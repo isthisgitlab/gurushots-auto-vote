@@ -88,8 +88,7 @@ jobs:
         id: release_name
         run: |
           VERSION="${{ steps.get_version.outputs.VERSION }}"
-          COMMIT_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
-          echo "RELEASE_NAME=v$VERSION-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+          echo "RELEASE_NAME=v$VERSION" >> $GITHUB_OUTPUT
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -101,6 +100,7 @@ jobs:
         with:
           tag_name: ${{ steps.release_name.outputs.RELEASE_NAME }}
           name: Release ${{ steps.release_name.outputs.RELEASE_NAME }}
+          generate_release_notes: true
           body: |
             ## What's Changed
             

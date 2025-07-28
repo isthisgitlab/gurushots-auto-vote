@@ -41,14 +41,19 @@
     "build:cli:all": "npm run build:cli:mac && npm run build:cli:linux",
     "build:mock:mac": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-macos-x64 --output build/cli/gurumockcli",
     "build:mock:linux": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-linux-x64 --output build/cli/gurumockcli",
-    "build:mock:all": "npm run build:mock:mac && npm run build:mock:linux"
+    "build:mock:all": "npm run build:mock:mac && npm run build:mock:linux",
+    "tag": "git tag v$(node -p \"require('./package.json').version\")",
+    "tag:push": "npm run tag && git push origin v$(node -p \"require('./package.json').version\")"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/isthisgitlab/gurushots-auto-vote.git"
   },
   "keywords": [],
-  "author": "",
+  "author": {
+    "name": "isthisgitlab",
+    "email": "isthisgitlab@isthisgitlab.com"
+  },
   "license": "ISC",
   "type": "commonjs",
   "bugs": {
@@ -104,7 +109,12 @@
         "deb"
       ],
       "category": "Utility",
-      "icon": "src/assets/logo.png"
+      "icon": "src/assets/logo.png",
+      "maintainer": "isthisgitlab@isthisgitlab.com"
+    },
+    "publish": {
+      "provider": "github",
+      "releaseType": "release"
     }
   }
 }
