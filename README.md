@@ -229,6 +229,16 @@ Download the latest version for your platform from the [Releases page](https://g
 3. Launch from Applications folder
 4. **CLI**: Download the CLI executable (`gurucli` or `gurumockcli`) and run from terminal
 
+**Note for macOS users**: If you encounter "unidentified developer" warnings or the app won't open, you may need to remove quarantine attributes:
+```bash
+# For the main app
+xattr -rd com.apple.quarantine /Applications/GuruShots\ Auto\ Vote.app
+
+# For CLI executables (if downloaded separately)
+xattr -rd com.apple.quarantine ./gurucli
+xattr -rd com.apple.quarantine ./gurumockcli
+```
+
 #### **Linux**
 1. **AppImage**: Download the `.AppImage` file, make it executable (`chmod +x`), and run
 2. **DEB**: Download the `.deb` file and install with `sudo dpkg -i filename.deb`
