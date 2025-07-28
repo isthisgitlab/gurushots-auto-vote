@@ -2,6 +2,16 @@
 
 An Electron application for automated voting on GuruShots challenges. Features both a graphical interface and command-line tools for easy automation.
 
+## ☕ Support the Project
+
+If you find this tool helpful, consider supporting its development:
+
+[![Bitcoin](https://img.shields.io/badge/Bitcoin-000000?style=for-the-badge&logo=bitcoin&logoColor=white)](bitcoin:bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh)
+[![Ethereum](https://img.shields.io/badge/Ethereum-3C3C3D?style=for-the-badge&logo=Ethereum&logoColor=white)](ethereum:0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6)
+
+**Bitcoin**: `bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh`  
+**Ethereum**: `0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6`
+
 ## 🚀 Features
 
 - **Automated Voting**: Automatically vote on images in active challenges

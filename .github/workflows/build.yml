@@ -41,7 +41,11 @@ jobs:
         run: npm run build:css
 
       - name: Build Electron app
-        run: npm run build:${{ matrix.platform }}
+        run: |
+          npm run build:${{ matrix.platform }}
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            npm run build:linux-arm
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
@@ -54,13 +58,23 @@ jobs:
 
       - name: Build CLI app (macOS/Linux only)
         if: matrix.platform != 'win'
-        run: npm run build:cli:${{ matrix.platform }}
+        run: |
+          npm run build:cli:${{ matrix.platform }}
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            npm run build:cli:linux-arm
+          fi
+          ls -la build/cli/
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Mock CLI app (macOS/Linux only)
         if: matrix.platform != 'win'
-        run: npm run build:mock:${{ matrix.platform }}
+        run: |
+          npm run build:mock:${{ matrix.platform }}
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            npm run build:mock:linux-arm
+          fi
+          ls -la build/cli/
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -72,7 +86,7 @@ jobs:
             build/*.dmg
             build/*.exe
             build/*.AppImage
-            build/cli/
+            ${{ matrix.platform != 'win' && 'build/cli/' || '' }}
           retention-days: 1
 
   create-release:
@@ -135,11 +149,15 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/mac-builds/*.dmg
-            artifacts/linux-builds/*.AppImage
-            artifacts/win-builds/*.exe
-            artifacts/mac-builds/cli/*
-            artifacts/linux-builds/cli/*
+            artifacts/mac-builds/GuruShotsAutoVote-v*.dmg
+            artifacts/linux-builds/GuruShotsAutoVote-v*.AppImage
+            artifacts/win-builds/GuruShotsAutoVote-v*.exe
+            artifacts/mac-builds/cli/gurucli-mac
+            artifacts/mac-builds/cli/gurumockcli-mac
+            artifacts/linux-builds/cli/gurucli-linux
+            artifacts/linux-builds/cli/gurucli-linux-arm
+            artifacts/linux-builds/cli/gurumockcli-linux
+            artifacts/linux-builds/cli/gurumockcli-linux-arm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

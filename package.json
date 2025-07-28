@@ -38,13 +38,16 @@
     "build:win": "cross-env NODE_ENV=production electron-builder --win",
     "build:mac": "cross-env NODE_ENV=production electron-builder --mac",
     "build:linux": "cross-env NODE_ENV=production electron-builder --linux",
+    "build:linux-arm": "cross-env NODE_ENV=production electron-builder --linux --arm64",
     "build:all": "cross-env NODE_ENV=production electron-builder -mwl",
-    "build:cli:mac": "npm run build:css && pkg src/js/cli/cli.js --targets node18-macos-x64 --output build/cli/gurucli",
-    "build:cli:linux": "npm run build:css && pkg src/js/cli/cli.js --targets node18-linux-x64 --output build/cli/gurucli",
-    "build:cli:all": "npm run build:cli:mac && npm run build:cli:linux",
-    "build:mock:mac": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-macos-x64 --output build/cli/gurumockcli",
-    "build:mock:linux": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-linux-x64 --output build/cli/gurumockcli",
-    "build:mock:all": "npm run build:mock:mac && npm run build:mock:linux",
+    "build:cli:mac": "npm run build:css && pkg src/js/cli/cli.js --targets node18-macos-x64 --output build/cli/gurucli-mac",
+    "build:cli:linux": "npm run build:css && pkg src/js/cli/cli.js --targets node18-linux-x64 --output build/cli/gurucli-linux",
+    "build:cli:linux-arm": "npm run build:css && pkg src/js/cli/cli.js --targets node18-linux-arm64 --output build/cli/gurucli-linux-arm",
+    "build:cli:all": "npm run build:cli:mac && npm run build:cli:linux && npm run build:cli:linux-arm",
+    "build:mock:mac": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-macos-x64 --output build/cli/gurumockcli-mac",
+    "build:mock:linux": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-linux-x64 --output build/cli/gurumockcli-linux",
+    "build:mock:linux-arm": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-linux-arm64 --output build/cli/gurumockcli-linux-arm",
+    "build:mock:all": "npm run build:mock:mac && npm run build:mock:linux && npm run build:mock:linux-arm",
     "tag": "git tag v$(node -p \"require('./package.json').version\")",
     "tag:push": "npm run tag && git push origin v$(node -p \"require('./package.json').version\")"
   },
@@ -83,7 +86,7 @@
   },
   "build": {
     "appId": "com.gurushots.autovote",
-    "productName": "GuruShots Auto Vote",
+    "productName": "GuruShotsAutoVote",
     "compression": "maximum",
     "removePackageScripts": true,
     "removePackageKeywords": true,
@@ -112,17 +115,20 @@
       "target": "dmg",
       "icon": "src/assets/logo.png",
       "gatekeeperAssess": false,
-      "hardenedRuntime": false
+      "hardenedRuntime": false,
+      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.dmg"
     },
     "win": {
       "target": "portable",
-      "icon": "src/assets/logo.png"
+      "icon": "src/assets/logo.png",
+      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.exe"
     },
     "linux": {
       "target": "AppImage",
       "category": "Utility",
       "icon": "src/assets/logo.png",
-      "maintainer": "isthisgitlab@isthisgitlab.com"
+      "maintainer": "isthisgitlab@isthisgitlab.com",
+      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.AppImage"
     },
     "publish": {
       "provider": "github",
