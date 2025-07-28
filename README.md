@@ -242,7 +242,7 @@ Download the latest version for your platform from the [Releases page](https://g
 **Note for macOS users**: If you encounter "unidentified developer" warnings or the app won't open, you may need to remove quarantine attributes:
 ```bash
 # For the main app
-xattr -rd com.apple.quarantine /Applications/GuruShots\ Auto\ Vote.app
+xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 # For CLI executables (if downloaded separately)
 xattr -rd com.apple.quarantine ./gurucli

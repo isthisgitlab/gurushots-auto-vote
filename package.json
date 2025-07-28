@@ -1,7 +1,7 @@
 {
   "name": "gurushots-auto-vote",
   "version": "0.0.2",
-  "description": "A simple Electron application with login and logout functionality",
+  "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with GUI and CLI interfaces",
   "main": "src/js/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -66,6 +66,10 @@
     "url": "https://github.com/isthisgitlab/gurushots-auto-vote/issues"
   },
   "homepage": "https://github.com/isthisgitlab/gurushots-auto-vote#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
   "dependencies": {
     "axios": "^1.11.0",
     "node-cron": "^4.2.1",

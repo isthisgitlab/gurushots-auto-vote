@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "Bash(npm run lint)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(npm audit:*)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "browsermcp",
+    "docfork",
+    "context7",
+    "sequential-thinking",
+    "mcp-compass"
+  ]
+}
