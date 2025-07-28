@@ -41,11 +41,14 @@ jobs:
         run: npm run build:css
 
       - name: Build Electron app
-        run: |
-          npm run build:${{ matrix.platform }}
-          if [ "${{ matrix.platform }}" = "linux" ]; then
-            npm run build:linux-arm
-          fi
+        run: npm run build:${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_ENV: production
+
+      - name: Build Linux ARM app
+        if: matrix.platform == 'linux'
+        run: npm run build:linux-arm
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
@@ -58,25 +61,31 @@ jobs:
 
       - name: Build CLI app (macOS/Linux only)
         if: matrix.platform != 'win'
-        run: |
-          npm run build:cli:${{ matrix.platform }}
-          if [ "${{ matrix.platform }}" = "linux" ]; then
-            npm run build:cli:linux-arm
-          fi
-          ls -la build/cli/
+        run: npm run build:cli:${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build CLI Linux ARM app
+        if: matrix.platform == 'linux'
+        run: npm run build:cli:linux-arm
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Mock CLI app (macOS/Linux only)
         if: matrix.platform != 'win'
-        run: |
-          npm run build:mock:${{ matrix.platform }}
-          if [ "${{ matrix.platform }}" = "linux" ]; then
-            npm run build:mock:linux-arm
-          fi
-          ls -la build/cli/
+        run: npm run build:mock:${{ matrix.platform }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Mock CLI Linux ARM app
+        if: matrix.platform == 'linux'
+        run: npm run build:mock:linux-arm
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List CLI files
+        if: matrix.platform != 'win'
+        run: ls -la build/cli/
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
