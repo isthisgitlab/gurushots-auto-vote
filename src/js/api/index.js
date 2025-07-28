@@ -1,19 +1,32 @@
 /**
  * GuruShots Auto Voter - API Module Index
  * 
- * This file provides a unified interface for all API operations,
- * maintaining backward compatibility with the original fetch.js structure.
+ * This file provides a unified interface for all API operations
+ * using the new factory pattern with strategies.
  */
 
-// Export middleware functions for CLI and GUI usage
-const middleware = require('./middleware');
+const { getMiddleware } = require('../apiFactory');
 
-// Export the main functions for backward compatibility
+// Get the middleware instance
+const middleware = getMiddleware();
+
+// Export the middleware directly
 module.exports = {
-    // Backward compatibility exports
-    fetchChallengesAndVote: middleware.fetchChallengesAndVote,
-    login: middleware.cliLogin,
+    // Main functions
+    fetchChallengesAndVote: middleware.apiStrategy.fetchChallengesAndVote.bind(middleware.apiStrategy),
+    login: middleware.cliLogin.bind(middleware),
     
-    // New middleware interface
-    ...middleware,
+    // All middleware interface
+    cliLogin: middleware.cliLogin.bind(middleware),
+    cliVote: middleware.cliVote.bind(middleware),
+    guiLogin: middleware.guiLogin.bind(middleware),
+    guiVote: middleware.guiVote.bind(middleware),
+    isAuthenticated: middleware.isAuthenticated.bind(middleware),
+    logout: middleware.logout.bind(middleware),
+    authenticate: middleware.apiStrategy.authenticate.bind(middleware.apiStrategy),
+    getActiveChallenges: middleware.getActiveChallenges.bind(middleware),
+    getVoteImages: middleware.getVoteImages.bind(middleware),
+    submitVotes: middleware.submitVotes.bind(middleware),
+    applyBoost: middleware.applyBoost.bind(middleware),
+    applyBoostToEntry: middleware.applyBoostToEntry.bind(middleware),
 }; 

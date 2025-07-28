@@ -89,9 +89,14 @@ const mockApiClient = {
      * Simulate authentication
      */
     authenticate: async (email, password) => {
-        if (email === 'test@example.com' && password === 'password') {
+        console.log('🔧 Mock authentication with:', email, password ? '[hidden]' : 'no password');
+        
+        // Accept any non-empty email and password for mock mode
+        if (email && email.trim() !== '' && password && password.trim() !== '') {
+            console.log('✅ Mock authentication successful');
             return simulateApiResponse(auth.mockLoginSuccess, 1500);
         } else {
+            console.log('❌ Mock authentication failed - empty credentials');
             return simulateApiError(auth.mockLoginFailure, 1000);
         }
     },
