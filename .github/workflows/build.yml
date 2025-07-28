@@ -11,33 +11,7 @@ permissions:
   packages: write
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run linter
-        run: npm run lint
-
-      - name: Run tests with coverage
-        run: npm run test:coverage
-
-      - name: Verify README version
-        run: npm run verify:readme
-
   build:
-    needs: test
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -68,6 +42,9 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+      - name: Verify README version
+        run: npm run verify:readme
 
       - name: Build CSS
         run: npm run build:css
@@ -131,7 +108,7 @@ jobs:
           retention-days: 1
 
   create-release:
-    needs: [test, build]
+    needs: [build]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
 
