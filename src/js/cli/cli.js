@@ -32,6 +32,9 @@ const middleware = realApi;
 const settings = require('../settings');
 const { initializeHeaders } = require('../api/randomizer');
 
+// Import logger for cleanup
+const logger = require('../logger');
+
 // Get command line arguments
 const args = process.argv.slice(2);
 const command = args[0];
@@ -216,6 +219,9 @@ const main = async () => {
     try {
         // Initialize API headers on CLI startup
         initializeHeaders();
+        
+        // Run log cleanup on CLI startup
+        logger.cleanup();
         
         switch (command) {
         case 'login':

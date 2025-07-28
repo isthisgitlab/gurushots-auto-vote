@@ -29,6 +29,9 @@ const {
 // Import settings
 const settings = require('../settings');
 
+// Import logger for cleanup
+const logger = require('../logger');
+
 // Get command line arguments
 const args = process.argv.slice(2);
 const command = args[0];
@@ -190,6 +193,9 @@ const showMockStatus = () => {
  */
 const main = async () => {
     try {
+        // Run log cleanup on mock CLI startup
+        logger.cleanup();
+        
         switch (command) {
         case 'login':
             console.log('Starting mock login process...');
