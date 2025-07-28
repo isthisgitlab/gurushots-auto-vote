@@ -8,7 +8,11 @@
       "Bash(ls:*)",
       "Bash(find:*)",
       "Bash(npm audit:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(npm run test:coverage:*)"
     ]
   },
   "enabledMcpjsonServers": [
