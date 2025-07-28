@@ -7,7 +7,7 @@
 
 const { getActiveChallenges } = require('./challenges');
 const { getVoteImages, submitVotes } = require('./voting');
-const { applyBoost } = require('./boost');
+const { applyBoost, applyBoostToEntry } = require('./boost');
 const { sleep, getRandomDelay } = require('./utils');
 
 // Global cancellation flag
@@ -119,4 +119,5 @@ const fetchChallengesAndVote = async (token) => {
 module.exports = {
     fetchChallengesAndVote,
     setCancellationFlag,
+    applyBoostToEntry,
 }; 

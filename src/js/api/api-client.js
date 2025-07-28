@@ -7,6 +7,7 @@
 
 const axios = require('axios');
 const logger = require('../logger');
+const { generateRandomHeaders } = require('./randomizer');
 
 // Common content type for form submissions
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
@@ -61,21 +62,9 @@ const makePostRequest = async (url, headers, data = '') => {
  * @param {string} token - Authentication token
  * @returns {object} - Headers object for API requests
  */
-const createCommonHeaders = (token) => ({
-    'host': 'api.gurushots.com',
-    'accept': '*/*',
-    'x-device': 'iPhone',                // Identifies as an iPhone device
-    'x-requested-with': 'XMLHttpRequest',
-    'x-model': 'iPhone X',               // Specific iPhone model
-    'accept-language': 'fr-SE;q=1.0, en-SE;q=0.9, sv-SE;q=0.8, es-SE;q=0.7',
-    'x-api-version': '20',               // API version required by GuruShots
-    'x-env': 'IOS',                      // Environment identifier
-    'user-agent': 'GuruShotsIOS/2.41.3 (com.gurushots.app; build:507; iOS 16.7.11) Alamofire/5.10.2',
-    'x-app-version': '2.41.3',           // App version to match
-    'connection': 'keep-alive',
-    'x-brand': 'Apple',
-    'x-token': token,                    // Authentication token
-});
+const createCommonHeaders = (token) => {
+    return generateRandomHeaders(token);
+};
 
 module.exports = {
     makePostRequest,

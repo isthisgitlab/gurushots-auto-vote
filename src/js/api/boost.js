@@ -59,6 +59,34 @@ const applyBoost = async (challenge, token) => {
     return response;
 };
 
+/**
+ * Applies a boost to a specific photo entry in a challenge
+ * 
+ * @param {number} challengeId - Challenge ID
+ * @param {string} imageId - Image ID to boost
+ * @param {string} token - Authentication token
+ * @returns {object|null} - API response or null if boost failed
+ */
+const applyBoostToEntry = async (challengeId, imageId, token) => {
+    // Prepare request data
+    const data = `c_id=${challengeId}&image_id=${imageId}`;
+    const headers = {
+        ...createCommonHeaders(token), 
+        'content-type': FORM_CONTENT_TYPE,
+    };
+
+    // Send boost request to API
+    const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
+    if (!response) {
+        console.error(`Failed to apply boost for challenge ID: ${challengeId}, image ID: ${imageId}`);
+        return null;
+    }
+
+    console.log(`Boost applied successfully to image ID: ${imageId} in challenge ${challengeId}`);
+    return response;
+};
+
 module.exports = {
     applyBoost,
+    applyBoostToEntry,
 }; 
