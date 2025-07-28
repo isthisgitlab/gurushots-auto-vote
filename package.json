@@ -31,11 +31,11 @@
     "dev:once": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
     "bump": "npx npm-check-updates -u && npm i",
     "prebuild": "npm run build:css",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux",
-    "build:all": "electron-builder -mwl",
+    "build": "NODE_ENV=production electron-builder",
+    "build:win": "NODE_ENV=production electron-builder --win",
+    "build:mac": "NODE_ENV=production electron-builder --mac",
+    "build:linux": "NODE_ENV=production electron-builder --linux",
+    "build:all": "NODE_ENV=production electron-builder -mwl",
     "build:cli:mac": "npm run build:css && pkg src/js/cli/cli.js --targets node18-macos-x64 --output build/cli/gurucli",
     "build:cli:linux": "npm run build:css && pkg src/js/cli/cli.js --targets node18-linux-x64 --output build/cli/gurucli",
     "build:cli:all": "npm run build:cli:mac && npm run build:cli:linux",
@@ -63,7 +63,6 @@
   "dependencies": {
     "axios": "^1.11.0",
     "node-cron": "^4.2.1",
-    "pkg": "^5.8.1",
     "prompt-sync": "^4.2.0"
   },
   "devDependencies": {
@@ -75,14 +74,30 @@
     "electron-builder": "^26.0.12",
     "eslint": "^9.32.0",
     "nodemon": "^3.1.10",
+    "pkg": "^5.8.1",
     "tailwindcss": "^4.1.11"
   },
   "build": {
     "appId": "com.gurushots.autovote",
     "productName": "GuruShots Auto Vote",
+    "compression": "maximum",
+    "removePackageScripts": true,
+    "removePackageKeywords": true,
     "files": [
       "dist/**/*",
-      "src/**/*",
+      "src/html/**/*",
+      "src/js/app.js",
+      "src/js/index.js",
+      "src/js/login.js",
+      "src/js/preload.js",
+      "src/js/settings.js",
+      "src/js/translations.js",
+      "src/js/logger.js",
+      "src/js/apiFactory.js",
+      "src/js/api/**/*",
+      "src/js/api/randomizer.js",
+      "src/js/mock/**/*",
+      "src/assets/**/*",
       "package.json"
     ],
     "directories": {
@@ -90,24 +105,17 @@
     },
     "mac": {
       "category": "public.app-category.utilities",
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "icon": "src/assets/logo.png"
+      "target": "dmg",
+      "icon": "src/assets/logo.png",
+      "gatekeeperAssess": false,
+      "hardenedRuntime": false
     },
     "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
+      "target": "portable",
       "icon": "src/assets/logo.png"
     },
     "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
+      "target": "AppImage",
       "category": "Utility",
       "icon": "src/assets/logo.png",
       "maintainer": "isthisgitlab@isthisgitlab.com"

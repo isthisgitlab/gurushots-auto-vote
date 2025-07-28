@@ -40,6 +40,7 @@ jobs:
         run: npm run build:${{ matrix.platform }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_ENV: production
 
       - name: Setup Node.js 18 for CLI builds
         if: matrix.platform != 'win'
@@ -63,8 +64,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-builds
-          path: build/
-          retention-days: 7
+          path: |
+            build/*.dmg
+            build/*.exe
+            build/*.AppImage
+            build/cli/
+          retention-days: 1
 
   create-release:
     needs: build
@@ -126,9 +131,9 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/mac-builds/*
-            artifacts/linux-builds/*
-            artifacts/win-builds/*
+            artifacts/mac-builds/*.dmg
+            artifacts/linux-builds/*.AppImage
+            artifacts/win-builds/*.exe
             artifacts/mac-builds/cli/*
             artifacts/linux-builds/cli/*
         env:
