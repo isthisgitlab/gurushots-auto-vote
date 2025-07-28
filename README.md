@@ -1,5 +1,10 @@
 # GuruShots Auto Voter
 
+[![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/workflows/Build%20and%20Release/badge.svg)](https://github.com/isthisgitlab/gurushots-auto-vote/actions)
+[![Coverage](https://img.shields.io/badge/coverage-98.34%25-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
+[![Tests](https://img.shields.io/badge/tests-143%20passing-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
+[![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
+
 An Electron application for automated voting on GuruShots challenges. Features both a graphical interface and command-line tools for easy automation.
 
 ## ☕ Support the Project
@@ -21,6 +26,7 @@ If you find this tool helpful, consider supporting its development:
 - **Remember Me**: Stay logged in across sessions
 - **Theme Support**: Light and dark mode options
 - **Mock Mode**: Test the app without real API calls
+- **Comprehensive Testing**: Extensive test suite with >98% coverage
 
 ## 📦 Installation
 
@@ -174,6 +180,62 @@ The app automatically saves your preferences:
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly.
 
+## 🧪 Testing & Coverage
+
+This project includes a comprehensive test suite to ensure reliability and quality.
+
+### **Running Tests**
+
+```bash
+# Run all tests
+npm test
+
+# Run tests in watch mode (for development)
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+```
+
+### **Test Coverage**
+
+Our test suite achieves excellent coverage across core components:
+
+| Component | Statements | Branches | Functions | Lines |
+|-----------|------------|----------|-----------|-------|
+| **Overall** | 98.34% | 91.66% | 100% | 98.87% |
+| API Client | 100% | 100% | 100% | 100% |
+| Authentication | 100% | 100% | 100% | 100% |
+| Challenges | 100% | 87.5% | 100% | 100% |
+| Voting | 92.5% | 80% | 100% | 94.73% |
+| Boost | 100% | 100% | 100% | 100% |
+| Strategies | 100% | 100% | 100% | 100% |
+| API Factory | 100% | 100% | 100% | 100% |
+
+### **What's Tested**
+
+- ✅ **API Layer**: HTTP client, authentication, challenges, voting, boost functionality
+- ✅ **Strategy Pattern**: Mock and real API implementations
+- ✅ **Error Handling**: Network failures, invalid responses, authentication errors
+- ✅ **Mock System**: Simulated API responses for testing and development
+- ✅ **Edge Cases**: Empty data, null responses, malformed inputs
+
+### **Mock Testing**
+
+All tests use mocked HTTP requests to ensure:
+- **No real API calls** during testing
+- **Fast test execution** (no network dependencies)
+- **Predictable results** for reliable CI/CD
+- **Safe testing** without affecting your GuruShots account
+
+### **Continuous Integration**
+
+Tests run automatically on every push and pull request:
+- **Linting** ensures code quality standards
+- **Unit tests** verify individual component functionality
+- **Coverage reports** maintain quality thresholds
+- **Build verification** ensures deployable artifacts
+
 ## 🔍 Troubleshooting
 
 ### **Common Issues**
@@ -266,13 +328,48 @@ cd gurushots-auto-vote
 # Install dependencies
 npm install
 
-# Start the application
-npm start
+# Run tests to verify setup
+npm test
+
+# Start the application in development mode
+npm run dev
+```
+
+**Requirements:**
+- Node.js 18.14.0+ or 20.0.0+ or 22.0.0+ (recommended: 22.x)
+- npm 8.0.0+
+```
+
+### **Development Commands**
+
+```bash
+# Development
+npm run dev              # Start with hot reload and CSS watching
+npm start               # Start the Electron app
+npm run watch:css       # Watch CSS changes only
+
+# Testing
+npm test                # Run all tests
+npm run test:watch      # Run tests in watch mode
+npm run test:coverage   # Generate coverage report
+
+# Building
+npm run build:css       # Build CSS for production
+npm run build           # Build for current platform
+npm run build:all       # Build for all platforms
+
+# Linting
+npm run lint            # Check code style
+npm run lint:fix        # Fix code style issues
+
+# Utilities
+npm run cleanup:logs    # Clean up old log files
+npm run cli:help        # Show CLI help
 ```
 
 ## 📄 License
 
-This project is licensed under the MIT License.
+This project is licensed under the ISC License.
 
 ## 🆘 Support
 
