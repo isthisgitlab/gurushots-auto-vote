@@ -5,6 +5,8 @@
   "main": "src/js/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint src/ scripts/",
+    "lint:fix": "eslint src/ scripts/ --fix",
     "start": "electron .",
     "cli:login": "node src/js/cli/cli.js login",
     "cli:vote": "node src/js/cli/cli.js vote",
@@ -23,6 +25,7 @@
     "test:gui-env": "node src/js/cli/test-gui-env.js",
     "test:window-bounds": "node src/js/cli/test-window-bounds.js",
     "test:gui-challenges": "node src/js/cli/test-gui-challenges.js",
+    "cleanup:logs": "node scripts/cleanup-logs.js",
     "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
     "watch:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --watch",
     "watch:app": "nodemon --no-restart-on exit",
