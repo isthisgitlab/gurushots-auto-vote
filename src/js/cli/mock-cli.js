@@ -19,15 +19,15 @@
 // Import node-cron for scheduling
 const cron = require('node-cron');
 
-// Import the mock middleware
-const {
-    mockCliLogin,
-    mockCliVote,
-    mockIsAuthenticated,
-} = require('../mock/mock-middleware');
-
-// Import settings
+// Import the API factory (Mock CLI always uses mock API by forcing mock=true)
+const { getMiddleware } = require('../apiFactory');
 const settings = require('../settings');
+
+// Ensure Mock CLI always uses mock API regardless of settings
+settings.setSetting('mock', true);
+
+// Get the middleware instance - but don't destructure methods at module level
+const getMiddlewareInstance = () => getMiddleware();
 
 // Import logger for cleanup
 const logger = require('../logger');
@@ -46,7 +46,7 @@ GuruShots Auto Voter - Mock CLI
 Usage: node mock-cli.js <command>
 
 Commands:
-  login    - Mock authentication with GuruShots (uses test credentials)
+  login    - Mock authentication with GuruShots (accepts any email/password)
   vote     - Start the mock voting process (requires authentication)
   start    - Start continuous mock voting with cron scheduling (every 3 minutes)
   stop     - Stop continuous voting (if running)
@@ -73,14 +73,14 @@ const runMockVotingCycle = async (cycleNumber = 1) => {
         console.log(`Time: ${new Date().toLocaleString()}`);
         
         // Check if user is authenticated
-        if (!mockIsAuthenticated()) {
+        if (!getMiddlewareInstance().isAuthenticated()) {
             console.error('No authentication token found. Please login first.');
             console.log('Run: node mock-cli.js login');
             return false;
         }
         
         // Run the mock voting process
-        await mockCliVote();
+        await getMiddlewareInstance().cliVote();
         console.log(`--- Mock Voting Cycle ${cycleNumber} Completed ---\n`);
         return true;
     } catch (error) {
@@ -96,7 +96,7 @@ const startContinuousMockVoting = async () => {
     console.log('=== Starting Continuous Mock Voting Mode ===');
     
     // Check if user is authenticated
-    if (!mockIsAuthenticated()) {
+    if (!getMiddlewareInstance().isAuthenticated()) {
         console.error('No authentication token found. Please login first.');
         console.log('Run: node mock-cli.js login');
         process.exit(1);
@@ -167,7 +167,7 @@ const showMockStatus = () => {
     const userDataPath = settings.getUserDataPath();
     console.log(`Settings location: ${userDataPath}`);
     
-    if (mockIsAuthenticated()) {
+    if (getMiddlewareInstance().isAuthenticated()) {
         const token = userSettings.token;
         const tokenStart = token.substring(0, 6);
         const tokenEnd = token.substring(token.length - 4);
@@ -199,17 +199,19 @@ const main = async () => {
         switch (command) {
         case 'login':
             console.log('Starting mock login process...');
-            await mockCliLogin();
+            await getMiddlewareInstance().cliLogin();
+            process.exit(0);
             break;
                 
         case 'vote':
-            if (!mockIsAuthenticated()) {
+            if (!getMiddlewareInstance().isAuthenticated()) {
                 console.error('You must login first before voting.');
                 console.log('Run: node mock-cli.js login');
                 process.exit(1);
             }
             console.log('Starting single mock voting cycle...');
             await runMockVotingCycle(1);
+            process.exit(0);
             break;
                 
         case 'start':
@@ -218,12 +220,14 @@ const main = async () => {
                 
         case 'status':
             showMockStatus();
+            process.exit(0);
             break;
                 
         case 'help':
         case '--help':
         case '-h':
             showHelp();
+            process.exit(0);
             break;
                 
         default:

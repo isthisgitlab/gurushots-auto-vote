@@ -343,12 +343,12 @@ ipcMain.handle('get-active-challenges', async (event, token) => {
         console.log('Token received:', token ? `${token.substring(0, 10)}...` : 'none');
         console.log('Full token:', token || 'NO TOKEN');
     
-        // Use the API factory to get the appropriate API
-        const apiFactory = require('./apiFactory');
-        const api = apiFactory.getApi();
+        // Use the API factory to get the appropriate strategy
+        const { getApiStrategy } = require('./apiFactory');
+        const strategy = getApiStrategy();
     
         // Call the getActiveChallenges function
-        const result = await api.getActiveChallenges(token);
+        const result = await strategy.getActiveChallenges(token);
         return result;
     } catch (error) {
         console.error('Error handling get-active-challenges request:', error);
@@ -546,9 +546,9 @@ ipcMain.handle('run-voting-cycle', async () => {
             };
         }
     
-        // Use the API factory to get the appropriate API
-        const apiFactory = require('./apiFactory');
-        const api = apiFactory.getApi();
+        // Use the API factory to get the appropriate strategy
+        const { getApiStrategy } = require('./apiFactory');
+        const strategy = getApiStrategy();
         
         // Reset cancellation flag before starting
         shouldCancelVoting = false;
@@ -562,7 +562,7 @@ ipcMain.handle('run-voting-cycle', async () => {
         mockApi.setCancellationFlag(false);
         
         // Run the voting cycle
-        const result = await api.fetchChallengesAndVote(userSettings.token);
+        const result = await strategy.fetchChallengesAndVote(userSettings.token);
     
         if (result && result.success) {
             return {
@@ -619,12 +619,12 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
             };
         }
     
-        // Use the API factory to get the appropriate API
-        const apiFactory = require('./apiFactory');
-        const api = apiFactory.getApi();
+        // Use the API factory to get the appropriate strategy
+        const { getApiStrategy } = require('./apiFactory');
+        const strategy = getApiStrategy();
     
         // Get active challenges to find the specific challenge
-        const challengesResponse = await api.getActiveChallenges(userSettings.token);
+        const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
     
         if (!challengesResponse || !challengesResponse.challenges) {
             console.log('❌ Failed to fetch challenges for voting');
@@ -669,12 +669,12 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         // Vote on the specific challenge
         console.log('🗳️ Starting voting process for challenge:', challenge.title);
     
-        const voteImages = await api.getVoteImages(challenge, userSettings.token);
+        const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
         console.log('📸 Vote images received:', voteImages ? { imageCount: voteImages.images?.length } : 'No vote images');
     
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
             console.log('✅ Submitting votes...');
-            await api.submitVotes(voteImages, userSettings.token);
+            await strategy.submitVotes(voteImages, userSettings.token);
             console.log('✅ Votes submitted successfully');
         } else {
             console.log('⚠️ No vote images available');
@@ -708,13 +708,13 @@ ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
             };
         }
     
-        // Use the API factory to get the appropriate API
-        const apiFactory = require('./apiFactory');
-        const api = apiFactory.getApi();
+        // Use the API factory to get the appropriate strategy
+        const { getApiStrategy } = require('./apiFactory');
+        const strategy = getApiStrategy();
     
         // Apply boost to the specific entry
         console.log('🚀 Applying boost to entry:', { challengeId, imageId });
-        const result = await api.applyBoostToEntry(challengeId, imageId, userSettings.token);
+        const result = await strategy.applyBoostToEntry(challengeId, imageId, userSettings.token);
     
         if (result) {
             console.log('✅ Boost applied successfully');

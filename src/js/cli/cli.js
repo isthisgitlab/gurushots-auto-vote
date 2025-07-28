@@ -21,15 +21,15 @@
 // Import node-cron for scheduling
 const cron = require('node-cron');
 
-// Import the real API directly (CLI always uses real API)
-const realApi = require('../api/middleware');
-const { fetchChallengesAndVote, cliLogin } = realApi;
-
-// Get the middleware once to avoid recreation
-const middleware = realApi;
-
-// Import settings
+// Import the API factory (CLI always uses real API by forcing mock=false)
+const { getMiddleware } = require('../apiFactory');
 const settings = require('../settings');
+
+// Ensure CLI always uses real API regardless of settings
+settings.setSetting('mock', false);
+
+// Get the middleware instance - but don't destructure methods at module level
+const getMiddlewareInstance = () => getMiddleware();
 const { initializeHeaders } = require('../api/randomizer');
 
 // Import logger for cleanup
@@ -77,7 +77,7 @@ const runVotingCycle = async (cycleNumber = 1) => {
         console.log(`Time: ${new Date().toLocaleString()}`);
         
         // Check if user is authenticated
-        if (!middleware.isAuthenticated()) {
+        if (!getMiddlewareInstance().isAuthenticated()) {
             console.error('No authentication token found. Please login first.');
             console.log('Run: node cli.js login');
             return false;
@@ -88,7 +88,7 @@ const runVotingCycle = async (cycleNumber = 1) => {
         const token = userSettings.token;
         
         // Run the voting process
-        await fetchChallengesAndVote(token);
+        await getMiddlewareInstance().apiStrategy.fetchChallengesAndVote(token);
         console.log(`--- Voting Cycle ${cycleNumber} Completed ---\n`);
         return true;
     } catch (error) {
@@ -104,7 +104,7 @@ const startContinuousVoting = async () => {
     console.log('=== Starting Continuous Voting Mode ===');
     
     // Check if user is authenticated
-    if (!middleware.isAuthenticated()) {
+    if (!getMiddlewareInstance().isAuthenticated()) {
         console.error('No authentication token found. Please login first.');
         console.log('Run: node cli.js login');
         process.exit(1);
@@ -186,7 +186,7 @@ const showStatus = () => {
     const userDataPath = settings.getUserDataPath();
     console.log(`Settings location: ${userDataPath}`);
     
-    if (middleware.isAuthenticated()) {
+    if (getMiddlewareInstance().isAuthenticated()) {
         const token = userSettings.token;
         const tokenStart = token.substring(0, 6);
         const tokenEnd = token.substring(token.length - 4);
@@ -226,17 +226,19 @@ const main = async () => {
         switch (command) {
         case 'login':
             console.log('Starting login process...');
-            await cliLogin();
+            await getMiddlewareInstance().cliLogin();
+            process.exit(0);
             break;
                 
         case 'vote':
-            if (!middleware.isAuthenticated()) {
+            if (!getMiddlewareInstance().isAuthenticated()) {
                 console.error('You must login first before voting.');
                 console.log('Run: node cli.js login');
                 process.exit(1);
             }
             console.log('Starting single voting cycle...');
             await runVotingCycle(1);
+            process.exit(0);
             break;
                 
         case 'start':
@@ -245,6 +247,7 @@ const main = async () => {
                 
         case 'status':
             showStatus();
+            process.exit(0);
             break;
                 
         case 'reset-windows': {
@@ -252,6 +255,7 @@ const main = async () => {
             const defaultSettings = settings.getDefaultSettings();
             settings.saveSettings({ windowBounds: defaultSettings.windowBounds });
             console.log('Window positions reset successfully.');
+            process.exit(0);
             break;
         }
                 
@@ -259,6 +263,7 @@ const main = async () => {
         case '--help':
         case '-h':
             showHelp();
+            process.exit(0);
             break;
                 
         default:
