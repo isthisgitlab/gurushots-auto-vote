@@ -98,6 +98,43 @@ The continuous voting mode automatically runs voting cycles every 3 minutes:
 npm run cli:start
 ```
 
+## 📝 Logging
+
+The application uses a split logging system with automatic retention:
+
+### **Log Files**
+- **`errors-YYYY-MM-DD.log`** - Error logs (30 days retention)
+- **`app-YYYY-MM-DD.log`** - General application logs (7 days retention)  
+- **`api-YYYY-MM-DD.log`** - API request/response logs (dev mode only, 1 day retention)
+
+### **Log Locations**
+- **macOS**: `~/Library/Application Support/gurushots-auto-vote/logs/`
+- **Windows**: `%APPDATA%/gurushots-auto-vote/logs/`
+- **Linux**: `~/.config/gurushots-auto-vote/logs/`
+
+### **Cleanup**
+```bash
+# Clean up old log files
+npm run cleanup:logs
+```
+
+### **Development vs Production**
+- **Development mode**: All log types are written
+- **Production mode**: API logs are disabled to reduce disk usage
+
+### **Automatic Cleanup**
+The logging system includes automatic cleanup to prevent disk space issues:
+
+- **Startup cleanup**: Runs when the application starts (GUI or CLI)
+- **Periodic cleanup**: Runs every hour while the application is running
+- **Daily rotation**: Creates new log files each day with date-based naming
+- **Date-based cleanup**: Automatically deletes log files based on retention periods
+- **Size-based cleanup**: Automatically deletes log files that exceed size limits:
+  - `errors-YYYY-MM-DD.log`: 10 MB max
+  - `app-YYYY-MM-DD.log`: 50 MB max  
+  - `api-YYYY-MM-DD.log`: 20 MB max
+- **Manual cleanup**: Available via `npm run cleanup:logs`
+
 **Example Output:**
 ```
 === Starting Continuous Voting Mode ===
