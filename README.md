@@ -28,28 +28,118 @@ If you find this tool helpful, consider supporting its development:
 - **Mock Mode**: Test the app without real API calls
 - **Comprehensive Testing**: Extensive test suite with >98% coverage
 
-## 📦 Installation
+## 📥 Download & Install
 
+### **🚀 Quick Download Links**
+
+**Latest Version: v0.0.3**
+
+#### **🖥️ GUI Applications (Recommended for most users)**
+
+| Platform | Download | Size | Type |
+|----------|----------|------|------|
+| **Windows** | [📥 GuruShotsAutoVote-v0.0.3-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-x64.exe) | ~50 MB | Portable Executable |
+| **macOS** | [📥 GuruShotsAutoVote-v0.0.3-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-arm64.dmg) | ~50 MB | DMG Installer |
+| **Linux (x64)** | [📥 GuruShotsAutoVote-v0.0.3-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-x86_64.AppImage) | ~50 MB | AppImage |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.0.3-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-arm64.AppImage) | ~50 MB | AppImage |
+
+#### **💻 CLI Applications (For advanced users)**
+
+| Platform | Download | Size | Type |
+|----------|----------|------|------|
+| **macOS CLI** | [📥 gurucli-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-mac) | ~55 MB | Terminal Executable |
+| **Linux CLI (x64)** | [📥 gurucli-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-linux) | ~50 MB | Terminal Executable |
+| **Linux CLI (ARM64)** | [📥 gurucli-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-linux-arm) | ~47 MB | Terminal Executable |
+
+#### **🧪 Test Mode CLI (For testing without real API calls)**
+
+| Platform | Download | Size | Type |
+|----------|----------|------|------|
+| **macOS Test CLI** | [📥 gurumockcli-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurumockcli-mac) | ~55 MB | Terminal Executable |
+| **Linux Test CLI (x64)** | [📥 gurumockcli-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurumockcli-linux) | ~50 MB | Terminal Executable |
+| **Linux Test CLI (ARM64)** | [📥 gurumockcli-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurumockcli-linux-arm) | ~47 MB | Terminal Executable |
+
+### **📋 Installation Instructions**
+
+#### **🪟 Windows Users**
+
+1. **Download**: Click the Windows link above to download the `.exe` file
+2. **Run**: Double-click the downloaded file to start the app
+3. **No Installation Required**: The app runs directly from the executable
+4. **First Run**: The app will create configuration files in your user directory
+
+**✅ That's it!** The app is ready to use.
+
+#### **🍎 macOS Users**
+
+1. **Download**: Click the macOS link above to download the `.dmg` file
+2. **Open DMG**: Double-click the downloaded `.dmg` file
+3. **Install**: Drag the app icon to the Applications folder
+4. **Launch**: Open the app from your Applications folder
+
+**🔧 If you get security warnings:**
 ```bash
-# Clone the repository
-git clone https://github.com/isthisgitlab/gurushots-auto-vote.git
-
-# Navigate to the project directory
-cd gurushots-auto-vote
-
-# Install dependencies
-npm install
+# Open Terminal and run this command (replace with your actual path):
+xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 ```
+
+**💻 For CLI users on macOS:**
+1. Download the `gurucli-mac` file
+2. Open Terminal
+3. Navigate to the download folder: `cd ~/Downloads`
+4. Make executable: `chmod +x gurucli-mac`
+5. Run: `./gurucli-mac`
+
+#### **🐧 Linux Users**
+
+**GUI App (AppImage):**
+1. **Download**: Click the appropriate Linux link above
+2. **Make Executable**: Right-click the file → Properties → Permissions → Check "Allow executing file as program"
+   - Or use terminal: `chmod +x GuruShotsAutoVote-v0.0.3-*.AppImage`
+3. **Run**: Double-click the file or run from terminal: `./GuruShotsAutoVote-v0.0.3-*.AppImage`
+
+**CLI App:**
+1. Download the appropriate `gurucli-linux` file
+2. Open terminal and navigate to download folder: `cd ~/Downloads`
+3. Make executable: `chmod +x gurucli-linux`
+4. Run: `./gurucli-linux`
+
+### **🎯 Which Version Should I Download?**
+
+| User Type | Recommended Download | Why? |
+|-----------|---------------------|------|
+| **New Users** | GUI App for your platform | Easiest to use, visual interface |
+| **Power Users** | CLI App for your platform | More control, automation features |
+| **Developers** | CLI App + Test CLI | Full control + testing capabilities |
+| **Testing** | Test CLI App | Safe testing without real API calls |
+
+### **🔗 Alternative: Browse All Releases**
+
+If you need a specific version or want to see all available downloads:
+- **📂 [View All Releases](https://github.com/isthisgitlab/gurushots-auto-vote/releases)**
+- **📋 [Release Notes](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest)**
+
+### **❓ Still Not Sure?**
+
+**For most users**: Download the GUI app for your platform (Windows `.exe`, macOS `.dmg`, or Linux `.AppImage`)
+
+**Need help?** Check the [Troubleshooting](#-troubleshooting) section below or [open an issue](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
+
+### **🌍 Other Languages**
+
+- **🇱🇻 [Latviešu valoda](docs/INSTALACIJA.md)** - Instalācijas ceļvedis latviešu valodā
 
 ## 🎯 Quick Start
 
 ### **GUI Mode (Recommended for beginners)**
 
+Start the application:
+
 ```bash
-# Start the application
 npm start
 ```
 
+Then follow these steps:
 1. **Login**: Enter your GuruShots credentials
 2. **Choose Settings**: Select theme and whether to stay logged in
 3. **View Challenges**: See your active challenges and voting status
@@ -57,21 +147,29 @@ npm start
 
 ### **CLI Mode (For automation)**
 
+Login with your credentials:
+
 ```bash
-# Login with your credentials
 npm run cli:login
+```
 
-# Run a single voting cycle
+Run a single voting cycle:
+
+```bash
 npm run cli:vote
+```
 
-# Start continuous voting (every 3 minutes)
+Start continuous voting (every 3 minutes):
+
+```bash
 npm run cli:start
 ```
 
 ### **Testing Mode (No real API calls)**
 
+Test with mock data:
+
 ```bash
-# Test with mock data
 npm run mock:login
 npm run mock:start
 ```
@@ -89,21 +187,57 @@ The GUI provides a user-friendly interface for managing your GuruShots voting:
 ### **CLI Commands**
 
 #### **Real API (Production)**
+
+Login with your credentials:
 ```bash
-npm run cli:login      # Login with your credentials
-npm run cli:vote       # Run one voting cycle
-npm run cli:start      # Start continuous voting
-npm run cli:status     # Check current status
-npm run cli:help       # Show help
+npm run cli:login
+```
+
+Run one voting cycle:
+```bash
+npm run cli:vote
+```
+
+Start continuous voting:
+```bash
+npm run cli:start
+```
+
+Check current status:
+```bash
+npm run cli:status
+```
+
+Show help:
+```bash
+npm run cli:help
 ```
 
 #### **Mock API (Testing)**
+
+Test login (accepts any email/password):
 ```bash
-npm run mock:login     # Test login (accepts any email/password)
-npm run mock:vote      # Test voting cycle
-npm run mock:start     # Test continuous voting
-npm run mock:status    # Check mock status
-npm run mock:help      # Show mock help
+npm run mock:login
+```
+
+Test voting cycle:
+```bash
+npm run mock:vote
+```
+
+Test continuous voting:
+```bash
+npm run mock:start
+```
+
+Check mock status:
+```bash
+npm run mock:status
+```
+
+Show mock help:
+```bash
+npm run mock:help
 ```
 
 ### **Continuous Voting**
@@ -129,8 +263,10 @@ The application uses a split logging system with automatic retention:
 - **Linux**: `~/.config/gurushots-auto-vote/logs/`
 
 ### **Cleanup**
+
+Clean up old log files:
+
 ```bash
-# Clean up old log files
 npm run cleanup:logs
 ```
 
@@ -180,20 +316,66 @@ The app automatically saves your preferences:
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly.
 
+## 🔍 Troubleshooting
+
+### **Common Issues**
+
+**"No authentication token found"**
+```bash
+npm run cli:login
+```
+
+**"Network Error"**
+- Check your internet connection
+- Try again later
+
+**"Token expired"**
+```bash
+npm run cli:login
+```
+
+**Windows open off-screen**
+```bash
+npm run cli:reset-windows
+```
+
+### **Get Help**
+
+Check current status:
+```bash
+npm run cli:status
+```
+
+Show help:
+```bash
+npm run cli:help
+```
+
+## 🔒 Security
+
+- All API calls use secure HTTPS
+- Credentials are never logged
+- Tokens are stored locally and securely
+- No sensitive information is exposed in error messages
+
 ## 🧪 Testing & Coverage
 
 This project includes a comprehensive test suite to ensure reliability and quality.
 
 ### **Running Tests**
 
+Run all tests:
 ```bash
-# Run all tests
 npm test
+```
 
-# Run tests in watch mode (for development)
+Run tests in watch mode (for development):
+```bash
 npm run test:watch
+```
 
-# Run tests with coverage report
+Run tests with coverage report:
+```bash
 npm run test:coverage
 ```
 
@@ -236,135 +418,70 @@ Tests run automatically on every push and pull request:
 - **Coverage reports** maintain quality thresholds
 - **Build verification** ensures deployable artifacts
 
-## 🔍 Troubleshooting
-
-### **Common Issues**
-
-**"No authentication token found"**
-```bash
-npm run cli:login
-```
-
-**"Network Error"**
-- Check your internet connection
-- Try again later
-
-**"Token expired"**
-```bash
-npm run cli:login
-```
-
-**Windows open off-screen**
-```bash
-npm run cli:reset-windows
-```
-
-### **Get Help**
-
-```bash
-# Check current status
-npm run cli:status
-
-# Show help
-npm run cli:help
-```
-
-## 🔒 Security
-
-- All API calls use secure HTTPS
-- Credentials are never logged
-- Tokens are stored locally and securely
-- No sensitive information is exposed in error messages
-
-## 📥 Download & Install
-
-### **Latest Release**
-
-Download the latest version for your platform from the [Releases page](https://github.com/isthisgitlab/gurushots-auto-vote/releases).
-
-### **Supported Platforms**
-
-- **Windows**: NSIS installer (.exe) or portable executable
-- **macOS**: DMG installer, ZIP archive, and CLI executables
-- **Linux**: AppImage, DEB package, and CLI executables
-
-### **Installation Instructions**
-
-#### **Windows**
-1. Download the `.exe` installer from the latest release
-2. Run the installer and follow the setup wizard
-3. Launch "GuruShots Auto Vote" from Start Menu
-
-#### **macOS**
-1. Download the `.dmg` file from the latest release
-2. Open the DMG and drag the app to Applications
-3. Launch from Applications folder
-4. **CLI**: Download the CLI executable (`gurucli` or `gurumockcli`) and run from terminal
-
-**Note for macOS users**: If you encounter "unidentified developer" warnings or the app won't open, you may need to remove quarantine attributes:
-```bash
-# For the main app
-xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
-
-# For CLI executables (if downloaded separately)
-xattr -rd com.apple.quarantine ./gurucli
-xattr -rd com.apple.quarantine ./gurumockcli
-```
-
-#### **Linux**
-1. **AppImage**: Download the `.AppImage` file, make it executable (`chmod +x`), and run
-2. **DEB**: Download the `.deb` file and install with `sudo dpkg -i filename.deb`
-3. **CLI**: Download the CLI executable (`gurucli` or `gurumockcli`), make it executable (`chmod +x`), and run
+## 📦 Installation (From Source)
 
 ### **From Source (Developers)**
 
 If you want to build from source or contribute:
 
+Clone the repository:
 ```bash
-# Clone the repository
 git clone https://github.com/isthisgitlab/gurushots-auto-vote.git
 cd gurushots-auto-vote
+```
 
-# Install dependencies
+Install dependencies:
+```bash
 npm install
+```
 
-# Run tests to verify setup
+Run tests to verify setup:
+```bash
 npm test
+```
 
-# Start the application in development mode
+Start the application in development mode:
+```bash
 npm run dev
 ```
 
 **Requirements:**
 - Node.js 18.14.0+ or 20.0.0+ or 22.0.0+ (recommended: 22.x)
 - npm 8.0.0+
-```
 
 ### **Development Commands**
 
+Development:
 ```bash
-# Development
-npm run dev              # Start with hot reload and CSS watching
-npm start               # Start the Electron app
-npm run watch:css       # Watch CSS changes only
+npm run dev
+npm start
+npm run watch:css
+```
 
-# Testing
-npm test                # Run all tests
-npm run test:watch      # Run tests in watch mode
-npm run test:coverage   # Generate coverage report
+Testing:
+```bash
+npm test
+npm run test:watch
+npm run test:coverage
+```
 
-# Building
-npm run build:css       # Build CSS for production
-npm run build           # Build for current platform
-npm run build:all       # Build for all platforms
+Building:
+```bash
+npm run build:css
+npm run build
+npm run build:all
+```
 
-# Linting
-npm run lint            # Check code style
-npm run lint:fix        # Fix code style issues
+Linting:
+```bash
+npm run lint
+npm run lint:fix
+```
 
-# Utilities
-npm run cleanup:logs    # Clean up old log files
-npm run cli:help        # Show CLI help
+Utilities:
+```bash
+npm run cleanup:logs
+npm run cli:help
 ```
 
 ## 📄 License

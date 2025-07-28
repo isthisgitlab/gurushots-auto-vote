@@ -36,7 +36,7 @@
     "dev:no-watch": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
     "dev:once": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
     "bump": "npx npm-check-updates -u && npm i",
-    "prebuild": "npm run build:css",
+    "prebuild": "npm run verify:readme && npm run build:css",
     "build": "cross-env NODE_ENV=production electron-builder",
     "build:win": "cross-env NODE_ENV=production electron-builder --win",
     "build:mac": "cross-env NODE_ENV=production electron-builder --mac",
@@ -52,7 +52,9 @@
     "build:mock:linux-arm": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-linux-arm64 --output build/cli/gurumockcli-linux-arm",
     "build:mock:all": "npm run build:mock:mac && npm run build:mock:linux && npm run build:mock:linux-arm",
     "tag": "git tag v$(node -p \"require('./package.json').version\")",
-    "tag:push": "npm run tag && git push origin v$(node -p \"require('./package.json').version\")"
+    "tag:push": "npm run tag && git push origin v$(node -p \"require('./package.json').version\")",
+    "update:readme": "node scripts/update-readme-version.js",
+    "verify:readme": "node scripts/verify-readme-version.js"
   },
   "repository": {
     "type": "git",

@@ -33,6 +33,9 @@ jobs:
       - name: Run tests with coverage
         run: npm run test:coverage
 
+      - name: Verify README version
+        run: npm run verify:readme
+
   build:
     needs: test
     runs-on: ${{ matrix.os }}
@@ -145,6 +148,28 @@ jobs:
         id: get_version
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
+      - name: Update README with current version
+        run: npm run update:readme
+
+      - name: Determine version bump type
+        id: version_bump_type
+        run: |
+          # Check commit message for version bump indicators
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          
+          if [[ "$COMMIT_MSG" =~ \[major\] ]]; then
+            echo "BUMP_TYPE=major" >> $GITHUB_OUTPUT
+          elif [[ "$COMMIT_MSG" =~ \[minor\] ]]; then
+            echo "BUMP_TYPE=minor" >> $GITHUB_OUTPUT
+          elif [[ "$COMMIT_MSG" =~ \[patch\] ]]; then
+            echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
+          elif [[ "$COMMIT_MSG" =~ ^feat: ]]; then
+            echo "BUMP_TYPE=minor" >> $GITHUB_OUTPUT
+          else
+            echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
+          fi
+          echo "Version bump type: ${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
+
       - name: Generate release name
         id: release_name
         run: |
@@ -187,6 +212,7 @@ jobs:
             - Commit: ${{ github.sha }}
             - Branch: ${{ github.ref_name }}
             - Version: ${{ steps.get_version.outputs.VERSION }}
+            - Version Bump Type: ${{ steps.version_bump_type.outputs.BUMP_TYPE }}
           draft: false
           prerelease: false
           files: |
@@ -204,8 +230,10 @@ jobs:
 
       - name: Bump version
         run: |
-          # Bump patch version
-          npm version patch --no-git-tag-version
+          # Bump version based on determined type
+          BUMP_TYPE="${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
+          echo "Bumping $BUMP_TYPE version..."
+          npm version $BUMP_TYPE --no-git-tag-version
           
           # Get new version
           NEW_VERSION=$(node -p "require('./package.json').version")
@@ -215,6 +243,6 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add package.json
-          git commit -m "Bump version to $NEW_VERSION [skip ci]"
+          git add package.json README.md docs/
+          git commit -m "Bump version to $NEW_VERSION (${{ steps.version_bump_type.outputs.BUMP_TYPE }}) and update documentation [skip ci]"
           git push origin master 

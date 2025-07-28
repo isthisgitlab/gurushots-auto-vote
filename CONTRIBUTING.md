@@ -38,6 +38,8 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 - `npm run verify:settings` - Verify settings functionality
 - `npm run verify:challenges` - Test challenges loading
 - `npm run debug:environment` - Debug environment detection
+- `npm run update:readme` - Update README.md with current version from package.json
+- `npm run verify:readme` - Verify README.md matches package.json version
 
 ### Project Structure
 
@@ -65,6 +67,8 @@ scripts/              # Development and build utilities
 ├── debug-environment.js  # Debug environment detection
 ├── debug-window-bounds.js # Test window positioning
 ├── cleanup-logs.js       # Log cleanup utility
+├── update-readme-version.js # Update README with current version
+├── verify-readme-version.js # Verify README version matches package.json
 └── dev.js               # Development server
 ```
 
@@ -107,12 +111,26 @@ This eliminates code duplication and provides clean separation between real and 
 3. Run linting and tests:
    ```bash
    npm run lint
+   npm run test
    ```
-4. Commit with clear messages:
+4. **Important**: If you changed the version in package.json, update the README:
+   ```bash
+   npm run update:readme
+   ```
+5. Commit with clear messages:
    ```bash
    git commit -m "feat: add new voting feature"
    ```
-5. Push and create a pull request
+6. Push and create a pull request
+
+### README Maintenance
+
+The README.md file contains download links and version information that must stay in sync with the package.json version:
+
+- **Before committing**: Run `npm run verify:readme` to check if README is up to date
+- **After version changes**: Run `npm run update:readme` to update all version references
+- **CI/CD**: The build process automatically verifies and updates the README
+- **Manual updates**: If you manually edit download links, ensure they match the current version
 
 ### Commit Messages
 
