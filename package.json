@@ -1,6 +1,6 @@
 {
   "name": "gurushots-auto-vote",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with GUI and CLI interfaces",
   "main": "src/js/index.js",
   "scripts": {
@@ -152,8 +152,13 @@
   },
   "jest": {
     "testEnvironment": "node",
-    "roots": ["<rootDir>/src", "<rootDir>/tests"],
-    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
+    "roots": [
+      "<rootDir>/src",
+      "<rootDir>/tests"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/tests/setup.js"
+    ],
     "testMatch": [
       "**/__tests__/**/*.js",
       "**/?(*.)+(spec|test).js"
@@ -169,7 +174,11 @@
       "src/js/apiFactory.js"
     ],
     "coverageDirectory": "coverage",
-    "coverageReporters": ["text", "lcov", "html"],
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ],
     "coverageThreshold": {
       "global": {
         "branches": 90,
