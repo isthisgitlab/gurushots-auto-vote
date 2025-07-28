@@ -7,7 +7,8 @@
       "mcp__sequential-thinking__sequentialthinking",
       "Bash(ls:*)",
       "Bash(find:*)",
-      "Bash(npm audit:*)"
+      "Bash(npm audit:*)",
+      "Bash(node:*)"
     ]
   },
   "enabledMcpjsonServers": [
