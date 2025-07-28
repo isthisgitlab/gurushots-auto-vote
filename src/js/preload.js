@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld(
         logError: (message, data) => ipcRenderer.invoke('log-error', message, data),
         logApi: (message, data) => ipcRenderer.invoke('log-api', message, data),
         getLogFile: () => ipcRenderer.invoke('get-log-file'),
+        getErrorLogFile: () => ipcRenderer.invoke('get-error-log-file'),
+        getApiLogFile: () => ipcRenderer.invoke('get-api-log-file'),
     
         // Boost configuration methods
         getBoostThreshold: (challengeId) => ipcRenderer.invoke('get-boost-threshold', challengeId),

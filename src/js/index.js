@@ -142,6 +142,10 @@ app.whenReady().then(async () => {
     // Initialize API headers on app startup
     initializeHeaders();
     
+    // Run log cleanup on app startup
+    const logger = require('./logger');
+    logger.cleanup();
+    
     await checkAutoLogin();
 
     // On macOS, re-create a window when dock icon is clicked and no windows are open
@@ -402,6 +406,14 @@ ipcMain.handle('log-api', async (event, message, data) => {
 
 ipcMain.handle('get-log-file', async () => {
     return logger.getLogFile();
+});
+
+ipcMain.handle('get-error-log-file', async () => {
+    return logger.getErrorLogFile();
+});
+
+ipcMain.handle('get-api-log-file', async () => {
+    return logger.getApiLogFile();
 });
 
 // Boost configuration handlers
