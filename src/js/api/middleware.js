@@ -11,7 +11,7 @@ const { authenticate } = require('./login');
 const { fetchChallengesAndVote } = require('./main');
 const { getActiveChallenges } = require('./challenges');
 const { getVoteImages, submitVotes } = require('./voting');
-const { applyBoost } = require('./boost');
+const { applyBoost, applyBoostToEntry } = require('./boost');
 
 /**
  * CLI-specific login function with user prompts
@@ -198,4 +198,5 @@ module.exports = {
     getVoteImages,
     submitVotes,
     applyBoost,
+    applyBoostToEntry,
 }; 

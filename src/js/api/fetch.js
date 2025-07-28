@@ -17,6 +17,7 @@ require('dotenv').config({path: path.resolve(__dirname, '../.env')});
 
 const axios = require('axios');
 const prompt = require('prompt-sync')();
+const { generateRandomHeaders } = require('./randomizer');
 
 // Common content type for form submissions
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
@@ -56,23 +57,12 @@ const makePostRequest = async (url, headers, data = '') => {
  * Common headers for all API requests to GuruShots
  * 
  * These headers mimic an iOS device to ensure compatibility with the API.
+ * Headers are randomized to make the app look more natural when used by multiple people.
  * The x-token header is populated from the TOKEN environment variable
  * which is obtained during the login process.
  */
-const commonHeaders = {
-    'host': 'api.gurushots.com',
-    'accept': '*/*',
-    'x-device': 'iPhone',                // Identifies as an iPhone device
-    'x-requested-with': 'XMLHttpRequest',
-    'x-model': 'iPhone X',               // Specific iPhone model
-    'accept-language': 'fr-SE;q=1.0, en-SE;q=0.9, sv-SE;q=0.8, es-SE;q=0.7',
-    'x-api-version': '20',               // API version required by GuruShots
-    'x-env': 'IOS',                      // Environment identifier
-    'user-agent': 'GuruShotsIOS/2.41.3 (com.gurushots.app; build:507; iOS 16.7.11) Alamofire/5.10.2',
-    'x-app-version': '2.41.3',           // App version to match
-    'connection': 'keep-alive',
-    'x-brand': 'Apple',
-    'x-token': process.env.TOKEN,        // Authentication token from .env
+const getCommonHeaders = () => {
+    return generateRandomHeaders(process.env.TOKEN);
 };
 
 /**
@@ -83,7 +73,7 @@ const commonHeaders = {
  */
 const getActiveChallenges = async () => {
     console.log('Getting active challenges');
-    const headers = {...commonHeaders};
+    const headers = getCommonHeaders();
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/get_my_active_challenges', headers);
     
     // Handle failed requests gracefully
@@ -106,7 +96,7 @@ const getVoteImages = async (challenge) => {
     // Request up to 100 images for voting
     const data = `limit=100&url=${challenge.url}`;
     const headers = {
-        ...commonHeaders, 
+        ...getCommonHeaders(), 
         'content-type': FORM_CONTENT_TYPE,
     };
 
@@ -173,7 +163,7 @@ const submitVotes = async (voteImages) => {
     // Prepare final request data
     const data = `c_id=${challenge.id}${votedImages}&layout=scroll${viewedImages}`;
     const headers = {
-        ...commonHeaders, 
+        ...getCommonHeaders(), 
         'content-type': FORM_CONTENT_TYPE,
     };
 
@@ -225,7 +215,7 @@ const applyBoost = async (challenge) => {
     // Prepare request data
     const data = `c_id=${id}&image_id=${boostImageId}`;
     const headers = {
-        ...commonHeaders, 
+        ...getCommonHeaders(),
         'content-type': FORM_CONTENT_TYPE,
     };
 
@@ -237,6 +227,32 @@ const applyBoost = async (challenge) => {
     }
 
     console.log(`Boost applied successfully to image ID: ${boostImageId}`);
+    return response;
+};
+
+/**
+ * Applies a boost to a specific photo entry in a challenge
+ * 
+ * @param {number} challengeId - Challenge ID
+ * @param {string} imageId - Image ID to boost
+ * @returns {object|null} - API response or null if boost failed
+ */
+const applyBoostToEntry = async (challengeId, imageId) => {
+    // Prepare request data
+    const data = `c_id=${challengeId}&image_id=${imageId}`;
+    const headers = {
+        ...getCommonHeaders(),
+        'content-type': FORM_CONTENT_TYPE,
+    };
+
+    // Send boost request to API
+    const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
+    if (!response) {
+        console.error(`Failed to apply boost for challenge ID: ${challengeId}, image ID: ${imageId}`);
+        return null;
+    }
+
+    console.log(`Boost applied successfully to image ID: ${imageId} in challenge ${challengeId}`);
     return response;
 };
 
@@ -362,7 +378,7 @@ const login = async () => {
         method: 'post',
         url: 'https://api.gurushots.com/rest_mobile/signup', // API endpoint for login
         headers: {
-            ...commonHeaders,
+            ...getCommonHeaders(),
             'content-type': FORM_CONTENT_TYPE,
             'content-length': data.length.toString(),
             'x-token': undefined, // Remove token for login request
@@ -425,4 +441,5 @@ const login = async () => {
 module.exports = {
     fetchChallengesAndVote,
     login,
+    applyBoostToEntry,
 };

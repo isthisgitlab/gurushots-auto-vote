@@ -41,6 +41,7 @@ const getApi = () => {
             getVoteImages: mockApi.mockApiClient.getVoteImages,
             submitVotes: mockApi.mockApiClient.submitVotes,
             applyBoost: mockApi.mockApiClient.applyBoost,
+            applyBoostToEntry: mockApi.mockApiClient.applyBoostToEntry,
         };
     } else {
         console.log('🌐 Using REAL API for production');
@@ -52,6 +53,7 @@ const getApi = () => {
             getVoteImages: realApi.getVoteImages,
             submitVotes: realApi.submitVotes,
             applyBoost: realApi.applyBoost,
+            applyBoostToEntry: realApi.applyBoostToEntry,
         };
     }
 };
