@@ -93,7 +93,7 @@ npm run cli:help       # Show help
 
 #### **Mock API (Testing)**
 ```bash
-npm run mock:login     # Test login (uses test credentials)
+npm run mock:login     # Test login (accepts any email/password)
 npm run mock:vote      # Test voting cycle
 npm run mock:start     # Test continuous voting
 npm run mock:status    # Check mock status

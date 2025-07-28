@@ -35,23 +35,50 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 - `npm run dev` - Development mode with hot reload
 - `npm run lint` - Check code style
 - `npm run lint:fix` - Fix code style issues
-- `npm test` - Run tests (when available)
+- `npm run verify:settings` - Verify settings functionality
+- `npm run verify:challenges` - Test challenges loading
+- `npm run debug:environment` - Debug environment detection
 
 ### Project Structure
 
 ```
 src/
 ├── js/
-│   ├── api/          # API modules for GuruShots integration
-│   ├── cli/          # Command-line interface
+│   ├── api/          # Real API modules for GuruShots integration
+│   ├── cli/          # Command-line interface (cli.js, mock-cli.js)
 │   ├── mock/         # Mock API for testing
+│   ├── services/     # Base services (middleware, etc.)
+│   ├── strategies/   # API strategy implementations (real/mock)
+│   ├── interfaces/   # Abstract interfaces for strategies
+│   ├── apiFactory.js # Factory for switching between real/mock APIs
 │   ├── app.js        # Main renderer process
 │   ├── index.js      # Main electron process
 │   └── preload.js    # Preload script for security
 ├── html/             # HTML templates
 ├── styles/           # CSS styles (Tailwind)
 └── assets/           # Images and other assets
+
+scripts/              # Development and build utilities
+├── verify-settings.js    # Verify settings functionality
+├── verify-challenges.js  # Test challenges loading
+├── verify-login.js       # Test authentication
+├── debug-environment.js  # Debug environment detection
+├── debug-window-bounds.js # Test window positioning
+├── cleanup-logs.js       # Log cleanup utility
+└── dev.js               # Development server
 ```
+
+### Architecture
+
+The application uses a **Strategy Pattern** for API handling:
+
+- **`apiFactory.js`** - Factory that switches between real and mock APIs based on settings
+- **`interfaces/ApiStrategy.js`** - Abstract interface that all API strategies must implement
+- **`strategies/RealApiStrategy.js`** - Real API implementation using actual GuruShots endpoints
+- **`strategies/MockApiStrategy.js`** - Mock API implementation for testing without real API calls
+- **`services/BaseMiddleware.js`** - Common middleware logic shared between real and mock implementations
+
+This eliminates code duplication and provides clean separation between real and mock functionality.
 
 ## 📝 Code Guidelines
 
@@ -132,9 +159,24 @@ Before suggesting new features:
 - [ ] Tests added/updated
 - [ ] No breaking changes (or clearly documented)
 
-## 🧪 Testing
+## 🧪 Development Utilities
 
-### Mock Mode
+### Verification Scripts
+
+Test specific functionality without the full app:
+
+```bash
+# Verify core functionality
+npm run verify:settings     # Test settings system
+npm run verify:challenges   # Test challenges loading
+npm run verify:login        # Test authentication
+
+# Debug utilities  
+npm run debug:environment   # Check environment detection
+npm run debug:window-bounds # Test window positioning
+```
+
+### Mock Mode Testing
 
 Test your changes without real API calls:
 ```bash
@@ -147,6 +189,7 @@ npm run mock:start
 - Verify on different platforms
 - Check error handling
 - Test with invalid credentials
+- Run verification scripts after changes
 
 ## 📦 Building
 

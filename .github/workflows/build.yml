@@ -134,27 +134,30 @@ jobs:
           name: Release ${{ steps.release_name.outputs.RELEASE_NAME }}
           generate_release_notes: true
           body: |
-            ## What's Changed
+            ## 📦 Build
             
-            ### 🚀 New Features
-            - Add your new features here
+            ### 🖥️ GUI Applications
+            - **Windows**: Portable executable (x64)
+            - **macOS**: DMG installer (ARM64)
+            - **Linux**: AppImage (x64 + ARM64)
             
-            ### 🐛 Bug Fixes
-            - Add your bug fixes here
+            ### 💻 CLI Applications
+            - **macOS**: Native CLI executables (x64)
+            - **Linux**: Native CLI executables (x64 + ARM64)
+            - **Mock Mode**: Test CLI versions available
             
-            ### 📦 Build
-            - Built for Windows, macOS, and Linux
-            - Includes installers and portable versions
-            - CLI versions for macOS and Linux
+            ### 🔧 Features
+            - Automated voting on GuruShots challenges
+            - Boost management and application
+            - Dual interface: GUI and command-line
+            - Secure authentication with remember me
+            - Theme support (light/dark mode)
+            - Cross-platform compatibility
             
-            ### 📥 Downloads
-            - **Windows**: NSIS installer and portable executable
-            - **macOS**: DMG installer, ZIP archive, and CLI executables
-            - **Linux**: AppImage, DEB package, and CLI executables
-            
-            ### 🔗 Commit
+            ### 🔗 Build Info
             - Commit: ${{ github.sha }}
             - Branch: ${{ github.ref_name }}
+            - Version: ${{ steps.get_version.outputs.VERSION }}
           draft: false
           prerelease: false
           files: |
