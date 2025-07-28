@@ -1,0 +1,135 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: win
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build CSS
+        run: npm run build:css
+
+      - name: Build Electron app
+        run: npm run build:${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js 18 for CLI builds
+        if: matrix.platform != 'win'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Build CLI app (macOS/Linux only)
+        if: matrix.platform != 'win'
+        run: npm run build:cli:${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Mock CLI app (macOS/Linux only)
+        if: matrix.platform != 'win'
+        run: npm run build:mock:${{ matrix.platform }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}-builds
+          path: build/
+          retention-days: 7
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '23'
+
+      - name: Get version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Generate release name
+        id: release_name
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          COMMIT_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+          echo "RELEASE_NAME=v$VERSION-$COMMIT_SHORT" >> $GITHUB_OUTPUT
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_name.outputs.RELEASE_NAME }}
+          name: Release ${{ steps.release_name.outputs.RELEASE_NAME }}
+          body: |
+            ## What's Changed
+            
+            ### 🚀 New Features
+            - Add your new features here
+            
+            ### 🐛 Bug Fixes
+            - Add your bug fixes here
+            
+            ### 📦 Build
+            - Built for Windows, macOS, and Linux
+            - Includes installers and portable versions
+            - CLI versions for macOS and Linux
+            
+            ### 📥 Downloads
+            - **Windows**: NSIS installer and portable executable
+            - **macOS**: DMG installer, ZIP archive, and CLI executables
+            - **Linux**: AppImage, DEB package, and CLI executables
+            
+            ### 🔗 Commit
+            - Commit: ${{ github.sha }}
+            - Branch: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/mac-builds/*
+            artifacts/linux-builds/*
+            artifacts/win-builds/*
+            artifacts/mac-builds/cli/*
+            artifacts/linux-builds/cli/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
