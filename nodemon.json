@@ -1,0 +1,11 @@
+{
+  "watch": ["src"],
+  "ext": "js,html,css",
+  "ignore": ["node_modules", "dist"],
+  "exec": "electron .",
+  "env": {
+    "NODE_ENV": "development"
+  },
+  "delay": 500,
+  "killTimeout": 3000
+}

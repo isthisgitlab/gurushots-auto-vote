@@ -1,0 +1,110 @@
+{
+  "name": "gurushots-auto-vote",
+  "version": "0.0.1",
+  "description": "A simple Electron application with login and logout functionality",
+  "main": "src/js/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron .",
+    "cli:login": "node src/js/cli/cli.js login",
+    "cli:vote": "node src/js/cli/cli.js vote",
+    "cli:start": "node src/js/cli/cli.js start",
+    "cli:status": "node src/js/cli/cli.js status",
+    "cli:reset-windows": "node src/js/cli/cli.js reset-windows",
+    "cli:help": "node src/js/cli/cli.js help",
+    "mock:login": "node src/js/cli/mock-cli.js login",
+    "mock:vote": "node src/js/cli/mock-cli.js vote",
+    "mock:start": "node src/js/cli/mock-cli.js start",
+    "mock:status": "node src/js/cli/mock-cli.js status",
+    "mock:help": "node src/js/cli/mock-cli.js help",
+    "test:settings": "node src/js/cli/test-settings.js",
+    "test:settings:dev": "NODE_ENV=development node src/js/cli/test-settings.js",
+    "test:settings:prod": "NODE_ENV=production node src/js/cli/test-settings.js",
+    "test:gui-env": "node src/js/cli/test-gui-env.js",
+    "test:window-bounds": "node src/js/cli/test-window-bounds.js",
+    "test:gui-challenges": "node src/js/cli/test-gui-challenges.js",
+    "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
+    "watch:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --watch",
+    "watch:app": "nodemon --no-restart-on exit",
+    "dev": "concurrently --kill-others \"npm run watch:css\" \"node scripts/dev.js\"",
+    "dev:no-watch": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
+    "dev:once": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
+    "bump": "npx npm-check-updates -u && npm i",
+    "prebuild": "npm run build:css",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder -mwl",
+    "build:cli:mac": "npm run build:css && pkg src/js/cli/cli.js --targets node18-macos-x64 --output build/cli/gurucli",
+    "build:cli:linux": "npm run build:css && pkg src/js/cli/cli.js --targets node18-linux-x64 --output build/cli/gurucli",
+    "build:cli:all": "npm run build:cli:mac && npm run build:cli:linux",
+    "build:mock:mac": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-macos-x64 --output build/cli/gurumockcli",
+    "build:mock:linux": "npm run build:css && pkg src/js/cli/mock-cli.js --targets node18-linux-x64 --output build/cli/gurumockcli",
+    "build:mock:all": "npm run build:mock:mac && npm run build:mock:linux"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/isthisgitlab/gurushots-auto-vote.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/isthisgitlab/gurushots-auto-vote/issues"
+  },
+  "homepage": "https://github.com/isthisgitlab/gurushots-auto-vote#readme",
+  "dependencies": {
+    "axios": "^1.11.0",
+    "node-cron": "^4.2.1",
+    "pkg": "^5.8.1",
+    "prompt-sync": "^4.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "@tailwindcss/cli": "^4.1.11",
+    "concurrently": "^9.2.0",
+    "daisyui": "^5.0.48",
+    "electron": "^37.2.4",
+    "electron-builder": "^26.0.12",
+    "eslint": "^9.32.0",
+    "nodemon": "^3.1.10",
+    "tailwindcss": "^4.1.11"
+  },
+  "build": {
+    "appId": "com.gurushots.autovote",
+    "productName": "GuruShots Auto Vote",
+    "files": [
+      "dist/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "build"
+    },
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "src/assets/logo.png"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "src/assets/logo.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "icon": "src/assets/logo.png"
+    }
+  }
+}
