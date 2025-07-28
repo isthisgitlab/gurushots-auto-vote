@@ -1,0 +1,34 @@
+@import "tailwindcss" source(none);
+@source "../../src/html/**/*.html";
+@source "../../src/js/**/*.js";
+@plugin "daisyui" {
+    themes: light, dark;
+    base: true;
+    styled: true;
+    utils: true;
+    logs: false;
+}
+
+@theme {
+    --color-latvian: #960018;
+}
+
+/* Latvian color utility classes */
+.btn-latvian {
+    background-color: var(--color-latvian);
+    border-color: var(--color-latvian);
+    color: white;
+}
+
+.btn-latvian:hover {
+    background-color: #7a0014;
+    border-color: #7a0014;
+}
+
+.text-latvian {
+    color: var(--color-latvian);
+}
+
+.bg-latvian {
+    background-color: var(--color-latvian);
+}
