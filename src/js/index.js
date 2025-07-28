@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const settings = require('./settings');
+const { initializeHeaders } = require('./api/randomizer');
 
 // Global force exit handler to ensure the application always terminates
 let forceExitTimeout = null;
@@ -138,6 +139,9 @@ async function checkAutoLogin() {
 
 // When Electron has finished initialization
 app.whenReady().then(async () => {
+    // Initialize API headers on app startup
+    initializeHeaders();
+    
     await checkAutoLogin();
 
     // On macOS, re-create a window when dock icon is clicked and no windows are open
@@ -673,6 +677,51 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         return {
             success: false,
             error: error.message || 'Failed to vote on challenge',
+        };
+    }
+});
+
+// Handle apply boost to entry request
+ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
+    try {
+        console.log('🚀 Apply boost to entry request:', { challengeId, imageId });
+    
+        const userSettings = settings.loadSettings();
+    
+        if (!userSettings.token) {
+            console.log('❌ No token found for boost');
+            return {
+                success: false,
+                error: 'No authentication token found',
+            };
+        }
+    
+        // Use the API factory to get the appropriate API
+        const apiFactory = require('./apiFactory');
+        const api = apiFactory.getApi();
+    
+        // Apply boost to the specific entry
+        console.log('🚀 Applying boost to entry:', { challengeId, imageId });
+        const result = await api.applyBoostToEntry(challengeId, imageId, userSettings.token);
+    
+        if (result) {
+            console.log('✅ Boost applied successfully');
+            return {
+                success: true,
+                message: 'Boost applied successfully',
+            };
+        } else {
+            console.log('❌ Failed to apply boost');
+            return {
+                success: false,
+                error: 'Failed to apply boost',
+            };
+        }
+    } catch (error) {
+        console.error('Error applying boost to entry:', error);
+        return {
+            success: false,
+            error: error.message || 'Failed to apply boost',
         };
     }
 });

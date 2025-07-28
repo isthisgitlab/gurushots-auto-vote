@@ -86,13 +86,13 @@ const getDefaultMockSetting = () => {
         process.env.PROD === 'true' ||
         process.env.PROD === '1';
     
-    // Default to development mode if not explicitly set to production
+    // Default to production mode (mock disabled) for safety
     if (isProd) {
         return false;
     }
     
-    // Default to development mode (mock enabled) for safety
-    return true;
+    // Default to production mode (mock disabled) for safety
+    return false;
 };
 
 // Default settings with environment-aware mock setting
@@ -143,6 +143,7 @@ const settingsSchema = {
     boostConfig: (value) => typeof value === 'object' && value !== null && 
                            typeof value.defaultThreshold === 'number' && 
                            typeof value.perChallenge === 'object',
+    apiHeaders: (value) => typeof value === 'object' && value !== null,
 };
 
 /**

@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld(
         // Voting control methods
         shouldCancelVoting: () => ipcRenderer.invoke('should-cancel-voting'),
         setCancelVoting: (shouldCancel) => ipcRenderer.invoke('set-cancel-voting', shouldCancel),
+        
+        // Boost methods
+        applyBoostToEntry: (challengeId, imageId) => ipcRenderer.invoke('apply-boost-to-entry', challengeId, imageId),
     
     // Optional: Add listeners for responses from main process
     // Example: on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args))

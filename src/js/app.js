@@ -144,7 +144,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
         return timeA - timeB;
     });
     
-    const challengesHtml = sortedChallenges.map(challenge => {
+    const challengesHtmlArray = await Promise.all(sortedChallenges.map(async challenge => {
         // Log challenge processing (synchronously to avoid async issues)
         console.log('🎨 Processing challenge:', challenge.title);
         
@@ -153,6 +153,17 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
         const boostStatus = getBoostStatus(challenge.member.boost, challenge.id, challenge.close_time);
         const exposureFactor = challenge.member.ranking.exposure.exposure_factor;
         const entries = challenge.member.ranking.entries;
+        
+        // Get boost threshold for tooltip
+        let tooltipText = 'Configure boost';
+        try {
+            const threshold = await window.api.getBoostThreshold(challenge.id);
+            const hours = Math.floor(threshold / 3600);
+            const minutes = Math.floor((threshold % 3600) / 60);
+            tooltipText = `Auto-boost when < ${hours}h ${minutes}m remaining`;
+        } catch (error) {
+            console.error('Error getting boost threshold for tooltip:', error);
+        }
         
         // Get user progress data
         const userProgress = challenge.member.ranking.total;
@@ -213,9 +224,22 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
             const turboIcon = entry.turbo ? '⚡' : '📷';
             const boostClass = entry.boost === 1 ? 'badge-success' : 'badge-secondary';
             
+            // Show boost button only if boost is available and entry is not already boosted
+            const showBoostButton = boostStatus.includes('Available') && entry.boost !== 1;
+            const boostButtonHtml = showBoostButton ? `
+                <button class="btn btn-xs btn-warning ml-1 entry-boost-btn" 
+                        data-challenge-id="${challenge.id}" 
+                        data-image-id="${entry.id}" 
+                        data-entry-rank="${entry.rank}"
+                        onclick="boostEntry(${challenge.id}, '${entry.id}', ${entry.rank})">
+                    🚀
+                </button>
+            ` : '';
+            
             return `
-                <div class="badge badge-outline ${boostClass} ${entry.turbo ? 'badge-warning' : ''}">
+                <div class="badge badge-outline ${boostClass} ${entry.turbo ? 'badge-warning' : ''} flex items-center">
                     ${turboIcon} ${boostIcon} ${guruIcon} ${translationManager.t('app.rank')} ${entry.rank} (${entry.votes} ${translationManager.t('app.votes')})
+                    ${boostButtonHtml}
                 </div>
             `;
         }).join('');
@@ -327,7 +351,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.boost')}</div>
                             <div class="${boostStatus.includes('Available') ? 'text-success' : boostStatus === 'Used' ? 'text-warning' : 'text-error'}">${boostStatus.includes('Available') ? translationManager.t('app.available') : boostStatus === 'Used' ? 'Used' : 'None'}</div>
-                            <button class="btn btn-xs btn-ghost mt-1 tooltip" data-tip="Loading..." id="boost-config-${challenge.id}" onclick="configureBoost(${challenge.id}, '${challenge.title}')">
+                            <button class="btn btn-xs btn-ghost mt-1 tooltip" data-tip="${tooltipText}" id="boost-config-${challenge.id}" onclick="configureBoost(${challenge.id}, '${challenge.title}')">
                                 ⚙️
                             </button>
                         </div>
@@ -356,7 +380,9 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                 </div>
             </div>
         `;
-    }).join('');
+    }));
+    
+    const challengesHtml = challengesHtmlArray.join('');
     
     container.innerHTML = challengesHtml;
     
@@ -558,6 +584,12 @@ window.saveBoostConfig = async (challengeId) => {
         
         await window.api.setBoostThreshold(challengeId, threshold);
         closeBoostModal();
+        
+        // Update the tooltip immediately
+        const configButton = document.getElementById(`boost-config-${challengeId}`);
+        if (configButton) {
+            configButton.setAttribute('data-tip', `Auto-boost when < ${hours}h ${minutes}m remaining`);
+        }
         
         // Refresh challenges to show updated configuration
         await loadChallenges(document.getElementById('timezone-select').value, autovoteRunning);
@@ -1162,3 +1194,51 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // No welcome toast - annoying
 });
+
+// Global function to boost a specific entry
+window.boostEntry = async (challengeId, imageId, rank) => {
+    try {
+        console.log(`🚀 Boosting entry: Challenge ${challengeId}, Image ${imageId}, Rank ${rank}`);
+        
+        // Show loading state on the button
+        const button = document.querySelector(`[data-challenge-id="${challengeId}"][data-image-id="${imageId}"]`);
+        if (button) {
+            const originalText = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<span class="loading loading-spinner loading-xs"></span>';
+            
+            // Call the API to apply boost
+            const result = await window.api.applyBoostToEntry(challengeId, imageId);
+            
+            if (result && result.success) {
+                console.log('✅ Boost applied successfully');
+                // Update the button to show success
+                button.innerHTML = '✅';
+                button.className = 'btn btn-xs btn-success ml-1';
+                
+                // Refresh challenges to show updated state
+                setTimeout(() => {
+                    loadChallenges(document.getElementById('timezone-select').value, false);
+                }, 1000);
+            } else {
+                console.error('❌ Failed to apply boost:', result?.error || 'Unknown error');
+                // Reset button on error
+                button.disabled = false;
+                button.innerHTML = originalText;
+                
+                // Show error message
+                alert(`Failed to apply boost: ${result?.error || 'Unknown error'}`);
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error boosting entry:', error);
+        alert(`Error boosting entry: ${error.message || 'Unknown error'}`);
+        
+        // Reset button on error
+        const button = document.querySelector(`[data-challenge-id="${challengeId}"][data-image-id="${imageId}"]`);
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = '🚀';
+        }
+    }
+};
