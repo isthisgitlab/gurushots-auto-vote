@@ -197,6 +197,25 @@ const mockApiClient = {
     },
 
     /**
+     * Simulate applying boost to a specific entry
+     */
+    applyBoostToEntry: async (challengeId, imageId, token) => {
+        console.log('=== Mock applyBoostToEntry ===');
+        console.log('Challenge ID:', challengeId);
+        console.log('Image ID:', imageId);
+        console.log('Token provided:', token ? `${token.substring(0, 10)}...` : 'none');
+        
+        // In mock mode, accept any token (including real ones)
+        if (token) {
+            console.log('Applying boost to specific entry successfully');
+            return simulateApiResponse(boost.mockBoostSuccess, 1500);
+        } else {
+            console.log('No token provided, returning error');
+            return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
+        }
+    },
+
+    /**
      * Simulate the main voting process (fetchChallengesAndVote)
      */
     fetchChallengesAndVote: async (token) => {

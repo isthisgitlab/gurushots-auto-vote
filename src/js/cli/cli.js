@@ -30,6 +30,7 @@ const middleware = realApi;
 
 // Import settings
 const settings = require('../settings');
+const { initializeHeaders } = require('../api/randomizer');
 
 // Get command line arguments
 const args = process.argv.slice(2);
@@ -213,6 +214,9 @@ const showStatus = () => {
  */
 const main = async () => {
     try {
+        // Initialize API headers on CLI startup
+        initializeHeaders();
+        
         switch (command) {
         case 'login':
             console.log('Starting login process...');
