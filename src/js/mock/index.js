@@ -269,9 +269,42 @@ const mockApiClient = {
                 // Check if boost-only mode is enabled for this challenge
                 const onlyBoost = settings.getEffectiveSetting('onlyBoost', challenge.id.toString());
 
-                // Simulate voting if exposure factor is less than the effective threshold
-                // Skip voting if boost-only mode is enabled
-                if (!onlyBoost && challenge.member.ranking.exposure.exposure_factor < effectiveThreshold) {
+                // Get the effective lastminute threshold for this challenge
+                const effectiveLastMinutes = settings.getEffectiveSetting('lastMinutes', challenge.id.toString());
+                const now = Math.floor(Date.now() / 1000);
+                const timeUntilEnd = challenge.close_time - now;
+                const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+
+                // Determine if we should vote based on lastminute threshold logic
+                let shouldVote = false;
+                let voteReason = '';
+
+                if (onlyBoost) {
+                    // Skip voting if boost-only mode is enabled
+                    voteReason = 'boost-only mode enabled';
+                } else if (challenge.start_time >= now) {
+                    // Skip voting if challenge hasn't started yet
+                    voteReason = 'challenge not started';
+                } else if (isWithinLastMinuteThreshold) {
+                    // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
+                    if (challenge.member.ranking.exposure.exposure_factor < 100) {
+                        shouldVote = true;
+                        voteReason = `lastminute threshold (${effectiveLastMinutes}m): exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
+                    } else {
+                        voteReason = `lastminute threshold (${effectiveLastMinutes}m): exposure already at 100%`;
+                    }
+                } else {
+                    // Normal logic: vote if exposure factor is less than the effective threshold
+                    if (challenge.member.ranking.exposure.exposure_factor < effectiveThreshold) {
+                        shouldVote = true;
+                        voteReason = `normal threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveThreshold}%`;
+                    } else {
+                        voteReason = `normal threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveThreshold}%`;
+                    }
+                }
+
+                // Simulate voting if conditions are met
+                if (shouldVote) {
                     // Check for cancellation before voting
                     if (shouldCancelVoting) {
                         console.log('🛑 Mock voting cancelled by user before voting');
@@ -292,8 +325,9 @@ const mockApiClient = {
                             await simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
                         }
                     }
-                } else if (onlyBoost) {
-                    console.log(`Boost-only mode enabled for challenge: ${challenge.title}. Skipping voting.`);
+                } else {
+                    // Log why voting was skipped
+                    console.log(`Skipping voting on challenge: ${challenge.title} - ${voteReason}`);
                 }
 
                 // Check for cancellation before delay
