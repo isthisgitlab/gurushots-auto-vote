@@ -1,7 +1,7 @@
 # GuruShots Auto Voter
 
 [![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/workflows/Build%20and%20Release/badge.svg)](https://github.com/isthisgitlab/gurushots-auto-vote/actions)
-[![Coverage](https://img.shields.io/badge/coverage-97.28%25-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
+[![Coverage](https://img.shields.io/badge/coverage-97.25%25-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
 [![Tests](https://img.shields.io/badge/tests-160%20passing-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
 [![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
@@ -29,6 +29,9 @@ If you find this tool helpful, consider supporting its development:
 - **Theme Support**: Light and dark mode options
 - **Mock Mode**: Test the app without real API calls
 - **Comprehensive Testing**: Extensive test suite with >97% coverage
+- **Internationalization**: Multi-language support with dynamic language selection
+- **Configurable Timeouts**: Customizable API timeout and voting interval settings
+- **Enhanced Security**: Improved token handling and reduced sensitive data exposure
 
 ## 📥 Download & Install
 
@@ -36,9 +39,9 @@ If you find this tool helpful, consider supporting its development:
 
 **Latest Version: v0.0.3**
 
-> **🚀 Coming Soon: v0.0.4** - The next release will include the new **Last Minutes Threshold** feature, allowing automatic voting when challenges are within a specified time limit before ending. This feature is currently available in the development version.
+> **🚀 Latest Development Version: v0.0.4** - This version includes the **Last Minutes Threshold** feature, internationalization support, configurable timeouts, and enhanced security improvements. Available in the development version.
 > 
-> **Note**: The package.json shows version 0.0.4, but the latest **released** version is 0.0.3. The Last Minutes Threshold feature documented below will be available in the upcoming v0.0.4 release.
+> **Note**: The package.json shows version 0.0.4, which is the current development version. The Last Minutes Threshold feature and other improvements documented below are available in this version.
 
 #### **🖥️ GUI Applications (Recommended for most users)**
 
@@ -338,9 +341,13 @@ Press `Ctrl+C` to stop continuous voting.
 The app automatically saves your preferences:
 
 - **Theme**: Light or dark mode
+- **Language**: Application language selection
 - **Remember Me**: Stay logged in between sessions
 - **Window Position**: Remembers where you placed the app window
 - **Authentication**: Securely stores your login token
+- **API Timeout**: Configurable timeout for API requests (1-120 seconds)
+- **Voting Interval**: Customizable interval between voting cycles (1-60 minutes)
+- **Challenge Settings**: Per-challenge overrides for boost time, exposure, and last minutes threshold
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly.
 
@@ -371,6 +378,43 @@ You can set the Last Minutes Threshold in the app settings:
 - **Challenge ends in 5 minutes**: App will vote if exposure < 100%
 
 This feature is particularly useful for challenges where you want to maximize your final ranking in the closing minutes.
+
+## 🌍 Internationalization
+
+The application now supports multiple languages with dynamic language selection:
+
+- **Dynamic Language Switching**: Change languages on-the-fly without restarting
+- **Translation Keys**: Organized translation structure for better maintainability
+- **Language Dropdown**: Easy language selection in the UI
+- **Supported Languages**: English (default), with framework for additional languages
+
+### **Language Selection**
+
+You can change the application language through the settings interface. The language preference is automatically saved and restored on subsequent sessions.
+
+## ⏱️ Configurable Timeouts
+
+The application now includes configurable timing settings for better control over API interactions:
+
+- **API Timeout**: Configurable timeout for API requests (1-120 seconds, default: 30)
+- **Voting Interval**: Customizable interval between voting cycles (1-60 minutes, default: 3)
+- **Validation**: Built-in validation for timing settings
+- **User-Friendly Units**: Settings stored in human-readable units
+
+### **Timeout Configuration**
+
+These settings can be configured through the application settings interface and are automatically validated to ensure they remain within acceptable ranges.
+
+## 🔒 Enhanced Security
+
+Recent security improvements include:
+
+- **Reduced Token Exposure**: Minimized sensitive data in logs and debug output
+- **Boolean Token Checks**: Replaced token substring logging with boolean checks
+- **Improved Token Masking**: Enhanced token masking in CLI output
+- **Secure Debug Output**: Removed full token logging from API factory debug
+
+These improvements help protect your authentication tokens while maintaining the functionality needed for debugging and development.
 
 ## 🔍 Troubleshooting
 
@@ -450,7 +494,7 @@ Our test suite achieves excellent coverage across core components:
 
 | Component      | Statements | Branches | Functions | Lines  |
 |----------------|------------|----------|-----------|--------|
-| **Overall**    | 97.28%     | 92.45%   | 100%      | 97.79% |
+| **Overall**    | 97.25%     | 91.83%   | 100%      | 97.76% |
 | API Client     | 100%       | 100%     | 100%      | 100%   |
 | Authentication | 100%       | 100%     | 100%      | 100%   |
 | Challenges     | 100%       | 87.5%    | 100%      | 100%   |
@@ -467,6 +511,9 @@ Our test suite achieves excellent coverage across core components:
 - ✅ **Mock System**: Simulated API responses for testing and development
 - ✅ **Edge Cases**: Empty data, null responses, malformed inputs
 - ✅ **Last Minutes Threshold**: Time-based voting logic, threshold calculations, per-challenge overrides
+- ✅ **Internationalization**: Translation system, language switching, dynamic content
+- ✅ **Security Features**: Token handling, reduced exposure, boolean checks
+- ✅ **Configurable Settings**: Timeout validation, voting interval management
 
 ### **Mock Testing**
 
