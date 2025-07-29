@@ -37,7 +37,7 @@ const loginMock = async (username, password) => {
     }
 };
 
-// Toast notification function
+
 const showToast = (message, type = 'info') => {
     const toastContainer = document.getElementById('toast-container');
     const toast = document.createElement('div');
@@ -74,7 +74,7 @@ const showToast = (message, type = 'info') => {
     }, 5000);
 };
 
-// Form validation function
+
 const validateForm = () => {
     const username = document.getElementById('username');
     const password = document.getElementById('password');

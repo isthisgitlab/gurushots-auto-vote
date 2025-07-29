@@ -22,7 +22,7 @@ let lastMockSetting = null;
  * @returns {ApiStrategy} - API strategy instance (real or mock)
  */
 const getApiStrategy = () => {
-    // Force fresh settings load to avoid cache issues
+
     const userSettings = settings.loadSettings();
     
     // Check if we need to recreate the strategy due to setting change

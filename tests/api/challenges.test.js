@@ -159,7 +159,7 @@ describe('challenges', () => {
 
       expect(result).toEqual({ challenges: [] });
       expect(logger.error).toHaveBeenCalledWith('❌ Failed to fetch active challenges.');
-      // Note: No debug log is called when response is null as it returns early
+
     });
 
     test('should truncate long tokens in logs', async () => {

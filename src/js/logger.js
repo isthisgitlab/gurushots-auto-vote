@@ -105,7 +105,7 @@ const isDateOlderThan = (dateString, days) => {
     return fileDate < cutoffDate;
 };
 
-// Cleanup old log files based on date
+
 const cleanupOldLogs = () => {
     try {
         const files = fs.readdirSync(logsDir);
@@ -186,7 +186,7 @@ if (typeof setInterval !== 'undefined' && (isElectronApp || (isCliMode && proces
     cleanupInterval = setInterval(cleanupOldLogs, 60 * 60 * 1000); // 1 hour
 }
 
-// Cleanup on process exit
+
 if (typeof process !== 'undefined') {
     process.on('exit', () => {
         if (cleanupInterval) {

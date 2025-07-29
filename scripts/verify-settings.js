@@ -67,7 +67,7 @@ console.log('\n6. Testing Mock Setting Override:');
 const originalMock = settings.getSetting('mock');
 console.log(`   Current mock setting: ${originalMock}`);
 
-// Toggle mock setting
+
 const newMockValue = !originalMock;
 settings.setSetting('mock', newMockValue);
 console.log(`   Changed mock setting to: ${newMockValue}`);

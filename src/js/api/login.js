@@ -34,7 +34,7 @@ const authenticate = async (email, password) => {
             ...createCommonHeaders(undefined), // No token for login request
             'content-type': FORM_CONTENT_TYPE,
             'content-length': data.length.toString(),
-            'x-token': undefined, // Remove token for login request
+            'x-token': undefined,
         },
         data: data,
         timeout: 5000, // 5 second timeout

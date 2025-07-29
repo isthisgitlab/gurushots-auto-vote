@@ -1,7 +1,4 @@
-// Get translation manager from global scope
 const translationManager = window.translationManager;
-
-// No more toasts - they're annoying
 
 // Function to update all translations on the page
 const updateTranslations = () => {
@@ -252,8 +249,14 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
             entriesHtml = `<span class="text-base-content/60">${translationManager.t('app.noEntries')}</span>`;
         }
         
-        // Show vote button only if autovote is not running and challenge is active
-        const showVoteButton = !autovoteRunning && 
+        // Check if boost-only mode is enabled for this challenge
+        const onlyBoost = await window.api.getEffectiveSetting('onlyBoost', challenge.id.toString());
+        
+        // Show vote button if:
+        // 1. Autovote is not running, OR
+        // 2. Autovote is running but boost-only mode is enabled for this challenge
+        // AND challenge is active and exposure factor is less than 100 (not configured threshold)
+        const showVoteButton = (!autovoteRunning || (autovoteRunning && onlyBoost)) && 
                               challenge.start_time < Math.floor(Date.now() / 1000) && 
                               exposureFactor < 100;
         
@@ -548,7 +551,7 @@ const loadChallenges = async (timezone = 'local', autovoteRunning = false) => {
             // Extract challenge IDs for cleanup
             const activeChallengeIds = result.challenges.map(challenge => challenge.id.toString());
             
-            // Cleanup stale challenge settings
+
             try {
                 await window.api.cleanupStaleChallengeSetting(activeChallengeIds);
             } catch (error) {
@@ -646,7 +649,7 @@ const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => 
                 <div class="form-control mb-4">
                     <label class="label">
                         <span class="label-text font-medium" data-translate="${config.label}">${labelText}</span>
-                        <span class="badge badge-ghost badge-xs ml-2">Global Default</span>
+                        <span class="badge badge-ghost badge-xs ml-2" data-translate="app.globalDefault">${translationManager.t('app.globalDefault')}</span>
                     </label>
                     <p class="text-xs text-base-content/60 mb-2" data-translate="${config.description}">${descText}</p>
                     <div class="flex items-center gap-2">
@@ -683,23 +686,23 @@ const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => 
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                     </svg>
-                    Global Settings
+                    <span data-translate="app.globalSettings">${translationManager.t('app.globalSettings')}</span>
                 </h3>
                 
                 <div class="space-y-6">
                     <!-- App Settings Section -->
                     <div>
-                        <h4 class="font-semibold text-base mb-3 border-b border-base-300 pb-2">Application Settings</h4>
+                        <h4 class="font-semibold text-base mb-3 border-b border-base-300 pb-2" data-translate="app.applicationSettings">${translationManager.t('app.applicationSettings')}</h4>
                         <div class="space-y-4">
-                            ${uiSettingsHtml || '<div class="text-error">No UI settings to display</div>'}
+                            ${uiSettingsHtml || `<div class="text-error" data-translate="app.noUiSettingsToDisplay">${translationManager.t('app.noUiSettingsToDisplay')}</div>`}
                         </div>
                     </div>
                     
                     <!-- Challenge Settings Section -->
                     <div>
-                        <h4 class="font-semibold text-base mb-3 border-b border-base-300 pb-2">Challenge Defaults</h4>
+                        <h4 class="font-semibold text-base mb-3 border-b border-base-300 pb-2" data-translate="app.challengeDefaults">${translationManager.t('app.challengeDefaults')}</h4>
                         <div class="space-y-4">
-                            ${globalSettingsHtml || '<div class="text-error">No global settings to display</div>'}
+                            ${globalSettingsHtml || `<div class="text-error" data-translate="app.noGlobalSettingsToDisplay">${translationManager.t('app.noGlobalSettingsToDisplay')}</div>`}
                         </div>
                     </div>
                 </div>
@@ -734,14 +737,14 @@ const generateUISettingsHtml = async () => {
         uiSettingsHtml += `
             <div class="form-control mb-4">
                 <label class="label">
-                    <span class="label-text font-medium">Theme</span>
-                    <span class="badge badge-ghost badge-xs ml-2">UI Setting</span>
+                    <span class="label-text font-medium" data-translate="app.theme">${translationManager.t('app.theme')}</span>
+                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
                 </label>
-                <p class="text-xs text-base-content/60 mb-2">Choose between light and dark theme</p>
+                <p class="text-xs text-base-content/60 mb-2" data-translate="app.themeDesc">${translationManager.t('app.themeDesc')}</p>
                 <div class="flex items-center gap-2">
-                    <span class="text-sm" data-translate="common.light">Light</span>
+                    <span class="text-sm" data-translate="common.light">${translationManager.t('common.light')}</span>
                     <input type="checkbox" id="modal-theme-toggle" class="toggle toggle-sm" ${settings.theme === 'dark' ? 'checked' : ''}>
-                    <span class="text-sm" data-translate="common.dark">Dark</span>
+                    <span class="text-sm" data-translate="common.dark">${translationManager.t('common.dark')}</span>
                 </div>
             </div>
         `;
@@ -751,10 +754,10 @@ const generateUISettingsHtml = async () => {
         uiSettingsHtml += `
             <div class="form-control mb-4">
                 <label class="label">
-                    <span class="label-text font-medium">Language</span>
-                    <span class="badge badge-ghost badge-xs ml-2">UI Setting</span>
+                    <span class="label-text font-medium" data-translate="app.language">${translationManager.t('app.language')}</span>
+                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
                 </label>
-                <p class="text-xs text-base-content/60 mb-2">Select your preferred language</p>
+                <p class="text-xs text-base-content/60 mb-2" data-translate="app.languageDesc">${translationManager.t('app.languageDesc')}</p>
                 <div class="flex items-center gap-2">
                     <select id="modal-language-select" class="select select-bordered select-sm">
                         <option value="en" ${currentLang === 'en' ? 'selected' : ''}>English</option>
@@ -784,18 +787,18 @@ const generateUISettingsHtml = async () => {
         uiSettingsHtml += `
             <div class="form-control mb-4">
                 <label class="label">
-                    <span class="label-text font-medium">Timezone</span>
-                    <span class="badge badge-ghost badge-xs ml-2">UI Setting</span>
+                    <span class="label-text font-medium" data-translate="app.timezone">${translationManager.t('app.timezone')}</span>
+                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
                 </label>
-                <p class="text-xs text-base-content/60 mb-2">Select your timezone for displaying challenge times</p>
+                <p class="text-xs text-base-content/60 mb-2" data-translate="app.timezoneDesc">${translationManager.t('app.timezoneDesc')}</p>
                 <div class="flex items-center gap-2">
                     <select id="modal-timezone-select" class="select select-bordered select-sm" style="width: 200px;">
                         ${timezoneOptions}
                     </select>
-                    <button id="modal-timezone-add" class="btn btn-ghost btn-sm" title="Add custom timezone">+</button>
-                    <button id="modal-timezone-remove" class="btn btn-ghost btn-sm text-red-500" title="Remove current timezone" style="visibility: ${currentTimezone !== 'Europe/Riga' ? 'visible' : 'hidden'}">×</button>
+                    <button id="modal-timezone-add" class="btn btn-ghost btn-sm" title="${translationManager.t('app.addCustomTimezone')}">+</button>
+                    <button id="modal-timezone-remove" class="btn btn-ghost btn-sm text-red-500" title="${translationManager.t('app.removeCurrentTimezone')}" style="visibility: ${currentTimezone !== 'Europe/Riga' ? 'visible' : 'hidden'}">×</button>
                 </div>
-                <input id="modal-timezone-input" type="text" placeholder="Enter timezone (e.g., UTC, America/New_York)" class="input input-bordered input-sm mt-2" style="display: none; width: 250px;">
+                <input id="modal-timezone-input" type="text" placeholder="${translationManager.t('app.timezonePlaceholder')}" class="input input-bordered input-sm mt-2" style="display: none; width: 250px;">
             </div>
         `;
         
@@ -803,13 +806,13 @@ const generateUISettingsHtml = async () => {
         uiSettingsHtml += `
             <div class="form-control mb-4">
                 <label class="label">
-                    <span class="label-text font-medium">Stay Logged In</span>
-                    <span class="badge badge-ghost badge-xs ml-2">UI Setting</span>
+                    <span class="label-text font-medium" data-translate="app.stayLoggedIn">${translationManager.t('app.stayLoggedIn')}</span>
+                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
                 </label>
-                <p class="text-xs text-base-content/60 mb-2">Keep login session after closing the app</p>
+                <p class="text-xs text-base-content/60 mb-2" data-translate="app.stayLoggedInDesc">${translationManager.t('app.stayLoggedInDesc')}</p>
                 <div class="flex items-center gap-2">
                     <input type="checkbox" id="modal-stay-logged-in" class="checkbox checkbox-sm" ${settings.stayLoggedIn ? 'checked' : ''}>
-                    <span class="text-sm">Remember login session</span>
+                    <span class="text-sm" data-translate="app.rememberLoginSession">${translationManager.t('app.rememberLoginSession')}</span>
                 </div>
             </div>
         `;
@@ -817,7 +820,7 @@ const generateUISettingsHtml = async () => {
         return uiSettingsHtml;
     } catch (error) {
         console.error('Error generating UI settings HTML:', error);
-        return '<div class="text-error">Error loading UI settings</div>';
+        return `<div class="text-error" data-translate="app.errorLoadingUiSettings">${translationManager.t('app.errorLoadingUiSettings')}</div>`;
     }
 };
 
@@ -828,7 +831,7 @@ const generateInputHtml = (key, config, value, challengeId = '', hasOverride = f
         
         if (!config) {
             console.error(`No config provided for setting ${key}`);
-            return `<div class="text-error">Missing config for ${key}</div>`;
+            return `<div class="text-error" data-translate="app.missingConfigFor">${translationManager.t('app.missingConfigFor')} ${key}</div>`;
         }
         
         const inputId = challengeId ? `${key}-${challengeId}` : `global-${key}`;
@@ -898,14 +901,8 @@ const initializeSettingsModal = () => {
 
 // Function to initialize UI settings event handlers
 const initializeUISettingsHandlers = () => {
-    // Theme toggle handler - just update UI preview, don't save yet
-    const themeToggle = document.getElementById('modal-theme-toggle');
-    if (themeToggle) {
-        themeToggle.addEventListener('change', () => {
-            const newTheme = themeToggle.checked ? 'dark' : 'light';
-            document.documentElement.setAttribute('data-theme', newTheme);
-        });
-    }
+    // Theme toggle handler - no UI preview, just like other settings
+    // Theme will only be applied when save button is clicked
     
     // Timezone handlers
     const timezoneSelect = document.getElementById('modal-timezone-select');
@@ -1055,6 +1052,12 @@ const saveUISettings = async () => {
             if (uiUpdates.language) {
                 await translationManager.setLanguage(uiUpdates.language);
             }
+            
+            // Apply theme change if needed
+            if (uiUpdates.theme) {
+                document.documentElement.setAttribute('data-theme', uiUpdates.theme);
+                console.log('🎨 Applied theme after save:', uiUpdates.theme);
+            }
         }
         
         // Update the main page UI controls that are still visible
@@ -1073,8 +1076,7 @@ const updateMainPageUIControls = async () => {
         // Update mock status (this is still in header)
         updateSettingsDisplay(settings);
         
-        // Update language display (if we had one)
-        // This is now handled in the modal only
+
         
         // Update timezone on the hidden timezone select (for compatibility)
         const hiddenTimezoneSelect = document.getElementById('timezone-select');
@@ -1251,7 +1253,7 @@ const generateChallengeSettingsModalHtml = async (challengeId, challengeTitle, s
                 <div class="form-control mb-4">
                     <label class="label">
                         <span class="label-text font-medium" data-translate="${config.label}">${labelText}</span>
-                        ${hasOverride ? '<span class="badge badge-warning badge-xs ml-2">Override</span>' : '<span class="badge badge-ghost badge-xs ml-2">Global</span>'}
+                        ${hasOverride ? `<span class="badge badge-warning badge-xs ml-2" data-translate="app.override">${translationManager.t('app.override')}</span>` : `<span class="badge badge-ghost badge-xs ml-2" data-translate="app.global">${translationManager.t('app.global')}</span>`}
                     </label>
                     <p class="text-xs text-base-content/60 mb-2" data-translate="${config.description}">${descText}</p>
                     <div class="flex items-center gap-2">
@@ -1266,7 +1268,7 @@ const generateChallengeSettingsModalHtml = async (challengeId, challengeTitle, s
                 <div class="form-control mb-4">
                     <label class="label">
                         <span class="label-text font-medium">${key}</span>
-                        ${hasOverride ? '<span class="badge badge-warning badge-xs ml-2">Override</span>' : '<span class="badge badge-ghost badge-xs ml-2">Global</span>'}
+                        ${hasOverride ? `<span class="badge badge-warning badge-xs ml-2" data-translate="app.override">${translationManager.t('app.override')}</span>` : `<span class="badge badge-ghost badge-xs ml-2" data-translate="app.global">${translationManager.t('app.global')}</span>`}
                     </label>
                     <p class="text-xs text-base-content/60 mb-2">${config.description || 'No description'}</p>
                     <div class="flex items-center gap-2">
@@ -1369,7 +1371,7 @@ window.saveChallengeSettings = async (challengeId) => {
             }
         }
         
-        // Remove overrides that are now reset to global defaults
+
         for (const key of overridesToRemove) {
             await window.api.removeChallengeOverride(key, challengeId);
         }
@@ -1528,10 +1530,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Update the theme immediately for responsive UI
         document.documentElement.setAttribute('data-theme', newTheme);
         
-        // Note: Theme is now only saved when user clicks Save in settings modal
+
         updateSettingsDisplay(settings);
         
-        // No feedback toast - annoying
+
     });
     
     // Handle timezone toggle
@@ -1565,7 +1567,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 timezoneSelect.style.display = 'inline-block';
                 timezoneToggle.textContent = '+';
                 timezoneSelect.value = 'local';
-                // Note: Timezone changes are now only saved through settings modal
+
                 await loadChallenges('local', autovoteRunning);
                 return;
             }
@@ -1586,7 +1588,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     timezoneSelect.appendChild(option);
                 }
                 
-                // Note: Custom timezones will be saved through settings modal
+
                 
                 timezoneSelect.value = newTimezone;
                 timezoneInput.value = '';
@@ -1614,8 +1616,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     timezoneSelect.addEventListener('change', async () => {
         const newTimezone = timezoneSelect.value;
         
-        // Note: Timezone changes are now only saved through settings modal
-        
         // Update remove button visibility
         updateRemoveButton();
         
@@ -1635,8 +1635,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (option) {
                 option.remove();
             }
-            
-            // Note: Timezone changes are now only saved through settings modal
             
             // Set back to Europe/Riga  
             timezoneSelect.value = 'Europe/Riga';
@@ -1681,8 +1679,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         `;
     });
 
-    // Mock status is display-only - no click functionality  
-    // Mock is only set during login or via npm run mock:... commands
+
 
     // Auto Vote Functionality
     const autovoteToggle = document.getElementById('autovote-toggle');

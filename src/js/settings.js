@@ -628,7 +628,7 @@ const cleanupStaleChallengeSetting = (activeChallengeIds) => {
     
     console.log(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
     
-    // Remove stale challenge settings
+
     staleChallengeIds.forEach(challengeId => {
         delete settings.challengeSettings.perChallenge[challengeId];
     });
@@ -645,7 +645,7 @@ const cleanupObsoleteSettings = () => {
         const settings = loadSettings();
         let hasChanges = false;
         
-        // Remove legacy boostConfig if it still exists
+
         if (settings.boostConfig) {
             console.log('Removing legacy boostConfig');
             delete settings.boostConfig;
@@ -686,7 +686,7 @@ const cleanupObsoleteSettings = () => {
                         });
                     }
                     
-                    // Remove empty challenge override objects
+
                     if (Object.keys(challengeOverrides).length === 0) {
                         delete settings.challengeSettings.perChallenge[challengeId];
                         hasChanges = true;

@@ -160,8 +160,7 @@ describe('mock/index', () => {
   describe('setCancellationFlag', () => {
     test('should set cancellation flag', () => {
       mockIndex.setCancellationFlag(true);
-      // Note: We can't directly test the flag value as it's internal,
-      // but we can test its effect on the voting process
+
       expect(() => mockIndex.setCancellationFlag(true)).not.toThrow();
       expect(() => mockIndex.setCancellationFlag(false)).not.toThrow();
     });
@@ -216,7 +215,7 @@ describe('mock/index', () => {
       test('should return challenges for any token', async () => {
         const result = await mockIndex.mockApiClient.getActiveChallenges('any-token');
 
-        // Since generateMockChallenges exists, it will be called and return generated data
+
         expect(result).toEqual({ challenges: [{ id: '2', title: 'Generated Challenge' }] });
         expect(console.log).toHaveBeenCalledWith('=== Mock getActiveChallenges ===');
       });
@@ -251,7 +250,7 @@ describe('mock/index', () => {
         
         const result = await mockIndex.mockApiClient.getVoteImages(challenge, 'test-token');
 
-        // Since generateMockVoteImages exists, it will be called and return generated data
+
         expect(result).toEqual({ images: [{ id: 'generated-img', ratio: 30 }] });
         expect(console.log).toHaveBeenCalledWith('=== Mock getVoteImages ===');
         expect(console.log).toHaveBeenCalledWith('Challenge:', 'Test Challenge');

@@ -266,8 +266,12 @@ const mockApiClient = {
                     await simulateApiResponse(boost.mockBoostSuccess, 1500);
                 }
                 
+                // Check if boost-only mode is enabled for this challenge
+                const onlyBoost = settings.getEffectiveSetting('onlyBoost', challenge.id.toString());
+                
                 // Simulate voting if exposure factor is less than the effective threshold
-                if (challenge.member.ranking.exposure.exposure_factor < effectiveThreshold) {
+                // Skip voting if boost-only mode is enabled
+                if (!onlyBoost && challenge.member.ranking.exposure.exposure_factor < effectiveThreshold) {
                     // Check for cancellation before voting
                     if (shouldCancelVoting) {
                         console.log('🛑 Mock voting cancelled by user before voting');
@@ -288,6 +292,8 @@ const mockApiClient = {
                             await simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
                         }
                     }
+                } else if (onlyBoost) {
+                    console.log(`Boost-only mode enabled for challenge: ${challenge.title}. Skipping voting.`);
                 }
                 
                 // Check for cancellation before delay

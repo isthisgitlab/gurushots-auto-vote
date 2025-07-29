@@ -17,7 +17,7 @@ const testMockAuth = async () => {
         // Simulate network delay for realistic behavior
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // For mock login, accept any credentials
+
         const isValidCredential = true;
         
         if (isValidCredential) {

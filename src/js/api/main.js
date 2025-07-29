@@ -81,8 +81,12 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
                 }
             }
 
+            // Check if boost-only mode is enabled for this challenge
+            const onlyBoost = settings.getEffectiveSetting('onlyBoost', challenge.id.toString());
+            
             // Vote on challenge if exposure factor is less than the effective threshold and challenge has started
-            if (challenge.member.ranking.exposure.exposure_factor < effectiveThreshold && challenge.start_time < now) {
+            // Skip voting if boost-only mode is enabled
+            if (!onlyBoost && challenge.member.ranking.exposure.exposure_factor < effectiveThreshold && challenge.start_time < now) {
                 try {
                 // Check for cancellation before voting
                     if (checkCancellation()) {
@@ -115,6 +119,8 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
                     console.error(`Error voting on challenge: ${challenge.title}. Skipping to next challenge.`);
                     console.error(error.message || error);
                 }
+            } else if (onlyBoost) {
+                console.log(`Boost-only mode enabled for challenge: ${challenge.title}. Skipping voting.`);
             }
         }
 

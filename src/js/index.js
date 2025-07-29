@@ -216,7 +216,6 @@ app.on('before-quit', () => {
         settings.setSetting('token', '');
     }
   
-    // Force process to exit completely to prevent nodemon from waiting for changes
     console.log('Application is about to quit. Forcing exit...');
   
     // Use the global force exit handler to ensure the process terminates
@@ -227,7 +226,6 @@ app.on('before-quit', () => {
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
-        // Force process to exit completely to prevent nodemon from waiting for changes
         console.log('All windows closed. Forcing exit...');
     
         // Use the global force exit handler to ensure the process terminates
@@ -492,7 +490,7 @@ ipcMain.handle('get-settings-schema', async () => {
                 perChallenge: schema[key].perChallenge,
                 label: schema[key].label,
                 description: schema[key].description,
-                // Note: validation function is not included as it can't be serialized
+
             };
         });
         
@@ -615,7 +613,7 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
             // Simulate network delay for realistic behavior
             await new Promise(resolve => setTimeout(resolve, 500));
       
-            // For mock login, accept any credentials
+
             const isValidCredential = true;
       
             if (isValidCredential) {
