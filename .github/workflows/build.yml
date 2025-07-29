@@ -30,8 +30,64 @@ jobs:
         run: npm test
         continue-on-error: true
 
+  version-bump:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    outputs:
+      new-version: ${{ steps.bump_version.outputs.NEW_VERSION }}
+      bump-type: ${{ steps.version_bump_type.outputs.BUMP_TYPE }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Determine version bump type
+        id: version_bump_type
+        run: |
+          # Check commit message for version bump indicators
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          
+          if [[ "$COMMIT_MSG" =~ \[major\] ]]; then
+            echo "BUMP_TYPE=major" >> $GITHUB_OUTPUT
+          elif [[ "$COMMIT_MSG" =~ \[minor\] ]]; then
+            echo "BUMP_TYPE=minor" >> $GITHUB_OUTPUT
+          elif [[ "$COMMIT_MSG" =~ \[patch\] ]]; then
+            echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
+          elif [[ "$COMMIT_MSG" =~ ^feat: ]]; then
+            echo "BUMP_TYPE=minor" >> $GITHUB_OUTPUT
+          else
+            echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
+          fi
+          echo "Version bump type: ${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
+
+      - name: Bump version
+        id: bump_version
+        run: |
+          # Bump version based on determined type
+          BUMP_TYPE="${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
+          echo "Bumping $BUMP_TYPE version..."
+          npm version $BUMP_TYPE --no-git-tag-version
+          
+          # Get new version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Upload bumped package.json
+        uses: actions/upload-artifact@v4
+        with:
+          name: bumped-package
+          path: package.json
+          retention-days: 1
+
   build:
     runs-on: ${{ matrix.os }}
+    needs: [ version-bump ]
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
@@ -52,6 +108,12 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+
+      - name: Download bumped package.json
+        uses: actions/download-artifact@v4
+        with:
+          name: bumped-package
+          path: .
 
       - name: Install dependencies
         run: npm ci
@@ -121,7 +183,7 @@ jobs:
           retention-days: 1
 
   create-release:
-    needs: [ build ]
+    needs: [ build, version-bump ]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
 
@@ -134,35 +196,11 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Determine version bump type
-        id: version_bump_type
-        run: |
-          # Check commit message for version bump indicators
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          
-          if [[ "$COMMIT_MSG" =~ \[major\] ]]; then
-            echo "BUMP_TYPE=major" >> $GITHUB_OUTPUT
-          elif [[ "$COMMIT_MSG" =~ \[minor\] ]]; then
-            echo "BUMP_TYPE=minor" >> $GITHUB_OUTPUT
-          elif [[ "$COMMIT_MSG" =~ \[patch\] ]]; then
-            echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
-          elif [[ "$COMMIT_MSG" =~ ^feat: ]]; then
-            echo "BUMP_TYPE=minor" >> $GITHUB_OUTPUT
-          else
-            echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
-          fi
-          echo "Version bump type: ${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
-
-      - name: Bump version
-        run: |
-          # Bump version based on determined type
-          BUMP_TYPE="${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
-          echo "Bumping $BUMP_TYPE version..."
-          npm version $BUMP_TYPE --no-git-tag-version
-          
-          # Get new version
-          NEW_VERSION=$(node -p "require('./package.json').version")
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+      - name: Download bumped package.json
+        uses: actions/download-artifact@v4
+        with:
+          name: bumped-package
+          path: .
 
       - name: Get version from package.json
         id: get_version
@@ -216,7 +254,7 @@ jobs:
             - Commit: ${{ github.sha }}
             - Branch: ${{ github.ref_name }}
             - Version: ${{ steps.get_version.outputs.VERSION }}
-            - Version Bump Type: ${{ steps.version_bump_type.outputs.BUMP_TYPE }}
+            - Version Bump Type: ${{ needs.version-bump.outputs.bump-type }}
           draft: false
           prerelease: false
           files: |
@@ -237,5 +275,5 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add package.json README.md docs/
-          git commit -m "Bump version to $NEW_VERSION (${{ steps.version_bump_type.outputs.BUMP_TYPE }}) and update documentation [skip ci]"
+          git commit -m "Bump version to ${{ needs.version-bump.outputs.new-version }} (${{ needs.version-bump.outputs.bump-type }}) and update documentation [skip ci]"
           git push origin master 
