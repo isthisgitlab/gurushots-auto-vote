@@ -112,6 +112,9 @@ const getDefaultSettings = () => {
         timezone: 'Europe/Riga',
         customTimezones: [],
         language: 'en', // Default language
+        // Timing settings (stored in user-friendly units)
+        apiTimeout: 30, // API request timeout in seconds (default: 30 seconds)
+        votingInterval: 3, // Voting interval in minutes (default: 3 minutes)
         // Window position and size settings
         windowBounds: {
             login: {x: undefined, y: undefined, width: 800, height: 600},
@@ -149,6 +152,8 @@ const settingsSchema = {
     timezone: (value) => typeof value === 'string',
     customTimezones: (value) => Array.isArray(value),
     language: (value) => ['en', 'lv'].includes(value),
+    apiTimeout: (value) => typeof value === 'number' && value >= 1 && value <= 120,
+    votingInterval: (value) => typeof value === 'number' && value >= 1 && value <= 60,
     windowBounds: (value) => typeof value === 'object' && value !== null,
     challengeSettings: (value) => {
         if (typeof value !== 'object' || value === null) return false;
