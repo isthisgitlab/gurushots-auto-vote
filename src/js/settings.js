@@ -729,14 +729,6 @@ const SETTINGS_SCHEMA = {
         label: 'app.exposure',
         description: 'app.exposureDesc',
     },
-    onGuruVoting: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        label: 'app.onGuruVoting',
-        description: 'app.onGuruVotingDesc',
-    },
     lastMinutes: {
         type: 'number',
         default: 30,
