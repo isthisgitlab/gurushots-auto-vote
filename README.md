@@ -1,8 +1,8 @@
 # GuruShots Auto Voter
 
 [![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/workflows/Build%20and%20Release/badge.svg)](https://github.com/isthisgitlab/gurushots-auto-vote/actions)
-[![Coverage](https://img.shields.io/badge/coverage-98.34%25-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
-[![Tests](https://img.shields.io/badge/tests-143%20passing-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
+[![Coverage](https://img.shields.io/badge/coverage-97.28%25-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
+[![Tests](https://img.shields.io/badge/tests-160%20passing-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
 [![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
 An Electron application for automated voting on GuruShots challenges. Features both a graphical interface and
@@ -22,18 +22,23 @@ If you find this tool helpful, consider supporting its development:
 
 - **Automated Voting**: Automatically vote on images in active challenges
 - **Boost Management**: Apply boosts when available and near deadline
+- **Last Minutes Threshold**: Auto-vote when challenges are within the last minutes threshold, ignoring exposure limits
 - **Dual Interface**: Use the GUI for manual control or CLI for automation
 - **Secure Login**: Safe authentication with GuruShots
 - **Remember Me**: Stay logged in across sessions
 - **Theme Support**: Light and dark mode options
 - **Mock Mode**: Test the app without real API calls
-- **Comprehensive Testing**: Extensive test suite with >98% coverage
+- **Comprehensive Testing**: Extensive test suite with >97% coverage
 
 ## 📥 Download & Install
 
 ### **🚀 Quick Download Links**
 
 **Latest Version: v0.0.3**
+
+> **🚀 Coming Soon: v0.0.4** - The next release will include the new **Last Minutes Threshold** feature, allowing automatic voting when challenges are within a specified time limit before ending. This feature is currently available in the development version.
+> 
+> **Note**: The package.json shows version 0.0.4, but the latest **released** version is 0.0.3. The Last Minutes Threshold feature documented below will be available in the upcoming v0.0.4 release.
 
 #### **🖥️ GUI Applications (Recommended for most users)**
 
@@ -339,6 +344,34 @@ The app automatically saves your preferences:
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly.
 
+## ⏰ Last Minutes Threshold
+
+The Last Minutes Threshold feature allows the app to automatically vote on challenges when they are within a specified time limit before ending, regardless of your current exposure percentage.
+
+### **How It Works**
+
+- **Default Threshold**: 30 minutes (configurable)
+- **Behavior**: When a challenge is within the last minutes threshold:
+  - The app ignores your normal exposure threshold
+  - It will vote if your exposure is below 100%
+  - This helps maximize your final ranking in time-sensitive situations
+
+### **Configuration**
+
+You can set the Last Minutes Threshold in the app settings:
+
+- **Global Default**: Set a default threshold for all challenges
+- **Per-Challenge Override**: Set different thresholds for specific challenges
+- **Range**: 1-60 minutes (recommended: 15-30 minutes)
+
+### **Example Scenarios**
+
+- **Challenge ends in 20 minutes**: If your threshold is 30 minutes, the app will vote regardless of exposure
+- **Challenge ends in 45 minutes**: Normal exposure threshold rules apply
+- **Challenge ends in 5 minutes**: App will vote if exposure < 100%
+
+This feature is particularly useful for challenges where you want to maximize your final ranking in the closing minutes.
+
 ## 🔍 Troubleshooting
 
 ### **Common Issues**
@@ -417,11 +450,11 @@ Our test suite achieves excellent coverage across core components:
 
 | Component      | Statements | Branches | Functions | Lines  |
 |----------------|------------|----------|-----------|--------|
-| **Overall**    | 98.34%     | 91.66%   | 100%      | 98.87% |
+| **Overall**    | 97.28%     | 92.45%   | 100%      | 97.79% |
 | API Client     | 100%       | 100%     | 100%      | 100%   |
 | Authentication | 100%       | 100%     | 100%      | 100%   |
 | Challenges     | 100%       | 87.5%    | 100%      | 100%   |
-| Voting         | 92.5%      | 80%      | 100%      | 94.73% |
+| Voting         | 87.8%      | 81.25%   | 100%      | 89.74% |
 | Boost          | 100%       | 100%     | 100%      | 100%   |
 | Strategies     | 100%       | 100%     | 100%      | 100%   |
 | API Factory    | 100%       | 100%     | 100%      | 100%   |
@@ -433,6 +466,7 @@ Our test suite achieves excellent coverage across core components:
 - ✅ **Error Handling**: Network failures, invalid responses, authentication errors
 - ✅ **Mock System**: Simulated API responses for testing and development
 - ✅ **Edge Cases**: Empty data, null responses, malformed inputs
+- ✅ **Last Minutes Threshold**: Time-based voting logic, threshold calculations, per-challenge overrides
 
 ### **Mock Testing**
 
