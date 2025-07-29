@@ -88,11 +88,8 @@ describe('apiFactory', () => {
             getApiStrategy();
 
             expect(console.log).toHaveBeenCalledWith('=== API Factory Debug ===');
-            expect(console.log).toHaveBeenCalledWith('User settings:', JSON.stringify(mockSettings, null, 2));
             expect(console.log).toHaveBeenCalledWith('Mock setting:', true);
             expect(console.log).toHaveBeenCalledWith('Token exists:', true);
-            expect(console.log).toHaveBeenCalledWith('Token length:', 14);
-            expect(console.log).toHaveBeenCalledWith('Full token:', 'test-token-123');
         });
 
         test('should handle missing token', () => {
@@ -105,8 +102,6 @@ describe('apiFactory', () => {
             getApiStrategy();
 
             expect(console.log).toHaveBeenCalledWith('Token exists:', false);
-            expect(console.log).toHaveBeenCalledWith('Token length:', 0);
-            expect(console.log).toHaveBeenCalledWith('Full token:', 'NO TOKEN');
         });
 
         test('should handle undefined token', () => {
@@ -118,8 +113,6 @@ describe('apiFactory', () => {
             getApiStrategy();
 
             expect(console.log).toHaveBeenCalledWith('Token exists:', false);
-            expect(console.log).toHaveBeenCalledWith('Token length:', 0);
-            expect(console.log).toHaveBeenCalledWith('Full token:', 'NO TOKEN');
         });
 
         test('should cache strategy when settings do not change', () => {

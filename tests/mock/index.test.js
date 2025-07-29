@@ -244,8 +244,8 @@ describe('mock/index', () => {
             test('should log token information', async () => {
                 await mockIndex.mockApiClient.getActiveChallenges('test-token-123');
 
-                expect(console.log).toHaveBeenCalledWith('Token provided:', 'test-token...');
-                expect(console.log).toHaveBeenCalledWith('Full token:', 'test-token-123');
+                expect(console.log).toHaveBeenCalledWith('Token provided:', true);
+                expect(console.log).toHaveBeenCalledWith('Token starts with mock_:', false);
             });
         });
 
