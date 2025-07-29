@@ -541,7 +541,7 @@ const loadChallenges = async (timezone = 'local', autovoteRunning = false) => {
         }
 
         await window.api.logDebug('🌐 Calling getActiveChallenges', {
-            token: settings.token.substring(0, 10) + '...',
+            tokenExists: !!settings.token,
         });
 
         // Use the real API call that works in both mock and production
@@ -770,8 +770,8 @@ const generateUISettingsHtml = async () => {
                 <p class="text-xs text-base-content/60 mb-2" data-translate="app.languageDesc">${translationManager.t('app.languageDesc')}</p>
                 <div class="flex items-center gap-2">
                     <select id="modal-language-select" class="select select-bordered select-sm">
-                        <option value="en" ${currentLang === 'en' ? 'selected' : ''}>English</option>
-                        <option value="lv" ${currentLang === 'lv' ? 'selected' : ''}>Latviešu</option>
+                        <option value="en" ${currentLang === 'en' ? 'selected' : ''}>${translationManager.t('app.english')}</option>
+                        <option value="lv" ${currentLang === 'lv' ? 'selected' : ''}>${translationManager.t('app.latvian')}</option>
                     </select>
                 </div>
             </div>
@@ -817,7 +817,7 @@ const generateUISettingsHtml = async () => {
             <div class="form-control mb-4">
                 <label class="label">
                     <span class="label-text font-medium" data-translate="app.stayLoggedIn">${translationManager.t('app.stayLoggedIn')}</span>
-                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
+                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.appSetting">${translationManager.t('app.appSetting')}</span>
                 </label>
                 <p class="text-xs text-base-content/60 mb-2" data-translate="app.stayLoggedInDesc">${translationManager.t('app.stayLoggedInDesc')}</p>
                 <div class="flex items-center gap-2">
@@ -831,18 +831,50 @@ const generateUISettingsHtml = async () => {
         uiSettingsHtml += `
             <div class="form-control mb-4">
                 <label class="label">
-                    <span class="label-text font-medium">Check for Updates</span>
-                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
+                    <span class="label-text font-medium" data-translate="app.checkForUpdates">${translationManager.t('app.checkForUpdates')}</span>
+                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.appSetting">${translationManager.t('app.appSetting')}</span>
                 </label>
-                <p class="text-xs text-base-content/60 mb-2">Manually check for new versions of the application</p>
+                <p class="text-xs text-base-content/60 mb-2" data-translate="app.checkForUpdatesDesc">${translationManager.t('app.checkForUpdatesDesc')}</p>
                 <div class="flex items-center gap-2">
                     <button id="check-updates-btn" class="btn btn-sm btn-outline">
                         <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
                         </svg>
-                        Check for Updates
+                        <span data-translate="app.checkForUpdates">${translationManager.t('app.checkForUpdates')}</span>
                     </button>
                     <span id="update-check-status" class="text-sm text-base-content/60"></span>
+                </div>
+            </div>
+        `;
+
+        // API Timeout Setting
+        uiSettingsHtml += `
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text font-medium" data-translate="app.apiTimeout">${translationManager.t('app.apiTimeout')}</span>
+                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.appSetting">${translationManager.t('app.appSetting')}</span>
+                </label>
+                <p class="text-xs text-base-content/60 mb-2" data-translate="app.apiTimeoutDesc">${translationManager.t('app.apiTimeoutDesc')}</p>
+                <div class="flex items-center gap-2">
+                    <input type="number" id="modal-api-timeout" class="input input-bordered input-sm w-20" 
+                           value="${settings.apiTimeout || 30}" min="1" max="120" step="1">
+                    <span class="text-sm text-base-content/60" data-translate="app.seconds">${translationManager.t('app.seconds')}</span>
+                </div>
+            </div>
+        `;
+
+        // Voting Interval Setting
+        uiSettingsHtml += `
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text font-medium" data-translate="app.votingInterval">${translationManager.t('app.votingInterval')}</span>
+                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.appSetting">${translationManager.t('app.appSetting')}</span>
+                </label>
+                <p class="text-xs text-base-content/60 mb-2" data-translate="app.votingIntervalDesc">${translationManager.t('app.votingIntervalDesc')}</p>
+                <div class="flex items-center gap-2">
+                    <input type="number" id="modal-voting-interval" class="input input-bordered input-sm w-20" 
+                           value="${settings.votingInterval || 3}" min="1" max="60" step="1">
+                    <span class="text-sm text-base-content/60" data-translate="app.minutes">${translationManager.t('app.minutes')}</span>
                 </div>
             </div>
         `;
@@ -1117,6 +1149,23 @@ const saveUISettings = async () => {
             uiUpdates.stayLoggedIn = stayLoggedInCheckbox.checked;
         }
 
+        // Collect API timeout
+        const apiTimeoutInput = document.getElementById('modal-api-timeout');
+        if (apiTimeoutInput) {
+            const apiTimeout = parseInt(apiTimeoutInput.value);
+            if (!isNaN(apiTimeout) && apiTimeout >= 1 && apiTimeout <= 120) {
+                uiUpdates.apiTimeout = apiTimeout;
+            }
+        }
+
+        // Collect voting interval
+        const votingIntervalInput = document.getElementById('modal-voting-interval');
+        if (votingIntervalInput) {
+            const votingInterval = parseInt(votingIntervalInput.value);
+            if (!isNaN(votingInterval) && votingInterval >= 1 && votingInterval <= 60) {
+                uiUpdates.votingInterval = votingInterval;
+            }
+        }
 
         // Save update check timestamp if an update check was performed
         if (window.updateCheckPerformed) {
@@ -1892,7 +1941,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('▶️ Starting immediate voting cycle');
         runVotingCycle();
 
-        // Set up interval for every 3 minutes (180000 ms)
+        // Set up configurable interval
+        const settings = await window.api.getSettings();
+        const votingInterval = settings.votingInterval * 60000; // Convert minutes to milliseconds
+        const intervalMinutes = Math.round(votingInterval / 60000);
         console.log('⏰ Setting up autovote interval');
         autovoteInterval = setInterval(() => {
             console.log('⏰ Interval triggered, autovoteRunning:', autovoteRunning);
@@ -1903,10 +1955,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 clearInterval(autovoteInterval);
                 autovoteInterval = null;
             }
-        }, 180000);
+        }, votingInterval);
 
         console.log('=== Auto Vote Started ===');
-        console.log('Scheduling voting every 3 minutes');
+        console.log(`Scheduling voting every ${intervalMinutes} minutes`);
         console.log('Challenges will update after each voting cycle');
     };
 
