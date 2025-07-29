@@ -43,9 +43,6 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Verify README version
-        run: npm run verify:readme
-
       - name: Build CSS
         run: npm run build:css
 
@@ -127,6 +124,9 @@ jobs:
 
       - name: Update README with current version
         run: npm run update:readme
+
+      - name: Verify README version
+        run: npm run verify:readme
 
       - name: Determine version bump type
         id: version_bump_type
