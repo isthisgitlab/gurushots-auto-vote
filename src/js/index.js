@@ -177,6 +177,22 @@ app.whenReady().then(async () => {
     const logger = require('./logger');
     logger.cleanup();
 
+
+    // Check for updates in the background (only if not checked recently)
+    const UpdateChecker = require('./services/UpdateChecker');
+    const updateChecker = new UpdateChecker();
+    
+    // Check for updates after a short delay to not block app startup
+    setTimeout(async () => {
+        try {
+            // Only check if not checked recently, and save timestamp
+            await updateChecker.checkForUpdates(true);
+            // Don't show dialog automatically - user can check manually in settings
+        } catch (error) {
+            console.error('Error during update check:', error);
+        }
+    }, 3000); // 3 second delay
+
     await checkAutoLogin();
 
     // On macOS, re-create a window when dock icon is clicked and no windows are open
@@ -935,6 +951,49 @@ ipcMain.handle('reload-window', async () => {
         }
     } catch (error) {
         console.error('Error reloading window:', error);
+        return {success: false, error: error.message};
+    }
+});
+
+// Update checker handlers
+ipcMain.handle('check-for-updates', async () => {
+    try {
+        const UpdateChecker = require('./services/UpdateChecker');
+        const updateChecker = new UpdateChecker();
+        const updateInfo = await updateChecker.checkForUpdates(false); // Don't save timestamp for manual checks
+        return {success: true, updateInfo};
+    } catch (error) {
+        console.error('Error checking for updates:', error);
+        return {success: false, error: error.message};
+    }
+});
+
+ipcMain.handle('skip-update-version', async () => {
+    try {
+        const UpdateChecker = require('./services/UpdateChecker');
+        const updateChecker = new UpdateChecker();
+        
+        // Get the latest version to skip
+        const updateInfo = await updateChecker.forceCheckForUpdates();
+        if (updateInfo) {
+            updateChecker.skipVersion(updateInfo.latestVersion);
+            return {success: true};
+        }
+        return {success: false, error: 'No update info available'};
+    } catch (error) {
+        console.error('Error skipping update version:', error);
+        return {success: false, error: error.message};
+    }
+});
+
+ipcMain.handle('clear-skip-version', async () => {
+    try {
+        const UpdateChecker = require('./services/UpdateChecker');
+        const updateChecker = new UpdateChecker();
+        updateChecker.clearSkipVersion();
+        return {success: true};
+    } catch (error) {
+        console.error('Error clearing skip version:', error);
         return {success: false, error: error.message};
     }
 });

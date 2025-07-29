@@ -61,6 +61,12 @@ contextBridge.exposeInMainWorld(
         // Window methods
         reloadWindow: () => ipcRenderer.invoke('reload-window'),
 
+        // Update checker methods
+        checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+        skipUpdateVersion: () => ipcRenderer.invoke('skip-update-version'),
+        clearSkipVersion: () => ipcRenderer.invoke('clear-skip-version'),
+        onShowUpdateDialog: (callback) => ipcRenderer.on('show-update-dialog', (event, updateInfo) => callback(updateInfo)),
+
         // Optional: Add listeners for responses from main process
         // Example: on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args))
     },

@@ -827,6 +827,26 @@ const generateUISettingsHtml = async () => {
             </div>
         `;
 
+        // Update Check Setting
+        uiSettingsHtml += `
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text font-medium">Check for Updates</span>
+                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
+                </label>
+                <p class="text-xs text-base-content/60 mb-2">Manually check for new versions of the application</p>
+                <div class="flex items-center gap-2">
+                    <button id="check-updates-btn" class="btn btn-sm btn-outline">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Check for Updates
+                    </button>
+                    <span id="update-check-status" class="text-sm text-base-content/60"></span>
+                </div>
+            </div>
+        `;
+
         return uiSettingsHtml;
     } catch (error) {
         console.error('Error generating UI settings HTML:', error);
@@ -985,6 +1005,50 @@ const initializeUISettingsHandlers = () => {
             }
         });
     }
+
+    // Update check button handler
+    const checkUpdatesBtn = document.getElementById('check-updates-btn');
+    const updateCheckStatus = document.getElementById('update-check-status');
+    
+    if (checkUpdatesBtn && updateCheckStatus) {
+        checkUpdatesBtn.addEventListener('click', async () => {
+            try {
+                // Show loading state
+                checkUpdatesBtn.disabled = true;
+                checkUpdatesBtn.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Checking...';
+                updateCheckStatus.textContent = '';
+
+                // Check for updates
+                const result = await window.api.checkForUpdates();
+                
+                if (result.success && result.updateInfo) {
+                    // Show update dialog
+                    window.showUpdateDialog(result.updateInfo);
+                    updateCheckStatus.textContent = translationManager.t('app.updateAvailable');
+                    updateCheckStatus.className = 'text-sm text-success';
+                } else {
+                    updateCheckStatus.textContent = translationManager.t('app.noUpdatesAvailable');
+                    updateCheckStatus.className = 'text-sm text-base-content/60';
+                }
+                
+                // Mark that an update check was performed (will be saved when settings are saved)
+                window.updateCheckPerformed = true;
+            } catch (error) {
+                console.error('Error checking for updates:', error);
+                updateCheckStatus.textContent = translationManager.t('app.errorCheckingUpdates');
+                updateCheckStatus.className = 'text-sm text-error';
+            } finally {
+                // Reset button state
+                checkUpdatesBtn.disabled = false;
+                checkUpdatesBtn.innerHTML = `
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    ${translationManager.t('app.checkForUpdates')}
+                `;
+            }
+        });
+    }
 };
 
 // Global function to save global settings only
@@ -1051,6 +1115,13 @@ const saveUISettings = async () => {
         const stayLoggedInCheckbox = document.getElementById('modal-stay-logged-in');
         if (stayLoggedInCheckbox) {
             uiUpdates.stayLoggedIn = stayLoggedInCheckbox.checked;
+        }
+
+
+        // Save update check timestamp if an update check was performed
+        if (window.updateCheckPerformed) {
+            uiUpdates.lastUpdateCheck = Date.now();
+            window.updateCheckPerformed = false; // Reset the flag
         }
 
         // Save all UI settings at once
@@ -1978,3 +2049,76 @@ window.boostEntry = async (challengeId, imageId, rank) => {
         }
     }
 };
+
+// Update dialog functionality
+const initializeUpdateDialog = () => {
+    const updateDialog = document.getElementById('updateDialog');
+    const currentVersion = document.getElementById('currentVersion');
+    const latestVersion = document.getElementById('latestVersion');
+    const releaseNotes = document.getElementById('releaseNotes');
+    const prereleaseBadge = document.getElementById('prereleaseBadge');
+    const skipButton = document.getElementById('skipButton');
+    const remindLaterButton = document.getElementById('remindLaterButton');
+    const downloadButton = document.getElementById('downloadButton');
+
+    // Show update dialog
+    window.showUpdateDialog = (updateInfo) => {
+        currentVersion.textContent = updateInfo.currentVersion;
+        latestVersion.textContent = updateInfo.latestVersion;
+        releaseNotes.textContent = updateInfo.releaseNotes;
+        
+        // Show prerelease badge if it's a prerelease
+        if (updateInfo.isPrerelease) {
+            prereleaseBadge.style.display = 'inline-block';
+        } else {
+            prereleaseBadge.style.display = 'none';
+        }
+        
+        updateDialog.style.display = 'flex';
+    };
+
+    // Hide update dialog
+    window.hideUpdateDialog = () => {
+        updateDialog.style.display = 'none';
+    };
+
+    // Event listeners
+    downloadButton.addEventListener('click', async () => {
+        try {
+            await window.api.openExternalUrl('https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest');
+            window.hideUpdateDialog();
+        } catch (error) {
+            console.error('Error opening download URL:', error);
+        }
+    });
+
+    remindLaterButton.addEventListener('click', () => {
+        window.hideUpdateDialog();
+    });
+
+    skipButton.addEventListener('click', async () => {
+        try {
+            await window.api.skipUpdateVersion();
+            window.hideUpdateDialog();
+        } catch (error) {
+            console.error('Error skipping update version:', error);
+        }
+    });
+
+    // Close dialog when clicking outside
+    updateDialog.addEventListener('click', (e) => {
+        if (e.target.id === 'updateDialog') {
+            window.hideUpdateDialog();
+        }
+    });
+
+    // Listen for update notifications from main process
+    window.api.onShowUpdateDialog((updateInfo) => {
+        window.showUpdateDialog(updateInfo);
+    });
+};
+
+// Initialize update dialog when DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+    initializeUpdateDialog();
+});
