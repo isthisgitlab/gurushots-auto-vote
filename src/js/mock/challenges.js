@@ -1,6 +1,6 @@
 /**
  * GuruShots Auto Voter - Mock Challenge Data
- * 
+ *
  * Mock responses for challenge operations
  */
 
@@ -9,7 +9,7 @@
  */
 const generateMockChallenges = () => {
     const now = Math.floor(Date.now() / 1000);
-    
+
     return {
         challenges: [
             {

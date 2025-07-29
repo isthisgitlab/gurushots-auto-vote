@@ -135,6 +135,7 @@ The README.md file contains download links and version information that must sta
 ### Commit Messages
 
 We follow conventional commit format:
+
 - `feat:` - New features
 - `fix:` - Bug fixes
 - `docs:` - Documentation changes
@@ -146,6 +147,7 @@ We follow conventional commit format:
 ## 🐛 Bug Reports
 
 When reporting bugs, please include:
+
 - Operating system and version
 - Node.js version
 - Steps to reproduce
@@ -156,6 +158,7 @@ When reporting bugs, please include:
 ## 💡 Feature Requests
 
 Before suggesting new features:
+
 - Check existing issues and discussions
 - Consider if it aligns with the project goals
 - Provide clear use cases and benefits
@@ -197,6 +200,7 @@ npm run debug:window-bounds # Test window positioning
 ### Mock Mode Testing
 
 Test your changes without real API calls:
+
 ```bash
 npm run mock:start
 ```
@@ -212,11 +216,13 @@ npm run mock:start
 ## 📦 Building
 
 ### Local Build
+
 ```bash
 npm run build
 ```
 
 ### Platform-Specific Builds
+
 ```bash
 npm run build:win    # Windows
 npm run build:mac    # macOS  
@@ -239,6 +245,7 @@ npm run build:linux  # Linux
 ## 🎉 Recognition
 
 Contributors will be recognized in:
+
 - Release notes
 - README.md contributors section
 - Git commit history

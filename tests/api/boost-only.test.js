@@ -1,6 +1,6 @@
 /**
  * GuruShots Auto Voter - Boost Only Mode Tests
- * 
+ *
  * Tests for the boost-only mode functionality
  */
 
@@ -75,11 +75,11 @@ describe('boost-only mode functionality', () => {
 
             // Simulate checking boost-only setting for multiple challenges
             const challenges = [
-                { id: challenge1Id, title: 'Challenge 1' },
-                { id: challenge2Id, title: 'Challenge 2' }
+                {id: challenge1Id, title: 'Challenge 1'},
+                {id: challenge2Id, title: 'Challenge 2'}
             ];
 
-            const boostOnlyResults = challenges.map(challenge => 
+            const boostOnlyResults = challenges.map(challenge =>
                 settings.getEffectiveSetting('onlyBoost', challenge.id)
             );
 

@@ -1,6 +1,6 @@
 /**
  * GuruShots Auto Voter - Mock Error Data
- * 
+ *
  * Mock error responses for various API scenarios
  */
 
@@ -24,21 +24,21 @@ const mockAuthErrors = {
         message: 'The provided authentication token is invalid or expired',
         details: 'Please login again to obtain a new token',
     },
-    
+
     expiredToken: {
         error: 'Token Expired',
         code: 'AUTH_TOKEN_EXPIRED',
         message: 'Your authentication token has expired',
         details: 'Please login again to continue',
     },
-    
+
     missingToken: {
         error: 'Missing Token',
         code: 'AUTH_MISSING_TOKEN',
         message: 'No authentication token provided',
         details: 'Please login to obtain an authentication token',
     },
-    
+
     invalidCredentials: {
         error: 'Invalid Credentials',
         code: 'AUTH_INVALID_CREDENTIALS',
@@ -58,7 +58,7 @@ const mockRateLimitErrors = {
         details: 'Please wait before making additional requests',
         retry_after: 60, // seconds
     },
-    
+
     votingRateLimit: {
         error: 'Voting Rate Limit',
         code: 'VOTING_RATE_LIMIT',
@@ -78,21 +78,21 @@ const mockChallengeErrors = {
         message: 'The specified challenge does not exist',
         details: 'The challenge may have been removed or the URL is incorrect',
     },
-    
+
     challengeNotActive: {
         error: 'Challenge Not Active',
         code: 'CHALLENGE_NOT_ACTIVE',
         message: 'This challenge is not currently active',
         details: 'The challenge may not have started yet or has already ended',
     },
-    
+
     challengeEnded: {
         error: 'Challenge Ended',
         code: 'CHALLENGE_ENDED',
         message: 'This challenge has already ended',
         details: 'Voting is no longer possible for this challenge',
     },
-    
+
     noVoteImages: {
         error: 'No Vote Images',
         code: 'NO_VOTE_IMAGES',
@@ -111,14 +111,14 @@ const mockVotingErrors = {
         message: 'You have already voted on these images',
         details: 'Each image can only be voted on once per session',
     },
-    
+
     invalidImageIds: {
         error: 'Invalid Image IDs',
         code: 'INVALID_IMAGE_IDS',
         message: 'One or more image IDs are invalid',
         details: 'The images may have been removed or are not available for voting',
     },
-    
+
     exposureFactorComplete: {
         error: 'Exposure Factor Complete',
         code: 'EXPOSURE_FACTOR_COMPLETE',
@@ -137,14 +137,14 @@ const mockBoostErrors = {
         message: 'No boost is available for this challenge',
         details: 'You may have already used your boost or it is not available yet',
     },
-    
+
     boostTimeoutExpired: {
         error: 'Boost Timeout Expired',
         code: 'BOOST_TIMEOUT_EXPIRED',
         message: 'The boost timeout has expired',
         details: 'The boost must be used within the specified time limit',
     },
-    
+
     noNonTurboedEntries: {
         error: 'No Non-Turboed Entries',
         code: 'NO_NON_TURBOED_ENTRIES',
@@ -163,7 +163,7 @@ const mockServerErrors = {
         message: 'An internal server error occurred',
         details: 'Please try again later or contact support if the problem persists',
     },
-    
+
     serviceUnavailable: {
         error: 'Service Unavailable',
         code: 'SERVICE_UNAVAILABLE',
@@ -171,7 +171,7 @@ const mockServerErrors = {
         details: 'Please try again later',
         retry_after: 300, // 5 minutes
     },
-    
+
     maintenanceMode: {
         error: 'Maintenance Mode',
         code: 'MAINTENANCE_MODE',

@@ -1,21 +1,21 @@
 /**
  * GuruShots Auto Voter - Authentication Module
- * 
+ *
  * This module handles user authentication with the GuruShots API.
  * It's designed to work with both CLI and GUI interfaces.
  */
 
 const axios = require('axios');
-const { createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
+const {createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
 
 /**
  * Authenticates with GuruShots and obtains an authentication token
- * 
+ *
  * This function:
  * 1. Takes email and password as parameters
  * 2. Sends authentication request to GuruShots API
  * 3. Returns the response data containing token
- * 
+ *
  * @param {string} email - User's email address
  * @param {string} password - User's password
  * @returns {object|null} - Response data containing token or null if login failed

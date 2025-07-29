@@ -23,8 +23,8 @@ console.log('   Main window:', mainBounds);
 
 // Test 3: Save new window bounds
 console.log('\n3. Saving New Window Bounds:');
-const newLoginBounds = { x: 100, y: 200, width: 900, height: 700 };
-const newMainBounds = { x: 150, y: 250, width: 1000, height: 800 };
+const newLoginBounds = {x: 100, y: 200, width: 900, height: 700};
+const newMainBounds = {x: 150, y: 250, width: 1000, height: 800};
 
 const saveLoginResult = settings.saveWindowBounds('login', newLoginBounds);
 const saveMainResult = settings.saveWindowBounds('main', newMainBounds);

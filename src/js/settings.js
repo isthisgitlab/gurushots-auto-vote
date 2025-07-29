@@ -15,14 +15,14 @@ try {
 // Define the settings file path in the userData directory
 const getSettingsPath = () => {
     let userDataPath;
-    
+
     if (electronApp && electronApp.getPath) {
         // Electron context - use app.getPath('userData')
         userDataPath = electronApp.getPath('userData');
     } else {
         // CLI context - create fallback userData path
         const appName = 'gurushots-auto-vote';
-        
+
         // Use platform-specific paths
         switch (process.platform) {
         case 'darwin': // macOS
@@ -35,29 +35,29 @@ const getSettingsPath = () => {
             userDataPath = path.join(os.homedir(), '.config', appName);
             break;
         }
-        
+
         // Ensure the directory exists
         if (!fs.existsSync(userDataPath)) {
             try {
-                fs.mkdirSync(userDataPath, { recursive: true });
+                fs.mkdirSync(userDataPath, {recursive: true});
                 console.log(`Created userData directory: ${userDataPath}`);
             } catch (error) {
                 console.error('Error creating userData directory:', error);
                 // Fallback to current directory if we can't create the proper path
                 userDataPath = path.join(process.cwd(), 'userData');
                 if (!fs.existsSync(userDataPath)) {
-                    fs.mkdirSync(userDataPath, { recursive: true });
+                    fs.mkdirSync(userDataPath, {recursive: true});
                 }
             }
         }
     }
-    
+
     return path.join(userDataPath, 'settings.json');
 };
 
 /**
  * Determine the default mock setting based on environment
- * 
+ *
  * @returns {boolean} - True for development, false for production
  */
 const getDefaultMockSetting = () => {
@@ -65,32 +65,32 @@ const getDefaultMockSetting = () => {
     if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev') {
         return true;
     }
-    
+
     if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod') {
         return false;
     }
-    
+
     // Check for other development indicators
     if (process.env.DEV === 'true' || process.env.DEV === '1') {
         return true;
     }
-    
+
     if (process.env.PROD === 'true' || process.env.PROD === '1') {
         return false;
     }
-    
+
     // Check if running in development mode (common patterns)
-    const isProd = 
+    const isProd =
         process.env.NODE_ENV === 'production' ||
         process.env.NODE_ENV === 'prod' ||
         process.env.PROD === 'true' ||
         process.env.PROD === '1';
-    
+
     // Default to production mode (mock disabled) for safety
     if (isProd) {
         return false;
     }
-    
+
     // Default to production mode (mock disabled) for safety
     return false;
 };
@@ -114,8 +114,8 @@ const getDefaultSettings = () => {
         language: 'en', // Default language
         // Window position and size settings
         windowBounds: {
-            login: { x: undefined, y: undefined, width: 800, height: 600 },
-            main: { x: undefined, y: undefined, width: 800, height: 600 },
+            login: {x: undefined, y: undefined, width: 800, height: 600},
+            main: {x: undefined, y: undefined, width: 800, height: 600},
         },
         // Schema-based challenge settings
         challengeSettings: {
@@ -130,7 +130,7 @@ const getDefaultSettings = () => {
 
 /**
  * Settings validation system
- * 
+ *
  * This validation system ensures data integrity by validating settings values
  * against a schema. Invalid values are automatically reset to their defaults.
  * This prevents issues caused by corrupted settings or manual edits to the settings file.
@@ -154,14 +154,14 @@ const settingsSchema = {
         if (typeof value !== 'object' || value === null) return false;
         if (typeof value.globalDefaults !== 'object' || value.globalDefaults === null) return false;
         if (typeof value.perChallenge !== 'object' || value.perChallenge === null) return false;
-        
+
         // Validate global defaults against schema
         for (const [key, schemaValue] of Object.entries(SETTINGS_SCHEMA)) {
             if (Object.prototype.hasOwnProperty.call(value.globalDefaults, key)) {
                 if (!schemaValue.validation(value.globalDefaults[key])) return false;
             }
         }
-        
+
         // Validate per-challenge overrides against schema
         for (const [, challengeOverrides] of Object.entries(value.perChallenge)) {
             if (typeof challengeOverrides !== 'object' || challengeOverrides === null) return false;
@@ -169,7 +169,7 @@ const settingsSchema = {
                 if (SETTINGS_SCHEMA[key] && !SETTINGS_SCHEMA[key].validation(overrideValue)) return false;
             }
         }
-        
+
         return true;
     },
     apiHeaders: (value) => typeof value === 'object' && value !== null,
@@ -184,7 +184,7 @@ const settingsSchema = {
 const validateSetting = (key, value) => {
     // If we don't have a validator for this key, assume it's valid
     if (!settingsSchema[key]) return true;
-    
+
     // Run the validator
     return settingsSchema[key](value);
 };
@@ -195,9 +195,9 @@ const validateSetting = (key, value) => {
  * @returns {Object} - Object containing validated settings and whether changes were made
  */
 const validateSettings = (settings) => {
-    const validatedSettings = { ...settings };
+    const validatedSettings = {...settings};
     let hasChanges = false;
-    
+
     // Check each setting against its validator
     Object.keys(validatedSettings).forEach(key => {
         if (settingsSchema[key] && !validateSetting(key, validatedSettings[key])) {
@@ -207,45 +207,45 @@ const validateSettings = (settings) => {
             hasChanges = true;
         }
     });
-    
-    return { validatedSettings, hasChanges };
+
+    return {validatedSettings, hasChanges};
 };
 
 /**
  * Simple settings storage without caching
- * 
+ *
  * Settings are always read fresh from disk to ensure consistency
  * between CLI and GUI, especially for edit operations.
  */
 
 // Load settings from the userData directory
 const loadSettings = () => {
-    
+
     try {
         const settingsPath = getSettingsPath();
-        
+
         // Check if the settings file exists
         if (fs.existsSync(settingsPath)) {
             // Read and parse the settings file
             const settingsData = fs.readFileSync(settingsPath, 'utf8');
             const settings = JSON.parse(settingsData);
-            
+
             // Merge with default settings to ensure all properties exist
-            const mergedSettings = { ...getDefaultSettings(), ...settings };
-            
+            const mergedSettings = {...getDefaultSettings(), ...settings};
+
             // Mock setting can be user-controlled, but default to environment if not set
             if (mergedSettings.mock === undefined) {
                 mergedSettings.mock = getDefaultMockSetting();
             }
-            
+
             // Validate settings
-            const { validatedSettings, hasChanges } = validateSettings(mergedSettings);
-            
+            const {validatedSettings, hasChanges} = validateSettings(mergedSettings);
+
             // If validation changed any settings, save the corrected settings
             if (hasChanges) {
                 fs.writeFileSync(settingsPath, JSON.stringify(validatedSettings, null, 2), 'utf8');
             }
-            
+
             // Run migration for boost configuration if needed - but avoid recursion
             if (!global.migrationInProgress) {
                 global.migrationInProgress = true;
@@ -261,10 +261,10 @@ const loadSettings = () => {
                     global.migrationInProgress = false;
                 }
             }
-            
+
             return validatedSettings;
         }
-        
+
         // If the file doesn't exist, return default settings
         const defaultSettings = getDefaultSettings();
         console.log('No settings file found, loaded default settings with keys:', Object.keys(defaultSettings));
@@ -282,28 +282,28 @@ const loadSettings = () => {
 const saveSettings = (settings) => {
     try {
         const settingsPath = getSettingsPath();
-        
+
         // Ensure the directory exists
         const settingsDir = path.dirname(settingsPath);
         if (!fs.existsSync(settingsDir)) {
-            fs.mkdirSync(settingsDir, { recursive: true });
+            fs.mkdirSync(settingsDir, {recursive: true});
         }
-        
+
         // Merge with existing settings
         const currentSettings = loadSettings();
-        const mergedSettings = { ...currentSettings, ...settings };
-        
+        const mergedSettings = {...currentSettings, ...settings};
+
         // Validate the merged settings
-        const { validatedSettings, hasChanges } = validateSettings(mergedSettings);
-        
+        const {validatedSettings, hasChanges} = validateSettings(mergedSettings);
+
         // If validation made changes, log a warning
         if (hasChanges) {
             console.warn('Some settings were invalid and have been reset to defaults');
         }
-        
+
         // Write the validated settings to the file
         fs.writeFileSync(settingsPath, JSON.stringify(validatedSettings, null, 2), 'utf8');
-        
+
         return true;
     } catch (error) {
         console.error('Error saving settings:', error);
@@ -377,11 +377,11 @@ const getEnvironmentInfo = () => {
 const getGlobalDefault = (settingKey) => {
     const settings = loadSettings();
     const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
-    
+
     if (challengeSettings.globalDefaults && Object.prototype.hasOwnProperty.call(challengeSettings.globalDefaults, settingKey)) {
         return challengeSettings.globalDefaults[settingKey];
     }
-    
+
     // Fallback to schema default if not found in settings
     return SETTINGS_SCHEMA[settingKey]?.default;
 };
@@ -397,12 +397,12 @@ const setGlobalDefault = (settingKey, value) => {
         console.error(`Invalid setting key: ${settingKey}`);
         return false;
     }
-    
+
     if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
         console.error(`Invalid value for setting ${settingKey}:`, value);
         return false;
     }
-    
+
     const settings = loadSettings();
     if (!settings.challengeSettings) {
         settings.challengeSettings = getDefaultSettings().challengeSettings;
@@ -410,7 +410,7 @@ const setGlobalDefault = (settingKey, value) => {
     if (!settings.challengeSettings.globalDefaults) {
         settings.challengeSettings.globalDefaults = {};
     }
-    
+
     settings.challengeSettings.globalDefaults[settingKey] = value;
     return saveSettings(settings);
 };
@@ -424,13 +424,13 @@ const setGlobalDefault = (settingKey, value) => {
 const getChallengeOverride = (settingKey, challengeId) => {
     const settings = loadSettings();
     const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
-    
-    if (challengeSettings.perChallenge && 
-        challengeSettings.perChallenge[challengeId] && 
+
+    if (challengeSettings.perChallenge &&
+        challengeSettings.perChallenge[challengeId] &&
         Object.prototype.hasOwnProperty.call(challengeSettings.perChallenge[challengeId], settingKey)) {
         return challengeSettings.perChallenge[challengeId][settingKey];
     }
-    
+
     return null;
 };
 
@@ -446,17 +446,17 @@ const setChallengeOverride = (settingKey, challengeId, value) => {
         console.error(`Invalid setting key: ${settingKey}`);
         return false;
     }
-    
+
     if (!SETTINGS_SCHEMA[settingKey].perChallenge) {
         console.error(`Setting ${settingKey} does not support per-challenge overrides`);
         return false;
     }
-    
+
     if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
         console.error(`Invalid value for setting ${settingKey}:`, value);
         return false;
     }
-    
+
     const settings = loadSettings();
     if (!settings.challengeSettings) {
         settings.challengeSettings = getDefaultSettings().challengeSettings;
@@ -467,23 +467,23 @@ const setChallengeOverride = (settingKey, challengeId, value) => {
     if (!settings.challengeSettings.perChallenge[challengeId]) {
         settings.challengeSettings.perChallenge[challengeId] = {};
     }
-    
+
     // Get the global default value for comparison
     const globalDefault = getGlobalDefault(settingKey);
-    
+
     // Only save if the value is different from global default
     if (value !== globalDefault) {
         settings.challengeSettings.perChallenge[challengeId][settingKey] = value;
     } else {
         // If value matches global default, remove the override
         delete settings.challengeSettings.perChallenge[challengeId][settingKey];
-        
+
         // If challenge has no more overrides, remove the challenge entry
         if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
             delete settings.challengeSettings.perChallenge[challengeId];
         }
     }
-    
+
     return saveSettings(settings);
 };
 
@@ -504,31 +504,31 @@ const setChallengeOverrides = (challengeId, overrides) => {
     if (!settings.challengeSettings.perChallenge[challengeId]) {
         settings.challengeSettings.perChallenge[challengeId] = {};
     }
-    
+
     let hasChanges = false;
     const savedOverrides = [];
     const removedOverrides = [];
-    
+
     // Process each override
     for (const [settingKey, value] of Object.entries(overrides)) {
         if (!SETTINGS_SCHEMA[settingKey]) {
             console.error(`Invalid setting key: ${settingKey}`);
             continue;
         }
-        
+
         if (!SETTINGS_SCHEMA[settingKey].perChallenge) {
             console.error(`Setting ${settingKey} does not support per-challenge overrides`);
             continue;
         }
-        
+
         if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
             console.error(`Invalid value for setting ${settingKey}:`, value);
             continue;
         }
-        
+
         // Get the global default value for comparison
         const globalDefault = getGlobalDefault(settingKey);
-        
+
         // Only save if the value is different from global default
         if (value !== globalDefault) {
             settings.challengeSettings.perChallenge[challengeId][settingKey] = value;
@@ -541,14 +541,14 @@ const setChallengeOverrides = (challengeId, overrides) => {
             hasChanges = true;
         }
     }
-    
+
     // If challenge has no more overrides, remove the challenge entry
     if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
         delete settings.challengeSettings.perChallenge[challengeId];
         console.log(`🗑️ Removed empty challenge settings for challenge ${challengeId}`);
         hasChanges = true;
     }
-    
+
     // Log the changes for debugging
     if (savedOverrides.length > 0) {
         console.log(`💾 Saved overrides for challenge ${challengeId}:`, savedOverrides.join(', '));
@@ -556,7 +556,7 @@ const setChallengeOverrides = (challengeId, overrides) => {
     if (removedOverrides.length > 0) {
         console.log(`🗑️ Removed overrides for challenge ${challengeId}:`, removedOverrides.join(', '));
     }
-    
+
     return hasChanges ? saveSettings(settings) : true;
 };
 
@@ -568,19 +568,19 @@ const setChallengeOverrides = (challengeId, overrides) => {
  */
 const removeChallengeOverride = (settingKey, challengeId) => {
     const settings = loadSettings();
-    if (!settings.challengeSettings || 
-        !settings.challengeSettings.perChallenge || 
+    if (!settings.challengeSettings ||
+        !settings.challengeSettings.perChallenge ||
         !settings.challengeSettings.perChallenge[challengeId]) {
         return true; // Nothing to remove
     }
-    
+
     delete settings.challengeSettings.perChallenge[challengeId][settingKey];
-    
+
     // If challenge has no more overrides, remove the challenge entry
     if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
         delete settings.challengeSettings.perChallenge[challengeId];
     }
-    
+
     return saveSettings(settings);
 };
 
@@ -595,7 +595,7 @@ const getEffectiveSetting = (settingKey, challengeId = null) => {
         console.error(`Invalid setting key: ${settingKey}`);
         return SETTINGS_SCHEMA[settingKey]?.default;
     }
-    
+
     // If challengeId is provided and the setting supports per-challenge overrides, check for override
     if (challengeId && SETTINGS_SCHEMA[settingKey].perChallenge) {
         const override = getChallengeOverride(settingKey, challengeId);
@@ -603,7 +603,7 @@ const getEffectiveSetting = (settingKey, challengeId = null) => {
             return override;
         }
     }
-    
+
     // Return global default
     return getGlobalDefault(settingKey);
 };
@@ -618,21 +618,21 @@ const cleanupStaleChallengeSetting = (activeChallengeIds) => {
     if (!settings.challengeSettings || !settings.challengeSettings.perChallenge) {
         return true; // Nothing to cleanup
     }
-    
+
     const storedChallengeIds = Object.keys(settings.challengeSettings.perChallenge);
     const staleChallengeIds = storedChallengeIds.filter(id => !activeChallengeIds.includes(id));
-    
+
     if (staleChallengeIds.length === 0) {
         return true; // Nothing to cleanup
     }
-    
+
     console.log(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
-    
+
 
     staleChallengeIds.forEach(challengeId => {
         delete settings.challengeSettings.perChallenge[challengeId];
     });
-    
+
     return saveSettings(settings);
 };
 
@@ -644,14 +644,14 @@ const cleanupObsoleteSettings = () => {
     try {
         const settings = loadSettings();
         let hasChanges = false;
-        
+
 
         if (settings.boostConfig) {
             console.log('Removing legacy boostConfig');
             delete settings.boostConfig;
             hasChanges = true;
         }
-        
+
         // Clean up challengeSettings structure
         if (settings.challengeSettings) {
             // Ensure globalDefaults only contains valid schema keys
@@ -659,7 +659,7 @@ const cleanupObsoleteSettings = () => {
                 const validSchemaKeys = Object.keys(SETTINGS_SCHEMA);
                 const globalDefaultKeys = Object.keys(settings.challengeSettings.globalDefaults);
                 const invalidGlobalKeys = globalDefaultKeys.filter(key => !validSchemaKeys.includes(key));
-                
+
                 if (invalidGlobalKeys.length > 0) {
                     console.log('Removing invalid global default keys:', invalidGlobalKeys);
                     invalidGlobalKeys.forEach(key => {
@@ -668,16 +668,16 @@ const cleanupObsoleteSettings = () => {
                     });
                 }
             }
-            
+
             // Clean up perChallenge overrides
             if (settings.challengeSettings.perChallenge) {
                 const validSchemaKeys = Object.keys(SETTINGS_SCHEMA);
                 const challengeIds = Object.keys(settings.challengeSettings.perChallenge);
-                
+
                 for (const challengeId of challengeIds) {
                     const challengeOverrides = settings.challengeSettings.perChallenge[challengeId];
                     const invalidKeys = Object.keys(challengeOverrides).filter(key => !validSchemaKeys.includes(key));
-                    
+
                     if (invalidKeys.length > 0) {
                         console.log(`Removing invalid override keys for challenge ${challengeId}:`, invalidKeys);
                         invalidKeys.forEach(key => {
@@ -685,7 +685,7 @@ const cleanupObsoleteSettings = () => {
                             hasChanges = true;
                         });
                     }
-                    
+
 
                     if (Object.keys(challengeOverrides).length === 0) {
                         delete settings.challengeSettings.perChallenge[challengeId];
@@ -694,13 +694,13 @@ const cleanupObsoleteSettings = () => {
                 }
             }
         }
-        
+
         // Save cleaned settings if any changes were made
         if (hasChanges) {
             console.log('Settings cleanup completed - saving cleaned settings');
             saveSettings(settings);
         }
-        
+
     } catch (error) {
         console.error('Error during settings cleanup:', error);
     }
@@ -708,7 +708,7 @@ const cleanupObsoleteSettings = () => {
 
 /**
  * Centralized Settings Schema
- * 
+ *
  * Single source of truth for all configurable settings.
  * Each setting defines its type, default value, validation, and whether it supports per-challenge overrides.
  */
@@ -767,7 +767,7 @@ module.exports = {
     getDefaultMockSetting,
     saveWindowBounds,
     getWindowBounds,
-    
+
     // Schema-based settings functions
     SETTINGS_SCHEMA,
     getGlobalDefault,

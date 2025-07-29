@@ -1,6 +1,6 @@
 /**
  * GuruShots Auto Voter - Mock Authentication Data
- * 
+ *
  * Mock responses for authentication operations
  */
 

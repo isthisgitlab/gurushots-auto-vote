@@ -1,11 +1,11 @@
 /**
  * GuruShots Auto Voter - API Module Index
- * 
+ *
  * This file provides a unified interface for all API operations
  * using the new factory pattern with strategies.
  */
 
-const { getMiddleware } = require('../apiFactory');
+const {getMiddleware} = require('../apiFactory');
 
 // Get the middleware instance
 const middleware = getMiddleware();
@@ -15,7 +15,7 @@ module.exports = {
     // Main functions
     fetchChallengesAndVote: middleware.apiStrategy.fetchChallengesAndVote.bind(middleware.apiStrategy),
     login: middleware.cliLogin.bind(middleware),
-    
+
     // All middleware interface
     cliLogin: middleware.cliLogin.bind(middleware),
     cliVote: middleware.cliVote.bind(middleware),

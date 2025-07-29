@@ -15,10 +15,10 @@ try {
     if (!fs.existsSync(packageJsonPath)) {
         throw new Error('package.json not found');
     }
-  
+
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     const version = packageJson.version;
-  
+
     if (!version) {
         throw new Error('No version found in package.json');
     }

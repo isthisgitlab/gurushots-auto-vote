@@ -1,6 +1,6 @@
 /**
  * GuruShots Auto Voter - Base Middleware Service
- * 
+ *
  * This module provides common middleware functionality that can be used
  * by both real and mock API implementations, eliminating code duplication.
  */
@@ -17,14 +17,14 @@ class BaseMiddleware {
 
     /**
      * CLI-specific login function with user prompts
-     * 
+     *
      * @returns {object|null} - Login response or null if failed
      */
     async cliLogin() {
         const prompt = require('prompt-sync')();
-        
+
         console.log('=== GuruShots Auto Voter - CLI Login ===');
-        
+
         // Prompt user for credentials
         const email = prompt('Please enter your email: ');
         const password = prompt('Please enter your password: ');
@@ -46,15 +46,15 @@ class BaseMiddleware {
             // Attempt authentication using the provided strategy
             const response = await this.apiStrategy.authenticate(email, password);
             clearInterval(loading);
-            
+
             if (response && response.token) {
                 console.log('Login successful!');
                 console.log('Token obtained successfully');
-                
+
                 // Save token to settings
                 settings.setSetting('token', response.token);
                 console.log('Token saved to settings');
-                
+
                 return response;
             } else {
                 console.log('Login failed. Please check your credentials.');
@@ -69,7 +69,7 @@ class BaseMiddleware {
 
     /**
      * GUI-friendly login function
-     * 
+     *
      * @param {string} email - User's email address
      * @param {string} password - User's password
      * @returns {object} - Object containing success status and data/error
@@ -77,11 +77,11 @@ class BaseMiddleware {
     async guiLogin(email, password) {
         try {
             const response = await this.apiStrategy.authenticate(email, password);
-            
+
             if (response && response.token) {
                 // Save token to settings
                 settings.setSetting('token', response.token);
-                
+
                 return {
                     success: true,
                     data: response,
@@ -102,23 +102,23 @@ class BaseMiddleware {
 
     /**
      * CLI-specific voting function
-     * 
+     *
      * @returns {void}
      */
     async cliVote() {
         console.log('=== GuruShots Auto Voter - CLI Voting ===');
-        
+
         // Load token from settings
         const token = settings.getSetting('token');
-        
+
         if (!token) {
             console.error('No authentication token found. Please login first.');
             console.log('Run the login command to authenticate.');
             return;
         }
-        
+
         console.log('Starting voting process...');
-        
+
         try {
             await this.apiStrategy.fetchChallengesAndVote(token);
             console.log('Voting process completed successfully!');
@@ -129,23 +129,23 @@ class BaseMiddleware {
 
     /**
      * GUI-friendly voting function
-     * 
+     *
      * @returns {object} - Object containing success status and data/error
      */
     async guiVote() {
         try {
             // Load token from settings
             const token = settings.getSetting('token');
-            
+
             if (!token) {
                 return {
                     success: false,
                     error: 'No authentication token found. Please login first.',
                 };
             }
-            
+
             await this.apiStrategy.fetchChallengesAndVote(token);
-            
+
             return {
                 success: true,
                 data: 'Voting process completed successfully!',
@@ -160,7 +160,7 @@ class BaseMiddleware {
 
     /**
      * Check if user is authenticated
-     * 
+     *
      * @returns {boolean} - True if user has a valid token
      */
     isAuthenticated() {
@@ -170,7 +170,7 @@ class BaseMiddleware {
 
     /**
      * Logout function (clears token from settings)
-     * 
+     *
      * @param {boolean} clearToken - Whether to clear the token (default: true)
      */
     logout(clearToken = true) {
@@ -182,7 +182,7 @@ class BaseMiddleware {
 
     /**
      * Get active challenges using the strategy
-     * 
+     *
      * @returns {object} - Challenges response
      */
     async getActiveChallenges() {
@@ -195,7 +195,7 @@ class BaseMiddleware {
 
     /**
      * Get vote images using the strategy
-     * 
+     *
      * @param {object} challenge - Challenge object
      * @returns {object} - Vote images response
      */
@@ -209,7 +209,7 @@ class BaseMiddleware {
 
     /**
      * Submit votes using the strategy
-     * 
+     *
      * @param {object} voteImages - Vote images object
      * @param {number} exposureThreshold - Exposure threshold (default: schema default)
      * @returns {object} - Vote submission response
@@ -224,7 +224,7 @@ class BaseMiddleware {
 
     /**
      * Apply boost using the strategy
-     * 
+     *
      * @param {object} challenge - Challenge object
      * @returns {object} - Boost application response
      */
@@ -238,7 +238,7 @@ class BaseMiddleware {
 
     /**
      * Apply boost to entry using the strategy
-     * 
+     *
      * @param {string} challengeId - Challenge ID
      * @param {string} imageId - Image ID
      * @returns {object} - Boost application response

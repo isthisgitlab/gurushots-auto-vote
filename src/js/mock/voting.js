@@ -1,6 +1,6 @@
 /**
  * GuruShots Auto Voter - Mock Voting Data
- * 
+ *
  * Mock responses for voting operations
  */
 
@@ -13,7 +13,7 @@ const generateMockVoteImages = (challengeUrl) => {
         'Lisa Davis', 'Tom Miller', 'Emma Taylor', 'Chris Anderson', 'Anna Garcia',
         'Robert Chen', 'Maria Rodriguez', 'James Wilson', 'Sophie Martin', 'Alex Thompson',
     ];
-    
+
     const titles = {
         'street-photography-2024': [
             'Urban Life', 'City Lights', 'Street Market', 'Morning Commute', 'Street Art',
@@ -40,19 +40,19 @@ const generateMockVoteImages = (challengeUrl) => {
             'Ancient Temple', 'Art Deco Building', 'Minimalist Design', 'Historic Castle', 'Contemporary Museum',
         ],
     };
-    
+
     const challengeTitles = titles[challengeUrl] || titles['street-photography-2024'];
     const images = [];
-    
+
     // Generate 15-25 random images for voting
     const numImages = Math.floor(Math.random() * 11) + 15; // 15-25 images
-    
+
     for (let i = 0; i < numImages; i++) {
         const photographer = photographers[Math.floor(Math.random() * photographers.length)];
         const title = challengeTitles[Math.floor(Math.random() * challengeTitles.length)];
         const ratio = (Math.random() * 3) + 3; // 3-6 ratio
         const votes = Math.floor(Math.random() * 50) + 10; // 10-60 votes
-        
+
         images.push({
             id: `vote_img_${String(i + 1).padStart(3, '0')}`,
             image_url: `https://example.com/vote${i + 1}.jpg`,
@@ -62,7 +62,7 @@ const generateMockVoteImages = (challengeUrl) => {
             votes,
         });
     }
-    
+
     return {
         challenge: {
             id: Math.floor(Math.random() * 9000) + 1000,

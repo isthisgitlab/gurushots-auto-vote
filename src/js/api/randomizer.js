@@ -1,6 +1,6 @@
 /**
  * API Header Randomizer
- * 
+ *
  * Randomizes API headers to make the app look more natural when used by multiple people.
  * Headers are saved in settings so they stay consistent for each app installation.
  * Keeps app version and build number the same for consistency.
@@ -81,21 +81,21 @@ const getRandomItem = (array) => {
 const initializeHeaders = () => {
     // Check if we already have saved headers
     let savedHeaders = settings.getSetting('apiHeaders');
-    
+
     // Check if headers are complete (should have at least 10 fields)
-    const isHeadersComplete = savedHeaders && 
-        Object.keys(savedHeaders).length >= 10 && 
-        savedHeaders.host && 
-        savedHeaders['x-model'] && 
+    const isHeadersComplete = savedHeaders &&
+        Object.keys(savedHeaders).length >= 10 &&
+        savedHeaders.host &&
+        savedHeaders['x-model'] &&
         savedHeaders['accept-language'];
-    
+
     if (!savedHeaders || !isHeadersComplete) {
         // Generate new random headers
         const iphoneModel = getRandomItem(IPHONE_MODELS);
         const iosVersion = getRandomItem(IOS_VERSIONS);
         const languagePref = getRandomItem(LANGUAGE_PREFERENCES);
         const alamofireVersion = getRandomItem(ALAMOFIRE_VERSIONS);
-        
+
         savedHeaders = {
             'host': 'api.gurushots.com',
             'accept': '*/*',
@@ -111,7 +111,7 @@ const initializeHeaders = () => {
             'x-brand': 'Apple',
             '_version': CURRENT_APP_VERSION, // Track version for updates
         };
-        
+
         // Save headers to settings
         settings.setSetting('apiHeaders', savedHeaders);
         console.log('🔄 Generated new random API headers');
@@ -119,19 +119,19 @@ const initializeHeaders = () => {
         // Update version-related fields while preserving randomized values
         const iosVersion = savedHeaders['user-agent']?.match(/iOS ([^)]+)/)?.[1] || '16.7.11';
         const alamofireVersion = savedHeaders['user-agent']?.match(/Alamofire\/([^)]+)/)?.[1] || '5.10.2';
-        
+
         savedHeaders = {
             ...savedHeaders,
             'user-agent': `GuruShotsIOS/${CURRENT_APP_VERSION} (com.gurushots.app; build:${CURRENT_BUILD_NUMBER}; iOS ${iosVersion}) Alamofire/${alamofireVersion}`,
             'x-app-version': CURRENT_APP_VERSION,
             '_version': CURRENT_APP_VERSION,
         };
-        
+
         // Save updated headers
         settings.setSetting('apiHeaders', savedHeaders);
         console.log('🔄 Updated API headers for new app version');
     }
-    
+
     return savedHeaders;
 };
 
@@ -142,7 +142,7 @@ const initializeHeaders = () => {
 const generateRandomHeaders = (token) => {
     // Ensure headers are initialized
     const savedHeaders = initializeHeaders();
-    
+
     // Return headers with current token
     return {
         ...savedHeaders,

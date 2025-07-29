@@ -1,6 +1,6 @@
 /**
  * GuruShots Auto Voter - Mock Boost Data
- * 
+ *
  * Mock responses for boost operations
  */
 
@@ -59,7 +59,7 @@ const mockBoostData = {
         type: 'standard',
         duration: 3600,
     },
-    
+
     // Challenge with used boost
     used: {
         state: 'USED',
@@ -68,7 +68,7 @@ const mockBoostData = {
         duration: 3600,
         applied_at: Math.floor(Date.now() / 1000) - 1800, // Applied 30 minutes ago
     },
-    
+
     // Challenge with unavailable boost
     unavailable: {
         state: 'UNAVAILABLE',
@@ -76,7 +76,7 @@ const mockBoostData = {
         type: null,
         duration: 0,
     },
-    
+
     // Challenge with boost about to expire
     expiring: {
         state: 'AVAILABLE',

@@ -371,5 +371,5 @@ if (typeof window !== 'undefined' && !window.translationManager) {
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { translationManager: window.translationManager || new TranslationManager(), translations };
+    module.exports = {translationManager: window.translationManager || new TranslationManager(), translations};
 }

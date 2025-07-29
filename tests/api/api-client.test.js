@@ -1,228 +1,228 @@
 /**
  * Tests for api-client.js
- * 
+ *
  * Tests the core HTTP client functionality and common headers for API requests.
  */
 
 const axios = require('axios');
-const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('../../src/js/api/api-client');
+const {makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE} = require('../../src/js/api/api-client');
 
 // Mock the randomizer module
 jest.mock('../../src/js/api/randomizer', () => ({
-  generateRandomHeaders: jest.fn((token) => ({
-    'x-token': token || 'mock-token',
-    'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
-    'accept': 'application/json',
-    'accept-language': 'en-US',
-    'connection': 'keep-alive',
-  }))
+    generateRandomHeaders: jest.fn((token) => ({
+        'x-token': token || 'mock-token',
+        'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
+        'accept': 'application/json',
+        'accept-language': 'en-US',
+        'connection': 'keep-alive',
+    }))
 }));
 
 // Mock the logger module
 jest.mock('../../src/js/logger', () => ({
-  api: jest.fn(),
-  error: jest.fn(),
+    api: jest.fn(),
+    error: jest.fn(),
 }));
 
 describe('api-client', () => {
-  const mockToken = 'test-token-123';
-  const mockUrl = 'https://api.gurushots.com/test';
-  const mockData = 'test=data';
+    const mockToken = 'test-token-123';
+    const mockUrl = 'https://api.gurushots.com/test';
+    const mockData = 'test=data';
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    // Reset axios mock
-    axios.mockClear();
-  });
-
-  describe('FORM_CONTENT_TYPE', () => {
-    test('should export correct content type', () => {
-      expect(FORM_CONTENT_TYPE).toBe('application/x-www-form-urlencoded; charset=utf-8');
-    });
-  });
-
-  describe('createCommonHeaders', () => {
-    test('should create headers with token', () => {
-      const headers = createCommonHeaders(mockToken);
-      
-      expect(headers).toEqual(expect.objectContaining({
-        'x-token': mockToken,
-        'user-agent': expect.stringContaining('GuruShots'),
-        'accept': 'application/json',
-        'accept-language': 'en-US',
-        'connection': 'keep-alive',
-      }));
+    beforeEach(() => {
+        jest.clearAllMocks();
+        // Reset axios mock
+        axios.mockClear();
     });
 
-    test('should create headers without token', () => {
-      const headers = createCommonHeaders();
-      
-      expect(headers).toEqual(expect.objectContaining({
-        'x-token': 'mock-token',
-        'user-agent': expect.stringContaining('GuruShots'),
-        'accept': 'application/json',
-        'accept-language': 'en-US',
-        'connection': 'keep-alive',
-      }));
-    });
-  });
-
-  describe('makePostRequest', () => {
-    test('should make successful POST request', async () => {
-      const mockResponse = {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-        data: { success: true, message: 'Request successful' }
-      };
-
-      axios.mockResolvedValueOnce(mockResponse);
-
-      const headers = createCommonHeaders(mockToken);
-      const result = await makePostRequest(mockUrl, headers, mockData);
-
-      expect(axios).toHaveBeenCalledWith({
-        method: 'post',
-        url: mockUrl,
-        headers: headers,
-        data: mockData,
-        timeout: 30000,
-      });
-
-      expect(result).toEqual(mockResponse.data);
+    describe('FORM_CONTENT_TYPE', () => {
+        test('should export correct content type', () => {
+            expect(FORM_CONTENT_TYPE).toBe('application/x-www-form-urlencoded; charset=utf-8');
+        });
     });
 
-    test('should handle request with empty data', async () => {
-      const mockResponse = {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-        data: { success: true }
-      };
+    describe('createCommonHeaders', () => {
+        test('should create headers with token', () => {
+            const headers = createCommonHeaders(mockToken);
 
-      axios.mockResolvedValueOnce(mockResponse);
+            expect(headers).toEqual(expect.objectContaining({
+                'x-token': mockToken,
+                'user-agent': expect.stringContaining('GuruShots'),
+                'accept': 'application/json',
+                'accept-language': 'en-US',
+                'connection': 'keep-alive',
+            }));
+        });
 
-      const headers = createCommonHeaders(mockToken);
-      const result = await makePostRequest(mockUrl, headers);
+        test('should create headers without token', () => {
+            const headers = createCommonHeaders();
 
-      expect(axios).toHaveBeenCalledWith({
-        method: 'post',
-        url: mockUrl,
-        headers: headers,
-        data: '',
-        timeout: 30000,
-      });
-
-      expect(result).toEqual(mockResponse.data);
+            expect(headers).toEqual(expect.objectContaining({
+                'x-token': 'mock-token',
+                'user-agent': expect.stringContaining('GuruShots'),
+                'accept': 'application/json',
+                'accept-language': 'en-US',
+                'connection': 'keep-alive',
+            }));
+        });
     });
 
-    test('should return null on request error', async () => {
-      const mockError = new Error('Network error');
-      mockError.response = {
-        status: 500,
-        data: { error: 'Internal server error' },
-        headers: { 'content-type': 'application/json' }
-      };
+    describe('makePostRequest', () => {
+        test('should make successful POST request', async () => {
+            const mockResponse = {
+                status: 200,
+                headers: {'content-type': 'application/json'},
+                data: {success: true, message: 'Request successful'}
+            };
 
-      axios.mockRejectedValueOnce(mockError);
+            axios.mockResolvedValueOnce(mockResponse);
 
-      const headers = createCommonHeaders(mockToken);
-      const result = await makePostRequest(mockUrl, headers, mockData);
+            const headers = createCommonHeaders(mockToken);
+            const result = await makePostRequest(mockUrl, headers, mockData);
 
-      expect(result).toBeNull();
+            expect(axios).toHaveBeenCalledWith({
+                method: 'post',
+                url: mockUrl,
+                headers: headers,
+                data: mockData,
+                timeout: 30000,
+            });
+
+            expect(result).toEqual(mockResponse.data);
+        });
+
+        test('should handle request with empty data', async () => {
+            const mockResponse = {
+                status: 200,
+                headers: {'content-type': 'application/json'},
+                data: {success: true}
+            };
+
+            axios.mockResolvedValueOnce(mockResponse);
+
+            const headers = createCommonHeaders(mockToken);
+            const result = await makePostRequest(mockUrl, headers);
+
+            expect(axios).toHaveBeenCalledWith({
+                method: 'post',
+                url: mockUrl,
+                headers: headers,
+                data: '',
+                timeout: 30000,
+            });
+
+            expect(result).toEqual(mockResponse.data);
+        });
+
+        test('should return null on request error', async () => {
+            const mockError = new Error('Network error');
+            mockError.response = {
+                status: 500,
+                data: {error: 'Internal server error'},
+                headers: {'content-type': 'application/json'}
+            };
+
+            axios.mockRejectedValueOnce(mockError);
+
+            const headers = createCommonHeaders(mockToken);
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            expect(result).toBeNull();
+        });
+
+        test('should return null on request error without response', async () => {
+            const mockError = new Error('Network timeout');
+
+            axios.mockRejectedValueOnce(mockError);
+
+            const headers = createCommonHeaders(mockToken);
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            expect(result).toBeNull();
+        });
+
+        test('should use 30 second timeout', async () => {
+            const mockResponse = {
+                status: 200,
+                headers: {},
+                data: {success: true}
+            };
+
+            axios.mockResolvedValueOnce(mockResponse);
+
+            const headers = createCommonHeaders(mockToken);
+            await makePostRequest(mockUrl, headers, mockData);
+
+            expect(axios).toHaveBeenCalledWith(expect.objectContaining({
+                timeout: 30000,
+            }));
+        });
+
+        test('should log API requests and responses', async () => {
+            const logger = require('../../src/js/logger');
+            const mockResponse = {
+                status: 200,
+                headers: {'content-type': 'application/json'},
+                data: {success: true}
+            };
+
+            axios.mockResolvedValueOnce(mockResponse);
+
+            const headers = createCommonHeaders(mockToken);
+            await makePostRequest(mockUrl, headers, mockData);
+
+            expect(logger.api).toHaveBeenCalledWith('🌐 === API REQUEST ===', {
+                url: mockUrl,
+                headers: headers,
+                data: mockData
+            });
+
+            expect(logger.api).toHaveBeenCalledWith('✅ === API RESPONSE ===', {
+                status: mockResponse.status,
+                headers: mockResponse.headers,
+                data: mockResponse.data,
+            });
+        });
+
+        test('should log API errors', async () => {
+            const logger = require('../../src/js/logger');
+            const mockError = new Error('API error');
+            mockError.response = {
+                status: 400,
+                data: {error: 'Bad request'},
+                headers: {'content-type': 'application/json'}
+            };
+
+            axios.mockRejectedValueOnce(mockError);
+
+            const headers = createCommonHeaders(mockToken);
+            await makePostRequest(mockUrl, headers, mockData);
+
+            expect(logger.error).toHaveBeenCalledWith('❌ === API ERROR ===', {
+                url: mockUrl,
+                error: mockError.message,
+                response: {
+                    status: mockError.response.status,
+                    data: mockError.response.data,
+                    headers: mockError.response.headers,
+                }
+            });
+        });
+
+        test('should log API errors without response', async () => {
+            const logger = require('../../src/js/logger');
+            const mockError = new Error('Network timeout');
+
+            axios.mockRejectedValueOnce(mockError);
+
+            const headers = createCommonHeaders(mockToken);
+            await makePostRequest(mockUrl, headers, mockData);
+
+            expect(logger.error).toHaveBeenCalledWith('❌ === API ERROR ===', {
+                url: mockUrl,
+                error: mockError.message,
+                response: 'No response'
+            });
+        });
     });
-
-    test('should return null on request error without response', async () => {
-      const mockError = new Error('Network timeout');
-
-      axios.mockRejectedValueOnce(mockError);
-
-      const headers = createCommonHeaders(mockToken);
-      const result = await makePostRequest(mockUrl, headers, mockData);
-
-      expect(result).toBeNull();
-    });
-
-    test('should use 30 second timeout', async () => {
-      const mockResponse = {
-        status: 200,
-        headers: {},
-        data: { success: true }
-      };
-
-      axios.mockResolvedValueOnce(mockResponse);
-
-      const headers = createCommonHeaders(mockToken);
-      await makePostRequest(mockUrl, headers, mockData);
-
-      expect(axios).toHaveBeenCalledWith(expect.objectContaining({
-        timeout: 30000,
-      }));
-    });
-
-    test('should log API requests and responses', async () => {
-      const logger = require('../../src/js/logger');
-      const mockResponse = {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-        data: { success: true }
-      };
-
-      axios.mockResolvedValueOnce(mockResponse);
-
-      const headers = createCommonHeaders(mockToken);
-      await makePostRequest(mockUrl, headers, mockData);
-
-      expect(logger.api).toHaveBeenCalledWith('🌐 === API REQUEST ===', {
-        url: mockUrl,
-        headers: headers,
-        data: mockData
-      });
-
-      expect(logger.api).toHaveBeenCalledWith('✅ === API RESPONSE ===', {
-        status: mockResponse.status,
-        headers: mockResponse.headers,
-        data: mockResponse.data,
-      });
-    });
-
-    test('should log API errors', async () => {
-      const logger = require('../../src/js/logger');
-      const mockError = new Error('API error');
-      mockError.response = {
-        status: 400,
-        data: { error: 'Bad request' },
-        headers: { 'content-type': 'application/json' }
-      };
-
-      axios.mockRejectedValueOnce(mockError);
-
-      const headers = createCommonHeaders(mockToken);
-      await makePostRequest(mockUrl, headers, mockData);
-
-      expect(logger.error).toHaveBeenCalledWith('❌ === API ERROR ===', {
-        url: mockUrl,
-        error: mockError.message,
-        response: {
-          status: mockError.response.status,
-          data: mockError.response.data,
-          headers: mockError.response.headers,
-        }
-      });
-    });
-
-    test('should log API errors without response', async () => {
-      const logger = require('../../src/js/logger');
-      const mockError = new Error('Network timeout');
-
-      axios.mockRejectedValueOnce(mockError);
-
-      const headers = createCommonHeaders(mockToken);
-      await makePostRequest(mockUrl, headers, mockData);
-
-      expect(logger.error).toHaveBeenCalledWith('❌ === API ERROR ===', {
-        url: mockUrl,
-        error: mockError.message,
-        response: 'No response'
-      });
-    });
-  });
 });

@@ -1,20 +1,20 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const {contextBridge, ipcRenderer} = require('electron');
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld(
     'api', {
-    // Send methods
+        // Send methods
         login: () => ipcRenderer.send('login-success'),
         logout: () => ipcRenderer.send('logout'),
-    
+
         // Settings methods
         getSettings: () => ipcRenderer.invoke('get-settings'),
         getSetting: (key) => ipcRenderer.invoke('get-setting', key),
         setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
         saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
         getEnvironmentInfo: () => ipcRenderer.invoke('get-environment-info'),
-    
+
         // API methods
         guiVote: () => ipcRenderer.invoke('gui-vote'),
         getActiveChallenges: (token) => ipcRenderer.invoke('get-active-challenges', token),
@@ -22,7 +22,7 @@ contextBridge.exposeInMainWorld(
         runVotingCycle: () => ipcRenderer.invoke('run-voting-cycle'),
         voteOnChallenge: (challengeId, challengeTitle) => ipcRenderer.invoke('vote-on-challenge', challengeId, challengeTitle),
         refreshApi: () => ipcRenderer.invoke('refresh-api'),
-    
+
         // Logger methods
         logDebug: (message, data) => ipcRenderer.invoke('log-debug', message, data),
         logError: (message, data) => ipcRenderer.invoke('log-error', message, data),
@@ -30,12 +30,12 @@ contextBridge.exposeInMainWorld(
         getLogFile: () => ipcRenderer.invoke('get-log-file'),
         getErrorLogFile: () => ipcRenderer.invoke('get-error-log-file'),
         getApiLogFile: () => ipcRenderer.invoke('get-api-log-file'),
-    
+
         // Boost configuration methods
         getBoostThreshold: (challengeId) => ipcRenderer.invoke('get-boost-threshold', challengeId),
         setBoostThreshold: (challengeId, threshold) => ipcRenderer.invoke('set-boost-threshold', challengeId, threshold),
         setDefaultBoostThreshold: (threshold) => ipcRenderer.invoke('set-default-boost-threshold', threshold),
-        
+
         // New schema-based settings methods
         getGlobalDefault: (settingKey) => ipcRenderer.invoke('get-global-default', settingKey),
         setGlobalDefault: (settingKey, value) => ipcRenderer.invoke('set-global-default', settingKey, value),
@@ -47,21 +47,21 @@ contextBridge.exposeInMainWorld(
         cleanupStaleChallengeSetting: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-challenge-setting', activeChallengeIds),
         cleanupObsoleteSettings: () => ipcRenderer.invoke('cleanup-obsolete-settings'),
         getSettingsSchema: () => ipcRenderer.invoke('get-settings-schema'),
-    
+
         // External URL methods
         openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
-        
+
         // Voting control methods
         shouldCancelVoting: () => ipcRenderer.invoke('should-cancel-voting'),
         setCancelVoting: (shouldCancel) => ipcRenderer.invoke('set-cancel-voting', shouldCancel),
-        
+
         // Boost methods
         applyBoostToEntry: (challengeId, imageId) => ipcRenderer.invoke('apply-boost-to-entry', challengeId, imageId),
-        
+
         // Window methods
         reloadWindow: () => ipcRenderer.invoke('reload-window'),
-    
-    // Optional: Add listeners for responses from main process
-    // Example: on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args))
+
+        // Optional: Add listeners for responses from main process
+        // Example: on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args))
     },
 );

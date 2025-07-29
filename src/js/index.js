@@ -1,8 +1,8 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const {app, BrowserWindow, ipcMain} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const settings = require('./settings');
-const { initializeHeaders } = require('./api/randomizer');
+const {initializeHeaders} = require('./api/randomizer');
 
 // Global force exit handler to ensure the application always terminates
 let forceExitTimeout = null;
@@ -13,9 +13,9 @@ function ensureExit(reason) {
     if (forceExitTimeout) {
         clearTimeout(forceExitTimeout);
     }
-  
+
     console.log(`Ensuring exit after ${reason}...`);
-  
+
     // Set a timeout to force exit after a delay
     forceExitTimeout = setTimeout(() => {
         console.log(`Force exiting after ${reason}...`);
@@ -37,7 +37,7 @@ let settingsReloadTimeout = null;
 function createLoginWindow() {
     // Get saved window bounds
     const bounds = settings.getWindowBounds('login');
-  
+
     // Create the login window with saved bounds
     loginWindow = new BrowserWindow({
         width: bounds.width,
@@ -85,7 +85,7 @@ function createLoginWindow() {
 function createMainWindow() {
     // Get saved window bounds
     const bounds = settings.getWindowBounds('main');
-  
+
     // Create the main application window with saved bounds
     mainWindow = new BrowserWindow({
         width: bounds.width,
@@ -130,7 +130,7 @@ function createMainWindow() {
             settingsWatcher = null;
         }
     });
-    
+
     // Watch settings file for changes and auto-reload with debouncing
     const settingsPath = path.join(settings.getUserDataPath(), 'settings.json');
     if (fs.existsSync(settingsPath)) {
@@ -140,7 +140,7 @@ function createMainWindow() {
                 if (settingsReloadTimeout) {
                     clearTimeout(settingsReloadTimeout);
                 }
-                
+
                 // Reload after a short delay to avoid rapid reloads
                 settingsReloadTimeout = setTimeout(() => {
                     console.log('🔄 Settings file changed, reloading main window...');
@@ -156,13 +156,13 @@ function createMainWindow() {
 // Check if we should auto-login based on saved token
 async function checkAutoLogin() {
     const userSettings = settings.loadSettings();
-  
+
     // If we have a token and stay logged in is enabled, auto-login
     if (userSettings.token && userSettings.stayLoggedIn) {
         createMainWindow();
         return true;
     }
-  
+
     // Otherwise, show the login window
     createLoginWindow();
     return false;
@@ -172,11 +172,11 @@ async function checkAutoLogin() {
 app.whenReady().then(async () => {
     // Initialize API headers on app startup
     initializeHeaders();
-    
+
     // Run log cleanup on app startup
     const logger = require('./logger');
     logger.cleanup();
-    
+
     await checkAutoLogin();
 
     // On macOS, re-create a window when dock icon is clicked and no windows are open
@@ -185,7 +185,7 @@ app.whenReady().then(async () => {
             checkAutoLogin();
         }
     });
-  
+
     // Handle SIGINT and SIGTERM signals to ensure clean exit
     process.on('SIGINT', () => {
         console.log('Received SIGINT signal. Exiting...');
@@ -193,14 +193,14 @@ app.whenReady().then(async () => {
         // Use the global force exit handler to ensure the process terminates
         ensureExit('SIGINT');
     });
-  
+
     process.on('SIGTERM', () => {
         console.log('Received SIGTERM signal. Exiting...');
         app.quit();
         // Use the global force exit handler to ensure the process terminates
         ensureExit('SIGTERM');
     });
-  
+
     // Set up a global force exit handler to ensure the process always terminates
     process.on('exit', (code) => {
         console.log(`Process exiting with code: ${code}`);
@@ -210,14 +210,14 @@ app.whenReady().then(async () => {
 // Clear token when app is about to quit if stay logged in is not enabled
 app.on('before-quit', () => {
     const userSettings = settings.loadSettings();
-  
+
     // If stay logged in is not enabled, clear the token
     if (!userSettings.stayLoggedIn && userSettings.token) {
         settings.setSetting('token', '');
     }
-  
+
     console.log('Application is about to quit. Forcing exit...');
-  
+
     // Use the global force exit handler to ensure the process terminates
     ensureExit('before-quit');
 });
@@ -227,7 +227,7 @@ app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
         console.log('All windows closed. Forcing exit...');
-    
+
         // Use the global force exit handler to ensure the process terminates
         ensureExit('window-all-closed');
     }
@@ -246,35 +246,35 @@ ipcMain.on('login-success', () => {
 // Handle logout
 ipcMain.on('logout', () => {
     if (!mainWindow) return;
-  
+
     const userSettings = settings.loadSettings();
-  
+
     // Clear the token only if stay logged in is not enabled
     if (!userSettings.stayLoggedIn) {
         settings.setSetting('token', '');
     }
-  
+
     // Reset mock value to environment default while preserving theme and remember me settings
     const envInfo = settings.getEnvironmentInfo();
     settings.setSetting('mock', envInfo.defaultMock);
-  
+
     // Open the login window only after the main window is fully closed
     mainWindow.once('closed', () => {
-    // If a login window is already open, just focus it instead of creating a second one
+        // If a login window is already open, just focus it instead of creating a second one
         if (loginWindow) {
             loginWindow.focus();
         } else {
             createLoginWindow();
         }
     });
-  
+
     // Close main window
     mainWindow.close();
 });
 
 /**
  * IPC Handlers for Settings Management
- * 
+ *
  * These handlers provide robust error handling for IPC communication between
  * the main process and renderer processes. They validate input parameters,
  * catch and log errors, and provide fallback values when errors occur.
@@ -294,7 +294,7 @@ ipcMain.handle('get-settings', async () => {
 // Handle get-setting request for a specific key
 ipcMain.handle('get-setting', async (event, key) => {
     try {
-    // Validate input parameter
+        // Validate input parameter
         if (typeof key !== 'string') {
             throw new Error('Invalid key type, expected string');
         }
@@ -303,8 +303,8 @@ ipcMain.handle('get-setting', async (event, key) => {
         console.error(`Error handling get-setting request for key "${key}":`, error);
         // Return the default value for this key if it exists, otherwise null
         const defaultSettings = settings.getDefaultSettings();
-        return defaultSettings[key] !== undefined 
-            ? defaultSettings[key] 
+        return defaultSettings[key] !== undefined
+            ? defaultSettings[key]
             : null;
     }
 });
@@ -312,7 +312,7 @@ ipcMain.handle('get-setting', async (event, key) => {
 // Handle set-setting request
 ipcMain.handle('set-setting', async (event, key, value) => {
     try {
-    // Validate input parameter
+        // Validate input parameter
         if (typeof key !== 'string') {
             throw new Error('Invalid key type, expected string');
         }
@@ -326,7 +326,7 @@ ipcMain.handle('set-setting', async (event, key, value) => {
 // Handle save-settings request
 ipcMain.handle('save-settings', async (event, newSettings) => {
     try {
-    // Validate input parameter
+        // Validate input parameter
         if (typeof newSettings !== 'object' || newSettings === null) {
             throw new Error('Invalid settings type, expected object');
         }
@@ -341,18 +341,18 @@ ipcMain.handle('save-settings', async (event, newSettings) => {
 ipcMain.handle('gui-vote', async () => {
     try {
         const userSettings = settings.loadSettings();
-    
+
         if (!userSettings.token) {
             return {
                 success: false,
                 error: 'No authentication token found',
             };
         }
-    
+
         // Use the API factory to get the appropriate middleware
         const apiFactory = require('./apiFactory');
         const middleware = apiFactory.getMiddleware();
-    
+
         // Call the GUI vote function
         const result = await middleware.guiVote();
         return result;
@@ -371,11 +371,11 @@ ipcMain.handle('get-active-challenges', async (event, token) => {
         console.log('=== IPC get-active-challenges ===');
         console.log('Token received:', token ? `${token.substring(0, 10)}...` : 'none');
         console.log('Full token:', token || 'NO TOKEN');
-    
+
         // Use the API factory to get the appropriate strategy
-        const { getApiStrategy } = require('./apiFactory');
+        const {getApiStrategy} = require('./apiFactory');
         const strategy = getApiStrategy();
-    
+
         // Call the getActiveChallenges function
         const result = await strategy.getActiveChallenges(token);
         return result;
@@ -408,10 +408,10 @@ ipcMain.handle('refresh-api', async () => {
         console.log('🔄 Refreshing API due to settings change');
         const apiFactory = require('./apiFactory');
         apiFactory.refreshApi();
-        return { success: true };
+        return {success: true};
     } catch (error) {
         console.error('Error handling refresh-api request:', error);
-        return { success: false, error: error.message };
+        return {success: false, error: error.message};
     }
 });
 
@@ -420,17 +420,17 @@ const logger = require('./logger');
 
 ipcMain.handle('log-debug', async (event, message, data) => {
     logger.debug(message, data);
-    return { success: true };
+    return {success: true};
 });
 
 ipcMain.handle('log-error', async (event, message, data) => {
     logger.error(message, data);
-    return { success: true };
+    return {success: true};
 });
 
 ipcMain.handle('log-api', async (event, message, data) => {
     logger.api(message, data);
-    return { success: true };
+    return {success: true};
 });
 
 ipcMain.handle('get-log-file', async () => {
@@ -458,20 +458,20 @@ ipcMain.handle('get-boost-threshold', async (event, challengeId) => {
 ipcMain.handle('set-boost-threshold', async (event, challengeId, threshold) => {
     try {
         settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
-        return { success: true };
+        return {success: true};
     } catch (error) {
         console.error('Error setting boost threshold:', error);
-        return { success: false, error: error.message };
+        return {success: false, error: error.message};
     }
 });
 
 ipcMain.handle('set-default-boost-threshold', async (event, threshold) => {
     try {
         settings.setGlobalDefault('boostTime', threshold);
-        return { success: true };
+        return {success: true};
     } catch (error) {
         console.error('Error setting default boost threshold:', error);
-        return { success: false, error: error.message };
+        return {success: false, error: error.message};
     }
 });
 
@@ -480,7 +480,7 @@ ipcMain.handle('get-settings-schema', async () => {
     try {
         const settings = require('./settings');
         const schema = settings.SETTINGS_SCHEMA;
-        
+
         // Create a serializable version of the schema (without functions)
         const serializableSchema = {};
         Object.keys(schema).forEach(key => {
@@ -493,7 +493,7 @@ ipcMain.handle('get-settings-schema', async () => {
 
             };
         });
-        
+
         return serializableSchema;
     } catch (error) {
         console.error('Error getting settings schema:', error);
@@ -594,12 +594,12 @@ ipcMain.handle('cleanup-obsolete-settings', async () => {
 // Handle open external URL request
 ipcMain.handle('open-external-url', async (event, url) => {
     try {
-        const { shell } = require('electron');
+        const {shell} = require('electron');
         await shell.openExternal(url);
-        return { success: true };
+        return {success: true};
     } catch (error) {
         console.error('Error opening external URL:', error);
-        return { success: false, error: error.message };
+        return {success: false, error: error.message};
     }
 });
 
@@ -608,14 +608,14 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
     try {
         if (isMock) {
             // Use mock authentication
-            const { mockLoginSuccess, mockLoginFailure } = require('./mock/auth');
-      
+            const {mockLoginSuccess, mockLoginFailure} = require('./mock/auth');
+
             // Simulate network delay for realistic behavior
             await new Promise(resolve => setTimeout(resolve, 500));
-      
+
 
             const isValidCredential = true;
-      
+
             if (isValidCredential) {
                 return {
                     success: true,
@@ -636,17 +636,17 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
             }
         } else {
             // Use real authentication
-            const { authenticate } = require('./api/login');
-      
+            const {authenticate} = require('./api/login');
+
             const response = await authenticate(username, password);
-      
+
             if (!response) {
                 return {
                     success: false,
                     message: 'Authentication failed - no response from server',
                 };
             }
-      
+
             // Check if the response indicates success
             if (response.success === true && response.token) {
                 return {
@@ -680,9 +680,9 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
 ipcMain.handle('run-voting-cycle', async () => {
     try {
         console.log('🔄 Starting voting cycle...');
-        
+
         const userSettings = settings.loadSettings();
-        
+
         if (!userSettings.token) {
             console.log('❌ No token found for voting cycle');
             return {
@@ -690,11 +690,11 @@ ipcMain.handle('run-voting-cycle', async () => {
                 error: 'No authentication token found',
             };
         }
-        
+
         // Use the API factory to get the appropriate strategy
-        const { getApiStrategy } = require('./apiFactory');
+        const {getApiStrategy} = require('./apiFactory');
         const strategy = getApiStrategy();
-        
+
         // Create a function to get the effective exposure setting for each challenge
         const getExposureThreshold = (challengeId) => {
             try {
@@ -704,21 +704,21 @@ ipcMain.handle('run-voting-cycle', async () => {
                 return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
             }
         };
-        
+
         // Reset cancellation flag before starting
         shouldCancelVoting = false;
-        
+
         // Set the cancellation flag in the API module
         const mainApi = require('./api/main');
         mainApi.setCancellationFlag(false);
-        
+
         // Also set the cancellation flag in the mock API
         const mockApi = require('./mock');
         mockApi.setCancellationFlag(false);
-        
+
         // Run the voting cycle with per-challenge exposure settings
         const result = await strategy.fetchChallengesAndVote(userSettings.token, getExposureThreshold);
-    
+
         if (result && result.success) {
             return {
                 success: true,
@@ -747,25 +747,25 @@ ipcMain.handle('should-cancel-voting', () => {
 // Handle set-cancel-voting request
 ipcMain.handle('set-cancel-voting', (event, shouldCancel) => {
     shouldCancelVoting = shouldCancel;
-    
+
     // Also set the flag in the API module
     const mainApi = require('./api/main');
     mainApi.setCancellationFlag(shouldCancel);
-    
+
     // Also set the flag in the mock API
     const mockApi = require('./mock');
     mockApi.setCancellationFlag(shouldCancel);
-    
+
     return shouldCancelVoting;
 });
 
 // Handle vote-on-challenge request
 ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) => {
     try {
-        console.log('🔄 Vote on challenge request:', { challengeId, challengeTitle });
-    
+        console.log('🔄 Vote on challenge request:', {challengeId, challengeTitle});
+
         const userSettings = settings.loadSettings();
-    
+
         if (!userSettings.token) {
             console.log('❌ No token found for voting');
             return {
@@ -773,14 +773,14 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
                 error: 'No authentication token found',
             };
         }
-    
+
         // Use the API factory to get the appropriate strategy
-        const { getApiStrategy } = require('./apiFactory');
+        const {getApiStrategy} = require('./apiFactory');
         const strategy = getApiStrategy();
-    
+
         // Get active challenges to find the specific challenge
         const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
-    
+
         if (!challengesResponse || !challengesResponse.challenges) {
             console.log('❌ Failed to fetch challenges for voting');
             return {
@@ -788,23 +788,23 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
                 error: 'Failed to fetch challenges',
             };
         }
-    
-        console.log('📋 Found challenges:', challengesResponse.challenges.map(c => ({ id: c.id, title: c.title })));
+
+        console.log('📋 Found challenges:', challengesResponse.challenges.map(c => ({id: c.id, title: c.title})));
         console.log('🔍 Looking for challenge ID:', challengeId, 'Type:', typeof challengeId);
-    
+
         // Find the specific challenge (convert challengeId to number for comparison)
         const challenge = challengesResponse.challenges.find(c => c.id === parseInt(challengeId));
-    
-        console.log('🎯 Challenge found:', challenge ? { id: challenge.id, title: challenge.title } : 'NOT FOUND');
-    
+
+        console.log('🎯 Challenge found:', challenge ? {id: challenge.id, title: challenge.title} : 'NOT FOUND');
+
         if (!challenge) {
-            console.log('❌ Challenge not found:', { challengeId, challengeTitle });
+            console.log('❌ Challenge not found:', {challengeId, challengeTitle});
             return {
                 success: false,
                 error: `Challenge "${challengeTitle}" not found`,
             };
         }
-    
+
         // Check if challenge is active and can be voted on
         const now = Math.floor(Date.now() / 1000);
         if (challenge.start_time >= now) {
@@ -813,7 +813,7 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
                 error: `Challenge "${challengeTitle}" has not started yet`,
             };
         }
-    
+
         // Get the effective exposure threshold for this challenge
         const effectiveThreshold = settings.getEffectiveSetting('exposure', challengeId);
         if (challenge.member.ranking.exposure.exposure_factor >= effectiveThreshold) {
@@ -822,13 +822,13 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
                 error: `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`,
             };
         }
-    
+
         // Vote on the specific challenge
         console.log('🗳️ Starting voting process for challenge:', challenge.title);
-    
+
         const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
-        console.log('📸 Vote images received:', voteImages ? { imageCount: voteImages.images?.length } : 'No vote images');
-    
+        console.log('📸 Vote images received:', voteImages ? {imageCount: voteImages.images?.length} : 'No vote images');
+
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
             console.log('✅ Submitting votes...');
             await strategy.submitVotes(voteImages, userSettings.token, effectiveThreshold);
@@ -836,7 +836,7 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         } else {
             console.log('⚠️ No vote images available');
         }
-    
+
         return {
             success: true,
             message: `Successfully voted on challenge "${challengeTitle}"`,
@@ -853,10 +853,10 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
 // Handle apply boost to entry request
 ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
     try {
-        console.log('🚀 Apply boost to entry request:', { challengeId, imageId });
-    
+        console.log('🚀 Apply boost to entry request:', {challengeId, imageId});
+
         const userSettings = settings.loadSettings();
-    
+
         if (!userSettings.token) {
             console.log('❌ No token found for boost');
             return {
@@ -864,15 +864,15 @@ ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
                 error: 'No authentication token found',
             };
         }
-    
+
         // Use the API factory to get the appropriate strategy
-        const { getApiStrategy } = require('./apiFactory');
+        const {getApiStrategy} = require('./apiFactory');
         const strategy = getApiStrategy();
-    
+
         // Apply boost to the specific entry
-        console.log('🚀 Applying boost to entry:', { challengeId, imageId });
+        console.log('🚀 Applying boost to entry:', {challengeId, imageId});
         const result = await strategy.applyBoostToEntry(challengeId, imageId, userSettings.token);
-    
+
         if (result) {
             console.log('✅ Boost applied successfully');
             return {
@@ -900,15 +900,15 @@ ipcMain.handle('reload-window', async () => {
     try {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.reload();
-            return { success: true };
+            return {success: true};
         } else if (loginWindow && !loginWindow.isDestroyed()) {
             loginWindow.reload();
-            return { success: true };
+            return {success: true};
         } else {
-            return { success: false, error: 'No active window to reload' };
+            return {success: false, error: 'No active window to reload'};
         }
     } catch (error) {
         console.error('Error reloading window:', error);
-        return { success: false, error: error.message };
+        return {success: false, error: error.message};
     }
 });

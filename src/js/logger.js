@@ -17,14 +17,14 @@ const isElectronApp = process.type === 'renderer' || process.type === 'main';
 // Get the same userData path that settings use
 const getUserDataPath = () => {
     let userDataPath;
-    
+
     if (electronApp && electronApp.getPath) {
         // Electron context - use app.getPath('userData')
         userDataPath = electronApp.getPath('userData');
     } else {
         // CLI context - create fallback userData path (same as settings.js)
         const appName = 'gurushots-auto-vote';
-        
+
         // Use platform-specific paths
         switch (process.platform) {
         case 'darwin': // macOS
@@ -37,28 +37,28 @@ const getUserDataPath = () => {
             userDataPath = path.join(os.homedir(), '.config', appName);
             break;
         }
-        
+
         // Ensure the directory exists
         if (!fs.existsSync(userDataPath)) {
             try {
-                fs.mkdirSync(userDataPath, { recursive: true });
+                fs.mkdirSync(userDataPath, {recursive: true});
             } catch {
                 // Fallback to current directory if we can't create the proper path
                 userDataPath = path.join(process.cwd(), 'userData');
                 if (!fs.existsSync(userDataPath)) {
-                    fs.mkdirSync(userDataPath, { recursive: true });
+                    fs.mkdirSync(userDataPath, {recursive: true});
                 }
             }
         }
     }
-    
+
     return userDataPath;
 };
 
 // Create logs directory in the same location as settings
 const logsDir = path.join(getUserDataPath(), 'logs');
 if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
+    fs.mkdirSync(logsDir, {recursive: true});
 }
 
 // Check if we're in development mode (not mock)
@@ -110,18 +110,18 @@ const cleanupOldLogs = () => {
     try {
         const files = fs.readdirSync(logsDir);
         const now = new Date();
-        
+
         files.forEach(file => {
             const filePath = path.join(logsDir, file);
             const stats = fs.statSync(filePath);
             const fileSizeMB = stats.size / (1024 * 1024);
-            
+
             let shouldDelete = false;
             let reason = '';
-            
+
             // Parse date from filename
             const fileDate = parseDateFromFilename(file);
-            
+
             if (fileDate) {
                 // Determine retention based on file type
                 if (file.startsWith('errors-')) {
@@ -140,7 +140,7 @@ const cleanupOldLogs = () => {
                 shouldDelete = fileAge > (7 * 24 * 60 * 60 * 1000); // 7 days
                 reason = 'age';
             }
-            
+
             if (shouldDelete) {
                 fs.unlinkSync(filePath);
                 console.log(`Cleaned up old log file: ${file} (${reason}, ${fileSizeMB.toFixed(2)} MB)`);
@@ -156,7 +156,7 @@ const writeToLogFile = (logFile, level, message, data = null) => {
     try {
         const timestamp = new Date().toISOString();
         let logEntry = `[${timestamp}] [${level}] ${message}`;
-        
+
         if (data) {
             if (typeof data === 'object') {
                 logEntry += '\n' + JSON.stringify(data, null, 2);
@@ -164,12 +164,12 @@ const writeToLogFile = (logFile, level, message, data = null) => {
                 logEntry += '\n' + data;
             }
         }
-        
+
         logEntry += '\n' + '='.repeat(80) + '\n';
-        
+
         // Write to file
         fs.appendFileSync(logFile, logEntry);
-        
+
         // Also log to console for immediate feedback
         console.log(`[${level}] ${message}`);
     } catch (error) {
@@ -202,7 +202,7 @@ const currentLogFiles = getLogFilePaths();
 module.exports = {
     // Error logging - 30 days retention
     error: (message, data) => writeToLogFile(currentLogFiles.error, 'ERROR', message, data),
-    
+
     // General logging - 7 days retention
     info: (message, data) => writeToLogFile(currentLogFiles.app, 'INFO', message, data),
     debug: (message, data) => {
@@ -215,22 +215,22 @@ module.exports = {
             console.log(`[DEBUG] ${message}`);
         }
     },
-    
+
     // API logging - only in dev mode, 1 day retention
     api: (message, data) => {
         if (isDevMode) {
             writeToLogFile(currentLogFiles.api, 'API', message, data);
         }
     },
-    
+
     // Get current log file paths
     getLogFile: () => currentLogFiles.app,
     getErrorLogFile: () => currentLogFiles.error,
     getApiLogFile: () => currentLogFiles.api,
-    
+
     // Get log files for a specific date
     getLogFileForDate: (date) => getLogFilePaths(date),
-    
+
     // Manual cleanup function
     cleanup: cleanupOldLogs,
 }; 

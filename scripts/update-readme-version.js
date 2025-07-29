@@ -15,10 +15,10 @@ try {
     if (!fs.existsSync(packageJsonPath)) {
         throw new Error('package.json not found');
     }
-  
+
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
     const version = packageJson.version;
-  
+
     if (!version) {
         throw new Error('No version found in package.json');
     }
@@ -76,7 +76,7 @@ try {
         ];
 
         // Apply all replacements
-        filePatterns.forEach(({ pattern, replacement }) => {
+        filePatterns.forEach(({pattern, replacement}) => {
             if (pattern.test(content)) {
                 content = content.replace(pattern, replacement);
                 changesMade++;
@@ -104,7 +104,7 @@ try {
         ];
 
         // Apply all URL replacements
-        urlPatterns.forEach(({ pattern, replacement }) => {
+        urlPatterns.forEach(({pattern, replacement}) => {
             if (pattern.test(content)) {
                 content = content.replace(pattern, replacement);
                 changesMade++;

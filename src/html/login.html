@@ -1,93 +1,101 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html data-theme="light" lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
     <title>Login - GuruShots Auto Vote</title>
     <link href="../../dist/styles.css" rel="stylesheet">
     <script src="../js/translations.js"></script>
-    <script src="../js/login.js" defer></script>
+    <script defer src="../js/login.js"></script>
 </head>
 <body class="min-h-screen bg-base-200 flex items-center justify-center">
-    <!-- Toast container -->
-    <div id="toast-container" class="toast toast-bottom toast-start z-50"></div>
-    
-    <div class="card w-full max-w-lg bg-base-100 shadow-xl">
-        <div class="card-body">
-            <!-- Language Switcher -->
-            <div class="flex justify-end mb-4">
-                <div class="dropdown dropdown-end">
-                    <div tabindex="0" role="button" class="btn btn-ghost btn-sm">
-                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path>
-                        </svg>
-                        <span id="current-language">English</span>
+<!-- Toast container -->
+<div class="toast toast-bottom toast-start z-50" id="toast-container"></div>
+
+<div class="card w-full max-w-lg bg-base-100 shadow-xl">
+    <div class="card-body">
+        <!-- Language Switcher -->
+        <div class="flex justify-end mb-4">
+            <div class="dropdown dropdown-end">
+                <div class="btn btn-ghost btn-sm" role="button" tabindex="0">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
+                              stroke-linecap="round" stroke-linejoin="round"
+                              stroke-width="2"></path>
+                    </svg>
+                    <span id="current-language">English</span>
+                </div>
+                <ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32" tabindex="0">
+                    <li><a data-lang="en" data-translate="common.languageEnglish">English</a></li>
+                    <li><a data-lang="lv" data-translate="common.languageLatvian">Latviešu</a></li>
+                </ul>
+            </div>
+        </div>
+        <h2 class="card-title text-2xl font-bold text-center mb-6" data-translate="login.heading">Login</h2>
+        <form class="space-y-4" id="loginForm" novalidate>
+            <div class="form-control w-full">
+                <label class="label" for="username">
+                    <span class="label-text" data-translate="login.username">Username</span>
+                </label>
+                <input class="input w-full border border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200"
+                       data-translate-placeholder="login.usernamePlaceholder" id="username"
+                       placeholder="Enter your username"
+                       type="text"/>
+                <div class="label-text-alt text-latvian font-medium hidden" id="username-error"></div>
+            </div>
+            <div class="form-control w-full">
+                <label class="label" for="password">
+                    <span class="label-text" data-translate="login.password">Password</span>
+                </label>
+                <input class="input w-full border border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200"
+                       data-translate-placeholder="login.passwordPlaceholder" id="password"
+                       placeholder="Enter your password"
+                       type="password"/>
+                <div class="label-text-alt text-latvian font-medium hidden" id="password-error"></div>
+            </div>
+
+            <div class="divider">Settings</div>
+
+            <div class="grid grid-cols-3 gap-2">
+                <div class="flex flex-col items-center">
+                    <span class="label-text mb-2" data-translate="common.theme">Theme</span>
+                    <div class="flex items-center justify-center">
+                        <span class="label-text mr-2" data-translate="common.light">Light</span>
+                        <input class="toggle toggle-sm" id="themeToggle" type="checkbox"/>
+                        <span class="label-text ml-2" data-translate="common.dark">Dark</span>
                     </div>
-                    <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32">
-                        <li><a data-lang="en" data-translate="common.languageEnglish">English</a></li>
-                        <li><a data-lang="lv" data-translate="common.languageLatvian">Latviešu</a></li>
-                    </ul>
+                </div>
+
+                <div class="flex flex-col items-center">
+                    <span class="label-text mb-2" data-translate="login.stayLoggedIn">Stay logged in</span>
+                    <div class="flex items-center justify-center">
+                        <span class="invisible label-text mr-2">Off</span>
+                        <input class="toggle toggle-sm" id="stayLoggedIn" type="checkbox"/>
+                        <span class="invisible label-text ml-2">On</span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col items-center">
+                    <span class="label-text mb-2" data-translate="login.mockMode">Mock mode</span>
+                    <div class="flex items-center justify-center">
+                        <span class="invisible label-text mr-2">Off</span>
+                        <input class="toggle toggle-sm" id="mockToggle" type="checkbox"/>
+                        <span class="invisible label-text ml-2">On</span>
+                    </div>
                 </div>
             </div>
-            <h2 class="card-title text-2xl font-bold text-center mb-6" data-translate="login.heading">Login</h2>
-            <form id="loginForm" class="space-y-4" novalidate>
-                <div class="form-control w-full">
-                    <label class="label" for="username">
-                        <span class="label-text" data-translate="login.username">Username</span>
-                    </label>
-                    <input type="text" id="username" data-translate-placeholder="login.usernamePlaceholder" placeholder="Enter your username" class="input w-full border border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200" />
-                    <div id="username-error" class="label-text-alt text-latvian font-medium hidden"></div>
-                </div>
-                <div class="form-control w-full">
-                    <label class="label" for="password">
-                        <span class="label-text" data-translate="login.password">Password</span>
-                    </label>
-                    <input type="password" id="password" data-translate-placeholder="login.passwordPlaceholder" placeholder="Enter your password" class="input w-full border border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200" />
-                    <div id="password-error" class="label-text-alt text-latvian font-medium hidden"></div>
-                </div>
-                
-                <div class="divider">Settings</div>
-                
-                <div class="grid grid-cols-3 gap-2">
-                    <div class="flex flex-col items-center">
-                        <span class="label-text mb-2" data-translate="common.theme">Theme</span>
-                        <div class="flex items-center justify-center">
-                            <span class="label-text mr-2" data-translate="common.light">Light</span>
-                            <input id="themeToggle" type="checkbox" class="toggle toggle-sm" />
-                            <span class="label-text ml-2" data-translate="common.dark">Dark</span>
-                        </div>
-                    </div>
-                    
-                    <div class="flex flex-col items-center">
-                        <span class="label-text mb-2" data-translate="login.stayLoggedIn">Stay logged in</span>
-                        <div class="flex items-center justify-center">
-                            <span class="invisible label-text mr-2">Off</span>
-                            <input id="stayLoggedIn" type="checkbox" class="toggle toggle-sm" />
-                            <span class="invisible label-text ml-2">On</span>
-                        </div>
-                    </div>
-                    
-                    <div class="flex flex-col items-center">
-                        <span class="label-text mb-2" data-translate="login.mockMode">Mock mode</span>
-                        <div class="flex items-center justify-center">
-                            <span class="invisible label-text mr-2">Off</span>
-                            <input id="mockToggle" type="checkbox" class="toggle toggle-sm" />
-                            <span class="invisible label-text ml-2">On</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="form-control w-full mt-6">
-                    <button type="submit" id="loginBtn" class="btn bg-latvian text-white w-full">
-                        <span id="loginBtnText" data-translate="login.loginButton">Login</span>
-                        <span id="loginBtnSpinner" class="loading loading-spinner loading-sm hidden"></span>
-                    </button>
-                </div>
-            </form>
-            <p class="text-center text-sm mt-4 text-gray-500" data-translate="login.loadingModeInfo">
-                Loading mode information...
-            </p>
-        </div>
+
+            <div class="form-control w-full mt-6">
+                <button class="btn bg-latvian text-white w-full" id="loginBtn" type="submit">
+                    <span data-translate="login.loginButton" id="loginBtnText">Login</span>
+                    <span class="loading loading-spinner loading-sm hidden" id="loginBtnSpinner"></span>
+                </button>
+            </div>
+        </form>
+        <p class="text-center text-sm mt-4 text-gray-500" data-translate="login.loadingModeInfo">
+            Loading mode information...
+        </p>
     </div>
+</div>
 </body>
 </html>

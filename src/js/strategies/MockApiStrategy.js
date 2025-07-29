@@ -1,12 +1,12 @@
 /**
  * GuruShots Auto Voter - Mock API Strategy
- * 
+ *
  * This module implements the mock API strategy that returns
  * simulated responses for testing and development.
  */
 
 const ApiStrategy = require('../interfaces/ApiStrategy');
-const { mockApiClient } = require('../mock');
+const {mockApiClient} = require('../mock');
 const settings = require('../settings');
 
 /**
@@ -16,7 +16,7 @@ const settings = require('../settings');
 class MockApiStrategy extends ApiStrategy {
     /**
      * Authenticate user with email and password
-     * 
+     *
      * @param {string} email - User's email address
      * @param {string} password - User's password
      * @returns {Promise<object>} - Authentication response with token
@@ -28,7 +28,7 @@ class MockApiStrategy extends ApiStrategy {
 
     /**
      * Get active challenges for the authenticated user
-     * 
+     *
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Response containing array of active challenges
      */
@@ -39,7 +39,7 @@ class MockApiStrategy extends ApiStrategy {
 
     /**
      * Get vote images for a specific challenge
-     * 
+     *
      * @param {object} challenge - Challenge object
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Response containing vote images
@@ -51,7 +51,7 @@ class MockApiStrategy extends ApiStrategy {
 
     /**
      * Submit votes for images
-     * 
+     *
      * @param {object} voteImages - Vote images object
      * @param {string} token - Authentication token
      * @param {number} exposureThreshold - Exposure threshold (default: schema default)
@@ -64,7 +64,7 @@ class MockApiStrategy extends ApiStrategy {
 
     /**
      * Apply boost to a challenge
-     * 
+     *
      * @param {object} challenge - Challenge object
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Boost application response
@@ -76,7 +76,7 @@ class MockApiStrategy extends ApiStrategy {
 
     /**
      * Apply boost to a specific entry
-     * 
+     *
      * @param {string} challengeId - Challenge ID
      * @param {string} imageId - Image ID
      * @param {string} token - Authentication token
@@ -89,7 +89,7 @@ class MockApiStrategy extends ApiStrategy {
 
     /**
      * Main voting process - fetch challenges and vote
-     * 
+     *
      * @param {string} token - Authentication token
      * @param {number|function} exposureThreshold - Exposure threshold (default: schema default) or function to get threshold per challenge
      * @returns {Promise<object>} - Voting process response
@@ -101,7 +101,7 @@ class MockApiStrategy extends ApiStrategy {
 
     /**
      * Get strategy type (for debugging/logging)
-     * 
+     *
      * @returns {string} - Strategy type name
      */
     getStrategyType() {

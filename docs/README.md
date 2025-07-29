@@ -5,9 +5,11 @@ This directory contains application documentation in different languages.
 ## 📚 Available Documentation
 
 ### **🇱🇻 Latvian**
+
 - **[Installation Guide](INSTALACIJA.md)** - Complete installation guide in Latvian
 
 ### **🇺🇸 English**
+
 - **[Main README](../README.md)** - Complete documentation in English (in main directory)
 
 ## 🎯 Which Documentation to Use?

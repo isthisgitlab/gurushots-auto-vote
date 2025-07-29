@@ -8,12 +8,12 @@
 
 #### **🖥️ Grafiskā lietotne (Ieteicams lielākajai daļai lietotāju)**
 
-| Platforma | Lejupielāde | Izmērs | Tips |
-|-----------|-------------|--------|------|
-| **Windows** | [📥 GuruShotsAutoVote-v0.0.3-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-x64.exe) | ~50 MB | Portatīva izpildfaila |
-| **macOS** | [📥 GuruShotsAutoVote-v0.0.3-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-arm64.dmg) | ~50 MB | DMG instalētājs |
-| **Linux (x64)** | [📥 GuruShotsAutoVote-v0.0.3-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-x86_64.AppImage) | ~50 MB | AppImage |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.0.3-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-arm64.AppImage) | ~50 MB | AppImage |
+| Platforma         | Lejupielāde                                                                                                                                                          | Izmērs | Tips                  |
+|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|-----------------------|
+| **Windows**       | [📥 GuruShotsAutoVote-v0.0.3-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
+| **macOS**         | [📥 GuruShotsAutoVote-v0.0.3-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-arm64.dmg)             | ~50 MB | DMG instalētājs       |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.0.3-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-x86_64.AppImage) | ~50 MB | AppImage              |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.0.3-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.0.3-arm64.AppImage)   | ~50 MB | AppImage              |
 
 ### **📋 Instalācijas instrukcijas**
 
@@ -34,6 +34,7 @@
 4. **Palaist**: Atveriet lietotni no Applications mapes
 
 **🔧 Ja saņemat drošības brīdinājumus:**
+
 ```bash
 # Atveriet Terminal un izpildiet šo komandu (aizstājiet ar savu faktisko ceļu):
 xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
@@ -42,9 +43,11 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 #### **🐧 Linux lietotājiem**
 
 **Grafiskā lietotne (AppImage):**
+
 1. **Lejupielādēt**: Noklikšķiniet uz atbilstošās Linux saites augšā
-2. **Padarīt izpildāmu**: Labais klikšķis uz faila → Properties → Permissions → Atzīmējiet "Allow executing file as program"
-   - Vai izmantojiet termināli: `chmod +x GuruShotsAutoVote-v0.0.3-*.AppImage`
+2. **Padarīt izpildāmu**: Labais klikšķis uz faila → Properties → Permissions → Atzīmējiet "Allow executing file as
+   program"
+    - Vai izmantojiet termināli: `chmod +x GuruShotsAutoVote-v0.0.3-*.AppImage`
 3. **Palaist**: Veiciet dubultklikšķi uz faila vai palaidiet no termināļa: `./GuruShotsAutoVote-v0.0.3-*.AppImage`
 
 ### **🎯 Kuru versiju lejupielādēt?**
@@ -52,6 +55,7 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 **Ieteicamā lejupielāde**: Grafiskā lietotne jūsu platformai
 
 **Kāpēc grafiskā lietotne?**
+
 - ✅ **Vienkārša lietošana** - Vizuāls interfeiss, nav nepieciešamas komandas
 - ✅ **Pilna funkcionalitāte** - Visas funkcijas pieejamas caur interfeisu
 - ✅ **Automātiska atjaunināšana** - Lietotne pati pārvalda balsošanu
@@ -60,17 +64,20 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 ### **🔗 Alternatīva: Apskatīt visas izlaidumus**
 
 Ja jums nepieciešama konkrēta versija vai vēlaties apskatīt visas pieejamās lejupielādes:
+
 - **📂 [Apskatīt visas izlaidumus](https://github.com/isthisgitlab/gurushots-auto-vote/releases)**
 - **📋 [Izlaiduma piezīmes](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest)**
 
 ### **❓ Joprojām neesat pārliecināts?**
 
 **Vienkāršā atbilde**: Lejupielādējiet grafisko lietotni jūsu platformai:
+
 - **Windows**: `.exe` fails
-- **macOS**: `.dmg` fails  
+- **macOS**: `.dmg` fails
 - **Linux**: `.AppImage` fails
 
-**Nepieciešama palīdzība?** Apskatiet [Problēmu risināšanas](#problmu-risinana) sadaļu zemāk vai [atveriet problēmu](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
+**Nepieciešama palīdzība?** Apskatiet [Problēmu risināšanas](#problmu-risinana) sadaļu zemāk
+vai [atveriet problēmu](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
 
 ## 🎯 Ātrs sākums
 
@@ -107,22 +114,27 @@ Lietotne automātiski saglabā jūsu preferences:
 ### **Biežākās problēmas**
 
 **"Nav atrasts autentifikācijas tokens"**
+
 - Pārliecinieties, ka esat pieslēdzies ar saviem GuruShots akreditācijas datiem
 - Mēģiniet vēlreiz
 
 **"Tīkla kļūda"**
+
 - Pārbaudiet savu interneta savienojumu
 - Mēģiniet vēlāk
 
 **"Token beidzies"**
+
 - Piesakieties vēlreiz ar saviem akreditācijas datiem
 
 **Logi atveras ārpus ekrāna**
+
 - Aizveriet lietotni un palaidiet vēlreiz
 
 ### **Saņemt palīdzību**
 
 Pārbaudiet pašreizējo statusu:
+
 - Apskatiet lietotnes interfeisu
 - Pārbaudiet pieslēgšanās statusu
 
@@ -136,10 +148,12 @@ Pārbaudiet pašreizējo statusu:
 ## 🆘 Atbalsts
 
 Problēmām un jautājumiem:
+
 1. Pārbaudiet problēmu risināšanas sadaļu augšā
 2. Pārbaudiet statusu lietotnes interfeisā
 3. [Atveriet problēmu GitHub](https://github.com/isthisgitlab/gurushots-auto-vote/issues)
 
 ---
 
-**Piezīme**: Šī lietotne ir paredzēta izglītības un attīstības nolūkiem. Lūdzu, ievērojiet GuruShots lietošanas noteikumus un izmantojiet atbildīgi. 
+**Piezīme**: Šī lietotne ir paredzēta izglītības un attīstības nolūkiem. Lūdzu, ievērojiet GuruShots lietošanas
+noteikumus un izmantojiet atbildīgi. 

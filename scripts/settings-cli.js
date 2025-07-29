@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 
 const settings = require('../src/js/settings');
-const { spawn } = require('child_process');
+const {spawn} = require('child_process');
 
 /**
  * CLI Settings Management Script
- * 
+ *
  * Usage:
  *   npm run settings:get [key]     - Get setting value (or all if no key provided)
  *   npm run settings:set key value - Set setting value
- * 
+ *
  * Examples:
  *   npm run settings:get            # Get all settings
  *   npm run settings:get theme      # Get theme setting
@@ -38,7 +38,7 @@ function setNestedProperty(obj, path, value) {
         }
         return current[key];
     }, obj);
-    
+
     // Try to parse value as JSON first, then number, then boolean, then string
     let parsedValue = value;
     try {
@@ -50,7 +50,7 @@ function setNestedProperty(obj, path, value) {
             parsedValue = value === 'true';
         }
     }
-    
+
     target[lastKey] = parsedValue;
     return obj;
 }
@@ -58,15 +58,15 @@ function setNestedProperty(obj, path, value) {
 // Helper function to format output
 function formatValue(value, indent = 0) {
     const spaces = '  '.repeat(indent);
-    
+
     if (value === null) return 'null';
     if (value === undefined) return 'undefined';
-    
+
     if (typeof value === 'object' && !Array.isArray(value)) {
         if (Object.keys(value).length === 0) {
             return '{}';
         }
-        
+
         let result = '{\n';
         Object.entries(value).forEach(([k, v]) => {
             result += `${spaces}  ${k}: ${formatValue(v, indent + 1)}\n`;
@@ -74,26 +74,26 @@ function formatValue(value, indent = 0) {
         result += `${spaces}}`;
         return result;
     }
-    
+
     if (Array.isArray(value)) {
         if (value.length === 0) {
             return '[]';
         }
         return '[' + value.map(v => JSON.stringify(v)).join(', ') + ']';
     }
-    
+
     return JSON.stringify(value);
 }
 
 // Function to check if Electron GUI is running
 function isElectronRunning() {
     return new Promise((resolve) => {
-        const process = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], { stdio: 'pipe' });
-        
+        const process = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], {stdio: 'pipe'});
+
         process.on('close', (code) => {
             resolve(code === 0);
         });
-        
+
         process.on('error', () => {
             resolve(false);
         });
@@ -117,7 +117,7 @@ async function main() {
         switch (command) {
         case 'get': {
             const allSettings = settings.loadSettings();
-            
+
             if (!key) {
                 // Show all settings
                 console.log('All Settings:');
@@ -134,23 +134,23 @@ async function main() {
             }
             break;
         }
-        
+
         case 'set': {
             if (!key || value === undefined) {
                 console.error('Usage: npm run settings:set <key> <value>');
                 console.error('Example: npm run settings:set theme dark');
                 process.exit(1);
             }
-            
+
             const allSettings = settings.loadSettings();
-            
+
             // Handle nested keys by modifying the settings object
             if (key.includes('.')) {
                 setNestedProperty(allSettings, key, value);
                 const success = settings.saveSettings(allSettings);
                 if (success) {
                     console.log(`✅ Set ${key} = ${formatValue(getNestedProperty(allSettings, key))}`);
-                    
+
                     // Inform about GUI reload for certain settings
                     const uiSettings = ['theme', 'language', 'timezone'];
                     const mainKey = key.split('.')[0];
@@ -164,7 +164,7 @@ async function main() {
             } else {
                 // Handle top-level settings
                 let parsedValue = value;
-                
+
                 // Try to parse value appropriately
                 try {
                     parsedValue = JSON.parse(value);
@@ -175,12 +175,12 @@ async function main() {
                         parsedValue = value === 'true';
                     }
                 }
-                
+
                 const success = settings.setSetting(key, parsedValue);
                 if (success) {
                     console.log(`✅ Set ${key} = ${formatValue(parsedValue)}`);
-                    
-                    // Inform about GUI reload for certain settings  
+
+                    // Inform about GUI reload for certain settings
                     const uiSettings = ['theme', 'language', 'timezone'];
                     if (uiSettings.includes(key)) {
                         await informAboutGuiReload();
@@ -192,13 +192,13 @@ async function main() {
             }
             break;
         }
-        
+
         case 'schema': {
             // Show settings schema information
             const schema = settings.SETTINGS_SCHEMA;
             console.log('Settings Schema:');
             console.log('================');
-            
+
             Object.entries(schema).forEach(([key, config]) => {
                 console.log(`\n${key}:`);
                 console.log(`  Type: ${config.type}`);
@@ -209,22 +209,22 @@ async function main() {
             });
             break;
         }
-        
+
         case 'global-defaults': {
             // Show current global defaults for schema-based settings
             const allSettings = settings.loadSettings();
             const globalDefaults = allSettings.challengeSettings?.globalDefaults || {};
-            
+
             console.log('Global Defaults for Schema Settings:');
             console.log('===================================');
-            
+
             Object.entries(settings.SETTINGS_SCHEMA).forEach(([key, config]) => {
                 const currentValue = globalDefaults[key] !== undefined ? globalDefaults[key] : config.default;
                 console.log(`${key}: ${formatValue(currentValue)}`);
             });
             break;
         }
-        
+
         case 'help':
         default: {
             console.log('Settings CLI Help');

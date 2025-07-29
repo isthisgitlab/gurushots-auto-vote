@@ -1,19 +1,19 @@
 /**
  * Simplified tests for voting.js
- * 
+ *
  * Tests the vote images fetching and submission functionality.
  */
 
-const { getVoteImages, submitVotes } = require('../../src/js/api/voting');
+const {getVoteImages, submitVotes} = require('../../src/js/api/voting');
 
 // Mock the makePostRequest function
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded',
-    createCommonHeaders: jest.fn(() => ({ 'x-token': 'test-token' }))
+    createCommonHeaders: jest.fn(() => ({'x-token': 'test-token'}))
 }));
 
-const { makePostRequest, createCommonHeaders } = require('../../src/js/api/api-client');
+const {makePostRequest, createCommonHeaders} = require('../../src/js/api/api-client');
 
 describe('voting', () => {
     beforeEach(() => {
@@ -22,10 +22,10 @@ describe('voting', () => {
 
     describe('getVoteImages', () => {
         test('should fetch vote images successfully', async () => {
-            const mockChallenge = { title: 'Test Challenge', url: 'test-url' };
+            const mockChallenge = {title: 'Test Challenge', url: 'test-url'};
             const mockToken = 'test-token';
             const mockResponse = {
-                images: [{ id: 'img1', ratio: 25 }, { id: 'img2', ratio: 30 }]
+                images: [{id: 'img1', ratio: 25}, {id: 'img2', ratio: 30}]
             };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
@@ -43,9 +43,9 @@ describe('voting', () => {
         });
 
         test('should return null when no images', async () => {
-            const mockChallenge = { title: 'Test Challenge', url: 'test-url' };
+            const mockChallenge = {title: 'Test Challenge', url: 'test-url'};
             const mockToken = 'test-token';
-            const mockResponse = { images: [] };
+            const mockResponse = {images: []};
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -58,16 +58,16 @@ describe('voting', () => {
     describe('submitVotes', () => {
         test('should submit votes successfully', async () => {
             const mockVoteImages = {
-                challenge: { id: '123', title: 'Test Challenge' },
-                voting: { exposure: { exposure_factor: 50 } },
+                challenge: {id: '123', title: 'Test Challenge'},
+                voting: {exposure: {exposure_factor: 50}},
                 images: [
-                    { id: 'img1', ratio: 25 },
-                    { id: 'img2', ratio: 30 },
-                    { id: 'img3', ratio: 20 }
+                    {id: 'img1', ratio: 25},
+                    {id: 'img2', ratio: 30},
+                    {id: 'img3', ratio: 20}
                 ]
             };
             const mockToken = 'test-token';
-            const mockResponse = { success: true };
+            const mockResponse = {success: true};
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -85,8 +85,8 @@ describe('voting', () => {
 
         test('should return undefined when no images', async () => {
             const mockVoteImages = {
-                challenge: { id: '123', title: 'Test Challenge' },
-                voting: { exposure: { exposure_factor: 50 } },
+                challenge: {id: '123', title: 'Test Challenge'},
+                voting: {exposure: {exposure_factor: 50}},
                 images: []
             };
             const mockToken = 'test-token';
@@ -98,17 +98,17 @@ describe('voting', () => {
 
         test('should use custom exposure threshold instead of hardcoded 100', async () => {
             const mockVoteImages = {
-                challenge: { id: '123', title: 'Test Challenge' },
-                voting: { exposure: { exposure_factor: 50 } },
+                challenge: {id: '123', title: 'Test Challenge'},
+                voting: {exposure: {exposure_factor: 50}},
                 images: [
-                    { id: 'img1', ratio: 25 },
-                    { id: 'img2', ratio: 30 },
-                    { id: 'img3', ratio: 20 }
+                    {id: 'img1', ratio: 25},
+                    {id: 'img2', ratio: 30},
+                    {id: 'img3', ratio: 20}
                 ]
             };
             const mockToken = 'test-token';
             const customThreshold = 75; // Custom threshold instead of 100
-            const mockResponse = { success: true };
+            const mockResponse = {success: true};
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -129,15 +129,15 @@ describe('voting', () => {
 
         test('should handle exposure threshold function parameter', async () => {
             const mockVoteImages = {
-                challenge: { id: '123', title: 'Test Challenge' },
-                voting: { exposure: { exposure_factor: 50 } },
+                challenge: {id: '123', title: 'Test Challenge'},
+                voting: {exposure: {exposure_factor: 50}},
                 images: [
-                    { id: 'img1', ratio: 25 },
-                    { id: 'img2', ratio: 30 }
+                    {id: 'img1', ratio: 25},
+                    {id: 'img2', ratio: 30}
                 ]
             };
             const mockToken = 'test-token';
-            const mockResponse = { success: true };
+            const mockResponse = {success: true};
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 

@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
         include:
           - os: macos-latest
             platform: mac
@@ -108,7 +108,7 @@ jobs:
           retention-days: 1
 
   create-release:
-    needs: [build]
+    needs: [ build ]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
 

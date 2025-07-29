@@ -1,6 +1,6 @@
 /**
  * GuruShots Auto Voter - API Strategy Interface
- * 
+ *
  * This module defines the common interface that both real and mock
  * API implementations must follow, ensuring consistency.
  */
@@ -12,7 +12,7 @@
 class ApiStrategy {
     /**
      * Authenticate user with email and password
-     * 
+     *
      * @param {string} email - User's email address
      * @param {string} password - User's password
      * @returns {Promise<object>} - Authentication response with token
@@ -23,7 +23,7 @@ class ApiStrategy {
 
     /**
      * Get active challenges for the authenticated user
-     * 
+     *
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Response containing array of active challenges
      */
@@ -33,7 +33,7 @@ class ApiStrategy {
 
     /**
      * Get vote images for a specific challenge
-     * 
+     *
      * @param {object} challenge - Challenge object
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Response containing vote images
@@ -44,7 +44,7 @@ class ApiStrategy {
 
     /**
      * Submit votes for images
-     * 
+     *
      * @param {object} voteImages - Vote images object
      * @param {string} token - Authentication token
      * @param {number} exposureThreshold - Exposure threshold (default: schema default)
@@ -56,7 +56,7 @@ class ApiStrategy {
 
     /**
      * Apply boost to a challenge
-     * 
+     *
      * @param {object} challenge - Challenge object
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Boost application response
@@ -67,7 +67,7 @@ class ApiStrategy {
 
     /**
      * Apply boost to a specific entry
-     * 
+     *
      * @param {string} challengeId - Challenge ID
      * @param {string} imageId - Image ID
      * @param {string} token - Authentication token
@@ -79,7 +79,7 @@ class ApiStrategy {
 
     /**
      * Main voting process - fetch challenges and vote
-     * 
+     *
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Voting process response
      */
@@ -89,7 +89,7 @@ class ApiStrategy {
 
     /**
      * Get strategy type (for debugging/logging)
-     * 
+     *
      * @returns {string} - Strategy type name
      */
     getStrategyType() {

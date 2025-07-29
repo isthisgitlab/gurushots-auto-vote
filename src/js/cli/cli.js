@@ -2,17 +2,17 @@
 
 /**
  * GuruShots Auto Voter - CLI Entry Point
- * 
+ *
  * This script provides a command-line interface for the GuruShots Auto Voter.
  * It can run in two modes:
  * 1. Single execution mode: Run once and exit
  * 2. Continuous mode: Run with cron scheduling every 3 minutes
- * 
+ *
  * The application:
  * 1. Runs immediately on startup to process current challenges
  * 2. Sets up a cron job to run every 3 minutes to continue voting
  * 3. Keeps track of voting attempts with a counter
- * 
+ *
  * Requirements:
  * - Valid GuruShots authentication token in settings
  * - Node.js with required dependencies
@@ -22,7 +22,7 @@
 const cron = require('node-cron');
 
 // Import the API factory (CLI always uses real API by forcing mock=false)
-const { getMiddleware } = require('../apiFactory');
+const {getMiddleware} = require('../apiFactory');
 const settings = require('../settings');
 
 // Ensure CLI always uses real API regardless of settings
@@ -30,7 +30,7 @@ settings.setSetting('mock', false);
 
 // Get the middleware instance - but don't destructure methods at module level
 const getMiddlewareInstance = () => getMiddleware();
-const { initializeHeaders } = require('../api/randomizer');
+const {initializeHeaders} = require('../api/randomizer');
 
 // Import logger for cleanup
 const logger = require('../logger');
@@ -75,18 +75,18 @@ const runVotingCycle = async (cycleNumber = 1) => {
     try {
         console.log(`--- Voting Cycle ${cycleNumber} ---`);
         console.log(`Time: ${new Date().toLocaleString()}`);
-        
+
         // Check if user is authenticated
         if (!getMiddlewareInstance().isAuthenticated()) {
             console.error('No authentication token found. Please login first.');
             console.log('Run: node cli.js login');
             return false;
         }
-        
+
         // Get token from settings
         const userSettings = settings.loadSettings();
         const token = userSettings.token;
-        
+
         // Run the voting process
         await getMiddlewareInstance().apiStrategy.fetchChallengesAndVote(token);
         console.log(`--- Voting Cycle ${cycleNumber} Completed ---\n`);
@@ -102,43 +102,43 @@ const runVotingCycle = async (cycleNumber = 1) => {
  */
 const startContinuousVoting = async () => {
     console.log('=== Starting Continuous Voting Mode ===');
-    
+
     // Check if user is authenticated
     if (!getMiddlewareInstance().isAuthenticated()) {
         console.error('No authentication token found. Please login first.');
         console.log('Run: node cli.js login');
         process.exit(1);
     }
-    
+
     // Load settings (CLI always uses real API)
     const userSettings = settings.loadSettings();
     console.log('Mode: REAL API (CLI mode)');
     console.log(`Stay logged in: ${userSettings.stayLoggedIn ? 'Yes' : 'No'}`);
-    
+
     // Counter to track number of voting attempts
     let voteCounter = 0;
-    
+
     // Cron interval: Run every 3 minutes
     // Format: second(optional) minute hour day-of-month month day-of-week
     const interval = '*/3 * * * *';
-    
+
     console.log(`Scheduling voting every 3 minutes (${interval})`);
     console.log('Press Ctrl+C to stop continuous voting\n');
-    
+
     // Create the scheduled task
     const task = cron.schedule(interval, () => {
         voteCounter += 1;
         runVotingCycle(voteCounter);
     });
-    
+
     // Run immediately on startup
     console.log('--- Initial voting run ---');
     voteCounter += 1;
     await runVotingCycle(voteCounter);
-    
+
     // Start the scheduled task
     task.start();
-    
+
     // Keep the process running
     process.on('SIGINT', () => {
         console.log('\n=== Stopping Continuous Voting ===');
@@ -146,7 +146,7 @@ const startContinuousVoting = async () => {
         console.log('Continuous voting stopped.');
         process.exit(0);
     });
-    
+
     process.on('SIGTERM', () => {
         console.log('\n=== Stopping Continuous Voting ===');
         task.stop();
@@ -160,16 +160,16 @@ const startContinuousVoting = async () => {
  */
 const showStatus = () => {
     const userSettings = settings.loadSettings();
-    
+
     console.log('=== GuruShots Auto Voter Status ===');
     console.log('Mode: REAL API (CLI mode)');
     console.log(`Stay logged in: ${userSettings.stayLoggedIn ? 'Yes' : 'No'}`);
     console.log(`Theme: ${userSettings.theme}`);
-    
+
     // Show environment information
     console.log('Environment: CLI (real API mode)');
     console.log('Mock Setting: ignored (CLI forces real API)');
-    
+
     // Show window bounds information
     const windowBounds = userSettings.windowBounds;
     if (windowBounds) {
@@ -181,21 +181,21 @@ const showStatus = () => {
             console.log(`  Main: ${windowBounds.main.width}x${windowBounds.main.height} at (${windowBounds.main.x || 'auto'}, ${windowBounds.main.y || 'auto'})`);
         }
     }
-    
+
     // Show userData path information
     const userDataPath = settings.getUserDataPath();
     console.log(`Settings location: ${userDataPath}`);
-    
+
     if (getMiddlewareInstance().isAuthenticated()) {
         const token = userSettings.token;
         const tokenStart = token.substring(0, 6);
         const tokenEnd = token.substring(token.length - 4);
         const maskedLength = Math.max(0, token.length - 10);
         const maskedPart = '*'.repeat(maskedLength);
-        
+
         console.log('Authentication: ✅ Logged in');
         console.log(`Token: ${tokenStart}${maskedPart}${tokenEnd}`);
-        
+
         if (userSettings.token.startsWith('mock_')) {
             console.log('Token Type: MOCK (for testing)');
         } else {
@@ -205,7 +205,7 @@ const showStatus = () => {
         console.log('Authentication: ❌ Not logged in');
         console.log('Token: Not set');
     }
-    
+
     console.log('\nTo login: node cli.js login');
     console.log('To vote once: node cli.js vote');
     console.log('To start continuous voting: node cli.js start');
@@ -219,17 +219,17 @@ const main = async () => {
     try {
         // Initialize API headers on CLI startup
         initializeHeaders();
-        
+
         // Run log cleanup on CLI startup
         logger.cleanup();
-        
+
         switch (command) {
         case 'login':
             console.log('Starting login process...');
             await getMiddlewareInstance().cliLogin();
             process.exit(0);
             break;
-                
+
         case 'vote':
             if (!getMiddlewareInstance().isAuthenticated()) {
                 console.error('You must login first before voting.');
@@ -240,32 +240,32 @@ const main = async () => {
             await runVotingCycle(1);
             process.exit(0);
             break;
-                
+
         case 'start':
             await startContinuousVoting();
             break;
-                
+
         case 'status':
             showStatus();
             process.exit(0);
             break;
-                
+
         case 'reset-windows': {
             console.log('Resetting window positions to default...');
             const defaultSettings = settings.getDefaultSettings();
-            settings.saveSettings({ windowBounds: defaultSettings.windowBounds });
+            settings.saveSettings({windowBounds: defaultSettings.windowBounds});
             console.log('Window positions reset successfully.');
             process.exit(0);
             break;
         }
-                
+
         case 'help':
         case '--help':
         case '-h':
             showHelp();
             process.exit(0);
             break;
-                
+
         default:
             if (!command) {
                 console.error('No command specified.');
@@ -286,4 +286,4 @@ if (require.main === module) {
     main();
 }
 
-module.exports = { main, runVotingCycle, startContinuousVoting, showStatus }; 
+module.exports = {main, runVotingCycle, startContinuousVoting, showStatus};

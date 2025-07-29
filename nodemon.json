@@ -1,7 +1,12 @@
 {
-  "watch": ["src"],
+  "watch": [
+    "src"
+  ],
   "ext": "js,html,css",
-  "ignore": ["node_modules", "dist"],
+  "ignore": [
+    "node_modules",
+    "dist"
+  ],
   "exec": "electron .",
   "env": {
     "NODE_ENV": "development"

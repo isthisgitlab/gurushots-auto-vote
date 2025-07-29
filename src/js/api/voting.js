@@ -1,32 +1,32 @@
 /**
  * GuruShots Auto Voter - Voting Module
- * 
+ *
  * This module handles fetching images for voting and submitting votes
  * to the GuruShots API.
  */
 
-const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
+const {makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
 const settings = require('../settings');
 
 /**
  * Fetches images available for voting in a specific challenge
- * 
+ *
  * @param {object} challenge - Challenge object containing title and URL
  * @param {string} token - Authentication token
  * @returns {object|null} - Response containing images to vote on, or null if request failed
  */
 const getVoteImages = async (challenge, token) => {
     console.log(`Fetching vote images for challenge: ${challenge.title}`);
-    
+
     // Request up to 100 images for voting
     const data = `limit=100&url=${challenge.url}`;
     const headers = {
-        ...createCommonHeaders(token), 
+        ...createCommonHeaders(token),
         'content-type': FORM_CONTENT_TYPE,
     };
 
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/get_vote_images', headers, data);
-    
+
     // Validate response contains images
     if (!response || !response.images || response.images.length === 0) {
         console.warn(`No images available or invalid response for challenge: ${challenge.title}. Skipping.`);
@@ -39,12 +39,12 @@ const getVoteImages = async (challenge, token) => {
 
 /**
  * Submits votes for images in a challenge
- * 
+ *
  * This function:
  * 1. Randomly selects images to vote on
  * 2. Continues voting until the exposure factor reaches the exposure threshold or all images are used
  * 3. Submits the votes to the GuruShots API
- * 
+ *
  * @param {object} voteImages - Object containing challenge, voting, and images data
  * @param {string} token - Authentication token
  * @param {number} exposureThreshold - Exposure threshold (default: schema default)
@@ -90,7 +90,7 @@ const submitVotes = async (voteImages, token, exposureThreshold = settings.SETTI
     // Prepare final request data
     const data = `c_id=${challenge.id}${votedImages}&layout=scroll${viewedImages}`;
     const headers = {
-        ...createCommonHeaders(token), 
+        ...createCommonHeaders(token),
         'content-type': FORM_CONTENT_TYPE,
     };
 

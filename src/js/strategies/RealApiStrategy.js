@@ -1,16 +1,16 @@
 /**
  * GuruShots Auto Voter - Real API Strategy
- * 
+ *
  * This module implements the real API strategy that makes actual
  * HTTP requests to the GuruShots API endpoints.
  */
 
 const ApiStrategy = require('../interfaces/ApiStrategy');
-const { authenticate } = require('../api/login');
-const { fetchChallengesAndVote } = require('../api/main');
-const { getActiveChallenges } = require('../api/challenges');
-const { getVoteImages, submitVotes } = require('../api/voting');
-const { applyBoost, applyBoostToEntry } = require('../api/boost');
+const {authenticate} = require('../api/login');
+const {fetchChallengesAndVote} = require('../api/main');
+const {getActiveChallenges} = require('../api/challenges');
+const {getVoteImages, submitVotes} = require('../api/voting');
+const {applyBoost, applyBoostToEntry} = require('../api/boost');
 const settings = require('../settings');
 
 /**
@@ -20,7 +20,7 @@ const settings = require('../settings');
 class RealApiStrategy extends ApiStrategy {
     /**
      * Authenticate user with email and password
-     * 
+     *
      * @param {string} email - User's email address
      * @param {string} password - User's password
      * @returns {Promise<object>} - Authentication response with token
@@ -31,7 +31,7 @@ class RealApiStrategy extends ApiStrategy {
 
     /**
      * Get active challenges for the authenticated user
-     * 
+     *
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Response containing array of active challenges
      */
@@ -41,7 +41,7 @@ class RealApiStrategy extends ApiStrategy {
 
     /**
      * Get vote images for a specific challenge
-     * 
+     *
      * @param {object} challenge - Challenge object
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Response containing vote images
@@ -52,7 +52,7 @@ class RealApiStrategy extends ApiStrategy {
 
     /**
      * Submit votes for images
-     * 
+     *
      * @param {object} voteImages - Vote images object
      * @param {string} token - Authentication token
      * @param {number} exposureThreshold - Exposure threshold (default: schema default)
@@ -64,7 +64,7 @@ class RealApiStrategy extends ApiStrategy {
 
     /**
      * Apply boost to a challenge
-     * 
+     *
      * @param {object} challenge - Challenge object
      * @param {string} token - Authentication token
      * @returns {Promise<object>} - Boost application response
@@ -75,7 +75,7 @@ class RealApiStrategy extends ApiStrategy {
 
     /**
      * Apply boost to a specific entry
-     * 
+     *
      * @param {string} challengeId - Challenge ID
      * @param {string} imageId - Image ID
      * @param {string} token - Authentication token
@@ -87,7 +87,7 @@ class RealApiStrategy extends ApiStrategy {
 
     /**
      * Main voting process - fetch challenges and vote
-     * 
+     *
      * @param {string} token - Authentication token
      * @param {number|function} exposureThreshold - Exposure threshold (default: schema default) or function to get threshold per challenge
      * @returns {Promise<object>} - Voting process response
@@ -98,7 +98,7 @@ class RealApiStrategy extends ApiStrategy {
 
     /**
      * Get strategy type (for debugging/logging)
-     * 
+     *
      * @returns {string} - Strategy type name
      */
     getStrategyType() {
