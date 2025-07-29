@@ -28,6 +28,3 @@ jobs:
 
       - name: Run tests with coverage
         run: npm run test:coverage
-
-      - name: Verify README version
-        run: npm run verify:readme

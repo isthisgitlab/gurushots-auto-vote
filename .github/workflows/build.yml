@@ -134,16 +134,6 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Get version from package.json
-        id: get_version
-        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
-      - name: Update README with current version
-        run: npm run update:readme
-
-      - name: Verify README version
-        run: npm run verify:readme
-
       - name: Determine version bump type
         id: version_bump_type
         run: |
@@ -162,6 +152,27 @@ jobs:
             echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
           fi
           echo "Version bump type: ${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
+
+      - name: Bump version
+        run: |
+          # Bump version based on determined type
+          BUMP_TYPE="${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
+          echo "Bumping $BUMP_TYPE version..."
+          npm version $BUMP_TYPE --no-git-tag-version
+          
+          # Get new version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+      - name: Get version from package.json
+        id: get_version
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Update README with current version
+        run: npm run update:readme
+
+      - name: Verify README version
+        run: npm run verify:readme
 
       - name: Generate release name
         id: release_name
@@ -220,17 +231,6 @@ jobs:
             artifacts/linux-builds/cli/gurumockcli-linux-arm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Bump version
-        run: |
-          # Bump version based on determined type
-          BUMP_TYPE="${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
-          echo "Bumping $BUMP_TYPE version..."
-          npm version $BUMP_TYPE --no-git-tag-version
-          
-          # Get new version
-          NEW_VERSION=$(node -p "require('./package.json').version")
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
       - name: Commit and push version bump
         run: |

@@ -1,6 +1,6 @@
 {
   "name": "gurushots-auto-vote",
-  "version": "0.1.0",
+  "version": "0.0.4",
   "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with GUI and CLI interfaces",
   "main": "src/js/index.js",
   "scripts": {
