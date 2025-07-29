@@ -47,9 +47,10 @@ class ApiStrategy {
      * 
      * @param {object} voteImages - Vote images object
      * @param {string} token - Authentication token
+     * @param {number} exposureThreshold - Exposure threshold (default: schema default)
      * @returns {Promise<object>} - Vote submission response
      */
-    async submitVotes(/* voteImages, token */) {
+    async submitVotes(/* voteImages, token, exposureThreshold */) {
         throw new Error('submitVotes method must be implemented by subclass');
     }
 

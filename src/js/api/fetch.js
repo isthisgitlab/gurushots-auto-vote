@@ -18,6 +18,7 @@ require('dotenv').config({path: path.resolve(__dirname, '../.env')});
 const axios = require('axios');
 const prompt = require('prompt-sync')();
 const { generateRandomHeaders } = require('./randomizer');
+const settings = require('../settings');
 
 // Common content type for form submissions
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
@@ -117,13 +118,14 @@ const getVoteImages = async (challenge) => {
  * 
  * This function:
  * 1. Randomly selects images to vote on
- * 2. Continues voting until the exposure factor reaches 100 or all images are used
+ * 2. Continues voting until the exposure factor reaches the exposure threshold or all images are used
  * 3. Submits the votes to the GuruShots API
  * 
  * @param {object} voteImages - Object containing challenge, voting, and images data
+ * @param {number} exposureThreshold - Exposure threshold (default: schema default)
  * @returns {object|undefined} - API response or undefined if submission failed
  */
-const submitVotes = async (voteImages) => {
+const submitVotes = async (voteImages, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
     const {challenge, voting, images} = voteImages;
 
     // Validate we have images to vote on
@@ -142,8 +144,8 @@ const submitVotes = async (voteImages) => {
     // Track unique images to avoid voting for the same image twice
     const uniqueImageIds = new Set();
 
-    // Continue voting until exposure factor reaches 100
-    while (exposure_factor < 100) {
+    // Continue voting until exposure factor reaches the exposure threshold
+    while (exposure_factor < exposureThreshold) {
         // Select a random image from the available images
         const randomImage = images[Math.floor(Math.random() * images.length)];
         if (uniqueImageIds.has(randomImage.id)) continue;
@@ -153,9 +155,9 @@ const submitVotes = async (voteImages) => {
         votedImages += `&image_ids[]=${encodeURIComponent(randomImage.id)}`;
         exposure_factor += randomImage.ratio;
 
-        // Break if we've used all available images but still haven't reached 100
+        // Break if we've used all available images but still haven't reached the exposure threshold
         if (uniqueImageIds.size === images.length) {
-            console.warn(`Not enough images to reach exposure factor 100 for challenge: ${challenge.title}`);
+            console.warn(`Not enough images to reach exposure factor ${exposureThreshold} for challenge: ${challenge.title}`);
             break;
         }
     }
@@ -286,11 +288,12 @@ const getRandomDelay = (min, max) => Math.floor(Math.random() * (max - min + 1) 
  * 1. Gets all active challenges for the user
  * 2. For each challenge:
  *    - Applies boosts if available and close to deadline
- *    - Votes on images if exposure factor is less than 100
+ *    - Votes on images if exposure factor is less than the exposure threshold
  * 
+ * @param {number} exposureThreshold - Exposure threshold (default: schema default)
  * @returns {void}
  */
-const fetchChallengesAndVote = async () => {
+const fetchChallengesAndVote = async (exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
     // Get all active challenges
     const {challenges} = await getActiveChallenges();
     // Current timestamp in seconds (Unix epoch time)
@@ -317,14 +320,14 @@ const fetchChallengesAndVote = async () => {
             }
         }
 
-        // Vote on challenge if exposure factor is less than 100 and challenge has started
-        if (challenge.member.ranking.exposure.exposure_factor < 100 && challenge.start_time < now) {
+        // Vote on challenge if exposure factor is less than the exposure threshold and challenge has started
+        if (challenge.member.ranking.exposure.exposure_factor < exposureThreshold && challenge.start_time < now) {
             try {
                 // Get images to vote on
                 const voteImages = await getVoteImages(challenge);
                 if (voteImages) {
-                    // Submit votes
-                    await submitVotes(voteImages);
+                    // Submit votes with the exposure threshold
+                    await submitVotes(voteImages, exposureThreshold);
                     // Add random delay between challenges to mimic human behavior
                     await sleep(getRandomDelay(2000, 5000));
                 }

@@ -8,6 +8,7 @@
 const { getActiveChallenges } = require('./challenges');
 const { getVoteImages, submitVotes } = require('./voting');
 const { applyBoost, applyBoostToEntry } = require('./boost');
+const settings = require('../settings');
 const { sleep, getRandomDelay } = require('./utils');
 
 // Global cancellation flag
@@ -30,12 +31,13 @@ const setCancellationFlag = (cancel) => {
  * 1. Gets all active challenges for the user
  * 2. For each challenge:
  *    - Applies boosts if available and close to deadline
- *    - Votes on images if exposure factor is less than 100
+ *    - Votes on images if exposure factor is less than the exposure threshold
  * 
  * @param {string} token - Authentication token
+ * @param {number|function} exposureThreshold - Exposure threshold (default: schema default) or function to get threshold per challenge
  * @returns {void}
  */
-const fetchChallengesAndVote = async (token) => {
+const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
     try {
         // Get all active challenges
         const {challenges} = await getActiveChallenges(token);
@@ -49,6 +51,12 @@ const fetchChallengesAndVote = async (token) => {
                 console.log('🛑 Voting cancelled by user');
                 return { success: false, message: 'Voting cancelled by user' };
             }
+            
+            // Get the effective exposure threshold for this challenge
+            const effectiveThreshold = typeof exposureThreshold === 'function' 
+                ? exposureThreshold(challenge.id.toString()) 
+                : exposureThreshold;
+            
             // Check if boost is available for this challenge
             const {boost} = challenge.member;
             if (boost.state === 'AVAILABLE' && boost.timeout) {
@@ -68,8 +76,8 @@ const fetchChallengesAndVote = async (token) => {
                 }
             }
 
-            // Vote on challenge if exposure factor is less than 100 and challenge has started
-            if (challenge.member.ranking.exposure.exposure_factor < 100 && challenge.start_time < now) {
+            // Vote on challenge if exposure factor is less than the effective threshold and challenge has started
+            if (challenge.member.ranking.exposure.exposure_factor < effectiveThreshold && challenge.start_time < now) {
                 try {
                 // Check for cancellation before voting
                     if (checkCancellation()) {
@@ -86,8 +94,8 @@ const fetchChallengesAndVote = async (token) => {
                             return { success: false, message: 'Voting cancelled by user' };
                         }
                     
-                        // Submit votes
-                        await submitVotes(voteImages, token);
+                        // Submit votes with the effective exposure threshold
+                        await submitVotes(voteImages, token, effectiveThreshold);
                     
                         // Check for cancellation before delay
                         if (checkCancellation()) {
