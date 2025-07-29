@@ -30,7 +30,7 @@ const makePostRequest = async (url, headers, data = '') => {
             url,
             headers,
             data,
-            timeout: settings.getSetting('apiTimeout') * 1000 // Convert seconds to milliseconds
+            timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
         });
 
         logger.api('✅ === API RESPONSE ===', {

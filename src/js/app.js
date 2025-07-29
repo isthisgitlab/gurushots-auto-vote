@@ -118,6 +118,26 @@ const getBoostStatus = (boost) => {
     }
 };
 
+// Function to get turbo status
+const getTurboStatus = (turbo) => {
+    if (!turbo || !turbo.state) {
+        return 'Unavailable';
+    }
+    if (turbo.state === 'FREE') {
+        return 'Free';
+    } else if (turbo.state === 'TIMER') {
+        return 'Timer';
+    } else if (turbo.state === 'IN_PROGRESS') {
+        return 'In Progress';
+    } else if (turbo.state === 'WON') {
+        return 'Won';
+    } else if (turbo.state === 'USED') {
+        return 'Used';
+    } else {
+        return 'Locked';
+    }
+};
+
 
 // Function to render challenges
 const renderChallenges = async (challenges, timezone = 'local', autovoteRunning = false) => {
@@ -147,6 +167,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
         const timeRemaining = formatTimeRemaining(challenge.close_time, timezone);
         const endTime = formatEndTime(challenge.close_time, timezone);
         const boostStatus = getBoostStatus(challenge.member.boost);
+        const turboStatus = getTurboStatus(challenge.member.turbo);
         const exposureFactor = challenge.member.ranking.exposure.exposure_factor;
         const entries = challenge.member.ranking.entries;
 
@@ -189,15 +210,15 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                     const getLevelName = (level) => {
                         switch (level) {
                         case 1:
-                            return 'SKILLED';
+                            return 'POPULAR';
                         case 2:
-                            return 'PREMIER';
+                            return 'SKILLED';
                         case 3:
-                            return 'ELITE';
+                            return 'PREMIER';
                         case 4:
-                            return 'ALLSTAR';
+                            return 'ELITE';
                         case 5:
-                            return 'MASTER';
+                            return 'ALLSTAR';
                         default:
                             return `LEVEL ${level}`;
                         }
@@ -219,19 +240,20 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
             timeRemaining,
             endTime,
             boostStatus,
+            turboStatus,
             exposureFactor,
             entriesCount: entries.length,
         });
 
         // Create entries display with detailed information
         let entriesHtml = entries.map(entry => {
-            // Show boost icon if entry is boosted OR if boost is used for this challenge
-            const isEntryBoosted = entry.boost === 1;
+            // Show boost icon only if entry is actually boosted
+            const isEntryBoosted = entry.boost === 1 || entry.boosted === true;
             const isBoostUsed = boostStatus === 'Used';
-            const boostIcon = (isEntryBoosted || isBoostUsed) ? '🚀' : '';
+            const boostIcon = isEntryBoosted ? '🚀' : '';
             const guruIcon = entry.guru_pick ? '⭐' : '';
             // Show camera only for regular entries (no turbo, no boost, no guru pick)
-            const isRegularEntry = !entry.turbo && !isEntryBoosted && !isBoostUsed && !entry.guru_pick;
+            const isRegularEntry = !entry.turbo && !isEntryBoosted && !entry.guru_pick;
             const turboIcon = entry.turbo ? '⚡' : (isRegularEntry ? '📷' : '');
             const boostClass = (isEntryBoosted || isBoostUsed) ? 'badge-success' : 'badge-secondary';
 
@@ -366,7 +388,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                     ` : ''}
                     
                     <!-- Challenge Stats -->
-                    <div class="grid grid-cols-5 gap-2 text-xs">
+                    <div class="grid grid-cols-6 gap-2 text-xs">
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.time')}</div>
                             <div class="${timeRemaining === 'Ended' ? 'text-error' : 'text-success'}">${timeRemaining}</div>
@@ -382,6 +404,10 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.boost')}</div>
                             <div class="${boostStatus.includes('Available') ? 'text-success' : boostStatus === 'Used' ? 'text-warning' : 'text-error'}">${boostStatus.includes('Available') ? translationManager.t('app.available') : boostStatus === 'Used' ? 'Used' : 'None'}</div>
+                        </div>
+                        <div class="text-center p-2 bg-base-200 rounded">
+                            <div class="font-medium">${translationManager.t('app.turbo')}</div>
+                            <div class="${turboStatus === 'Free' ? 'text-success' : turboStatus.includes('Won') || turboStatus.includes('Progress') ? 'text-warning' : turboStatus === 'Used' ? 'text-info' : 'text-error'}">${turboStatus}</div>
                         </div>
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.yourEntries')}</div>
@@ -664,6 +690,11 @@ const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => 
                     <p class="text-xs text-base-content/60 mb-2" data-translate="${config.description}">${descText}</p>
                     <div class="flex items-center gap-2">
                         ${inputHtml}
+                        <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetGlobalDefault('${key}')">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                            </svg>
+                        </button>
                     </div>
                 </div>
             `;
@@ -691,13 +722,20 @@ const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => 
     const modalHtml = `
         <div class="modal modal-open">
             <div class="modal-box max-w-3xl">
-                <h3 class="font-bold text-lg mb-4">
-                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                    </svg>
-                    <span data-translate="app.globalSettings">${translationManager.t('app.globalSettings')}</span>
-                </h3>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-lg">
+                        <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        <span data-translate="app.globalSettings">${translationManager.t('app.globalSettings')}</span>
+                    </h3>
+                    <button class="btn btn-ghost btn-sm" onclick="closeSettingsModal()">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
                 
                 <div class="space-y-6">
                     <!-- App Settings Section -->
@@ -723,6 +761,12 @@ const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => 
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                         </svg>
                         <span data-translate="app.save">${translationManager.t('app.save') || 'Save'}</span>
+                    </button>
+                    <button class="btn btn-warning" onclick="resetAllSettings()">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <span data-translate="app.resetAll">${translationManager.t('app.resetAll')}</span>
                     </button>
                     <button class="btn" onclick="closeSettingsModal()">
                         <span data-translate="app.cancel">${translationManager.t('app.cancel') || 'Cancel'}</span>
@@ -755,6 +799,11 @@ const generateUISettingsHtml = async () => {
                     <span class="text-sm" data-translate="common.light">${translationManager.t('common.light')}</span>
                     <input type="checkbox" id="modal-theme-toggle" class="toggle toggle-sm" ${settings.theme === 'dark' ? 'checked' : ''}>
                     <span class="text-sm" data-translate="common.dark">${translationManager.t('common.dark')}</span>
+                    <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetUISetting('theme')">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         `;
@@ -773,6 +822,11 @@ const generateUISettingsHtml = async () => {
                         <option value="en" ${currentLang === 'en' ? 'selected' : ''}>${translationManager.t('app.english')}</option>
                         <option value="lv" ${currentLang === 'lv' ? 'selected' : ''}>${translationManager.t('app.latvian')}</option>
                     </select>
+                    <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetUISetting('language')">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         `;
@@ -807,6 +861,11 @@ const generateUISettingsHtml = async () => {
                     </select>
                     <button id="modal-timezone-add" class="btn btn-ghost btn-sm" title="${translationManager.t('app.addCustomTimezone')}">+</button>
                     <button id="modal-timezone-remove" class="btn btn-ghost btn-sm text-red-500" title="${translationManager.t('app.removeCurrentTimezone')}" style="visibility: ${currentTimezone !== 'Europe/Riga' ? 'visible' : 'hidden'}">×</button>
+                    <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetUISetting('timezone')">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
                 </div>
                 <input id="modal-timezone-input" type="text" placeholder="${translationManager.t('app.timezonePlaceholder')}" class="input input-bordered input-sm mt-2" style="display: none; width: 250px;">
             </div>
@@ -823,6 +882,11 @@ const generateUISettingsHtml = async () => {
                 <div class="flex items-center gap-2">
                     <input type="checkbox" id="modal-stay-logged-in" class="checkbox checkbox-sm" ${settings.stayLoggedIn ? 'checked' : ''}>
                     <span class="text-sm" data-translate="app.rememberLoginSession">${translationManager.t('app.rememberLoginSession')}</span>
+                    <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetUISetting('stayLoggedIn')">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                    </button>
                 </div>
             </div>
         `;
@@ -1321,6 +1385,143 @@ window.closeSettingsModal = () => {
     }
 };
 
+// Global function to reset a UI setting to default (UI only, not saved until Save button is clicked)
+window.resetUISetting = (settingKey) => {
+    try {
+        // Get the default value
+        const defaultSettings = {
+            theme: 'light',
+            language: 'en',
+            timezone: 'Europe/Riga',
+            stayLoggedIn: false,
+        };
+        
+        const defaultValue = defaultSettings[settingKey];
+        
+        // Update the UI element only
+        switch (settingKey) {
+        case 'theme': {
+            const themeToggle = document.getElementById('modal-theme-toggle');
+            if (themeToggle) {
+                themeToggle.checked = defaultValue === 'dark';
+            }
+            break;
+        }
+            
+        case 'language': {
+            const languageSelect = document.getElementById('modal-language-select');
+            if (languageSelect) {
+                languageSelect.value = defaultValue;
+            }
+            break;
+        }
+            
+        case 'timezone': {
+            const timezoneSelect = document.getElementById('modal-timezone-select');
+            if (timezoneSelect) {
+                timezoneSelect.value = defaultValue;
+                // Update the remove button visibility
+                const removeButton = document.getElementById('modal-timezone-remove');
+                if (removeButton) {
+                    removeButton.style.visibility = defaultValue !== 'Europe/Riga' ? 'visible' : 'hidden';
+                }
+            }
+            break;
+        }
+            
+        case 'stayLoggedIn': {
+            const stayLoggedInCheckbox = document.getElementById('modal-stay-logged-in');
+            if (stayLoggedInCheckbox) {
+                stayLoggedInCheckbox.checked = defaultValue;
+            }
+            break;
+        }
+        }
+        
+        console.log(`🔄 Reset ${settingKey} UI to default value: ${defaultValue} (not saved yet)`);
+    } catch (error) {
+        console.error(`Error resetting UI setting ${settingKey}:`, error);
+        alert(`Error resetting ${settingKey}: ${error.message}`);
+    }
+};
+
+// Global function to reset a global default setting (UI only, not saved until Save button is clicked)
+window.resetGlobalDefault = async (settingKey) => {
+    try {
+        // Get the schema to find the default value
+        const schema = await window.api.getSettingsSchema();
+        const defaultValue = schema[settingKey]?.default;
+        
+        // Update the UI element based on setting type (no backend save)
+        const config = schema[settingKey];
+        if (config) {
+            // Find the input element for this setting
+            const inputId = `global-${settingKey}`;
+            const inputElement = document.getElementById(inputId);
+            
+            if (inputElement) {
+                switch (config.type) {
+                case 'boolean':
+                    inputElement.checked = defaultValue;
+                    break;
+                case 'time': {
+                    // Convert seconds to hours and minutes for display
+                    const hours = Math.floor(defaultValue / 3600);
+                    const minutes = Math.floor((defaultValue % 3600) / 60);
+                    const timeInput = document.getElementById(`${inputId}-time`);
+                    if (timeInput) {
+                        timeInput.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                    }
+                    break;
+                }
+                case 'number':
+                    inputElement.value = defaultValue;
+                    break;
+                default:
+                    inputElement.value = defaultValue;
+                }
+            }
+        }
+        
+        console.log(`🔄 Reset global default ${settingKey} UI to: ${defaultValue} (not saved yet)`);
+    } catch (error) {
+        console.error(`Error resetting global default ${settingKey}:`, error);
+        alert(`Error resetting ${settingKey}: ${error.message}`);
+    }
+};
+
+// Global function to reset all settings
+window.resetAllSettings = async () => {
+    const confirmMessage = `${translationManager.t('app.resetAllConfirmMessage')}\n\n${translationManager.t('app.resetAllConfirmDetails')}`;
+    
+    if (!confirm(confirmMessage)) {
+        return;
+    }
+    
+    try {
+        // Reset all UI settings
+        const uiSuccess = await window.api.resetAllSettings();
+        
+        // Reset all global defaults
+        const globalSuccess = await window.api.resetAllGlobalDefaults();
+        
+        if (uiSuccess && globalSuccess) {
+            console.log('✅ Successfully reset all settings to defaults');
+            alert(translationManager.t('app.resetAllSuccess'));
+            
+            // Close the modal and reload the page to apply changes
+            closeSettingsModal();
+            location.reload();
+        } else {
+            console.error('❌ Failed to reset some settings');
+            alert('Failed to reset some settings. Please try again or check the console for details.');
+        }
+    } catch (error) {
+        console.error('Error resetting all settings:', error);
+        alert(`Error resetting settings: ${error.message}`);
+    }
+};
+
 // Global function to open challenge-specific settings modal
 window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
     try {
@@ -1411,13 +1612,20 @@ const generateChallengeSettingsModalHtml = async (challengeId, challengeTitle, s
     return `
         <div class="modal modal-open">
             <div class="modal-box max-w-2xl">
-                <h3 class="font-bold text-lg mb-4">
-                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                    </svg>
-                    Settings: ${challengeTitle}
-                </h3>
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-lg">
+                        <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                        </svg>
+                        Settings: ${challengeTitle}
+                    </h3>
+                    <button class="btn btn-ghost btn-sm" onclick="closeSettingsModal()">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
                 
                 <div class="space-y-4">
                     ${settingsHtml}

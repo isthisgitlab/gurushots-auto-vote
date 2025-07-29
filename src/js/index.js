@@ -606,6 +606,67 @@ ipcMain.handle('cleanup-obsolete-settings', async () => {
     }
 });
 
+// Reset settings handlers
+ipcMain.handle('reset-setting', async (event, key) => {
+    try {
+        const settings = require('./settings');
+        return settings.resetSetting(key);
+    } catch (error) {
+        console.error('Error resetting setting:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('reset-global-default', async (event, settingKey) => {
+    try {
+        const settings = require('./settings');
+        return settings.resetGlobalDefault(settingKey);
+    } catch (error) {
+        console.error('Error resetting global default:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('reset-all-global-defaults', async () => {
+    try {
+        const settings = require('./settings');
+        return settings.resetAllGlobalDefaults();
+    } catch (error) {
+        console.error('Error resetting all global defaults:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('reset-all-settings', async () => {
+    try {
+        const settings = require('./settings');
+        return settings.resetAllSettings();
+    } catch (error) {
+        console.error('Error resetting all settings:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('is-setting-modified', async (event, key) => {
+    try {
+        const settings = require('./settings');
+        return settings.isSettingModified(key);
+    } catch (error) {
+        console.error('Error checking if setting is modified:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('is-global-default-modified', async (event, settingKey) => {
+    try {
+        const settings = require('./settings');
+        return settings.isGlobalDefaultModified(settingKey);
+    } catch (error) {
+        console.error('Error checking if global default is modified:', error);
+        return false;
+    }
+});
+
 // Handle open external URL request
 ipcMain.handle('open-external-url', async (event, url) => {
     try {

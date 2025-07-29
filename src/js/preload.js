@@ -48,6 +48,14 @@ contextBridge.exposeInMainWorld(
         cleanupObsoleteSettings: () => ipcRenderer.invoke('cleanup-obsolete-settings'),
         getSettingsSchema: () => ipcRenderer.invoke('get-settings-schema'),
 
+        // Reset methods
+        resetSetting: (key) => ipcRenderer.invoke('reset-setting', key),
+        resetGlobalDefault: (settingKey) => ipcRenderer.invoke('reset-global-default', settingKey),
+        resetAllGlobalDefaults: () => ipcRenderer.invoke('reset-all-global-defaults'),
+        resetAllSettings: () => ipcRenderer.invoke('reset-all-settings'),
+        isSettingModified: (key) => ipcRenderer.invoke('is-setting-modified', key),
+        isGlobalDefaultModified: (settingKey) => ipcRenderer.invoke('is-global-default-modified', settingKey),
+
         // External URL methods
         openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
 
