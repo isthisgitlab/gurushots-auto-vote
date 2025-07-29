@@ -107,8 +107,7 @@ const mockApiClient = {
      */
     getActiveChallenges: async (token) => {
         console.log('=== Mock getActiveChallenges ===');
-        console.log('Token provided:', token ? `${token.substring(0, 10)}...` : 'none');
-        console.log('Full token:', token || 'NO TOKEN');
+        console.log('Token provided:', !!token);
         console.log('Token starts with mock_:', token ? token.startsWith('mock_') : false);
 
         // In mock mode, accept any token (including real ones)
@@ -131,8 +130,7 @@ const mockApiClient = {
     getVoteImages: async (challenge, token) => {
         console.log('=== Mock getVoteImages ===');
         console.log('Challenge:', challenge.title);
-        console.log('Token provided:', token ? `${token.substring(0, 10)}...` : 'none');
-        console.log('Full token:', token || 'NO TOKEN');
+        console.log('Token provided:', !!token);
 
         // In mock mode, accept any token (including real ones)
         if (token) {
@@ -155,8 +153,7 @@ const mockApiClient = {
     submitVotes: async (voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
         console.log('=== Mock submitVotes ===');
         console.log('Vote images count:', voteImages.images ? voteImages.images.length : 0);
-        console.log('Token provided:', token ? `${token.substring(0, 10)}...` : 'none');
-        console.log('Full token:', token || 'NO TOKEN');
+        console.log('Token provided:', !!token);
         console.log('Exposure threshold:', exposureThreshold);
 
         // In mock mode, accept any token (including real ones)
@@ -181,8 +178,7 @@ const mockApiClient = {
         console.log('=== Mock applyBoost ===');
         console.log('Challenge:', challenge.title);
         console.log('Boost state:', challenge.member.boost.state);
-        console.log('Token provided:', token ? `${token.substring(0, 10)}...` : 'none');
-        console.log('Full token:', token || 'NO TOKEN');
+        console.log('Token provided:', !!token);
 
         // In mock mode, accept any token (including real ones)
         if (token) {
@@ -227,8 +223,7 @@ const mockApiClient = {
      */
     fetchChallengesAndVote: async (token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
         console.log('=== Mock Voting Process Started ===');
-        console.log('Token provided:', token ? `${token.substring(0, 10)}...` : 'none');
-        console.log('Full token:', token || 'NO TOKEN');
+        console.log('Token provided:', !!token);
         console.log('Exposure threshold type:', typeof exposureThreshold);
 
         // In mock mode, accept any token (including real ones)

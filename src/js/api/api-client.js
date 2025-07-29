@@ -8,6 +8,7 @@
 const axios = require('axios');
 const logger = require('../logger');
 const {generateRandomHeaders} = require('./randomizer');
+const settings = require('../settings');
 
 // Common content type for form submissions
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
@@ -29,7 +30,7 @@ const makePostRequest = async (url, headers, data = '') => {
             url,
             headers,
             data,
-            timeout: 30000, // 30 second timeout for real API
+            timeout: settings.getSetting('apiTimeout') * 1000 // Convert seconds to milliseconds
         });
 
         logger.api('✅ === API RESPONSE ===', {

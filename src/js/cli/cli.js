@@ -198,9 +198,9 @@ const showStatus = () => {
 
     if (getMiddlewareInstance().isAuthenticated()) {
         const token = userSettings.token;
-        const tokenStart = token.substring(0, 6);
-        const tokenEnd = token.substring(token.length - 4);
-        const maskedLength = Math.max(0, token.length - 10);
+        const tokenStart = token.substring(0, 3);
+        const tokenEnd = token.substring(token.length - 3);
+        const maskedLength = Math.max(0, token.length - 6);
         const maskedPart = '*'.repeat(maskedLength);
 
         console.log('Authentication: ✅ Logged in');

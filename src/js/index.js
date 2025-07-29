@@ -385,8 +385,7 @@ ipcMain.handle('gui-vote', async () => {
 ipcMain.handle('get-active-challenges', async (event, token) => {
     try {
         console.log('=== IPC get-active-challenges ===');
-        console.log('Token received:', token ? `${token.substring(0, 10)}...` : 'none');
-        console.log('Full token:', token || 'NO TOKEN');
+        console.log('Token received:', !!token);
 
         // Use the API factory to get the appropriate strategy
         const {getApiStrategy} = require('./apiFactory');
