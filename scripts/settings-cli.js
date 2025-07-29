@@ -225,18 +225,89 @@ async function main() {
             break;
         }
 
+        case 'reset': {
+            if (!key) {
+                console.error('Usage: npm run settings:reset <key>');
+                console.error('Example: npm run settings:reset theme');
+                process.exit(1);
+            }
+
+            const success = settings.resetSetting(key);
+            if (success) {
+                const defaultSettings = settings.getDefaultSettings();
+                console.log(`✅ Reset ${key} to default value: ${formatValue(defaultSettings[key])}`);
+                
+                // Check if GUI is running and inform about reload
+                const uiSettings = ['theme', 'language', 'timezone'];
+                if (uiSettings.includes(key)) {
+                    await informAboutGuiReload();
+                }
+            } else {
+                console.error(`❌ Failed to reset setting '${key}'`);
+                process.exit(1);
+            }
+            break;
+        }
+
+        case 'reset-global': {
+            if (!key) {
+                console.error('Usage: npm run settings:reset-global <settingKey>');
+                console.error('Example: npm run settings:reset-global boostTime');
+                process.exit(1);
+            }
+
+            const success = settings.resetGlobalDefault(key);
+            if (success) {
+                const schema = settings.SETTINGS_SCHEMA;
+                const defaultValue = schema[key]?.default;
+                console.log(`✅ Reset global default ${key} to: ${formatValue(defaultValue)}`);
+                await informAboutGuiReload();
+            } else {
+                console.error(`❌ Failed to reset global default '${key}'`);
+                process.exit(1);
+            }
+            break;
+        }
+
+        case 'reset-all': {
+            const confirmMessage = 'Are you sure you want to reset ALL settings to their default values?\nThis will reset all UI settings, global challenge defaults, window positions, and preferences.\nOnly your login token, last update check time, mock mode setting, and API headers will be preserved.\nType "yes" to confirm:';
+            
+            console.log(confirmMessage);
+            
+            // In a real CLI, we'd use readline, but for npm scripts this is a simple confirmation
+            if (process.argv[3] !== 'yes') {
+                console.log('Reset cancelled. To confirm, run: npm run settings:reset-all yes');
+                process.exit(0);
+            }
+
+            const uiSuccess = settings.resetAllSettings();
+            const globalSuccess = settings.resetAllGlobalDefaults();
+
+            if (uiSuccess && globalSuccess) {
+                console.log('✅ Successfully reset all settings to defaults');
+                await informAboutGuiReload();
+            } else {
+                console.error('❌ Failed to reset some settings');
+                process.exit(1);
+            }
+            break;
+        }
+
         case 'help':
         default: {
             console.log('Settings CLI Help');
             console.log('================');
             console.log('');
             console.log('Available commands:');
-            console.log('  npm run settings:get [key]        - Get setting value (all if no key)');
-            console.log('  npm run settings:set <key> <value> - Set setting value');
-            console.log('  npm run settings:schema            - Show settings schema');
-            console.log('  npm run settings:global-defaults   - Show global defaults');
-            console.log('  npm run settings:help              - Show this help');
-            console.log('  npm run gui:refresh                - Get info about refreshing GUI');
+            console.log('  npm run settings:get [key]          - Get setting value (all if no key)');
+            console.log('  npm run settings:set <key> <value>  - Set setting value');
+            console.log('  npm run settings:reset <key>        - Reset setting to default value');
+            console.log('  npm run settings:reset-global <key> - Reset global default to schema default');
+            console.log('  npm run settings:reset-all yes      - Reset all settings to defaults');
+            console.log('  npm run settings:schema             - Show settings schema');
+            console.log('  npm run settings:global-defaults    - Show global defaults');
+            console.log('  npm run settings:help               - Show this help');
+            console.log('  npm run gui:refresh                 - Get info about refreshing GUI');
             console.log('');
             console.log('Examples:');
             console.log('  npm run settings:get');
@@ -244,12 +315,17 @@ async function main() {
             console.log('  npm run settings:set theme dark');
             console.log('  npm run settings:set stayLoggedIn true');
             console.log('  npm run settings:set challengeSettings.globalDefaults.boostTime 7200');
+            console.log('  npm run settings:reset theme');
+            console.log('  npm run settings:reset-global boostTime');
+            console.log('  npm run settings:reset-all yes');
             console.log('');
             console.log('Notes:');
             console.log('  - Values are automatically parsed (JSON, numbers, booleans)');
             console.log('  - Use dot notation for nested properties');
             console.log('  - CLI only supports global settings, not per-challenge overrides');
             console.log('  - GUI refresh (Ctrl+R / Cmd+R) needed for theme/language/timezone changes');
+            console.log('  - Individual reset commands preserve current values until saved');
+            console.log('  - Reset-all preserves only login token, last update check, mock mode, and API headers');
             break;
         }
         }

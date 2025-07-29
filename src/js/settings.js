@@ -117,8 +117,8 @@ const getDefaultSettings = () => {
         votingInterval: 3, // Voting interval in minutes (default: 3 minutes)
         // Window position and size settings
         windowBounds: {
-            login: {x: undefined, y: undefined, width: 800, height: 600},
-            main: {x: undefined, y: undefined, width: 800, height: 600},
+            login: {x: undefined, y: undefined, width: 800, height: 960},
+            main: {x: undefined, y: undefined, width: 800, height: 960},
         },
         // Schema-based challenge settings
         challengeSettings: {
@@ -712,6 +712,154 @@ const cleanupObsoleteSettings = () => {
 };
 
 /**
+ * Reset Functionality
+ */
+
+/**
+ * Reset a single setting to its default value
+ * @param {string} key - The setting key to reset
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const resetSetting = (key) => {
+    try {
+        const defaultSettings = getDefaultSettings();
+        
+        if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
+            console.error(`Invalid setting key: ${key}`);
+            return false;
+        }
+
+        const defaultValue = defaultSettings[key];
+        return setSetting(key, defaultValue);
+    } catch (error) {
+        console.error(`Error resetting setting ${key}:`, error);
+        return false;
+    }
+};
+
+/**
+ * Reset global default for a schema-based setting
+ * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const resetGlobalDefault = (settingKey) => {
+    if (!SETTINGS_SCHEMA[settingKey]) {
+        console.error(`Invalid setting key: ${settingKey}`);
+        return false;
+    }
+
+    const defaultValue = SETTINGS_SCHEMA[settingKey].default;
+    return setGlobalDefault(settingKey, defaultValue);
+};
+
+/**
+ * Reset all global defaults for schema-based settings
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const resetAllGlobalDefaults = () => {
+    try {
+        const settings = loadSettings();
+        if (!settings.challengeSettings) {
+            settings.challengeSettings = getDefaultSettings().challengeSettings;
+        }
+
+        // Reset all global defaults to schema defaults
+        const globalDefaults = {};
+        Object.keys(SETTINGS_SCHEMA).forEach(key => {
+            globalDefaults[key] = SETTINGS_SCHEMA[key].default;
+        });
+
+        settings.challengeSettings.globalDefaults = globalDefaults;
+        return saveSettings(settings);
+    } catch (error) {
+        console.error('Error resetting all global defaults:', error);
+        return false;
+    }
+};
+
+/**
+ * Reset all settings to their default values (preserves only essential user data)
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const resetAllSettings = () => {
+    try {
+        const currentSettings = loadSettings();
+        const defaultSettings = getDefaultSettings();
+        
+        // Settings to preserve (only essential user data that shouldn't be reset)
+        const preserveKeys = ['token', 'lastUpdateCheck', 'mock', 'apiHeaders'];
+        
+        // Start with defaults
+        const newSettings = {...defaultSettings};
+        
+        // Preserve specified user data
+        preserveKeys.forEach(key => {
+            if (currentSettings[key] !== undefined) {
+                newSettings[key] = currentSettings[key];
+            }
+        });
+
+        // Save the reset settings
+        const saveResult = saveSettings(newSettings);
+        
+        // Run cleanup to remove any obsolete settings
+        if (saveResult) {
+            cleanupObsoleteSettings();
+        }
+
+        return saveResult;
+    } catch (error) {
+        console.error('Error resetting all settings:', error);
+        return false;
+    }
+};
+
+/**
+ * Check if a setting has been modified from its default value
+ * @param {string} key - The setting key to check
+ * @returns {boolean} - True if modified from default, false if at default value
+ */
+const isSettingModified = (key) => {
+    try {
+        const currentSettings = loadSettings();
+        const defaultSettings = getDefaultSettings();
+        
+        if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
+            return false;
+        }
+
+        const currentValue = currentSettings[key];
+        const defaultValue = defaultSettings[key];
+        
+        return JSON.stringify(currentValue) !== JSON.stringify(defaultValue);
+    } catch (error) {
+        console.error(`Error checking if setting ${key} is modified:`, error);
+        return false;
+    }
+};
+
+/**
+ * Check if a global default has been modified from its schema default
+ * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
+ * @returns {boolean} - True if modified from schema default, false if at schema default
+ */
+const isGlobalDefaultModified = (settingKey) => {
+    try {
+        if (!SETTINGS_SCHEMA[settingKey]) {
+            return false;
+        }
+
+        const currentValue = getGlobalDefault(settingKey);
+        const schemaDefault = SETTINGS_SCHEMA[settingKey].default;
+        
+        return JSON.stringify(currentValue) !== JSON.stringify(schemaDefault);
+    } catch (error) {
+        console.error(`Error checking if global default ${settingKey} is modified:`, error);
+        return false;
+    }
+};
+
+/**
  * Centralized Settings Schema
  *
  * Single source of truth for all configurable settings.
@@ -736,7 +884,7 @@ const SETTINGS_SCHEMA = {
     },
     lastMinutes: {
         type: 'number',
-        default: 30,
+        default: 10,
         perChallenge: true,
         validation: (value) => typeof value === 'number' && value >= 1,
         label: 'app.lastMinutes',
@@ -776,4 +924,12 @@ module.exports = {
     getEffectiveSetting,
     cleanupStaleChallengeSetting,
     cleanupObsoleteSettings,
+
+    // Reset functions
+    resetSetting,
+    resetGlobalDefault,
+    resetAllGlobalDefaults,
+    resetAllSettings,
+    isSettingModified,
+    isGlobalDefaultModified,
 };
