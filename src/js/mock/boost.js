@@ -91,8 +91,8 @@ const mockBoostData = {
  */
 const mockBoostHistory = [
     {
-        challenge_id: 1001,
-        challenge_title: 'Street Photography',
+        challenge_id: 105755,
+        challenge_title: 'Ultimate Exposure',
         image_id: 'entry_001',
         applied_at: Math.floor(Date.now() / 1000) - 86400, // 1 day ago
         duration: 3600,
@@ -100,13 +100,109 @@ const mockBoostHistory = [
         result: 'success',
     },
     {
-        challenge_id: 999,
-        challenge_title: 'Previous Challenge',
-        image_id: 'entry_999',
+        challenge_id: 105508,
+        challenge_title: 'Wood & Metal Combinations',
+        image_id: 'entry_003',
         applied_at: Math.floor(Date.now() / 1000) - 172800, // 2 days ago
         duration: 3600,
         boost_type: 'standard',
         result: 'success',
+    },
+];
+
+/**
+ * Mock turbo data for different challenge states
+ * Based on real API responses
+ */
+const mockTurboData = {
+    // Turbo available for free
+    free: {
+        max_selections: 10,
+        turbo_unlock_type: 'COINS',
+        turbo_unlock_amount: 250,
+        required_selections: 6,
+        state: 'FREE',
+        time_to_open: null,
+    },
+
+    // Turbo on timer - will open later
+    timer: {
+        max_selections: 10,
+        turbo_unlock_type: 'COINS',
+        turbo_unlock_amount: 250,
+        required_selections: 6,
+        state: 'TIMER',
+        time_to_open: Math.floor(Date.now() / 1000) + 3600, // Opens in 1 hour
+    },
+
+    // Turbo locked (not available)
+    locked: {
+        max_selections: 10,
+        turbo_unlock_type: 'COINS',
+        turbo_unlock_amount: 250,
+        required_selections: 6,
+        state: 'LOCKED',
+        time_to_open: null,
+    },
+
+    // Turbo in progress
+    in_progress: {
+        max_selections: 10,
+        turbo_unlock_type: 'COINS',
+        turbo_unlock_amount: 250,
+        required_selections: 6,
+        state: 'IN_PROGRESS',
+        time_to_open: null,
+    },
+
+    // Turbo won (completed successfully)
+    won: {
+        max_selections: 10,
+        turbo_unlock_type: 'COINS',
+        turbo_unlock_amount: 250,
+        required_selections: 6,
+        state: 'WON',
+        time_to_open: null,
+    },
+
+    // Turbo used (completed)
+    used: {
+        max_selections: 10,
+        turbo_unlock_type: 'COINS',
+        turbo_unlock_amount: 250,
+        required_selections: 6,
+        state: 'USED',
+        time_to_open: null,
+    },
+};
+
+/**
+ * Mock turbo history
+ */
+const mockTurboHistory = [
+    {
+        challenge_id: 105516,
+        challenge_title: 'Urban Wildlife',
+        applied_at: Math.floor(Date.now() / 1000) - 86400, // 1 day ago
+        result: 'won',
+        selections_made: 10,
+        reward_received: true,
+    },
+    {
+        challenge_id: 105513,
+        challenge_title: 'Street Art & Graffiti',
+        applied_at: Math.floor(Date.now() / 1000) - 172800, // 2 days ago
+        result: 'used',
+        selections_made: 8,
+        reward_received: true,
+    },
+    {
+        challenge_id: 105484,
+        challenge_title: 'Food Photography',
+        applied_at: Math.floor(Date.now() / 1000) - 259200, // 3 days ago
+        result: 'won',
+        selections_made: 10,
+        reward_received: true,
     },
 ];
 
@@ -117,4 +213,6 @@ module.exports = {
     mockBoostTimeout,
     mockBoostData,
     mockBoostHistory,
+    mockTurboData,
+    mockTurboHistory,
 }; 
