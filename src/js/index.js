@@ -896,11 +896,17 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         const timeUntilEnd = challenge.close_time - now;
         const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
 
+        // Get the vote-only-in-last-threshold setting for this challenge
+        const voteOnlyInLastThreshold = settings.getEffectiveSetting('voteOnlyInLastThreshold', challengeId);
+
         // Check if we should allow voting based on lastminute threshold logic
         let shouldAllowVoting = false;
         let errorMessage = '';
 
-        if (isWithinLastMinuteThreshold) {
+        if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
+            // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
+            errorMessage = `Challenge "${challengeTitle}" voting is restricted to last ${effectiveLastMinutes} minutes only`;
+        } else if (isWithinLastMinuteThreshold) {
             // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
             if (challenge.member.ranking.exposure.exposure_factor >= 100) {
                 errorMessage = `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinutes}m)`;

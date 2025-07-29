@@ -39,10 +39,6 @@ If you find this tool helpful, consider supporting its development:
 
 **Latest Version: v0.1.0**
 
-> **🚀 Latest Development Version: v0.0.4** - This version includes the **Last Minutes Threshold** feature, internationalization support, configurable timeouts, and enhanced security improvements. Available in the development version.
-> 
-> **Note**: The package.json shows version 0.0.4, which is the current development version. The Last Minutes Threshold feature and other improvements documented below are available in this version.
-
 #### **🖥️ GUI Applications (Recommended for most users)**
 
 | Platform          | Download                                                                                                                                                             | Size   | Type                |
@@ -378,6 +374,41 @@ You can set the Last Minutes Threshold in the app settings:
 - **Challenge ends in 5 minutes**: App will vote if exposure < 100%
 
 This feature is particularly useful for challenges where you want to maximize your final ranking in the closing minutes.
+
+## 🎯 Vote Only in Last Threshold
+
+The Vote Only in Last Threshold feature allows you to restrict auto-voting to only occur when a challenge is within the last minutes threshold. This is useful when you want to conserve votes and only vote strategically in the final moments of a challenge.
+
+### **How It Works**
+
+- **Default Setting**: Disabled (auto-vote normally)
+- **When Enabled**: Auto-vote will only vote when within the last minutes threshold
+- **Boost Mode Respect**: Still respects the boost-only mode setting
+- **Manual Voting**: Manual voting is also restricted when this setting is enabled
+
+### **Configuration**
+
+You can configure this setting in the app:
+
+- **Global Default**: Set a default for all challenges
+- **Per-Challenge Override**: Set different behavior for specific challenges
+- **Combination**: Works with other settings like boost-only mode and last minutes threshold
+
+### **Example Scenarios**
+
+- **Setting Enabled, Challenge ends in 1 hour**: Auto-vote skips voting (not within last threshold)
+- **Setting Enabled, Challenge ends in 15 minutes**: Auto-vote votes if exposure < 100% (within last threshold)
+- **Setting Disabled**: Normal auto-vote behavior applies
+- **Boost-only Mode + This Setting**: Only boost actions, no voting regardless of threshold
+
+### **Use Cases**
+
+- **Vote Conservation**: Save votes for the most critical moments
+- **Strategic Timing**: Focus voting efforts in the final minutes
+- **Resource Management**: Reduce API calls and voting activity
+- **Competitive Edge**: Maximize impact in the closing moments
+
+This feature is particularly useful for users who want to be more strategic about when they vote, especially in competitive challenges where vote timing can make a significant difference.
 
 ## 🌍 Internationalization
 

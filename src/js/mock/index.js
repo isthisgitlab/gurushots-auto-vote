@@ -270,6 +270,9 @@ const mockApiClient = {
                 const timeUntilEnd = challenge.close_time - now;
                 const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
 
+                // Get the vote-only-in-last-threshold setting for this challenge
+                const voteOnlyInLastThreshold = settings.getEffectiveSetting('voteOnlyInLastThreshold', challenge.id.toString());
+
                 // Determine if we should vote based on lastminute threshold logic
                 let shouldVote = false;
                 let voteReason = '';
@@ -280,6 +283,9 @@ const mockApiClient = {
                 } else if (challenge.start_time >= now) {
                     // Skip voting if challenge hasn't started yet
                     voteReason = 'challenge not started';
+                } else if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
+                    // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
+                    voteReason = `vote-only-in-last-threshold enabled: not within last ${effectiveLastMinutes}m threshold`;
                 } else if (isWithinLastMinuteThreshold) {
                     // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
                     if (challenge.member.ranking.exposure.exposure_factor < 100) {
