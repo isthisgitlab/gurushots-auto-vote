@@ -62,12 +62,17 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
             if (boost.state === 'AVAILABLE' && boost.timeout) {
                 console.log(`Boost available for challenge: ${challenge.title}`);
 
-                // Apply boost if deadline is within 1 hour
-                const oneHourInSeconds = 60 * 60; // 1 hour in seconds
+                // Get the effective boost time setting for this challenge
+                const effectiveBoostTime = settings.getEffectiveSetting('boostTime', challenge.id.toString());
                 const timeUntilDeadline = boost.timeout - now;
 
-                if (timeUntilDeadline <= oneHourInSeconds && timeUntilDeadline > 0) {
-                    console.log(`Boost deadline is within 1 hour (${Math.floor(timeUntilDeadline / 60)} minutes). Executing boost.`);
+                if (timeUntilDeadline <= effectiveBoostTime && timeUntilDeadline > 0) {
+                    const minutesRemaining = Math.floor(timeUntilDeadline / 60);
+                    const hoursRemaining = Math.floor(minutesRemaining / 60);
+                    const timeDisplay = hoursRemaining > 0 
+                        ? `${hoursRemaining}h ${minutesRemaining % 60}m` 
+                        : `${minutesRemaining}m`;
+                    console.log(`Boost deadline is within ${timeDisplay} (${effectiveBoostTime / 60} minutes setting). Executing boost.`);
                     try {
                         await applyBoost(challenge, token);
                     } catch (error) {
