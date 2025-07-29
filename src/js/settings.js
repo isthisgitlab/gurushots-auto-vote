@@ -96,27 +96,42 @@ const getDefaultMockSetting = () => {
 };
 
 // Default settings with environment-aware mock setting
-const getDefaultSettings = () => ({
-    theme: 'light',
-    stayLoggedIn: false,
-    lastUsername: '',
-    mock: getDefaultMockSetting(),
-    token: '',
-    timezone: 'Europe/Riga',
-    customTimezones: [],
-    language: 'en', // Default language
-    // Window position and size settings
-    windowBounds: {
-        login: { x: undefined, y: undefined, width: 800, height: 600 },
-        main: { x: undefined, y: undefined, width: 800, height: 600 },
-    },
-    // Boost configuration
-    boostConfig: {
-        defaultThreshold: 3600, // Default 1 hour (3600 seconds)
-        perChallenge: {}, // Challenge ID -> threshold mapping
-    },
-    // Add any other default settings as needed
-});
+const getDefaultSettings = () => {
+    // Generate global defaults from schema
+    const globalDefaults = {};
+    Object.keys(SETTINGS_SCHEMA).forEach(key => {
+        globalDefaults[key] = SETTINGS_SCHEMA[key].default;
+    });
+
+    return {
+        theme: 'light',
+        stayLoggedIn: false,
+        lastUsername: '',
+        mock: getDefaultMockSetting(),
+        token: '',
+        timezone: 'Europe/Riga',
+        customTimezones: [],
+        language: 'en', // Default language
+        // Window position and size settings
+        windowBounds: {
+            login: { x: undefined, y: undefined, width: 800, height: 600 },
+            main: { x: undefined, y: undefined, width: 800, height: 600 },
+        },
+        // Schema-based challenge settings
+        challengeSettings: {
+            globalDefaults: globalDefaults,
+            perChallenge: {}, // Challenge ID -> setting overrides mapping
+        },
+        // Legacy boost configuration (for backward compatibility)
+        boostConfig: {
+            defaultThreshold: 3600, // Default 1 hour (3600 seconds)
+            perChallenge: {}, // Challenge ID -> threshold mapping
+        },
+        // API headers for randomization
+        apiHeaders: {},
+        // Add any other default settings as needed
+    };
+};
 
 /**
  * Settings validation system
@@ -140,6 +155,28 @@ const settingsSchema = {
     customTimezones: (value) => Array.isArray(value),
     language: (value) => ['en', 'lv'].includes(value),
     windowBounds: (value) => typeof value === 'object' && value !== null,
+    challengeSettings: (value) => {
+        if (typeof value !== 'object' || value === null) return false;
+        if (typeof value.globalDefaults !== 'object' || value.globalDefaults === null) return false;
+        if (typeof value.perChallenge !== 'object' || value.perChallenge === null) return false;
+        
+        // Validate global defaults against schema
+        for (const [key, schemaValue] of Object.entries(SETTINGS_SCHEMA)) {
+            if (Object.prototype.hasOwnProperty.call(value.globalDefaults, key)) {
+                if (!schemaValue.validation(value.globalDefaults[key])) return false;
+            }
+        }
+        
+        // Validate per-challenge overrides against schema
+        for (const [, challengeOverrides] of Object.entries(value.perChallenge)) {
+            if (typeof challengeOverrides !== 'object' || challengeOverrides === null) return false;
+            for (const [key, overrideValue] of Object.entries(challengeOverrides)) {
+                if (SETTINGS_SCHEMA[key] && !SETTINGS_SCHEMA[key].validation(overrideValue)) return false;
+            }
+        }
+        
+        return true;
+    },
     boostConfig: (value) => typeof value === 'object' && value !== null && 
                            typeof value.defaultThreshold === 'number' && 
                            typeof value.perChallenge === 'object',
@@ -183,20 +220,14 @@ const validateSettings = (settings) => {
 };
 
 /**
- * Simple settings storage
+ * Simple settings storage without caching
  * 
- * Since settings are primarily modified during login/logout and rarely change
- * after the login token is written, we use a simple approach without time-based caching.
- * This simplifies the code while still providing the necessary functionality.
+ * Settings are always read fresh from disk to ensure consistency
+ * between CLI and GUI, especially for edit operations.
  */
-let settingsCache = null;
 
 // Load settings from the userData directory
 const loadSettings = () => {
-    // Return cached settings if available
-    if (settingsCache) {
-        return settingsCache;
-    }
     
     try {
         const settingsPath = getSettingsPath();
@@ -223,18 +254,36 @@ const loadSettings = () => {
                 fs.writeFileSync(settingsPath, JSON.stringify(validatedSettings, null, 2), 'utf8');
             }
             
-            settingsCache = validatedSettings;
-            return settingsCache;
+            // Run migration for boost configuration if needed - but avoid recursion
+            if (!global.migrationInProgress) {
+                global.migrationInProgress = true;
+                try {
+                    migrateBoostConfigurationToSchema();
+                    // Only run cleanup once per app session, not on every settings load
+                    if (!global.cleanupCompleted) {
+                        cleanupObsoleteSettings();
+                        global.cleanupCompleted = true;
+                    }
+                } catch (migrationError) {
+                    console.warn('Migration/cleanup failed:', migrationError);
+                } finally {
+                    global.migrationInProgress = false;
+                }
+            }
+            
+            return validatedSettings;
         }
         
         // If the file doesn't exist, return default settings
-        settingsCache = { ...getDefaultSettings() };
-        return settingsCache;
+        const defaultSettings = getDefaultSettings();
+        console.log('No settings file found, loaded default settings with keys:', Object.keys(defaultSettings));
+        return defaultSettings;
     } catch (error) {
         console.error('Error loading settings:', error);
         // Return default settings if there's an error
-        settingsCache = { ...getDefaultSettings() };
-        return settingsCache;
+        const defaultSettings = getDefaultSettings();
+        console.log('Loaded default settings with keys:', Object.keys(defaultSettings));
+        return defaultSettings;
     }
 };
 
@@ -264,14 +313,9 @@ const saveSettings = (settings) => {
         // Write the validated settings to the file
         fs.writeFileSync(settingsPath, JSON.stringify(validatedSettings, null, 2), 'utf8');
         
-        // Update the cache with the validated settings
-        settingsCache = validatedSettings;
-        
         return true;
     } catch (error) {
         console.error('Error saving settings:', error);
-        // Invalidate the cache on error to force a fresh read next time
-        settingsCache = null;
         return false;
     }
 };
@@ -279,6 +323,11 @@ const saveSettings = (settings) => {
 // Get a specific setting
 const getSetting = (key) => {
     const settings = loadSettings();
+    if (!settings) {
+        console.warn(`Settings not loaded, returning default for key: ${key}`);
+        const defaultSettings = getDefaultSettings();
+        return defaultSettings[key];
+    }
     return settings[key];
 };
 
@@ -286,12 +335,7 @@ const getSetting = (key) => {
 const setSetting = (key, value) => {
     const settings = loadSettings();
     settings[key] = value;
-    const result = saveSettings(settings);
-    
-    // Clear cache to ensure fresh settings on next load
-    settingsCache = null;
-    
-    return result;
+    return saveSettings(settings);
 };
 
 // Get the userData directory path (useful for debugging)
@@ -331,52 +375,507 @@ const getEnvironmentInfo = () => {
 };
 
 /**
- * Boost configuration helpers
+ * Schema-based Settings Helper Functions
  */
-const getBoostThreshold = (challengeId) => {
+
+/**
+ * Get global default value for a setting
+ * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
+ * @returns {any} - The global default value
+ */
+const getGlobalDefault = (settingKey) => {
     const settings = loadSettings();
-    const boostConfig = settings.boostConfig || getDefaultSettings().boostConfig;
+    const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
     
-    // Check if there's a specific threshold for this challenge
-    if (boostConfig.perChallenge && boostConfig.perChallenge[challengeId]) {
-        return boostConfig.perChallenge[challengeId];
+    if (challengeSettings.globalDefaults && Object.prototype.hasOwnProperty.call(challengeSettings.globalDefaults, settingKey)) {
+        return challengeSettings.globalDefaults[settingKey];
     }
     
-    // Return default threshold
-    return boostConfig.defaultThreshold || 3600;
+    // Fallback to schema default if not found in settings
+    return SETTINGS_SCHEMA[settingKey]?.default;
+};
+
+/**
+ * Set global default value for a setting
+ * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
+ * @param {any} value - The value to set
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const setGlobalDefault = (settingKey, value) => {
+    if (!SETTINGS_SCHEMA[settingKey]) {
+        console.error(`Invalid setting key: ${settingKey}`);
+        return false;
+    }
+    
+    if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
+        console.error(`Invalid value for setting ${settingKey}:`, value);
+        return false;
+    }
+    
+    const settings = loadSettings();
+    if (!settings.challengeSettings) {
+        settings.challengeSettings = getDefaultSettings().challengeSettings;
+    }
+    if (!settings.challengeSettings.globalDefaults) {
+        settings.challengeSettings.globalDefaults = {};
+    }
+    
+    settings.challengeSettings.globalDefaults[settingKey] = value;
+    return saveSettings(settings);
+};
+
+/**
+ * Get per-challenge override value for a setting
+ * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
+ * @param {string} challengeId - The challenge ID
+ * @returns {any|null} - The override value, or null if no override exists
+ */
+const getChallengeOverride = (settingKey, challengeId) => {
+    const settings = loadSettings();
+    const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
+    
+    if (challengeSettings.perChallenge && 
+        challengeSettings.perChallenge[challengeId] && 
+        Object.prototype.hasOwnProperty.call(challengeSettings.perChallenge[challengeId], settingKey)) {
+        return challengeSettings.perChallenge[challengeId][settingKey];
+    }
+    
+    return null;
+};
+
+/**
+ * Set per-challenge override value for a setting
+ * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
+ * @param {string} challengeId - The challenge ID
+ * @param {any} value - The value to set
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const setChallengeOverride = (settingKey, challengeId, value) => {
+    if (!SETTINGS_SCHEMA[settingKey]) {
+        console.error(`Invalid setting key: ${settingKey}`);
+        return false;
+    }
+    
+    if (!SETTINGS_SCHEMA[settingKey].perChallenge) {
+        console.error(`Setting ${settingKey} does not support per-challenge overrides`);
+        return false;
+    }
+    
+    if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
+        console.error(`Invalid value for setting ${settingKey}:`, value);
+        return false;
+    }
+    
+    const settings = loadSettings();
+    if (!settings.challengeSettings) {
+        settings.challengeSettings = getDefaultSettings().challengeSettings;
+    }
+    if (!settings.challengeSettings.perChallenge) {
+        settings.challengeSettings.perChallenge = {};
+    }
+    if (!settings.challengeSettings.perChallenge[challengeId]) {
+        settings.challengeSettings.perChallenge[challengeId] = {};
+    }
+    
+    // Get the global default value for comparison
+    const globalDefault = getGlobalDefault(settingKey);
+    
+    // Only save if the value is different from global default
+    if (value !== globalDefault) {
+        settings.challengeSettings.perChallenge[challengeId][settingKey] = value;
+    } else {
+        // If value matches global default, remove the override
+        delete settings.challengeSettings.perChallenge[challengeId][settingKey];
+        
+        // If challenge has no more overrides, remove the challenge entry
+        if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
+            delete settings.challengeSettings.perChallenge[challengeId];
+        }
+    }
+    
+    return saveSettings(settings);
+};
+
+/**
+ * Set multiple per-challenge overrides efficiently, only saving values that differ from global defaults
+ * @param {string} challengeId - The challenge ID
+ * @param {Object} overrides - Object with settingKey -> value mappings
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const setChallengeOverrides = (challengeId, overrides) => {
+    const settings = loadSettings();
+    if (!settings.challengeSettings) {
+        settings.challengeSettings = getDefaultSettings().challengeSettings;
+    }
+    if (!settings.challengeSettings.perChallenge) {
+        settings.challengeSettings.perChallenge = {};
+    }
+    if (!settings.challengeSettings.perChallenge[challengeId]) {
+        settings.challengeSettings.perChallenge[challengeId] = {};
+    }
+    
+    let hasChanges = false;
+    const savedOverrides = [];
+    const removedOverrides = [];
+    
+    // Process each override
+    for (const [settingKey, value] of Object.entries(overrides)) {
+        if (!SETTINGS_SCHEMA[settingKey]) {
+            console.error(`Invalid setting key: ${settingKey}`);
+            continue;
+        }
+        
+        if (!SETTINGS_SCHEMA[settingKey].perChallenge) {
+            console.error(`Setting ${settingKey} does not support per-challenge overrides`);
+            continue;
+        }
+        
+        if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
+            console.error(`Invalid value for setting ${settingKey}:`, value);
+            continue;
+        }
+        
+        // Get the global default value for comparison
+        const globalDefault = getGlobalDefault(settingKey);
+        
+        // Only save if the value is different from global default
+        if (value !== globalDefault) {
+            settings.challengeSettings.perChallenge[challengeId][settingKey] = value;
+            savedOverrides.push(`${settingKey}=${value}`);
+            hasChanges = true;
+        } else {
+            // If value matches global default, remove the override
+            delete settings.challengeSettings.perChallenge[challengeId][settingKey];
+            removedOverrides.push(settingKey);
+            hasChanges = true;
+        }
+    }
+    
+    // If challenge has no more overrides, remove the challenge entry
+    if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
+        delete settings.challengeSettings.perChallenge[challengeId];
+        console.log(`🗑️ Removed empty challenge settings for challenge ${challengeId}`);
+        hasChanges = true;
+    }
+    
+    // Log the changes for debugging
+    if (savedOverrides.length > 0) {
+        console.log(`💾 Saved overrides for challenge ${challengeId}:`, savedOverrides.join(', '));
+    }
+    if (removedOverrides.length > 0) {
+        console.log(`🗑️ Removed overrides for challenge ${challengeId}:`, removedOverrides.join(', '));
+    }
+    
+    return hasChanges ? saveSettings(settings) : true;
+};
+
+/**
+ * Remove per-challenge override for a setting
+ * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
+ * @param {string} challengeId - The challenge ID
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const removeChallengeOverride = (settingKey, challengeId) => {
+    const settings = loadSettings();
+    if (!settings.challengeSettings || 
+        !settings.challengeSettings.perChallenge || 
+        !settings.challengeSettings.perChallenge[challengeId]) {
+        return true; // Nothing to remove
+    }
+    
+    delete settings.challengeSettings.perChallenge[challengeId][settingKey];
+    
+    // If challenge has no more overrides, remove the challenge entry
+    if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
+        delete settings.challengeSettings.perChallenge[challengeId];
+    }
+    
+    return saveSettings(settings);
+};
+
+/**
+ * Get the effective value for a setting (per-challenge override or global default)
+ * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
+ * @param {string} challengeId - The challenge ID (optional for global-only settings)
+ * @returns {any} - The effective value to use
+ */
+const getEffectiveSetting = (settingKey, challengeId = null) => {
+    if (!SETTINGS_SCHEMA[settingKey]) {
+        console.error(`Invalid setting key: ${settingKey}`);
+        return SETTINGS_SCHEMA[settingKey]?.default;
+    }
+    
+    // If challengeId is provided and the setting supports per-challenge overrides, check for override
+    if (challengeId && SETTINGS_SCHEMA[settingKey].perChallenge) {
+        const override = getChallengeOverride(settingKey, challengeId);
+        if (override !== null) {
+            return override;
+        }
+    }
+    
+    // Return global default
+    return getGlobalDefault(settingKey);
+};
+
+/**
+ * Cleanup stale challenge settings for challenges that no longer exist
+ * @param {string[]} activeChallengeIds - Array of currently active challenge IDs
+ * @returns {boolean} - True if cleanup was successful, false otherwise
+ */
+const cleanupStaleChallengeSetting = (activeChallengeIds) => {
+    const settings = loadSettings();
+    if (!settings.challengeSettings || !settings.challengeSettings.perChallenge) {
+        return true; // Nothing to cleanup
+    }
+    
+    const storedChallengeIds = Object.keys(settings.challengeSettings.perChallenge);
+    const staleChallengeIds = storedChallengeIds.filter(id => !activeChallengeIds.includes(id));
+    
+    if (staleChallengeIds.length === 0) {
+        return true; // Nothing to cleanup
+    }
+    
+    console.log(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
+    
+    // Remove stale challenge settings
+    staleChallengeIds.forEach(challengeId => {
+        delete settings.challengeSettings.perChallenge[challengeId];
+    });
+    
+    return saveSettings(settings);
+};
+
+/**
+ * Cleanup obsolete/deprecated settings that are no longer used
+ * This removes old settings structures that have been replaced or are no longer needed
+ * @returns {boolean} - True if cleanup was successful, false otherwise
+ */
+const cleanupObsoleteSettings = () => {
+    try {
+        const settings = loadSettings();
+        let hasChanges = false;
+        
+        // Define current valid settings structure
+        const validTopLevelKeys = [
+            'theme',
+            'stayLoggedIn', 
+            'lastUsername',
+            'mock',
+            'token',
+            'timezone',
+            'customTimezones',
+            'language',
+            'windowBounds',
+            'challengeSettings', // New schema-based system
+            'apiHeaders',
+            // Note: 'boostConfig' is intentionally omitted as it's deprecated
+        ];
+        
+        // Remove deprecated top-level settings
+        const currentKeys = Object.keys(settings);
+        const obsoleteKeys = currentKeys.filter(key => !validTopLevelKeys.includes(key));
+        
+        if (obsoleteKeys.length > 0) {
+            console.log('Removing obsolete settings:', obsoleteKeys);
+            obsoleteKeys.forEach(key => {
+                delete settings[key];
+                hasChanges = true;
+            });
+        }
+        
+        // Clean up challengeSettings structure
+        if (settings.challengeSettings) {
+            // Ensure globalDefaults only contains valid schema keys
+            if (settings.challengeSettings.globalDefaults) {
+                const validSchemaKeys = Object.keys(SETTINGS_SCHEMA);
+                const globalDefaultKeys = Object.keys(settings.challengeSettings.globalDefaults);
+                const invalidGlobalKeys = globalDefaultKeys.filter(key => !validSchemaKeys.includes(key));
+                
+                if (invalidGlobalKeys.length > 0) {
+                    console.log('Removing invalid global default keys:', invalidGlobalKeys);
+                    invalidGlobalKeys.forEach(key => {
+                        delete settings.challengeSettings.globalDefaults[key];
+                        hasChanges = true;
+                    });
+                }
+            }
+            
+            // Clean up per-challenge overrides - remove invalid setting keys
+            if (settings.challengeSettings.perChallenge) {
+                const validSchemaKeys = Object.keys(SETTINGS_SCHEMA);
+                
+                Object.keys(settings.challengeSettings.perChallenge).forEach(challengeId => {
+                    const challengeOverrides = settings.challengeSettings.perChallenge[challengeId];
+                    const overrideKeys = Object.keys(challengeOverrides);
+                    const invalidOverrideKeys = overrideKeys.filter(key => !validSchemaKeys.includes(key));
+                    
+                    if (invalidOverrideKeys.length > 0) {
+                        console.log(`Removing invalid override keys for challenge ${challengeId}:`, invalidOverrideKeys);
+                        invalidOverrideKeys.forEach(key => {
+                            delete challengeOverrides[key];
+                            hasChanges = true;
+                        });
+                        
+                        // If challenge has no more overrides, remove the challenge entry
+                        if (Object.keys(challengeOverrides).length === 0) {
+                            delete settings.challengeSettings.perChallenge[challengeId];
+                            hasChanges = true;
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Clean up windowBounds - ensure it has the expected structure
+        if (settings.windowBounds) {
+            const validWindowTypes = ['login', 'main'];
+            const currentWindowTypes = Object.keys(settings.windowBounds);
+            const invalidWindowTypes = currentWindowTypes.filter(type => !validWindowTypes.includes(type));
+            
+            if (invalidWindowTypes.length > 0) {
+                console.log('Removing invalid window bound types:', invalidWindowTypes);
+                invalidWindowTypes.forEach(type => {
+                    delete settings.windowBounds[type];
+                    hasChanges = true;
+                });
+            }
+        }
+        
+        // Save changes if any were made
+        if (hasChanges) {
+            console.log('Settings cleanup completed - saving cleaned settings');
+            return saveSettings(settings);
+        }
+        
+        return true; // No changes needed
+        
+    } catch (error) {
+        console.error('Error during settings cleanup:', error);
+        return false;
+    }
+};
+
+/**
+ * Centralized Settings Schema
+ * 
+ * Single source of truth for all configurable settings.
+ * Each setting defines its type, default value, validation, and whether it supports per-challenge overrides.
+ */
+const SETTINGS_SCHEMA = {
+    boostTime: {
+        type: 'time', // Special type for hours/minutes input
+        default: 3600, // 1 hour in seconds
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 0,
+        label: 'app.boostTime',
+        description: 'app.boostTimeDesc',
+    },
+    exposure: {
+        type: 'number',
+        default: 100,
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
+        label: 'app.exposure',
+        description: 'app.exposureDesc',
+    },
+    onGuruVoting: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        label: 'app.onGuruVoting',
+        description: 'app.onGuruVotingDesc',
+    },
+    lastMinutes: {
+        type: 'number',
+        default: 30,
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 1,
+        label: 'app.lastMinutes',
+        description: 'app.lastMinutesDesc',
+    },
+    onlyBoost: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        label: 'app.onlyBoost',
+        description: 'app.onlyBoostDesc',
+    },
+};
+
+/**
+ * Boost configuration helpers (legacy compatibility)
+ */
+const getBoostThreshold = (challengeId) => {
+    // Use new schema-based system for boostTime setting
+    return getEffectiveSetting('boostTime', challengeId);
 };
 
 const setBoostThreshold = (challengeId, threshold) => {
-    const settings = loadSettings();
-    const boostConfig = settings.boostConfig || getDefaultSettings().boostConfig;
-    
-    // Ensure perChallenge object exists
-    if (!boostConfig.perChallenge) {
-        boostConfig.perChallenge = {};
-    }
-    
-    // Set the threshold for this challenge
-    boostConfig.perChallenge[challengeId] = threshold;
-    
-    // Save the updated settings
-    settings.boostConfig = boostConfig;
-    saveSettings(settings);
-    settingsCache = null; // Clear cache to ensure fresh settings on next load
+    // Use new schema-based system for boostTime setting
+    return setChallengeOverride('boostTime', challengeId.toString(), threshold);
 };
 
 const setDefaultBoostThreshold = (threshold) => {
-    const settings = loadSettings();
-    const boostConfig = settings.boostConfig || getDefaultSettings().boostConfig;
-    
-    boostConfig.defaultThreshold = threshold;
-    
-    // Save the updated settings
-    settings.boostConfig = boostConfig;
-    saveSettings(settings);
-    settingsCache = null; // Clear cache to ensure fresh settings on next load
+    // Use new schema-based system for boostTime setting
+    return setGlobalDefault('boostTime', threshold);
+};
+
+/**
+ * Migration function to move existing boost configuration to new schema-based system
+ * This ensures backward compatibility for users with existing boost settings
+ */
+const migrateBoostConfigurationToSchema = () => {
+    try {
+        const settings = loadSettings();
+        const boostConfig = settings.boostConfig;
+        
+        if (!boostConfig || !settings.challengeSettings) {
+            return; // Nothing to migrate or already using new system
+        }
+        
+        let migrationNeeded = false;
+        
+        // Migrate default boost threshold to global default
+        if (boostConfig.defaultThreshold && boostConfig.defaultThreshold !== 3600) {
+            if (!settings.challengeSettings.globalDefaults.boostTime || 
+                settings.challengeSettings.globalDefaults.boostTime === 3600) {
+                console.log('Migrating default boost threshold to new schema:', boostConfig.defaultThreshold);
+                settings.challengeSettings.globalDefaults.boostTime = boostConfig.defaultThreshold;
+                migrationNeeded = true;
+            }
+        }
+        
+        // Migrate per-challenge boost thresholds to per-challenge overrides
+        if (boostConfig.perChallenge && Object.keys(boostConfig.perChallenge).length > 0) {
+            for (const [challengeId, threshold] of Object.entries(boostConfig.perChallenge)) {
+                if (!settings.challengeSettings.perChallenge[challengeId] || 
+                    !settings.challengeSettings.perChallenge[challengeId].boostTime) {
+                    console.log(`Migrating boost threshold for challenge ${challengeId}:`, threshold);
+                    
+                    if (!settings.challengeSettings.perChallenge[challengeId]) {
+                        settings.challengeSettings.perChallenge[challengeId] = {};
+                    }
+                    settings.challengeSettings.perChallenge[challengeId].boostTime = threshold;
+                    migrationNeeded = true;
+                }
+            }
+        }
+        
+        // Save the migrated settings if changes were made
+        if (migrationNeeded) {
+            console.log('Boost configuration migration completed - saving updated settings');
+            saveSettings(settings);
+        }
+        
+    } catch (error) {
+        console.error('Error during boost configuration migration:', error);
+    }
 };
 
 module.exports = {
+    // Legacy settings functions
     loadSettings,
     saveSettings,
     getSetting,
@@ -387,7 +886,22 @@ module.exports = {
     getDefaultMockSetting,
     saveWindowBounds,
     getWindowBounds,
+    
+    // Legacy boost configuration functions (for backward compatibility)
     getBoostThreshold,
     setBoostThreshold,
     setDefaultBoostThreshold,
+    
+    // New schema-based settings functions
+    SETTINGS_SCHEMA,
+    getGlobalDefault,
+    setGlobalDefault,
+    getChallengeOverride,
+    setChallengeOverride,
+    setChallengeOverrides,
+    removeChallengeOverride,
+    getEffectiveSetting,
+    cleanupStaleChallengeSetting,
+    cleanupObsoleteSettings,
+    migrateBoostConfigurationToSchema,
 };

@@ -31,10 +31,22 @@ contextBridge.exposeInMainWorld(
         getErrorLogFile: () => ipcRenderer.invoke('get-error-log-file'),
         getApiLogFile: () => ipcRenderer.invoke('get-api-log-file'),
     
-        // Boost configuration methods
+        // Boost configuration methods (legacy)
         getBoostThreshold: (challengeId) => ipcRenderer.invoke('get-boost-threshold', challengeId),
         setBoostThreshold: (challengeId, threshold) => ipcRenderer.invoke('set-boost-threshold', challengeId, threshold),
         setDefaultBoostThreshold: (threshold) => ipcRenderer.invoke('set-default-boost-threshold', threshold),
+        
+        // New schema-based settings methods
+        getGlobalDefault: (settingKey) => ipcRenderer.invoke('get-global-default', settingKey),
+        setGlobalDefault: (settingKey, value) => ipcRenderer.invoke('set-global-default', settingKey, value),
+        getChallengeOverride: (settingKey, challengeId) => ipcRenderer.invoke('get-challenge-override', settingKey, challengeId),
+        setChallengeOverride: (settingKey, challengeId, value) => ipcRenderer.invoke('set-challenge-override', settingKey, challengeId, value),
+        setChallengeOverrides: (challengeId, overrides) => ipcRenderer.invoke('set-challenge-overrides', challengeId, overrides),
+        removeChallengeOverride: (settingKey, challengeId) => ipcRenderer.invoke('remove-challenge-override', settingKey, challengeId),
+        getEffectiveSetting: (settingKey, challengeId) => ipcRenderer.invoke('get-effective-setting', settingKey, challengeId),
+        cleanupStaleChallengeSetting: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-challenge-setting', activeChallengeIds),
+        cleanupObsoleteSettings: () => ipcRenderer.invoke('cleanup-obsolete-settings'),
+        getSettingsSchema: () => ipcRenderer.invoke('get-settings-schema'),
     
         // External URL methods
         openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
@@ -45,6 +57,9 @@ contextBridge.exposeInMainWorld(
         
         // Boost methods
         applyBoostToEntry: (challengeId, imageId) => ipcRenderer.invoke('apply-boost-to-entry', challengeId, imageId),
+        
+        // Window methods
+        reloadWindow: () => ipcRenderer.invoke('reload-window'),
     
     // Optional: Add listeners for responses from main process
     // Example: on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args))

@@ -54,7 +54,13 @@
     "tag": "git tag v$(node -p \"require('./package.json').version\")",
     "tag:push": "npm run tag && git push origin v$(node -p \"require('./package.json').version\")",
     "update:readme": "node scripts/update-readme-version.js",
-    "verify:readme": "node scripts/verify-readme-version.js"
+    "verify:readme": "node scripts/verify-readme-version.js",
+    "settings:get": "node scripts/settings-cli.js get",
+    "settings:set": "node scripts/settings-cli.js set",
+    "settings:schema": "node scripts/settings-cli.js schema",
+    "settings:global-defaults": "node scripts/settings-cli.js global-defaults",
+    "settings:help": "node scripts/settings-cli.js help",
+    "gui:refresh": "node scripts/refresh-gui.js"
   },
   "repository": {
     "type": "git",

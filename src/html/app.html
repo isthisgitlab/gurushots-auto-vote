@@ -11,9 +11,37 @@
 <body class="min-h-screen bg-base-200">
     
     <div class="navbar bg-base-100 shadow-md items-center flex-col">
-        <div class="flex justify-between items-center px-4 py-2" style="width: 800px; margin: 0 auto;">
-            <!-- Timezone Selector -->
-            <div class="relative flex items-center gap-1">
+        <div class="flex justify-between items-center px-4 py-2" style="max-width: 800px; width: 100%; margin: 0 auto;">
+            <!-- Left side - App Title -->
+            <div class="flex items-center">
+                <span class="card-title text-latvian text-xl whitespace-nowrap" data-translate="common.title">GuruShots Auto Vote</span>
+            </div>
+            
+            <!-- Right side - Mock, Settings, Logout -->
+            <div class="flex items-center gap-3">
+                <!-- Mock Status (display only) -->
+                <div class="flex items-center gap-1">
+                    <span class="text-sm" data-translate="common.mock">Mock:</span>
+                    <span id="mock-status" class="badge badge-sm">Loading...</span>
+                </div>
+                
+                <!-- Settings Button -->
+                <button id="settingsBtn" class="btn btn-ghost btn-sm" data-translate-title="app.settings" title="Settings">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                </button>
+                
+                <!-- Logout Button -->
+                <button id="logoutBtn" class="btn btn-ghost border border-latvian" data-translate="common.logout">Logout</button>
+            </div>
+        </div>
+        
+        <!-- Hidden elements that were moved to settings modal -->
+        <div style="display: none;">
+            <!-- Timezone Selector (moved to settings) -->
+            <div id="timezone-controls" class="relative flex items-center gap-1">
                 <select id="timezone-select" class="select select-bordered select-sm" style="background-image: none; width: 140px;">
                     <option value="Europe/Riga">Europe/Riga</option>
                 </select>
@@ -22,8 +50,8 @@
                 <input id="timezone-input" type="text" data-translate-placeholder="app.timezonePlaceholder" placeholder="Enter timezone" class="input input-bordered input-sm w-32 absolute top-full left-0 mt-1 z-10" style="display: none;">
             </div>
             
-            <!-- Language Switcher -->
-            <div class="dropdown dropdown-end">
+            <!-- Language Switcher (moved to settings) -->
+            <div id="language-controls" class="dropdown dropdown-end">
                 <div tabindex="0" role="button" class="btn btn-ghost btn-sm">
                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path>
@@ -35,26 +63,20 @@
                     <li><a data-lang="lv" data-translate="common.languageLatvian">Latviešu</a></li>
                 </ul>
             </div>
-            <div class="flex items-center gap-1">
+            
+            <!-- Theme Toggle (moved to settings) -->
+            <div id="theme-controls" class="flex items-center gap-1">
                 <span class="text-sm" data-translate="common.light">Light</span>
                 <input id="themeToggle" type="checkbox" class="toggle toggle-sm" />
                 <span class="text-sm" data-translate="common.dark">Dark</span>
             </div>
-            <div class="flex items-center gap-1">
-                <span class="text-sm" data-translate="common.mock">Mock:</span>
-                <button id="mock-toggle" class="btn btn-ghost btn-sm">
-                    <span id="mock-status" class="badge badge-sm">Loading...</span>
-                </button>
-            </div>
-            <div class="flex items-center gap-1">
+            
+            <!-- Stay Logged In Status (moved to settings) -->
+            <div id="stay-controls" class="flex items-center gap-1">
                 <span class="text-sm" data-translate="common.stay">Stay:</span>
                 <span id="stay-logged-in-status" class="badge badge-sm">Loading...</span>
             </div>
-            <button id="logoutBtn" class="btn btn-ghost border border-latvian" data-translate="common.logout">Logout</button>
         </div>
-        <div class="w-full flex justify-center items-center py-2">
-            <span class="card-title text-latvian text-xl whitespace-nowrap" data-translate="common.title">GuruShots Auto Vote</span>
-                </div>
     </div>
     </div>
     

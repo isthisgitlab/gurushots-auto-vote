@@ -111,8 +111,8 @@ const initializeHeaders = () => {
         // Check if version needs updating
         if (savedHeaders._version !== CURRENT_APP_VERSION) {
             // Update version-related fields while preserving randomized values
-            const iosVersion = savedHeaders.userAgent.match(/iOS ([^)]+)/)?.[1] || '16.7.11';
-            const alamofireVersion = savedHeaders.userAgent.match(/Alamofire\/([^)]+)/)?.[1] || '5.10.2';
+            const iosVersion = savedHeaders['user-agent']?.match(/iOS ([^)]+)/)?.[1] || '16.7.11';
+            const alamofireVersion = savedHeaders['user-agent']?.match(/Alamofire\/([^)]+)/)?.[1] || '5.10.2';
             
             savedHeaders = {
                 ...savedHeaders,

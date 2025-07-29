@@ -154,15 +154,19 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
         const exposureFactor = challenge.member.ranking.exposure.exposure_factor;
         const entries = challenge.member.ranking.entries;
         
-        // Get boost threshold for tooltip
-        let tooltipText = 'Configure boost';
+        // Check if this challenge has any custom settings overrides
+        let hasCustomSettings = false;
         try {
-            const threshold = await window.api.getBoostThreshold(challenge.id);
-            const hours = Math.floor(threshold / 3600);
-            const minutes = Math.floor((threshold % 3600) / 60);
-            tooltipText = `Auto-boost when < ${hours}h ${minutes}m remaining`;
+            const schema = await window.api.getSettingsSchema();
+            for (const key of Object.keys(schema)) {
+                const override = await window.api.getChallengeOverride(key, challenge.id.toString());
+                if (override !== null) {
+                    hasCustomSettings = true;
+                    break;
+                }
+            }
         } catch (error) {
-            console.error('Error getting boost threshold for tooltip:', error);
+            console.warn('Error checking for custom settings:', error);
         }
         
         // Get user progress data
@@ -262,6 +266,16 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
             </button>
         ` : '';
         
+        // Settings button (always visible)
+        const settingsButtonHtml = `
+            <button class="challenge-settings-btn btn btn-ghost btn-sm" data-challenge-id="${challenge.id}" data-challenge-title="${challenge.title}" title="Challenge Settings">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+            </button>
+        `;
+        
         return `
             <div class="border rounded-lg p-3 mb-3 bg-base-100">
                 <div class="space-y-2">
@@ -276,6 +290,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
         challenge.type === 'default' ? `<span class="badge badge-xs badge-success">${translationManager.t('app.normal')}</span>` : 
             challenge.badge ? `<span class="badge badge-xs badge-info">${challenge.badge}</span>` : ''}
                                 ${challenge.max_photo_submits > 1 ? `<span class="badge badge-xs badge-warning">${challenge.max_photo_submits} ${translationManager.t('app.photos')}</span>` : ''}
+                                ${hasCustomSettings ? '<span class="badge badge-xs badge-accent" title="Custom settings configured">⚙️</span>' : ''}
                             </div>
                             <!-- Challenge URL -->
                             ${challenge.url ? `
@@ -286,7 +301,10 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                                 </div>
                             ` : ''}
                         </div>
-                        ${voteButtonHtml}
+                        <div class="flex gap-2">
+                            ${voteButtonHtml}
+                            ${settingsButtonHtml}
+                        </div>
                     </div>
                     
                     <!-- Challenge Statistics -->
@@ -351,9 +369,6 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.boost')}</div>
                             <div class="${boostStatus.includes('Available') ? 'text-success' : boostStatus === 'Used' ? 'text-warning' : 'text-error'}">${boostStatus.includes('Available') ? translationManager.t('app.available') : boostStatus === 'Used' ? 'Used' : 'None'}</div>
-                            <button class="btn btn-xs btn-ghost mt-1 tooltip" data-tip="${tooltipText}" id="boost-config-${challenge.id}" onclick="configureBoost(${challenge.id}, '${challenge.title}')">
-                                ⚙️
-                            </button>
                         </div>
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.yourEntries')}</div>
@@ -385,9 +400,6 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
     const challengesHtml = challengesHtmlArray.join('');
     
     container.innerHTML = challengesHtml;
-    
-    // Update boost threshold displays
-    await updateBoostThresholdDisplays(sortedChallenges);
     
     // Add event listeners to vote buttons
     if (!autovoteRunning) {
@@ -489,6 +501,15 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
             });
         });
     }
+    
+    // Add event listeners to challenge settings buttons (always add, regardless of autovote status)
+    document.querySelectorAll('.challenge-settings-btn').forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const challengeId = e.target.closest('.challenge-settings-btn').dataset.challengeId;
+            const challengeTitle = e.target.closest('.challenge-settings-btn').dataset.challengeTitle;
+            openChallengeSettingsModal(challengeId, challengeTitle);
+        });
+    });
 };
 
 // Function to load challenges
@@ -523,6 +544,17 @@ const loadChallenges = async (timezone = 'local', autovoteRunning = false) => {
             await window.api.logDebug(`✅ Rendering ${result.challenges.length} challenges`, {
                 firstChallenge: result.challenges[0],
             });
+            
+            // Extract challenge IDs for cleanup
+            const activeChallengeIds = result.challenges.map(challenge => challenge.id.toString());
+            
+            // Cleanup stale challenge settings
+            try {
+                await window.api.cleanupStaleChallengeSetting(activeChallengeIds);
+            } catch (error) {
+                console.warn('Failed to cleanup stale challenge settings:', error);
+            }
+            
             renderChallenges(result.challenges, timezone, autovoteRunning);
         } else {
             await window.api.logError('❌ No challenges in result', { result });
@@ -535,75 +567,795 @@ const loadChallenges = async (timezone = 'local', autovoteRunning = false) => {
     }
 };
 
-// Global function to configure boost for a challenge
-window.configureBoost = async (challengeId, challengeTitle) => {
+// Legacy boost configuration functions - removed in favor of new settings system
+
+// Global function to open settings modal
+window.openSettingsModal = async () => {
     try {
-        // Get current threshold for this challenge
-        const currentThreshold = await window.api.getBoostThreshold(challengeId);
-        const hours = Math.floor(currentThreshold / 3600);
-        const minutes = Math.floor((currentThreshold % 3600) / 60);
+        // Get the settings schema and current values
+        const schema = await window.api.getSettingsSchema();
         
-        // Create modal for boost configuration
-        const modalHtml = `
-            <div class="modal modal-open">
-                <div class="modal-box">
-                    <h3 class="font-bold text-lg mb-4">${translationManager.t('app.configureBoost')} "${challengeTitle}"</h3>
-                    <div class="form-control">
-                        <label class="label">
-                            <span class="label-text">${translationManager.t('app.autoBoostWhenTimeRemaining')}</span>
-                        </label>
-                        <div class="flex gap-2 items-center">
-                            <input type="number" id="boost-hours" class="input input-bordered w-20" value="${hours}" min="0" max="24">
-                            <span class="text-sm">${translationManager.t('app.hours')}</span>
-                            <input type="number" id="boost-minutes" class="input input-bordered w-20" value="${minutes}" min="0" max="59">
-                            <span class="text-sm">${translationManager.t('app.minutes')}</span>
-                        </div>
-                    </div>
-                    <div class="modal-action">
-                        <button class="btn btn-latvian" onclick="saveBoostConfig(${challengeId})">${translationManager.t('app.save')}</button>
-                        <button class="btn" onclick="closeBoostModal()">${translationManager.t('app.cancel')}</button>
-                    </div>
-                </div>
-            </div>
-        `;
+        if (!schema || Object.keys(schema).length === 0) {
+            console.error('No schema available');
+            alert('Settings schema not available. Please try again.');
+            return;
+        }
+        
+        const globalDefaults = {};
+        
+        // Load current global defaults
+        for (const key of Object.keys(schema)) {
+            try {
+                globalDefaults[key] = await window.api.getGlobalDefault(key);
+            } catch (error) {
+                console.warn(`Error loading global default for ${key}:`, error);
+                globalDefaults[key] = schema[key].default;
+            }
+        }
+        
+        // Get current challenges for per-challenge overrides
+        const settings = await window.api.getSettings();
+        const result = await window.api.getActiveChallenges(settings.token);
+        const challenges = result?.challenges || [];
+        
+        // Create modal HTML
+        const modalHtml = await generateSettingsModalHtml(schema, globalDefaults, challenges);
         
         // Add modal to page
         document.body.insertAdjacentHTML('beforeend', modalHtml);
         
+        // Initialize modal event handlers
+        initializeSettingsModal(schema, challenges);
+        
     } catch (error) {
-        console.error('Error configuring boost:', error);
+        console.error('Error opening settings modal:', error);
+        alert('Failed to open settings modal. Check console for details.');
     }
 };
 
-// Global function to save boost configuration
-window.saveBoostConfig = async (challengeId) => {
+// Function to generate settings modal HTML based on schema (simplified to match per-challenge design)
+const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => {
+    console.log('generateSettingsModalHtml called with:', { schema, globalDefaults, challengesCount: challenges.length });
+    
+    // Validate inputs
+    if (!schema || Object.keys(schema).length === 0) {
+        console.error('No schema provided to generateSettingsModalHtml');
+        return '<div class="text-error">Error: No settings schema available</div>';
+    }
+    
+    if (!globalDefaults) {
+        console.error('No globalDefaults provided to generateSettingsModalHtml');
+        return '<div class="text-error">Error: No global defaults available</div>';
+    }
+    
+    // Generate global settings inputs (same style as per-challenge)
+    let globalSettingsHtml = '';
+    for (const [key, config] of Object.entries(schema)) {
+        try {
+            const value = globalDefaults[key];
+            console.log(`Processing global setting ${key}:`, { value, config });
+            
+            if (value === undefined || value === null) {
+                console.warn(`Missing value for global setting ${key}, using default`);
+                globalDefaults[key] = config.default;
+            }
+            
+            const inputHtml = generateInputHtml(key, config, globalDefaults[key], '');
+            const labelText = translationManager.t(config.label) || config.label || key;
+            const descText = translationManager.t(config.description) || config.description || 'No description';
+            
+            globalSettingsHtml += `
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text font-medium" data-translate="${config.label}">${labelText}</span>
+                        <span class="badge badge-ghost badge-xs ml-2">Global Default</span>
+                    </label>
+                    <p class="text-xs text-base-content/60 mb-2" data-translate="${config.description}">${descText}</p>
+                    <div class="flex items-center gap-2">
+                        ${inputHtml}
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            console.error(`Error generating HTML for global setting ${key}:`, error);
+            // Add a simple fallback
+            globalSettingsHtml += `
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text font-medium">${key}</span>
+                        <span class="badge badge-error badge-xs ml-2">Error</span>
+                    </label>
+                    <p class="text-xs text-base-content/60 mb-2">Error loading setting</p>
+                    <div class="text-error">Error: ${error.message || 'Unknown error'}</div>
+                </div>
+            `;
+        }
+    }
+    
+    console.log('Generated global settings HTML length:', globalSettingsHtml.length);
+    
+    // Generate UI settings HTML
+    const uiSettingsHtml = await generateUISettingsHtml();
+    
+    const modalHtml = `
+        <div class="modal modal-open">
+            <div class="modal-box max-w-3xl">
+                <h3 class="font-bold text-lg mb-4">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    Global Settings
+                </h3>
+                
+                <div class="space-y-6">
+                    <!-- App Settings Section -->
+                    <div>
+                        <h4 class="font-semibold text-base mb-3 border-b border-base-300 pb-2">Application Settings</h4>
+                        <div class="space-y-4">
+                            ${uiSettingsHtml || '<div class="text-error">No UI settings to display</div>'}
+                        </div>
+                    </div>
+                    
+                    <!-- Challenge Settings Section -->
+                    <div>
+                        <h4 class="font-semibold text-base mb-3 border-b border-base-300 pb-2">Challenge Defaults</h4>
+                        <div class="space-y-4">
+                            ${globalSettingsHtml || '<div class="text-error">No global settings to display</div>'}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-action">
+                    <button class="btn btn-latvian" onclick="saveGlobalSettings()">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span data-translate="app.save">${translationManager.t('app.save') || 'Save'}</span>
+                    </button>
+                    <button class="btn" onclick="closeSettingsModal()">
+                        <span data-translate="app.cancel">${translationManager.t('app.cancel') || 'Cancel'}</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    console.log('Final modal HTML length:', modalHtml.length);
+    return modalHtml;
+};
+
+// Function to generate UI settings HTML
+const generateUISettingsHtml = async () => {
     try {
-        const hours = parseInt(document.getElementById('boost-hours').value) || 0;
-        const minutes = parseInt(document.getElementById('boost-minutes').value) || 0;
-        const threshold = (hours * 3600) + (minutes * 60);
+        const settings = await window.api.getSettings();
         
-        await window.api.setBoostThreshold(challengeId, threshold);
-        closeBoostModal();
+        let uiSettingsHtml = '';
         
-        // Update the tooltip immediately
-        const configButton = document.getElementById(`boost-config-${challengeId}`);
-        if (configButton) {
-            configButton.setAttribute('data-tip', `Auto-boost when < ${hours}h ${minutes}m remaining`);
+        // Theme Setting
+        uiSettingsHtml += `
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text font-medium">Theme</span>
+                    <span class="badge badge-ghost badge-xs ml-2">UI Setting</span>
+                </label>
+                <p class="text-xs text-base-content/60 mb-2">Choose between light and dark theme</p>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm" data-translate="common.light">Light</span>
+                    <input type="checkbox" id="modal-theme-toggle" class="toggle toggle-sm" ${settings.theme === 'dark' ? 'checked' : ''}>
+                    <span class="text-sm" data-translate="common.dark">Dark</span>
+                </div>
+            </div>
+        `;
+        
+        // Language Setting
+        const currentLang = settings.language || 'en';
+        uiSettingsHtml += `
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text font-medium">Language</span>
+                    <span class="badge badge-ghost badge-xs ml-2">UI Setting</span>
+                </label>
+                <p class="text-xs text-base-content/60 mb-2">Select your preferred language</p>
+                <div class="flex items-center gap-2">
+                    <select id="modal-language-select" class="select select-bordered select-sm">
+                        <option value="en" ${currentLang === 'en' ? 'selected' : ''}>English</option>
+                        <option value="lv" ${currentLang === 'lv' ? 'selected' : ''}>Latviešu</option>
+                    </select>
+                </div>
+            </div>
+        `;
+        
+        // Timezone Setting
+        const currentTimezone = settings.timezone || 'Europe/Riga';
+        const customTimezones = settings.customTimezones || [];
+        let timezoneOptions = '<option value="Europe/Riga">Europe/Riga</option>';
+        
+        // Add custom timezones
+        customTimezones.forEach(tz => {
+            if (tz !== 'Europe/Riga') {
+                timezoneOptions += `<option value="${tz}"${currentTimezone === tz ? ' selected' : ''}>${tz}</option>`;
+            }
+        });
+        
+        // If current timezone is not in the list, add it
+        if (currentTimezone !== 'Europe/Riga' && !customTimezones.includes(currentTimezone)) {
+            timezoneOptions += `<option value="${currentTimezone}" selected>${currentTimezone}</option>`;
         }
         
-        // Refresh challenges to show updated configuration
-        await loadChallenges(document.getElementById('timezone-select').value, autovoteRunning);
+        uiSettingsHtml += `
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text font-medium">Timezone</span>
+                    <span class="badge badge-ghost badge-xs ml-2">UI Setting</span>
+                </label>
+                <p class="text-xs text-base-content/60 mb-2">Select your timezone for displaying challenge times</p>
+                <div class="flex items-center gap-2">
+                    <select id="modal-timezone-select" class="select select-bordered select-sm" style="width: 200px;">
+                        ${timezoneOptions}
+                    </select>
+                    <button id="modal-timezone-add" class="btn btn-ghost btn-sm" title="Add custom timezone">+</button>
+                    <button id="modal-timezone-remove" class="btn btn-ghost btn-sm text-red-500" title="Remove current timezone" style="visibility: ${currentTimezone !== 'Europe/Riga' ? 'visible' : 'hidden'}">×</button>
+                </div>
+                <input id="modal-timezone-input" type="text" placeholder="Enter timezone (e.g., UTC, America/New_York)" class="input input-bordered input-sm mt-2" style="display: none; width: 250px;">
+            </div>
+        `;
         
+        // Stay Logged In Setting
+        uiSettingsHtml += `
+            <div class="form-control mb-4">
+                <label class="label">
+                    <span class="label-text font-medium">Stay Logged In</span>
+                    <span class="badge badge-ghost badge-xs ml-2">UI Setting</span>
+                </label>
+                <p class="text-xs text-base-content/60 mb-2">Keep login session after closing the app</p>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="modal-stay-logged-in" class="checkbox checkbox-sm" ${settings.stayLoggedIn ? 'checked' : ''}>
+                    <span class="text-sm">Remember login session</span>
+                </div>
+            </div>
+        `;
+        
+        return uiSettingsHtml;
     } catch (error) {
-        console.error('Error saving boost config:', error);
+        console.error('Error generating UI settings HTML:', error);
+        return '<div class="text-error">Error loading UI settings</div>';
     }
 };
 
-// Global function to close boost modal
-window.closeBoostModal = () => {
+// Function to generate input HTML based on setting type
+const generateInputHtml = (key, config, value, challengeId = '', hasOverride = false) => {
+    try {
+        console.log(`Generating input HTML for ${key}:`, { config, value, challengeId, hasOverride });
+        
+        if (!config) {
+            console.error(`No config provided for setting ${key}`);
+            return `<div class="text-error">Missing config for ${key}</div>`;
+        }
+        
+        const inputId = challengeId ? `${key}-${challengeId}` : `global-${key}`;
+        const inputClass = hasOverride ? 'input-warning' : '';
+        
+        // Handle undefined/null values
+        if (value === undefined || value === null) {
+            console.warn(`Using default value for ${key}:`, config.default);
+            value = config.default || 0;
+        }
+        
+        // Safe translation with fallbacks
+        const hoursText = translationManager.t('app.hours') || 'hours';
+        const minutesText = translationManager.t('app.minutes') || 'minutes';
+        const resetTooltip = translationManager.t('app.resetToGlobal') || 'Reset to Global';
+        
+        switch (config.type) {
+        case 'time': {
+            const hours = Math.floor(Number(value) / 3600);
+            const minutes = Math.floor((Number(value) % 3600) / 60);
+            return `
+                    <div class="flex gap-2 items-center">
+                        <input type="number" id="${inputId}-hours" class="input input-bordered input-sm w-20 ${inputClass}" 
+                               value="${hours}" min="0" max="24" data-setting="${key}" data-challenge="${challengeId}">
+                        <span class="text-sm" data-translate="app.hours">${hoursText}</span>
+                        <input type="number" id="${inputId}-minutes" class="input input-bordered input-sm w-20 ${inputClass}" 
+                               value="${minutes}" min="0" max="59" data-setting="${key}" data-challenge="${challengeId}">
+                        <span class="text-sm" data-translate="app.minutes">${minutesText}</span>
+                        ${challengeId ? `<button class="btn btn-xs btn-ghost" onclick="resetChallengeOverride('${key}', '${challengeId}')" title="${resetTooltip}">↻</button>` : ''}
+                    </div>
+                `;
+        }
+            
+        case 'boolean': {
+            return `
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" id="${inputId}" class="checkbox checkbox-sm ${inputClass}" 
+                               ${value ? 'checked' : ''} data-setting="${key}" data-challenge="${challengeId}">
+                        ${challengeId ? `<button class="btn btn-xs btn-ghost" onclick="resetChallengeOverride('${key}', '${challengeId}')" title="${resetTooltip}">↻</button>` : ''}
+                    </div>
+                `;
+        }
+            
+        case 'number':
+        default:
+            return `
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="${inputId}" class="input input-bordered input-sm w-24 ${inputClass}" 
+                               value="${Number(value)}" min="0" data-setting="${key}" data-challenge="${challengeId}">
+                        ${challengeId ? `<button class="btn btn-xs btn-ghost" onclick="resetChallengeOverride('${key}', '${challengeId}')" title="${resetTooltip}">↻</button>` : ''}
+                    </div>
+                `;
+        }
+    } catch (error) {
+        console.error(`Error generating input HTML for ${key}:`, error);
+        return `<div class="text-error">Error generating input for ${key}: ${error.message || 'Unknown error'}</div>`;
+    }
+};
+
+// Function to initialize settings modal event handlers
+const initializeSettingsModal = () => {
+    // Initialize UI settings event handlers
+    setTimeout(() => {
+        initializeUISettingsHandlers();
+    }, 100); // Small delay to ensure DOM is ready
+};
+
+// Function to initialize UI settings event handlers
+const initializeUISettingsHandlers = () => {
+    // Theme toggle handler - just update UI preview, don't save yet
+    const themeToggle = document.getElementById('modal-theme-toggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('change', () => {
+            const newTheme = themeToggle.checked ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', newTheme);
+        });
+    }
+    
+    // Timezone handlers
+    const timezoneSelect = document.getElementById('modal-timezone-select');
+    const timezoneAdd = document.getElementById('modal-timezone-add');
+    const timezoneRemove = document.getElementById('modal-timezone-remove');
+    const timezoneInput = document.getElementById('modal-timezone-input');
+    
+    if (timezoneAdd && timezoneInput) {
+        timezoneAdd.addEventListener('click', () => {
+            if (timezoneInput.style.display === 'none' || timezoneInput.style.display === '') {
+                timezoneInput.style.display = 'block';
+                timezoneAdd.textContent = '✓';
+                timezoneInput.focus();
+            } else {
+                timezoneInput.style.display = 'none';
+                timezoneAdd.textContent = '+';
+            }
+        });
+        
+        timezoneInput.addEventListener('keypress', async (e) => {
+            if (e.key === 'Enter') {
+                const newTimezone = timezoneInput.value.trim();
+                if (newTimezone) {
+                    try {
+                        // Validate timezone
+                        const testDate = new Date();
+                        testDate.toLocaleString('en-US', { timeZone: newTimezone });
+                        
+                        // Add to select options
+                        const option = document.createElement('option');
+                        option.value = newTimezone;
+                        option.textContent = newTimezone;
+                        option.selected = true;
+                        timezoneSelect.appendChild(option);
+                        
+                        // Update remove button visibility
+                        if (timezoneRemove) {
+                            timezoneRemove.style.visibility = 'visible';
+                        }
+                        
+                        timezoneInput.value = '';
+                        timezoneInput.style.display = 'none';
+                        timezoneAdd.textContent = '+';
+                    } catch {
+                        timezoneInput.classList.add('input-error');
+                        setTimeout(() => {
+                            timezoneInput.classList.remove('input-error');
+                        }, 3000);
+                    }
+                }
+            }
+        });
+    }
+    
+    if (timezoneSelect && timezoneRemove) {
+        timezoneSelect.addEventListener('change', () => {
+            const currentTimezone = timezoneSelect.value;
+            timezoneRemove.style.visibility = currentTimezone !== 'Europe/Riga' ? 'visible' : 'hidden';
+        });
+        
+        timezoneRemove.addEventListener('click', () => {
+            const currentTimezone = timezoneSelect.value;
+            if (currentTimezone !== 'Europe/Riga') {
+                const option = timezoneSelect.querySelector(`option[value="${currentTimezone}"]`);
+                if (option) {
+                    option.remove();
+                }
+                timezoneSelect.value = 'Europe/Riga';
+                timezoneRemove.style.visibility = 'hidden';
+            }
+        });
+    }
+};
+
+// Global function to save global settings only
+window.saveGlobalSettings = async () => {
+    try {
+        const schema = await window.api.getSettingsSchema();
+        
+        // Save challenge-related global defaults
+        for (const key of Object.keys(schema)) {
+            const value = getInputValue(key, schema[key], '');
+            if (value !== null) {
+                await window.api.setGlobalDefault(key, value);
+            }
+        }
+        
+        // Save UI settings
+        await saveUISettings();
+        
+        closeSettingsModal();
+        
+        // Refresh challenges to apply new settings
+        const newTimezone = document.getElementById('modal-timezone-select')?.value || 'Europe/Riga';
+        await loadChallenges(newTimezone, autovoteRunning);
+        
+    } catch (error) {
+        console.error('Error saving global settings:', error);
+    }
+};
+
+// Function to save UI settings
+const saveUISettings = async () => {
+    try {
+        console.log('💾 Saving UI settings in batch...');
+        const uiUpdates = {};
+        
+        // Collect theme
+        const themeToggle = document.getElementById('modal-theme-toggle');
+        if (themeToggle) {
+            uiUpdates.theme = themeToggle.checked ? 'dark' : 'light';
+        }
+        
+        // Collect language  
+        const languageSelect = document.getElementById('modal-language-select');
+        if (languageSelect) {
+            uiUpdates.language = languageSelect.value;
+        }
+        
+        // Collect timezone
+        const timezoneSelect = document.getElementById('modal-timezone-select');
+        if (timezoneSelect) {
+            uiUpdates.timezone = timezoneSelect.value;
+            
+            // Handle custom timezones
+            const customTimezones = [];
+            Array.from(timezoneSelect.options).forEach(option => {
+                if (option.value !== 'Europe/Riga') {
+                    customTimezones.push(option.value);
+                }
+            });
+            uiUpdates.customTimezones = customTimezones;
+        }
+        
+        // Collect stay logged in
+        const stayLoggedInCheckbox = document.getElementById('modal-stay-logged-in');
+        if (stayLoggedInCheckbox) {
+            uiUpdates.stayLoggedIn = stayLoggedInCheckbox.checked;
+        }
+        
+        // Save all UI settings at once
+        if (Object.keys(uiUpdates).length > 0) {
+            await window.api.saveSettings(uiUpdates);
+            console.log('✅ UI settings saved:', Object.keys(uiUpdates));
+            
+            // Apply language change if needed
+            if (uiUpdates.language) {
+                await translationManager.setLanguage(uiUpdates.language);
+            }
+        }
+        
+        // Update the main page UI controls that are still visible
+        updateMainPageUIControls();
+        
+    } catch (error) {
+        console.error('Error saving UI settings:', error);
+    }
+};
+
+// Function to update main page UI controls after settings change
+const updateMainPageUIControls = async () => {
+    try {
+        const settings = await window.api.getSettings();
+        
+        // Update mock status (this is still in header)
+        updateSettingsDisplay(settings);
+        
+        // Update language display (if we had one)
+        // This is now handled in the modal only
+        
+        // Update timezone on the hidden timezone select (for compatibility)
+        const hiddenTimezoneSelect = document.getElementById('timezone-select');
+        if (hiddenTimezoneSelect && settings.timezone) {
+            hiddenTimezoneSelect.value = settings.timezone;
+        }
+        
+    } catch (error) {
+        console.error('Error updating main page UI controls:', error);
+    }
+};
+
+// Keep the old saveAllSettings for backward compatibility (if needed elsewhere)
+window.saveAllSettings = window.saveGlobalSettings;
+
+// Function to get input value based on setting type
+const getInputValue = (key, config, challengeId) => {
+    const inputId = challengeId ? `${key}-${challengeId}` : `global-${key}`;
+    
+    switch (config.type) {
+    case 'time': {
+        const hoursEl = document.getElementById(`${inputId}-hours`);
+        const minutesEl = document.getElementById(`${inputId}-minutes`);
+        if (hoursEl && minutesEl) {
+            const hours = parseInt(hoursEl.value) || 0;
+            const minutes = parseInt(minutesEl.value) || 0;
+            return (hours * 3600) + (minutes * 60);
+        }
+        break;
+    }
+        
+    case 'boolean': {
+        const checkboxEl = document.getElementById(inputId);
+        if (checkboxEl) {
+            return checkboxEl.checked;
+        }
+        break;
+    }
+        
+    case 'number':
+    default: {
+        const numberEl = document.getElementById(inputId);
+        if (numberEl) {
+            return parseInt(numberEl.value) || 0;
+        }
+        break;
+    }
+    }
+    
+    return null;
+};
+
+// Global function to reset challenge override
+window.resetChallengeOverride = async (settingKey, challengeId) => {
+    try {
+        await window.api.removeChallengeOverride(settingKey, challengeId);
+        
+        // Update the input to show global default value
+        const globalValue = await window.api.getGlobalDefault(settingKey);
+        const schema = await window.api.getSettingsSchema();
+        const config = schema[settingKey];
+        
+        if (config) {
+            const inputId = `${settingKey}-${challengeId}`;
+            
+            switch (config.type) {
+            case 'time': {
+                const hours = Math.floor(globalValue / 3600);
+                const minutes = Math.floor((globalValue % 3600) / 60);
+                const hoursEl = document.getElementById(`${inputId}-hours`);
+                const minutesEl = document.getElementById(`${inputId}-minutes`);
+                if (hoursEl && minutesEl) {
+                    hoursEl.value = hours;
+                    minutesEl.value = minutes;
+                    hoursEl.classList.remove('input-warning');
+                    minutesEl.classList.remove('input-warning');
+                }
+                break;
+            }
+                
+            case 'boolean': {
+                const checkboxEl = document.getElementById(inputId);
+                if (checkboxEl) {
+                    checkboxEl.checked = globalValue;
+                    checkboxEl.classList.remove('input-warning');
+                }
+                break;
+            }
+                
+            case 'number':
+            default: {
+                const numberEl = document.getElementById(inputId);
+                if (numberEl) {
+                    numberEl.value = globalValue;
+                    numberEl.classList.remove('input-warning');
+                }
+                break;
+            }
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error resetting challenge override:', error);
+    }
+};
+
+// Global function to close settings modal
+window.closeSettingsModal = () => {
     const modal = document.querySelector('.modal');
     if (modal) {
         modal.remove();
+    }
+};
+
+// Global function to open challenge-specific settings modal
+window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
+    try {
+        // Get the settings schema
+        const schema = await window.api.getSettingsSchema();
+        
+        if (!schema || Object.keys(schema).length === 0) {
+            console.error('No schema available');
+            alert('Settings schema not available. Please try again.');
+            return;
+        }
+        
+        // Load current values for this challenge
+        const challengeSettings = {};
+        const globalDefaults = {};
+        
+        for (const key of Object.keys(schema)) {
+            try {
+                globalDefaults[key] = await window.api.getGlobalDefault(key);
+                challengeSettings[key] = await window.api.getChallengeOverride(key, challengeId.toString());
+            } catch (error) {
+                console.warn(`Error loading setting ${key}:`, error);
+                globalDefaults[key] = schema[key].default;
+                challengeSettings[key] = null;
+            }
+        }
+        
+        // Create modal HTML
+        const modalHtml = await generateChallengeSettingsModalHtml(challengeId, challengeTitle, schema, globalDefaults, challengeSettings);
+        
+        // Add modal to page
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Initialize modal event handlers
+        initializeChallengeSettingsModal(challengeId, schema);
+        
+    } catch (error) {
+        console.error('Error opening challenge settings modal:', error);
+        alert('Failed to open challenge settings modal. Check console for details.');
+    }
+};
+
+// Function to generate challenge-specific settings modal HTML
+const generateChallengeSettingsModalHtml = async (challengeId, challengeTitle, schema, globalDefaults, challengeSettings) => {
+    let settingsHtml = '';
+    
+    for (const [key, config] of Object.entries(schema)) {
+        const hasOverride = challengeSettings[key] !== null;
+        const currentValue = hasOverride ? challengeSettings[key] : globalDefaults[key];
+        const globalValue = globalDefaults[key];
+        
+        const inputHtml = generateInputHtml(key, config, currentValue, challengeId, hasOverride);
+        
+        try {
+            const labelText = translationManager.t(config.label);
+            const descText = translationManager.t(config.description);
+            
+            settingsHtml += `
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text font-medium" data-translate="${config.label}">${labelText}</span>
+                        ${hasOverride ? '<span class="badge badge-warning badge-xs ml-2">Override</span>' : '<span class="badge badge-ghost badge-xs ml-2">Global</span>'}
+                    </label>
+                    <p class="text-xs text-base-content/60 mb-2" data-translate="${config.description}">${descText}</p>
+                    <div class="flex items-center gap-2">
+                        ${inputHtml}
+                        ${hasOverride ? '' : `<span class="text-xs text-base-content/40">(Global: ${formatValue(config, globalValue)})</span>`}
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            console.error(`Error generating HTML for challenge setting ${key}:`, error);
+            settingsHtml += `
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text font-medium">${key}</span>
+                        ${hasOverride ? '<span class="badge badge-warning badge-xs ml-2">Override</span>' : '<span class="badge badge-ghost badge-xs ml-2">Global</span>'}
+                    </label>
+                    <p class="text-xs text-base-content/60 mb-2">${config.description || 'No description'}</p>
+                    <div class="flex items-center gap-2">
+                        ${inputHtml}
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    return `
+        <div class="modal modal-open">
+            <div class="modal-box max-w-2xl">
+                <h3 class="font-bold text-lg mb-4">
+                    <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    </svg>
+                    Settings: ${challengeTitle}
+                </h3>
+                
+                <div class="space-y-4">
+                    ${settingsHtml}
+                </div>
+                
+                <div class="modal-action">
+                    <button class="btn btn-latvian" onclick="saveChallengeSettings('${challengeId}')">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span data-translate="app.save">${translationManager.t('app.save')}</span>
+                    </button>
+                    <button class="btn" onclick="closeSettingsModal()">
+                        <span data-translate="app.cancel">${translationManager.t('app.cancel')}</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+// Function to format a value for display
+const formatValue = (config, value) => {
+    switch (config.type) {
+    case 'time': {
+        const hours = Math.floor(value / 3600);
+        const minutes = Math.floor((value % 3600) / 60);
+        return `${hours}h ${minutes}m`;
+    }
+    case 'boolean': {
+        return value ? 'Yes' : 'No';
+    }
+    default: {
+        return value;
+    }
+    }
+};
+
+// Function to initialize challenge settings modal event handlers
+const initializeChallengeSettingsModal = () => {
+    // No special initialization needed for now
+};
+
+// Global function to save challenge settings
+window.saveChallengeSettings = async (challengeId) => {
+    try {
+        const schema = await window.api.getSettingsSchema();
+        
+        // Collect all overrides efficiently
+        const overrides = {};
+        for (const key of Object.keys(schema)) {
+            const value = getInputValue(key, schema[key], challengeId);
+            if (value !== null) {
+                overrides[key] = value;
+            }
+        }
+        
+        // Save all overrides in one call, only saving values that differ from global defaults
+        await window.api.setChallengeOverrides(challengeId, overrides);
+        
+        closeSettingsModal();
+        
+        // Refresh challenges to apply new settings
+        const currentTimezone = document.getElementById('timezone-select')?.value || 'local';
+        await loadChallenges(currentTimezone, autovoteRunning);
+        
+    } catch (error) {
+        console.error('Error saving challenge settings:', error);
     }
 };
 
@@ -612,41 +1364,30 @@ window.openChallengeUrl = (url) => {
     window.api.openExternalUrl(`https://gurushots.com/challenge/${url}`);
 };
 
-// Function to update boost threshold displays
-const updateBoostThresholdDisplays = async (challenges) => {
-    for (const challenge of challenges) {
-        try {
-            const threshold = await window.api.getBoostThreshold(challenge.id);
-            const hours = Math.floor(threshold / 3600);
-            const minutes = Math.floor((threshold % 3600) / 60);
-            
-            const configButton = document.getElementById(`boost-config-${challenge.id}`);
-            if (configButton) {
-                configButton.setAttribute('data-tip', `Auto-boost when < ${hours}h ${minutes}m remaining`);
-            }
-        } catch (error) {
-            console.error('Error updating boost threshold display:', error);
-        }
-    }
-};
+// Legacy boost threshold display function - removed in favor of new settings system
 
 // Wait for the DOM to be fully loaded
 document.addEventListener('DOMContentLoaded', async () => {
     // Show log file location
     const logFile = await window.api.getLogFile();
     console.log('📝 Log file location:', logFile);
-    // Get the logout button element
+    
+    // Settings cleanup is now handled automatically in settings.js during loadSettings()
+    
+    // Load initial settings AFTER cleanup
+    let settings = await window.api.getSettings();
+    
+    // Apply initial theme with current settings
+    document.documentElement.setAttribute('data-theme', settings.theme);
+    console.log('🎨 Applied theme:', settings.theme);
+    
+    // Get the UI elements
     const logoutBtn = document.getElementById('logoutBtn');
+    const settingsBtn = document.getElementById('settingsBtn');
     const themeToggle = document.getElementById('themeToggle');
     const refreshBtn = document.getElementById('refresh-challenges');
     const timezoneSelect = document.getElementById('timezone-select');
     const currentLanguageSpan = document.getElementById('current-language');
-    
-    // Load initial settings
-    let settings = await window.api.getSettings();
-    
-    // Apply initial theme
-    document.documentElement.setAttribute('data-theme', settings.theme);
     themeToggle.checked = settings.theme === 'dark';
     
     // Apply timezone setting
@@ -722,6 +1463,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.api.logout();
     });
     
+    // Add click event listener to the settings button
+    settingsBtn.addEventListener('click', () => {
+        openSettingsModal();
+    });
+    
     // Handle language change
     document.querySelectorAll('[data-lang]').forEach(item => {
         item.addEventListener('click', async (e) => {
@@ -746,20 +1492,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     });
     
-    // Handle theme toggle change
+    // Handle theme toggle change - just update UI, don't auto-save
     themeToggle.addEventListener('change', async () => {
         const newTheme = themeToggle.checked ? 'dark' : 'light';
         
         // Update the theme immediately for responsive UI
         document.documentElement.setAttribute('data-theme', newTheme);
         
-        // Save the setting
-        await window.api.setSetting('theme', newTheme);
-        
-        // Reload settings to get the updated state
-        settings = await window.api.getSettings();
-        
-        // Update the display
+        // Note: Theme is now only saved when user clicks Save in settings modal
         updateSettingsDisplay(settings);
         
         // No feedback toast - annoying
@@ -796,7 +1536,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 timezoneSelect.style.display = 'inline-block';
                 timezoneToggle.textContent = '+';
                 timezoneSelect.value = 'local';
-                await window.api.setSetting('timezone', 'local');
+                // Note: Timezone changes are now only saved through settings modal
                 await loadChallenges('local', autovoteRunning);
                 return;
             }
@@ -806,8 +1546,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const testDate = new Date();
                 testDate.toLocaleString('en-US', { timeZone: newTimezone });
                 
-                // Valid timezone - save and use
-                await window.api.setSetting('timezone', newTimezone);
+                // Valid timezone - just update UI (saved through settings modal)
                 
                 // Add the new timezone as an option if it doesn't exist
                 const existingOption = timezoneSelect.querySelector(`option[value="${newTimezone}"]`);
@@ -818,13 +1557,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     timezoneSelect.appendChild(option);
                 }
                 
-                // Save the custom timezone to settings
-                const currentSettings = await window.api.getSettings();
-                const customTimezones = currentSettings.customTimezones || [];
-                if (!customTimezones.includes(newTimezone)) {
-                    customTimezones.push(newTimezone);
-                    await window.api.setSetting('customTimezones', customTimezones);
-                }
+                // Note: Custom timezones will be saved through settings modal
                 
                 timezoneSelect.value = newTimezone;
                 timezoneInput.value = '';
@@ -852,8 +1585,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     timezoneSelect.addEventListener('change', async () => {
         const newTimezone = timezoneSelect.value;
         
-        // Save the setting
-        await window.api.setSetting('timezone', newTimezone);
+        // Note: Timezone changes are now only saved through settings modal
         
         // Update remove button visibility
         updateRemoveButton();
@@ -875,15 +1607,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 option.remove();
             }
             
-            // Remove from custom timezones in settings
-            const currentSettings = await window.api.getSettings();
-            const customTimezones = currentSettings.customTimezones || [];
-            const updatedTimezones = customTimezones.filter(tz => tz !== currentTimezone);
-            await window.api.setSetting('customTimezones', updatedTimezones);
+            // Note: Timezone changes are now only saved through settings modal
             
-            // Set back to Europe/Riga
+            // Set back to Europe/Riga  
             timezoneSelect.value = 'Europe/Riga';
-            await window.api.setSetting('timezone', 'Europe/Riga');
             
             // Update remove button visibility
             updateRemoveButton();
@@ -925,32 +1652,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         `;
     });
 
-    // Mock Toggle Functionality
-    const mockToggle = document.getElementById('mock-toggle');
-    
-    // Handle mock toggle
-    mockToggle.addEventListener('click', async () => {
-        const currentSettings = await window.api.getSettings();
-        const newMockValue = !currentSettings.mock;
-        
-        console.log(`🔄 Mock toggle clicked: ${currentSettings.mock} -> ${newMockValue}`);
-        
-        // Update the setting
-        await window.api.setSetting('mock', newMockValue);
-        
-        // Update the display
-        updateSettingsDisplay({ ...currentSettings, mock: newMockValue });
-        
-        // Show feedback
-        const status = newMockValue ? 'Mock API Enabled' : 'Real API Enabled';
-        console.log(`Switched to: ${status}`);
-        
-        // Force API refresh in main process
-        await window.api.refreshApi();
-        
-        // Refresh challenges to reflect the new API mode
-        await loadChallenges(timezoneSelect.value, autovoteRunning);
-    });
+    // Mock status is display-only - no click functionality  
+    // Mock is only set during login or via npm run mock:... commands
 
     // Auto Vote Functionality
     const autovoteToggle = document.getElementById('autovote-toggle');

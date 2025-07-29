@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const settings = require('./settings');
 const { initializeHeaders } = require('./api/randomizer');
 
@@ -28,6 +29,10 @@ let mainWindow = null;
 
 // Global voting cancellation flag
 let shouldCancelVoting = false;
+
+// Settings file watcher
+let settingsWatcher = null;
+let settingsReloadTimeout = null;
 
 function createLoginWindow() {
     // Get saved window bounds
@@ -119,7 +124,33 @@ function createMainWindow() {
     // Handle window close
     mainWindow.on('closed', () => {
         mainWindow = null;
+        // Stop watching settings file when window closes
+        if (settingsWatcher) {
+            settingsWatcher.close();
+            settingsWatcher = null;
+        }
     });
+    
+    // Watch settings file for changes and auto-reload with debouncing
+    const settingsPath = path.join(settings.getUserDataPath(), 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+        settingsWatcher = fs.watch(settingsPath, (eventType) => {
+            if (eventType === 'change') {
+                // Clear existing timeout to debounce rapid file changes
+                if (settingsReloadTimeout) {
+                    clearTimeout(settingsReloadTimeout);
+                }
+                
+                // Reload after a short delay to avoid rapid reloads
+                settingsReloadTimeout = setTimeout(() => {
+                    console.log('🔄 Settings file changed, reloading main window...');
+                    if (mainWindow && !mainWindow.isDestroyed()) {
+                        mainWindow.reload();
+                    }
+                }, 500); // 500ms debounce
+            }
+        });
+    }
 }
 
 // Check if we should auto-login based on saved token
@@ -449,6 +480,122 @@ ipcMain.handle('set-default-boost-threshold', async (event, threshold) => {
     }
 });
 
+// New schema-based settings handlers
+ipcMain.handle('get-settings-schema', async () => {
+    try {
+        const settings = require('./settings');
+        const schema = settings.SETTINGS_SCHEMA;
+        
+        // Create a serializable version of the schema (without functions)
+        const serializableSchema = {};
+        Object.keys(schema).forEach(key => {
+            serializableSchema[key] = {
+                type: schema[key].type,
+                default: schema[key].default,
+                perChallenge: schema[key].perChallenge,
+                label: schema[key].label,
+                description: schema[key].description,
+                // Note: validation function is not included as it can't be serialized
+            };
+        });
+        
+        return serializableSchema;
+    } catch (error) {
+        console.error('Error getting settings schema:', error);
+        return {};
+    }
+});
+
+ipcMain.handle('get-global-default', async (event, settingKey) => {
+    try {
+        const settings = require('./settings');
+        return settings.getGlobalDefault(settingKey);
+    } catch (error) {
+        console.error('Error getting global default:', error);
+        return null;
+    }
+});
+
+ipcMain.handle('set-global-default', async (event, settingKey, value) => {
+    try {
+        const settings = require('./settings');
+        return settings.setGlobalDefault(settingKey, value);
+    } catch (error) {
+        console.error('Error setting global default:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('get-challenge-override', async (event, settingKey, challengeId) => {
+    try {
+        const settings = require('./settings');
+        return settings.getChallengeOverride(settingKey, challengeId);
+    } catch (error) {
+        console.error('Error getting challenge override:', error);
+        return null;
+    }
+});
+
+ipcMain.handle('set-challenge-override', async (event, settingKey, challengeId, value) => {
+    try {
+        const settings = require('./settings');
+        return settings.setChallengeOverride(settingKey, challengeId, value);
+    } catch (error) {
+        console.error('Error setting challenge override:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('set-challenge-overrides', async (event, challengeId, overrides) => {
+    try {
+        const settings = require('./settings');
+        return settings.setChallengeOverrides(challengeId, overrides);
+    } catch (error) {
+        console.error('Error setting challenge overrides:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('remove-challenge-override', async (event, settingKey, challengeId) => {
+    try {
+        const settings = require('./settings');
+        return settings.removeChallengeOverride(settingKey, challengeId);
+    } catch (error) {
+        console.error('Error removing challenge override:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('get-effective-setting', async (event, settingKey, challengeId) => {
+    try {
+        const settings = require('./settings');
+        return settings.getEffectiveSetting(settingKey, challengeId);
+    } catch (error) {
+        console.error('Error getting effective setting:', error);
+        return null;
+    }
+});
+
+ipcMain.handle('cleanup-stale-challenge-setting', async (event, activeChallengeIds) => {
+    try {
+        const settings = require('./settings');
+        return settings.cleanupStaleChallengeSetting(activeChallengeIds);
+    } catch (error) {
+        console.error('Error cleaning up stale challenge settings:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('cleanup-obsolete-settings', async () => {
+    try {
+        const settings = require('./settings');
+        return settings.cleanupObsoleteSettings();
+    } catch (error) {
+        console.error('Error cleaning up obsolete settings:', error);
+        return false;
+    }
+});
+
 // Handle open external URL request
 ipcMain.handle('open-external-url', async (event, url) => {
     try {
@@ -735,5 +882,23 @@ ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
             success: false,
             error: error.message || 'Failed to apply boost',
         };
+    }
+});
+
+// Handle reload window request (for CLI settings changes)
+ipcMain.handle('reload-window', async () => {
+    try {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.reload();
+            return { success: true };
+        } else if (loginWindow && !loginWindow.isDestroyed()) {
+            loginWindow.reload();
+            return { success: true };
+        } else {
+            return { success: false, error: 'No active window to reload' };
+        }
+    } catch (error) {
+        console.error('Error reloading window:', error);
+        return { success: false, error: error.message };
     }
 });
