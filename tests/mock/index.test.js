@@ -120,7 +120,7 @@ describe('mock/index', () => {
 
             const endTime = Date.now();
             expect(result).toEqual(testData);
-            expect(endTime - startTime).toBeGreaterThanOrEqual(100);
+            expect(endTime - startTime).toBeGreaterThanOrEqual(90); // Allow 10ms tolerance for CI timing precision
         });
 
         test('should use default delay of 1000ms', async () => {
@@ -131,7 +131,7 @@ describe('mock/index', () => {
 
             const endTime = Date.now();
             expect(result).toEqual(testData);
-            expect(endTime - startTime).toBeGreaterThanOrEqual(1000);
+            expect(endTime - startTime).toBeGreaterThanOrEqual(990); // Allow 10ms tolerance for CI timing precision
         });
     });
 
@@ -143,7 +143,7 @@ describe('mock/index', () => {
             await expect(mockIndex.simulateApiError(testError, 100)).rejects.toThrow('Test error');
 
             const endTime = Date.now();
-            expect(endTime - startTime).toBeGreaterThanOrEqual(100);
+            expect(endTime - startTime).toBeGreaterThanOrEqual(90); // Allow 10ms tolerance for CI timing precision
         });
 
         test('should use default delay of 500ms', async () => {
@@ -153,7 +153,7 @@ describe('mock/index', () => {
             await expect(mockIndex.simulateApiError(testError)).rejects.toThrow('Test error');
 
             const endTime = Date.now();
-            expect(endTime - startTime).toBeGreaterThanOrEqual(500);
+            expect(endTime - startTime).toBeGreaterThanOrEqual(490); // Allow 10ms tolerance for CI timing precision
         });
     });
 
