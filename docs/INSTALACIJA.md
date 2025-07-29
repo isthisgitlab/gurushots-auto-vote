@@ -4,16 +4,16 @@
 
 ### **🚀 Ātrās lejupielādes saites**
 
-**Latest Version: v0.1.0**
+**Latest Version: v0.1.1**
 
 #### **🖥️ Grafiskā lietotne (Ieteicams lielākajai daļai lietotāju)**
 
 | Platforma         | Lejupielāde                                                                                                                                                          | Izmērs | Tips                  |
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|-----------------------|
-| **Windows**       | [📥 GuruShotsAutoVote-v0.1.0-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.1.0-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
-| **macOS**         | [📥 GuruShotsAutoVote-v0.1.0-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.1.0-arm64.dmg)             | ~50 MB | DMG instalētājs       |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.1.0-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.1.0-x86_64.AppImage) | ~50 MB | AppImage              |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.1.0-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.1.0-arm64.AppImage)   | ~50 MB | AppImage              |
+| **Windows**       | [📥 GuruShotsAutoVote-v0.1.1-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.1.1-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
+| **macOS**         | [📥 GuruShotsAutoVote-v0.1.1-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.1.1-arm64.dmg)             | ~50 MB | DMG instalētājs       |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.1.1-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.1.1-x86_64.AppImage) | ~50 MB | AppImage              |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.1.1-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.1.1-arm64.AppImage)   | ~50 MB | AppImage              |
 
 ### **📋 Instalācijas instrukcijas**
 
@@ -47,8 +47,8 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 1. **Lejupielādēt**: Noklikšķiniet uz atbilstošās Linux saites augšā
 2. **Padarīt izpildāmu**: Labais klikšķis uz faila → Properties → Permissions → Atzīmējiet "Allow executing file as
    program"
-    - Vai izmantojiet termināli: `chmod +x GuruShotsAutoVote-v0.1.0-*.AppImage`
-3. **Palaist**: Veiciet dubultklikšķi uz faila vai palaidiet no termināļa: `./GuruShotsAutoVote-v0.1.0-*.AppImage`
+    - Vai izmantojiet termināli: `chmod +x GuruShotsAutoVote-v0.1.1-*.AppImage`
+3. **Palaist**: Veiciet dubultklikšķi uz faila vai palaidiet no termināļa: `./GuruShotsAutoVote-v0.1.1-*.AppImage`
 
 ### **🎯 Kuru versiju lejupielādēt?**
 
