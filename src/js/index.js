@@ -814,12 +814,36 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
             };
         }
 
-        // Get the effective exposure threshold for this challenge
+        // Get the effective exposure threshold and lastminute threshold for this challenge
         const effectiveThreshold = settings.getEffectiveSetting('exposure', challengeId);
-        if (challenge.member.ranking.exposure.exposure_factor >= effectiveThreshold) {
+        const effectiveLastMinutes = settings.getEffectiveSetting('lastMinutes', challengeId);
+        const timeUntilEnd = challenge.close_time - now;
+        const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+
+        // Check if we should allow voting based on lastminute threshold logic
+        let shouldAllowVoting = false;
+        let errorMessage = '';
+
+        if (isWithinLastMinuteThreshold) {
+            // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
+            if (challenge.member.ranking.exposure.exposure_factor >= 100) {
+                errorMessage = `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinutes}m)`;
+            } else {
+                shouldAllowVoting = true;
+            }
+        } else {
+            // Normal logic: check against exposure threshold
+            if (challenge.member.ranking.exposure.exposure_factor >= effectiveThreshold) {
+                errorMessage = `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`;
+            } else {
+                shouldAllowVoting = true;
+            }
+        }
+
+        if (!shouldAllowVoting) {
             return {
                 success: false,
-                error: `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`,
+                error: errorMessage,
             };
         }
 
@@ -831,7 +855,9 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
 
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
             console.log('✅ Submitting votes...');
-            await strategy.submitVotes(voteImages, userSettings.token, effectiveThreshold);
+            // Use 100 as threshold if within lastminute threshold, otherwise use effective threshold
+            const submissionThreshold = isWithinLastMinuteThreshold ? 100 : effectiveThreshold;
+            await strategy.submitVotes(voteImages, userSettings.token, submissionThreshold);
             console.log('✅ Votes submitted successfully');
         } else {
             console.log('⚠️ No vote images available');
