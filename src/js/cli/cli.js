@@ -87,8 +87,18 @@ const runVotingCycle = async (cycleNumber = 1) => {
         const userSettings = settings.loadSettings();
         const token = userSettings.token;
 
-        // Run the voting process
-        await getMiddlewareInstance().apiStrategy.fetchChallengesAndVote(token);
+        // Create a function to get the effective exposure setting for each challenge
+        const getExposureThreshold = (challengeId) => {
+            try {
+                return settings.getEffectiveSetting('exposure', challengeId);
+            } catch (error) {
+                console.warn(`Error getting exposure setting for challenge ${challengeId}:`, error);
+                return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
+            }
+        };
+
+        // Run the voting process with per-challenge exposure settings
+        await getMiddlewareInstance().apiStrategy.fetchChallengesAndVote(token, getExposureThreshold);
         console.log(`--- Voting Cycle ${cycleNumber} Completed ---\n`);
         return true;
     } catch (error) {

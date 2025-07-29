@@ -120,7 +120,17 @@ class BaseMiddleware {
         console.log('Starting voting process...');
 
         try {
-            await this.apiStrategy.fetchChallengesAndVote(token);
+            // Create a function to get the effective exposure setting for each challenge
+            const getExposureThreshold = (challengeId) => {
+                try {
+                    return settings.getEffectiveSetting('exposure', challengeId);
+                } catch (error) {
+                    console.warn(`Error getting exposure setting for challenge ${challengeId}:`, error);
+                    return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
+                }
+            };
+
+            await this.apiStrategy.fetchChallengesAndVote(token, getExposureThreshold);
             console.log('Voting process completed successfully!');
         } catch (error) {
             console.error('Error during voting process:', error.message || error);
@@ -144,7 +154,17 @@ class BaseMiddleware {
                 };
             }
 
-            await this.apiStrategy.fetchChallengesAndVote(token);
+            // Create a function to get the effective exposure setting for each challenge
+            const getExposureThreshold = (challengeId) => {
+                try {
+                    return settings.getEffectiveSetting('exposure', challengeId);
+                } catch (error) {
+                    console.warn(`Error getting exposure setting for challenge ${challengeId}:`, error);
+                    return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
+                }
+            };
+
+            await this.apiStrategy.fetchChallengesAndVote(token, getExposureThreshold);
 
             return {
                 success: true,
