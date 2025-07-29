@@ -908,6 +908,15 @@ const SETTINGS_SCHEMA = {
     },
 };
 
+/**
+ * Get the settings schema
+ *
+ * @returns {Promise<object>} - Settings schema
+ */
+const getSettingsSchema = async () => {
+    return SETTINGS_SCHEMA;
+};
+
 module.exports = {
     // Core settings functions
     loadSettings,
@@ -923,6 +932,7 @@ module.exports = {
 
     // Schema-based settings functions
     SETTINGS_SCHEMA,
+    getSettingsSchema,
     getGlobalDefault,
     setGlobalDefault,
     getChallengeOverride,
