@@ -5,6 +5,8 @@
  */
 
 const MockApiStrategy = require('../../src/js/strategies/MockApiStrategy');
+const { mockApiClient } = require('../../src/js/mock');
+const settings = require('../../src/js/settings');
 
 // Mock the mock api-client
 jest.mock('../../src/js/mock', () => ({
@@ -143,28 +145,28 @@ describe('MockApiStrategy', () => {
         images: [{ id: 'img1', ratio: 25 }]
       };
       const mockToken = 'test-token-123';
-      const mockResponse = { success: true, votes_submitted: 5 };
+      const mockResponse = { success: true };
 
       mockApiClient.submitVotes.mockResolvedValueOnce(mockResponse);
 
       const result = await mockApiStrategy.submitVotes(mockVoteImages, mockToken);
 
       expect(console.log).toHaveBeenCalledWith('🔧 Using mock submitVotes');
-      expect(mockApiClient.submitVotes).toHaveBeenCalledWith(mockVoteImages, mockToken);
+      expect(mockApiClient.submitVotes).toHaveBeenCalledWith(mockVoteImages, mockToken, settings.SETTINGS_SCHEMA.exposure.default);
       expect(result).toEqual(mockResponse);
     });
 
     test('should handle submitVotes errors', async () => {
+      const mockVoteImages = { images: [] };
       const mockError = new Error('Failed to submit votes');
+
       mockApiClient.submitVotes.mockRejectedValueOnce(mockError);
 
-      const mockVoteImages = { images: [] };
-      
       await expect(mockApiStrategy.submitVotes(mockVoteImages, 'invalid-token'))
         .rejects.toThrow('Failed to submit votes');
       
       expect(console.log).toHaveBeenCalledWith('🔧 Using mock submitVotes');
-      expect(mockApiClient.submitVotes).toHaveBeenCalledWith(mockVoteImages, 'invalid-token');
+      expect(mockApiClient.submitVotes).toHaveBeenCalledWith(mockVoteImages, 'invalid-token', settings.SETTINGS_SCHEMA.exposure.default);
     });
   });
 
@@ -232,26 +234,27 @@ describe('MockApiStrategy', () => {
   describe('fetchChallengesAndVote', () => {
     test('should call mock fetchChallengesAndVote with correct parameters', async () => {
       const mockToken = 'test-token-123';
-      const mockResponse = { success: true, challenges_processed: 3 };
+      const mockResponse = { success: true, message: 'Voting completed' };
 
       mockApiClient.fetchChallengesAndVote.mockResolvedValueOnce(mockResponse);
 
       const result = await mockApiStrategy.fetchChallengesAndVote(mockToken);
 
       expect(console.log).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote');
-      expect(mockApiClient.fetchChallengesAndVote).toHaveBeenCalledWith(mockToken);
+      expect(mockApiClient.fetchChallengesAndVote).toHaveBeenCalledWith(mockToken, settings.SETTINGS_SCHEMA.exposure.default);
       expect(result).toEqual(mockResponse);
     });
 
     test('should handle fetchChallengesAndVote errors', async () => {
       const mockError = new Error('Failed to fetch challenges and vote');
+
       mockApiClient.fetchChallengesAndVote.mockRejectedValueOnce(mockError);
-      
+
       await expect(mockApiStrategy.fetchChallengesAndVote('invalid-token'))
         .rejects.toThrow('Failed to fetch challenges and vote');
       
       expect(console.log).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote');
-      expect(mockApiClient.fetchChallengesAndVote).toHaveBeenCalledWith('invalid-token');
+      expect(mockApiClient.fetchChallengesAndVote).toHaveBeenCalledWith('invalid-token', settings.SETTINGS_SCHEMA.exposure.default);
     });
   });
 });

@@ -38,6 +38,7 @@ describe('RealApiStrategy', () => {
   const { getActiveChallenges } = require('../../src/js/api/challenges');
   const { getVoteImages, submitVotes } = require('../../src/js/api/voting');
   const { applyBoost, applyBoostToEntry } = require('../../src/js/api/boost');
+  const settings = require('../../src/js/settings');
 
   beforeEach(() => {
     realApiStrategy = new RealApiStrategy();
@@ -175,20 +176,20 @@ describe('RealApiStrategy', () => {
 
       const result = await realApiStrategy.submitVotes(mockVoteImages, mockToken);
 
-      expect(submitVotes).toHaveBeenCalledWith(mockVoteImages, mockToken);
+      expect(submitVotes).toHaveBeenCalledWith(mockVoteImages, mockToken, settings.SETTINGS_SCHEMA.exposure.default);
       expect(result).toEqual(mockResponse);
     });
 
     test('should handle submitVotes errors', async () => {
+      const mockVoteImages = { images: [] };
       const mockError = new Error('Failed to submit votes');
+
       submitVotes.mockRejectedValueOnce(mockError);
 
-      const mockVoteImages = { images: [] };
-      
       await expect(realApiStrategy.submitVotes(mockVoteImages, 'invalid-token'))
         .rejects.toThrow('Failed to submit votes');
       
-      expect(submitVotes).toHaveBeenCalledWith(mockVoteImages, 'invalid-token');
+      expect(submitVotes).toHaveBeenCalledWith(mockVoteImages, 'invalid-token', settings.SETTINGS_SCHEMA.exposure.default);
     });
   });
 
@@ -271,24 +272,25 @@ describe('RealApiStrategy', () => {
   describe('fetchChallengesAndVote', () => {
     test('should delegate to real fetchChallengesAndVote function', async () => {
       const mockToken = 'test-token-123';
-      const mockResponse = { success: true, challenges_processed: 3 };
+      const mockResponse = { success: true, message: 'Voting completed' };
 
       fetchChallengesAndVote.mockResolvedValueOnce(mockResponse);
 
       const result = await realApiStrategy.fetchChallengesAndVote(mockToken);
 
-      expect(fetchChallengesAndVote).toHaveBeenCalledWith(mockToken);
+      expect(fetchChallengesAndVote).toHaveBeenCalledWith(mockToken, settings.SETTINGS_SCHEMA.exposure.default);
       expect(result).toEqual(mockResponse);
     });
 
     test('should handle fetchChallengesAndVote errors', async () => {
       const mockError = new Error('Failed to fetch challenges and vote');
+
       fetchChallengesAndVote.mockRejectedValueOnce(mockError);
-      
+
       await expect(realApiStrategy.fetchChallengesAndVote('invalid-token'))
         .rejects.toThrow('Failed to fetch challenges and vote');
       
-      expect(fetchChallengesAndVote).toHaveBeenCalledWith('invalid-token');
+      expect(fetchChallengesAndVote).toHaveBeenCalledWith('invalid-token', settings.SETTINGS_SCHEMA.exposure.default);
     });
   });
 });
