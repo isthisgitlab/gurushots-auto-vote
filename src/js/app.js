@@ -146,7 +146,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
 
         const timeRemaining = formatTimeRemaining(challenge.close_time, timezone);
         const endTime = formatEndTime(challenge.close_time, timezone);
-        const boostStatus = getBoostStatus(challenge.member.boost, challenge.id, challenge.close_time);
+        const boostStatus = getBoostStatus(challenge.member.boost);
         const exposureFactor = challenge.member.ranking.exposure.exposure_factor;
         const entries = challenge.member.ranking.entries;
 
@@ -225,10 +225,15 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
 
         // Create entries display with detailed information
         let entriesHtml = entries.map(entry => {
-            const boostIcon = entry.boost === 1 ? '🚀' : '';
+            // Show boost icon if entry is boosted OR if boost is used for this challenge
+            const isEntryBoosted = entry.boost === 1;
+            const isBoostUsed = boostStatus === 'Used';
+            const boostIcon = (isEntryBoosted || isBoostUsed) ? '🚀' : '';
             const guruIcon = entry.guru_pick ? '⭐' : '';
-            const turboIcon = entry.turbo ? '⚡' : '📷';
-            const boostClass = entry.boost === 1 ? 'badge-success' : 'badge-secondary';
+            // Show camera only for regular entries (no turbo, no boost, no guru pick)
+            const isRegularEntry = !entry.turbo && !isEntryBoosted && !isBoostUsed && !entry.guru_pick;
+            const turboIcon = entry.turbo ? '⚡' : (isRegularEntry ? '📷' : '');
+            const boostClass = (isEntryBoosted || isBoostUsed) ? 'badge-success' : 'badge-secondary';
 
             // Show boost button only if boost is available and entry is not already boosted
             const showBoostButton = boostStatus.includes('Available') && entry.boost !== 1;
@@ -1262,7 +1267,7 @@ const generateChallengeSettingsModalHtml = async (challengeId, challengeTitle, s
                     <p class="text-xs text-base-content/60 mb-2" data-translate="${config.description}">${descText}</p>
                     <div class="flex items-center gap-2">
                         ${inputHtml}
-                        ${hasOverride ? '' : `<span class="text-xs text-base-content/40">(Global: ${formatValue(config, globalValue)})</span>`}
+                        ${hasOverride ? '' : `<span class="text-xs text-base-content/40">(${translationManager.t('common.global')} ${formatValue(config, globalValue)})</span>`}
                     </div>
                 </div>
             `;
@@ -1323,7 +1328,7 @@ const formatValue = (config, value) => {
         return `${hours}h ${minutes}m`;
     }
     case 'boolean': {
-        return value ? 'Yes' : 'No';
+        return value ? translationManager.t('common.yes') : translationManager.t('common.no');
     }
     default: {
         return value;

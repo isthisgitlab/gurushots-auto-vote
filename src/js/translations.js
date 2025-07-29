@@ -20,6 +20,9 @@ const translations = {
             never: 'Never',
             languageEnglish: 'English',
             languageLatvian: 'Latviešu',
+            yes: 'Yes',
+            no: 'No',
+            global: 'Global:',
         },
         // Login screen specific
         login: {
@@ -123,6 +126,7 @@ const translations = {
             noGlobalSettingsToDisplay: 'No global settings to display',
             errorLoadingUiSettings: 'Error loading UI settings',
             missingConfigFor: 'Missing config for',
+            theme: 'Theme',
         },
     },
     lv: {
@@ -132,7 +136,7 @@ const translations = {
             light: 'Gaišs',
             dark: 'Tumšs',
             on: 'ON',
-            off: 'OFF',
+            off: 'IZSLĒGTS',
             loading: 'Ielādē...',
             theme: 'Tēma',
             mock: 'Tests:',
@@ -145,6 +149,9 @@ const translations = {
             never: 'Nekad',
             languageEnglish: 'English',
             languageLatvian: 'Latviešu',
+            yes: 'Jā',
+            no: 'Nē',
+            global: 'Globāls:',
         },
         // Login screen specific
         login: {
@@ -248,6 +255,7 @@ const translations = {
             noGlobalSettingsToDisplay: 'Nav globālo iestatījumu attēlošanai',
             errorLoadingUiSettings: 'Kļūda UI iestatījumu ielādē',
             missingConfigFor: 'Trūkst konfigurācijas priekš',
+            theme: 'Tēma',
         },
     },
 };
