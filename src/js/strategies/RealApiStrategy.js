@@ -11,6 +11,7 @@ const { fetchChallengesAndVote } = require('../api/main');
 const { getActiveChallenges } = require('../api/challenges');
 const { getVoteImages, submitVotes } = require('../api/voting');
 const { applyBoost, applyBoostToEntry } = require('../api/boost');
+const settings = require('../settings');
 
 /**
  * Real API Strategy implementation
@@ -54,10 +55,11 @@ class RealApiStrategy extends ApiStrategy {
      * 
      * @param {object} voteImages - Vote images object
      * @param {string} token - Authentication token
+     * @param {number} exposureThreshold - Exposure threshold (default: schema default)
      * @returns {Promise<object>} - Vote submission response
      */
-    async submitVotes(voteImages, token) {
-        return await submitVotes(voteImages, token);
+    async submitVotes(voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) {
+        return await submitVotes(voteImages, token, exposureThreshold);
     }
 
     /**
@@ -87,10 +89,11 @@ class RealApiStrategy extends ApiStrategy {
      * Main voting process - fetch challenges and vote
      * 
      * @param {string} token - Authentication token
+     * @param {number|function} exposureThreshold - Exposure threshold (default: schema default) or function to get threshold per challenge
      * @returns {Promise<object>} - Voting process response
      */
-    async fetchChallengesAndVote(token) {
-        return await fetchChallengesAndVote(token);
+    async fetchChallengesAndVote(token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) {
+        return await fetchChallengesAndVote(token, exposureThreshold);
     }
 
     /**

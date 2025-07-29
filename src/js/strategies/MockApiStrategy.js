@@ -7,6 +7,7 @@
 
 const ApiStrategy = require('../interfaces/ApiStrategy');
 const { mockApiClient } = require('../mock');
+const settings = require('../settings');
 
 /**
  * Mock API Strategy implementation
@@ -53,11 +54,12 @@ class MockApiStrategy extends ApiStrategy {
      * 
      * @param {object} voteImages - Vote images object
      * @param {string} token - Authentication token
+     * @param {number} exposureThreshold - Exposure threshold (default: schema default)
      * @returns {Promise<object>} - Vote submission response
      */
-    async submitVotes(voteImages, token) {
+    async submitVotes(voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) {
         console.log('🔧 Using mock submitVotes');
-        return await mockApiClient.submitVotes(voteImages, token);
+        return await mockApiClient.submitVotes(voteImages, token, exposureThreshold);
     }
 
     /**
@@ -89,11 +91,12 @@ class MockApiStrategy extends ApiStrategy {
      * Main voting process - fetch challenges and vote
      * 
      * @param {string} token - Authentication token
+     * @param {number|function} exposureThreshold - Exposure threshold (default: schema default) or function to get threshold per challenge
      * @returns {Promise<object>} - Voting process response
      */
-    async fetchChallengesAndVote(token) {
+    async fetchChallengesAndVote(token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) {
         console.log('🔧 Using mock fetchChallengesAndVote');
-        return await mockApiClient.fetchChallengesAndVote(token);
+        return await mockApiClient.fetchChallengesAndVote(token, exposureThreshold);
     }
 
     /**

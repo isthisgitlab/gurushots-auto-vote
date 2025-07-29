@@ -9,6 +9,7 @@ const challenges = require('./challenges');
 const voting = require('./voting');
 const boost = require('./boost');
 const errors = require('./errors');
+const settings = require('../settings');
 
 // Global cancellation flag for mock API
 let shouldCancelVoting = false;
@@ -151,11 +152,12 @@ const mockApiClient = {
     /**
      * Simulate submitting votes
      */
-    submitVotes: async (voteImages, token) => {
+    submitVotes: async (voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
         console.log('=== Mock submitVotes ===');
         console.log('Vote images count:', voteImages.images ? voteImages.images.length : 0);
         console.log('Token provided:', token ? `${token.substring(0, 10)}...` : 'none');
         console.log('Full token:', token || 'NO TOKEN');
+        console.log('Exposure threshold:', exposureThreshold);
         
         // In mock mode, accept any token (including real ones)
         if (token) {
@@ -223,10 +225,11 @@ const mockApiClient = {
     /**
      * Simulate the main voting process (fetchChallengesAndVote)
      */
-    fetchChallengesAndVote: async (token) => {
+    fetchChallengesAndVote: async (token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
         console.log('=== Mock Voting Process Started ===');
         console.log('Token provided:', token ? `${token.substring(0, 10)}...` : 'none');
         console.log('Full token:', token || 'NO TOKEN');
+        console.log('Exposure threshold type:', typeof exposureThreshold);
         
         // In mock mode, accept any token (including real ones)
         if (token) {
@@ -244,6 +247,13 @@ const mockApiClient = {
                 
                 console.log(`Processing challenge: ${challenge.title}`);
                 
+                // Get the effective exposure threshold for this challenge
+                const effectiveThreshold = typeof exposureThreshold === 'function' 
+                    ? exposureThreshold(challenge.id.toString()) 
+                    : exposureThreshold;
+                
+                console.log(`Challenge ${challenge.id} exposure threshold: ${effectiveThreshold}`);
+                
                 // Simulate boost application if available
                 if (challenge.member.boost.state === 'AVAILABLE') {
                     // Check for cancellation before boost
@@ -256,8 +266,8 @@ const mockApiClient = {
                     await simulateApiResponse(boost.mockBoostSuccess, 1500);
                 }
                 
-                // Simulate voting if exposure factor is less than 100
-                if (challenge.member.ranking.exposure.exposure_factor < 100) {
+                // Simulate voting if exposure factor is less than the effective threshold
+                if (challenge.member.ranking.exposure.exposure_factor < effectiveThreshold) {
                     // Check for cancellation before voting
                     if (shouldCancelVoting) {
                         console.log('🛑 Mock voting cancelled by user before voting');
