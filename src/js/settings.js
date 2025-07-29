@@ -898,6 +898,14 @@ const SETTINGS_SCHEMA = {
         label: 'app.onlyBoost',
         description: 'app.onlyBoostDesc',
     },
+    voteOnlyInLastThreshold: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        label: 'app.voteOnlyInLastThreshold',
+        description: 'app.voteOnlyInLastThresholdDesc',
+    },
 };
 
 module.exports = {
