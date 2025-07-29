@@ -211,14 +211,15 @@ class BaseMiddleware {
      * Submit votes using the strategy
      * 
      * @param {object} voteImages - Vote images object
+     * @param {number} exposureThreshold - Exposure threshold (default: schema default)
      * @returns {object} - Vote submission response
      */
-    async submitVotes(voteImages) {
+    async submitVotes(voteImages, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) {
         const token = settings.getSetting('token');
         if (!token) {
             throw new Error('No authentication token found');
         }
-        return this.apiStrategy.submitVotes(voteImages, token);
+        return this.apiStrategy.submitVotes(voteImages, token, exposureThreshold);
     }
 
     /**

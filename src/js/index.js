@@ -450,18 +450,16 @@ ipcMain.handle('get-api-log-file', async () => {
 // Boost configuration handlers
 ipcMain.handle('get-boost-threshold', async (event, challengeId) => {
     try {
-        const settings = require('./settings');
-        return settings.getBoostThreshold(challengeId);
+        return settings.getEffectiveSetting('boostTime', challengeId);
     } catch (error) {
         console.error('Error getting boost threshold:', error);
-        return 3600; // Default 1 hour
+        return settings.SETTINGS_SCHEMA.boostTime.default;
     }
 });
 
 ipcMain.handle('set-boost-threshold', async (event, challengeId, threshold) => {
     try {
-        const settings = require('./settings');
-        settings.setBoostThreshold(challengeId, threshold);
+        settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
         return { success: true };
     } catch (error) {
         console.error('Error setting boost threshold:', error);
@@ -471,8 +469,7 @@ ipcMain.handle('set-boost-threshold', async (event, challengeId, threshold) => {
 
 ipcMain.handle('set-default-boost-threshold', async (event, threshold) => {
     try {
-        const settings = require('./settings');
-        settings.setDefaultBoostThreshold(threshold);
+        settings.setGlobalDefault('boostTime', threshold);
         return { success: true };
     } catch (error) {
         console.error('Error setting default boost threshold:', error);
@@ -684,18 +681,31 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
 // Handle run-voting-cycle request
 ipcMain.handle('run-voting-cycle', async () => {
     try {
+        console.log('🔄 Starting voting cycle...');
+        
         const userSettings = settings.loadSettings();
-    
+        
         if (!userSettings.token) {
+            console.log('❌ No token found for voting cycle');
             return {
                 success: false,
                 error: 'No authentication token found',
             };
         }
-    
+        
         // Use the API factory to get the appropriate strategy
         const { getApiStrategy } = require('./apiFactory');
         const strategy = getApiStrategy();
+        
+        // Create a function to get the effective exposure setting for each challenge
+        const getExposureThreshold = (challengeId) => {
+            try {
+                return settings.getEffectiveSetting('exposure', challengeId);
+            } catch (error) {
+                console.warn(`Error getting exposure setting for challenge ${challengeId}:`, error);
+                return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
+            }
+        };
         
         // Reset cancellation flag before starting
         shouldCancelVoting = false;
@@ -708,8 +718,8 @@ ipcMain.handle('run-voting-cycle', async () => {
         const mockApi = require('./mock');
         mockApi.setCancellationFlag(false);
         
-        // Run the voting cycle
-        const result = await strategy.fetchChallengesAndVote(userSettings.token);
+        // Run the voting cycle with per-challenge exposure settings
+        const result = await strategy.fetchChallengesAndVote(userSettings.token, getExposureThreshold);
     
         if (result && result.success) {
             return {
@@ -806,10 +816,12 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
             };
         }
     
-        if (challenge.member.ranking.exposure.exposure_factor >= 100) {
+        // Get the effective exposure threshold for this challenge
+        const effectiveThreshold = settings.getEffectiveSetting('exposure', challengeId);
+        if (challenge.member.ranking.exposure.exposure_factor >= effectiveThreshold) {
             return {
                 success: false,
-                error: `Challenge "${challengeTitle}" already has 100% exposure`,
+                error: `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`,
             };
         }
     
@@ -821,7 +833,7 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
     
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
             console.log('✅ Submitting votes...');
-            await strategy.submitVotes(voteImages, userSettings.token);
+            await strategy.submitVotes(voteImages, userSettings.token, effectiveThreshold);
             console.log('✅ Votes submitted successfully');
         } else {
             console.log('⚠️ No vote images available');

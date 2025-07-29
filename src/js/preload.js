@@ -31,7 +31,7 @@ contextBridge.exposeInMainWorld(
         getErrorLogFile: () => ipcRenderer.invoke('get-error-log-file'),
         getApiLogFile: () => ipcRenderer.invoke('get-api-log-file'),
     
-        // Boost configuration methods (legacy)
+        // Boost configuration methods
         getBoostThreshold: (challengeId) => ipcRenderer.invoke('get-boost-threshold', challengeId),
         setBoostThreshold: (challengeId, threshold) => ipcRenderer.invoke('set-boost-threshold', challengeId, threshold),
         setDefaultBoostThreshold: (threshold) => ipcRenderer.invoke('set-default-boost-threshold', threshold),

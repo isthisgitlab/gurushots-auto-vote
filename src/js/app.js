@@ -567,8 +567,6 @@ const loadChallenges = async (timezone = 'local', autovoteRunning = false) => {
     }
 };
 
-// Legacy boost configuration functions - removed in favor of new settings system
-
 // Global function to open settings modal
 window.openSettingsModal = async () => {
     try {
@@ -1132,9 +1130,7 @@ const getInputValue = (key, config, challengeId) => {
 // Global function to reset challenge override
 window.resetChallengeOverride = async (settingKey, challengeId) => {
     try {
-        await window.api.removeChallengeOverride(settingKey, challengeId);
-        
-        // Update the input to show global default value
+        // Get the global default value
         const globalValue = await window.api.getGlobalDefault(settingKey);
         const schema = await window.api.getSettingsSchema();
         const config = schema[settingKey];
@@ -1176,6 +1172,9 @@ window.resetChallengeOverride = async (settingKey, challengeId) => {
                 break;
             }
             }
+            
+            // Update the remove button visibility since we've reset to global default
+            updateRemoveButton();
         }
         
     } catch (error) {
@@ -1336,17 +1335,49 @@ window.saveChallengeSettings = async (challengeId) => {
     try {
         const schema = await window.api.getSettingsSchema();
         
-        // Collect all overrides efficiently
-        const overrides = {};
+        // Get current overrides to know what to remove
+        const currentOverrides = {};
         for (const key of Object.keys(schema)) {
-            const value = getInputValue(key, schema[key], challengeId);
-            if (value !== null) {
-                overrides[key] = value;
+            try {
+                const currentOverride = await window.api.getChallengeOverride(key, challengeId);
+                if (currentOverride !== null) {
+                    currentOverrides[key] = currentOverride;
+                }
+            } catch {
+                // Ignore errors for non-existent overrides
             }
         }
         
-        // Save all overrides in one call, only saving values that differ from global defaults
-        await window.api.setChallengeOverrides(challengeId, overrides);
+        // Collect all overrides efficiently, only saving values that differ from global defaults
+        const overrides = {};
+        const overridesToRemove = [];
+        
+        for (const key of Object.keys(schema)) {
+            const value = getInputValue(key, schema[key], challengeId);
+            if (value !== null) {
+                // Get the global default to compare
+                const globalDefault = await window.api.getGlobalDefault(key);
+                
+                if (value !== globalDefault) {
+                    // Value differs from global default - save as override
+                    overrides[key] = value;
+                } else if (currentOverrides[key] !== undefined) {
+                    // Value equals global default but there was a previous override - remove it
+                    overridesToRemove.push(key);
+                }
+                // If value equals global default and there was no previous override, do nothing
+            }
+        }
+        
+        // Remove overrides that are now reset to global defaults
+        for (const key of overridesToRemove) {
+            await window.api.removeChallengeOverride(key, challengeId);
+        }
+        
+        // Save new overrides
+        if (Object.keys(overrides).length > 0) {
+            await window.api.setChallengeOverrides(challengeId, overrides);
+        }
         
         closeSettingsModal();
         
@@ -1363,8 +1394,6 @@ window.saveChallengeSettings = async (challengeId) => {
 window.openChallengeUrl = (url) => {
     window.api.openExternalUrl(`https://gurushots.com/challenge/${url}`);
 };
-
-// Legacy boost threshold display function - removed in favor of new settings system
 
 // Wait for the DOM to be fully loaded
 document.addEventListener('DOMContentLoaded', async () => {

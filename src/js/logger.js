@@ -135,7 +135,7 @@ const cleanupOldLogs = () => {
                     reason = isDateOlderThan(fileDate, API_RETENTION_DAYS) ? 'age' : 'size';
                 }
             } else if (file.startsWith('api-debug-')) {
-                // Clean up old timestamped files (legacy)
+                // Clean up old timestamped files
                 const fileAge = now.getTime() - stats.mtime.getTime();
                 shouldDelete = fileAge > (7 * 24 * 60 * 60 * 1000); // 7 days
                 reason = 'age';
