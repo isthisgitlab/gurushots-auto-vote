@@ -403,7 +403,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                         </div>
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.boost')}</div>
-                            <div class="${boostStatus.includes('Available') ? 'text-success' : boostStatus === 'Used' ? 'text-warning' : 'text-error'}">${boostStatus.includes('Available') ? translationManager.t('app.available') : boostStatus === 'Used' ? 'Used' : 'None'}</div>
+                            <div class="${boostStatus.includes('Available') ? 'text-success' : boostStatus === 'Used' ? 'text-warning' : 'text-error'}">${boostStatus.includes('Available') ? translationManager.t('app.available') : boostStatus === 'Used' ? translationManager.t('app.used') : boostStatus === 'Unavailable' ? translationManager.t('app.unavailable') : boostStatus}</div>
                         </div>
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.turbo')}</div>
