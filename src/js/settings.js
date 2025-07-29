@@ -122,12 +122,7 @@ const getDefaultSettings = () => {
             globalDefaults: globalDefaults,
             perChallenge: {}, // Challenge ID -> setting overrides mapping
         },
-        // Legacy boost configuration (for backward compatibility)
-        boostConfig: {
-            defaultThreshold: 3600, // Default 1 hour (3600 seconds)
-            perChallenge: {}, // Challenge ID -> threshold mapping
-        },
-        // API headers for randomization
+        // API headers for randomization (random per user installation)
         apiHeaders: {},
         // Add any other default settings as needed
     };
@@ -177,9 +172,6 @@ const settingsSchema = {
         
         return true;
     },
-    boostConfig: (value) => typeof value === 'object' && value !== null && 
-                           typeof value.defaultThreshold === 'number' && 
-                           typeof value.perChallenge === 'object',
     apiHeaders: (value) => typeof value === 'object' && value !== null,
 };
 
@@ -258,14 +250,13 @@ const loadSettings = () => {
             if (!global.migrationInProgress) {
                 global.migrationInProgress = true;
                 try {
-                    migrateBoostConfigurationToSchema();
                     // Only run cleanup once per app session, not on every settings load
                     if (!global.cleanupCompleted) {
                         cleanupObsoleteSettings();
                         global.cleanupCompleted = true;
                     }
                 } catch (migrationError) {
-                    console.warn('Migration/cleanup failed:', migrationError);
+                    console.warn('Cleanup failed:', migrationError);
                 } finally {
                     global.migrationInProgress = false;
                 }
@@ -646,41 +637,19 @@ const cleanupStaleChallengeSetting = (activeChallengeIds) => {
 };
 
 /**
- * Cleanup obsolete/deprecated settings that are no longer used
- * This removes old settings structures that have been replaced or are no longer needed
- * @returns {boolean} - True if cleanup was successful, false otherwise
+ * Clean up obsolete settings that are no longer used
+ * This function removes deprecated settings to keep the settings file clean
  */
 const cleanupObsoleteSettings = () => {
     try {
         const settings = loadSettings();
         let hasChanges = false;
         
-        // Define current valid settings structure
-        const validTopLevelKeys = [
-            'theme',
-            'stayLoggedIn', 
-            'lastUsername',
-            'mock',
-            'token',
-            'timezone',
-            'customTimezones',
-            'language',
-            'windowBounds',
-            'challengeSettings', // New schema-based system
-            'apiHeaders',
-            // Note: 'boostConfig' is intentionally omitted as it's deprecated
-        ];
-        
-        // Remove deprecated top-level settings
-        const currentKeys = Object.keys(settings);
-        const obsoleteKeys = currentKeys.filter(key => !validTopLevelKeys.includes(key));
-        
-        if (obsoleteKeys.length > 0) {
-            console.log('Removing obsolete settings:', obsoleteKeys);
-            obsoleteKeys.forEach(key => {
-                delete settings[key];
-                hasChanges = true;
-            });
+        // Remove legacy boostConfig if it still exists
+        if (settings.boostConfig) {
+            console.log('Removing legacy boostConfig');
+            delete settings.boostConfig;
+            hasChanges = true;
         }
         
         // Clean up challengeSettings structure
@@ -700,58 +669,40 @@ const cleanupObsoleteSettings = () => {
                 }
             }
             
-            // Clean up per-challenge overrides - remove invalid setting keys
+            // Clean up perChallenge overrides
             if (settings.challengeSettings.perChallenge) {
                 const validSchemaKeys = Object.keys(SETTINGS_SCHEMA);
+                const challengeIds = Object.keys(settings.challengeSettings.perChallenge);
                 
-                Object.keys(settings.challengeSettings.perChallenge).forEach(challengeId => {
+                for (const challengeId of challengeIds) {
                     const challengeOverrides = settings.challengeSettings.perChallenge[challengeId];
-                    const overrideKeys = Object.keys(challengeOverrides);
-                    const invalidOverrideKeys = overrideKeys.filter(key => !validSchemaKeys.includes(key));
+                    const invalidKeys = Object.keys(challengeOverrides).filter(key => !validSchemaKeys.includes(key));
                     
-                    if (invalidOverrideKeys.length > 0) {
-                        console.log(`Removing invalid override keys for challenge ${challengeId}:`, invalidOverrideKeys);
-                        invalidOverrideKeys.forEach(key => {
+                    if (invalidKeys.length > 0) {
+                        console.log(`Removing invalid override keys for challenge ${challengeId}:`, invalidKeys);
+                        invalidKeys.forEach(key => {
                             delete challengeOverrides[key];
                             hasChanges = true;
                         });
-                        
-                        // If challenge has no more overrides, remove the challenge entry
-                        if (Object.keys(challengeOverrides).length === 0) {
-                            delete settings.challengeSettings.perChallenge[challengeId];
-                            hasChanges = true;
-                        }
                     }
-                });
+                    
+                    // Remove empty challenge override objects
+                    if (Object.keys(challengeOverrides).length === 0) {
+                        delete settings.challengeSettings.perChallenge[challengeId];
+                        hasChanges = true;
+                    }
+                }
             }
         }
         
-        // Clean up windowBounds - ensure it has the expected structure
-        if (settings.windowBounds) {
-            const validWindowTypes = ['login', 'main'];
-            const currentWindowTypes = Object.keys(settings.windowBounds);
-            const invalidWindowTypes = currentWindowTypes.filter(type => !validWindowTypes.includes(type));
-            
-            if (invalidWindowTypes.length > 0) {
-                console.log('Removing invalid window bound types:', invalidWindowTypes);
-                invalidWindowTypes.forEach(type => {
-                    delete settings.windowBounds[type];
-                    hasChanges = true;
-                });
-            }
-        }
-        
-        // Save changes if any were made
+        // Save cleaned settings if any changes were made
         if (hasChanges) {
             console.log('Settings cleanup completed - saving cleaned settings');
-            return saveSettings(settings);
+            saveSettings(settings);
         }
-        
-        return true; // No changes needed
         
     } catch (error) {
         console.error('Error during settings cleanup:', error);
-        return false;
     }
 };
 
@@ -804,78 +755,8 @@ const SETTINGS_SCHEMA = {
     },
 };
 
-/**
- * Boost configuration helpers (legacy compatibility)
- */
-const getBoostThreshold = (challengeId) => {
-    // Use new schema-based system for boostTime setting
-    return getEffectiveSetting('boostTime', challengeId);
-};
-
-const setBoostThreshold = (challengeId, threshold) => {
-    // Use new schema-based system for boostTime setting
-    return setChallengeOverride('boostTime', challengeId.toString(), threshold);
-};
-
-const setDefaultBoostThreshold = (threshold) => {
-    // Use new schema-based system for boostTime setting
-    return setGlobalDefault('boostTime', threshold);
-};
-
-/**
- * Migration function to move existing boost configuration to new schema-based system
- * This ensures backward compatibility for users with existing boost settings
- */
-const migrateBoostConfigurationToSchema = () => {
-    try {
-        const settings = loadSettings();
-        const boostConfig = settings.boostConfig;
-        
-        if (!boostConfig || !settings.challengeSettings) {
-            return; // Nothing to migrate or already using new system
-        }
-        
-        let migrationNeeded = false;
-        
-        // Migrate default boost threshold to global default
-        if (boostConfig.defaultThreshold && boostConfig.defaultThreshold !== 3600) {
-            if (!settings.challengeSettings.globalDefaults.boostTime || 
-                settings.challengeSettings.globalDefaults.boostTime === 3600) {
-                console.log('Migrating default boost threshold to new schema:', boostConfig.defaultThreshold);
-                settings.challengeSettings.globalDefaults.boostTime = boostConfig.defaultThreshold;
-                migrationNeeded = true;
-            }
-        }
-        
-        // Migrate per-challenge boost thresholds to per-challenge overrides
-        if (boostConfig.perChallenge && Object.keys(boostConfig.perChallenge).length > 0) {
-            for (const [challengeId, threshold] of Object.entries(boostConfig.perChallenge)) {
-                if (!settings.challengeSettings.perChallenge[challengeId] || 
-                    !settings.challengeSettings.perChallenge[challengeId].boostTime) {
-                    console.log(`Migrating boost threshold for challenge ${challengeId}:`, threshold);
-                    
-                    if (!settings.challengeSettings.perChallenge[challengeId]) {
-                        settings.challengeSettings.perChallenge[challengeId] = {};
-                    }
-                    settings.challengeSettings.perChallenge[challengeId].boostTime = threshold;
-                    migrationNeeded = true;
-                }
-            }
-        }
-        
-        // Save the migrated settings if changes were made
-        if (migrationNeeded) {
-            console.log('Boost configuration migration completed - saving updated settings');
-            saveSettings(settings);
-        }
-        
-    } catch (error) {
-        console.error('Error during boost configuration migration:', error);
-    }
-};
-
 module.exports = {
-    // Legacy settings functions
+    // Core settings functions
     loadSettings,
     saveSettings,
     getSetting,
@@ -887,12 +768,7 @@ module.exports = {
     saveWindowBounds,
     getWindowBounds,
     
-    // Legacy boost configuration functions (for backward compatibility)
-    getBoostThreshold,
-    setBoostThreshold,
-    setDefaultBoostThreshold,
-    
-    // New schema-based settings functions
+    // Schema-based settings functions
     SETTINGS_SCHEMA,
     getGlobalDefault,
     setGlobalDefault,
@@ -903,5 +779,4 @@ module.exports = {
     getEffectiveSetting,
     cleanupStaleChallengeSetting,
     cleanupObsoleteSettings,
-    migrateBoostConfigurationToSchema,
 };
