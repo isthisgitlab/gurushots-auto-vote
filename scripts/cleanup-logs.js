@@ -35,12 +35,12 @@ try {
     let totalSize = 0;
     
     files.forEach(file => {
-        // Clean up old timestamped files (legacy format)
+        // Clean up old timestamped files
         if (file.startsWith('api-debug-')) {
             const filePath = path.join(logsDir, file);
             const stats = fs.statSync(filePath);
             
-            console.log(`🗑️  Deleting legacy log file: ${file} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+            console.log(`🗑️  Deleting old log file: ${file} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
             
             fs.unlinkSync(filePath);
             deletedCount++;
@@ -49,10 +49,10 @@ try {
     });
     
     if (deletedCount > 0) {
-        console.log(`✅ Cleaned up ${deletedCount} legacy log files`);
+        console.log(`✅ Cleaned up ${deletedCount} old log files`);
         console.log(`💾 Freed up ${(totalSize / 1024 / 1024).toFixed(2)} MB of disk space`);
     } else {
-        console.log('✅ No legacy log files found to clean up');
+        console.log('✅ No old log files found to clean up');
     }
     
     console.log('\n📋 Current logging structure:');
