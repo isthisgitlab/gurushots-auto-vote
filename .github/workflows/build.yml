@@ -155,18 +155,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Mock CLI app (macOS/Linux only)
-        if: matrix.platform != 'win'
-        run: npm run build:mock:${{ matrix.platform }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build Mock CLI Linux ARM app
-        if: matrix.platform == 'linux'
-        run: npm run build:mock:linux-arm
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: List CLI files
         if: matrix.platform != 'win'
         run: ls -la build/cli/
@@ -238,9 +226,9 @@ jobs:
             - **Linux**: AppImage (x64 + ARM64)
             
             ### 💻 CLI Applications
-            - **macOS**: Native CLI executables (x64)
+            - **macOS**: Native CLI executable (x64)
             - **Linux**: Native CLI executables (x64 + ARM64)
-            - **Mock Mode**: Test CLI versions available
+            - **Features**: Supports both real and mock modes via settings
             
             ### 🔧 Features
             - Automated voting on GuruShots challenges
@@ -262,11 +250,8 @@ jobs:
             artifacts/linux-builds/GuruShotsAutoVote-v*.AppImage
             artifacts/win-builds/GuruShotsAutoVote-v*.exe
             artifacts/mac-builds/cli/gurucli-mac
-            artifacts/mac-builds/cli/gurumockcli-mac
             artifacts/linux-builds/cli/gurucli-linux
             artifacts/linux-builds/cli/gurucli-linux-arm
-            artifacts/linux-builds/cli/gurumockcli-linux
-            artifacts/linux-builds/cli/gurumockcli-linux-arm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
