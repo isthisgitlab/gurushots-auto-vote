@@ -115,6 +115,7 @@
       "src/js/apiFactory.js",
       "src/js/api/**/*",
       "src/js/api/randomizer.js",
+      "src/js/ui/**/*",
       "src/js/mock/**/*",
       "src/js/services/**/*",
       "src/js/strategies/**/*",
