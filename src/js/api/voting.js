@@ -6,7 +6,7 @@
  */
 
 const {makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
-const settings = require('../settings');
+const logger = require('../logger');
 
 /**
  * Fetches images available for voting in a specific challenge
@@ -16,7 +16,8 @@ const settings = require('../settings');
  * @returns {object|null} - Response containing images to vote on, or null if request failed
  */
 const getVoteImages = async (challenge, token) => {
-    console.log(`Fetching vote images for challenge: ${challenge.title}`);
+    const operationId = `get-vote-images-${challenge.id}`;
+    logger.startOperation(operationId, `Fetching vote images for challenge ${challenge.title}`);
 
     // Request up to 100 images for voting
     const data = `limit=100&url=${challenge.url}`;
@@ -29,11 +30,11 @@ const getVoteImages = async (challenge, token) => {
 
     // Validate response contains images
     if (!response || !response.images || response.images.length === 0) {
-        console.warn(`No images available or invalid response for challenge: ${challenge.title}. Skipping.`);
+        logger.endOperation(operationId, null, 'No images available for voting');
         return null;
     }
 
-    console.log(`Fetched ${response.images.length} images for challenge: ${challenge.title}`);
+    logger.endOperation(operationId, `Retrieved ${response.images.length} images for voting`);
     return response;
 };
 
@@ -47,17 +48,19 @@ const getVoteImages = async (challenge, token) => {
  *
  * @param {object} voteImages - Object containing challenge, voting, and images data
  * @param {string} token - Authentication token
- * @param {number} exposureThreshold - Exposure threshold (default: schema default)
  * @returns {object|undefined} - API response or undefined if submission failed
  */
-const submitVotes = async (voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
+const submitVotes = async (voteImages, token) => {
     const {challenge, voting, images} = voteImages;
-
+    const operationId = `submit-votes-${challenge.id}`;
+    
     // Validate we have images to vote on
     if (!images || images.length === 0) {
-        console.warn(`No images to vote on for challenge: ${challenge.title}`);
+        logger.warning(`No images to vote on for challenge: ${challenge.title}`);
         return;
     }
+    
+    logger.startOperation(operationId, `Submitting votes for challenge ${challenge.title} (target: 100%)`);
 
     // Prepare data for vote submission
     let votedImages = '';
@@ -69,8 +72,8 @@ const submitVotes = async (voteImages, token, exposureThreshold = settings.SETTI
     // Track unique images to avoid voting for the same image twice
     const uniqueImageIds = new Set();
 
-    // Continue voting until exposure factor reaches the exposure threshold
-    while (exposure_factor < exposureThreshold) {
+    // Continue voting until exposure factor reaches 100% (always vote to 100, not just to threshold)
+    while (exposure_factor < 100) {
         // Select a random image from the available images
         const randomImage = images[Math.floor(Math.random() * images.length)];
         if (uniqueImageIds.has(randomImage.id)) continue;
@@ -80,9 +83,9 @@ const submitVotes = async (voteImages, token, exposureThreshold = settings.SETTI
         votedImages += `&image_ids[]=${encodeURIComponent(randomImage.id)}`;
         exposure_factor += randomImage.ratio;
 
-        // Break if we've used all available images but still haven't reached the exposure threshold
+        // Break if we've used all available images but still haven't reached 100%
         if (uniqueImageIds.size === images.length) {
-            console.warn(`Not enough images to reach exposure factor ${exposureThreshold} for challenge: ${challenge.title}`);
+            logger.warning(`Insufficient images to reach 100% exposure for ${challenge.title} (only ${uniqueImageIds.size} images available)`);
             break;
         }
     }
@@ -97,11 +100,11 @@ const submitVotes = async (voteImages, token, exposureThreshold = settings.SETTI
     // Submit votes to API
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/submit_vote', headers, data);
     if (!response) {
-        console.error(`Failed to submit votes for challenge: ${challenge.title}`);
+        logger.endOperation(operationId, null, 'Vote submission failed');
         return;
     }
 
-    console.log(`Votes submitted successfully for challenge: ${challenge.title}`);
+    logger.endOperation(operationId, `Votes submitted successfully (${uniqueImageIds.size} images, ~${exposure_factor.toFixed(1)}% exposure)`);
     return response;
 };
 

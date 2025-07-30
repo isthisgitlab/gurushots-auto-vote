@@ -22,8 +22,12 @@ const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
  * @returns {object|null} - Response data or null if request failed
  */
 const makePostRequest = async (url, headers, data = '') => {
-    logger.api('🌐 === API REQUEST ===', {url, headers, data});
-
+    const startTime = Date.now();
+    const endpoint = url.split('/').pop() || 'unknown';
+    
+    // Log the request with enhanced context
+    logger.apiRequest('POST', url);
+    
     try {
         const response = await axios({
             method: 'post',
@@ -33,23 +37,42 @@ const makePostRequest = async (url, headers, data = '') => {
             timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
         });
 
-        logger.api('✅ === API RESPONSE ===', {
-            status: response.status,
-            headers: response.headers,
-            data: response.data,
-        });
+        const duration = Date.now() - startTime;
+        
+        // Log successful response with timing
+        logger.apiResponse('POST', url, response.status, duration);
+        
+        // Log detailed response data only in debug mode
+        if (logger.isDevMode()) {
+            logger.api('API Response Details', {
+                endpoint,
+                status: response.status,
+                responseSize: JSON.stringify(response.data).length,
+                headers: response.headers,
+                duration: `${duration}ms`,
+            });
+        }
 
         return response.data;
     } catch (error) {
-        logger.error('❌ === API ERROR ===', {
+        const duration = Date.now() - startTime;
+        const status = error.response?.status || 'NO_RESPONSE';
+        
+        // Log failed response with timing
+        logger.apiResponse('POST', url, status, duration);
+        
+        // Log detailed error information
+        logger.error('API Request Failed', {
+            endpoint,
             url,
+            method: 'POST',
+            duration: `${duration}ms`,
             error: error.message,
-            response: error.response ? {
-                status: error.response.status,
-                data: error.response.data,
-                headers: error.response.headers,
-            } : 'No response',
+            status: error.response?.status || 'NO_RESPONSE',
+            responseData: error.response?.data || null,
+            timeout: error.code === 'ECONNABORTED',
         });
+        
         return null; // Return null instead of throwing to prevent crashing
     }
 };

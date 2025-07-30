@@ -10,6 +10,7 @@ const {getVoteImages, submitVotes} = require('./voting');
 const {applyBoost, applyBoostToEntry} = require('./boost');
 const settings = require('../settings');
 const {sleep, getRandomDelay} = require('./utils');
+const logger = require('../logger');
 
 // Global cancellation flag
 let shouldCancelVoting = false;
@@ -38,19 +39,37 @@ const setCancellationFlag = (cancel) => {
  * @returns {void}
  */
 const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
+    logger.startOperation('voting-process', 'Voting process');
+    
     try {
         // Get all active challenges
+        logger.info('🔄 Loading active challenges');
         const {challenges} = await getActiveChallenges(token);
         // Current timestamp in seconds (Unix epoch time)
         const now = Math.floor(Date.now() / 1000);
+        
+        logger.info(`📋 Found ${challenges.length} active challenges`);
+        
+        if (challenges.length === 0) {
+            logger.warning('No active challenges found');
+            logger.endOperation('voting-process', 'No challenges to process');
+            return {success: true, message: 'No active challenges found'};
+        }
 
         // Process each challenge
+        let processedCount = 0;
         for (const challenge of challenges) {
+            processedCount++;
+            
             // Check for cancellation before processing each challenge
             if (checkCancellation()) {
-                console.log('🛑 Voting cancelled by user');
+                logger.warning('🛑 Voting cancelled by user');
+                logger.endOperation('voting-process', null, 'Voting cancelled by user');
                 return {success: false, message: 'Voting cancelled by user'};
             }
+
+            // Log progress
+            logger.progress(`Processing challenge ${processedCount}/${challenges.length}: ${challenge.title}`, processedCount, challenges.length);
 
             // Get the effective exposure threshold for this challenge
             const effectiveThreshold = typeof exposureThreshold === 'function'
@@ -60,7 +79,7 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
             // Check if boost is available for this challenge
             const {boost} = challenge.member;
             if (boost.state === 'AVAILABLE' && boost.timeout) {
-                console.log(`Boost available for challenge: ${challenge.title}`);
+                logger.challengeInfo(challenge.id, challenge.title, 'Boost available');
 
                 // Get the effective boost time setting for this challenge
                 const effectiveBoostTime = settings.getEffectiveSetting('boostTime', challenge.id.toString());
@@ -72,12 +91,21 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
                     const timeDisplay = hoursRemaining > 0
                         ? `${hoursRemaining}h ${minutesRemaining % 60}m`
                         : `${minutesRemaining}m`;
-                    console.log(`Boost deadline is within ${timeDisplay} (${effectiveBoostTime / 60} minutes setting). Executing boost.`);
+                    
+                    logger.startOperation(`boost-${challenge.id}`, `Applying boost to challenge ${challenge.title}`);
+                    
                     try {
                         await applyBoost(challenge, token);
+                        logger.endOperation(`boost-${challenge.id}`, `Boost applied successfully (${timeDisplay} remaining)`);
                     } catch (error) {
-                        console.error('Error during boost process:', error.message || error);
+                        logger.endOperation(`boost-${challenge.id}`, null, error.message || error);
                     }
+                } else {
+                    const minutesRemaining = Math.floor(timeUntilDeadline / 60);
+                    const timeDisplay = minutesRemaining > 60 
+                        ? `${Math.floor(minutesRemaining / 60)}h ${minutesRemaining % 60}m`
+                        : `${minutesRemaining}m`;
+                    logger.challengeInfo(challenge.id, challenge.title, `Boost not ready - ${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`);
                 }
             }
 
@@ -108,7 +136,7 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
                     shouldVote = true;
                     voteReason = `flash type: exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
                 } else {
-                    voteReason = `flash type: exposure already at 100%`;
+                    voteReason = 'flash type: exposure already at 100%';
                 }
             } else if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
                 // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
@@ -133,51 +161,66 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
 
             // Vote on challenge if conditions are met
             if (shouldVote) {
+                logger.startOperation(`vote-${challenge.id}`, `Voting on challenge ${challenge.title}`);
+                
                 try {
                     // Check for cancellation before voting
                     if (checkCancellation()) {
-                        console.log('🛑 Voting cancelled by user during challenge processing');
+                        logger.warning('🛑 Voting cancelled by user during challenge processing');
+                        logger.endOperation('voting-process', null, 'Voting cancelled by user');
                         return {success: false, message: 'Voting cancelled by user'};
                     }
 
+                    logger.challengeInfo(challenge.id, challenge.title, `Starting voting process - ${voteReason}`);
+
                     // Get images to vote on
                     const voteImages = await getVoteImages(challenge, token);
-                    if (voteImages) {
+                    if (voteImages && voteImages.images) {
                         // Check for cancellation before submitting votes
                         if (checkCancellation()) {
-                            console.log('🛑 Voting cancelled by user before vote submission');
+                            logger.warning('🛑 Voting cancelled by user before vote submission');
+                            logger.endOperation('voting-process', null, 'Voting cancelled by user');
                             return {success: false, message: 'Voting cancelled by user'};
                         }
 
-                        // Submit votes with the effective exposure threshold
-                        await submitVotes(voteImages, token, effectiveThreshold);
+                        logger.challengeInfo(challenge.id, challenge.title, `Submitting votes for ${voteImages.images.length} images`);
+
+                        // Submit votes to 100% (always vote to 100, not just to threshold)
+                        await submitVotes(voteImages, token);
 
                         // Check for cancellation before delay
                         if (checkCancellation()) {
-                            console.log('🛑 Voting cancelled by user after vote submission');
+                            logger.warning('🛑 Voting cancelled by user after vote submission');
+                            logger.endOperation('voting-process', null, 'Voting cancelled by user');
                             return {success: false, message: 'Voting cancelled by user'};
                         }
 
+                        logger.endOperation(`vote-${challenge.id}`, 'Votes submitted successfully');
+
                         // Add random delay between challenges to mimic human behavior
-                        await sleep(getRandomDelay(2000, 5000));
+                        const delay = getRandomDelay(2000, 5000);
+                        logger.debug(`Adding ${delay}ms delay between challenges`);
+                        await sleep(delay);
+                    } else {
+                        logger.challengeError(challenge.id, challenge.title, 'No vote images available');
+                        logger.endOperation(`vote-${challenge.id}`, null, 'No vote images available');
                     }
                 } catch (error) {
-                    console.error(`Error voting on challenge: ${challenge.title}. Skipping to next challenge.`);
-                    console.error(error.message || error);
+                    logger.challengeError(challenge.id, challenge.title, `Voting failed: ${error.message || error}`);
+                    logger.endOperation(`vote-${challenge.id}`, null, error.message || error);
                 }
             } else {
                 // Log why voting was skipped
-                console.log(`Skipping voting on challenge: ${challenge.title} - ${voteReason}`);
+                logger.challengeInfo(challenge.id, challenge.title, `Skipping voting - ${voteReason}`);
             }
         }
 
-        // Format completion time using Latvian locale (24-hour format)
-        const completionTime = new Date().toLocaleTimeString('lv-LV');
-        console.log(`Voting process completed for all challenges at ${completionTime}`);
+        // Complete the voting process
+        logger.endOperation('voting-process', `All ${challenges.length} challenges processed successfully`);
 
         return {success: true, message: 'Voting process completed successfully'};
     } catch (error) {
-        console.error('Error during voting process:', error.message || error);
+        logger.endOperation('voting-process', null, error.message || error);
         return {success: false, error: error.message || 'Voting process failed'};
     }
 };

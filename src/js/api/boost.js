@@ -5,6 +5,7 @@
  */
 
 const {makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
+const logger = require('../logger');
 
 /**
  * Applies a boost to a photo in a challenge
@@ -37,7 +38,7 @@ const applyBoost = async (challenge, token) => {
     // Find a photo to boost
     const boostImageId = getFirstNonTurboKey(member.ranking.entries);
     if (!boostImageId) {
-        console.error('No non-turboed entries found for boosting.');
+        logger.error('No non-turboed entries found for boosting', {challengeId: id});
         return null;
     }
 
@@ -49,13 +50,16 @@ const applyBoost = async (challenge, token) => {
     };
 
     // Send boost request to API
+    const operationId = `apply-boost-${id}`;
+    logger.startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${id}`);
+    
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
     if (!response) {
-        console.error(`Failed to apply boost for challenge ID: ${id}`);
+        logger.endOperation(operationId, null, 'Boost application failed');
         return;
     }
 
-    console.log(`Boost applied successfully to image ID: ${boostImageId}`);
+    logger.endOperation(operationId, `Boost applied successfully to image ${boostImageId}`);
     return response;
 };
 
@@ -76,13 +80,16 @@ const applyBoostToEntry = async (challengeId, imageId, token) => {
     };
 
     // Send boost request to API
+    const operationId = `apply-boost-entry-${challengeId}-${imageId}`;
+    logger.startOperation(operationId, `Applying boost to specific entry ${imageId} in challenge ${challengeId}`);
+    
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
     if (!response) {
-        console.error(`Failed to apply boost for challenge ID: ${challengeId}, image ID: ${imageId}`);
+        logger.endOperation(operationId, null, 'Boost application to entry failed');
         return null;
     }
 
-    console.log(`Boost applied successfully to image ID: ${imageId} in challenge ${challengeId}`);
+    logger.endOperation(operationId, `Boost applied successfully to entry ${imageId}`);
     return response;
 };
 

@@ -15,28 +15,33 @@ const logger = require('../logger');
  *                   or empty challenges array if request fails
  */
 const getActiveChallenges = async (token) => {
-    logger.debug('📋 === Getting Active Challenges ===', {
-        token: token ? `${token.substring(0, 10)}...` : 'none',
+    const operationId = 'get-active-challenges';
+    logger.startOperation(operationId, 'Fetching active challenges');
+    
+    logger.debug('Requesting active challenges from API', {
+        hasToken: !!token,
+        tokenPrefix: token ? `${token.substring(0, 10)}...` : 'none',
     });
 
     const headers = createCommonHeaders(token);
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/get_my_active_challenges', headers);
 
-    logger.debug('📋 === Challenges Response ===', response);
-
     // Handle failed requests gracefully
     if (!response) {
-        logger.error('❌ Failed to fetch active challenges.');
+        logger.endOperation(operationId, null, 'API request failed');
         return {challenges: []}; // Return empty challenges to avoid crashing
     }
 
-    // Log the structure of the response
-    logger.debug('📋 === Response Structure ===', {
-        responseType: typeof response,
+    const challengeCount = response.challenges ? response.challenges.length : 0;
+    
+    // Log successful response
+    logger.debug('Active challenges response received', {
+        challengeCount,
+        hasValidStructure: !!response.challenges,
         responseKeys: Object.keys(response || {}),
-        challengesCount: response.challenges ? response.challenges.length : 'No challenges array',
     });
 
+    logger.endOperation(operationId, `Retrieved ${challengeCount} active challenges`);
     return response;
 };
 
