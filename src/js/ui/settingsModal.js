@@ -470,6 +470,10 @@ export const generateChallengeSettingsModalHtml = async (challengeId, challengeT
     // Generate challenge-specific settings inputs
     let challengeSettingsHtml = '';
     for (const [key, config] of Object.entries(schema)) {
+        // Skip settings that don't support per-challenge overrides
+        if (!config.perChallenge) {
+            continue;
+        }
         try {
             const globalValue = globalDefaults[key];
             const challengeValue = challengeSettings[key];

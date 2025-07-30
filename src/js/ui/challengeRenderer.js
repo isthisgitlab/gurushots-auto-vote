@@ -44,7 +44,11 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
         let hasCustomSettings = false;
         try {
             const schema = await window.api.getSettingsSchema();
-            for (const key of Object.keys(schema)) {
+            for (const [key, config] of Object.entries(schema)) {
+                // Only check settings that support per-challenge overrides
+                if (!config.perChallenge) {
+                    continue;
+                }
                 const override = await window.api.getChallengeOverride(key, challenge.id.toString());
                 if (override !== null) {
                     hasCustomSettings = true;
