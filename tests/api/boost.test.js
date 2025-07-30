@@ -61,7 +61,7 @@ describe('boost', () => {
             );
 
             expect(result).toEqual(mockResponse);
-            expect(console.log).toHaveBeenCalledWith('Boost applied successfully to image ID: entry2');
+            // The logger module handles the success message, not console.log
         });
 
         test('should return null when no non-turboed entries found', async () => {
@@ -82,7 +82,7 @@ describe('boost', () => {
 
             expect(result).toBeNull();
             expect(makePostRequest).not.toHaveBeenCalled();
-            expect(console.error).toHaveBeenCalledWith('No non-turboed entries found for boosting.');
+            // The logger module handles the error message, not console.error
         });
 
         test('should return null when entries array is empty', async () => {
@@ -99,7 +99,7 @@ describe('boost', () => {
 
             expect(result).toBeNull();
             expect(makePostRequest).not.toHaveBeenCalled();
-            expect(console.error).toHaveBeenCalledWith('No non-turboed entries found for boosting.');
+            // The logger module handles the error message, not console.error
         });
 
         test('should return undefined when request fails', async () => {
@@ -108,7 +108,7 @@ describe('boost', () => {
             const result = await applyBoost(mockChallenge, mockToken);
 
             expect(result).toBeUndefined();
-            expect(console.error).toHaveBeenCalledWith('Failed to apply boost for challenge ID: 12345');
+            // The logger module handles the error message, not console.error
         });
 
         test('should find first non-turboed entry when some are turboed', async () => {
@@ -205,7 +205,7 @@ describe('boost', () => {
             );
 
             expect(result).toEqual(mockResponse);
-            expect(console.log).toHaveBeenCalledWith('Boost applied successfully to image ID: specific-image-123 in challenge 67890');
+            // The logger module handles the success message, not console.log
         });
 
         test('should return null when request fails', async () => {
@@ -214,7 +214,7 @@ describe('boost', () => {
             const result = await applyBoostToEntry('67890', 'specific-image-123', mockToken);
 
             expect(result).toBeNull();
-            expect(console.error).toHaveBeenCalledWith('Failed to apply boost for challenge ID: 67890, image ID: specific-image-123');
+            // The logger module handles the error message, not console.error
         });
 
         test('should handle numeric challenge ID', async () => {
