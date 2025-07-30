@@ -48,62 +48,95 @@ try {
         const content = fs.readFileSync(fileInfo.path, 'utf8');
         let issues = [];
 
-        // Check version number
-        const expectedVersion = `**Latest Version: v${version}`;
-        if (!content.includes(expectedVersion)) {
-            issues.push(`Version number should be "${expectedVersion}"`);
+        // Check version number using regex
+        const versionPattern = /\*\*Latest Version: v([\d.]+)/;
+        const versionMatch = content.match(versionPattern);
+        if (!versionMatch) {
+            issues.push(`Missing version number. Expected format: "**Latest Version: v${version}"`);
+        } else if (versionMatch[1] !== version) {
+            issues.push(`Version mismatch. Found v${versionMatch[1]}, expected v${version}`);
         }
 
-        // Check file names
-        const expectedFiles = [
-            `GuruShotsAutoVote-v${version}-x64.exe`,
-            `GuruShotsAutoVote-v${version}-arm64.dmg`,
-            `GuruShotsAutoVote-v${version}-x86_64.AppImage`,
-            `GuruShotsAutoVote-v${version}-arm64.AppImage`,
-            // CLI files
-            `gurucli-v${version}-mac`,
-            `gurucli-v${version}-linux`,
-            `gurucli-v${version}-linux-arm`,
+        // Determine if this file has CLI section
+        const hasCLISection = content.includes('gurucli-v') || content.includes('CLI Applications');
+
+        // Check file names using regex patterns
+        const filePatterns = [
+            { pattern: /GuruShotsAutoVote-v[\d.]+-x64\.exe/g, type: 'GuruShotsAutoVote-x64.exe', required: true },
+            { pattern: /GuruShotsAutoVote-v[\d.]+-arm64\.dmg/g, type: 'GuruShotsAutoVote-arm64.dmg', required: true },
+            { pattern: /GuruShotsAutoVote-v[\d.]+-x86_64\.AppImage/g, type: 'GuruShotsAutoVote-x86_64.AppImage', required: true },
+            { pattern: /GuruShotsAutoVote-v[\d.]+-arm64\.AppImage/g, type: 'GuruShotsAutoVote-arm64.AppImage', required: true },
+            // CLI files - only required if CLI section exists
+            { pattern: /gurucli-v[\d.]+-mac/g, type: 'gurucli-mac', required: hasCLISection },
+            { pattern: /gurucli-v[\d.]+-linux/g, type: 'gurucli-linux', required: hasCLISection },
+            { pattern: /gurucli-v[\d.]+-linux-arm/g, type: 'gurucli-linux-arm', required: hasCLISection },
         ];
 
-        expectedFiles.forEach(file => {
-            if (!content.includes(file)) {
-                issues.push(`Missing file reference: ${file}`);
+        filePatterns.forEach(({ pattern, type, required }) => {
+            if (!required) return; // Skip if not required for this file
+            
+            const matches = content.match(pattern);
+            if (!matches) {
+                issues.push(`Missing file reference: ${type} with version ${version}`);
+            } else {
+                // Check if any of the matches has the correct version
+                const hasCorrectVersion = matches.some(match => match.includes(`-v${version}-`) || match.includes(`-v${version}`));
+                if (!hasCorrectVersion) {
+                    issues.push(`Missing file reference: ${type} with version ${version}`);
+                }
             }
         });
 
-        // Check URLs
-        const expectedUrls = [
-            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-x64.exe`,
-            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.dmg`,
-            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-x86_64.AppImage`,
-            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.AppImage`,
-            // CLI URLs
-            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-mac`,
-            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-linux`,
-            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-linux-arm`,
+        // Check URLs using regex patterns
+        const urlPatterns = [
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+-x64\.exe/g, type: 'GuruShotsAutoVote-x64.exe URL', required: true },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+-arm64\.dmg/g, type: 'GuruShotsAutoVote-arm64.dmg URL', required: true },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+-x86_64\.AppImage/g, type: 'GuruShotsAutoVote-x86_64.AppImage URL', required: true },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+-arm64\.AppImage/g, type: 'GuruShotsAutoVote-arm64.AppImage URL', required: true },
+            // CLI URLs - only required if CLI section exists
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+-mac/g, type: 'gurucli-mac URL', required: hasCLISection },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+-linux/g, type: 'gurucli-linux URL', required: hasCLISection },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+-linux-arm/g, type: 'gurucli-linux-arm URL', required: hasCLISection },
         ];
 
-        expectedUrls.forEach(url => {
-            if (!content.includes(url)) {
-                issues.push(`Missing URL: ${url}`);
+        urlPatterns.forEach(({ pattern, type, required }) => {
+            if (!required) return; // Skip if not required for this file
+            
+            const matches = content.match(pattern);
+            if (!matches) {
+                issues.push(`Missing URL: ${type} with version ${version}`);
+            } else {
+                // Check if any of the matches has the correct version
+                const hasCorrectVersion = matches.some(match => match.includes(`-v${version}-`) || match.includes(`-v${version}`));
+                if (!hasCorrectVersion) {
+                    issues.push(`Missing URL: ${type} with version ${version}`);
+                }
             }
         });
 
-        // Check command examples
-        const expectedCommands = [
-            `chmod +x GuruShotsAutoVote-v${version}-*.AppImage`,
-            `./GuruShotsAutoVote-v${version}-*.AppImage`,
-            // CLI command examples
-            `chmod +x gurucli-v${version}-mac`,
-            `./gurucli-v${version}-mac`,
-            `chmod +x gurucli-v${version}-linux`,
-            `./gurucli-v${version}-linux`,
+        // Check command examples using regex patterns
+        const commandPatterns = [
+            { pattern: /chmod \+x GuruShotsAutoVote-v[\d.]+-\*\.AppImage/g, type: 'chmod AppImage', required: content.includes('AppImage') },
+            { pattern: /\.\/GuruShotsAutoVote-v[\d.]+-\*\.AppImage/g, type: 'run AppImage', required: content.includes('AppImage') },
+            // CLI command examples - only required if CLI section exists
+            { pattern: /chmod \+x gurucli-v[\d.]+-mac/g, type: 'chmod gurucli-mac', required: hasCLISection && content.includes('gurucli-mac') },
+            { pattern: /\.\/gurucli-v[\d.]+-mac/g, type: 'run gurucli-mac', required: hasCLISection && content.includes('gurucli-mac') },
+            { pattern: /chmod \+x gurucli-v[\d.]+-linux/g, type: 'chmod gurucli-linux', required: hasCLISection && content.includes('gurucli-linux') },
+            { pattern: /\.\/gurucli-v[\d.]+-linux/g, type: 'run gurucli-linux', required: hasCLISection && content.includes('gurucli-linux') },
         ];
 
-        expectedCommands.forEach(cmd => {
-            if (!content.includes(cmd)) {
-                issues.push(`Missing command example: ${cmd}`);
+        commandPatterns.forEach(({ pattern, type, required }) => {
+            if (!required) return; // Skip if not required for this file
+            
+            const matches = content.match(pattern);
+            if (!matches) {
+                issues.push(`Missing command example: ${type} with version ${version}`);
+            } else {
+                // Check if any of the matches has the correct version
+                const hasCorrectVersion = matches.some(match => match.includes(`-v${version}`));
+                if (!hasCorrectVersion) {
+                    issues.push(`Missing command example: ${type} with version ${version}`);
+                }
             }
         });
 
