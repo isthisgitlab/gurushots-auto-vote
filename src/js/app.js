@@ -321,9 +321,8 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                             <p class="text-xs text-base-content/60">${challenge.welcome_message}</p>
                             <!-- Challenge Type Badges -->
                             <div class="flex gap-1 mt-1">
-                                ${challenge.type === 'speed' ? `<span class="badge badge-xs badge-error">${translationManager.t('app.fast')}</span>` :
-        challenge.type === 'default' ? `<span class="badge badge-xs badge-success">${translationManager.t('app.normal')}</span>` :
-            challenge.badge ? `<span class="badge badge-xs badge-info">${challenge.badge}</span>` : ''}
+                                ${challenge.type ? `<span class="badge badge-xs badge-warning">${challenge.type.toUpperCase()}</span>` : 
+        challenge.badge ? `<span class="badge badge-xs badge-info">${challenge.badge}</span>` : ''}
                                 ${challenge.max_photo_submits > 1 ? `<span class="badge badge-xs badge-warning">${challenge.max_photo_submits} ${translationManager.t('app.photos')}</span>` : ''}
                                 ${hasCustomSettings ? '<span class="badge badge-xs badge-accent" title="Custom settings configured">⚙️</span>' : ''}
                             </div>

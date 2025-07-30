@@ -102,6 +102,14 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
             } else if (challenge.start_time >= now) {
                 // Skip voting if challenge hasn't started yet
                 voteReason = 'challenge not started';
+            } else if (challenge.type === 'flash') {
+                // Flash type: ignore exposure threshold, boost only and vote when below 100
+                if (challenge.member.ranking.exposure.exposure_factor < 100) {
+                    shouldVote = true;
+                    voteReason = `flash type: exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
+                } else {
+                    voteReason = `flash type: exposure already at 100%`;
+                }
             } else if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
                 // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
                 voteReason = `vote-only-in-last-threshold enabled: not within last ${effectiveLastMinutes}m threshold`;

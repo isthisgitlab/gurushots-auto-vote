@@ -903,7 +903,14 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         let shouldAllowVoting = false;
         let errorMessage = '';
 
-        if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
+        if (challenge.type === 'flash') {
+            // Flash type: ignore exposure threshold, boost only and vote when below 100
+            if (challenge.member.ranking.exposure.exposure_factor >= 100) {
+                errorMessage = `Challenge "${challengeTitle}" already has 100% exposure (flash type)`;
+            } else {
+                shouldAllowVoting = true;
+            }
+        } else if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
             // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
             errorMessage = `Challenge "${challengeTitle}" voting is restricted to last ${effectiveLastMinutes} minutes only`;
         } else if (isWithinLastMinuteThreshold) {
@@ -937,8 +944,8 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
 
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
             console.log('✅ Submitting votes...');
-            // Use 100 as threshold if within lastminute threshold, otherwise use effective threshold
-            const submissionThreshold = isWithinLastMinuteThreshold ? 100 : effectiveThreshold;
+            // Use 100 as threshold if within lastminute threshold or flash type, otherwise use effective threshold
+            const submissionThreshold = (isWithinLastMinuteThreshold || challenge.type === 'flash') ? 100 : effectiveThreshold;
             await strategy.submitVotes(voteImages, userSettings.token, submissionThreshold);
             console.log('✅ Votes submitted successfully');
         } else {

@@ -115,6 +115,7 @@ const getDefaultSettings = () => {
         // Timing settings (stored in user-friendly units)
         apiTimeout: 30, // API request timeout in seconds (default: 30 seconds)
         votingInterval: 3, // Voting interval in minutes (default: 3 minutes)
+        cliCronExpression: '*/3 * * * *', // CLI cron expression (default: every 3 minutes)
         // Window position and size settings
         windowBounds: {
             login: {x: undefined, y: undefined, width: 800, height: 960},
