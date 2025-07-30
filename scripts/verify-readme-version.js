@@ -60,6 +60,10 @@ try {
             `GuruShotsAutoVote-v${version}-arm64.dmg`,
             `GuruShotsAutoVote-v${version}-x86_64.AppImage`,
             `GuruShotsAutoVote-v${version}-arm64.AppImage`,
+            // CLI files
+            `gurucli-v${version}-mac`,
+            `gurucli-v${version}-linux`,
+            `gurucli-v${version}-linux-arm`,
         ];
 
         expectedFiles.forEach(file => {
@@ -74,6 +78,10 @@ try {
             `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.dmg`,
             `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-x86_64.AppImage`,
             `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.AppImage`,
+            // CLI URLs
+            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-mac`,
+            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-linux`,
+            `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-linux-arm`,
         ];
 
         expectedUrls.forEach(url => {
@@ -86,6 +94,11 @@ try {
         const expectedCommands = [
             `chmod +x GuruShotsAutoVote-v${version}-*.AppImage`,
             `./GuruShotsAutoVote-v${version}-*.AppImage`,
+            // CLI command examples
+            `chmod +x gurucli-v${version}-mac`,
+            `./gurucli-v${version}-mac`,
+            `chmod +x gurucli-v${version}-linux`,
+            `./gurucli-v${version}-linux`,
         ];
 
         expectedCommands.forEach(cmd => {

@@ -73,6 +73,19 @@ try {
                 pattern: /GuruShotsAutoVote-v[\d.]+-arm64\.AppImage/g,
                 replacement: `GuruShotsAutoVote-v${version}-arm64.AppImage`,
             },
+            // CLI files with version
+            {
+                pattern: /gurucli-v[\d.]+-mac/g,
+                replacement: `gurucli-v${version}-mac`,
+            },
+            {
+                pattern: /gurucli-v[\d.]+-linux/g,
+                replacement: `gurucli-v${version}-linux`,
+            },
+            {
+                pattern: /gurucli-v[\d.]+-linux-arm/g,
+                replacement: `gurucli-v${version}-linux-arm`,
+            },
         ];
 
         // Apply all replacements
@@ -101,6 +114,19 @@ try {
                 pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+-arm64\.AppImage/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.AppImage`,
             },
+            // CLI file URLs
+            {
+                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+-mac/g,
+                replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-mac`,
+            },
+            {
+                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+-linux/g,
+                replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-linux`,
+            },
+            {
+                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+-linux-arm/g,
+                replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-linux-arm`,
+            },
         ];
 
         // Apply all URL replacements
@@ -123,6 +149,30 @@ try {
             content = content.replace(runPattern, `./GuruShotsAutoVote-v${version}-*.AppImage`);
             changesMade++;
         }
+        
+        // Update CLI command examples
+        const cliCommandPatterns = [
+            {
+                pattern: /gurucli-v[\d.]+-mac/g,
+                replacement: `gurucli-v${version}-mac`,
+            },
+            {
+                pattern: /gurucli-v[\d.]+-linux/g,
+                replacement: `gurucli-v${version}-linux`,
+            },
+            {
+                pattern: /gurucli-v[\d.]+-linux-arm/g,
+                replacement: `gurucli-v${version}-linux-arm`,
+            },
+        ];
+        
+        // Apply CLI command replacements
+        cliCommandPatterns.forEach(({pattern, replacement}) => {
+            if (pattern.test(content)) {
+                content = content.replace(pattern, replacement);
+                changesMade++;
+            }
+        });
 
         // Write the updated content back to file
         fs.writeFileSync(fileInfo.path, content, 'utf8');

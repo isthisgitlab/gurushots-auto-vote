@@ -1,8 +1,6 @@
 # GuruShots Auto Voter
 
-[![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/workflows/Build%20and%20Release/badge.svg)](https://github.com/isthisgitlab/gurushots-auto-vote/actions)
-[![Coverage](https://img.shields.io/badge/coverage-98.5%25-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
-[![Tests](https://img.shields.io/badge/tests-204%20passing-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
+[![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/workflows/Build%20and%20Release/badge.svg)](https://github.com/isthisgitlab/gurushots-auto-vote/actions) 
 [![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
 An Electron application for automated voting on GuruShots challenges. Features both a graphical interface and
@@ -27,11 +25,10 @@ If you find this tool helpful, consider supporting its development:
 - **Secure Login**: Safe authentication with GuruShots
 - **Remember Me**: Stay logged in across sessions
 - **Theme Support**: Light and dark mode options
-- **Mock Mode**: Test the app without real API calls
-- **Comprehensive Testing**: Extensive test suite with 98.5% coverage (204 tests)
 - **Internationalization**: Multi-language support with dynamic language selection
 - **Configurable Timeouts**: Customizable API timeout and voting interval settings
 - **Enhanced Security**: Improved token handling and reduced sensitive data exposure
+- **Mock Mode**: Test the app without real API calls
 
 ## 📥 Download & Install
 
@@ -50,19 +47,11 @@ If you find this tool helpful, consider supporting its development:
 
 #### **💻 CLI Applications (For advanced users)**
 
-| Platform              | Download                                                                                                               | Size   | Type                |
-|-----------------------|------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
-| **macOS CLI**         | [📥 gurucli-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-mac)             | ~55 MB | Terminal Executable |
-| **Linux CLI (x64)**   | [📥 gurucli-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-linux)         | ~50 MB | Terminal Executable |
-| **Linux CLI (ARM64)** | [📥 gurucli-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-linux-arm) | ~47 MB | Terminal Executable |
-
-#### **🧪 Test Mode CLI (For testing without real API calls)**
-
-| Platform                   | Download                                                                                                                       | Size   | Type                |
-|----------------------------|--------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
-| **macOS Test CLI**         | [📥 gurumockcli-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurumockcli-mac)             | ~55 MB | Terminal Executable |
-| **Linux Test CLI (x64)**   | [📥 gurumockcli-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurumockcli-linux)         | ~50 MB | Terminal Executable |
-| **Linux Test CLI (ARM64)** | [📥 gurumockcli-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurumockcli-linux-arm) | ~47 MB | Terminal Executable |
+| Platform              | Download                                                                                                                           | Size   | Type                |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
+| **macOS CLI**         | [📥 gurucli-v0.2.0-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.2.0-mac)             | ~55 MB | Terminal Executable |
+| **Linux CLI (x64)**   | [📥 gurucli-v0.2.0-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.2.0-linux)         | ~50 MB | Terminal Executable |
+| **Linux CLI (ARM64)** | [📥 gurucli-v0.2.0-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.2.0-linux-arm) | ~47 MB | Terminal Executable |
 
 ### **📋 Installation Instructions**
 
@@ -91,11 +80,11 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 **💻 For CLI users on macOS:**
 
-1. Download the `gurucli-mac` file
+1. Download the `gurucli-v0.2.0-mac` file
 2. Open Terminal
 3. Navigate to the download folder: `cd ~/Downloads`
-4. Make executable: `chmod +x gurucli-mac`
-5. Run: `./gurucli-mac`
+4. Make executable: `chmod +x gurucli-v0.2.0-mac`
+5. Run: `./gurucli-v0.2.0-mac`
 
 #### **🐧 Linux Users**
 
@@ -108,10 +97,10 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 **CLI App:**
 
-1. Download the appropriate `gurucli-linux` file
+1. Download the appropriate `gurucli-v0.2.0-linux` file
 2. Open terminal and navigate to download folder: `cd ~/Downloads`
-3. Make executable: `chmod +x gurucli-linux`
-4. Run: `./gurucli-linux`
+3. Make executable: `chmod +x gurucli-v0.2.0-linux`
+4. Run: `./gurucli-v0.2.0-linux`
 
 ### **🎯 Which Version Should I Download?**
 
@@ -119,8 +108,6 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 |-----------------|---------------------------|-------------------------------------|
 | **New Users**   | GUI App for your platform | Easiest to use, visual interface    |
 | **Power Users** | CLI App for your platform | More control, automation features   |
-| **Developers**  | CLI App + Test CLI        | Full control + testing capabilities |
-| **Testing**     | Test CLI App              | Safe testing without real API calls |
 
 ### **🔗 Alternative: Browse All Releases**
 
@@ -144,46 +131,30 @@ or [open an issue](https://github.com/isthisgitlab/gurushots-auto-vote/issues).
 
 ### **GUI Mode (Recommended for beginners)**
 
-Start the application:
-
-```bash
-npm start
-```
-
-Then follow these steps:
+Launch the application you downloaded and follow these steps:
 
 1. **Login**: Enter your GuruShots credentials
 2. **Choose Settings**: Select theme and whether to stay logged in
 3. **View Challenges**: See your active challenges and voting status
 4. **Start Voting**: Use the interface to manage your voting
 
-### **CLI Mode (For automation)**
+### **CLI Mode (For advanced users)**
+
+For CLI applications, use these commands after making the file executable:
 
 Login with your credentials:
-
-```bash
-npm run cli:login
+```
+./gurucli-v0.2.0-[platform] login
 ```
 
 Run a single voting cycle:
-
-```bash
-npm run cli:vote
+```
+./gurucli-v0.2.0-[platform] vote
 ```
 
-Start continuous voting (every 3 minutes):
-
-```bash
-npm run cli:start
+Start continuous voting:
 ```
-
-### **Testing Mode (No real API calls)**
-
-Test with mock data:
-
-```bash
-npm run mock:login
-npm run mock:start
+./gurucli-v0.2.0-[platform] start
 ```
 
 ## 🔧 Usage
@@ -192,149 +163,79 @@ npm run mock:start
 
 The GUI provides a user-friendly interface for managing your GuruShots voting:
 
-- **Login Screen**: Secure authentication with theme options
-- **Main Interface**: View challenges, monitor voting status, and manage settings
-- **Settings**: All preferences are automatically saved
+#### **Login Screen**:
+
+- **Username/Email**: Enter your GuruShots account email
+- **Password**: Enter your GuruShots account password
+- **Remember Login**: Check to save your session after closing the app
+- **Theme**: Choose between light and dark theme
+- **Language**: Choose between English and Latvian
+
+#### **Main Interface**:
+
+- **Top Bar**:
+  - **App Title**: Shows "GuruShots Auto Vote" on the left side
+  - **Mock Status**: Indicates if the app is running in mock mode
+  - **Settings Button**: Access application settings
+  - **Logout**: Sign out of current session
+
+- **Challenge List**:
+  - **Title**: Challenge name
+  - **End Time**: When the challenge will end
+  - **Exposure**: Your current exposure percentage
+  - **Status**: Voting status (Voted/Voting/Waiting)
+
+- **Challenge Details**:
+  - **Your Progress**: Current rank, exposure, and votes
+  - **Your Photos**: Your submitted photos in this challenge
+  - **Boost Status**: Whether boost is available and when it will be applied
 
 ### **CLI Commands**
 
-#### **Real API (Production)**
+For the CLI application, use these commands:
 
 Login with your credentials:
-
-```bash
-npm run cli:login
+```
+./gurucli-v0.2.0-[platform] login
 ```
 
 Run one voting cycle:
-
-```bash
-npm run cli:vote
+```
+./gurucli-v0.2.0-[platform] vote
 ```
 
 Start continuous voting:
-
-```bash
-npm run cli:start
+```
+./gurucli-v0.2.0-[platform] start
 ```
 
 Check current status:
-
-```bash
-npm run cli:status
+```
+./gurucli-v0.2.0-[platform] status
 ```
 
 Show help:
-
-```bash
-npm run cli:help
 ```
-
-#### **Mock API (Testing)**
-
-Test login (accepts any email/password):
-
-```bash
-npm run mock:login
-```
-
-Test voting cycle:
-
-```bash
-npm run mock:vote
-```
-
-Test continuous voting:
-
-```bash
-npm run mock:start
-```
-
-Check mock status:
-
-```bash
-npm run mock:status
-```
-
-Show mock help:
-
-```bash
-npm run mock:help
+./gurucli-v0.2.0-[platform] help
 ```
 
 ### **Continuous Voting**
 
 The continuous voting mode automatically runs voting cycles with dynamic interval scheduling:
 
-- **Normal Operation**: Runs every 3 minutes (configurable via `votingInterval` setting)
-- **Within Last Threshold**: Automatically switches to higher frequency (configurable via `lastThresholdCheckFrequency` setting, default: 1 minute)
+- **Normal Operation**: Runs every 3 minutes (configurable via settings)
+- **Within Last Threshold**: Automatically switches to higher frequency (default: 1 minute)
 - **Automatic Detection**: Monitors all active challenges and adjusts frequency based on their end times
-
-```bash
-npm run cli:start
-```
 
 ## 📝 Logging
 
-The application uses a split logging system with automatic retention:
-
-### **Log Files**
-
-- **`errors-YYYY-MM-DD.log`** - Error logs (30 days retention)
-- **`app-YYYY-MM-DD.log`** - General application logs (7 days retention)
-- **`api-YYYY-MM-DD.log`** - API request/response logs (dev mode only, 1 day retention)
+The application automatically logs activity to help with troubleshooting:
 
 ### **Log Locations**
 
 - **macOS**: `~/Library/Application Support/gurushots-auto-vote/logs/`
 - **Windows**: `%APPDATA%/gurushots-auto-vote/logs/`
 - **Linux**: `~/.config/gurushots-auto-vote/logs/`
-
-### **Cleanup**
-
-Clean up old log files:
-
-```bash
-npm run cleanup:logs
-```
-
-### **Development vs Production**
-
-- **Development mode**: All log types are written
-- **Production mode**: API logs are disabled to reduce disk usage
-
-### **Automatic Cleanup**
-
-The logging system includes automatic cleanup to prevent disk space issues:
-
-- **Startup cleanup**: Runs when the application starts (GUI or CLI)
-- **Periodic cleanup**: Runs every hour while the application is running
-- **Daily rotation**: Creates new log files each day with date-based naming
-- **Date-based cleanup**: Automatically deletes log files based on retention periods
-- **Size-based cleanup**: Automatically deletes log files that exceed size limits:
-    - `errors-YYYY-MM-DD.log`: 10 MB max
-    - `app-YYYY-MM-DD.log`: 50 MB max
-    - `api-YYYY-MM-DD.log`: 20 MB max
-- **Manual cleanup**: Available via `npm run cleanup:logs`
-
-**Example Output:**
-
-```
-=== Starting Continuous Voting Mode ===
-Mode: REAL API
-Stay logged in: Yes
-Scheduling voting every 3 minutes
-
---- Voting Cycle 1 ---
-Getting active challenges
-Found 3 active challenges
-Processing challenge: Street Photography
-Boost applied successfully
-Votes submitted successfully
---- Voting Cycle 1 Completed ---
-```
-
-Press `Ctrl+C` to stop continuous voting.
 
 ## ⚙️ Settings
 
@@ -344,13 +245,36 @@ The app automatically saves your preferences:
 - **Language**: Application language selection
 - **Remember Me**: Stay logged in between sessions
 - **Window Position**: Remembers where you placed the app window
-- **Authentication**: Securely stores your login token
 - **API Timeout**: Configurable timeout for API requests (1-120 seconds)
 - **Voting Interval**: Customizable interval between voting cycles (1-60 minutes)
 - **Last Threshold Check Frequency**: Dynamic check frequency when within last threshold (1-60 minutes, default: 1)
 - **Challenge Settings**: Per-challenge overrides for boost time, exposure, last minutes threshold, and check frequency
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly.
+
+### **Settings Logic: Global Defaults vs. Per-Challenge Overrides**
+
+The application uses a hierarchical settings system that gives you powerful control over how it behaves:
+
+#### **How Settings Work**
+
+- **Global Defaults**: These apply to all challenges unless overridden
+- **Per-Challenge Overrides**: Custom settings for specific challenges that take precedence over global defaults
+- **Effective Settings**: The app automatically determines which setting to use based on this hierarchy
+
+#### **Example Scenarios**
+
+- **Scenario 1**: Set global exposure to 80% but override a specific challenge to 100%
+- **Scenario 2**: Configure most challenges to vote normally, but set a few to "boost only" mode
+- **Scenario 3**: Use different last-minute thresholds for different types of challenges
+- **Scenario 4**: Apply more aggressive check frequencies to high-priority challenges
+
+#### **Benefits of This Approach**
+
+- **Flexibility**: Configure each challenge exactly how you want it
+- **Efficiency**: Set global defaults once and only override when needed
+- **Strategic Control**: Optimize your voting strategy for each challenge type
+- **Time-Saving**: No need to reconfigure settings for every new challenge
 
 ## ⏰ Last Minutes Threshold
 
@@ -374,11 +298,18 @@ You can set the Last Minutes Threshold in the app settings:
 
 ### **Example Scenarios**
 
-- **Challenge ends in 20 minutes**: If your threshold is 30 minutes, the app will vote regardless of exposure
-- **Challenge ends in 45 minutes**: Normal exposure threshold rules apply
-- **Challenge ends in 5 minutes**: App will vote if exposure < 100%
+- **Competitive Challenge**: Set a longer threshold (30-60 minutes) to ensure maximum exposure
+- **Less Important Challenge**: Use a shorter threshold (5-10 minutes) to conserve votes
+- **High-Value Challenge**: Set to 30+ minutes to maximize your chances of ranking well
+- **Multiple Challenges Ending**: Different thresholds help prioritize which challenges get votes first
+- **Strategic Voting**: Combine with exposure settings to control voting patterns throughout the challenge
 
-This feature is particularly useful for challenges where you want to maximize your final ranking in the closing minutes.
+### **Use Cases**
+
+- **Final Push**: Ensure you reach 100% exposure before a challenge ends
+- **Vote Conservation**: Only use votes when they matter most (near the end)
+- **Ranking Optimization**: Maximize your final position by voting aggressively in final minutes
+- **Time Management**: Automatically adjust voting behavior as deadlines approach
 
 ## 🎯 Vote Only in Last Threshold
 
@@ -389,7 +320,6 @@ The Vote Only in Last Threshold feature allows you to restrict auto-voting to on
 - **Default Setting**: Disabled (auto-vote normally)
 - **When Enabled**: Auto-vote will only vote when within the last minutes threshold
 - **Boost Mode Respect**: Still respects the boost-only mode setting
-- **Manual Voting**: Manual voting is also restricted when this setting is enabled
 
 ### **Configuration**
 
@@ -401,19 +331,19 @@ You can configure this setting in the app:
 
 ### **Example Scenarios**
 
-- **Setting Enabled, Challenge ends in 1 hour**: Auto-vote skips voting (not within last threshold)
-- **Setting Enabled, Challenge ends in 15 minutes**: Auto-vote votes if exposure < 100% (within last threshold)
-- **Setting Disabled**: Normal auto-vote behavior applies
-- **Boost-only Mode + This Setting**: Only boost actions, no voting regardless of threshold
+- **Vote Conservation**: Enable for all challenges to only vote in the final minutes
+- **Mixed Strategy**: Enable for some challenges but not others based on importance
+- **Boost + Last Minutes**: Configure to only apply boosts and only vote in last minutes
+- **Seasonal Challenges**: Enable during busy periods when you're in many challenges
+- **Ranking-Critical Challenges**: Disable for challenges where you want consistent voting throughout
 
 ### **Use Cases**
 
-- **Vote Conservation**: Save votes for the most critical moments
-- **Strategic Timing**: Focus voting efforts in the final minutes
-- **Resource Management**: Reduce API calls and voting activity
-- **Competitive Edge**: Maximize impact in the closing moments
-
-This feature is particularly useful for users who want to be more strategic about when they vote, especially in competitive challenges where vote timing can make a significant difference.
+- **Limited Time**: When you can't check the app frequently and want to focus votes
+- **Vote Economy**: When you want to maximize the impact of your limited votes
+- **Strategic Timing**: When you believe late voting has more impact on rankings
+- **Multiple Challenges**: When you're in many challenges and need to prioritize
+- **Competition Strategy**: When you want to surprise competitors with a late surge
 
 ## ⚡ Last Threshold Check Frequency
 
@@ -434,8 +364,6 @@ You can configure this setting in the app:
 - **Global Default**: Set a default frequency for all challenges
 - **Per-Challenge Override**: Set different frequencies for specific challenges
 - **Range**: 0-60 minutes (0 = disabled, recommended: 1-5 minutes for last threshold)
-- **Combination**: Works with other settings like last minutes threshold and vote-only-in-last-threshold
-- **Disable Feature**: Set to 0 to disable the feature and use normal voting interval
 
 ### **Example Scenarios**
 
@@ -452,85 +380,41 @@ You can configure this setting in the app:
 - **Resource Optimization**: Balance between responsiveness and API usage
 - **Strategic Advantage**: Ensure votes are cast at optimal times
 
-This feature is particularly useful for competitive challenges where every minute counts and you want to maximize your final ranking.
-
 ## 🌍 Internationalization
 
-The application now supports multiple languages with dynamic language selection:
+The application supports multiple languages with dynamic language selection:
 
 - **Dynamic Language Switching**: Change languages on-the-fly without restarting
-- **Translation Keys**: Organized translation structure for better maintainability
-- **Language Dropdown**: Easy language selection in the UI
-- **Supported Languages**: English (default), with framework for additional languages
+- **Supported Languages**: English (default) and Latvian
 
 ### **Language Selection**
 
 You can change the application language through the settings interface. The language preference is automatically saved and restored on subsequent sessions.
-
-## ⏱️ Configurable Timeouts
-
-The application now includes configurable timing settings for better control over API interactions:
-
-- **API Timeout**: Configurable timeout for API requests (1-120 seconds, default: 30)
-- **Voting Interval**: Customizable interval between voting cycles (1-60 minutes, default: 3)
-- **Validation**: Built-in validation for timing settings
-- **User-Friendly Units**: Settings stored in human-readable units
-
-### **Timeout Configuration**
-
-These settings can be configured through the application settings interface and are automatically validated to ensure they remain within acceptable ranges.
-
-## 🔒 Enhanced Security
-
-Recent security improvements include:
-
-- **Reduced Token Exposure**: Minimized sensitive data in logs and debug output
-- **Boolean Token Checks**: Replaced token substring logging with boolean checks
-- **Improved Token Masking**: Enhanced token masking in CLI output
-- **Secure Debug Output**: Removed full token logging from API factory debug
-
-These improvements help protect your authentication tokens while maintaining the functionality needed for debugging and development.
 
 ## 🔍 Troubleshooting
 
 ### **Common Issues**
 
 **"No authentication token found"**
-
-```bash
-npm run cli:login
-```
+- Try logging in again through the login screen
 
 **"Network Error"**
-
 - Check your internet connection
 - Try again later
 
 **"Token expired"**
-
-```bash
-npm run cli:login
-```
+- Log in again through the login screen
 
 **Windows open off-screen**
-
-```bash
-npm run cli:reset-windows
-```
+- Restart the application
+- If using CLI, run the reset-windows command
 
 ### **Get Help**
 
-Check current status:
-
-```bash
-npm run cli:status
-```
-
-Show help:
-
-```bash
-npm run cli:help
-```
+If you're having issues:
+1. Check the logs in the locations mentioned above
+2. Try restarting the application
+3. Open an issue on GitHub with details about your problem
 
 ## 🔒 Security
 
@@ -538,153 +422,6 @@ npm run cli:help
 - Credentials are never logged
 - Tokens are stored locally and securely
 - No sensitive information is exposed in error messages
-
-## 🧪 Testing & Coverage
-
-This project includes a comprehensive test suite to ensure reliability and quality.
-
-### **Running Tests**
-
-Run all tests:
-
-```bash
-npm test
-```
-
-Run tests in watch mode (for development):
-
-```bash
-npm run test:watch
-```
-
-Run tests with coverage report:
-
-```bash
-npm run test:coverage
-```
-
-### **Test Coverage**
-
-Our test suite achieves excellent coverage across core components:
-
-| Component      | Statements | Branches | Functions | Lines  |
-|----------------|------------|----------|-----------|--------|
-| **Overall**    | 98.5%      | 92.85%   | 100%      | 98.48% |
-| API Factory    | 100%       | 100%     | 100%      | 100%   |
-| API Client     | 95.83%     | 81.81%   | 100%      | 95.83% |
-| Boost          | 100%       | 100%     | 100%      | 100%   |
-| Challenges     | 100%       | 87.5%    | 100%      | 100%   |
-| Login          | 100%       | 100%     | 100%      | 100%   |
-| Voting         | 95.45%     | 93.33%   | 100%      | 95.23% |
-| Strategies     | 100%       | 100%     | 100%      | 100%   |
-
-**Note**: The few uncovered lines are primarily error handling edge cases and debug logging that are difficult to test in isolation.
-
-### **What's Tested**
-
-- ✅ **API Layer**: HTTP client, authentication, challenges, voting, boost functionality
-- ✅ **Strategy Pattern**: Mock and real API implementations
-- ✅ **Error Handling**: Network failures, invalid responses, authentication errors
-- ✅ **Mock System**: Simulated API responses for testing and development
-- ✅ **Edge Cases**: Empty data, null responses, malformed inputs
-- ✅ **Last Minutes Threshold**: Time-based voting logic, threshold calculations, per-challenge overrides
-- ✅ **Internationalization**: Translation system, language switching, dynamic content
-- ✅ **Security Features**: Token handling, reduced exposure, boolean checks
-- ✅ **Configurable Settings**: Timeout validation, voting interval management
-
-### **Mock Testing**
-
-All tests use mocked HTTP requests to ensure:
-
-- **No real API calls** during testing
-- **Fast test execution** (no network dependencies)
-- **Predictable results** for reliable CI/CD
-- **Safe testing** without affecting your GuruShots account
-
-### **Continuous Integration**
-
-Tests run automatically on every push and pull request:
-
-- **Linting** ensures code quality standards
-- **Unit tests** verify individual component functionality
-- **Coverage reports** maintain quality thresholds
-- **Build verification** ensures deployable artifacts
-
-## 📦 Installation (From Source)
-
-### **From Source (Developers)**
-
-If you want to build from source or contribute:
-
-Clone the repository:
-
-```bash
-git clone https://github.com/isthisgitlab/gurushots-auto-vote.git
-cd gurushots-auto-vote
-```
-
-Install dependencies:
-
-```bash
-npm install
-```
-
-Run tests to verify setup:
-
-```bash
-npm test
-```
-
-Start the application in development mode:
-
-```bash
-npm run dev
-```
-
-**Requirements:**
-
-- Node.js 18.14.0+ or 20.0.0+ or 22.0.0+ (recommended: 22.x)
-- npm 8.0.0+
-
-### **Development Commands**
-
-Development:
-
-```bash
-npm run dev
-npm start
-npm run watch:css
-```
-
-Testing:
-
-```bash
-npm test
-npm run test:watch
-npm run test:coverage
-```
-
-Building:
-
-```bash
-npm run build:css
-npm run build
-npm run build:all
-```
-
-Linting:
-
-```bash
-npm run lint
-npm run lint:fix
-```
-
-Utilities:
-
-```bash
-npm run cleanup:logs
-npm run cli:help
-```
 
 ## 📄 License
 
@@ -695,9 +432,7 @@ This project is licensed under the ISC License.
 For issues and questions:
 
 1. Check the troubleshooting section above
-2. Use the help commands: `npm run cli:help`
-3. Check status: `npm run cli:status`
-4. Open an issue on GitHub
+2. Open an issue on GitHub
 
 ---
 

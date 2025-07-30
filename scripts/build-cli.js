@@ -4,11 +4,13 @@ const { build } = require('esbuild');
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const packageJson = require('../package.json');
+const version = packageJson.version;
 
 const platforms = [
-    { target: 'node22-macos-arm64', output: 'gurucli-mac' },
-    { target: 'node22-linux-x64', output: 'gurucli-linux' },
-    { target: 'node22-linux-arm64', output: 'gurucli-linux-arm' },
+    { target: 'node22-macos-arm64', input: 'gurucli-mac', output: `gurucli-v${version}-mac` },
+    { target: 'node22-linux-x64', input: 'gurucli-linux', output: `gurucli-v${version}-linux` },
+    { target: 'node22-linux-arm64', input: 'gurucli-linux-arm', output: `gurucli-v${version}-linux-arm` },
 ];
 
 async function buildCliForPlatform(target, outputName) {
@@ -60,7 +62,7 @@ async function buildCli(platform = null) {
     
         // Build for specific platform or all platforms
         if (platform) {
-            const targetPlatform = platforms.find(p => p.output === platform);
+            const targetPlatform = platforms.find(p => p.input === platform);
             if (targetPlatform) {
                 await buildCliForPlatform(targetPlatform.target, targetPlatform.output);
             } else {
