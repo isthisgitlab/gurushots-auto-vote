@@ -49,7 +49,7 @@ try {
         let issues = [];
 
         // Check version number using regex
-        const versionPattern = /\*\*Latest Version: v([\d.]+)/;
+        const versionPattern = /\*\*Latest Version: v([\d.]+(?:-[a-zA-Z0-9.]+)?)/;
         const versionMatch = content.match(versionPattern);
         if (!versionMatch) {
             issues.push(`Missing version number. Expected format: "**Latest Version: v${version}"`);
@@ -62,14 +62,14 @@ try {
 
         // Check file names using regex patterns
         const filePatterns = [
-            { pattern: /GuruShotsAutoVote-v[\d.]+-x64\.exe/g, type: 'GuruShotsAutoVote-x64.exe', required: true },
-            { pattern: /GuruShotsAutoVote-v[\d.]+-arm64\.dmg/g, type: 'GuruShotsAutoVote-arm64.dmg', required: true },
-            { pattern: /GuruShotsAutoVote-v[\d.]+-x86_64\.AppImage/g, type: 'GuruShotsAutoVote-x86_64.AppImage', required: true },
-            { pattern: /GuruShotsAutoVote-v[\d.]+-arm64\.AppImage/g, type: 'GuruShotsAutoVote-arm64.AppImage', required: true },
+            { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x64\.exe/g, type: 'GuruShotsAutoVote-x64.exe', required: true },
+            { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.dmg/g, type: 'GuruShotsAutoVote-arm64.dmg', required: true },
+            { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x86_64\.AppImage/g, type: 'GuruShotsAutoVote-x86_64.AppImage', required: true },
+            { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.AppImage/g, type: 'GuruShotsAutoVote-arm64.AppImage', required: true },
             // CLI files - only required if CLI section exists
-            { pattern: /gurucli-v[\d.]+-mac/g, type: 'gurucli-mac', required: hasCLISection },
-            { pattern: /gurucli-v[\d.]+-linux/g, type: 'gurucli-linux', required: hasCLISection },
-            { pattern: /gurucli-v[\d.]+-linux-arm/g, type: 'gurucli-linux-arm', required: hasCLISection },
+            { pattern: /gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-mac/g, type: 'gurucli-mac', required: hasCLISection },
+            { pattern: /gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux/g, type: 'gurucli-linux', required: hasCLISection },
+            { pattern: /gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux-arm/g, type: 'gurucli-linux-arm', required: hasCLISection },
         ];
 
         filePatterns.forEach(({ pattern, type, required }) => {
@@ -89,14 +89,14 @@ try {
 
         // Check URLs using regex patterns
         const urlPatterns = [
-            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+-x64\.exe/g, type: 'GuruShotsAutoVote-x64.exe URL', required: true },
-            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+-arm64\.dmg/g, type: 'GuruShotsAutoVote-arm64.dmg URL', required: true },
-            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+-x86_64\.AppImage/g, type: 'GuruShotsAutoVote-x86_64.AppImage URL', required: true },
-            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+-arm64\.AppImage/g, type: 'GuruShotsAutoVote-arm64.AppImage URL', required: true },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x64\.exe/g, type: 'GuruShotsAutoVote-x64.exe URL', required: true },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.dmg/g, type: 'GuruShotsAutoVote-arm64.dmg URL', required: true },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x86_64\.AppImage/g, type: 'GuruShotsAutoVote-x86_64.AppImage URL', required: true },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.AppImage/g, type: 'GuruShotsAutoVote-arm64.AppImage URL', required: true },
             // CLI URLs - only required if CLI section exists
-            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+-mac/g, type: 'gurucli-mac URL', required: hasCLISection },
-            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+-linux/g, type: 'gurucli-linux URL', required: hasCLISection },
-            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+-linux-arm/g, type: 'gurucli-linux-arm URL', required: hasCLISection },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-mac/g, type: 'gurucli-mac URL', required: hasCLISection },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux/g, type: 'gurucli-linux URL', required: hasCLISection },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux-arm/g, type: 'gurucli-linux-arm URL', required: hasCLISection },
         ];
 
         urlPatterns.forEach(({ pattern, type, required }) => {
@@ -116,13 +116,13 @@ try {
 
         // Check command examples using regex patterns
         const commandPatterns = [
-            { pattern: /chmod \+x GuruShotsAutoVote-v[\d.]+-\*\.AppImage/g, type: 'chmod AppImage', required: content.includes('AppImage') },
-            { pattern: /\.\/GuruShotsAutoVote-v[\d.]+-\*\.AppImage/g, type: 'run AppImage', required: content.includes('AppImage') },
+            { pattern: /chmod \+x GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-\*\.AppImage/g, type: 'chmod AppImage', required: content.includes('AppImage') },
+            { pattern: /\.\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-\*\.AppImage/g, type: 'run AppImage', required: content.includes('AppImage') },
             // CLI command examples - only required if CLI section exists
-            { pattern: /chmod \+x gurucli-v[\d.]+-mac/g, type: 'chmod gurucli-mac', required: hasCLISection && content.includes('gurucli-mac') },
-            { pattern: /\.\/gurucli-v[\d.]+-mac/g, type: 'run gurucli-mac', required: hasCLISection && content.includes('gurucli-mac') },
-            { pattern: /chmod \+x gurucli-v[\d.]+-linux/g, type: 'chmod gurucli-linux', required: hasCLISection && content.includes('gurucli-linux') },
-            { pattern: /\.\/gurucli-v[\d.]+-linux/g, type: 'run gurucli-linux', required: hasCLISection && content.includes('gurucli-linux') },
+            { pattern: /chmod \+x gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-mac/g, type: 'chmod gurucli-mac', required: hasCLISection && content.includes('gurucli-mac') },
+            { pattern: /\.\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-mac/g, type: 'run gurucli-mac', required: hasCLISection && content.includes('gurucli-mac') },
+            { pattern: /chmod \+x gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux/g, type: 'chmod gurucli-linux', required: hasCLISection && content.includes('gurucli-linux') },
+            { pattern: /\.\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux/g, type: 'run gurucli-linux', required: hasCLISection && content.includes('gurucli-linux') },
         ];
 
         commandPatterns.forEach(({ pattern, type, required }) => {
