@@ -1,10 +1,13 @@
 // Import all UI modules
 import { updateTranslations, updateSettingsDisplay } from './ui/translations.js';
+// Removed unused imports: formatTimeRemaining, formatEndTime, getBoostStatus, getTurboStatus, renderChallenges
 import { loadChallenges } from './ui/challengeLoader.js';
 import { generateSettingsModalHtml, initializeSettingsModal, generateChallengeSettingsModalHtml, initializeChallengeSettingsModal } from './ui/settingsModal.js';
 import { initializeAutovote } from './ui/autovote.js';
 import { initializeBoostEntry } from './ui/boostEntry.js';
 import { initializeUpdateDialog } from './ui/updateDialog.js';
+
+// Removed unused variable: translationManager
 
 // Global function to open settings modal
 window.openSettingsModal = async () => {
@@ -30,19 +33,14 @@ window.openSettingsModal = async () => {
             }
         }
 
-        // Get current challenges for per-challenge overrides
-        const settings = await window.api.getSettings();
-        const result = await window.api.getActiveChallenges(settings.token);
-        const challenges = result?.challenges || [];
-
-        // Create modal HTML
-        const modalHtml = await generateSettingsModalHtml(schema, globalDefaults, challenges);
+        // Create modal HTML (challenges not needed for main settings modal)
+        const modalHtml = await generateSettingsModalHtml(schema, globalDefaults, []);
 
         // Add modal to page
         document.body.insertAdjacentHTML('beforeend', modalHtml);
 
         // Initialize modal event handlers
-        initializeSettingsModal(schema);
+        initializeSettingsModal(schema, []);
 
     } catch (error) {
         console.error('Error opening settings modal:', error);
