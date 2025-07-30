@@ -6,11 +6,11 @@
  * This script provides a command-line interface for the GuruShots Auto Voter.
  * It can run in two modes:
  * 1. Single execution mode: Run once and exit
- * 2. Continuous mode: Run with cron scheduling every 3 minutes
+ * 2. Continuous mode: Run with configurable cron scheduling
  *
  * The application:
  * 1. Runs immediately on startup to process current challenges
- * 2. Sets up a cron job to run every 3 minutes to continue voting
+ * 2. Sets up a cron job to run on a configurable schedule to continue voting
  * 3. Keeps track of voting attempts with a counter
  *
  * The CLI automatically detects and uses the mock setting from the GUI,
@@ -28,6 +28,7 @@ const readline = require('readline');
 // Import the API factory (CLI respects the mock setting from GUI)
 const {getMiddleware} = require('../apiFactory');
 const settings = require('../settings');
+const {getDefaultSettings} = require('../settings');
 
 // Get the middleware instance - but don't destructure methods at module level
 const getMiddlewareInstance = () => getMiddleware();
@@ -88,7 +89,7 @@ Usage: node cli.js <command>
 Commands:
   login    - Authenticate with GuruShots and save token
   vote     - Start the voting process (requires authentication)
-  start    - Start continuous voting with cron scheduling (every 3 minutes)
+  start    - Start continuous voting with cron scheduling
   stop     - Stop continuous voting (if running)
   status   - Show current status and settings
   reset-windows  - Reset window positions to default
@@ -102,6 +103,8 @@ Examples:
 
 Note: You must login first before you can vote.
       The 'start' command will run continuously until stopped.
+      Cron expression can be configured via settings CLI (default: ${getDefaultSettings().cliCronExpression}).
+      Use 'npm run settings:get cliCronExpression' to view, 'npm run settings:set cliCronExpression "*/5 * * * *"' to change.
       Current mode: ${isMockMode ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}
     `);
 };
@@ -242,8 +245,11 @@ const startContinuousVoting = async () => {
     console.log('🚀 Running initial voting cycle...');
     await runVotingCycle(++cycleCount);
 
-    // Set up cron job to run every 3 minutes
-    const cronJob = cron.schedule('*/3 * * * *', async () => {
+    // Get cron expression from CLI-specific setting
+    const cronExpression = settings.getSetting('cliCronExpression') || getDefaultSettings().cliCronExpression;
+    
+    // Set up cron job using the setting
+    const cronJob = cron.schedule(cronExpression, async () => {
         if (!isRunning) {
             cronJob.stop();
             return;
@@ -260,7 +266,8 @@ const startContinuousVoting = async () => {
 
     // Start the cron job
     cronJob.start();
-    console.log('⏰ Continuous voting started. Press Ctrl+C to stop.');
+    console.log(`⏰ Continuous voting started with cron expression: ${cronExpression}`);
+    console.log('Press Ctrl+C to stop.');
 
     // Keep the process running
     process.stdin.resume();
@@ -287,8 +294,9 @@ const showStatus = () => {
     console.log(`  Theme: ${userSettings.theme || 'default'}`);
     console.log(`  Language: ${userSettings.language || 'en'}`);
     console.log(`  Timezone: ${userSettings.timezone || 'local'}`);
-    console.log(`  API Timeout: ${userSettings.apiTimeout || 30000}ms`);
-    console.log(`  Voting Interval: ${userSettings.votingInterval || 3000}ms`);
+    console.log(`  API Timeout: ${userSettings.apiTimeout || getDefaultSettings().apiTimeout}s`);
+    console.log(`  Voting Interval: ${userSettings.votingInterval || getDefaultSettings().votingInterval}min`);
+    console.log(`  CLI Cron Expression: ${userSettings.cliCronExpression || getDefaultSettings().cliCronExpression}`);
     
     // Show challenge settings if any exist
     if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {

@@ -25,7 +25,7 @@ const generateMockChallenges = () => {
                 votes: 259120,
                 max_photo_submits: 4,
                 badge: 'speed',
-                type: 'default',
+                type: 'flash',
                 tags: ['special 4 pic', 'Comm', 'Exposure', 'Turbo'],
                 vote_minimum_players: 200,
                 prizes_worth: 3500,
