@@ -17,7 +17,6 @@ export const initializeAutovote = () => {
     let autovoteInterval = null;
     let autoRefreshInterval = null;
     let singleVoteRunning = false;
-    let shouldCancelVoting = false;
 
     const updateAutovoteStatus = (status, badgeClass = 'badge-neutral') => {
         // Translate status if it's a known key
