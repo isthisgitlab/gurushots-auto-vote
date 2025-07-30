@@ -239,6 +239,8 @@ The application automatically logs activity to help with troubleshooting:
 
 ## ⚙️ Settings
 
+> **⚠️ Important**: Changing settings while auto-vote is running will stop the voting process. You will need to manually restart auto-vote after applying your new settings.
+
 The app automatically saves your preferences:
 
 - **Theme**: Light or dark mode
