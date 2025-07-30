@@ -1,6 +1,3 @@
-// Import updateTranslations function
-import { updateTranslations } from './translations.js';
-
 const translationManager = window.translationManager;
 
 export const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => {
@@ -313,7 +310,7 @@ const generateInputHtml = (key, config, value, challengeId = '', hasOverride = f
         }
 
         const inputId = challengeId ? `${key}-${challengeId}` : `global-${key}`;
-        const inputClass = hasOverride ? 'input-warning' : '';
+        const inputClass = hasOverride ? 'input-error' : '';
 
         // Handle undefined/null values
         if (value === undefined || value === null) {
@@ -382,7 +379,7 @@ export const initializeSettingsModal = (schema) => {
         if (input) {
             input.addEventListener('change', () => {
                 // Mark as modified
-                input.classList.add('input-warning');
+                input.classList.add('input-error');
             });
         }
     }
@@ -393,101 +390,59 @@ const initializeUISettingsHandlers = () => {
     // Theme toggle
     const themeToggle = document.getElementById('modal-theme-toggle');
     if (themeToggle) {
-        themeToggle.addEventListener('change', async () => {
-            const theme = themeToggle.checked ? 'dark' : 'light';
-            await window.api.setSetting('theme', theme);
-            document.documentElement.setAttribute('data-theme', theme);
+        themeToggle.addEventListener('change', () => {
+            // Mark as modified - don't auto-save
+            themeToggle.classList.add('input-error');
         });
     }
 
     // Language select
     const languageSelect = document.getElementById('modal-language-select');
     if (languageSelect) {
-        languageSelect.addEventListener('change', async () => {
-            const language = languageSelect.value;
-            await window.api.setSetting('language', language);
-            translationManager.setLanguage(language);
-            updateTranslations();
+        languageSelect.addEventListener('change', () => {
+            // Mark as modified - don't auto-save
+            languageSelect.classList.add('input-error');
         });
     }
 
     // Timezone select
     const timezoneSelect = document.getElementById('modal-timezone-select');
     if (timezoneSelect) {
-        timezoneSelect.addEventListener('change', async () => {
-            const timezone = timezoneSelect.value;
-            await window.api.setSetting('timezone', timezone);
+        timezoneSelect.addEventListener('change', () => {
+            // Mark as modified - don't auto-save
+            timezoneSelect.classList.add('input-error');
         });
     }
 
     // Stay logged in
     const stayLoggedIn = document.getElementById('modal-stay-logged-in');
     if (stayLoggedIn) {
-        stayLoggedIn.addEventListener('change', async () => {
-            await window.api.setSetting('stayLoggedIn', stayLoggedIn.checked);
+        stayLoggedIn.addEventListener('change', () => {
+            // Mark as modified - don't auto-save
+            stayLoggedIn.classList.add('input-error');
         });
     }
 
     // API timeout
     const apiTimeout = document.getElementById('modal-api-timeout');
     if (apiTimeout) {
-        apiTimeout.addEventListener('change', async () => {
-            await window.api.setSetting('apiTimeout', parseInt(apiTimeout.value));
+        apiTimeout.addEventListener('change', () => {
+            // Mark as modified - don't auto-save
+            apiTimeout.classList.add('input-error');
         });
     }
 
     // Voting interval
     const votingInterval = document.getElementById('modal-voting-interval');
     if (votingInterval) {
-        votingInterval.addEventListener('change', async () => {
-            await window.api.setSetting('votingInterval', parseInt(votingInterval.value));
+        votingInterval.addEventListener('change', () => {
+            // Mark as modified - don't auto-save
+            votingInterval.classList.add('input-error');
         });
     }
 };
 
-// Function to save UI settings
-export const saveUISettings = async () => {
-    try {
-        // Save all UI settings
-        const themeToggle = document.getElementById('modal-theme-toggle');
-        const languageSelect = document.getElementById('modal-language-select');
-        const timezoneSelect = document.getElementById('modal-timezone-select');
-        const stayLoggedIn = document.getElementById('modal-stay-logged-in');
-        const apiTimeout = document.getElementById('modal-api-timeout');
-        const votingInterval = document.getElementById('modal-voting-interval');
 
-        if (themeToggle) {
-            await window.api.setSetting('theme', themeToggle.checked ? 'dark' : 'light');
-        }
-        if (languageSelect) {
-            await window.api.setSetting('language', languageSelect.value);
-        }
-        if (timezoneSelect) {
-            await window.api.setSetting('timezone', timezoneSelect.value);
-        }
-        if (stayLoggedIn) {
-            await window.api.setSetting('stayLoggedIn', stayLoggedIn.checked);
-        }
-        if (apiTimeout) {
-            await window.api.setSetting('apiTimeout', parseInt(apiTimeout.value));
-        }
-        if (votingInterval) {
-            await window.api.setSetting('votingInterval', parseInt(votingInterval.value));
-        }
-
-        // Close modal
-        closeSettingsModal();
-        
-        // Refresh UI
-        const settings = await window.api.getSettings();
-        updateSettingsDisplay(settings);
-        updateTranslations();
-
-    } catch (error) {
-        console.error('Error saving UI settings:', error);
-        alert('Failed to save settings. Check console for details.');
-    }
-};
 
 // Function to close settings modal
 export const closeSettingsModal = () => {
@@ -622,7 +577,7 @@ export const initializeChallengeSettingsModal = (schema, challengeId) => {
         if (input) {
             input.addEventListener('change', () => {
                 // Mark as modified
-                input.classList.add('input-warning');
+                input.classList.add('input-error');
             });
         }
     }

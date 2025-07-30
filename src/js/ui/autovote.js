@@ -9,7 +9,6 @@ export const initializeAutovote = () => {
     const autovoteLastRun = document.getElementById('autovote-last-run');
     const autovoteCycles = document.getElementById('autovote-cycles');
     const refreshBtn = document.getElementById('refresh-challenges');
-    const timezoneSelect = document.getElementById('timezone-select');
 
     // State variables
     let autovoteRunning = false;
@@ -148,12 +147,33 @@ export const initializeAutovote = () => {
             const useLastThreshold = lastThresholdFrequency > 0;
             
             let votingIntervalMs;
+            let useLastThresholdInterval = false;
+            
             if (useLastThreshold) {
+                // Check if any challenges are within the last minutes threshold
+                const settings = await window.api.getSettings();
+                const result = await window.api.getActiveChallenges(settings.token);
+                const challenges = result?.challenges || [];
+                const now = Math.floor(Date.now() / 1000);
+                
+                for (const challenge of challenges) {
+                    const effectiveLastMinutes = await window.api.getEffectiveSetting('lastMinutes', challenge.id.toString());
+                    const timeUntilEnd = challenge.close_time - now;
+                    const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+                    
+                    if (isWithinLastMinuteThreshold) {
+                        useLastThresholdInterval = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (useLastThresholdInterval) {
                 votingIntervalMs = lastThresholdFrequency * 60000;
-                console.log(`⏰ Using last threshold interval: ${lastThresholdFrequency} minutes`);
+                console.log(`⏰ Using last threshold interval: ${lastThresholdFrequency} minutes (challenge within threshold)`);
             } else {
                 votingIntervalMs = settings.votingInterval * 60000;
-                console.log(`⏰ Using normal voting interval: ${settings.votingInterval} minutes (last threshold disabled)`);
+                console.log(`⏰ Using normal voting interval: ${settings.votingInterval} minutes`);
             }
             
             // Clear existing interval if any
@@ -174,7 +194,7 @@ export const initializeAutovote = () => {
             }, votingIntervalMs);
 
             console.log('=== Auto Vote Started ===');
-            console.log(`Scheduling voting every ${useLastThreshold ? lastThresholdFrequency : settings.votingInterval} minutes`);
+            console.log(`Scheduling voting every ${useLastThresholdInterval ? lastThresholdFrequency : settings.votingInterval} minutes`);
             console.log('Challenges will update after each voting cycle');
         };
 
@@ -192,16 +212,6 @@ export const initializeAutovote = () => {
         console.log('🛑 Setting autovoteRunning to false and canceling voting');
         autovoteRunning = false;
         await window.api.setCancelVoting(true);
-        updateAutovoteStatus('Stopped', 'badge-neutral');
-
-        // Update button
-        autovoteToggle.innerHTML = `
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            ${translationManager.t('app.startAutoVote')}
-        `;
-        autovoteToggle.className = 'btn btn-latvian';
 
         // Clear autovote interval
         console.log('🛑 Clearing autovote interval:', autovoteInterval);
@@ -211,13 +221,24 @@ export const initializeAutovote = () => {
             console.log('🛑 Autovote interval cleared');
         }
 
-        // Show the refresh button when autovote is stopped (but not if single vote is running)
-        if (!singleVoteRunning) {
-            refreshBtn.style.display = 'inline-flex';
+        // Only update UI elements if they exist (for when called from main UI)
+        if (autovoteStatus) {
+            updateAutovoteStatus('Stopped', 'badge-neutral');
         }
 
-        // Refresh challenges to show individual vote buttons
-        loadChallenges(timezoneSelect.value, autovoteRunning);
+        if (autovoteToggle) {
+            autovoteToggle.innerHTML = `
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                ${translationManager.t('app.startAutoVote')}
+            `;
+            autovoteToggle.className = 'btn btn-latvian';
+        }
+
+        if (refreshBtn && !singleVoteRunning) {
+            refreshBtn.style.display = 'inline-flex';
+        }
 
         // Restart the regular auto-refresh
         startAutoRefresh();
@@ -252,8 +273,14 @@ export const initializeAutovote = () => {
     // Start auto-refresh for challenges (every 60 seconds when autovote is not running)
     const startAutoRefresh = () => {
         if (!autovoteRunning) {
-            autoRefreshInterval = setInterval(() => {
-                loadChallenges(timezoneSelect.value, autovoteRunning);
+            autoRefreshInterval = setInterval(async () => {
+                try {
+                    const timezone = await window.api.getSetting('timezone');
+                    loadChallenges(timezone, autovoteRunning);
+                } catch (error) {
+                    console.warn('Could not get timezone for auto-refresh:', error);
+                    loadChallenges('Europe/Riga', autovoteRunning); // Default fallback
+                }
             }, 60000); // 60 seconds
         }
     };
@@ -271,4 +298,7 @@ export const initializeAutovote = () => {
 
     // Expose singleVoteRunning to window for other modules
     window.singleVoteRunning = singleVoteRunning;
+    
+    // Expose stopAutovote function globally so it can be called from other modules
+    window.stopAutovote = stopAutovote;
 };

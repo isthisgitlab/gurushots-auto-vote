@@ -26,6 +26,11 @@ export const updateTranslations = () => {
 
 // Function to update settings display
 export const updateSettingsDisplay = (settings) => {
+    // Apply theme
+    if (settings.theme) {
+        document.documentElement.setAttribute('data-theme', settings.theme);
+    }
+
     // Header status badges
     const mockStatus = document.getElementById('mock-status');
     if (mockStatus) {
