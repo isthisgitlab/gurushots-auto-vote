@@ -17,7 +17,6 @@ export const initializeAutovote = () => {
     let autovoteInterval = null;
     let autoRefreshInterval = null;
     let singleVoteRunning = false;
-    let shouldCancelVoting = false;
 
     const updateAutovoteStatus = (status, badgeClass = 'badge-neutral') => {
         // Translate status if it's a known key
@@ -114,7 +113,6 @@ export const initializeAutovote = () => {
         if (autovoteRunning) return;
 
         autovoteRunning = true;
-        shouldCancelVoting = false;
         await window.api.setCancelVoting(false);
         updateAutovoteStatus('Running', 'badge-success');
 
@@ -191,9 +189,8 @@ export const initializeAutovote = () => {
             return;
         }
 
-        console.log('🛑 Setting autovoteRunning to false and shouldCancelVoting to true');
+        console.log('🛑 Setting autovoteRunning to false and canceling voting');
         autovoteRunning = false;
-        shouldCancelVoting = true;
         await window.api.setCancelVoting(true);
         updateAutovoteStatus('Stopped', 'badge-neutral');
 
@@ -274,4 +271,4 @@ export const initializeAutovote = () => {
 
     // Expose singleVoteRunning to window for other modules
     window.singleVoteRunning = singleVoteRunning;
-}; 
+};

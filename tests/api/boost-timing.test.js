@@ -49,6 +49,24 @@ const mockUtils = {
 
 jest.mock('../../src/js/api/utils', () => mockUtils);
 
+// Mock the logger module
+const mockLogger = {
+    startOperation: jest.fn(),
+    endOperation: jest.fn(),
+    info: jest.fn(),
+    warning: jest.fn(),
+    progress: jest.fn(),
+    challengeInfo: jest.fn(),
+    challengeSuccess: jest.fn(),
+    challengeError: jest.fn(),
+    error: jest.fn(),
+    success: jest.fn(),
+    debug: jest.fn(),
+    api: jest.fn()
+};
+
+jest.mock('../../src/js/logger', () => mockLogger);
+
 // Mock console methods
 jest.spyOn(console, 'log').mockImplementation();
 jest.spyOn(console, 'error').mockImplementation();
@@ -111,9 +129,14 @@ describe('boost timing settings', () => {
             // Verify that applyBoost was called (because deadline is within 30 minutes)
             expect(mockBoost.applyBoost).toHaveBeenCalledWith(challengeWithBoost, mockToken);
 
-            // Verify the log message shows the custom timing
-            expect(console.log).toHaveBeenCalledWith(
-                expect.stringContaining('Boost deadline is within')
+            // Verify that boost operation was started and ended
+            expect(mockLogger.startOperation).toHaveBeenCalledWith(
+                'boost-12345',
+                expect.stringContaining('Applying boost to challenge')
+            );
+            expect(mockLogger.endOperation).toHaveBeenCalledWith(
+                'boost-12345',
+                expect.stringContaining('Boost applied successfully')
             );
         });
 

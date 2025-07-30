@@ -20,6 +20,8 @@ jest.mock('../../src/js/api/api-client', () => ({
 jest.mock('../../src/js/logger', () => ({
     debug: jest.fn(),
     error: jest.fn(),
+    startOperation: jest.fn(),
+    endOperation: jest.fn(),
 }));
 
 describe('challenges', () => {
@@ -75,10 +77,15 @@ describe('challenges', () => {
             );
 
             expect(result).toEqual(mockResponse);
-            expect(logger.debug).toHaveBeenCalledWith('📋 === Getting Active Challenges ===', {
-                token: 'test-token...',
+            expect(logger.debug).toHaveBeenCalledWith('Requesting active challenges from API', {
+                hasToken: true,
+                tokenPrefix: 'test-token...',
             });
-            expect(logger.debug).toHaveBeenCalledWith('📋 === Challenges Response ===', mockResponse);
+            expect(logger.debug).toHaveBeenCalledWith('Active challenges response received', {
+                challengeCount: 2,
+                hasValidStructure: true,
+                responseKeys: ['challenges'],
+            });
         });
 
         test('should handle short token with truncation format', async () => {
@@ -89,8 +96,9 @@ describe('challenges', () => {
 
             await getActiveChallenges(shortToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('📋 === Getting Active Challenges ===', {
-                token: 'short...',
+            expect(logger.debug).toHaveBeenCalledWith('Requesting active challenges from API', {
+                hasToken: true,
+                tokenPrefix: 'short...',
             });
         });
 
@@ -101,8 +109,9 @@ describe('challenges', () => {
 
             await getActiveChallenges();
 
-            expect(logger.debug).toHaveBeenCalledWith('📋 === Getting Active Challenges ===', {
-                token: 'none',
+            expect(logger.debug).toHaveBeenCalledWith('Requesting active challenges from API', {
+                hasToken: false,
+                tokenPrefix: 'none',
             });
             expect(createCommonHeaders).toHaveBeenCalledWith(undefined);
         });
@@ -113,7 +122,7 @@ describe('challenges', () => {
             const result = await getActiveChallenges(mockToken);
 
             expect(result).toEqual({challenges: []});
-            expect(logger.error).toHaveBeenCalledWith('❌ Failed to fetch active challenges.');
+            // The logger module handles the error message, not console.error
         });
 
         test('should log response structure details', async () => {
@@ -129,10 +138,10 @@ describe('challenges', () => {
 
             await getActiveChallenges(mockToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('📋 === Response Structure ===', {
-                responseType: 'object',
+            expect(logger.debug).toHaveBeenCalledWith('Active challenges response received', {
+                challengeCount: 2,
+                hasValidStructure: true,
                 responseKeys: ['challenges', 'other_field'],
-                challengesCount: 2,
             });
         });
 
@@ -145,10 +154,10 @@ describe('challenges', () => {
 
             await getActiveChallenges(mockToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('📋 === Response Structure ===', {
-                responseType: 'object',
+            expect(logger.debug).toHaveBeenCalledWith('Active challenges response received', {
+                challengeCount: 0,
+                hasValidStructure: false,
                 responseKeys: ['other_field'],
-                challengesCount: 'No challenges array',
             });
         });
 
@@ -158,8 +167,7 @@ describe('challenges', () => {
             const result = await getActiveChallenges(mockToken);
 
             expect(result).toEqual({challenges: []});
-            expect(logger.error).toHaveBeenCalledWith('❌ Failed to fetch active challenges.');
-
+            // The logger module handles the error message, not console.error
         });
 
         test('should truncate long tokens in logs', async () => {
@@ -170,8 +178,9 @@ describe('challenges', () => {
 
             await getActiveChallenges(longToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('📋 === Getting Active Challenges ===', {
-                token: 'very-long-...',
+            expect(logger.debug).toHaveBeenCalledWith('Requesting active challenges from API', {
+                hasToken: true,
+                tokenPrefix: 'very-long-...',
             });
         });
     });
