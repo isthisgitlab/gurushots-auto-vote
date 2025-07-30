@@ -1,8 +1,11 @@
-const {app, BrowserWindow, ipcMain} = require('electron');
+const {app, BrowserWindow, ipcMain, session} = require('electron');
 const path = require('path');
 const fs = require('fs');
 const settings = require('./settings');
 const {initializeHeaders} = require('./api/randomizer');
+
+// Disable service workers at the application level
+app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
 
 // Global force exit handler to ensure the application always terminates
 let forceExitTimeout = null;
@@ -49,6 +52,10 @@ function createLoginWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
+            // Disable service workers to prevent database IO errors
+            webSecurity: false,
+            // Use a custom session partition to isolate storage
+            partition: 'persist:gurushots',
         },
     });
 
@@ -97,6 +104,10 @@ function createMainWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
+            // Disable service workers to prevent database IO errors
+            webSecurity: false,
+            // Use a custom session partition to isolate storage
+            partition: 'persist:gurushots',
         },
     });
 
@@ -154,7 +165,7 @@ function createMainWindow() {
 }
 
 // Check if we should auto-login based on saved token
-async function checkAutoLogin() {
+function checkAutoLogin() {
     const userSettings = settings.loadSettings();
 
     // If we have a token and stay logged in is enabled, auto-login
@@ -173,13 +184,16 @@ app.whenReady().then(async () => {
     // Log userData path for verification
     console.log(`[App] UserData path: ${settings.getUserDataPath()}`);
     
+    // Clear cache to prevent service worker database errors
+    await session.defaultSession.clearCache();
+    console.log('[App] Browser cache cleared to prevent service worker database errors');
+    
     // Initialize API headers on app startup
     initializeHeaders();
 
     // Run log cleanup on app startup
     const logger = require('./logger');
     logger.cleanup();
-
 
     // Check for updates in the background (only if not checked recently)
     const UpdateChecker = require('./services/UpdateChecker');

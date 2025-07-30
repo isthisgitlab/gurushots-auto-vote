@@ -1,621 +1,10 @@
-const translationManager = window.translationManager;
-
-// Function to update all translations on the page
-const updateTranslations = () => {
-    // Update elements with data-translate attribute
-    document.querySelectorAll('[data-translate]').forEach(element => {
-        const key = element.getAttribute('data-translate');
-        element.textContent = translationManager.t(key);
-    });
-
-    // Update elements with data-translate-placeholder attribute
-    document.querySelectorAll('[data-translate-placeholder]').forEach(element => {
-        const key = element.getAttribute('data-translate-placeholder');
-        element.placeholder = translationManager.t(key);
-    });
-
-    // Update elements with data-translate-title attribute
-    document.querySelectorAll('[data-translate-title]').forEach(element => {
-        const key = element.getAttribute('data-translate-title');
-        element.title = translationManager.t(key);
-    });
-
-    // Update page title
-    document.title = translationManager.t('common.title');
-};
-
-// Function to update settings display
-const updateSettingsDisplay = (settings) => {
-    // Header status badges
-    const mockStatus = document.getElementById('mock-status');
-    if (mockStatus) {
-        if (settings.mock) {
-            mockStatus.textContent = translationManager.t('common.on');
-            mockStatus.className = 'badge badge-sm badge-success';
-        } else {
-            mockStatus.textContent = translationManager.t('common.off');
-            mockStatus.className = 'badge badge-sm badge-neutral';
-        }
-    }
-
-    const stayLoggedInStatus = document.getElementById('stay-logged-in-status');
-    if (stayLoggedInStatus) {
-        if (settings.stayLoggedIn) {
-            stayLoggedInStatus.textContent = translationManager.t('common.on');
-            stayLoggedInStatus.className = 'badge badge-sm badge-success';
-        } else {
-            stayLoggedInStatus.textContent = translationManager.t('common.off');
-            stayLoggedInStatus.className = 'badge badge-sm badge-neutral';
-        }
-    }
-};
-
-// Function to format time remaining
-const formatTimeRemaining = (endTime) => {
-    const now = Math.floor(Date.now() / 1000);
-    const remaining = endTime - now;
-
-    if (remaining <= 0) {
-        return 'Ended';
-    }
-
-    const days = Math.floor(remaining / 86400);
-    const hours = Math.floor((remaining % 86400) / 3600);
-    const minutes = Math.floor((remaining % 3600) / 60);
-
-    if (days > 0) {
-        return `${days}d ${hours}h ${minutes}m`;
-    } else if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    } else {
-        return `${minutes}m`;
-    }
-};
-
-// Function to format end time
-const formatEndTime = (endTime, timezone = 'local') => {
-    const date = new Date(endTime * 1000);
-
-    const formatOptions = {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-    };
-
-    if (timezone === 'local') {
-        return date.toLocaleString('lv-LV', formatOptions);
-    } else {
-        try {
-            return date.toLocaleString('lv-LV', {
-                ...formatOptions,
-                timeZone: timezone,
-            });
-        } catch (error) {
-            console.warn('Error formatting date with timezone, falling back to local:', error);
-            return date.toLocaleString('lv-LV', formatOptions);
-        }
-    }
-};
-
-// Function to get boost status
-const getBoostStatus = (boost) => {
-    if (boost.state === 'AVAILABLE') {
-        const now = Math.floor(Date.now() / 1000);
-        const remaining = boost.timeout - now;
-        if (remaining > 0) {
-            const minutes = Math.floor(remaining / 60);
-            return `Available (${minutes}m left)`;
-        } else {
-            return 'Available';
-        }
-    } else if (boost.state === 'USED') {
-        return 'Used';
-    } else {
-        return 'Unavailable';
-    }
-};
-
-// Function to get turbo status
-const getTurboStatus = (turbo) => {
-    if (!turbo || !turbo.state) {
-        return 'Unavailable';
-    }
-    if (turbo.state === 'FREE') {
-        return 'Free';
-    } else if (turbo.state === 'TIMER') {
-        return 'Timer';
-    } else if (turbo.state === 'IN_PROGRESS') {
-        return 'In Progress';
-    } else if (turbo.state === 'WON') {
-        return 'Won';
-    } else if (turbo.state === 'USED') {
-        return 'Used';
-    } else {
-        return 'Locked';
-    }
-};
-
-
-// Function to render challenges
-const renderChallenges = async (challenges, timezone = 'local', autovoteRunning = false) => {
-    await window.api.logDebug('🎨 Rendering challenges in UI', {
-        challengeCount: challenges.length,
-        timezone,
-        autovoteRunning,
-        hasFirstChallenge: !!challenges[0],
-    });
-
-    const container = document.getElementById('challenges-container');
-
-    if (!challenges || challenges.length === 0) {
-        container.innerHTML = `<div class="text-center py-4 text-base-content/60">${translationManager.t('app.pleaseLogin')}</div>`;
-        await window.api.logDebug('No challenges to display');
-        return;
-    }
-
-    // Sort challenges by ending time (shortest time remaining first)
-    const sortedChallenges = challenges.sort((a, b) => {
-        const timeA = a.close_time - Math.floor(Date.now() / 1000);
-        const timeB = b.close_time - Math.floor(Date.now() / 1000);
-        return timeA - timeB;
-    });
-
-    const challengesHtmlArray = await Promise.all(sortedChallenges.map(async challenge => {
-        // Log challenge processing for debugging
-        await window.api.logDebug(`🎨 Processing challenge: ${challenge.title}`, {
-            challengeId: challenge.id,
-            type: challenge.type,
-            exposureFactor: challenge.member.ranking.exposure.exposure_factor,
-        });
-
-        const timeRemaining = formatTimeRemaining(challenge.close_time, timezone);
-        const endTime = formatEndTime(challenge.close_time, timezone);
-        const boostStatus = getBoostStatus(challenge.member.boost);
-        const turboStatus = getTurboStatus(challenge.member.turbo);
-        const exposureFactor = challenge.member.ranking.exposure.exposure_factor;
-        const entries = challenge.member.ranking.entries;
-
-        // Check if this challenge has any custom settings overrides
-        let hasCustomSettings = false;
-        try {
-            const schema = await window.api.getSettingsSchema();
-            for (const key of Object.keys(schema)) {
-                const override = await window.api.getChallengeOverride(key, challenge.id.toString());
-                if (override !== null) {
-                    hasCustomSettings = true;
-                    break;
-                }
-            }
-        } catch (error) {
-            console.warn('Error checking for custom settings:', error);
-        }
-
-        // Get user progress data
-        const userProgress = challenge.member.ranking.total;
-        const challengeStats = {
-            entries: challenge.entries,
-            players: challenge.players,
-            votes: challenge.votes,
-            maxPhotos: challenge.max_photo_submits,
-            prizeWorth: challenge.prizes_worth,
-        };
-
-        // Get next ranking level info
-        const getNextLevelInfo = () => {
-            if (challenge.ranking_levels && userProgress && userProgress.level !== undefined) {
-                const currentLevel = userProgress.level;
-                const nextLevel = currentLevel + 1;
-                const nextLevelKey = `level_${nextLevel}`;
-
-                if (challenge.ranking_levels[nextLevelKey]) {
-                    const votesNeeded = challenge.ranking_levels[nextLevelKey] - userProgress.votes;
-
-                    // Get next level name based on level number
-                    const getLevelName = (level) => {
-                        switch (level) {
-                        case 1:
-                            return 'POPULAR';
-                        case 2:
-                            return 'SKILLED';
-                        case 3:
-                            return 'PREMIER';
-                        case 4:
-                            return 'ELITE';
-                        case 5:
-                            return 'ALLSTAR';
-                        default:
-                            return `LEVEL ${level}`;
-                        }
-                    };
-
-                    return {
-                        nextLevel,
-                        votesNeeded,
-                        levelName: getLevelName(nextLevel),
-                    };
-                }
-            }
-            return null;
-        };
-
-        const nextLevelInfo = getNextLevelInfo();
-
-        console.log('🎨 Processed values:', {
-            timeRemaining,
-            endTime,
-            boostStatus,
-            turboStatus,
-            exposureFactor,
-            entriesCount: entries.length,
-        });
-
-        // Create entries display with detailed information
-        let entriesHtml = entries.map(entry => {
-            // Show boost icon only if entry is actually boosted
-            const isEntryBoosted = entry.boost === 1 || entry.boosted === true;
-            const isBoostUsed = boostStatus === 'Used';
-            const boostIcon = isEntryBoosted ? '🚀' : '';
-            const guruIcon = entry.guru_pick ? '⭐' : '';
-            // Show camera only for regular entries (no turbo, no boost, no guru pick)
-            const isRegularEntry = !entry.turbo && !isEntryBoosted && !entry.guru_pick;
-            const turboIcon = entry.turbo ? '⚡' : (isRegularEntry ? '📷' : '');
-            const boostClass = (isEntryBoosted || isBoostUsed) ? 'badge-success' : 'badge-secondary';
-
-            // Show boost button only if boost is available and entry is not already boosted
-            const showBoostButton = boostStatus.includes('Available') && entry.boost !== 1;
-            const boostButtonHtml = showBoostButton ? `
-                <button class="btn btn-xs btn-warning ml-1 entry-boost-btn" 
-                        data-challenge-id="${challenge.id}" 
-                        data-image-id="${entry.id}" 
-                        data-entry-rank="${entry.rank}"
-                        onclick="boostEntry(${challenge.id}, '${entry.id}', ${entry.rank})">
-                    🚀
-                </button>
-            ` : '';
-
-            return `
-                <div class="badge badge-outline ${boostClass} ${entry.turbo ? 'badge-warning' : ''} flex items-center">
-                    ${turboIcon} ${boostIcon} ${guruIcon} ${translationManager.t('app.rank')} ${entry.rank} (${entry.votes} ${translationManager.t('app.votes')})
-                    ${boostButtonHtml}
-                </div>
-            `;
-        }).join('');
-
-        if (entries.length === 0) {
-            entriesHtml = `<span class="text-base-content/60">${translationManager.t('app.noEntries')}</span>`;
-        }
-
-        // Check if boost-only mode is enabled for this challenge
-        const onlyBoost = await window.api.getEffectiveSetting('onlyBoost', challenge.id.toString());
-
-        // Show vote button if:
-        // 1. Autovote is not running, OR
-        // 2. Autovote is running but boost-only mode is enabled for this challenge
-        // AND challenge is active and exposure factor is less than 100 (not configured threshold)
-        const showVoteButton = (!autovoteRunning || (autovoteRunning && onlyBoost)) &&
-            challenge.start_time < Math.floor(Date.now() / 1000) &&
-            exposureFactor < 100;
-
-        const voteButtonHtml = showVoteButton ? `
-                            <button class="challenge-vote-btn btn btn-latvian btn-sm" data-challenge-id="${challenge.id}" data-challenge-title="${challenge.title}">
-                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                ${translationManager.t('app.vote')}
-            </button>
-        ` : '';
-
-        // Settings button (always visible)
-        const settingsButtonHtml = `
-            <button class="challenge-settings-btn btn btn-ghost btn-sm" data-challenge-id="${challenge.id}" data-challenge-title="${challenge.title}" title="Challenge Settings">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                </svg>
-            </button>
-        `;
-
-        return `
-            <div class="border rounded-lg p-3 mb-3 bg-base-100">
-                <div class="space-y-2">
-                    <!-- Title and Description -->
-                    <div class="flex justify-between items-start">
-                        <div class="flex-1">
-                            <h3 class="font-bold text-base">${challenge.title}</h3>
-                            <p class="text-xs text-base-content/60">${challenge.welcome_message}</p>
-                            <!-- Challenge Type Badges -->
-                            <div class="flex gap-1 mt-1">
-                                ${challenge.type ? `<span class="badge badge-xs badge-warning">${challenge.type.toUpperCase()}</span>` : 
-        challenge.badge ? `<span class="badge badge-xs badge-info">${challenge.badge}</span>` : ''}
-                                ${challenge.max_photo_submits > 1 ? `<span class="badge badge-xs badge-warning">${challenge.max_photo_submits} ${translationManager.t('app.photos')}</span>` : ''}
-                                ${hasCustomSettings ? '<span class="badge badge-xs badge-accent" title="Custom settings configured">⚙️</span>' : ''}
-                            </div>
-                            <!-- Challenge URL -->
-                            ${challenge.url ? `
-                                <div class="text-xs text-base-content/40 mt-1">
-                                    <button onclick="openChallengeUrl('${challenge.url}')" class="font-mono hover:text-latvian hover:underline text-left">
-                                        gurushots.com/challenge/${challenge.url}
-                                    </button>
-                                </div>
-                            ` : ''}
-                        </div>
-                        <div class="flex gap-2">
-                            ${voteButtonHtml}
-                            ${settingsButtonHtml}
-                        </div>
-                    </div>
-                    
-                    <!-- Challenge Statistics -->
-                    <div class="grid grid-cols-4 gap-2 text-xs">
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.entries')}</div>
-                            <div>${challengeStats.entries.toLocaleString()}</div>
-                        </div>
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.players')}</div>
-                            <div>${challengeStats.players.toLocaleString()}</div>
-                        </div>
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.votes')}</div>
-                            <div>${challengeStats.votes.toLocaleString()}</div>
-                        </div>
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.prize')}</div>
-                            <div>${challengeStats.prizeWorth}</div>
-                        </div>
-                    </div>
-                    
-                    <!-- User Progress -->
-                    ${userProgress && userProgress.votes > 0 ? `
-                        <div class="bg-base-200 rounded p-2">
-                            <div class="flex justify-between items-center mb-1">
-                                <span class="text-xs font-medium">${translationManager.t('app.yourProgress')}</span>
-                                <span class="badge badge-xs ${userProgress.level_name === 'ELITE' ? 'badge-warning' : 'badge-info'}">
-                                    ${userProgress.level_name} ${userProgress.level}
-                                </span>
-                            </div>
-                            <div class="flex justify-between text-xs mb-1">
-                                <span>${translationManager.t('app.rank')} ${userProgress.rank} ${translationManager.t('app.of')} ${challengeStats.players}</span>
-                                <span>${userProgress.votes} ${translationManager.t('app.votes')}</span>
-                            </div>
-                            <div class="w-full bg-base-300 rounded-full h-1.5">
-                                <div class="bg-latvian h-1.5 rounded-full" style="width: ${userProgress.percent}%"></div>
-                            </div>
-                            <div class="text-xs text-base-content/60 mt-1">${userProgress.next_message}</div>
-                            ${nextLevelInfo ? `
-                                <div class="text-xs text-base-content/60 mt-1">
-                                    ${translationManager.t('app.next')}: ${nextLevelInfo.levelName} (${nextLevelInfo.votesNeeded} ${translationManager.t('app.votesNeeded')})
-                                </div>
-                            ` : ''}
-                        </div>
-                    ` : ''}
-                    
-                    <!-- Challenge Stats -->
-                    <div class="grid grid-cols-6 gap-2 text-xs">
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.time')}</div>
-                            <div class="${timeRemaining === 'Ended' ? 'text-error' : 'text-success'}">${timeRemaining}</div>
-                        </div>
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.ends')}</div>
-                            <div class="text-xs">${endTime}</div>
-                        </div>
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.exposure')}</div>
-                            <div>${exposureFactor}%</div>
-                        </div>
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.boost')}</div>
-                            <div class="${boostStatus.includes('Available') ? 'text-success' : boostStatus === 'Used' ? 'text-warning' : 'text-error'}">${boostStatus.includes('Available') ? translationManager.t('app.available') : boostStatus === 'Used' ? translationManager.t('app.used') : boostStatus === 'Unavailable' ? translationManager.t('app.unavailable') : boostStatus}</div>
-                        </div>
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.turbo')}</div>
-                            <div class="${turboStatus === 'Free' ? 'text-success' : turboStatus.includes('Won') || turboStatus.includes('Progress') ? 'text-warning' : turboStatus === 'Used' ? 'text-info' : 'text-error'}">${turboStatus}</div>
-                        </div>
-                        <div class="text-center p-2 bg-base-200 rounded">
-                            <div class="font-medium">${translationManager.t('app.yourEntries')}</div>
-                            <div>${entries.length}/${challenge.max_photo_submits}</div>
-                        </div>
-                    </div>
-                    
-                    <!-- Challenge Tags -->
-                    ${challenge.tags && challenge.tags.length > 0 ? `
-                        <div class="flex flex-wrap gap-1">
-                            ${challenge.tags.map(tag => `<span class="badge badge-ghost badge-xs">${tag}</span>`).join('')}
-                        </div>
-                    ` : ''}
-                    
-                    <!-- Entries -->
-                    ${entries.length > 0 ? `
-                        <div>
-                            <div class="text-xs text-base-content/60 mb-1">${translationManager.t('app.entryDetails')}:</div>
-                            <div class="flex flex-wrap gap-1">
-                                ${entriesHtml}
-                            </div>
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-    }));
-
-    const challengesHtml = challengesHtmlArray.join('');
-
-    container.innerHTML = challengesHtml;
-
-    // Add event listeners to vote buttons
-    if (!autovoteRunning) {
-        document.querySelectorAll('.challenge-vote-btn').forEach(button => {
-            button.addEventListener('click', async (e) => {
-                const challengeId = e.target.closest('.challenge-vote-btn').dataset.challengeId;
-                const challengeTitle = e.target.closest('.challenge-vote-btn').dataset.challengeTitle;
-
-                // Disable button and show loading
-                const btn = e.target.closest('.challenge-vote-btn');
-                const originalText = btn.innerHTML;
-                btn.disabled = true;
-                btn.innerHTML = `
-                    <span class="loading loading-spinner loading-xs"></span>
-                    ${translationManager.t('app.voting')}
-                `;
-
-                // Hide refresh button while single vote is running
-                singleVoteRunning = true;
-                const refreshBtn = document.getElementById('refresh-challenges');
-                if (refreshBtn) {
-                    refreshBtn.classList.add('hidden');
-                }
-
-                try {
-                    // Call the voting function for this specific challenge
-                    const result = await window.api.voteOnChallenge(challengeId, challengeTitle);
-
-                    if (result && result.success) {
-                        // Show success feedback
-                        btn.innerHTML = `
-                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                            </svg>
-                            ${translationManager.t('app.voted')}
-                        `;
-                        btn.className = 'challenge-vote-btn btn btn-success btn-sm';
-
-                        // Refresh challenges immediately after successful vote
-                        const timezone = await window.api.getSetting('timezone');
-                        await loadChallenges(timezone, autovoteRunning);
-
-                        // Re-enable immediately and show refresh button
-                        btn.disabled = false;
-                        btn.innerHTML = originalText;
-                        btn.className = 'challenge-vote-btn btn btn-latvian btn-sm';
-
-                        // Show refresh button again immediately
-                        singleVoteRunning = false;
-                        if (refreshBtn && !autovoteRunning) {
-                            refreshBtn.style.display = 'inline-flex';
-                        }
-                    } else {
-                        // Show error feedback for API error
-                        await window.api.logError('Voting failed', result?.error || 'Unknown error');
-                        btn.innerHTML = `
-                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                            ${translationManager.t('app.error')}
-                        `;
-                        btn.className = 'challenge-vote-btn btn btn-error btn-sm';
-
-                        // Re-enable immediately and show refresh button
-                        btn.disabled = false;
-                        btn.innerHTML = originalText;
-                        btn.className = 'challenge-vote-btn btn btn-latvian btn-sm';
-
-                        // Show refresh button again immediately
-                        singleVoteRunning = false;
-                        if (refreshBtn && !autovoteRunning) {
-                            refreshBtn.style.display = 'inline-flex';
-                        }
-                    }
-
-                } catch (error) {
-                    await window.api.logError('Error voting on challenge', error.message || error);
-
-                    // Show error feedback
-                    btn.innerHTML = `
-                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                        ${translationManager.t('app.error')}
-                    `;
-                    btn.className = 'challenge-vote-btn btn btn-error btn-sm';
-
-                    // Re-enable immediately and show refresh button
-                    btn.disabled = false;
-                    btn.innerHTML = originalText;
-                    btn.className = 'challenge-vote-btn btn btn-latvian btn-sm';
-
-                    // Show refresh button again immediately
-                    singleVoteRunning = false;
-                    if (refreshBtn && !autovoteRunning) {
-                        refreshBtn.style.display = 'inline-flex';
-                    }
-                }
-            });
-        });
-    }
-
-    // Add event listeners to challenge settings buttons (always add, regardless of autovote status)
-    document.querySelectorAll('.challenge-settings-btn').forEach(button => {
-        button.addEventListener('click', async (e) => {
-            const challengeId = e.target.closest('.challenge-settings-btn').dataset.challengeId;
-            const challengeTitle = e.target.closest('.challenge-settings-btn').dataset.challengeTitle;
-            openChallengeSettingsModal(challengeId, challengeTitle);
-        });
-    });
-};
-
-// Function to load challenges
-const loadChallenges = async (timezone = 'local', autovoteRunning = false) => {
-    try {
-        await window.api.logDebug('🔄 Loading active challenges');
-
-        // Get token from settings
-        const settings = await window.api.getSettings();
-        await window.api.logDebug('Settings loaded successfully');
-
-        if (!settings.token) {
-            await window.api.logError('No authentication token found');
-            renderChallenges([], timezone, autovoteRunning);
-            return;
-        }
-
-        await window.api.logDebug('🌐 Fetching challenges from API', {
-            tokenExists: !!settings.token,
-            mockMode: settings.mock,
-        });
-
-        // Use the real API call that works in both mock and production
-        const result = await window.api.getActiveChallenges(settings.token);
-
-        await window.api.logDebug('📋 Challenges received from API', {
-            challengeCount: result?.challenges?.length || 0,
-            hasResult: !!result,
-            resultStructure: result ? Object.keys(result) : [],
-        });
-
-        if (result && result.challenges) {
-            await window.api.logDebug(`✅ Rendering ${result.challenges.length} challenges`, {
-                sampleChallenge: result.challenges[0] ? {
-                    id: result.challenges[0].id,
-                    title: result.challenges[0].title,
-                    type: result.challenges[0].type,
-                } : null,
-            });
-
-            // Extract challenge IDs for cleanup
-            const activeChallengeIds = result.challenges.map(challenge => challenge.id.toString());
-
-
-            try {
-                await window.api.cleanupStaleChallengeSetting(activeChallengeIds);
-            } catch (error) {
-                console.warn('Failed to cleanup stale challenge settings:', error);
-            }
-
-            renderChallenges(result.challenges, timezone, autovoteRunning);
-        } else {
-            await window.api.logError('❌ No challenges in result', {result});
-            renderChallenges([], timezone, autovoteRunning);
-        }
-
-    } catch (error) {
-        await window.api.logError('❌ Error loading challenges', error);
-        renderChallenges([], timezone);
-    }
-};
+// Import all UI modules
+import { updateTranslations, updateSettingsDisplay } from './ui/translations.js';
+import { loadChallenges } from './ui/challengeLoader.js';
+import { generateSettingsModalHtml, initializeSettingsModal, generateChallengeSettingsModalHtml, initializeChallengeSettingsModal } from './ui/settingsModal.js';
+import { initializeAutovote } from './ui/autovote.js';
+import { initializeBoostEntry } from './ui/boostEntry.js';
+import { initializeUpdateDialog } from './ui/updateDialog.js';
 
 // Global function to open settings modal
 window.openSettingsModal = async () => {
@@ -653,7 +42,7 @@ window.openSettingsModal = async () => {
         document.body.insertAdjacentHTML('beforeend', modalHtml);
 
         // Initialize modal event handlers
-        initializeSettingsModal(schema, challenges);
+        initializeSettingsModal(schema);
 
     } catch (error) {
         console.error('Error opening settings modal:', error);
@@ -661,882 +50,10 @@ window.openSettingsModal = async () => {
     }
 };
 
-// Function to generate settings modal HTML based on schema (simplified to match per-challenge design)
-const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => {
-    console.log('generateSettingsModalHtml called with:', {schema, globalDefaults, challengesCount: challenges.length});
-
-    // Validate inputs
-    if (!schema || Object.keys(schema).length === 0) {
-        console.error('No schema provided to generateSettingsModalHtml');
-        return '<div class="text-error">Error: No settings schema available</div>';
-    }
-
-    if (!globalDefaults) {
-        console.error('No globalDefaults provided to generateSettingsModalHtml');
-        return '<div class="text-error">Error: No global defaults available</div>';
-    }
-
-    // Generate global settings inputs (same style as per-challenge)
-    let globalSettingsHtml = '';
-    for (const [key, config] of Object.entries(schema)) {
-        try {
-            const value = globalDefaults[key];
-            console.log(`Processing global setting ${key}:`, {value, config});
-
-            if (value === undefined || value === null) {
-                console.warn(`Missing value for global setting ${key}, using default`);
-                globalDefaults[key] = config.default;
-            }
-
-            const inputHtml = generateInputHtml(key, config, globalDefaults[key], '');
-            const labelText = translationManager.t(config.label) || config.label || key;
-            const descText = translationManager.t(config.description) || config.description || 'No description';
-
-            globalSettingsHtml += `
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text font-medium" data-translate="${config.label}">${labelText}</span>
-                        <span class="badge badge-ghost badge-xs ml-2" data-translate="app.globalDefault">${translationManager.t('app.globalDefault')}</span>
-                    </label>
-                    <p class="text-xs text-base-content/60 mb-2" data-translate="${config.description}">${descText}</p>
-                    <div class="flex items-center gap-2">
-                        ${inputHtml}
-                        <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetGlobalDefault('${key}')">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            `;
-        } catch (error) {
-            console.error(`Error generating HTML for global setting ${key}:`, error);
-            // Add a simple fallback
-            globalSettingsHtml += `
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text font-medium">${key}</span>
-                        <span class="badge badge-error badge-xs ml-2">Error</span>
-                    </label>
-                    <p class="text-xs text-base-content/60 mb-2">Error loading setting</p>
-                    <div class="text-error">Error: ${error.message || 'Unknown error'}</div>
-                </div>
-            `;
-        }
-    }
-
-    console.log('Generated global settings HTML length:', globalSettingsHtml.length);
-
-    // Generate UI settings HTML
-    const uiSettingsHtml = await generateUISettingsHtml();
-
-    const modalHtml = `
-        <div class="modal modal-open">
-            <div class="modal-box max-w-3xl">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="font-bold text-lg">
-                        <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                        </svg>
-                        <span data-translate="app.globalSettings">${translationManager.t('app.globalSettings')}</span>
-                    </h3>
-                    <button class="btn btn-ghost btn-sm" onclick="closeSettingsModal()">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
-                
-                <div class="space-y-6">
-                    <!-- App Settings Section -->
-                    <div>
-                        <h4 class="font-semibold text-base mb-3 border-b border-base-300 pb-2" data-translate="app.applicationSettings">${translationManager.t('app.applicationSettings')}</h4>
-                        <div class="space-y-4">
-                            ${uiSettingsHtml || `<div class="text-error" data-translate="app.noUiSettingsToDisplay">${translationManager.t('app.noUiSettingsToDisplay')}</div>`}
-                        </div>
-                    </div>
-                    
-                    <!-- Challenge Settings Section -->
-                    <div>
-                        <h4 class="font-semibold text-base mb-3 border-b border-base-300 pb-2" data-translate="app.challengeDefaults">${translationManager.t('app.challengeDefaults')}</h4>
-                        <div class="space-y-4">
-                            ${globalSettingsHtml || `<div class="text-error" data-translate="app.noGlobalSettingsToDisplay">${translationManager.t('app.noGlobalSettingsToDisplay')}</div>`}
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="modal-action">
-                    <button class="btn btn-latvian" onclick="saveGlobalSettings()">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                        <span data-translate="app.save">${translationManager.t('app.save') || 'Save'}</span>
-                    </button>
-                    <button class="btn btn-warning" onclick="resetAllSettings()">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        <span data-translate="app.resetAll">${translationManager.t('app.resetAll')}</span>
-                    </button>
-                    <button class="btn" onclick="closeSettingsModal()">
-                        <span data-translate="app.cancel">${translationManager.t('app.cancel') || 'Cancel'}</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    console.log('Final modal HTML length:', modalHtml.length);
-    return modalHtml;
-};
-
-// Function to generate UI settings HTML
-const generateUISettingsHtml = async () => {
-    try {
-        const settings = await window.api.getSettings();
-
-        let uiSettingsHtml = '';
-
-        // Theme Setting
-        uiSettingsHtml += `
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text font-medium" data-translate="app.theme">${translationManager.t('app.theme')}</span>
-                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
-                </label>
-                <p class="text-xs text-base-content/60 mb-2" data-translate="app.themeDesc">${translationManager.t('app.themeDesc')}</p>
-                <div class="flex items-center gap-2">
-                    <span class="text-sm" data-translate="common.light">${translationManager.t('common.light')}</span>
-                    <input type="checkbox" id="modal-theme-toggle" class="toggle toggle-sm" ${settings.theme === 'dark' ? 'checked' : ''}>
-                    <span class="text-sm" data-translate="common.dark">${translationManager.t('common.dark')}</span>
-                    <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetUISetting('theme')">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `;
-
-        // Language Setting
-        const currentLang = settings.language || 'en';
-        uiSettingsHtml += `
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text font-medium" data-translate="app.language">${translationManager.t('app.language')}</span>
-                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
-                </label>
-                <p class="text-xs text-base-content/60 mb-2" data-translate="app.languageDesc">${translationManager.t('app.languageDesc')}</p>
-                <div class="flex items-center gap-2">
-                    <select id="modal-language-select" class="select select-bordered select-sm">
-                        <option value="en" ${currentLang === 'en' ? 'selected' : ''}>${translationManager.t('app.english')}</option>
-                        <option value="lv" ${currentLang === 'lv' ? 'selected' : ''}>${translationManager.t('app.latvian')}</option>
-                    </select>
-                    <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetUISetting('language')">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `;
-
-        // Timezone Setting
-        const currentTimezone = settings.timezone || 'Europe/Riga';
-        const customTimezones = settings.customTimezones || [];
-        let timezoneOptions = '<option value="Europe/Riga">Europe/Riga</option>';
-
-        // Add custom timezones
-        customTimezones.forEach(tz => {
-            if (tz !== 'Europe/Riga') {
-                timezoneOptions += `<option value="${tz}"${currentTimezone === tz ? ' selected' : ''}>${tz}</option>`;
-            }
-        });
-
-        // If current timezone is not in the list, add it
-        if (currentTimezone !== 'Europe/Riga' && !customTimezones.includes(currentTimezone)) {
-            timezoneOptions += `<option value="${currentTimezone}" selected>${currentTimezone}</option>`;
-        }
-
-        uiSettingsHtml += `
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text font-medium" data-translate="app.timezone">${translationManager.t('app.timezone')}</span>
-                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.uiSetting">${translationManager.t('app.uiSetting')}</span>
-                </label>
-                <p class="text-xs text-base-content/60 mb-2" data-translate="app.timezoneDesc">${translationManager.t('app.timezoneDesc')}</p>
-                <div class="flex items-center gap-2">
-                    <select id="modal-timezone-select" class="select select-bordered select-sm" style="width: 200px;">
-                        ${timezoneOptions}
-                    </select>
-                    <button id="modal-timezone-add" class="btn btn-ghost btn-sm" title="${translationManager.t('app.addCustomTimezone')}">+</button>
-                    <button id="modal-timezone-remove" class="btn btn-ghost btn-sm text-red-500" title="${translationManager.t('app.removeCurrentTimezone')}" style="visibility: ${currentTimezone !== 'Europe/Riga' ? 'visible' : 'hidden'}">×</button>
-                    <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetUISetting('timezone')">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </button>
-                </div>
-                <input id="modal-timezone-input" type="text" placeholder="${translationManager.t('app.timezonePlaceholder')}" class="input input-bordered input-sm mt-2" style="display: none; width: 250px;">
-            </div>
-        `;
-
-        // Stay Logged In Setting
-        uiSettingsHtml += `
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text font-medium" data-translate="app.stayLoggedIn">${translationManager.t('app.stayLoggedIn')}</span>
-                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.appSetting">${translationManager.t('app.appSetting')}</span>
-                </label>
-                <p class="text-xs text-base-content/60 mb-2" data-translate="app.stayLoggedInDesc">${translationManager.t('app.stayLoggedInDesc')}</p>
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" id="modal-stay-logged-in" class="checkbox checkbox-sm" ${settings.stayLoggedIn ? 'checked' : ''}>
-                    <span class="text-sm" data-translate="app.rememberLoginSession">${translationManager.t('app.rememberLoginSession')}</span>
-                    <button class="btn btn-ghost btn-sm tooltip tooltip-left" data-tip="${translationManager.t('app.resetToDefaultNotSaved')}" onclick="resetUISetting('stayLoggedIn')">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        `;
-
-        // Update Check Setting
-        uiSettingsHtml += `
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text font-medium" data-translate="app.checkForUpdates">${translationManager.t('app.checkForUpdates')}</span>
-                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.appSetting">${translationManager.t('app.appSetting')}</span>
-                </label>
-                <p class="text-xs text-base-content/60 mb-2" data-translate="app.checkForUpdatesDesc">${translationManager.t('app.checkForUpdatesDesc')}</p>
-                <div class="flex items-center gap-2">
-                    <button id="check-updates-btn" class="btn btn-sm btn-outline">
-                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                        </svg>
-                        <span data-translate="app.checkForUpdates">${translationManager.t('app.checkForUpdates')}</span>
-                    </button>
-                    <span id="update-check-status" class="text-sm text-base-content/60"></span>
-                </div>
-            </div>
-        `;
-
-        // API Timeout Setting
-        uiSettingsHtml += `
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text font-medium" data-translate="app.apiTimeout">${translationManager.t('app.apiTimeout')}</span>
-                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.appSetting">${translationManager.t('app.appSetting')}</span>
-                </label>
-                <p class="text-xs text-base-content/60 mb-2" data-translate="app.apiTimeoutDesc">${translationManager.t('app.apiTimeoutDesc')}</p>
-                <div class="flex items-center gap-2">
-                    <input type="number" id="modal-api-timeout" class="input input-bordered input-sm w-20" 
-                           value="${settings.apiTimeout || 30}" min="1" max="120" step="1">
-                    <span class="text-sm text-base-content/60" data-translate="app.seconds">${translationManager.t('app.seconds')}</span>
-                </div>
-            </div>
-        `;
-
-        // Voting Interval Setting
-        uiSettingsHtml += `
-            <div class="form-control mb-4">
-                <label class="label">
-                    <span class="label-text font-medium" data-translate="app.votingInterval">${translationManager.t('app.votingInterval')}</span>
-                    <span class="badge badge-ghost badge-xs ml-2" data-translate="app.appSetting">${translationManager.t('app.appSetting')}</span>
-                </label>
-                <p class="text-xs text-base-content/60 mb-2" data-translate="app.votingIntervalDesc">${translationManager.t('app.votingIntervalDesc')}</p>
-                <div class="flex items-center gap-2">
-                    <input type="number" id="modal-voting-interval" class="input input-bordered input-sm w-20" 
-                           value="${settings.votingInterval || 3}" min="1" max="60" step="1">
-                    <span class="text-sm text-base-content/60" data-translate="app.minutes">${translationManager.t('app.minutes')}</span>
-                </div>
-            </div>
-        `;
-
-        return uiSettingsHtml;
-    } catch (error) {
-        console.error('Error generating UI settings HTML:', error);
-        return `<div class="text-error" data-translate="app.errorLoadingUiSettings">${translationManager.t('app.errorLoadingUiSettings')}</div>`;
-    }
-};
-
-// Function to generate input HTML based on setting type
-const generateInputHtml = (key, config, value, challengeId = '', hasOverride = false) => {
-    try {
-        console.log(`Generating input HTML for ${key}:`, {config, value, challengeId, hasOverride});
-
-        if (!config) {
-            console.error(`No config provided for setting ${key}`);
-            return `<div class="text-error" data-translate="app.missingConfigFor">${translationManager.t('app.missingConfigFor')} ${key}</div>`;
-        }
-
-        const inputId = challengeId ? `${key}-${challengeId}` : `global-${key}`;
-        const inputClass = hasOverride ? 'input-warning' : '';
-
-        // Handle undefined/null values
-        if (value === undefined || value === null) {
-            console.warn(`Using default value for ${key}:`, config.default);
-            value = config.default || 0;
-        }
-
-        // Safe translation with fallbacks
-        const hoursText = translationManager.t('app.hours') || 'hours';
-        const minutesText = translationManager.t('app.minutes') || 'minutes';
-        const resetTooltip = translationManager.t('app.resetToGlobal') || 'Reset to Global';
-
-        switch (config.type) {
-        case 'time': {
-            const hours = Math.floor(Number(value) / 3600);
-            const minutes = Math.floor((Number(value) % 3600) / 60);
-            return `
-                    <div class="flex gap-2 items-center">
-                        <input type="number" id="${inputId}-hours" class="input input-bordered input-sm w-20 ${inputClass}" 
-                               value="${hours}" min="0" max="24" data-setting="${key}" data-challenge="${challengeId}">
-                        <span class="text-sm" data-translate="app.hours">${hoursText}</span>
-                        <input type="number" id="${inputId}-minutes" class="input input-bordered input-sm w-20 ${inputClass}" 
-                               value="${minutes}" min="0" max="59" data-setting="${key}" data-challenge="${challengeId}">
-                        <span class="text-sm" data-translate="app.minutes">${minutesText}</span>
-                        ${challengeId ? `<button class="btn btn-xs btn-ghost" onclick="resetChallengeOverride('${key}', '${challengeId}')" title="${resetTooltip}">↻</button>` : ''}
-                    </div>
-                `;
-        }
-
-        case 'boolean': {
-            return `
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" id="${inputId}" class="checkbox checkbox-sm ${inputClass}" 
-                               ${value ? 'checked' : ''} data-setting="${key}" data-challenge="${challengeId}">
-                        ${challengeId ? `<button class="btn btn-xs btn-ghost" onclick="resetChallengeOverride('${key}', '${challengeId}')" title="${resetTooltip}">↻</button>` : ''}
-                    </div>
-                `;
-        }
-
-        case 'number':
-        default:
-            return `
-                    <div class="flex items-center gap-2">
-                        <input type="number" id="${inputId}" class="input input-bordered input-sm w-24 ${inputClass}" 
-                               value="${Number(value)}" min="0" data-setting="${key}" data-challenge="${challengeId}">
-                        ${challengeId ? `<button class="btn btn-xs btn-ghost" onclick="resetChallengeOverride('${key}', '${challengeId}')" title="${resetTooltip}">↻</button>` : ''}
-                    </div>
-                `;
-        }
-    } catch (error) {
-        console.error(`Error generating input HTML for ${key}:`, error);
-        return `<div class="text-error">Error generating input for ${key}: ${error.message || 'Unknown error'}</div>`;
-    }
-};
-
-// Function to initialize settings modal event handlers
-const initializeSettingsModal = () => {
-    // Initialize UI settings event handlers
-    setTimeout(() => {
-        initializeUISettingsHandlers();
-    }, 100); // Small delay to ensure DOM is ready
-};
-
-// Function to initialize UI settings event handlers
-const initializeUISettingsHandlers = () => {
-    // Theme toggle handler - no UI preview, just like other settings
-    // Theme will only be applied when save button is clicked
-
-    // Timezone handlers
-    const timezoneSelect = document.getElementById('modal-timezone-select');
-    const timezoneAdd = document.getElementById('modal-timezone-add');
-    const timezoneRemove = document.getElementById('modal-timezone-remove');
-    const timezoneInput = document.getElementById('modal-timezone-input');
-
-    if (timezoneAdd && timezoneInput) {
-        timezoneAdd.addEventListener('click', () => {
-            if (timezoneInput.style.display === 'none' || timezoneInput.style.display === '') {
-                timezoneInput.style.display = 'block';
-                timezoneAdd.textContent = '✓';
-                timezoneInput.focus();
-            } else {
-                timezoneInput.style.display = 'none';
-                timezoneAdd.textContent = '+';
-            }
-        });
-
-        timezoneInput.addEventListener('keypress', async (e) => {
-            if (e.key === 'Enter') {
-                const newTimezone = timezoneInput.value.trim();
-                if (newTimezone) {
-                    try {
-                        // Validate timezone
-                        const testDate = new Date();
-                        testDate.toLocaleString('en-US', {timeZone: newTimezone});
-
-                        // Add to select options
-                        const option = document.createElement('option');
-                        option.value = newTimezone;
-                        option.textContent = newTimezone;
-                        option.selected = true;
-                        timezoneSelect.appendChild(option);
-
-                        // Update remove button visibility
-                        if (timezoneRemove) {
-                            timezoneRemove.style.visibility = 'visible';
-                        }
-
-                        timezoneInput.value = '';
-                        timezoneInput.style.display = 'none';
-                        timezoneAdd.textContent = '+';
-                    } catch {
-                        timezoneInput.classList.add('input-error');
-                        setTimeout(() => {
-                            timezoneInput.classList.remove('input-error');
-                        }, 3000);
-                    }
-                }
-            }
-        });
-    }
-
-    if (timezoneSelect && timezoneRemove) {
-        timezoneSelect.addEventListener('change', () => {
-            const currentTimezone = timezoneSelect.value;
-            timezoneRemove.style.visibility = currentTimezone !== 'Europe/Riga' ? 'visible' : 'hidden';
-        });
-
-        timezoneRemove.addEventListener('click', () => {
-            const currentTimezone = timezoneSelect.value;
-            if (currentTimezone !== 'Europe/Riga') {
-                const option = timezoneSelect.querySelector(`option[value="${currentTimezone}"]`);
-                if (option) {
-                    option.remove();
-                }
-                timezoneSelect.value = 'Europe/Riga';
-                timezoneRemove.style.visibility = 'hidden';
-            }
-        });
-    }
-
-    // Update check button handler
-    const checkUpdatesBtn = document.getElementById('check-updates-btn');
-    const updateCheckStatus = document.getElementById('update-check-status');
-    
-    if (checkUpdatesBtn && updateCheckStatus) {
-        checkUpdatesBtn.addEventListener('click', async () => {
-            try {
-                // Show loading state
-                checkUpdatesBtn.disabled = true;
-                checkUpdatesBtn.innerHTML = '<span class="loading loading-spinner loading-xs"></span> Checking...';
-                updateCheckStatus.textContent = '';
-
-                // Check for updates
-                const result = await window.api.checkForUpdates();
-                
-                if (result.success && result.updateInfo) {
-                    // Show update dialog
-                    window.showUpdateDialog(result.updateInfo);
-                    updateCheckStatus.textContent = translationManager.t('app.updateAvailable');
-                    updateCheckStatus.className = 'text-sm text-success';
-                } else {
-                    updateCheckStatus.textContent = translationManager.t('app.noUpdatesAvailable');
-                    updateCheckStatus.className = 'text-sm text-base-content/60';
-                }
-                
-                // Mark that an update check was performed (will be saved when settings are saved)
-                window.updateCheckPerformed = true;
-            } catch (error) {
-                console.error('Error checking for updates:', error);
-                updateCheckStatus.textContent = translationManager.t('app.errorCheckingUpdates');
-                updateCheckStatus.className = 'text-sm text-error';
-            } finally {
-                // Reset button state
-                checkUpdatesBtn.disabled = false;
-                checkUpdatesBtn.innerHTML = `
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                    </svg>
-                    ${translationManager.t('app.checkForUpdates')}
-                `;
-            }
-        });
-    }
-};
-
-// Global function to save global settings only
-window.saveGlobalSettings = async () => {
-    try {
-        const schema = await window.api.getSettingsSchema();
-
-        // Save challenge-related global defaults
-        for (const key of Object.keys(schema)) {
-            const value = getInputValue(key, schema[key], '');
-            if (value !== null) {
-                await window.api.setGlobalDefault(key, value);
-            }
-        }
-
-        // Save UI settings
-        await saveUISettings();
-
-        closeSettingsModal();
-
-        // Refresh challenges to apply new settings
-        const newTimezone = document.getElementById('modal-timezone-select')?.value || 'Europe/Riga';
-        await loadChallenges(newTimezone, autovoteRunning);
-
-    } catch (error) {
-        console.error('Error saving global settings:', error);
-    }
-};
-
-// Function to save UI settings
-const saveUISettings = async () => {
-    try {
-        console.log('💾 Saving UI settings in batch...');
-        const uiUpdates = {};
-
-        // Collect theme
-        const themeToggle = document.getElementById('modal-theme-toggle');
-        if (themeToggle) {
-            uiUpdates.theme = themeToggle.checked ? 'dark' : 'light';
-        }
-
-        // Collect language  
-        const languageSelect = document.getElementById('modal-language-select');
-        if (languageSelect) {
-            uiUpdates.language = languageSelect.value;
-        }
-
-        // Collect timezone
-        const timezoneSelect = document.getElementById('modal-timezone-select');
-        if (timezoneSelect) {
-            uiUpdates.timezone = timezoneSelect.value;
-
-            // Handle custom timezones
-            const customTimezones = [];
-            Array.from(timezoneSelect.options).forEach(option => {
-                if (option.value !== 'Europe/Riga') {
-                    customTimezones.push(option.value);
-                }
-            });
-            uiUpdates.customTimezones = customTimezones;
-        }
-
-        // Collect stay logged in
-        const stayLoggedInCheckbox = document.getElementById('modal-stay-logged-in');
-        if (stayLoggedInCheckbox) {
-            uiUpdates.stayLoggedIn = stayLoggedInCheckbox.checked;
-        }
-
-        // Collect API timeout
-        const apiTimeoutInput = document.getElementById('modal-api-timeout');
-        if (apiTimeoutInput) {
-            const apiTimeout = parseInt(apiTimeoutInput.value);
-            if (!isNaN(apiTimeout) && apiTimeout >= 1 && apiTimeout <= 120) {
-                uiUpdates.apiTimeout = apiTimeout;
-            }
-        }
-
-        // Collect voting interval
-        const votingIntervalInput = document.getElementById('modal-voting-interval');
-        if (votingIntervalInput) {
-            const votingInterval = parseInt(votingIntervalInput.value);
-            if (!isNaN(votingInterval) && votingInterval >= 1 && votingInterval <= 60) {
-                uiUpdates.votingInterval = votingInterval;
-            }
-        }
-
-        // Save update check timestamp if an update check was performed
-        if (window.updateCheckPerformed) {
-            uiUpdates.lastUpdateCheck = Date.now();
-            window.updateCheckPerformed = false; // Reset the flag
-        }
-
-        // Save all UI settings at once
-        if (Object.keys(uiUpdates).length > 0) {
-            await window.api.saveSettings(uiUpdates);
-            console.log('✅ UI settings saved:', Object.keys(uiUpdates));
-
-            // Apply language change if needed
-            if (uiUpdates.language) {
-                await translationManager.setLanguage(uiUpdates.language);
-            }
-
-            // Apply theme change if needed
-            if (uiUpdates.theme) {
-                document.documentElement.setAttribute('data-theme', uiUpdates.theme);
-                console.log('🎨 Applied theme after save:', uiUpdates.theme);
-            }
-        }
-
-        // Update the main page UI controls that are still visible
-        updateMainPageUIControls();
-
-    } catch (error) {
-        console.error('Error saving UI settings:', error);
-    }
-};
-
-// Function to update main page UI controls after settings change
-const updateMainPageUIControls = async () => {
-    try {
-        const settings = await window.api.getSettings();
-
-        // Update mock status (this is still in header)
-        updateSettingsDisplay(settings);
-
-
-        // Update timezone on the hidden timezone select (for compatibility)
-        const hiddenTimezoneSelect = document.getElementById('timezone-select');
-        if (hiddenTimezoneSelect && settings.timezone) {
-            hiddenTimezoneSelect.value = settings.timezone;
-        }
-
-    } catch (error) {
-        console.error('Error updating main page UI controls:', error);
-    }
-};
-
-// Keep the old saveAllSettings for backward compatibility (if needed elsewhere)
-window.saveAllSettings = window.saveGlobalSettings;
-
-// Function to get input value based on setting type
-const getInputValue = (key, config, challengeId) => {
-    const inputId = challengeId ? `${key}-${challengeId}` : `global-${key}`;
-
-    switch (config.type) {
-    case 'time': {
-        const hoursEl = document.getElementById(`${inputId}-hours`);
-        const minutesEl = document.getElementById(`${inputId}-minutes`);
-        if (hoursEl && minutesEl) {
-            const hours = parseInt(hoursEl.value) || 0;
-            const minutes = parseInt(minutesEl.value) || 0;
-            return (hours * 3600) + (minutes * 60);
-        }
-        break;
-    }
-
-    case 'boolean': {
-        const checkboxEl = document.getElementById(inputId);
-        if (checkboxEl) {
-            return checkboxEl.checked;
-        }
-        break;
-    }
-
-    case 'number':
-    default: {
-        const numberEl = document.getElementById(inputId);
-        if (numberEl) {
-            return parseInt(numberEl.value) || 0;
-        }
-        break;
-    }
-    }
-
-    return null;
-};
-
-// Global function to reset challenge override
-window.resetChallengeOverride = async (settingKey, challengeId) => {
-    try {
-        // Get the global default value
-        const globalValue = await window.api.getGlobalDefault(settingKey);
-        const schema = await window.api.getSettingsSchema();
-        const config = schema[settingKey];
-
-        if (config) {
-            const inputId = `${settingKey}-${challengeId}`;
-
-            switch (config.type) {
-            case 'time': {
-                const hours = Math.floor(globalValue / 3600);
-                const minutes = Math.floor((globalValue % 3600) / 60);
-                const hoursEl = document.getElementById(`${inputId}-hours`);
-                const minutesEl = document.getElementById(`${inputId}-minutes`);
-                if (hoursEl && minutesEl) {
-                    hoursEl.value = hours;
-                    minutesEl.value = minutes;
-                    hoursEl.classList.remove('input-warning');
-                    minutesEl.classList.remove('input-warning');
-                }
-                break;
-            }
-
-            case 'boolean': {
-                const checkboxEl = document.getElementById(inputId);
-                if (checkboxEl) {
-                    checkboxEl.checked = globalValue;
-                    checkboxEl.classList.remove('input-warning');
-                }
-                break;
-            }
-
-            case 'number':
-            default: {
-                const numberEl = document.getElementById(inputId);
-                if (numberEl) {
-                    numberEl.value = globalValue;
-                    numberEl.classList.remove('input-warning');
-                }
-                break;
-            }
-            }
-
-            // Update the remove button visibility since we've reset to global default
-            updateRemoveButton();
-        }
-
-    } catch (error) {
-        console.error('Error resetting challenge override:', error);
-    }
-};
-
-// Global function to close settings modal
-window.closeSettingsModal = () => {
-    const modal = document.querySelector('.modal');
-    if (modal) {
-        modal.remove();
-    }
-};
-
-// Global function to reset a UI setting to default (UI only, not saved until Save button is clicked)
-window.resetUISetting = (settingKey) => {
-    try {
-        // Get the default value
-        const defaultSettings = {
-            theme: 'light',
-            language: 'en',
-            timezone: 'Europe/Riga',
-            stayLoggedIn: false,
-        };
-        
-        const defaultValue = defaultSettings[settingKey];
-        
-        // Update the UI element only
-        switch (settingKey) {
-        case 'theme': {
-            const themeToggle = document.getElementById('modal-theme-toggle');
-            if (themeToggle) {
-                themeToggle.checked = defaultValue === 'dark';
-            }
-            break;
-        }
-            
-        case 'language': {
-            const languageSelect = document.getElementById('modal-language-select');
-            if (languageSelect) {
-                languageSelect.value = defaultValue;
-            }
-            break;
-        }
-            
-        case 'timezone': {
-            const timezoneSelect = document.getElementById('modal-timezone-select');
-            if (timezoneSelect) {
-                timezoneSelect.value = defaultValue;
-                // Update the remove button visibility
-                const removeButton = document.getElementById('modal-timezone-remove');
-                if (removeButton) {
-                    removeButton.style.visibility = defaultValue !== 'Europe/Riga' ? 'visible' : 'hidden';
-                }
-            }
-            break;
-        }
-            
-        case 'stayLoggedIn': {
-            const stayLoggedInCheckbox = document.getElementById('modal-stay-logged-in');
-            if (stayLoggedInCheckbox) {
-                stayLoggedInCheckbox.checked = defaultValue;
-            }
-            break;
-        }
-        }
-        
-        console.log(`🔄 Reset ${settingKey} UI to default value: ${defaultValue} (not saved yet)`);
-    } catch (error) {
-        console.error(`Error resetting UI setting ${settingKey}:`, error);
-        alert(`Error resetting ${settingKey}: ${error.message}`);
-    }
-};
-
-// Global function to reset a global default setting (UI only, not saved until Save button is clicked)
-window.resetGlobalDefault = async (settingKey) => {
-    try {
-        // Get the schema to find the default value
-        const schema = await window.api.getSettingsSchema();
-        const defaultValue = schema[settingKey]?.default;
-        
-        // Update the UI element based on setting type (no backend save)
-        const config = schema[settingKey];
-        if (config) {
-            // Find the input element for this setting
-            const inputId = `global-${settingKey}`;
-            const inputElement = document.getElementById(inputId);
-            
-            if (inputElement) {
-                switch (config.type) {
-                case 'boolean':
-                    inputElement.checked = defaultValue;
-                    break;
-                case 'time': {
-                    // Convert seconds to hours and minutes for display
-                    const hours = Math.floor(defaultValue / 3600);
-                    const minutes = Math.floor((defaultValue % 3600) / 60);
-                    const timeInput = document.getElementById(`${inputId}-time`);
-                    if (timeInput) {
-                        timeInput.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                    }
-                    break;
-                }
-                case 'number':
-                    inputElement.value = defaultValue;
-                    break;
-                default:
-                    inputElement.value = defaultValue;
-                }
-            }
-        }
-        
-        console.log(`🔄 Reset global default ${settingKey} UI to: ${defaultValue} (not saved yet)`);
-    } catch (error) {
-        console.error(`Error resetting global default ${settingKey}:`, error);
-        alert(`Error resetting ${settingKey}: ${error.message}`);
-    }
-};
-
-// Global function to reset all settings
-window.resetAllSettings = async () => {
-    const confirmMessage = `${translationManager.t('app.resetAllConfirmMessage')}\n\n${translationManager.t('app.resetAllConfirmDetails')}`;
-    
-    if (!confirm(confirmMessage)) {
-        return;
-    }
-    
-    try {
-        // Reset all UI settings
-        const uiSuccess = await window.api.resetAllSettings();
-        
-        // Reset all global defaults
-        const globalSuccess = await window.api.resetAllGlobalDefaults();
-        
-        if (uiSuccess && globalSuccess) {
-            console.log('✅ Successfully reset all settings to defaults');
-            alert(translationManager.t('app.resetAllSuccess'));
-            
-            // Close the modal and reload the page to apply changes
-            closeSettingsModal();
-            location.reload();
-        } else {
-            console.error('❌ Failed to reset some settings');
-            alert('Failed to reset some settings. Please try again or check the console for details.');
-        }
-    } catch (error) {
-        console.error('Error resetting all settings:', error);
-        alert(`Error resetting settings: ${error.message}`);
-    }
-};
-
-// Global function to open challenge-specific settings modal
+// Global function to open challenge settings modal
 window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
     try {
-        // Get the settings schema
+        // Get the settings schema and current values
         const schema = await window.api.getSettingsSchema();
 
         if (!schema || Object.keys(schema).length === 0) {
@@ -1545,16 +62,16 @@ window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
             return;
         }
 
-        // Load current values for this challenge
-        const challengeSettings = {};
         const globalDefaults = {};
+        const challengeSettings = {};
 
+        // Load current global defaults and challenge-specific settings
         for (const key of Object.keys(schema)) {
             try {
                 globalDefaults[key] = await window.api.getGlobalDefault(key);
-                challengeSettings[key] = await window.api.getChallengeOverride(key, challengeId.toString());
+                challengeSettings[key] = await window.api.getChallengeOverride(key, challengeId);
             } catch (error) {
-                console.warn(`Error loading setting ${key}:`, error);
+                console.warn(`Error loading settings for ${key}:`, error);
                 globalDefaults[key] = schema[key].default;
                 challengeSettings[key] = null;
             }
@@ -1567,7 +84,7 @@ window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
         document.body.insertAdjacentHTML('beforeend', modalHtml);
 
         // Initialize modal event handlers
-        initializeChallengeSettingsModal(challengeId, schema);
+        initializeChallengeSettingsModal(schema, challengeId);
 
     } catch (error) {
         console.error('Error opening challenge settings modal:', error);
@@ -1575,675 +92,310 @@ window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
     }
 };
 
-// Function to generate challenge-specific settings modal HTML
-const generateChallengeSettingsModalHtml = async (challengeId, challengeTitle, schema, globalDefaults, challengeSettings) => {
-    let settingsHtml = '';
+// Initialize everything when DOM is loaded
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 Initializing application...');
+    
+    // Initialize challenge timers array
+    window.challengeTimers = [];
 
-    for (const [key, config] of Object.entries(schema)) {
-        const hasOverride = challengeSettings[key] !== null;
-        const currentValue = hasOverride ? challengeSettings[key] : globalDefaults[key];
-        const globalValue = globalDefaults[key];
+    // Initialize update dialog
+    initializeUpdateDialog();
 
-        const inputHtml = generateInputHtml(key, config, currentValue, challengeId, hasOverride);
+    // Initialize boost entry functionality
+    initializeBoostEntry();
 
-        try {
-            const labelText = translationManager.t(config.label);
-            const descText = translationManager.t(config.description);
+    // Initialize autovote functionality
+    initializeAutovote();
 
-            settingsHtml += `
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text font-medium" data-translate="${config.label}">${labelText}</span>
-                        ${hasOverride ? `<span class="badge badge-warning badge-xs ml-2" data-translate="app.override">${translationManager.t('app.override')}</span>` : `<span class="badge badge-ghost badge-xs ml-2" data-translate="app.global">${translationManager.t('app.global')}</span>`}
-                    </label>
-                    <p class="text-xs text-base-content/60 mb-2" data-translate="${config.description}">${descText}</p>
-                    <div class="flex items-center gap-2">
-                        ${inputHtml}
-                        ${hasOverride ? '' : `<span class="text-xs text-base-content/40">(${translationManager.t('common.global')} ${formatValue(config, globalValue)})</span>`}
-                    </div>
-                </div>
-            `;
-        } catch (error) {
-            console.error(`Error generating HTML for challenge setting ${key}:`, error);
-            settingsHtml += `
-                <div class="form-control mb-4">
-                    <label class="label">
-                        <span class="label-text font-medium">${key}</span>
-                        ${hasOverride ? `<span class="badge badge-warning badge-xs ml-2" data-translate="app.override">${translationManager.t('app.override')}</span>` : `<span class="badge badge-ghost badge-xs ml-2" data-translate="app.global">${translationManager.t('app.global')}</span>`}
-                    </label>
-                    <p class="text-xs text-base-content/60 mb-2">${config.description || 'No description'}</p>
-                    <div class="flex items-center gap-2">
-                        ${inputHtml}
-                    </div>
-                </div>
-            `;
+    // Get DOM elements
+    const settingsBtn = document.getElementById('settingsBtn');
+    const refreshBtn = document.getElementById('refresh-challenges');
+    const timezoneSelect = document.getElementById('timezone-select');
+
+    // Load initial settings and update UI
+    try {
+        const settings = await window.api.getSettings();
+        updateSettingsDisplay(settings);
+        updateTranslations();
+
+        // Set timezone select value
+        if (timezoneSelect) {
+            timezoneSelect.value = settings.timezone || 'Europe/Riga';
         }
+
+        // Load challenges
+        await loadChallenges(settings.timezone || 'Europe/Riga', false);
+
+    } catch (error) {
+        console.error('Error loading initial settings:', error);
     }
 
-    return `
-        <div class="modal modal-open">
-            <div class="modal-box max-w-2xl">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="font-bold text-lg">
-                        <svg class="w-5 h-5 inline mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                        </svg>
-                        Settings: ${challengeTitle}
-                    </h3>
-                    <button class="btn btn-ghost btn-sm" onclick="closeSettingsModal()">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                    </button>
-                </div>
+    // Event listeners
+    if (settingsBtn) {
+        settingsBtn.addEventListener('click', () => {
+            window.openSettingsModal();
+        });
+    }
+
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            const timezone = timezoneSelect ? timezoneSelect.value : 'Europe/Riga';
+            await loadChallenges(timezone, false);
+        });
+    }
+
+    if (timezoneSelect) {
+        timezoneSelect.addEventListener('change', async () => {
+            const timezone = timezoneSelect.value;
+            await window.api.setSetting('timezone', timezone);
+            await loadChallenges(timezone, false);
+        });
+    }
+
+    // Global function to open challenge URL
+    window.openChallengeUrl = async (url) => {
+        try {
+            await window.api.openExternalUrl(`https://gurushots.com/challenge/${url}`);
+        } catch (error) {
+            console.error('Error opening challenge URL:', error);
+        }
+    };
+
+    console.log('✅ Application initialized successfully');
+});
+
+// Global functions for settings modals
+window.closeSettingsModal = () => {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+        modal.remove();
+    }
+};
+
+window.closeChallengeSettingsModal = () => {
+    const modal = document.querySelector('.modal');
+    if (modal) {
+        modal.remove();
+    }
+};
+
+window.saveGlobalSettings = async () => {
+    try {
+        // Save all global settings
+        const schema = await window.api.getSettingsSchema();
+        
+        for (const [key, config] of Object.entries(schema)) {
+            const inputId = `global-${key}`;
+            const input = document.getElementById(inputId);
+            
+            if (input) {
+                let value;
+                if (config.type === 'time') {
+                    const hoursInput = document.getElementById(`${inputId}-hours`);
+                    const minutesInput = document.getElementById(`${inputId}-minutes`);
+                    if (hoursInput && minutesInput) {
+                        value = (parseInt(hoursInput.value) * 3600) + (parseInt(minutesInput.value) * 60);
+                    }
+                } else if (config.type === 'boolean') {
+                    value = input.checked;
+                } else {
+                    value = parseInt(input.value) || input.value;
+                }
                 
-                <div class="space-y-4">
-                    ${settingsHtml}
-                </div>
-                
-                <div class="modal-action">
-                    <button class="btn btn-latvian" onclick="saveChallengeSettings('${challengeId}')">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                        </svg>
-                        <span data-translate="app.save">${translationManager.t('app.save')}</span>
-                    </button>
-                    <button class="btn" onclick="closeSettingsModal()">
-                        <span data-translate="app.cancel">${translationManager.t('app.cancel')}</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    `;
-};
-
-// Function to format a value for display
-const formatValue = (config, value) => {
-    switch (config.type) {
-    case 'time': {
-        const hours = Math.floor(value / 3600);
-        const minutes = Math.floor((value % 3600) / 60);
-        return `${hours}h ${minutes}m`;
-    }
-    case 'boolean': {
-        return value ? translationManager.t('common.yes') : translationManager.t('common.no');
-    }
-    default: {
-        return value;
-    }
+                await window.api.setGlobalDefault(key, value);
+            }
+        }
+        
+        // Close modal
+        window.closeSettingsModal();
+        
+        // Refresh challenges to show updated settings
+        const timezone = await window.api.getSetting('timezone');
+        await loadChallenges(timezone, false);
+        
+    } catch (error) {
+        console.error('Error saving global settings:', error);
+        alert('Failed to save settings. Check console for details.');
     }
 };
 
-// Function to initialize challenge settings modal event handlers
-const initializeChallengeSettingsModal = () => {
-    // No special initialization needed for now
+window.resetAllSettings = async () => {
+    try {
+        const schema = await window.api.getSettingsSchema();
+        
+        for (const [key, config] of Object.entries(schema)) {
+            await window.api.setGlobalDefault(key, config.default);
+        }
+        
+        // Close modal
+        window.closeSettingsModal();
+        
+        // Refresh challenges
+        const timezone = await window.api.getSetting('timezone');
+        await loadChallenges(timezone, false);
+        
+    } catch (error) {
+        console.error('Error resetting settings:', error);
+        alert('Failed to reset settings. Check console for details.');
+    }
 };
 
-// Global function to save challenge settings
+window.resetGlobalDefault = async (key) => {
+    try {
+        const schema = await window.api.getSettingsSchema();
+        const config = schema[key];
+        if (config) {
+            await window.api.setGlobalDefault(key, config.default);
+            
+            // Update the input to show the default value
+            const inputId = `global-${key}`;
+            const input = document.getElementById(inputId);
+            
+            if (input) {
+                if (config.type === 'time') {
+                    const hours = Math.floor(config.default / 3600);
+                    const minutes = Math.floor((config.default % 3600) / 60);
+                    const hoursInput = document.getElementById(`${inputId}-hours`);
+                    const minutesInput = document.getElementById(`${inputId}-minutes`);
+                    if (hoursInput) hoursInput.value = hours;
+                    if (minutesInput) minutesInput.value = minutes;
+                } else if (config.type === 'boolean') {
+                    input.checked = config.default;
+                } else {
+                    input.value = config.default;
+                }
+                input.classList.remove('input-warning');
+            }
+        }
+    } catch (error) {
+        console.error('Error resetting global default:', error);
+    }
+};
+
+window.resetUISetting = async (key) => {
+    try {
+        const defaultValues = {
+            theme: 'light',
+            language: 'en',
+            timezone: 'Europe/Riga',
+            stayLoggedIn: false,
+            apiTimeout: 30,
+            votingInterval: 3,
+        };
+        
+        const defaultValue = defaultValues[key];
+        if (defaultValue !== undefined) {
+            await window.api.setSetting(key, defaultValue);
+            
+            // Update the input
+            const inputId = `modal-${key}`;
+            const input = document.getElementById(inputId);
+            
+            if (input) {
+                if (key === 'theme') {
+                    input.checked = defaultValue === 'dark';
+                } else if (key === 'stayLoggedIn') {
+                    input.checked = defaultValue;
+                } else {
+                    input.value = defaultValue;
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error resetting UI setting:', error);
+    }
+};
+
 window.saveChallengeSettings = async (challengeId) => {
     try {
         const schema = await window.api.getSettingsSchema();
-
-        // Get current overrides to know what to remove
-        const currentOverrides = {};
-        for (const key of Object.keys(schema)) {
-            try {
-                const currentOverride = await window.api.getChallengeOverride(key, challengeId);
-                if (currentOverride !== null) {
-                    currentOverrides[key] = currentOverride;
+        
+        for (const [key, config] of Object.entries(schema)) {
+            const inputId = `${key}-${challengeId}`;
+            const input = document.getElementById(inputId);
+            
+            if (input) {
+                let value;
+                if (config.type === 'time') {
+                    const hoursInput = document.getElementById(`${inputId}-hours`);
+                    const minutesInput = document.getElementById(`${inputId}-minutes`);
+                    if (hoursInput && minutesInput) {
+                        value = (parseInt(hoursInput.value) * 3600) + (parseInt(minutesInput.value) * 60);
+                    }
+                } else if (config.type === 'boolean') {
+                    value = input.checked;
+                } else {
+                    value = parseInt(input.value) || input.value;
                 }
-            } catch {
-                // Ignore errors for non-existent overrides
+                
+                await window.api.setChallengeOverride(key, challengeId, value);
             }
         }
-
-        // Collect all overrides efficiently, only saving values that differ from global defaults
-        const overrides = {};
-        const overridesToRemove = [];
-
-        for (const key of Object.keys(schema)) {
-            const value = getInputValue(key, schema[key], challengeId);
-            if (value !== null) {
-                // Get the global default to compare
-                const globalDefault = await window.api.getGlobalDefault(key);
-
-                if (value !== globalDefault) {
-                    // Value differs from global default - save as override
-                    overrides[key] = value;
-                } else if (currentOverrides[key] !== undefined) {
-                    // Value equals global default but there was a previous override - remove it
-                    overridesToRemove.push(key);
-                }
-                // If value equals global default and there was no previous override, do nothing
-            }
-        }
-
-
-        for (const key of overridesToRemove) {
-            await window.api.removeChallengeOverride(key, challengeId);
-        }
-
-        // Save new overrides
-        if (Object.keys(overrides).length > 0) {
-            await window.api.setChallengeOverrides(challengeId, overrides);
-        }
-
-        closeSettingsModal();
-
-        // Refresh challenges to apply new settings
+        
+        // Close modal
+        window.closeChallengeSettingsModal();
+        
+        // Refresh challenges to show updated settings
         const timezone = await window.api.getSetting('timezone');
-        await loadChallenges(timezone, autovoteRunning);
-
+        await loadChallenges(timezone, false);
+        
     } catch (error) {
         console.error('Error saving challenge settings:', error);
+        alert('Failed to save challenge settings. Check console for details.');
     }
 };
 
-// Global function to open challenge URL in default browser
-window.openChallengeUrl = (url) => {
-    window.api.openExternalUrl(`https://gurushots.com/challenge/${url}`);
-};
-
-// Wait for the DOM to be fully loaded
-document.addEventListener('DOMContentLoaded', async () => {
-    // Show log file location
-    const logFile = await window.api.getLogFile();
-    console.log('📝 Log file location:', logFile);
-
-    // Settings cleanup is now handled automatically in settings.js during loadSettings()
-
-    // Load initial settings AFTER cleanup
-    let settings = await window.api.getSettings();
-
-    // Apply initial theme with current settings
-    document.documentElement.setAttribute('data-theme', settings.theme);
-    console.log('🎨 Applied theme:', settings.theme);
-
-    // Get the UI elements
-    const logoutBtn = document.getElementById('logoutBtn');
-    const settingsBtn = document.getElementById('settingsBtn');
-    const refreshBtn = document.getElementById('refresh-challenges');
-
-    // Display initial settings
-    updateSettingsDisplay(settings);
-
-    // Wait for translation manager to be initialized
-    while (!translationManager.initialized) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-    }
-
-    // Set language selector to current language
-    translationManager.getCurrentLanguage();
-
-    // Apply initial translations
-    updateTranslations();
-
-    // Load initial challenges
-    console.log('About to load challenges...');
-    const timezone = await window.api.getSetting('timezone');
-    await loadChallenges(timezone);
-    console.log('Challenges loaded.');
-
-    // Add click event listener to the logout button
-    logoutBtn.addEventListener('click', () => {
-        // Call the logout method exposed by the preload script
-        window.api.logout();
-    });
-
-    // Add click event listener to the settings button
-    settingsBtn.addEventListener('click', () => {
-        openSettingsModal();
-    });
-
-    // Handle language change
-    document.querySelectorAll('[data-lang]').forEach(item => {
-        item.addEventListener('click', async (e) => {
-            e.preventDefault();
-            const newLanguage = e.target.getAttribute('data-lang');
-            await translationManager.setLanguage(newLanguage);
-
-            updateTranslations();
-            updateSettingsDisplay(settings); // Update status badges with new language
-
-            // Close the dropdown by removing the tabindex attribute and re-adding it
-            setTimeout(() => {
-                const dropdownContent = document.querySelector('.dropdown-content');
-                if (dropdownContent) {
-                    dropdownContent.removeAttribute('tabindex');
-                    dropdownContent.setAttribute('tabindex', '0');
-                }
-            }, 10);
-        });
-    });
-
-    // Handle theme toggle change - just update UI, don't auto-save
-    const themeToggle = document.getElementById('modal-theme-toggle');
-    if (themeToggle) {
-        themeToggle.addEventListener('change', async () => {
-            const newTheme = themeToggle.checked ? 'dark' : 'light';
-
-            // Update the theme immediately for responsive UI
-            document.documentElement.setAttribute('data-theme', newTheme);
-
-            updateSettingsDisplay(settings);
-        });
-    }
-
-
-
-    // Handle refresh button
-    refreshBtn.addEventListener('click', async () => {
-        refreshBtn.disabled = true;
-        refreshBtn.innerHTML = `
-            <span class="loading loading-spinner loading-xs"></span>
-            ${translationManager.t('common.loading')}...
-        `;
-
-        const timezone = await window.api.getSetting('timezone');
-        await loadChallenges(timezone, autovoteRunning);
-
-        refreshBtn.disabled = false;
-        refreshBtn.innerHTML = `
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-            </svg>
-            ${translationManager.t('common.refresh')}
-        `;
-    });
-
-
-    // Auto Vote Functionality
-    const autovoteToggle = document.getElementById('autovote-toggle');
-    const autovoteStatus = document.getElementById('autovote-status');
-    const autovoteLastRun = document.getElementById('autovote-last-run');
-    const autovoteCycles = document.getElementById('autovote-cycles');
-
-    let autovoteInterval = null;
-    let autovoteRunning = false;
-    let cycleCount = 0;
-    let autoRefreshInterval = null;
-    let singleVoteRunning = false;
-
-    // Function to update autovote status
-    const updateAutovoteStatus = (status, badgeClass = 'badge-neutral') => {
-        // Translate status if it's a known key
-        let translatedStatus = status;
-        if (status === 'Running') {
-            translatedStatus = translationManager.t('common.running');
-        } else if (status === 'Stopped') {
-            translatedStatus = translationManager.t('common.stopped');
-        } else if (status === 'Error') {
-            translatedStatus = 'Error'; // Keep error as is
-        } else if (status === 'Error: Not logged in') {
-            translatedStatus = 'Error: Not logged in'; // Keep error as is
-        }
-
-        autovoteStatus.textContent = translatedStatus;
-        autovoteStatus.className = `badge ${badgeClass}`;
-    };
-
-    // Function to update last run time
-    const updateLastRun = () => {
-        const now = new Date();
-        autovoteLastRun.textContent = now.toLocaleTimeString('lv-LV');
-    };
-
-    // Function to update cycle count
-    const updateCycleCount = () => {
-        cycleCount++;
-        autovoteCycles.textContent = cycleCount.toString();
-    };
-
-    // Function to run a single voting cycle
-    const runVotingCycle = async () => {
-        console.log(`🔄 runVotingCycle called, autovoteRunning: ${autovoteRunning}`);
-
-        // Check if autovote is still running before proceeding
-        if (!autovoteRunning) {
-            console.log('🛑 Autovote stopped, skipping voting cycle');
-            return false;
-        }
-
-        try {
-            console.log(`--- Auto Vote Cycle ${cycleCount + 1} ---`);
-            console.log(`Time: ${new Date().toLocaleString()}`);
-
-            // Check if user is authenticated
-            const settings = await window.api.getSettings();
-            if (!settings.token) {
-                await window.api.logError('No authentication token found. Please login first.');
-                updateAutovoteStatus('Error: Not logged in', 'badge-error');
-                return false;
-            }
-
-            // Run the voting process using the API factory
-            const result = await window.api.runVotingCycle();
-
-            // Check if autovote was stopped during the cycle
-            if (!autovoteRunning) {
-                console.log('🛑 Autovote stopped during voting cycle, aborting');
-                return false;
-            }
-
-            if (result && result.success) {
-                // Double-check that autovote is still running before updating
-                if (autovoteRunning) {
-                    updateCycleCount();
-                    updateLastRun();
-
-                    // Refresh challenges immediately after voting cycle completes
-                    const timezone = await window.api.getSetting('timezone');
-                    await loadChallenges(timezone, autovoteRunning);
-
-                    console.log(`--- Auto Vote Cycle ${cycleCount} Completed ---\n`);
-                    return true;
-                } else {
-                    console.log('🛑 Autovote was stopped, not updating cycle count or refreshing');
-                    return false;
-                }
-            } else {
-                await window.api.logError('Voting cycle failed', result?.error || 'Unknown error');
-                if (autovoteRunning) {
-                    updateAutovoteStatus('Error', 'badge-error');
-                }
-                return false;
-            }
-        } catch (error) {
-            console.error(`Error during auto vote cycle ${cycleCount + 1}:`, error);
-            updateAutovoteStatus('Error', 'badge-error');
-            return false;
-        }
-    };
-
-
-
-    // Function to start autovote
-    const startAutovote = async () => {
-        if (autovoteRunning) return;
-
-        autovoteRunning = true;
-        shouldCancelVoting = false;
-        await window.api.setCancelVoting(false);
-        updateAutovoteStatus('Running', 'badge-success');
-
-        // Update button
-        autovoteToggle.innerHTML = `
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-            ${translationManager.t('app.stopAutoVote')}
-        `;
-        autovoteToggle.className = 'btn btn-error';
-
-        // Stop the regular auto-refresh since we'll update after each voting cycle
-        stopAutoRefresh();
-
-        // Hide the refresh button when autovote is running
-        refreshBtn.style.display = 'none';
-
-        // Refresh challenges to hide individual vote buttons
-        const timezone = await window.api.getSetting('timezone');
-        loadChallenges(timezone, autovoteRunning);
-
-        // Run immediately
-        console.log('▶️ Starting immediate voting cycle');
-        runVotingCycle();
-
-        // Set up simple interval without dynamic logic to avoid service worker issues
-        const setupVotingInterval = async () => {
-            const settings = await window.api.getSettings();
-            
-            // Check if last threshold check frequency is disabled (set to 0)
-            const lastThresholdFrequency = await window.api.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
-            const useLastThreshold = lastThresholdFrequency > 0;
-            
-            let votingIntervalMs;
-            if (useLastThreshold) {
-                votingIntervalMs = lastThresholdFrequency * 60000;
-                console.log(`⏰ Using last threshold interval: ${lastThresholdFrequency} minutes`);
-            } else {
-                votingIntervalMs = settings.votingInterval * 60000;
-                console.log(`⏰ Using normal voting interval: ${settings.votingInterval} minutes (last threshold disabled)`);
-            }
-            
-            // Clear existing interval if any
-            if (autovoteInterval) {
-                clearInterval(autovoteInterval);
-            }
-            
-            console.log('⏰ Setting up autovote interval');
-            autovoteInterval = setInterval(async () => {
-                console.log('⏰ Interval triggered, autovoteRunning:', autovoteRunning);
-                if (autovoteRunning) {
-                    await runVotingCycle();
-                } else {
-                    console.log('⏰ Autovote stopped, clearing interval');
-                    clearInterval(autovoteInterval);
-                    autovoteInterval = null;
-                }
-            }, votingIntervalMs);
-
-            console.log('=== Auto Vote Started ===');
-            console.log(`Scheduling voting every ${useLastThreshold ? lastThresholdFrequency : settings.votingInterval} minutes`);
-            console.log('Challenges will update after each voting cycle');
-        };
-
-        await setupVotingInterval();
-    };
-
-    // Function to stop autovote
-    const stopAutovote = async () => {
-        console.log('🛑 stopAutovote called, autovoteRunning:', autovoteRunning, 'Interval:', autovoteInterval);
-        if (!autovoteRunning) {
-            console.log('🛑 Autovote already stopped, returning');
-            return;
-        }
-
-        console.log('🛑 Setting autovoteRunning to false and shouldCancelVoting to true');
-        autovoteRunning = false;
-        shouldCancelVoting = true;
-        await window.api.setCancelVoting(true);
-        updateAutovoteStatus('Stopped', 'badge-neutral');
-
-        // Update button
-        autovoteToggle.innerHTML = `
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            ${translationManager.t('app.startAutoVote')}
-        `;
-        autovoteToggle.className = 'btn btn-latvian';
-
-        // Clear autovote interval
-        console.log('🛑 Clearing autovote interval:', autovoteInterval);
-        if (autovoteInterval) {
-            clearInterval(autovoteInterval);
-            autovoteInterval = null;
-            console.log('🛑 Autovote interval cleared');
-        }
-
-        // Show the refresh button when autovote is stopped (but not if single vote is running)
-        if (!singleVoteRunning) {
-            refreshBtn.style.display = 'inline-flex';
-        }
-
-        // Refresh challenges to show individual vote buttons
-        loadChallenges(timezoneSelect.value, autovoteRunning);
-
-        // Restart the regular auto-refresh
-        startAutoRefresh();
-
-        console.log('=== Auto Vote Stopped ===');
-        console.log('🛑 Final autovoteRunning state:', autovoteRunning);
-    };
-
-    // Handle autovote toggle
-    autovoteToggle.addEventListener('click', async (e) => {
-        e.preventDefault(); // Prevent any default behavior
-        console.log('🔄 Autovote toggle clicked, current state:', autovoteRunning, 'Interval:', autovoteInterval);
-        if (autovoteRunning) {
-            console.log('🛑 Stopping autovote...');
-            await stopAutovote();
-        } else {
-            console.log('▶️ Starting autovote...');
-            await startAutovote();
-        }
-    });
-
-    // Clean up on page unload
-    window.addEventListener('beforeunload', () => {
-        if (autovoteInterval) {
-            clearInterval(autovoteInterval);
-        }
-        if (autoRefreshInterval) {
-            clearInterval(autoRefreshInterval);
-        }
-    });
-
-    // Start auto-refresh for challenges (every 60 seconds when autovote is not running)
-    const startAutoRefresh = () => {
-        if (!autovoteRunning) {
-            autoRefreshInterval = setInterval(() => {
-                loadChallenges(timezoneSelect.value, autovoteRunning);
-            }, 60000); // 60 seconds
-        }
-    };
-
-    // Stop auto-refresh
-    const stopAutoRefresh = () => {
-        if (autoRefreshInterval) {
-            clearInterval(autoRefreshInterval);
-            autoRefreshInterval = null;
-        }
-    };
-
-    // Start auto-refresh initially
-    startAutoRefresh();
-
-    // No welcome toast - annoying
-});
-
-// Global function to boost a specific entry
-window.boostEntry = async (challengeId, imageId, rank) => {
+window.resetChallengeSettings = async (challengeId) => {
     try {
-        console.log(`🚀 Boosting entry: Challenge ${challengeId}, Image ${imageId}, Rank ${rank}`);
+        const schema = await window.api.getSettingsSchema();
+        
+        for (const [key] of Object.entries(schema)) {
+            await window.api.setChallengeOverride(key, challengeId, null);
+        }
+        
+        // Close modal
+        window.closeChallengeSettingsModal();
+        
+        // Refresh challenges
+        const timezone = await window.api.getSetting('timezone');
+        await loadChallenges(timezone, false);
+        
+    } catch (error) {
+        console.error('Error resetting challenge settings:', error);
+        alert('Failed to reset challenge settings. Check console for details.');
+    }
+};
 
-        // Show loading state on the button
-        const button = document.querySelector(`[data-challenge-id="${challengeId}"][data-image-id="${imageId}"]`);
-        if (button) {
-            const originalText = button.innerHTML;
-            button.disabled = true;
-            button.innerHTML = '<span class="loading loading-spinner loading-xs"></span>';
-
-            // Call the API to apply boost
-            const result = await window.api.applyBoostToEntry(challengeId, imageId);
-
-            if (result && result.success) {
-                console.log('✅ Boost applied successfully');
-                // Update the button to show success
-                button.innerHTML = '✅';
-                button.className = 'btn btn-xs btn-success ml-1';
-
-                // Refresh challenges to show updated state
-                setTimeout(async () => {
-                    const timezone = await window.api.getSetting('timezone');
-                    loadChallenges(timezone, false);
-                }, 1000);
-            } else {
-                console.error('❌ Failed to apply boost:', result?.error || 'Unknown error');
-                // Reset button on error
-                button.disabled = false;
-                button.innerHTML = originalText;
-
-                // Show error message
-                alert(`Failed to apply boost: ${result?.error || 'Unknown error'}`);
+window.resetChallengeOverride = async (key, challengeId) => {
+    try {
+        await window.api.setChallengeOverride(key, challengeId, null);
+        
+        // Update the input to show the global default
+        const schema = await window.api.getSettingsSchema();
+        const config = schema[key];
+        if (config) {
+            const globalDefault = await window.api.getGlobalDefault(key);
+            const inputId = `${key}-${challengeId}`;
+            const input = document.getElementById(inputId);
+            
+            if (input) {
+                if (config.type === 'time') {
+                    const hours = Math.floor(globalDefault / 3600);
+                    const minutes = Math.floor((globalDefault % 3600) / 60);
+                    const hoursInput = document.getElementById(`${inputId}-hours`);
+                    const minutesInput = document.getElementById(`${inputId}-minutes`);
+                    if (hoursInput) hoursInput.value = hours;
+                    if (minutesInput) minutesInput.value = minutes;
+                } else if (config.type === 'boolean') {
+                    input.checked = globalDefault;
+                } else {
+                    input.value = globalDefault;
+                }
+                input.classList.remove('input-warning');
             }
         }
     } catch (error) {
-        console.error('❌ Error boosting entry:', error);
-        alert(`Error boosting entry: ${error.message || 'Unknown error'}`);
-
-        // Reset button on error
-        const button = document.querySelector(`[data-challenge-id="${challengeId}"][data-image-id="${imageId}"]`);
-        if (button) {
-            button.disabled = false;
-            button.innerHTML = '🚀';
-        }
+        console.error('Error resetting challenge override:', error);
     }
 };
-
-// Update dialog functionality
-const initializeUpdateDialog = () => {
-    const updateDialog = document.getElementById('updateDialog');
-    const currentVersion = document.getElementById('currentVersion');
-    const latestVersion = document.getElementById('latestVersion');
-    const releaseNotes = document.getElementById('releaseNotes');
-    const prereleaseBadge = document.getElementById('prereleaseBadge');
-    const skipButton = document.getElementById('skipButton');
-    const remindLaterButton = document.getElementById('remindLaterButton');
-    const downloadButton = document.getElementById('downloadButton');
-
-    // Show update dialog
-    window.showUpdateDialog = (updateInfo) => {
-        currentVersion.textContent = updateInfo.currentVersion;
-        latestVersion.textContent = updateInfo.latestVersion;
-        releaseNotes.textContent = updateInfo.releaseNotes;
-        
-        // Show prerelease badge if it's a prerelease
-        if (updateInfo.isPrerelease) {
-            prereleaseBadge.classList.remove('hidden');
-        } else {
-            prereleaseBadge.classList.add('hidden');
-        }
-        
-        updateDialog.classList.remove('hidden');
-        updateDialog.classList.add('flex');
-    };
-
-    // Hide update dialog
-    window.hideUpdateDialog = () => {
-        updateDialog.classList.add('hidden');
-        updateDialog.classList.remove('flex');
-    };
-
-    // Event listeners
-    downloadButton.addEventListener('click', async () => {
-        try {
-            await window.api.openExternalUrl('https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest');
-            window.hideUpdateDialog();
-        } catch (error) {
-            console.error('Error opening download URL:', error);
-        }
-    });
-
-    remindLaterButton.addEventListener('click', () => {
-        window.hideUpdateDialog();
-    });
-
-    skipButton.addEventListener('click', async () => {
-        try {
-            await window.api.skipUpdateVersion();
-            window.hideUpdateDialog();
-        } catch (error) {
-            console.error('Error skipping update version:', error);
-        }
-    });
-
-    // Close dialog when clicking outside
-    updateDialog.addEventListener('click', (e) => {
-        if (e.target.id === 'updateDialog') {
-            window.hideUpdateDialog();
-        }
-    });
-
-    // Listen for update notifications from main process
-    window.api.onShowUpdateDialog((updateInfo) => {
-        window.showUpdateDialog(updateInfo);
-    });
-};
-
-// Initialize update dialog when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    initializeUpdateDialog();
-});

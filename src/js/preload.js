@@ -1,3 +1,19 @@
+// Block service worker registration
+(() => {
+    const C = globalThis.ServiceWorkerContainer;
+    if (C?.prototype?.register) {
+        Object.defineProperty(C.prototype, 'register', {
+            value: function () {
+                return Promise.reject(
+                    new DOMException('Service workers disabled by Electron host', 'NotAllowedError'),
+                );
+            },
+            writable: false,
+            configurable: false,
+        });
+    }
+})();
+
 const {contextBridge, ipcRenderer} = require('electron');
 
 // Expose protected methods that allow the renderer process to use
