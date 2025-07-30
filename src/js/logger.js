@@ -169,46 +169,60 @@ const isDateOlderThan = (dateString, days) => {
 
 const cleanupOldLogs = () => {
     try {
-        const files = fs.readdirSync(logsDir);
-        const now = new Date();
+        // Check if fs and path modules are available (they might not be in test environments)
+        if (typeof require !== 'undefined') {
+            const fs = require('fs');
+            const path = require('path');
+            
+            // Check if logsDir exists and is accessible
+            if (!fs.existsSync(logsDir)) {
+                return;
+            }
+            
+            const files = fs.readdirSync(logsDir);
+            const now = new Date();
 
-        files.forEach(file => {
-            const filePath = path.join(logsDir, file);
-            const stats = fs.statSync(filePath);
-            const fileSizeMB = stats.size / (1024 * 1024);
+            files.forEach(file => {
+                const filePath = path.join(logsDir, file);
+                const stats = fs.statSync(filePath);
+                const fileSizeMB = stats.size / (1024 * 1024);
 
-            let shouldDelete = false;
-            let reason = '';
+                let shouldDelete = false;
+                let reason = '';
 
-            // Parse date from filename
-            const fileDate = parseDateFromFilename(file);
+                // Parse date from filename
+                const fileDate = parseDateFromFilename(file);
 
-            if (fileDate) {
-                // Determine retention based on file type
-                if (file.startsWith('errors-')) {
-                    shouldDelete = isDateOlderThan(fileDate, ERROR_RETENTION_DAYS) || fileSizeMB > MAX_ERROR_LOG_SIZE;
-                    reason = isDateOlderThan(fileDate, ERROR_RETENTION_DAYS) ? 'age' : 'size';
-                } else if (file.startsWith('app-')) {
-                    shouldDelete = isDateOlderThan(fileDate, GENERAL_RETENTION_DAYS) || fileSizeMB > MAX_APP_LOG_SIZE;
-                    reason = isDateOlderThan(fileDate, GENERAL_RETENTION_DAYS) ? 'age' : 'size';
-                } else if (file.startsWith('api-')) {
-                    shouldDelete = isDateOlderThan(fileDate, API_RETENTION_DAYS) || fileSizeMB > MAX_API_LOG_SIZE;
-                    reason = isDateOlderThan(fileDate, API_RETENTION_DAYS) ? 'age' : 'size';
+                if (fileDate) {
+                    // Determine retention based on file type
+                    if (file.startsWith('errors-')) {
+                        shouldDelete = isDateOlderThan(fileDate, ERROR_RETENTION_DAYS) || fileSizeMB > MAX_ERROR_LOG_SIZE;
+                        reason = isDateOlderThan(fileDate, ERROR_RETENTION_DAYS) ? 'age' : 'size';
+                    } else if (file.startsWith('app-')) {
+                        shouldDelete = isDateOlderThan(fileDate, GENERAL_RETENTION_DAYS) || fileSizeMB > MAX_APP_LOG_SIZE;
+                        reason = isDateOlderThan(fileDate, GENERAL_RETENTION_DAYS) ? 'age' : 'size';
+                    } else if (file.startsWith('api-')) {
+                        shouldDelete = isDateOlderThan(fileDate, API_RETENTION_DAYS) || fileSizeMB > MAX_API_LOG_SIZE;
+                        reason = isDateOlderThan(fileDate, API_RETENTION_DAYS) ? 'age' : 'size';
+                    }
+                } else if (file.startsWith('api-debug-')) {
+                    // Clean up old timestamped files
+                    const fileAge = now.getTime() - stats.mtime.getTime();
+                    shouldDelete = fileAge > (7 * 24 * 60 * 60 * 1000); // 7 days
+                    reason = 'age';
                 }
-            } else if (file.startsWith('api-debug-')) {
-                // Clean up old timestamped files
-                const fileAge = now.getTime() - stats.mtime.getTime();
-                shouldDelete = fileAge > (7 * 24 * 60 * 60 * 1000); // 7 days
-                reason = 'age';
-            }
 
-            if (shouldDelete) {
-                fs.unlinkSync(filePath);
-                console.log(`Cleaned up old log file: ${file} (${reason}, ${fileSizeMB.toFixed(2)} MB)`);
-            }
-        });
+                if (shouldDelete) {
+                    fs.unlinkSync(filePath);
+                    console.log(`Cleaned up old log file: ${file} (${reason}, ${fileSizeMB.toFixed(2)} MB)`);
+                }
+            });
+        }
     } catch (error) {
-        console.error('Error during log cleanup:', error);
+        // Silently ignore cleanup errors in test environments
+        if (process.env.NODE_ENV !== 'test') {
+            console.error('Error during log cleanup:', error);
+        }
     }
 };
 
