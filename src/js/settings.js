@@ -957,7 +957,7 @@ const SETTINGS_SCHEMA = {
     lastThresholdCheckFrequency: {
         type: 'number',
         default: 0,
-        perChallenge: true,
+        perChallenge: false,
         validation: (value) => typeof value === 'number' && value >= 0 && value <= 60,
         label: 'app.lastThresholdCheckFrequency',
         description: 'app.lastThresholdCheckFrequencyDesc',

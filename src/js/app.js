@@ -1,11 +1,16 @@
 // Import all UI modules
-import { updateTranslations, updateSettingsDisplay } from './ui/translations.js';
+import {updateSettingsDisplay, updateTranslations} from './ui/translations.js';
 // Removed unused imports: formatTimeRemaining, formatEndTime, getBoostStatus, getTurboStatus, renderChallenges
-import { loadChallenges } from './ui/challengeLoader.js';
-import { generateSettingsModalHtml, initializeSettingsModal, generateChallengeSettingsModalHtml, initializeChallengeSettingsModal } from './ui/settingsModal.js';
-import { initializeAutovote } from './ui/autovote.js';
-import { initializeBoostEntry } from './ui/boostEntry.js';
-import { initializeUpdateDialog } from './ui/updateDialog.js';
+import {loadChallenges} from './ui/challengeLoader.js';
+import {
+    generateChallengeSettingsModalHtml,
+    generateSettingsModalHtml,
+    initializeChallengeSettingsModal,
+    initializeSettingsModal,
+} from './ui/settingsModal.js';
+import {initializeAutovote} from './ui/autovote.js';
+import {initializeBoostEntry} from './ui/boostEntry.js';
+import {initializeUpdateDialog} from './ui/updateDialog.js';
 
 // Removed unused variable: translationManager
 
@@ -93,7 +98,7 @@ window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
 // Initialize everything when DOM is loaded
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('🚀 Initializing application...');
-    
+
     // Initialize challenge timers array
     window.challengeTimers = [];
 
@@ -109,7 +114,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Get DOM elements
     const settingsBtn = document.getElementById('settingsBtn');
     const refreshBtn = document.getElementById('refresh-challenges');
-    const timezoneSelect = document.getElementById('timezone-select');
+    const logoutBtn = document.getElementById('logoutBtn');
 
     // Load initial settings and update UI
     try {
@@ -117,10 +122,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateSettingsDisplay(settings);
         updateTranslations();
 
-        // Set timezone select value
-        if (timezoneSelect) {
-            timezoneSelect.value = settings.timezone || 'Europe/Riga';
-        }
 
         // Load challenges
         await loadChallenges(settings.timezone || 'Europe/Riga', false);
@@ -138,16 +139,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (refreshBtn) {
         refreshBtn.addEventListener('click', async () => {
-            const timezone = timezoneSelect ? timezoneSelect.value : 'Europe/Riga';
+            const timezone = await window.api.getSetting('timezone');
             await loadChallenges(timezone, false);
         });
     }
 
-    if (timezoneSelect) {
-        timezoneSelect.addEventListener('change', async () => {
-            const timezone = timezoneSelect.value;
-            await window.api.setSetting('timezone', timezone);
-            await loadChallenges(timezone, false);
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', () => {
+            window.api.logout();
         });
     }
 
@@ -180,13 +179,51 @@ window.closeChallengeSettingsModal = () => {
 
 window.saveGlobalSettings = async () => {
     try {
+        // Stop autovote if it's running before saving settings
+        if (window.stopAutovote) {
+            await window.stopAutovote();
+        }
+
+        // Save all UI settings first
+        const themeToggle = document.getElementById('modal-theme-toggle');
+        const languageSelect = document.getElementById('modal-language-select');
+        const timezoneSelect = document.getElementById('modal-timezone-select');
+        const stayLoggedIn = document.getElementById('modal-stay-logged-in');
+        const apiTimeout = document.getElementById('modal-api-timeout');
+        const votingInterval = document.getElementById('modal-voting-interval');
+
+        if (themeToggle) {
+            await window.api.setSetting('theme', themeToggle.checked ? 'dark' : 'light');
+            themeToggle.classList.remove('input-error');
+        }
+        if (languageSelect) {
+            await window.api.setSetting('language', languageSelect.value);
+            languageSelect.classList.remove('input-error');
+        }
+        if (timezoneSelect) {
+            await window.api.setSetting('timezone', timezoneSelect.value);
+            timezoneSelect.classList.remove('input-error');
+        }
+        if (stayLoggedIn) {
+            await window.api.setSetting('stayLoggedIn', stayLoggedIn.checked);
+            stayLoggedIn.classList.remove('input-error');
+        }
+        if (apiTimeout) {
+            await window.api.setSetting('apiTimeout', parseInt(apiTimeout.value));
+            apiTimeout.classList.remove('input-error');
+        }
+        if (votingInterval) {
+            await window.api.setSetting('votingInterval', parseInt(votingInterval.value));
+            votingInterval.classList.remove('input-error');
+        }
+
         // Save all global settings
         const schema = await window.api.getSettingsSchema();
-        
+
         for (const [key, config] of Object.entries(schema)) {
             const inputId = `global-${key}`;
             const input = document.getElementById(inputId);
-            
+
             if (input) {
                 let value;
                 if (config.type === 'time') {
@@ -194,26 +231,35 @@ window.saveGlobalSettings = async () => {
                     const minutesInput = document.getElementById(`${inputId}-minutes`);
                     if (hoursInput && minutesInput) {
                         value = (parseInt(hoursInput.value) * 3600) + (parseInt(minutesInput.value) * 60);
+                        // Clear warning classes after saving
+                        hoursInput.classList.remove('input-error');
+                        minutesInput.classList.remove('input-error');
                     }
                 } else if (config.type === 'boolean') {
                     value = input.checked;
+                    input.classList.remove('input-error');
                 } else {
                     value = parseInt(input.value) || input.value;
+                    input.classList.remove('input-error');
                 }
-                
+
                 await window.api.setGlobalDefault(key, value);
             }
         }
-        
+
         // Close modal
         window.closeSettingsModal();
-        
-        // Refresh challenges to show updated settings
+
+        // Refresh UI and challenges
+        const settings = await window.api.getSettings();
+        updateSettingsDisplay(settings);
+        updateTranslations();
+
         const timezone = await window.api.getSetting('timezone');
         await loadChallenges(timezone, false);
-        
+
     } catch (error) {
-        console.error('Error saving global settings:', error);
+        console.error('Error saving settings:', error);
         alert('Failed to save settings. Check console for details.');
     }
 };
@@ -221,18 +267,62 @@ window.saveGlobalSettings = async () => {
 window.resetAllSettings = async () => {
     try {
         const schema = await window.api.getSettingsSchema();
-        
+
+        // Reset all global settings to defaults (don't auto-save)
         for (const [key, config] of Object.entries(schema)) {
-            await window.api.setGlobalDefault(key, config.default);
+            const inputId = `global-${key}`;
+            const input = document.getElementById(inputId);
+
+            if (input) {
+                if (config.type === 'time') {
+                    const hours = Math.floor(config.default / 3600);
+                    const minutes = Math.floor((config.default % 3600) / 60);
+                    const hoursInput = document.getElementById(`${inputId}-hours`);
+                    const minutesInput = document.getElementById(`${inputId}-minutes`);
+                    if (hoursInput) {
+                        hoursInput.value = hours;
+                        hoursInput.classList.add('input-error');
+                    }
+                    if (minutesInput) {
+                        minutesInput.value = minutes;
+                        minutesInput.classList.add('input-error');
+                    }
+                } else if (config.type === 'boolean') {
+                    input.checked = config.default;
+                    input.classList.add('input-error');
+                } else {
+                    input.value = config.default;
+                    input.classList.add('input-error');
+                }
+            }
         }
-        
-        // Close modal
-        window.closeSettingsModal();
-        
-        // Refresh challenges
-        const timezone = await window.api.getSetting('timezone');
-        await loadChallenges(timezone, false);
-        
+
+        // Reset all UI settings to defaults (don't auto-save)
+        const defaultValues = {
+            theme: 'light',
+            language: 'en',
+            timezone: 'Europe/Riga',
+            stayLoggedIn: false,
+            apiTimeout: 30,
+            votingInterval: 3,
+        };
+
+        for (const [key, defaultValue] of Object.entries(defaultValues)) {
+            const inputId = `modal-${key}`;
+            const input = document.getElementById(inputId);
+
+            if (input) {
+                if (key === 'theme') {
+                    input.checked = defaultValue === 'dark';
+                } else if (key === 'stayLoggedIn') {
+                    input.checked = defaultValue;
+                } else {
+                    input.value = defaultValue;
+                }
+                input.classList.add('input-error');
+            }
+        }
+
     } catch (error) {
         console.error('Error resetting settings:', error);
         alert('Failed to reset settings. Check console for details.');
@@ -244,26 +334,31 @@ window.resetGlobalDefault = async (key) => {
         const schema = await window.api.getSettingsSchema();
         const config = schema[key];
         if (config) {
-            await window.api.setGlobalDefault(key, config.default);
-            
-            // Update the input to show the default value
+            // Update the input to show the default value (don't auto-save)
             const inputId = `global-${key}`;
             const input = document.getElementById(inputId);
-            
+
             if (input) {
                 if (config.type === 'time') {
                     const hours = Math.floor(config.default / 3600);
                     const minutes = Math.floor((config.default % 3600) / 60);
                     const hoursInput = document.getElementById(`${inputId}-hours`);
                     const minutesInput = document.getElementById(`${inputId}-minutes`);
-                    if (hoursInput) hoursInput.value = hours;
-                    if (minutesInput) minutesInput.value = minutes;
+                    if (hoursInput) {
+                        hoursInput.value = hours;
+                        hoursInput.classList.add('input-error');
+                    }
+                    if (minutesInput) {
+                        minutesInput.value = minutes;
+                        minutesInput.classList.add('input-error');
+                    }
                 } else if (config.type === 'boolean') {
                     input.checked = config.default;
+                    input.classList.add('input-error');
                 } else {
                     input.value = config.default;
+                    input.classList.add('input-error');
                 }
-                input.classList.remove('input-warning');
             }
         }
     } catch (error) {
@@ -281,15 +376,13 @@ window.resetUISetting = async (key) => {
             apiTimeout: 30,
             votingInterval: 3,
         };
-        
+
         const defaultValue = defaultValues[key];
         if (defaultValue !== undefined) {
-            await window.api.setSetting(key, defaultValue);
-            
-            // Update the input
+            // Update the input (don't auto-save)
             const inputId = `modal-${key}`;
             const input = document.getElementById(inputId);
-            
+
             if (input) {
                 if (key === 'theme') {
                     input.checked = defaultValue === 'dark';
@@ -298,6 +391,7 @@ window.resetUISetting = async (key) => {
                 } else {
                     input.value = defaultValue;
                 }
+                input.classList.add('input-error');
             }
         }
     } catch (error) {
@@ -307,12 +401,17 @@ window.resetUISetting = async (key) => {
 
 window.saveChallengeSettings = async (challengeId) => {
     try {
+        // Stop autovote if it's running before saving challenge settings
+        if (window.stopAutovote) {
+            await window.stopAutovote();
+        }
+
         const schema = await window.api.getSettingsSchema();
-        
+
         for (const [key, config] of Object.entries(schema)) {
             const inputId = `${key}-${challengeId}`;
             const input = document.getElementById(inputId);
-            
+
             if (input) {
                 let value;
                 if (config.type === 'time') {
@@ -320,24 +419,29 @@ window.saveChallengeSettings = async (challengeId) => {
                     const minutesInput = document.getElementById(`${inputId}-minutes`);
                     if (hoursInput && minutesInput) {
                         value = (parseInt(hoursInput.value) * 3600) + (parseInt(minutesInput.value) * 60);
+                        // Clear warning classes after saving
+                        hoursInput.classList.remove('input-error');
+                        minutesInput.classList.remove('input-error');
                     }
                 } else if (config.type === 'boolean') {
                     value = input.checked;
+                    input.classList.remove('input-error');
                 } else {
                     value = parseInt(input.value) || input.value;
+                    input.classList.remove('input-error');
                 }
-                
+
                 await window.api.setChallengeOverride(key, challengeId, value);
             }
         }
-        
+
         // Close modal
         window.closeChallengeSettingsModal();
-        
+
         // Refresh challenges to show updated settings
         const timezone = await window.api.getSetting('timezone');
         await loadChallenges(timezone, false);
-        
+
     } catch (error) {
         console.error('Error saving challenge settings:', error);
         alert('Failed to save challenge settings. Check console for details.');
@@ -347,18 +451,37 @@ window.saveChallengeSettings = async (challengeId) => {
 window.resetChallengeSettings = async (challengeId) => {
     try {
         const schema = await window.api.getSettingsSchema();
-        
-        for (const [key] of Object.entries(schema)) {
-            await window.api.setChallengeOverride(key, challengeId, null);
+
+        // Reset all inputs to global defaults (don't auto-save)
+        for (const [key, config] of Object.entries(schema)) {
+            const globalDefault = await window.api.getGlobalDefault(key);
+            const inputId = `${key}-${challengeId}`;
+            const input = document.getElementById(inputId);
+
+            if (input) {
+                if (config.type === 'time') {
+                    const hours = Math.floor(globalDefault / 3600);
+                    const minutes = Math.floor((globalDefault % 3600) / 60);
+                    const hoursInput = document.getElementById(`${inputId}-hours`);
+                    const minutesInput = document.getElementById(`${inputId}-minutes`);
+                    if (hoursInput) {
+                        hoursInput.value = hours;
+                        hoursInput.classList.add('input-error');
+                    }
+                    if (minutesInput) {
+                        minutesInput.value = minutes;
+                        minutesInput.classList.add('input-error');
+                    }
+                } else if (config.type === 'boolean') {
+                    input.checked = globalDefault;
+                    input.classList.add('input-error');
+                } else {
+                    input.value = globalDefault;
+                    input.classList.add('input-error');
+                }
+            }
         }
-        
-        // Close modal
-        window.closeChallengeSettingsModal();
-        
-        // Refresh challenges
-        const timezone = await window.api.getSetting('timezone');
-        await loadChallenges(timezone, false);
-        
+
     } catch (error) {
         console.error('Error resetting challenge settings:', error);
         alert('Failed to reset challenge settings. Check console for details.');
@@ -367,30 +490,35 @@ window.resetChallengeSettings = async (challengeId) => {
 
 window.resetChallengeOverride = async (key, challengeId) => {
     try {
-        await window.api.setChallengeOverride(key, challengeId, null);
-        
-        // Update the input to show the global default
+        // Update the input to show the global default (don't auto-save)
         const schema = await window.api.getSettingsSchema();
         const config = schema[key];
         if (config) {
             const globalDefault = await window.api.getGlobalDefault(key);
             const inputId = `${key}-${challengeId}`;
             const input = document.getElementById(inputId);
-            
+
             if (input) {
                 if (config.type === 'time') {
                     const hours = Math.floor(globalDefault / 3600);
                     const minutes = Math.floor((globalDefault % 3600) / 60);
                     const hoursInput = document.getElementById(`${inputId}-hours`);
                     const minutesInput = document.getElementById(`${inputId}-minutes`);
-                    if (hoursInput) hoursInput.value = hours;
-                    if (minutesInput) minutesInput.value = minutes;
+                    if (hoursInput) {
+                        hoursInput.value = hours;
+                        hoursInput.classList.add('input-error');
+                    }
+                    if (minutesInput) {
+                        minutesInput.value = minutes;
+                        minutesInput.classList.add('input-error');
+                    }
                 } else if (config.type === 'boolean') {
                     input.checked = globalDefault;
+                    input.classList.add('input-error');
                 } else {
                     input.value = globalDefault;
+                    input.classList.add('input-error');
                 }
-                input.classList.remove('input-warning');
             }
         }
     } catch (error) {

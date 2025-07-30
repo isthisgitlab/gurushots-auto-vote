@@ -37,6 +37,9 @@ let shouldCancelVoting = false;
 let settingsWatcher = null;
 let settingsReloadTimeout = null;
 
+// Track main window creation time to prevent reload during login
+let mainWindowCreatedTime = null;
+
 function createLoginWindow() {
     // Get saved window bounds
     const bounds = settings.getWindowBounds('login');
@@ -92,6 +95,9 @@ function createLoginWindow() {
 function createMainWindow() {
     // Get saved window bounds
     const bounds = settings.getWindowBounds('main');
+
+    // Track when main window is created to prevent reload during login
+    mainWindowCreatedTime = Date.now();
 
     // Create the main application window with saved bounds
     mainWindow = new BrowserWindow({
@@ -154,6 +160,13 @@ function createMainWindow() {
 
                 // Reload after a short delay to avoid rapid reloads
                 settingsReloadTimeout = setTimeout(() => {
+                    // Prevent reload if main window was just created (during login)
+                    const timeSinceCreation = Date.now() - mainWindowCreatedTime;
+                    if (timeSinceCreation < 2000) { // 2 second window
+                        console.log('🔄 Settings file changed, but skipping reload (window recently created)');
+                        return;
+                    }
+                    
                     console.log('🔄 Settings file changed, reloading main window...');
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.reload();
@@ -280,12 +293,8 @@ ipcMain.on('login-success', () => {
 ipcMain.on('logout', () => {
     if (!mainWindow) return;
 
-    const userSettings = settings.loadSettings();
-
-    // Clear the token only if stay logged in is not enabled
-    if (!userSettings.stayLoggedIn) {
-        settings.setSetting('token', '');
-    }
+    // Always clear the token on logout (regardless of stay logged in setting)
+    settings.setSetting('token', '');
 
     // Reset mock value to environment default while preserving theme and remember me settings
     const envInfo = settings.getEnvironmentInfo();
