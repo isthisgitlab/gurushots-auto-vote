@@ -79,7 +79,15 @@ jobs:
           IS_BETA="${{ steps.is_beta.outputs.IS_BETA }}"
           
           if [[ "$IS_BETA" == "true" ]]; then
-            npm version prerelease --preid=beta --no-git-tag-version
+            # For beta releases, use the appropriate prerelease command
+            if [[ "$BUMP_TYPE" == "major" ]]; then
+              npm version premajor --preid=beta --no-git-tag-version
+            elif [[ "$BUMP_TYPE" == "minor" ]]; then
+              npm version preminor --preid=beta --no-git-tag-version
+            else
+              # For patch, just increment the beta number
+              npm version prerelease --preid=beta --no-git-tag-version
+            fi
           else
             npm version $BUMP_TYPE --no-git-tag-version
           fi
@@ -268,9 +276,9 @@ jobs:
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.dmg
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/GuruShotsAutoVote-v*.AppImage
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/GuruShotsAutoVote-v*.exe
-            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-mac
-            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-linux
-            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-linux-arm
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux-arm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
