@@ -224,7 +224,7 @@ Show help:
 The continuous voting mode automatically runs voting cycles with dynamic interval scheduling:
 
 - **Normal Operation**: Runs every 3 minutes (configurable via settings)
-- **Within Last Threshold**: Automatically switches to higher frequency (default: 1 minute)
+- **Within Last Threshold**: Automatically switches to higher frequency (default: 0 = disabled)
 - **Automatic Detection**: Monitors all active challenges and adjusts frequency based on their end times
 
 ## 📝 Logging
@@ -247,8 +247,8 @@ The app automatically saves your preferences:
 - **Window Position**: Remembers where you placed the app window
 - **API Timeout**: Configurable timeout for API requests (1-120 seconds)
 - **Voting Interval**: Customizable interval between voting cycles (1-60 minutes)
-- **Last Threshold Check Frequency**: Dynamic check frequency when within last threshold (1-60 minutes, default: 1)
-- **Challenge Settings**: Per-challenge overrides for boost time, exposure, last minutes threshold, and check frequency
+- **Last Threshold Check Frequency**: Dynamic check frequency when within last threshold (1-60 minutes, default: 0 = disabled, global setting)
+- **Challenge Settings**: Per-challenge overrides for boost time, exposure, last minutes threshold, and vote only in last threshold
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly.
 
@@ -267,7 +267,7 @@ The application uses a hierarchical settings system that gives you powerful cont
 - **Scenario 1**: Set global exposure to 80% but override a specific challenge to 100%
 - **Scenario 2**: Configure most challenges to vote normally, but set a few to "boost only" mode
 - **Scenario 3**: Use different last-minute thresholds for different types of challenges
-- **Scenario 4**: Apply more aggressive check frequencies to high-priority challenges
+- **Scenario 4**: Apply more aggressive check frequencies during critical time periods
 
 #### **Benefits of This Approach**
 
@@ -361,8 +361,7 @@ The Last Threshold Check Frequency feature allows you to configure different che
 
 You can configure this setting in the app:
 
-- **Global Default**: Set a default frequency for all challenges
-- **Per-Challenge Override**: Set different frequencies for specific challenges
+- **Global Setting**: Set the frequency for all challenges (no per-challenge overrides)
 - **Range**: 0-60 minutes (0 = disabled, recommended: 1-5 minutes for last threshold)
 
 ### **Example Scenarios**
