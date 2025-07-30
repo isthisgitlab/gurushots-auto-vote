@@ -289,7 +289,7 @@ const mockApiClient = {
                         shouldVote = true;
                         voteReason = `flash type: exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
                     } else {
-                        voteReason = `flash type: exposure already at 100%`;
+                        voteReason = 'flash type: exposure already at 100%';
                     }
                 } else if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
                     // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold

@@ -2,6 +2,27 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// ANSI color codes for CLI output
+const colors = {
+    reset: '\x1b[0m',
+    bright: '\x1b[1m',
+    dim: '\x1b[2m',
+    red: '\x1b[31m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    magenta: '\x1b[35m',
+    cyan: '\x1b[36m',
+    white: '\x1b[37m',
+    gray: '\x1b[90m',
+    bgRed: '\x1b[41m',
+    bgGreen: '\x1b[42m',
+    bgYellow: '\x1b[43m',
+    bgBlue: '\x1b[44m',
+    bgMagenta: '\x1b[45m',
+    bgCyan: '\x1b[46m',
+};
+
 // Try to get Electron app (same logic as settings.js)
 let electronApp;
 try {
@@ -14,16 +35,54 @@ try {
 // process.type will be 'renderer' or 'main' in Electron apps
 const isElectronApp = process.type === 'renderer' || process.type === 'main';
 
+/**
+ * Detect if we're running from source code vs built app
+ * @returns {boolean} - True if running from source, false if built
+ */
+const isSourceCode = () => {
+    // If we're in Electron and it's packaged, we're definitely built
+    if (electronApp && electronApp.isPackaged) {
+        return false;
+    }
+    
+    // For CLI: check if we're running as a pkg binary
+    if (process.pkg) {
+        return false;
+    }
+    
+    // Check if __dirname contains .asar (Electron packaged but somehow not detected)
+    if (__dirname.includes('.asar')) {
+        return false;
+    }
+    
+    // If none of the above, assume we're running from source
+    return true;
+};
+
+/**
+ * Get the app name with environment suffix if needed
+ * @returns {string} - App name with -dev suffix for source code
+ */
+const getAppName = () => {
+    const baseAppName = 'gurushots-auto-vote';
+    return isSourceCode() ? `${baseAppName}-dev` : baseAppName;
+};
+
 // Get the same userData path that settings use
 const getUserDataPath = () => {
     let userDataPath;
 
     if (electronApp && electronApp.getPath) {
         // Electron context - use app.getPath('userData')
+        // For source code, we need to modify the path to include -dev suffix
         userDataPath = electronApp.getPath('userData');
+        if (isSourceCode()) {
+            // Running from source code - append -dev to the base userData path
+            userDataPath = userDataPath + '-dev';
+        }
     } else {
         // CLI context - create fallback userData path (same as settings.js)
-        const appName = 'gurushots-auto-vote';
+        const appName = getAppName();
 
         // Use platform-specific paths
         switch (process.platform) {
@@ -64,8 +123,10 @@ if (!fs.existsSync(logsDir)) {
 // Check if we're in development mode (not mock)
 const isDevMode = process.env.NODE_ENV === 'development';
 
-// Check if we're in CLI mode (not running in Electron app context)
-const isCliMode = !isElectronApp;
+// Check if we're in CLI mode vs GUI mode
+// CLI mode: running directly from cli.js or when electron main process handles CLI commands
+// GUI mode: electron main process handling GUI IPC calls
+const isCliMode = !isElectronApp || (process.argv[1] && process.argv[1].includes('cli.js'));
 
 // Get current date in YYYY-MM-DD format
 const getCurrentDate = () => {
@@ -151,11 +212,92 @@ const cleanupOldLogs = () => {
     }
 };
 
-// Write to log file with daily rotation
-const writeToLogFile = (logFile, level, message, data = null) => {
+// Context override for explicit context setting
+let contextOverride = null;
+
+/**
+ * Set explicit context override (for IPC calls from GUI)
+ */
+const setContext = (context) => {
+    contextOverride = context;
+};
+
+/**
+ * Clear context override
+ */
+const clearContext = () => {
+    contextOverride = null;
+};
+
+/**
+ * Get context identifier (CLI/GUI)
+ */
+const getContext = () => {
+    // Use explicit override if set
+    if (contextOverride) {
+        return contextOverride;
+    }
+    
+    // Check if we're in a pure CLI environment (no Electron at all)
+    if (!isElectronApp) {
+        return 'CLI';
+    }
+    
+    // If we're in Electron, check if we were started via CLI
+    if (process.argv[1] && process.argv[1].includes('cli.js')) {
+        return 'CLI';
+    }
+    
+    // Default for Electron main process is GUI
+    return 'GUI';
+};
+
+/**
+ * Get timestamp in HH:MM:SS format
+ */
+const getTimeString = () => {
+    return new Date().toLocaleTimeString('en-GB', { hour12: false });
+};
+
+/**
+ * Apply color to text (only in CLI mode)
+ */
+const colorize = (text, color) => {
+    if (!isCliMode || !process.stdout.isTTY) {
+        return text;
+    }
+    return `${colors[color]}${text}${colors.reset}`;
+};
+
+/**
+ * Format console output with context and colors
+ */
+const formatConsoleMessage = (level, message, context = getContext(), timestamp = getTimeString()) => {
+    const levelColors = {
+        'INFO': 'blue',
+        'SUCCESS': 'green',
+        'WARNING': 'yellow',
+        'ERROR': 'red',
+        'DEBUG': 'gray',
+        'API': 'cyan',
+        'PROGRESS': 'magenta',
+    };
+
+    const color = levelColors[level] || 'white';
+    const coloredLevel = colorize(`[${level}]`, color);
+    const coloredContext = colorize(`[${context}]`, 'cyan');
+    const coloredTime = colorize(`[${timestamp}]`, 'gray');
+
+    return `${coloredContext} ${coloredTime} ${coloredLevel} ${message}`;
+};
+
+/**
+ * Write to log file with enhanced formatting
+ */
+const writeToLogFile = (logFile, level, message, data = null, context = getContext()) => {
     try {
         const timestamp = new Date().toISOString();
-        let logEntry = `[${timestamp}] [${level}] ${message}`;
+        let logEntry = `[${timestamp}] [${context}] [${level}] ${message}`;
 
         if (data) {
             if (typeof data === 'object') {
@@ -170,11 +312,99 @@ const writeToLogFile = (logFile, level, message, data = null) => {
         // Write to file
         fs.appendFileSync(logFile, logEntry);
 
-        // Also log to console for immediate feedback
-        console.log(`[${level}] ${message}`);
+        // Also log to console with formatting
+        console.log(formatConsoleMessage(level, message, context));
     } catch (error) {
         console.error('Error writing to log file:', error);
     }
+};
+
+/**
+ * Enhanced logging with operation tracking
+ */
+const logWithOperation = (level, operation, message, data = null, duration = null) => {
+    let formattedMessage = message;
+    
+    if (operation) {
+        formattedMessage = `${operation}: ${message}`;
+    }
+    
+    if (duration !== null) {
+        formattedMessage += ` ${colorize(`(${duration}ms)`, 'dim')}`;
+    }
+    
+    const logFile = level === 'ERROR' ? currentLogFiles.error : 
+        level === 'API' ? currentLogFiles.api : currentLogFiles.app;
+    
+    writeToLogFile(logFile, level, formattedMessage, data);
+};
+
+/**
+ * Progress indicator for long operations
+ */
+const logProgress = (message, current = null, total = null) => {
+    let progressMessage = message;
+    
+    if (current !== null && total !== null) {
+        const percentage = Math.round((current / total) * 100);
+        const progressBar = '█'.repeat(Math.floor(percentage / 5)) + 
+                           '░'.repeat(20 - Math.floor(percentage / 5));
+        progressMessage += ` [${progressBar}] ${percentage}% (${current}/${total})`;
+    }
+    
+    console.log(formatConsoleMessage('PROGRESS', progressMessage));
+};
+
+/**
+ * Success message with checkmark
+ */
+const logSuccess = (message, data = null, duration = null) => {
+    let successMessage = `✅ ${message}`;
+    if (duration !== null) {
+        successMessage += ` ${colorize(`(${duration}ms)`, 'dim')}`;
+    }
+    writeToLogFile(currentLogFiles.app, 'SUCCESS', successMessage, data);
+};
+
+/**
+ * Warning message with warning symbol
+ */
+const logWarning = (message, data = null) => {
+    const warningMessage = `⚠️ ${message}`;
+    writeToLogFile(currentLogFiles.app, 'WARNING', warningMessage, data);
+};
+
+/**
+ * Operation start tracker
+ */
+const operations = new Map();
+
+const startOperation = (operationId, message) => {
+    const startTime = Date.now();
+    operations.set(operationId, { startTime, message });
+    
+    const startMessage = `🔄 ${message}...`;
+    writeToLogFile(currentLogFiles.app, 'INFO', startMessage);
+    
+    return startTime;
+};
+
+const endOperation = (operationId, successMessage = null, errorMessage = null) => {
+    const operation = operations.get(operationId);
+    if (!operation) return;
+    
+    const duration = Date.now() - operation.startTime;
+    operations.delete(operationId);
+    
+    if (errorMessage) {
+        const failMessage = `❌ ${operation.message} failed: ${errorMessage}`;
+        writeToLogFile(currentLogFiles.error, 'ERROR', failMessage);
+    } else {
+        const completeMessage = successMessage || `${operation.message} completed`;
+        logSuccess(completeMessage, null, duration);
+    }
+    
+    return duration;
 };
 
 // Initialize cleanup on module load
@@ -200,10 +430,8 @@ const currentLogFiles = getLogFilePaths();
 
 // Export logger functions
 module.exports = {
-    // Error logging - 30 days retention
+    // Basic logging methods (backward compatibility)
     error: (message, data) => writeToLogFile(currentLogFiles.error, 'ERROR', message, data),
-
-    // General logging - 7 days retention
     info: (message, data) => writeToLogFile(currentLogFiles.app, 'INFO', message, data),
     debug: (message, data) => {
         // CLI mode: always log debug
@@ -212,25 +440,93 @@ module.exports = {
             writeToLogFile(currentLogFiles.app, 'DEBUG', message, data);
         } else {
             // In GUI production mode, only log to console, not to file
-            console.log(`[DEBUG] ${message}`);
+            console.log(formatConsoleMessage('DEBUG', message));
         }
     },
-
-    // API logging - only in dev mode, 1 day retention
     api: (message, data) => {
-        if (isDevMode) {
+        if (isDevMode || isCliMode) {
             writeToLogFile(currentLogFiles.api, 'API', message, data);
         }
     },
 
-    // Get current log file paths
+    // Enhanced logging methods
+    success: logSuccess,
+    warning: logWarning,
+    progress: logProgress,
+    
+    // Operation tracking
+    startOperation,
+    endOperation,
+    
+    // Enhanced logging with context
+    logWithOperation,
+    
+    // Challenge-specific logging
+    challengeInfo: (challengeId, challengeTitle, message, data) => {
+        const contextMessage = `[Challenge ${challengeId}: ${challengeTitle}] ${message}`;
+        writeToLogFile(currentLogFiles.app, 'INFO', contextMessage, data);
+    },
+    
+    challengeSuccess: (challengeId, challengeTitle, message, data, duration) => {
+        const contextMessage = `[Challenge ${challengeId}: ${challengeTitle}] ✅ ${message}`;
+        logSuccess(contextMessage, data, duration);
+    },
+    
+    challengeError: (challengeId, challengeTitle, message, data) => {
+        const contextMessage = `[Challenge ${challengeId}: ${challengeTitle}] ❌ ${message}`;
+        writeToLogFile(currentLogFiles.error, 'ERROR', contextMessage, data);
+    },
+    
+    // API-specific logging with timing
+    apiRequest: (method, url, duration = null) => {
+        const message = duration ? 
+            `${method} ${url} (${duration}ms)` : 
+            `${method} ${url}`;
+        if (isDevMode || isCliMode) {
+            writeToLogFile(currentLogFiles.api, 'API', `🌐 REQUEST: ${message}`);
+        }
+    },
+    
+    apiResponse: (method, url, status, duration = null) => {
+        const statusEmoji = status >= 200 && status < 300 ? '✅' : '❌';
+        const message = duration ? 
+            `${method} ${url} → ${status} (${duration}ms)` : 
+            `${method} ${url} → ${status}`;
+        if (isDevMode || isCliMode) {
+            writeToLogFile(currentLogFiles.api, 'API', `${statusEmoji} RESPONSE: ${message}`);
+        }
+    },
+    
+    // CLI-specific methods
+    cliInfo: (message, data) => {
+        if (isCliMode) {
+            writeToLogFile(currentLogFiles.app, 'INFO', message, data);
+        }
+    },
+    
+    cliSuccess: (message, data, duration) => {
+        if (isCliMode) {
+            logSuccess(message, data, duration);
+        }
+    },
+    
+    cliError: (message, data) => {
+        if (isCliMode) {
+            writeToLogFile(currentLogFiles.error, 'ERROR', message, data);
+        }
+    },
+
+    // Utility methods
     getLogFile: () => currentLogFiles.app,
     getErrorLogFile: () => currentLogFiles.error,
     getApiLogFile: () => currentLogFiles.api,
-
-    // Get log files for a specific date
     getLogFileForDate: (date) => getLogFilePaths(date),
-
-    // Manual cleanup function
     cleanup: cleanupOldLogs,
+    
+    // Context helpers
+    getContext,
+    setContext,
+    clearContext,
+    isCliMode: () => isCliMode,
+    isDevMode: () => isDevMode,
 }; 
