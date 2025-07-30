@@ -55,8 +55,7 @@ function createLoginWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
-            // Disable service workers to prevent database IO errors
-            webSecurity: false,
+            webSecurity: true,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',
         },
@@ -110,8 +109,7 @@ function createMainWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
-            // Disable service workers to prevent database IO errors
-            webSecurity: false,
+            webSecurity: true,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',
         },

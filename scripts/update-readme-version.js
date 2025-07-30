@@ -164,6 +164,11 @@ try {
                 pattern: /gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux-arm/g,
                 replacement: `gurucli-v${version}-linux-arm`,
             },
+            // Handle CLI command examples with [platform] placeholder
+            {
+                pattern: /\.\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-\[platform\]/g,
+                replacement: `./gurucli-v${version}-[platform]`,
+            },
         ];
         
         // Apply CLI command replacements

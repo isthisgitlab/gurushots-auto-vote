@@ -6,6 +6,25 @@
 An Electron application for automated voting on GuruShots challenges. Features both a graphical interface and
 command-line tools for easy automation.
 
+## ⚠️ IMPORTANT: Single Instance Warning
+
+**🚨 CRITICAL**: This application is designed to run **ONLY ONE INSTANCE** per computer. Running multiple instances (GUI or CLI) simultaneously will likely cause:
+
+- **API Rate Limit Exceeded**: GuruShots will block your requests
+- **Failed Voting**: The application will stop working properly
+- **Account Issues**: Potential temporary restrictions on your GuruShots account
+- **Unpredictable Behavior**: Conflicts between instances
+
+**✅ Recommended Usage:**
+- Use **either** the GUI **or** CLI version, but not both at the same time
+- Close any existing instances before starting a new one
+- If you need to switch between GUI and CLI, stop the current instance first
+
+**🔧 If you encounter rate limit errors:**
+1. Stop all instances of the application
+2. Wait 5-10 minutes before trying again
+3. Ensure only one instance is running
+
 ## ☕ Support the Project
 
 If you find this tool helpful, consider supporting its development:
@@ -144,17 +163,17 @@ For CLI applications, use these commands after making the file executable:
 
 Login with your credentials:
 ```
-./gurucli-v0.2.0-[platform] login
+./gurucli-v0.3.0-beta.1-[platform] login
 ```
 
 Run a single voting cycle:
 ```
-./gurucli-v0.2.0-[platform] vote
+./gurucli-v0.3.0-beta.1-[platform] vote
 ```
 
 Start continuous voting:
 ```
-./gurucli-v0.2.0-[platform] start
+./gurucli-v0.3.0-beta.1-[platform] start
 ```
 
 ## 🔧 Usage
@@ -192,31 +211,33 @@ The GUI provides a user-friendly interface for managing your GuruShots voting:
 
 ### **CLI Commands**
 
+> **⚠️ Remember**: Only run ONE instance (GUI or CLI) at a time to avoid API rate limits.
+
 For the CLI application, use these commands:
 
 Login with your credentials:
 ```
-./gurucli-v0.2.0-[platform] login
+./gurucli-v0.3.0-beta.1-[platform] login
 ```
 
 Run one voting cycle:
 ```
-./gurucli-v0.2.0-[platform] vote
+./gurucli-v0.3.0-beta.1-[platform] vote
 ```
 
 Start continuous voting:
 ```
-./gurucli-v0.2.0-[platform] start
+./gurucli-v0.3.0-beta.1-[platform] start
 ```
 
 Check current status:
 ```
-./gurucli-v0.2.0-[platform] status
+./gurucli-v0.3.0-beta.1-[platform] status
 ```
 
 Show help:
 ```
-./gurucli-v0.2.0-[platform] help
+./gurucli-v0.3.0-beta.1-[platform] help
 ```
 
 ### **Continuous Voting**
@@ -240,6 +261,7 @@ The application automatically logs activity to help with troubleshooting:
 ## ⚙️ Settings
 
 > **⚠️ Important**: Changing settings while auto-vote is running will stop the voting process. You will need to manually restart auto-vote after applying your new settings.
+> **WINDOW MOVEMENT**: If you move the app window, it will automatically save its position but it will stop autovoting process as it is saving the position in settings.
 
 The app automatically saves your preferences:
 
@@ -409,6 +431,12 @@ You can change the application language through the settings interface. The lang
 **Windows open off-screen**
 - Restart the application
 - If using CLI, run the reset-windows command
+
+**"API Rate Limit Exceeded" or "Too Many Requests"**
+- **Stop all instances** of the application (GUI and CLI)
+- Wait 5-10 minutes before trying again
+- Ensure only **one instance** is running at a time
+- Check that no other applications are accessing GuruShots API
 
 ### **Get Help**
 
