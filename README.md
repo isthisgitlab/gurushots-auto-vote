@@ -1,8 +1,8 @@
 # GuruShots Auto Voter
 
 [![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/workflows/Build%20and%20Release/badge.svg)](https://github.com/isthisgitlab/gurushots-auto-vote/actions)
-[![Coverage](https://img.shields.io/badge/coverage-98.9%25-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
-[![Tests](https://img.shields.io/badge/tests-191%20passing-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
+[![Coverage](https://img.shields.io/badge/coverage-98.5%25-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
+[![Tests](https://img.shields.io/badge/tests-204%20passing-brightgreen)](https://github.com/isthisgitlab/gurushots-auto-vote)
 [![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
 An Electron application for automated voting on GuruShots challenges. Features both a graphical interface and
@@ -28,7 +28,7 @@ If you find this tool helpful, consider supporting its development:
 - **Remember Me**: Stay logged in across sessions
 - **Theme Support**: Light and dark mode options
 - **Mock Mode**: Test the app without real API calls
-- **Comprehensive Testing**: Extensive test suite with >98% coverage
+- **Comprehensive Testing**: Extensive test suite with 98.5% coverage (204 tests)
 - **Internationalization**: Multi-language support with dynamic language selection
 - **Configurable Timeouts**: Customizable API timeout and voting interval settings
 - **Enhanced Security**: Improved token handling and reduced sensitive data exposure
@@ -569,14 +569,16 @@ Our test suite achieves excellent coverage across core components:
 
 | Component      | Statements | Branches | Functions | Lines  |
 |----------------|------------|----------|-----------|--------|
-| **Overall**    | 98.9%      | 95.91%   | 100%      | 98.88% |
-| API Client     | 100%       | 100%     | 100%      | 100%   |
-| Authentication | 100%       | 100%     | 100%      | 100%   |
-| Challenges     | 100%       | 87.5%    | 100%      | 100%   |
-| Voting         | 95.12%     | 93.75%   | 100%      | 94.87% |
-| Boost          | 100%       | 100%     | 100%      | 100%   |
-| Strategies     | 100%       | 100%     | 100%      | 100%   |
+| **Overall**    | 98.5%      | 92.85%   | 100%      | 98.48% |
 | API Factory    | 100%       | 100%     | 100%      | 100%   |
+| API Client     | 95.83%     | 81.81%   | 100%      | 95.83% |
+| Boost          | 100%       | 100%     | 100%      | 100%   |
+| Challenges     | 100%       | 87.5%    | 100%      | 100%   |
+| Login          | 100%       | 100%     | 100%      | 100%   |
+| Voting         | 95.45%     | 93.33%   | 100%      | 95.23% |
+| Strategies     | 100%       | 100%     | 100%      | 100%   |
+
+**Note**: The few uncovered lines are primarily error handling edge cases and debug logging that are difficult to test in isolation.
 
 ### **What's Tested**
 
