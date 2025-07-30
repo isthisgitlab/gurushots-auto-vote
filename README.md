@@ -264,7 +264,11 @@ npm run mock:help
 
 ### **Continuous Voting**
 
-The continuous voting mode automatically runs voting cycles every 3 minutes:
+The continuous voting mode automatically runs voting cycles with dynamic interval scheduling:
+
+- **Normal Operation**: Runs every 3 minutes (configurable via `votingInterval` setting)
+- **Within Last Threshold**: Automatically switches to higher frequency (configurable via `lastThresholdCheckFrequency` setting, default: 1 minute)
+- **Automatic Detection**: Monitors all active challenges and adjusts frequency based on their end times
 
 ```bash
 npm run cli:start
@@ -343,7 +347,8 @@ The app automatically saves your preferences:
 - **Authentication**: Securely stores your login token
 - **API Timeout**: Configurable timeout for API requests (1-120 seconds)
 - **Voting Interval**: Customizable interval between voting cycles (1-60 minutes)
-- **Challenge Settings**: Per-challenge overrides for boost time, exposure, and last minutes threshold
+- **Last Threshold Check Frequency**: Dynamic check frequency when within last threshold (1-60 minutes, default: 1)
+- **Challenge Settings**: Per-challenge overrides for boost time, exposure, last minutes threshold, and check frequency
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly.
 
@@ -409,6 +414,45 @@ You can configure this setting in the app:
 - **Competitive Edge**: Maximize impact in the closing moments
 
 This feature is particularly useful for users who want to be more strategic about when they vote, especially in competitive challenges where vote timing can make a significant difference.
+
+## ⚡ Last Threshold Check Frequency
+
+The Last Threshold Check Frequency feature allows you to configure different check frequencies when challenges are within the last minutes threshold. This enables more aggressive voting during critical time periods.
+
+### **How It Works**
+
+- **Default Setting**: 1 minute (configurable)
+- **Dynamic Behavior**: The app automatically adjusts its check frequency based on challenge states:
+  - **Normal Operation**: Uses the standard voting interval (default: 3 minutes)
+  - **Within Last Threshold**: Uses the last threshold check frequency (default: 1 minute)
+  - **Automatic Detection**: Monitors all active challenges and switches to higher frequency if any are within the last threshold
+
+### **Configuration**
+
+You can configure this setting in the app:
+
+- **Global Default**: Set a default frequency for all challenges
+- **Per-Challenge Override**: Set different frequencies for specific challenges
+- **Range**: 0-60 minutes (0 = disabled, recommended: 1-5 minutes for last threshold)
+- **Combination**: Works with other settings like last minutes threshold and vote-only-in-last-threshold
+- **Disable Feature**: Set to 0 to disable the feature and use normal voting interval
+
+### **Example Scenarios**
+
+- **Normal Operation**: App checks every 3 minutes (standard voting interval)
+- **Challenge within 30 minutes of ending**: App switches to checking every 1 minute (last threshold frequency)
+- **Multiple challenges**: If any challenge is within the last threshold, the higher frequency applies to all
+- **Challenge ends**: App automatically returns to normal frequency
+- **Feature Disabled (0)**: App always uses normal voting interval regardless of challenge state
+
+### **Use Cases**
+
+- **Critical Timing**: More frequent checks during the final moments of challenges
+- **Competitive Edge**: Maximize voting opportunities when time is limited
+- **Resource Optimization**: Balance between responsiveness and API usage
+- **Strategic Advantage**: Ensure votes are cast at optimal times
+
+This feature is particularly useful for competitive challenges where every minute counts and you want to maximize your final ranking.
 
 ## 🌍 Internationalization
 
