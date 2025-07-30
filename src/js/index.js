@@ -170,6 +170,9 @@ async function checkAutoLogin() {
 
 // When Electron has finished initialization
 app.whenReady().then(async () => {
+    // Log userData path for verification
+    console.log(`[App] UserData path: ${settings.getUserDataPath()}`);
+    
     // Initialize API headers on app startup
     initializeHeaders();
 
@@ -434,17 +437,23 @@ ipcMain.handle('refresh-api', async () => {
 const logger = require('./logger');
 
 ipcMain.handle('log-debug', async (event, message, data) => {
+    logger.setContext('GUI');
     logger.debug(message, data);
+    logger.clearContext();
     return {success: true};
 });
 
 ipcMain.handle('log-error', async (event, message, data) => {
+    logger.setContext('GUI');
     logger.error(message, data);
+    logger.clearContext();
     return {success: true};
 });
 
 ipcMain.handle('log-api', async (event, message, data) => {
+    logger.setContext('GUI');
     logger.api(message, data);
+    logger.clearContext();
     return {success: true};
 });
 
@@ -944,8 +953,8 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
 
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
             console.log('✅ Submitting votes...');
-            // Use 100 as threshold if within lastminute threshold or flash type, otherwise use effective threshold
-            const submissionThreshold = (isWithinLastMinuteThreshold || challenge.type === 'flash') ? 100 : effectiveThreshold;
+            // Always vote to 100% (always vote to 100, not just to threshold)
+            const submissionThreshold = 100;
             await strategy.submitVotes(voteImages, userSettings.token, submissionThreshold);
             console.log('✅ Votes submitted successfully');
         } else {

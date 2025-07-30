@@ -11,7 +11,7 @@
 <body class="min-h-screen bg-base-200">
 
 <div class="navbar bg-base-100 shadow-md items-center flex-col">
-    <div class="flex justify-between items-center px-4 py-2" style="max-width: 800px; width: 100%; margin: 0 auto;">
+    <div class="flex justify-between items-center px-4 py-2 max-w-4xl w-full mx-auto">
         <!-- Left side - App Title -->
         <div class="flex items-center">
             <span class="card-title text-latvian text-xl whitespace-nowrap" data-translate="common.title">GuruShots Auto Vote</span>
@@ -41,57 +41,6 @@
             </button>
         </div>
     </div>
-
-    <!-- Hidden elements that were moved to settings modal -->
-    <div style="display: none;">
-        <!-- Timezone Selector (moved to settings) -->
-        <div class="relative flex items-center gap-1" id="timezone-controls">
-            <select class="select select-bordered select-sm" id="timezone-select"
-                    style="background-image: none; width: 140px;">
-                <option value="Europe/Riga">Europe/Riga</option>
-            </select>
-            <button class="btn btn-ghost btn-sm" data-translate-title="app.addTimezone" id="timezone-toggle"
-                    title="Add custom timezone">+
-            </button>
-            <button class="btn btn-ghost btn-sm text-red-500 w-6 h-6 p-0" id="timezone-remove"
-                    style="visibility: hidden;" title="Remove current timezone">×
-            </button>
-            <input class="input input-bordered input-sm w-32 absolute top-full left-0 mt-1 z-10"
-                   data-translate-placeholder="app.timezonePlaceholder" id="timezone-input"
-                   placeholder="Enter timezone"
-                   style="display: none;" type="text">
-        </div>
-
-        <!-- Language Switcher (moved to settings) -->
-        <div class="dropdown dropdown-end" id="language-controls">
-            <div class="btn btn-ghost btn-sm" role="button" tabindex="0">
-                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
-                          stroke-linecap="round" stroke-linejoin="round"
-                          stroke-width="2"></path>
-                </svg>
-                <span id="current-language">English</span>
-            </div>
-            <ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32" tabindex="0">
-                <li><a data-lang="en" data-translate="common.languageEnglish">English</a></li>
-                <li><a data-lang="lv" data-translate="common.languageLatvian">Latviešu</a></li>
-            </ul>
-        </div>
-
-        <!-- Theme Toggle (moved to settings) -->
-        <div class="flex items-center gap-1" id="theme-controls">
-            <span class="text-sm" data-translate="common.light">Light</span>
-            <input class="toggle toggle-sm" id="themeToggle" type="checkbox"/>
-            <span class="text-sm" data-translate="common.dark">Dark</span>
-        </div>
-
-        <!-- Stay Logged In Status (moved to settings) -->
-        <div class="flex items-center gap-1" id="stay-controls">
-            <span class="text-sm" data-translate="common.stay">Stay:</span>
-            <span class="badge badge-sm" id="stay-logged-in-status">Loading...</span>
-        </div>
-    </div>
-</div>
 </div>
 
 <!-- Main Content -->
@@ -163,181 +112,31 @@
 </div>
 
 <!-- Update Dialog -->
-<div id="updateDialog" class="update-dialog" style="display: none;">
-    <div class="update-content">
-        <div class="update-header">
-            <div class="update-icon">🚀</div>
-            <h2 class="update-title">Update Available</h2>
-            <span id="prereleaseBadge" class="prerelease-badge" style="display: none;">Pre-release</span>
+<div id="updateDialog" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
+    <div class="bg-white rounded-xl p-6 max-w-lg w-11/12 max-h-4/5 overflow-y-auto shadow-2xl">
+        <div class="flex items-center mb-4">
+            <div class="text-2xl mr-3 text-blue-500">🚀</div>
+            <h2 class="text-xl font-semibold text-gray-800 m-0">Update Available</h2>
+            <span id="prereleaseBadge" class="ml-2 px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded hidden">Pre-release</span>
         </div>
-        
-        <div class="version-info">
-            <div class="version-current">Current version: <span id="currentVersion"></span></div>
-            <div class="version-latest">Latest version: <span id="latestVersion"></span></div>
+
+        <div class="bg-gray-100 rounded-lg p-3 mb-4">
+            <div class="text-gray-600 text-sm">Current version: <span id="currentVersion"></span></div>
+            <div class="text-green-600 font-semibold text-base">Latest version: <span id="latestVersion"></span></div>
         </div>
-        
-        <div class="release-notes">
-            <h4>What's New:</h4>
-            <div id="releaseNotes" class="release-notes-content"></div>
+
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-5 max-h-48 overflow-y-auto">
+            <h4 class="font-medium mb-2">What's New:</h4>
+            <div id="releaseNotes" class="text-sm text-gray-700"></div>
         </div>
-        
-        <div class="update-actions">
-            <button id="skipButton" class="btn btn-skip">Skip This Version</button>
-            <button id="remindLaterButton" class="btn btn-secondary">Remind Me Later</button>
-            <button id="downloadButton" class="btn btn-primary">Download Update</button>
+
+        <div class="flex flex-col sm:flex-row gap-2 justify-end">
+            <button id="skipButton" class="btn btn-ghost btn-sm">Skip This Version</button>
+            <button id="remindLaterButton" class="btn btn-secondary btn-sm">Remind Me Later</button>
+            <button id="downloadButton" class="btn btn-primary btn-sm">Download Update</button>
         </div>
     </div>
 </div>
-
-<style>
-    .update-dialog {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 9999;
-    }
-
-    .update-content {
-        background: white;
-        border-radius: 12px;
-        padding: 24px;
-        max-width: 500px;
-        width: 90%;
-        max-height: 80vh;
-        overflow-y: auto;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-    }
-
-    .update-header {
-        display: flex;
-        align-items: center;
-        margin-bottom: 16px;
-    }
-
-    .update-icon {
-        font-size: 24px;
-        margin-right: 12px;
-        color: #3b82f6;
-    }
-
-    .update-title {
-        font-size: 20px;
-        font-weight: 600;
-        color: #1f2937;
-        margin: 0;
-    }
-
-    .version-info {
-        background: #f3f4f6;
-        border-radius: 8px;
-        padding: 12px;
-        margin-bottom: 16px;
-    }
-
-    .version-current {
-        color: #6b7280;
-        font-size: 14px;
-    }
-
-    .version-latest {
-        color: #059669;
-        font-weight: 600;
-        font-size: 16px;
-    }
-
-    .release-notes {
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 20px;
-        max-height: 200px;
-        overflow-y: auto;
-    }
-
-    .release-notes h4 {
-        margin: 0 0 8px 0;
-        color: #374151;
-        font-size: 14px;
-        font-weight: 600;
-    }
-
-    .release-notes-content {
-        color: #6b7280;
-        font-size: 14px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-    }
-
-    .update-actions {
-        display: flex;
-        gap: 12px;
-        justify-content: flex-end;
-    }
-
-    .btn-skip {
-        background: #fef3c7;
-        color: #92400e;
-        border: 1px solid #f59e0b;
-        padding: 8px 16px;
-        border-radius: 6px;
-        font-size: 14px;
-        font-weight: 500;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-    .btn-skip:hover {
-        background: #fde68a;
-    }
-
-    .prerelease-badge {
-        background: #fef3c7;
-        color: #92400e;
-        padding: 4px 8px;
-        border-radius: 4px;
-        font-size: 12px;
-        font-weight: 500;
-        margin-left: 8px;
-    }
-
-    /* Dark theme support */
-    [data-theme="dark"] .update-content {
-        background: #1f2937;
-        color: #f9fafb;
-    }
-
-    [data-theme="dark"] .update-title {
-        color: #f9fafb;
-    }
-
-    [data-theme="dark"] .version-info {
-        background: #374151;
-    }
-
-    [data-theme="dark"] .version-current {
-        color: #9ca3af;
-    }
-
-    [data-theme="dark"] .release-notes {
-        background: #374151;
-        border-color: #4b5563;
-    }
-
-    [data-theme="dark"] .release-notes h4 {
-        color: #d1d5db;
-    }
-
-    [data-theme="dark"] .release-notes-content {
-        color: #9ca3af;
-    }
-</style>
 
 </body>
 </html>

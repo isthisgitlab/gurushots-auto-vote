@@ -141,15 +141,18 @@ const getTurboStatus = (turbo) => {
 
 // Function to render challenges
 const renderChallenges = async (challenges, timezone = 'local', autovoteRunning = false) => {
-    await window.api.logDebug('🎨 === Rendering Challenges ===', {
-        challengesCount: challenges.length,
-        firstChallenge: challenges[0],
+    await window.api.logDebug('🎨 Rendering challenges in UI', {
+        challengeCount: challenges.length,
+        timezone,
+        autovoteRunning,
+        hasFirstChallenge: !!challenges[0],
     });
 
     const container = document.getElementById('challenges-container');
 
     if (!challenges || challenges.length === 0) {
         container.innerHTML = `<div class="text-center py-4 text-base-content/60">${translationManager.t('app.pleaseLogin')}</div>`;
+        await window.api.logDebug('No challenges to display');
         return;
     }
 
@@ -161,8 +164,12 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
     });
 
     const challengesHtmlArray = await Promise.all(sortedChallenges.map(async challenge => {
-        // Log challenge processing (synchronously to avoid async issues)
-        console.log('🎨 Processing challenge:', challenge.title);
+        // Log challenge processing for debugging
+        await window.api.logDebug(`🎨 Processing challenge: ${challenge.title}`, {
+            challengeId: challenge.id,
+            type: challenge.type,
+            exposureFactor: challenge.member.ranking.exposure.exposure_factor,
+        });
 
         const timeRemaining = formatTimeRemaining(challenge.close_time, timezone);
         const endTime = formatEndTime(challenge.close_time, timezone);
@@ -459,7 +466,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                 singleVoteRunning = true;
                 const refreshBtn = document.getElementById('refresh-challenges');
                 if (refreshBtn) {
-                    refreshBtn.style.display = 'none';
+                    refreshBtn.classList.add('hidden');
                 }
 
                 try {
@@ -477,8 +484,8 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                         btn.className = 'challenge-vote-btn btn btn-success btn-sm';
 
                         // Refresh challenges immediately after successful vote
-                        const currentTimezone = document.getElementById('timezone-select')?.value || 'local';
-                        await loadChallenges(currentTimezone, autovoteRunning);
+                        const timezone = await window.api.getSetting('timezone');
+                        await loadChallenges(timezone, autovoteRunning);
 
                         // Re-enable immediately and show refresh button
                         btn.disabled = false;
@@ -492,7 +499,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                         }
                     } else {
                         // Show error feedback for API error
-                        console.error('Voting failed:', result?.error || 'Unknown error');
+                        await window.api.logError('Voting failed', result?.error || 'Unknown error');
                         btn.innerHTML = `
                             <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -514,7 +521,7 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
                     }
 
                 } catch (error) {
-                    console.error('Error voting on challenge:', error);
+                    await window.api.logError('Error voting on challenge', error.message || error);
 
                     // Show error feedback
                     btn.innerHTML = `
@@ -553,34 +560,39 @@ const renderChallenges = async (challenges, timezone = 'local', autovoteRunning 
 // Function to load challenges
 const loadChallenges = async (timezone = 'local', autovoteRunning = false) => {
     try {
-        await window.api.logDebug('🔄 === Loading Challenges ===');
+        await window.api.logDebug('🔄 Loading active challenges');
 
         // Get token from settings
         const settings = await window.api.getSettings();
-        await window.api.logDebug('Settings loaded', settings);
+        await window.api.logDebug('Settings loaded successfully');
 
         if (!settings.token) {
-            await window.api.logError('❌ No token found');
+            await window.api.logError('No authentication token found');
             renderChallenges([], timezone, autovoteRunning);
             return;
         }
 
-        await window.api.logDebug('🌐 Calling getActiveChallenges', {
+        await window.api.logDebug('🌐 Fetching challenges from API', {
             tokenExists: !!settings.token,
+            mockMode: settings.mock,
         });
 
         // Use the real API call that works in both mock and production
         const result = await window.api.getActiveChallenges(settings.token);
 
-        await window.api.logDebug('📋 === App Received Result ===', {
-            resultType: typeof result,
-            resultKeys: Object.keys(result || {}),
-            fullResult: result,
+        await window.api.logDebug('📋 Challenges received from API', {
+            challengeCount: result?.challenges?.length || 0,
+            hasResult: !!result,
+            resultStructure: result ? Object.keys(result) : [],
         });
 
         if (result && result.challenges) {
             await window.api.logDebug(`✅ Rendering ${result.challenges.length} challenges`, {
-                firstChallenge: result.challenges[0],
+                sampleChallenge: result.challenges[0] ? {
+                    id: result.challenges[0].id,
+                    title: result.challenges[0].title,
+                    type: result.challenges[0].type,
+                } : null,
             });
 
             // Extract challenge IDs for cleanup
@@ -1720,8 +1732,8 @@ window.saveChallengeSettings = async (challengeId) => {
         closeSettingsModal();
 
         // Refresh challenges to apply new settings
-        const currentTimezone = document.getElementById('timezone-select')?.value || 'local';
-        await loadChallenges(currentTimezone, autovoteRunning);
+        const timezone = await window.api.getSetting('timezone');
+        await loadChallenges(timezone, autovoteRunning);
 
     } catch (error) {
         console.error('Error saving challenge settings:', error);
@@ -1751,61 +1763,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Get the UI elements
     const logoutBtn = document.getElementById('logoutBtn');
     const settingsBtn = document.getElementById('settingsBtn');
-    const themeToggle = document.getElementById('themeToggle');
     const refreshBtn = document.getElementById('refresh-challenges');
-    const timezoneSelect = document.getElementById('timezone-select');
-    const currentLanguageSpan = document.getElementById('current-language');
-    themeToggle.checked = settings.theme === 'dark';
-
-    // Apply timezone setting
-    const currentTimezone = settings.timezone || 'Europe/Riga';
-    timezoneSelect.value = currentTimezone;
-
-    // Load saved custom timezones from settings
-    const savedTimezones = settings.customTimezones || [];
-
-    // Add saved custom timezones to the dropdown
-    savedTimezones.forEach(tz => {
-        if (tz !== 'local') {
-            const existingOption = timezoneSelect.querySelector(`option[value="${tz}"]`);
-            if (!existingOption) {
-                const option = document.createElement('option');
-                option.value = tz;
-                option.textContent = tz;
-                timezoneSelect.appendChild(option);
-            }
-        }
-    });
-
-    // If the current timezone is not 'local' and not in saved timezones, add it
-    if (currentTimezone !== 'local' && !savedTimezones.includes(currentTimezone)) {
-        const existingOption = timezoneSelect.querySelector(`option[value="${currentTimezone}"]`);
-        if (!existingOption) {
-            const option = document.createElement('option');
-            option.value = currentTimezone;
-            option.textContent = currentTimezone;
-            timezoneSelect.appendChild(option);
-        }
-    }
-
-    // Function to update remove button visibility
-    const updateRemoveButton = () => {
-        const timezoneRemove = document.getElementById('timezone-remove');
-        const currentTimezone = timezoneSelect.value;
-
-        // Only show remove button for custom timezones, not 'Europe/Riga'
-        if (currentTimezone !== 'Europe/Riga') {
-            timezoneRemove.style.visibility = 'visible';
-        } else {
-            timezoneRemove.style.visibility = 'hidden';
-        }
-    };
 
     // Display initial settings
     updateSettingsDisplay(settings);
-
-    // Update remove button visibility initially
-    updateRemoveButton();
 
     // Wait for translation manager to be initialized
     while (!translationManager.initialized) {
@@ -1813,15 +1774,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Set language selector to current language
-    const currentLang = translationManager.getCurrentLanguage();
-    currentLanguageSpan.textContent = translationManager.t(`common.language${currentLang === 'en' ? 'English' : 'Latvian'}`);
+    translationManager.getCurrentLanguage();
 
     // Apply initial translations
     updateTranslations();
 
     // Load initial challenges
     console.log('About to load challenges...');
-    await loadChallenges(timezoneSelect.value);
+    const timezone = await window.api.getSetting('timezone');
+    await loadChallenges(timezone);
     console.log('Challenges loaded.');
 
     // Add click event listener to the logout button
@@ -1842,9 +1803,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             const newLanguage = e.target.getAttribute('data-lang');
             await translationManager.setLanguage(newLanguage);
 
-            // Update the current language display
-            currentLanguageSpan.textContent = translationManager.t(`common.language${newLanguage === 'en' ? 'English' : 'Latvian'}`);
-
             updateTranslations();
             updateSettingsDisplay(settings); // Update status badges with new language
 
@@ -1860,140 +1818,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Handle theme toggle change - just update UI, don't auto-save
-    themeToggle.addEventListener('change', async () => {
-        const newTheme = themeToggle.checked ? 'dark' : 'light';
+    const themeToggle = document.getElementById('modal-theme-toggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('change', async () => {
+            const newTheme = themeToggle.checked ? 'dark' : 'light';
 
-        // Update the theme immediately for responsive UI
-        document.documentElement.setAttribute('data-theme', newTheme);
+            // Update the theme immediately for responsive UI
+            document.documentElement.setAttribute('data-theme', newTheme);
 
-
-        updateSettingsDisplay(settings);
-
-
-    });
-
-    // Handle timezone toggle
-    const timezoneToggle = document.getElementById('timezone-toggle');
-    const timezoneInput = document.getElementById('timezone-input');
-
-    // Ensure input field is properly initialized
-    timezoneInput.value = '';
-
-    timezoneToggle.addEventListener('click', () => {
-        if (timezoneInput.style.display === 'none' || timezoneInput.style.display === '') {
-            timezoneInput.style.display = 'inline-block';
-            timezoneToggle.textContent = '✓';
-            timezoneInput.value = ''; // Keep input empty
-            timezoneInput.focus();
-        } else {
-            timezoneInput.style.display = 'none';
-            timezoneToggle.textContent = '+';
-        }
-    });
-
-    // Handle timezone input
-    timezoneInput.addEventListener('keypress', async (e) => {
-        if (e.key === 'Enter') {
-            const newTimezone = timezoneInput.value.trim();
-
-            if (newTimezone === '') {
-                // Empty input - revert to local
-                timezoneInput.value = '';
-                timezoneInput.style.display = 'none';
-                timezoneSelect.style.display = 'inline-block';
-                timezoneToggle.textContent = '+';
-                timezoneSelect.value = 'local';
-
-                await loadChallenges('local', autovoteRunning);
-                return;
-            }
-
-            // Validate timezone
-            try {
-                const testDate = new Date();
-                testDate.toLocaleString('en-US', {timeZone: newTimezone});
-
-                // Valid timezone - just update UI (saved through settings modal)
-
-                // Add the new timezone as an option if it doesn't exist
-                const existingOption = timezoneSelect.querySelector(`option[value="${newTimezone}"]`);
-                if (!existingOption) {
-                    const option = document.createElement('option');
-                    option.value = newTimezone;
-                    option.textContent = newTimezone;
-                    timezoneSelect.appendChild(option);
-                }
+            updateSettingsDisplay(settings);
+        });
+    }
 
 
-                timezoneSelect.value = newTimezone;
-                timezoneInput.value = '';
-                timezoneInput.style.display = 'none';
-                timezoneSelect.style.display = 'inline-block';
-                timezoneToggle.textContent = '+';
-
-                await loadChallenges(newTimezone, autovoteRunning);
-            } catch (error) {
-                console.warn('Invalid timezone entered:', error);
-                // Invalid timezone - show error and keep input open
-                timezoneInput.classList.add('input-error');
-                timezoneInput.placeholder = 'Invalid timezone. Try: UTC, America/New_York, Europe/London';
-
-                // Clear error after 3 seconds
-                setTimeout(() => {
-                    timezoneInput.classList.remove('input-error');
-                    timezoneInput.placeholder = 'Enter timezone (e.g., UTC, America/New_York)';
-                }, 3000);
-            }
-        }
-    });
-
-    // Handle timezone select change
-    timezoneSelect.addEventListener('change', async () => {
-        const newTimezone = timezoneSelect.value;
-
-        // Update remove button visibility
-        updateRemoveButton();
-
-        // Reload challenges with new timezone
-        await loadChallenges(newTimezone, autovoteRunning);
-    });
-
-    // Handle timezone remove button
-    const timezoneRemove = document.getElementById('timezone-remove');
-    timezoneRemove.addEventListener('click', async () => {
-        const currentTimezone = timezoneSelect.value;
-
-        // Only allow removing custom timezones, not 'Europe/Riga'
-        if (currentTimezone !== 'Europe/Riga') {
-            // Remove the option from the dropdown
-            const option = timezoneSelect.querySelector(`option[value="${currentTimezone}"]`);
-            if (option) {
-                option.remove();
-            }
-
-            // Set back to Europe/Riga  
-            timezoneSelect.value = 'Europe/Riga';
-
-            // Update remove button visibility
-            updateRemoveButton();
-
-            // Reload challenges
-            await loadChallenges('Europe/Riga', autovoteRunning);
-        }
-    });
-
-    // Handle timezone input blur (when user clicks away)
-    timezoneInput.addEventListener('blur', () => {
-        // Small delay to allow Enter key to be processed first
-        setTimeout(() => {
-            if (timezoneInput.style.display !== 'none') {
-                timezoneInput.style.display = 'none';
-                timezoneSelect.style.display = 'inline-block';
-                timezoneToggle.textContent = '+';
-                timezoneInput.value = '';
-            }
-        }, 100);
-    });
 
     // Handle refresh button
     refreshBtn.addEventListener('click', async () => {
@@ -2003,7 +1840,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             ${translationManager.t('common.loading')}...
         `;
 
-        await loadChallenges(timezoneSelect.value, autovoteRunning);
+        const timezone = await window.api.getSetting('timezone');
+        await loadChallenges(timezone, autovoteRunning);
 
         refreshBtn.disabled = false;
         refreshBtn.innerHTML = `
@@ -2074,7 +1912,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Check if user is authenticated
             const settings = await window.api.getSettings();
             if (!settings.token) {
-                console.error('No authentication token found. Please login first.');
+                await window.api.logError('No authentication token found. Please login first.');
                 updateAutovoteStatus('Error: Not logged in', 'badge-error');
                 return false;
             }
@@ -2095,7 +1933,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     updateLastRun();
 
                     // Refresh challenges immediately after voting cycle completes
-                    await loadChallenges(timezoneSelect.value, autovoteRunning);
+                    const timezone = await window.api.getSetting('timezone');
+                    await loadChallenges(timezone, autovoteRunning);
 
                     console.log(`--- Auto Vote Cycle ${cycleCount} Completed ---\n`);
                     return true;
@@ -2104,7 +1943,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return false;
                 }
             } else {
-                console.error('Voting cycle failed:', result?.error || 'Unknown error');
+                await window.api.logError('Voting cycle failed', result?.error || 'Unknown error');
                 if (autovoteRunning) {
                     updateAutovoteStatus('Error', 'badge-error');
                 }
@@ -2116,6 +1955,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             return false;
         }
     };
+
+
 
     // Function to start autovote
     const startAutovote = async () => {
@@ -2142,31 +1983,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshBtn.style.display = 'none';
 
         // Refresh challenges to hide individual vote buttons
-        loadChallenges(timezoneSelect.value, autovoteRunning);
+        const timezone = await window.api.getSetting('timezone');
+        loadChallenges(timezone, autovoteRunning);
 
         // Run immediately
         console.log('▶️ Starting immediate voting cycle');
         runVotingCycle();
 
-        // Set up configurable interval
-        const settings = await window.api.getSettings();
-        const votingInterval = settings.votingInterval * 60000; // Convert minutes to milliseconds
-        const intervalMinutes = Math.round(votingInterval / 60000);
-        console.log('⏰ Setting up autovote interval');
-        autovoteInterval = setInterval(() => {
-            console.log('⏰ Interval triggered, autovoteRunning:', autovoteRunning);
-            if (autovoteRunning) {
-                runVotingCycle();
+        // Set up simple interval without dynamic logic to avoid service worker issues
+        const setupVotingInterval = async () => {
+            const settings = await window.api.getSettings();
+            
+            // Check if last threshold check frequency is disabled (set to 0)
+            const lastThresholdFrequency = await window.api.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const useLastThreshold = lastThresholdFrequency > 0;
+            
+            let votingIntervalMs;
+            if (useLastThreshold) {
+                votingIntervalMs = lastThresholdFrequency * 60000;
+                console.log(`⏰ Using last threshold interval: ${lastThresholdFrequency} minutes`);
             } else {
-                console.log('⏰ Autovote stopped, clearing interval');
-                clearInterval(autovoteInterval);
-                autovoteInterval = null;
+                votingIntervalMs = settings.votingInterval * 60000;
+                console.log(`⏰ Using normal voting interval: ${settings.votingInterval} minutes (last threshold disabled)`);
             }
-        }, votingInterval);
+            
+            // Clear existing interval if any
+            if (autovoteInterval) {
+                clearInterval(autovoteInterval);
+            }
+            
+            console.log('⏰ Setting up autovote interval');
+            autovoteInterval = setInterval(async () => {
+                console.log('⏰ Interval triggered, autovoteRunning:', autovoteRunning);
+                if (autovoteRunning) {
+                    await runVotingCycle();
+                } else {
+                    console.log('⏰ Autovote stopped, clearing interval');
+                    clearInterval(autovoteInterval);
+                    autovoteInterval = null;
+                }
+            }, votingIntervalMs);
 
-        console.log('=== Auto Vote Started ===');
-        console.log(`Scheduling voting every ${intervalMinutes} minutes`);
-        console.log('Challenges will update after each voting cycle');
+            console.log('=== Auto Vote Started ===');
+            console.log(`Scheduling voting every ${useLastThreshold ? lastThresholdFrequency : settings.votingInterval} minutes`);
+            console.log('Challenges will update after each voting cycle');
+        };
+
+        await setupVotingInterval();
     };
 
     // Function to stop autovote
@@ -2283,8 +2146,9 @@ window.boostEntry = async (challengeId, imageId, rank) => {
                 button.className = 'btn btn-xs btn-success ml-1';
 
                 // Refresh challenges to show updated state
-                setTimeout(() => {
-                    loadChallenges(document.getElementById('timezone-select').value, false);
+                setTimeout(async () => {
+                    const timezone = await window.api.getSetting('timezone');
+                    loadChallenges(timezone, false);
                 }, 1000);
             } else {
                 console.error('❌ Failed to apply boost:', result?.error || 'Unknown error');
@@ -2328,17 +2192,19 @@ const initializeUpdateDialog = () => {
         
         // Show prerelease badge if it's a prerelease
         if (updateInfo.isPrerelease) {
-            prereleaseBadge.style.display = 'inline-block';
+            prereleaseBadge.classList.remove('hidden');
         } else {
-            prereleaseBadge.style.display = 'none';
+            prereleaseBadge.classList.add('hidden');
         }
         
-        updateDialog.style.display = 'flex';
+        updateDialog.classList.remove('hidden');
+        updateDialog.classList.add('flex');
     };
 
     // Hide update dialog
     window.hideUpdateDialog = () => {
-        updateDialog.style.display = 'none';
+        updateDialog.classList.add('hidden');
+        updateDialog.classList.remove('flex');
     };
 
     // Event listeners
