@@ -12,16 +12,56 @@ try {
     console.log('Running in CLI context - using fallback userData path:', error.message);
 }
 
+/**
+ * Detect if we're running from source code vs built app
+ * @returns {boolean} - True if running from source, false if built
+ */
+const isSourceCode = () => {
+    // If we're in Electron and it's packaged, we're definitely built
+    if (electronApp && electronApp.isPackaged) {
+        return false;
+    }
+    
+    // For CLI: check if we're running as a pkg binary
+    if (process.pkg) {
+        return false;
+    }
+    
+    // Check if __dirname contains .asar (Electron packaged but somehow not detected)
+    if (__dirname.includes('.asar')) {
+        return false;
+    }
+    
+    // If none of the above, assume we're running from source
+    return true;
+};
+
+/**
+ * Get the app name with environment suffix if needed
+ * @returns {string} - App name with -dev suffix for source code
+ */
+const getAppName = () => {
+    const baseAppName = 'gurushots-auto-vote';
+    return isSourceCode() ? `${baseAppName}-dev` : baseAppName;
+};
+
 // Define the settings file path in the userData directory
 const getSettingsPath = () => {
     let userDataPath;
 
     if (electronApp && electronApp.getPath) {
-        // Electron context - use app.getPath('userData')
-        userDataPath = electronApp.getPath('userData');
+        // Electron context - need to construct proper path based on source/built status
+        if (isSourceCode()) {
+            // Running from source code - use dev-specific directory
+            const basePath = path.dirname(electronApp.getPath('userData'));
+            userDataPath = path.join(basePath, 'gurushots-auto-vote-dev');
+        } else {
+            // Built app - use normal userData path
+            userDataPath = electronApp.getPath('userData');
+        }
     } else {
         // CLI context - create fallback userData path
-        const appName = 'gurushots-auto-vote';
+        const appName = getAppName();
 
         // Use platform-specific paths
         switch (process.platform) {
@@ -361,6 +401,9 @@ const getWindowBounds = (windowType) => {
 
 // Get current environment information
 const getEnvironmentInfo = () => {
+    const isElectronPackaged = electronApp ? electronApp.isPackaged : false;
+    const isBuiltApp = isElectronPackaged || !isSourceCode();
+    
     return {
         nodeEnv: process.env.NODE_ENV,
         dev: process.env.DEV,
@@ -368,6 +411,10 @@ const getEnvironmentInfo = () => {
         defaultMock: getDefaultMockSetting(),
         platform: process.platform,
         userDataPath: getUserDataPath(),
+        isSourceCode: isSourceCode(),
+        isElectronPackaged: isElectronPackaged,
+        isBuiltApp: isBuiltApp,
+        appName: getAppName(),
     };
 };
 
@@ -907,6 +954,14 @@ const SETTINGS_SCHEMA = {
         label: 'app.voteOnlyInLastThreshold',
         description: 'app.voteOnlyInLastThresholdDesc',
     },
+    lastThresholdCheckFrequency: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 0 && value <= 60,
+        label: 'app.lastThresholdCheckFrequency',
+        description: 'app.lastThresholdCheckFrequencyDesc',
+    },
 };
 
 /**
@@ -930,6 +985,10 @@ module.exports = {
     getDefaultMockSetting,
     saveWindowBounds,
     getWindowBounds,
+    
+    // Environment detection functions
+    isSourceCode,
+    getAppName,
 
     // Schema-based settings functions
     SETTINGS_SCHEMA,

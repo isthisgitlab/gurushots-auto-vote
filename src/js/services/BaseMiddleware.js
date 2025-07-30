@@ -6,6 +6,7 @@
  */
 
 const settings = require('../settings');
+const logger = require('../logger');
 
 /**
  * Base middleware class that handles common functionality
@@ -20,50 +21,30 @@ class BaseMiddleware {
      *
      * @returns {object|null} - Login response or null if failed
      */
-    async cliLogin() {
-        const prompt = require('prompt-sync')();
+    async cliLogin(email, password) {
+        logger.info('=== GuruShots Auto Voter - CLI Login ===');
 
-        console.log('=== GuruShots Auto Voter - CLI Login ===');
-
-        // Prompt user for credentials
-        const email = prompt('Please enter your email: ');
-        const password = prompt('Please enter your password: ');
-
-        // Create loading animation for better user experience
-        const loading = (function () {
-            const h = ['|', '/', '-', '\\']; // Animation characters
-            let i = 0;
-
-            return setInterval(() => {
-                i = (i > 3) ? 0 : i;
-                console.clear();
-                console.log(`Logging in ${h[i]}`);
-                i++;
-            }, 300);
-        })();
+        logger.startOperation('cli-login', 'CLI Authentication');
 
         try {
             // Attempt authentication using the provided strategy
             const response = await this.apiStrategy.authenticate(email, password);
-            clearInterval(loading);
 
             if (response && response.token) {
-                console.log('Login successful!');
-                console.log('Token obtained successfully');
+                logger.endOperation('cli-login', 'Authentication successful');
+                logger.success('Token obtained and saved to settings');
 
                 // Save token to settings
                 settings.setSetting('token', response.token);
-                console.log('Token saved to settings');
 
-                return response;
+                return {success: true, token: response.token};
             } else {
-                console.log('Login failed. Please check your credentials.');
-                return null;
+                logger.endOperation('cli-login', null, 'Invalid credentials');
+                return {success: false, error: 'Login failed. Please check your credentials.'};
             }
         } catch (error) {
-            clearInterval(loading);
-            console.error('Login error:', error.message || error);
-            return null;
+            logger.endOperation('cli-login', null, error.message || error);
+            return {success: false, error: error.message || error};
         }
     }
 
@@ -106,18 +87,18 @@ class BaseMiddleware {
      * @returns {void}
      */
     async cliVote() {
-        console.log('=== GuruShots Auto Voter - CLI Voting ===');
+        logger.info('=== GuruShots Auto Voter - CLI Voting ===');
 
         // Load token from settings
         const token = settings.getSetting('token');
 
         if (!token) {
-            console.error('No authentication token found. Please login first.');
-            console.log('Run the login command to authenticate.');
+            logger.error('No authentication token found. Please login first');
+            logger.info('Run the login command to authenticate');
             return;
         }
 
-        console.log('Starting voting process...');
+        logger.startOperation('cli-vote', 'CLI Voting Process');
 
         try {
             // Create a function to get the effective exposure setting for each challenge
@@ -125,15 +106,15 @@ class BaseMiddleware {
                 try {
                     return settings.getEffectiveSetting('exposure', challengeId);
                 } catch (error) {
-                    console.warn(`Error getting exposure setting for challenge ${challengeId}:`, error);
+                    logger.warning(`Error getting exposure setting for challenge ${challengeId}`, error);
                     return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
                 }
             };
 
             await this.apiStrategy.fetchChallengesAndVote(token, getExposureThreshold);
-            console.log('Voting process completed successfully!');
+            logger.endOperation('cli-vote', 'Voting process completed successfully');
         } catch (error) {
-            console.error('Error during voting process:', error.message || error);
+            logger.endOperation('cli-vote', null, error.message || error);
         }
     }
 
@@ -154,12 +135,12 @@ class BaseMiddleware {
                 };
             }
 
-            // Create a function to get the effective exposure setting for each challenge
+            // Create a function to get the effective exposure setting for each challenge  
             const getExposureThreshold = (challengeId) => {
                 try {
                     return settings.getEffectiveSetting('exposure', challengeId);
                 } catch (error) {
-                    console.warn(`Error getting exposure setting for challenge ${challengeId}:`, error);
+                    logger.warning(`Error getting exposure setting for challenge ${challengeId}`, error);
                     return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
                 }
             };
@@ -196,7 +177,7 @@ class BaseMiddleware {
     logout(clearToken = true) {
         if (clearToken) {
             settings.setSetting('token', '');
-            console.log('Logged out successfully');
+            logger.success('Logged out successfully');
         }
     }
 
