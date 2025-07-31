@@ -33,3 +33,7 @@
 .bg-latvian {
     background-color: var(--color-latvian);
 }
+
+.border-latvian {
+    border-color: var(--color-latvian);
+}

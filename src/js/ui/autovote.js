@@ -242,6 +242,10 @@ export const initializeAutovote = () => {
             refreshBtn.style.display = 'inline-flex';
         }
 
+        // Refresh challenges to show vote buttons again
+        const timezone = await window.api.getSetting('timezone');
+        await loadChallenges(timezone, autovoteRunning);
+
         // Restart the regular auto-refresh
         startAutoRefresh();
 
