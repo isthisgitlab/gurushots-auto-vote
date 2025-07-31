@@ -13,7 +13,24 @@ jest.mock('../../src/js/api/api-client', () => ({
     createCommonHeaders: jest.fn(() => ({'x-token': 'test-token'}))
 }));
 
+// Mock the logger module
+jest.mock('../../src/js/logger', () => ({
+    info: jest.fn(),
+    warning: jest.fn(),
+    debug: jest.fn(),
+    error: jest.fn(),
+    startOperation: jest.fn(() => 'mock-operation-id'),
+    endOperation: jest.fn(),
+}));
+
+// Mock the metadata module
+jest.mock('../../src/js/metadata', () => ({
+    updateChallengeVoteMetadata: jest.fn(() => true),
+}));
+
 const {makePostRequest, createCommonHeaders} = require('../../src/js/api/api-client');
+const logger = require('../../src/js/logger');
+const { updateChallengeVoteMetadata } = require('../../src/js/metadata');
 
 describe('voting', () => {
     beforeEach(() => {
@@ -155,6 +172,92 @@ describe('voting', () => {
                 }),
                 expect.stringContaining('c_id=123')
             );
+            expect(result).toEqual(mockResponse);
+        });
+
+        test('should handle insufficient images for target exposure', async () => {
+            const mockVoteImages = {
+                challenge: {id: '123', title: 'Test Challenge'},
+                voting: {exposure: {exposure_factor: 50}},
+                images: [
+                    {id: 'img1', ratio: 10} // Only one small image available
+                ]
+            };
+            const mockToken = 'test-token';
+            const mockResponse = {success: true};
+            const targetThreshold = 100; // High threshold that can't be reached
+
+            makePostRequest.mockResolvedValueOnce(mockResponse);
+
+            const result = await submitVotes(mockVoteImages, mockToken, targetThreshold);
+
+            // Should log warning about insufficient images
+            expect(logger.warning).toHaveBeenCalledWith(
+                expect.stringContaining('Insufficient images to reach 100% exposure for Test Challenge (only 1 images available)')
+            );
+            expect(result).toEqual(mockResponse);
+        });
+
+        test('should handle vote submission failure', async () => {
+            const mockVoteImages = {
+                challenge: {id: '123', title: 'Test Challenge'},
+                voting: {exposure: {exposure_factor: 50}},
+                images: [
+                    {id: 'img1', ratio: 25}
+                ]
+            };
+            const mockToken = 'test-token';
+
+            makePostRequest.mockResolvedValueOnce(null); // Simulate failure
+
+            const result = await submitVotes(mockVoteImages, mockToken);
+
+            expect(logger.endOperation).toHaveBeenCalledWith(expect.any(String), null, 'Vote submission failed');
+            expect(result).toBeUndefined();
+        });
+
+        test('should handle metadata update failure', async () => {
+            const mockVoteImages = {
+                challenge: {id: '123', title: 'Test Challenge'},
+                voting: {exposure: {exposure_factor: 50}},
+                images: [
+                    {id: 'img1', ratio: 25}
+                ]
+            };
+            const mockToken = 'test-token';
+            const mockResponse = {success: true};
+
+            makePostRequest.mockResolvedValueOnce(mockResponse);
+            updateChallengeVoteMetadata.mockReturnValueOnce(false); // Simulate metadata update failure
+
+            const result = await submitVotes(mockVoteImages, mockToken);
+
+            expect(logger.debug).toHaveBeenCalledWith('🔧 DEBUG: Failed to update metadata for challenge 123');
+            expect(logger.warning).toHaveBeenCalledWith('Failed to update metadata for challenge 123');
+            expect(result).toEqual(mockResponse);
+        });
+
+        test('should handle metadata update error exception', async () => {
+            const mockVoteImages = {
+                challenge: {id: '123', title: 'Test Challenge'},
+                voting: {exposure: {exposure_factor: 50}},
+                images: [
+                    {id: 'img1', ratio: 25}
+                ]
+            };
+            const mockToken = 'test-token';
+            const mockResponse = {success: true};
+            const mockError = new Error('Metadata update error');
+
+            makePostRequest.mockResolvedValueOnce(mockResponse);
+            updateChallengeVoteMetadata.mockImplementationOnce(() => {
+                throw mockError;
+            });
+
+            const result = await submitVotes(mockVoteImages, mockToken);
+
+            expect(logger.debug).toHaveBeenCalledWith('🔧 DEBUG: Error updating metadata for challenge 123:', mockError);
+            expect(logger.warning).toHaveBeenCalledWith('Error updating metadata for challenge 123:', mockError);
             expect(result).toEqual(mockResponse);
         });
     });

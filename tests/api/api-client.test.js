@@ -228,5 +228,29 @@ describe('api-client', () => {
                 timeout: false,
             });
         });
+
+        test('should log detailed API response when in dev mode', async () => {
+            const logger = require('../../src/js/logger');
+            logger.isDevMode.mockReturnValueOnce(true);
+
+            const mockResponse = {
+                status: 200,
+                headers: {'content-type': 'application/json'},
+                data: {success: true, message: 'Request successful'}
+            };
+
+            axios.mockResolvedValueOnce(mockResponse);
+
+            const headers = createCommonHeaders(mockToken);
+            await makePostRequest(mockUrl, headers, mockData);
+
+            expect(logger.api).toHaveBeenCalledWith('API Response Details', {
+                endpoint: 'test',
+                status: mockResponse.status,
+                responseSize: JSON.stringify(mockResponse.data).length,
+                headers: mockResponse.headers,
+                duration: expect.stringMatching(/^\d+ms$/),
+            });
+        });
     });
 });
