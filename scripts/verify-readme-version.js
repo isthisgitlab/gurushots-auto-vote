@@ -64,7 +64,7 @@ try {
         const filePatterns = [
             { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x64\.exe/g, type: 'GuruShotsAutoVote-x64.exe', required: true },
             { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.dmg/g, type: 'GuruShotsAutoVote-arm64.dmg', required: true },
-            { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.app/g, type: 'GuruShotsAutoVote-arm64.app', required: true },
+            { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.app\.zip/g, type: 'GuruShotsAutoVote-arm64.app.zip', required: true },
             { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x86_64\.AppImage/g, type: 'GuruShotsAutoVote-x86_64.AppImage', required: true },
             { pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.AppImage/g, type: 'GuruShotsAutoVote-arm64.AppImage', required: true },
             // CLI files - only required if CLI section exists
@@ -92,7 +92,7 @@ try {
         const urlPatterns = [
             { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x64\.exe/g, type: 'GuruShotsAutoVote-x64.exe URL', required: true },
             { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.dmg/g, type: 'GuruShotsAutoVote-arm64.dmg URL', required: true },
-            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.app/g, type: 'GuruShotsAutoVote-arm64.app URL', required: true },
+            { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.app\.zip/g, type: 'GuruShotsAutoVote-arm64.app.zip URL', required: true },
             { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x86_64\.AppImage/g, type: 'GuruShotsAutoVote-x86_64.AppImage URL', required: true },
             { pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.AppImage/g, type: 'GuruShotsAutoVote-arm64.AppImage URL', required: true },
             // CLI URLs - only required if CLI section exists

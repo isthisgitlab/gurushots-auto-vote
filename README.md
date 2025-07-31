@@ -61,7 +61,7 @@ If you find this tool helpful, consider supporting its development:
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
 | **Windows**       | [📥 GuruShotsAutoVote-v0.3.0-beta.6-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-x64.exe)                 | ~50 MB | Portable Executable |
 | **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.dmg)             | ~50 MB | DMG Installer       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.app](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.app)             | ~50 MB | App Bundle          |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.app.zip)             | ~50 MB | App Bundle (ZIP)    |
 | **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-x86_64.AppImage) | ~50 MB | AppImage            |
 | **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.AppImage)   | ~50 MB | AppImage            |
 
@@ -93,9 +93,10 @@ If you find this tool helpful, consider supporting its development:
 4. **Launch**: Open the app from your Applications folder
 
 **Option 2: App Bundle (Direct)**
-1. **Download**: Click the macOS (APP) link above to download the `.app` file
-2. **Move**: Move the downloaded app to your Applications folder
-3. **Launch**: Open the app from your Applications folder
+1. **Download**: Click the macOS (APP) link above to download the `.app.zip` file
+2. **Extract**: Double-click the zip file to extract the `.app` bundle
+3. **Move**: Move the extracted app to your Applications folder
+4. **Launch**: Open the app from your Applications folder
 
 **🔧 If you get security warnings:**
 

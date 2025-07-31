@@ -12,7 +12,7 @@
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|-----------------------|
 | **Windows**       | [📥 GuruShotsAutoVote-v0.3.0-beta.6-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
 | **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.dmg)             | ~50 MB | DMG instalētājs       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.app](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.app)             | ~50 MB | App komplekts         |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.app.zip)             | ~50 MB | App komplekts (ZIP)   |
 | **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-x86_64.AppImage) | ~50 MB | AppImage              |
 | **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.AppImage)   | ~50 MB | AppImage              |
 
@@ -40,9 +40,10 @@
 4. **Palaist**: Atveriet lietotni no Applications mapes
 
 **Opcija 2: App komplekts (Tiešs)**
-1. **Lejupielādēt**: Noklikšķiniet uz macOS (APP) saites augšā, lai lejupielādētu `.app` failu
-2. **Pārvietot**: Pārvietojiet lejupielādēto lietotni uz Applications mapi
-3. **Palaist**: Atveriet lietotni no Applications mapes
+1. **Lejupielādēt**: Noklikšķiniet uz macOS (APP) saites augšā, lai lejupielādētu `.app.zip` failu
+2. **Izvilkt**: Veiciet dubultklikšķi uz zip faila, lai izvilktu `.app` komplektu
+3. **Pārvietot**: Pārvietojiet izvilkto lietotni uz Applications mapi
+4. **Palaist**: Atveriet lietotni no Applications mapes
 
 **Konfigurācijas faili**: Lietotne saglabā iestatījumus mapē `~/Library/Application Support/gurushots-auto-vote/`
 **Žurnālfaili**: Žurnālfaili tiek saglabāti mapē `~/Library/Application Support/gurushots-auto-vote/logs/`

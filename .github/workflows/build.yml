@@ -148,12 +148,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
 
-      - name: Rename macOS .app file with version
+      - name: Zip macOS .app file with version
         if: matrix.platform == 'mac'
         run: |
           VERSION=$(node -p "require('./package.json').version")
           if [ -d "build/mac-arm64/GuruShotsAutoVote.app" ]; then
-            mv "build/mac-arm64/GuruShotsAutoVote.app" "build/GuruShotsAutoVote-v${VERSION}-arm64.app"
+            cd build/mac-arm64
+            zip -r "../GuruShotsAutoVote-v${VERSION}-arm64.app.zip" "GuruShotsAutoVote.app"
+            cd ../..
           fi
 
       - name: Build Linux ARM app
@@ -187,7 +189,7 @@ jobs:
           name: ${{ needs.version-bump.outputs.is-beta == 'true' && format('develop-{0}-builds', matrix.platform) || format('{0}-builds', matrix.platform) }}
           path: |
             build/*.dmg
-            build/GuruShotsAutoVote-v*.app
+            build/GuruShotsAutoVote-v*.app.zip
             build/*.exe
             build/*.AppImage
             ${{ matrix.platform != 'win' && 'build/cli/' || '' }}
@@ -286,7 +288,7 @@ jobs:
           prerelease: ${{ needs.version-bump.outputs.is-beta == 'true' }}
           files: |
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.dmg
-            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.app
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.app.zip
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/GuruShotsAutoVote-v*.AppImage
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/GuruShotsAutoVote-v*.exe
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
