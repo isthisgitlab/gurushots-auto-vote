@@ -23,6 +23,8 @@ jest.mock('../../src/js/logger', () => ({
     log: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
     success: jest.fn(),
     cleanup: jest.fn(),
 }));
@@ -95,7 +97,7 @@ describe('CLI-GUI Parity Tests', () => {
             expect(allSettings).toHaveProperty('customTimezones');
             expect(allSettings).toHaveProperty('language');
             expect(allSettings).toHaveProperty('apiTimeout');
-            expect(allSettings).toHaveProperty('votingInterval');
+            expect(allSettings).toHaveProperty('checkFrequency');
             expect(allSettings).toHaveProperty('windowBounds');
             expect(allSettings).toHaveProperty('challengeSettings');
             expect(allSettings).toHaveProperty('apiHeaders');
@@ -107,9 +109,9 @@ describe('CLI-GUI Parity Tests', () => {
             // Verify all expected settings are in the schema
             expect(schema).toHaveProperty('exposure');
             expect(schema).toHaveProperty('boostTime');
-            expect(schema).toHaveProperty('lastMinutes');
-            expect(schema).toHaveProperty('onlyBoost');
-            expect(schema).toHaveProperty('voteOnlyInLastThreshold');
+                    expect(schema).toHaveProperty('lastMinuteThreshold');
+        expect(schema).toHaveProperty('onlyBoost');
+        expect(schema).toHaveProperty('voteOnlyInLastMinute');
 
             // Verify schema structure
             expect(schema.exposure).toHaveProperty('type');
@@ -219,9 +221,9 @@ describe('CLI-GUI Parity Tests', () => {
             const challengeId = '12345';
             
             // Test that we can get effective settings for last minutes
-            const effectiveLastMinutes = settings.getEffectiveSetting('lastMinutes', challengeId);
-            expect(typeof effectiveLastMinutes).toBe('number');
-            expect(effectiveLastMinutes).toBeGreaterThan(0);
+                    const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
+        expect(typeof effectiveLastMinuteThreshold).toBe('number');
+        expect(effectiveLastMinuteThreshold).toBeGreaterThan(0);
         });
     });
 
@@ -256,8 +258,8 @@ describe('CLI-GUI Parity Tests', () => {
             const challengeId = '12345';
             
             // Test that we can get effective settings for vote-only-in-last-threshold
-            const voteOnlyInLastThreshold = settings.getEffectiveSetting('voteOnlyInLastThreshold', challengeId);
-            expect(typeof voteOnlyInLastThreshold).toBe('boolean');
+                    const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
+        expect(typeof voteOnlyInLastMinute).toBe('boolean');
         });
     });
 
@@ -339,21 +341,21 @@ describe('CLI-GUI Parity Tests', () => {
             // Test that we can get effective settings for all challenge settings
             const exposure = settings.getEffectiveSetting('exposure', challengeId);
             const boostTime = settings.getEffectiveSetting('boostTime', challengeId);
-            const lastMinutes = settings.getEffectiveSetting('lastMinutes', challengeId);
+            const lastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
             const onlyBoost = settings.getEffectiveSetting('onlyBoost', challengeId);
-            const voteOnlyInLastThreshold = settings.getEffectiveSetting('voteOnlyInLastThreshold', challengeId);
+            const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
             
             // Verify all settings are of the correct types
             expect(typeof exposure).toBe('number');
             expect(typeof boostTime).toBe('number');
-            expect(typeof lastMinutes).toBe('number');
+            expect(typeof lastMinuteThreshold).toBe('number');
             expect(typeof onlyBoost).toBe('boolean');
-            expect(typeof voteOnlyInLastThreshold).toBe('boolean');
+            expect(typeof voteOnlyInLastMinute).toBe('boolean');
             
             // Verify numeric values are reasonable
             expect(exposure).toBeGreaterThan(0);
             expect(boostTime).toBeGreaterThanOrEqual(0);
-            expect(lastMinutes).toBeGreaterThan(0);
+            expect(lastMinuteThreshold).toBeGreaterThan(0);
         });
     });
 }); 

@@ -22,6 +22,8 @@ jest.mock('../../src/js/api/randomizer', () => ({
 jest.mock('../../src/js/logger', () => ({
     api: jest.fn(),
     error: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
     apiRequest: jest.fn(),
     apiResponse: jest.fn(),
     isDevMode: jest.fn(() => false),
