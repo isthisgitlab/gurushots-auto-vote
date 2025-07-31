@@ -15,7 +15,7 @@ jest.mock('../../src/js/settings', () => ({
         lastMinutes: { default: 30 },
         onlyBoost: { default: false },
         voteOnlyInLastThreshold: { default: false },
-        lastThresholdCheckFrequency: { default: 1 },
+        lastMinuteCheckFrequency: { default: 1 },
     },
 }));
 
@@ -49,7 +49,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 2; // 2 minutes when in last threshold
                     default:
                         return 100;
@@ -65,7 +65,7 @@ describe('last threshold check frequency functionality', () => {
             expect(isWithinLastMinuteThreshold).toBe(true);
 
             // Should use last threshold frequency
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(2);
         });
 
@@ -90,7 +90,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 1; // 1 minute when in last threshold
                     default:
                         return 100;
@@ -106,7 +106,7 @@ describe('last threshold check frequency functionality', () => {
             expect(isWithinLastMinuteThreshold).toBe(false);
 
             // Should not use last threshold frequency since not within threshold
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(1);
         });
 
@@ -131,7 +131,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 0; // Disabled (0)
                     default:
                         return 100;
@@ -147,7 +147,7 @@ describe('last threshold check frequency functionality', () => {
             expect(isWithinLastMinuteThreshold).toBe(true);
 
             // Should not use last threshold frequency since it's disabled (0)
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(0);
             
             // Should use normal voting interval instead
@@ -176,8 +176,8 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
-                        return 2; // Global setting: 2 minutes
+                    case 'lastMinuteCheckFrequency':
+                        return 3; // 3 minutes when in last threshold
                     default:
                         return 100;
                 }
@@ -191,12 +191,12 @@ describe('last threshold check frequency functionality', () => {
             // Should be within lastminute threshold (15 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
 
-            // Should use global setting for last threshold frequency
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
-            expect(lastThresholdFrequency).toBe(2);
+            // Should use global last threshold frequency setting
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
+            expect(lastThresholdFrequency).toBe(3);
 
             // Verify that getEffectiveSetting was called with 'global' for the global setting
-            expect(mockSettings.getEffectiveSetting).toHaveBeenCalledWith('lastThresholdCheckFrequency', 'global');
+            expect(mockSettings.getEffectiveSetting).toHaveBeenCalledWith('lastMinuteCheckFrequency', 'global');
         });
 
         test('should handle multiple challenges with different threshold states', () => {
@@ -235,7 +235,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 2; // 2 minutes when in last threshold
                     default:
                         return 100;
@@ -258,7 +258,7 @@ describe('last threshold check frequency functionality', () => {
             // Should use last threshold interval because Challenge 1 is within threshold
             expect(useLastThresholdInterval).toBe(true);
 
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(2);
         });
 
@@ -283,7 +283,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 1;
                     default:
                         return 100;
@@ -298,7 +298,7 @@ describe('last threshold check frequency functionality', () => {
             // Should be within lastminute threshold (30 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
 
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(1);
         });
 
@@ -323,7 +323,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 1;
                     default:
                         return 100;
@@ -339,7 +339,7 @@ describe('last threshold check frequency functionality', () => {
             expect(isWithinLastMinuteThreshold).toBe(false);
 
             // Should not use last threshold frequency since challenge has ended
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(1);
         });
 
@@ -379,7 +379,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 2; // 2 minutes when in last threshold
                     default:
                         return 100;
@@ -387,7 +387,7 @@ describe('last threshold check frequency functionality', () => {
             });
 
             // Simulate the GUI implementation logic
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             const useLastThreshold = lastThresholdFrequency > 0;
             
             let useLastThresholdInterval = false;
