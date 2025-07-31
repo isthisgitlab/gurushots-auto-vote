@@ -53,25 +53,25 @@ If you find this tool helpful, consider supporting its development:
 
 ### **🚀 Quick Download Links**
 
-**Latest Version: v0.3.0-beta.5**
+**Latest Version: v0.3.0-beta.6**
 
 #### **🖥️ GUI Applications (Recommended for most users)**
 
 | Platform          | Download                                                                                                                                                             | Size   | Type                |
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
-| **Windows**       | [📥 GuruShotsAutoVote-v0.3.0-beta.5-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-x64.exe)                 | ~50 MB | Portable Executable |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg)             | ~50 MB | DMG Installer       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.app](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.app)             | ~50 MB | App Bundle          |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.5-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-x86_64.AppImage) | ~50 MB | AppImage            |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.AppImage)   | ~50 MB | AppImage            |
+| **Windows**       | [📥 GuruShotsAutoVote-v0.3.0-beta.6-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-x64.exe)                 | ~50 MB | Portable Executable |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.dmg)             | ~50 MB | DMG Installer       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.app](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.app)             | ~50 MB | App Bundle          |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.6-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-x86_64.AppImage) | ~50 MB | AppImage            |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.3.0-beta.6-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.6-arm64.AppImage)   | ~50 MB | AppImage            |
 
 #### **💻 CLI Applications (For advanced users)**
 
 | Platform              | Download                                                                                                                           | Size   | Type                |
 |-----------------------|------------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
-| **macOS CLI**         | [📥 gurucli-v0.3.0-beta.5-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.3.0-beta.5-mac)             | ~55 MB | Terminal Executable |
-| **Linux CLI (x64)**   | [📥 gurucli-v0.3.0-beta.5-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.3.0-beta.5-linux)         | ~50 MB | Terminal Executable |
-| **Linux CLI (ARM64)** | [📥 gurucli-v0.3.0-beta.5-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.3.0-beta.5-linux-arm) | ~47 MB | Terminal Executable |
+| **macOS CLI**         | [📥 gurucli-v0.3.0-beta.6-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.3.0-beta.6-mac)             | ~55 MB | Terminal Executable |
+| **Linux CLI (x64)**   | [📥 gurucli-v0.3.0-beta.6-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.3.0-beta.6-linux)         | ~50 MB | Terminal Executable |
+| **Linux CLI (ARM64)** | [📥 gurucli-v0.3.0-beta.6-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.3.0-beta.6-linux-arm) | ~47 MB | Terminal Executable |
 
 ### **📋 Installation Instructions**
 
@@ -106,11 +106,11 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 **💻 For CLI users on macOS:**
 
-1. Download the `gurucli-v0.3.0-beta.5-mac` file
+1. Download the `gurucli-v0.3.0-beta.6-mac` file
 2. Open Terminal
 3. Navigate to the download folder: `cd ~/Downloads`
-4. Make executable: `chmod +x gurucli-v0.3.0-beta.5-mac`
-5. Run: `./gurucli-v0.3.0-beta.5-mac`
+4. Make executable: `chmod +x gurucli-v0.3.0-beta.6-mac`
+5. Run: `./gurucli-v0.3.0-beta.6-mac`
 
 #### **🐧 Linux Users**
 
@@ -118,15 +118,15 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 1. **Download**: Click the appropriate Linux link above
 2. **Make Executable**: Right-click the file → Properties → Permissions → Check "Allow executing file as program"
-    - Or use terminal: `chmod +x GuruShotsAutoVote-v0.3.0-beta.5-*.AppImage`
-3. **Run**: Double-click the file or run from terminal: `./GuruShotsAutoVote-v0.3.0-beta.5-*.AppImage`
+    - Or use terminal: `chmod +x GuruShotsAutoVote-v0.3.0-beta.6-*.AppImage`
+3. **Run**: Double-click the file or run from terminal: `./GuruShotsAutoVote-v0.3.0-beta.6-*.AppImage`
 
 **CLI App:**
 
-1. Download the appropriate `gurucli-v0.3.0-beta.5-linux` file
+1. Download the appropriate `gurucli-v0.3.0-beta.6-linux` file
 2. Open terminal and navigate to download folder: `cd ~/Downloads`
-3. Make executable: `chmod +x gurucli-v0.3.0-beta.5-linux`
-4. Run: `./gurucli-v0.3.0-beta.5-linux`
+3. Make executable: `chmod +x gurucli-v0.3.0-beta.6-linux`
+4. Run: `./gurucli-v0.3.0-beta.6-linux`
 
 ### **🎯 Which Version Should I Download?**
 
@@ -170,17 +170,17 @@ For CLI applications, use these commands after making the file executable:
 
 Login with your credentials:
 ```
-./gurucli-v0.3.0-beta.5-[platform] login
+./gurucli-v0.3.0-beta.6-[platform] login
 ```
 
 Run a single voting cycle:
 ```
-./gurucli-v0.3.0-beta.5-[platform] vote
+./gurucli-v0.3.0-beta.6-[platform] vote
 ```
 
 Start continuous voting:
 ```
-./gurucli-v0.3.0-beta.5-[platform] start
+./gurucli-v0.3.0-beta.6-[platform] start
 ```
 
 ## 🔧 Usage
@@ -224,27 +224,27 @@ For the CLI application, use these commands:
 
 Login with your credentials:
 ```
-./gurucli-v0.3.0-beta.5-[platform] login
+./gurucli-v0.3.0-beta.6-[platform] login
 ```
 
 Run one voting cycle:
 ```
-./gurucli-v0.3.0-beta.5-[platform] vote
+./gurucli-v0.3.0-beta.6-[platform] vote
 ```
 
 Start continuous voting:
 ```
-./gurucli-v0.3.0-beta.5-[platform] start
+./gurucli-v0.3.0-beta.6-[platform] start
 ```
 
 Check current status:
 ```
-./gurucli-v0.3.0-beta.5-[platform] status
+./gurucli-v0.3.0-beta.6-[platform] status
 ```
 
 Show help:
 ```
-./gurucli-v0.3.0-beta.5-[platform] help
+./gurucli-v0.3.0-beta.6-[platform] help
 ```
 
 ### **Continuous Voting**
