@@ -94,6 +94,7 @@ Commands:
   status   - Show current status and settings
   get-setting <key> - Get a setting value
   set-setting <key> <value> - Set a setting value
+  set-global-default <key> <value> - Set global default with validation
   list-settings - Show all settings and their values
   reset-setting <key> - Reset a setting to default
   reset-all-settings - Reset all settings to defaults
@@ -540,6 +541,53 @@ const setSetting = (key, value) => {
 };
 
 /**
+ * Set a global default value for a schema-based setting with validation
+ */
+const setGlobalDefault = (key, value) => {
+    try {
+        // Parse value appropriately
+        let parsedValue = value;
+        if (value === 'true') parsedValue = true;
+        else if (value === 'false') parsedValue = false;
+        else if (!isNaN(value) && value !== '') parsedValue = Number(value);
+        else if (value.startsWith('[') || value.startsWith('{')) {
+            try {
+                parsedValue = JSON.parse(value);
+            } catch {
+                // Keep as string if JSON parsing fails
+            }
+        }
+
+        // Check if this is a valid schema setting
+        const schema = settings.SETTINGS_SCHEMA;
+        if (!schema[key]) {
+            logger.cliError(`Unknown schema setting '${key}'`);
+            logger.cliInfo('Available settings:');
+            Object.keys(schema).forEach(settingKey => {
+                logger.cliInfo(`  ${settingKey}`);
+            });
+            return;
+        }
+
+        // Use schema-based validation
+        const success = settings.setGlobalDefault(key, parsedValue);
+        if (success) {
+            const actualValue = settings.getGlobalDefault(key);
+            logger.cliSuccess(`Set global default ${key} = ${JSON.stringify(actualValue)}`);
+        } else {
+            logger.cliError(`Failed to set global default '${key}' - validation failed`);
+            logger.cliError(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
+            
+            // Show setting info
+            const config = schema[key];
+            logger.cliInfo(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
+        }
+    } catch (error) {
+        logger.cliError(`Error setting global default '${key}'`, error.message);
+    }
+};
+
+/**
  * List all settings and their values
  */
 const listSettings = () => {
@@ -735,6 +783,16 @@ const main = async () => {
                 process.exit(1);
             }
             resetSetting(args[1]);
+            process.exit(0);
+            break;
+        case 'set-global-default':
+            if (!args[1] || !args[2]) {
+                logger.cliError('Please specify both setting key and value');
+                logger.cliInfo('Usage: set-global-default <key> <value>');
+                logger.cliInfo('Example: set-global-default exposure 80');
+                process.exit(1);
+            }
+            setGlobalDefault(args[1], args[2]);
             process.exit(0);
             break;
         case 'reset-all-settings':
