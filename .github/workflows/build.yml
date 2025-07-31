@@ -148,6 +148,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
 
+      - name: Rename macOS .app file with version
+        if: matrix.platform == 'mac'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -d "build/mac-arm64/GuruShotsAutoVote.app" ]; then
+            mv "build/mac-arm64/GuruShotsAutoVote.app" "build/GuruShotsAutoVote-v${VERSION}-arm64.app"
+          fi
+
       - name: Build Linux ARM app
         if: matrix.platform == 'linux'
         run: npm run build:linux-arm
@@ -179,6 +187,7 @@ jobs:
           name: ${{ needs.version-bump.outputs.is-beta == 'true' && format('develop-{0}-builds', matrix.platform) || format('{0}-builds', matrix.platform) }}
           path: |
             build/*.dmg
+            build/GuruShotsAutoVote-v*.app
             build/*.exe
             build/*.AppImage
             ${{ matrix.platform != 'win' && 'build/cli/' || '' }}
@@ -261,7 +270,7 @@ jobs:
             
             ### 🖥️ GUI Applications
             - **Windows**: Portable executable (x64)
-            - **macOS**: DMG installer (ARM64)
+            - **macOS**: DMG installer + App bundle (ARM64)
             - **Linux**: AppImage (x64 + ARM64)
             
             ### 💻 CLI Applications
@@ -277,6 +286,7 @@ jobs:
           prerelease: ${{ needs.version-bump.outputs.is-beta == 'true' }}
           files: |
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.dmg
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.app
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/GuruShotsAutoVote-v*.AppImage
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/GuruShotsAutoVote-v*.exe
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac

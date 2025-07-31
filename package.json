@@ -40,6 +40,7 @@
     "settings:reset-global": "node scripts/settings-cli.js reset-global",
     "settings:schema": "node scripts/settings-cli.js schema",
     "settings:set": "node scripts/settings-cli.js set",
+    "settings:set-global": "node scripts/settings-cli.js set-global",
     "start": "electron .",
     "tag": "git tag v$(node -p \"require('./package.json').version\")",
     "tag:push": "npm run tag && git push origin v$(node -p \"require('./package.json').version\")",
@@ -114,11 +115,24 @@
     },
     "mac": {
       "category": "public.app-category.utilities",
-      "target": "dmg",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "icon": "src/assets/logo.png",
       "gatekeeperAssess": false,
       "hardenedRuntime": false,
-      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.dmg"
+      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.${ext}"
     },
     "win": {
       "target": "portable",

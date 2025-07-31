@@ -11,7 +11,8 @@
 | Platforma         | Lejupielāde                                                                                                                                                          | Izmērs | Tips                  |
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|-----------------------|
 | **Windows**       | [📥 GuruShotsAutoVote-v0.3.0-beta.5-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
-| **macOS**         | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg)             | ~50 MB | DMG instalētājs       |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg)             | ~50 MB | DMG instalētājs       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.app](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.app)             | ~50 MB | App komplekts         |
 | **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.5-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-x86_64.AppImage) | ~50 MB | AppImage              |
 | **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.AppImage)   | ~50 MB | AppImage              |
 
@@ -32,12 +33,19 @@
 
 #### **🍎 macOS lietotājiem**
 
-1. **Lejupielādēt**: Noklikšķiniet uz macOS saites augšā, lai lejupielādētu `.dmg` failu
+**Opcija 1: DMG instalētājs (Ieteicams)**
+1. **Lejupielādēt**: Noklikšķiniet uz macOS (DMG) saites augšā, lai lejupielādētu `.dmg` failu
 2. **Atvērt DMG**: Veiciet dubultklikšķi uz lejupielādētā `.dmg` faila
 3. **Instalēt**: Velciet lietotnes ikonu uz Applications mapi
 4. **Palaist**: Atveriet lietotni no Applications mapes
-5. **Konfigurācijas faili**: Lietotne saglabā iestatījumus mapē `~/Library/Application Support/gurushots-auto-vote/`
-6. **Žurnālfaili**: Žurnālfaili tiek saglabāti mapē `~/Library/Application Support/gurushots-auto-vote/logs/`
+
+**Opcija 2: App komplekts (Tiešs)**
+1. **Lejupielādēt**: Noklikšķiniet uz macOS (APP) saites augšā, lai lejupielādētu `.app` failu
+2. **Pārvietot**: Pārvietojiet lejupielādēto lietotni uz Applications mapi
+3. **Palaist**: Atveriet lietotni no Applications mapes
+
+**Konfigurācijas faili**: Lietotne saglabā iestatījumus mapē `~/Library/Application Support/gurushots-auto-vote/`
+**Žurnālfaili**: Žurnālfaili tiek saglabāti mapē `~/Library/Application Support/gurushots-auto-vote/logs/`
 
 **🔧 Ja saņemat drošības brīdinājumus:**
 

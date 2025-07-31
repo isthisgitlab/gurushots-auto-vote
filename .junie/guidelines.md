@@ -34,8 +34,7 @@
 - **Safe Git Commands**: Stick to read-only git commands (status, log, diff, show) and local commit operations only.
 
 ## Development Commands
-- **Linting**: Run `npm run lint` after code changes
-- **Type Checking**: Run `npm run typecheck` to verify TypeScript types
+- **Linting**: Run `npm run lint` after code changes (JavaScript project - no TypeScript)
 - **Testing**: Use proper Jest test commands as defined in package.json
 - **Testing Completion**: All tests must pass regardless of code changes (even if they are not related to the code being changed)
 - **CONSOLE LOG**: DO NOT use `console.log` in code, use deicated logger functions instead. Only use `console.log` where logger does not work and cant be used.

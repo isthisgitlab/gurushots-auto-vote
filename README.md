@@ -60,7 +60,8 @@ If you find this tool helpful, consider supporting its development:
 | Platform          | Download                                                                                                                                                             | Size   | Type                |
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
 | **Windows**       | [📥 GuruShotsAutoVote-v0.3.0-beta.5-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-x64.exe)                 | ~50 MB | Portable Executable |
-| **macOS**         | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg)             | ~50 MB | DMG Installer       |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.dmg)             | ~50 MB | DMG Installer       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.app](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.app)             | ~50 MB | App Bundle          |
 | **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.5-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-x86_64.AppImage) | ~50 MB | AppImage            |
 | **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.3.0-beta.5-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.5-arm64.AppImage)   | ~50 MB | AppImage            |
 
@@ -85,10 +86,16 @@ If you find this tool helpful, consider supporting its development:
 
 #### **🍎 macOS Users**
 
-1. **Download**: Click the macOS link above to download the `.dmg` file
+**Option 1: DMG Installer (Recommended)**
+1. **Download**: Click the macOS (DMG) link above to download the `.dmg` file
 2. **Open DMG**: Double-click the downloaded `.dmg` file
 3. **Install**: Drag the app icon to the Applications folder
 4. **Launch**: Open the app from your Applications folder
+
+**Option 2: App Bundle (Direct)**
+1. **Download**: Click the macOS (APP) link above to download the `.app` file
+2. **Move**: Move the downloaded app to your Applications folder
+3. **Launch**: Open the app from your Applications folder
 
 **🔧 If you get security warnings:**
 
