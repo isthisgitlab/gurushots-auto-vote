@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const logger = require('../src/js/logger');
 
 try {
     // Get version from package.json
@@ -23,7 +24,7 @@ try {
         throw new Error('No version found in package.json');
     }
 
-    console.log(`Updating documentation with version ${version}...`);
+    logger.cliInfo(`Updating documentation with version ${version}...`);
 
     // Files to update
     const filesToUpdate = [
@@ -41,7 +42,7 @@ try {
 
     filesToUpdate.forEach(fileInfo => {
         if (!fs.existsSync(fileInfo.path)) {
-            console.log(`⚠️  ${fileInfo.name} not found, skipping...`);
+            logger.cliWarning(`⚠️  ${fileInfo.name} not found, skipping...`);
             return;
         }
 
@@ -183,24 +184,24 @@ try {
         fs.writeFileSync(fileInfo.path, content, 'utf8');
 
         if (changesMade > 0) {
-            console.log(`✅ ${fileInfo.name} updated successfully with version ${version} (${changesMade} changes)`);
+            logger.cliSuccess(`✅ ${fileInfo.name} updated successfully with version ${version} (${changesMade} changes)`);
             totalChanges += changesMade;
         } else {
-            console.log(`ℹ️  ${fileInfo.name} is already up to date with version ${version}`);
+            logger.cliInfo(`ℹ️  ${fileInfo.name} is already up to date with version ${version}`);
         }
     });
 
     if (totalChanges > 0) {
-        console.log(`\n📝 Total changes made: ${totalChanges}`);
-        console.log(`   - Updated version numbers to v${version}`);
-        console.log(`   - Updated all download file names to v${version}`);
-        console.log(`   - Updated all download URLs to v${version}`);
-        console.log(`   - Updated command examples to v${version}`);
+        logger.cliInfo(`\n📝 Total changes made: ${totalChanges}`);
+        logger.cliInfo(`   - Updated version numbers to v${version}`);
+        logger.cliInfo(`   - Updated all download file names to v${version}`);
+        logger.cliInfo(`   - Updated all download URLs to v${version}`);
+        logger.cliInfo(`   - Updated command examples to v${version}`);
     } else {
-        console.log(`\nℹ️  All documentation is already up to date with version ${version}`);
+        logger.cliInfo(`\nℹ️  All documentation is already up to date with version ${version}`);
     }
 
 } catch (error) {
-    console.error(`❌ Error updating documentation: ${error.message}`);
+    logger.cliError(`❌ Error updating documentation: ${error.message}`);
     process.exit(1);
 } 
