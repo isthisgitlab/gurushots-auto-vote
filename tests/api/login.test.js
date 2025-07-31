@@ -17,14 +17,20 @@ jest.mock('../../src/js/api/api-client', () => ({
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8'
 }));
 
-// Mock console methods
-jest.spyOn(console, 'log').mockImplementation();
-jest.spyOn(console, 'error').mockImplementation();
+// Mock logger
+jest.mock('../../src/js/logger', () => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    success: jest.fn(),
+    warning: jest.fn(),
+    debug: jest.fn(),
+}));
 
 describe('login', () => {
     const mockEmail = 'test@example.com';
     const mockPassword = 'testpassword123';
     const {createCommonHeaders} = require('../../src/js/api/api-client');
+    const mockLogger = require('../../src/js/logger');
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -62,8 +68,8 @@ describe('login', () => {
             });
 
             expect(result).toEqual(mockResponse.data);
-            expect(console.log).toHaveBeenCalledWith('Starting authentication...');
-            expect(console.log).toHaveBeenCalledWith('Authentication successful');
+            expect(mockLogger.info).toHaveBeenCalledWith('Starting authentication...');
+            expect(mockLogger.success).toHaveBeenCalledWith('Authentication successful');
         });
 
         test('should encode email in request data', async () => {
@@ -133,7 +139,7 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(console.error).toHaveBeenCalledWith('Authentication error:', 'Invalid credentials');
+            expect(mockLogger.error).toHaveBeenCalledWith('Authentication error:', 'Invalid credentials');
         });
 
         test('should return null on network error', async () => {
@@ -143,7 +149,7 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(console.error).toHaveBeenCalledWith('Authentication error:', 'Network timeout');
+            expect(mockLogger.error).toHaveBeenCalledWith('Authentication error:', 'Network timeout');
         });
 
         test('should handle error without message', async () => {
@@ -153,7 +159,7 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(console.error).toHaveBeenCalledWith('Authentication error:', mockError);
+            expect(mockLogger.error).toHaveBeenCalledWith('Authentication error:', mockError);
         });
 
         test('should handle axios error with response', async () => {
@@ -167,7 +173,7 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(console.error).toHaveBeenCalledWith('Authentication error:', 'Request failed');
+            expect(mockLogger.error).toHaveBeenCalledWith('Authentication error:', 'Request failed');
         });
 
         test('should remove x-token from headers for login request', async () => {
@@ -217,7 +223,7 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(console.log).toHaveBeenCalledWith('Authentication successful');
+            expect(mockLogger.success).toHaveBeenCalledWith('Authentication successful');
         });
 
         test('should handle response without data field', async () => {
@@ -228,7 +234,7 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeUndefined();
-            expect(console.log).toHaveBeenCalledWith('Authentication successful');
+            expect(mockLogger.success).toHaveBeenCalledWith('Authentication successful');
         });
     });
 });
