@@ -48,17 +48,17 @@ export const initializeAutovote = () => {
 
     // Function to run a single voting cycle
     const runVotingCycle = async () => {
-        console.log(`🔄 runVotingCycle called, autovoteRunning: ${autovoteRunning}`);
+        await window.api.logDebug(`🔄 runVotingCycle called, autovoteRunning: ${autovoteRunning}`);
 
         // Check if autovote is still running before proceeding
         if (!autovoteRunning) {
-            console.log('🛑 Autovote stopped, skipping voting cycle');
+            await window.api.logDebug('🛑 Autovote stopped, skipping voting cycle');
             return false;
         }
 
         try {
-            console.log(`--- Auto Vote Cycle ${cycleCount + 1} ---`);
-            console.log(`Time: ${new Date().toLocaleString()}`);
+            await window.api.logDebug(`--- Auto Vote Cycle ${cycleCount + 1} ---`);
+            await window.api.logDebug(`Time: ${new Date().toLocaleString()}`);
 
             // Check if user is authenticated
             const settings = await window.api.getSettings();
@@ -73,7 +73,7 @@ export const initializeAutovote = () => {
 
             // Check if autovote was stopped during the cycle
             if (!autovoteRunning) {
-                console.log('🛑 Autovote stopped during voting cycle, aborting');
+                await window.api.logDebug('🛑 Autovote stopped during voting cycle, aborting');
                 return false;
             }
 
@@ -87,10 +87,10 @@ export const initializeAutovote = () => {
                     const timezone = await window.api.getSetting('timezone');
                     await loadChallenges(timezone, autovoteRunning);
 
-                    console.log(`--- Auto Vote Cycle ${cycleCount} Completed ---\n`);
+                    await window.api.logDebug(`--- Auto Vote Cycle ${cycleCount} Completed ---\n`);
                     return true;
                 } else {
-                    console.log('🛑 Autovote was stopped, not updating cycle count or refreshing');
+                    await window.api.logDebug('🛑 Autovote was stopped, not updating cycle count or refreshing');
                     return false;
                 }
             } else {
@@ -101,7 +101,7 @@ export const initializeAutovote = () => {
                 return false;
             }
         } catch (error) {
-            console.error(`Error during auto vote cycle ${cycleCount + 1}:`, error);
+            await window.api.logError(`Error during auto vote cycle ${cycleCount + 1}:`, error);
             updateAutovoteStatus('Error', 'badge-error');
             return false;
         }
@@ -135,7 +135,7 @@ export const initializeAutovote = () => {
         loadChallenges(timezone, autovoteRunning);
 
         // Run immediately
-        console.log('▶️ Starting immediate voting cycle');
+        await window.api.logDebug('▶️ Starting immediate voting cycle');
         runVotingCycle();
 
         // Set up simple interval without dynamic logic to avoid service worker issues
@@ -143,8 +143,8 @@ export const initializeAutovote = () => {
             const settings = await window.api.getSettings();
             
             // Check if last threshold check frequency is disabled (set to 0)
-            const lastThresholdFrequency = await window.api.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
-            const useLastThreshold = lastThresholdFrequency > 0;
+            const lastMinuteCheckFrequency = await window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
+            const useLastThreshold = lastMinuteCheckFrequency > 0;
             
             let votingIntervalMs;
             let useLastThresholdInterval = false;
@@ -157,23 +157,25 @@ export const initializeAutovote = () => {
                 const now = Math.floor(Date.now() / 1000);
                 
                 for (const challenge of challenges) {
-                    const effectiveLastMinutes = await window.api.getEffectiveSetting('lastMinutes', challenge.id.toString());
-                    const timeUntilEnd = challenge.close_time - now;
-                    const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
-                    
-                    if (isWithinLastMinuteThreshold) {
-                        useLastThresholdInterval = true;
-                        break;
+                    if (challenge.type !== 'flash') {
+                        const effectiveLastMinuteThreshold = await window.api.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
+                        const timeUntilEnd = challenge.close_time - now;
+                        const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+
+                        if (isWithinLastMinuteThreshold) {
+                            useLastThresholdInterval = true;
+                            break;
+                        }
                     }
                 }
             }
             
             if (useLastThresholdInterval) {
                 votingIntervalMs = lastThresholdFrequency * 60000;
-                console.log(`⏰ Using last threshold interval: ${lastThresholdFrequency} minutes (challenge within threshold)`);
+                await window.api.logDebug(`⏰ Using last threshold interval: ${lastThresholdFrequency} minutes (challenge within threshold)`);
             } else {
-                votingIntervalMs = settings.votingInterval * 60000;
-                console.log(`⏰ Using normal voting interval: ${settings.votingInterval} minutes`);
+                votingIntervalMs = settings.checkFrequency * 60000;
+                await window.api.logDebug(`⏰ Using normal check frequency: ${settings.checkFrequency} minutes`);
             }
             
             // Clear existing interval if any
@@ -181,21 +183,21 @@ export const initializeAutovote = () => {
                 clearInterval(autovoteInterval);
             }
             
-            console.log('⏰ Setting up autovote interval');
+            await window.api.logDebug('⏰ Setting up autovote interval');
             autovoteInterval = setInterval(async () => {
-                console.log('⏰ Interval triggered, autovoteRunning:', autovoteRunning);
+                await window.api.logDebug('⏰ Interval triggered, autovoteRunning:', autovoteRunning);
                 if (autovoteRunning) {
                     await runVotingCycle();
                 } else {
-                    console.log('⏰ Autovote stopped, clearing interval');
+                    await window.api.logDebug('⏰ Autovote stopped, clearing interval');
                     clearInterval(autovoteInterval);
                     autovoteInterval = null;
                 }
             }, votingIntervalMs);
 
-            console.log('=== Auto Vote Started ===');
-            console.log(`Scheduling voting every ${useLastThresholdInterval ? lastThresholdFrequency : settings.votingInterval} minutes`);
-            console.log('Challenges will update after each voting cycle');
+            await window.api.logDebug('=== Auto Vote Started ===');
+            await window.api.logDebug(`Scheduling voting every ${useLastThresholdInterval ? lastThresholdFrequency : settings.checkFrequency} minutes`);
+            await window.api.logDebug('Challenges will update after each voting cycle');
         };
 
         await setupVotingInterval();
@@ -203,22 +205,22 @@ export const initializeAutovote = () => {
 
     // Function to stop autovote
     const stopAutovote = async () => {
-        console.log('🛑 stopAutovote called, autovoteRunning:', autovoteRunning, 'Interval:', autovoteInterval);
+        await window.api.logDebug('🛑 stopAutovote called, autovoteRunning:', autovoteRunning, 'Interval:', autovoteInterval);
         if (!autovoteRunning) {
-            console.log('🛑 Autovote already stopped, returning');
+            await window.api.logDebug('🛑 Autovote already stopped, returning');
             return;
         }
 
-        console.log('🛑 Setting autovoteRunning to false and canceling voting');
+        await window.api.logDebug('🛑 Setting autovoteRunning to false and canceling voting');
         autovoteRunning = false;
         await window.api.setCancelVoting(true);
 
         // Clear autovote interval
-        console.log('🛑 Clearing autovote interval:', autovoteInterval);
+        await window.api.logDebug('🛑 Clearing autovote interval:', autovoteInterval);
         if (autovoteInterval) {
             clearInterval(autovoteInterval);
             autovoteInterval = null;
-            console.log('🛑 Autovote interval cleared');
+            await window.api.logDebug('🛑 Autovote interval cleared');
         }
 
         // Only update UI elements if they exist (for when called from main UI)
@@ -243,19 +245,19 @@ export const initializeAutovote = () => {
         // Restart the regular auto-refresh
         startAutoRefresh();
 
-        console.log('=== Auto Vote Stopped ===');
-        console.log('🛑 Final autovoteRunning state:', autovoteRunning);
+        await window.api.logDebug('=== Auto Vote Stopped ===');
+        await window.api.logDebug('🛑 Final autovoteRunning state:', autovoteRunning);
     };
 
     // Handle autovote toggle
     autovoteToggle.addEventListener('click', async (e) => {
         e.preventDefault(); // Prevent any default behavior
-        console.log('🔄 Autovote toggle clicked, current state:', autovoteRunning, 'Interval:', autovoteInterval);
+        await window.api.logDebug('🔄 Autovote toggle clicked, current state:', autovoteRunning, 'Interval:', autovoteInterval);
         if (autovoteRunning) {
-            console.log('🛑 Stopping autovote...');
+            await window.api.logDebug('🛑 Stopping autovote...');
             await stopAutovote();
         } else {
-            console.log('▶️ Starting autovote...');
+            await window.api.logDebug('▶️ Starting autovote...');
             await startAutovote();
         }
     });
@@ -278,7 +280,7 @@ export const initializeAutovote = () => {
                     const timezone = await window.api.getSetting('timezone');
                     loadChallenges(timezone, autovoteRunning);
                 } catch (error) {
-                    console.warn('Could not get timezone for auto-refresh:', error);
+                    await window.api.logWarning('Could not get timezone for auto-refresh:', error);
                     loadChallenges('Europe/Riga', autovoteRunning); // Default fallback
                 }
             }, 60000); // 60 seconds

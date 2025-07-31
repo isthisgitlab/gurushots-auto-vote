@@ -89,7 +89,7 @@ export const formatEndTime = (endTime, timezone = 'local') => {
                 timeZone: timezone,
             });
         } catch (error) {
-            console.warn('Error formatting date with timezone, falling back to local:', error);
+            window.api.logWarning('Error formatting date with timezone, falling back to local:', error);
             return date.toLocaleString('lv-LV', formatOptions);
         }
     }

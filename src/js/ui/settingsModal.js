@@ -1,16 +1,16 @@
 const translationManager = window.translationManager;
 
 export const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => {
-    console.log('generateSettingsModalHtml called with:', {schema, globalDefaults, challengesCount: challenges.length});
+    await window.api.logDebug('generateSettingsModalHtml called with:', {schema, globalDefaults, challengesCount: challenges.length});
 
     // Validate inputs
     if (!schema || Object.keys(schema).length === 0) {
-        console.error('No schema provided to generateSettingsModalHtml');
+        await window.api.logError('No schema provided to generateSettingsModalHtml');
         return '<div class="text-error">Error: No settings schema available</div>';
     }
 
     if (!globalDefaults) {
-        console.error('No globalDefaults provided to generateSettingsModalHtml');
+        await window.api.logError('No globalDefaults provided to generateSettingsModalHtml');
         return '<div class="text-error">Error: No global defaults available</div>';
     }
 
@@ -19,14 +19,14 @@ export const generateSettingsModalHtml = async (schema, globalDefaults, challeng
     for (const [key, config] of Object.entries(schema)) {
         try {
             const value = globalDefaults[key];
-            console.log(`Processing global setting ${key}:`, {value, config});
+            await window.api.logDebug(`Processing global setting ${key}:`, {value, config});
 
             if (value === undefined || value === null) {
-                console.warn(`Missing value for global setting ${key}, using default`);
+                await window.api.logDebug(`Missing value for global setting ${key}, using default`);
                 globalDefaults[key] = config.default;
             }
 
-            const inputHtml = generateInputHtml(key, config, globalDefaults[key], '');
+            const inputHtml = await generateInputHtml(key, config, globalDefaults[key], '');
             const labelText = translationManager.t(config.label) || config.label || key;
             const descText = translationManager.t(config.description) || config.description || 'No description';
 
@@ -48,7 +48,7 @@ export const generateSettingsModalHtml = async (schema, globalDefaults, challeng
                 </div>
             `;
         } catch (error) {
-            console.error(`Error generating HTML for global setting ${key}:`, error);
+            await window.api.logError(`Error generating HTML for global setting ${key}:`, error);
             // Add a simple fallback
             globalSettingsHtml += `
                 <div class="form-control mb-4">
@@ -63,7 +63,7 @@ export const generateSettingsModalHtml = async (schema, globalDefaults, challeng
         }
     }
 
-    console.log('Generated global settings HTML length:', globalSettingsHtml.length);
+    await window.api.logDebug('Generated global settings HTML length:', globalSettingsHtml.length);
 
     // Generate UI settings HTML
     const uiSettingsHtml = await generateUISettingsHtml();
@@ -125,7 +125,7 @@ export const generateSettingsModalHtml = async (schema, globalDefaults, challeng
         </div>
     `;
 
-    console.log('Final modal HTML length:', modalHtml.length);
+    await window.api.logDebug('Final modal HTML length:', modalHtml.length);
     return modalHtml;
 };
 
@@ -276,17 +276,17 @@ const generateUISettingsHtml = async () => {
             </div>
         `;
 
-        // Voting Interval Setting
+        // Check Frequency Setting
         uiSettingsHtml += `
             <div class="form-control mb-4">
                 <label class="label">
-                    <span class="label-text font-medium" data-translate="app.votingInterval">${translationManager.t('app.votingInterval')}</span>
+                    <span class="label-text font-medium" data-translate="app.checkFrequency">${translationManager.t('app.checkFrequency')}</span>
                     <span class="badge badge-ghost badge-xs ml-2" data-translate="app.appSetting">${translationManager.t('app.appSetting')}</span>
                 </label>
-                <p class="text-xs text-base-content/60 mb-2" data-translate="app.votingIntervalDesc">${translationManager.t('app.votingIntervalDesc')}</p>
+                <p class="text-xs text-base-content/60 mb-2" data-translate="app.checkFrequencyDesc">${translationManager.t('app.checkFrequencyDesc')}</p>
                 <div class="flex items-center gap-2">
-                    <input type="number" id="modal-voting-interval" class="input input-bordered input-sm w-20" 
-                           value="${settings.votingInterval || 3}" min="1" max="60" step="1">
+                    <input type="number" id="modal-check-frequency" class="input input-bordered input-sm w-20" 
+                           value="${settings.checkFrequency || 3}" min="1" max="60" step="1">
                     <span class="text-sm text-base-content/60" data-translate="app.minutes">${translationManager.t('app.minutes')}</span>
                 </div>
             </div>
@@ -294,18 +294,18 @@ const generateUISettingsHtml = async () => {
 
         return uiSettingsHtml;
     } catch (error) {
-        console.error('Error generating UI settings HTML:', error);
+        await window.api.logError('Error generating UI settings HTML:', error);
         return `<div class="text-error" data-translate="app.errorLoadingUiSettings">${translationManager.t('app.errorLoadingUiSettings')}</div>`;
     }
 };
 
 // Function to generate input HTML based on setting type
-const generateInputHtml = (key, config, value, challengeId = '', hasOverride = false) => {
+const generateInputHtml = async (key, config, value, challengeId = '', hasOverride = false) => {
     try {
-        console.log(`Generating input HTML for ${key}:`, {config, value, challengeId, hasOverride});
+        await window.api.logDebug(`Generating input HTML for ${key}:`, {config, value, challengeId, hasOverride});
 
         if (!config) {
-            console.error(`No config provided for setting ${key}`);
+            await window.api.logError(`No config provided for setting ${key}`);
             return `<div class="text-error" data-translate="app.missingConfigFor">${translationManager.t('app.missingConfigFor')} ${key}</div>`;
         }
 
@@ -314,7 +314,7 @@ const generateInputHtml = (key, config, value, challengeId = '', hasOverride = f
 
         // Handle undefined/null values
         if (value === undefined || value === null) {
-            console.warn(`Using default value for ${key}:`, config.default);
+            await window.api.logDebug(`Using default value for ${key}:`, config.default);
             value = config.default || 0;
         }
 
@@ -361,7 +361,7 @@ const generateInputHtml = (key, config, value, challengeId = '', hasOverride = f
                 `;
         }
     } catch (error) {
-        console.error(`Error generating input HTML for ${key}:`, error);
+        await window.api.logError(`Error generating input HTML for ${key}:`, error);
         return `<div class="text-error">Error generating input for ${key}: ${error.message || 'Unknown error'}</div>`;
     }
 };
@@ -432,12 +432,12 @@ const initializeUISettingsHandlers = () => {
         });
     }
 
-    // Voting interval
-    const votingInterval = document.getElementById('modal-voting-interval');
-    if (votingInterval) {
-        votingInterval.addEventListener('change', () => {
+    // Check frequency
+    const checkFrequency = document.getElementById('modal-check-frequency');
+    if (checkFrequency) {
+        checkFrequency.addEventListener('change', () => {
             // Mark as modified - don't auto-save
-            votingInterval.classList.add('input-error');
+            checkFrequency.classList.add('input-error');
         });
     }
 };
@@ -454,16 +454,16 @@ export const closeSettingsModal = () => {
 
 // Function to generate challenge settings modal HTML
 export const generateChallengeSettingsModalHtml = async (challengeId, challengeTitle, schema, globalDefaults, challengeSettings) => {
-    console.log('generateChallengeSettingsModalHtml called with:', {challengeId, challengeTitle, schema, globalDefaults, challengeSettings});
+    await window.api.logDebug('generateChallengeSettingsModalHtml called with:', {challengeId, challengeTitle, schema, globalDefaults, challengeSettings});
 
     // Validate inputs
     if (!schema || Object.keys(schema).length === 0) {
-        console.error('No schema provided to generateChallengeSettingsModalHtml');
+        await window.api.logError('No schema provided to generateChallengeSettingsModalHtml');
         return '<div class="text-error">Error: No settings schema available</div>';
     }
 
     if (!globalDefaults) {
-        console.error('No globalDefaults provided to generateChallengeSettingsModalHtml');
+        await window.api.logError('No globalDefaults provided to generateChallengeSettingsModalHtml');
         return '<div class="text-error">Error: No global defaults available</div>';
     }
 
@@ -480,14 +480,14 @@ export const generateChallengeSettingsModalHtml = async (challengeId, challengeT
             const hasOverride = challengeValue !== null && challengeValue !== undefined;
             const effectiveValue = hasOverride ? challengeValue : globalValue;
 
-            console.log(`Processing challenge setting ${key}:`, {globalValue, challengeValue, hasOverride, effectiveValue});
+            await window.api.logDebug(`Processing challenge setting ${key}:`, {globalValue, challengeValue, hasOverride, effectiveValue});
 
             if (effectiveValue === undefined || effectiveValue === null) {
-                console.warn(`Missing value for challenge setting ${key}, using default`);
+                await window.api.logDebug(`Missing value for challenge setting ${key}, using default`);
                 challengeSettings[key] = config.default;
             }
 
-            const inputHtml = generateInputHtml(key, config, effectiveValue, challengeId, hasOverride);
+            const inputHtml = await generateInputHtml(key, config, effectiveValue, challengeId, hasOverride);
             const labelText = translationManager.t(config.label) || config.label || key;
             const descText = translationManager.t(config.description) || config.description || 'No description';
 
@@ -504,7 +504,7 @@ export const generateChallengeSettingsModalHtml = async (challengeId, challengeT
                 </div>
             `;
         } catch (error) {
-            console.error(`Error generating HTML for challenge setting ${key}:`, error);
+            await window.api.logError(`Error generating HTML for challenge setting ${key}:`, error);
             // Add a simple fallback
             challengeSettingsHtml += `
                 <div class="form-control mb-4">
@@ -567,7 +567,7 @@ export const generateChallengeSettingsModalHtml = async (challengeId, challengeT
         </div>
     `;
 
-    console.log('Final challenge settings modal HTML length:', modalHtml.length);
+    await window.api.logDebug('Final challenge settings modal HTML length:', modalHtml.length);
     return modalHtml;
 };
 

@@ -4,7 +4,7 @@ import { loadChallenges } from './challengeLoader.js';
 export const initializeBoostEntry = () => {
     window.boostEntry = async (challengeId, imageId, rank) => {
         try {
-            console.log(`🚀 Boosting entry: Challenge ${challengeId}, Image ${imageId}, Rank ${rank}`);
+            await window.api.logDebug(`🚀 Boosting entry: Challenge ${challengeId}, Image ${imageId}, Rank ${rank}`);
 
             // Show loading state on the button
             const button = document.querySelector(`[data-challenge-id="${challengeId}"][data-image-id="${imageId}"]`);
@@ -17,7 +17,7 @@ export const initializeBoostEntry = () => {
                 const result = await window.api.applyBoostToEntry(challengeId, imageId);
 
                 if (result && result.success) {
-                    console.log('✅ Boost applied successfully');
+                    await window.api.logDebug('✅ Boost applied successfully');
                     // Update the button to show success
                     button.innerHTML = '✅';
                     button.className = 'btn btn-xs btn-success ml-1';
@@ -28,7 +28,7 @@ export const initializeBoostEntry = () => {
                         loadChallenges(timezone, false);
                     }, 1000);
                 } else {
-                    console.error('❌ Failed to apply boost:', result?.error || 'Unknown error');
+                    await window.api.logError('❌ Failed to apply boost:', result?.error || 'Unknown error');
                     // Reset button on error
                     button.disabled = false;
                     button.innerHTML = originalText;
@@ -38,7 +38,7 @@ export const initializeBoostEntry = () => {
                 }
             }
         } catch (error) {
-            console.error('❌ Error boosting entry:', error);
+            await window.api.logError('❌ Error boosting entry:', error);
             alert(`Error boosting entry: ${error.message || 'Unknown error'}`);
 
             // Reset button on error

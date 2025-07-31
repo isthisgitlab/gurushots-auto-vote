@@ -45,11 +45,18 @@ export const loadChallenges = async (timezone = 'local', autovoteRunning = false
             // Extract challenge IDs for cleanup
             const activeChallengeIds = result.challenges.map(challenge => challenge.id.toString());
 
-
+            // Cleanup stale challenge settings
             try {
                 await window.api.cleanupStaleChallengeSetting(activeChallengeIds);
             } catch (error) {
-                console.warn('Failed to cleanup stale challenge settings:', error);
+                await window.api.logWarning('Failed to cleanup stale challenge settings:', error);
+            }
+
+            // Cleanup stale metadata
+            try {
+                await window.api.cleanupStaleMetadata(activeChallengeIds);
+            } catch (error) {
+                await window.api.logWarning('Failed to cleanup stale metadata:', error);
             }
 
             renderChallenges(result.challenges, timezone, autovoteRunning);

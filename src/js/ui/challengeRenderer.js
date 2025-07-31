@@ -56,7 +56,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                 }
             }
         } catch (error) {
-            console.warn('Error checking for custom settings:', error);
+            await window.api.logWarning('Error checking for custom settings:', error);
         }
 
         // Get user progress data
@@ -109,7 +109,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
 
         const nextLevelInfo = getNextLevelInfo();
 
-        console.log('🎨 Processed values:', {
+        await window.api.logDebug('🎨 Processed values:', {
             timeRemaining,
             endTime,
             boostStatus,
@@ -191,7 +191,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                     <div class="flex justify-between items-start">
                         <div class="flex-1">
                             <h3 class="font-bold text-base">${challenge.title}</h3>
-                            <p class="text-xs text-base-content/60">${challenge.welcome_message}</p>
+                            <div class="text-xs text-base-content/60 challenge-welcome-message" data-welcome-message="${challenge.welcome_message.replace(/"/g, '&quot;')}"></div>
                             <!-- Challenge Type Badges -->
                             <div class="flex gap-1 mt-1">
                                 ${challenge.type ? `<span class="badge badge-xs badge-warning">${challenge.type.toUpperCase()}</span>` : 
@@ -311,6 +311,14 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
     const challengesHtml = challengesHtmlArray.join('');
 
     container.innerHTML = challengesHtml;
+
+    // Set welcome messages as HTML
+    document.querySelectorAll('.challenge-welcome-message').forEach(element => {
+        const welcomeMessage = element.dataset.welcomeMessage;
+        if (welcomeMessage) {
+            element.innerHTML = welcomeMessage;
+        }
+    });
 
     // Add event listeners to vote buttons
     if (!autovoteRunning) {
