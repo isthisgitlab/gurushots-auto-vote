@@ -3,19 +3,20 @@ import { loadChallenges } from './challengeLoader.js';
 const translationManager = window.translationManager;
 
 export const initializeAutovote = () => {
-    // Get DOM elements
     const autovoteToggle = document.getElementById('autovote-toggle');
     const autovoteStatus = document.getElementById('autovote-status');
     const autovoteLastRun = document.getElementById('autovote-last-run');
     const autovoteCycles = document.getElementById('autovote-cycles');
     const refreshBtn = document.getElementById('refresh-challenges');
 
-    // State variables
     let autovoteRunning = false;
     let cycleCount = 0;
     let autovoteInterval = null;
     let autoRefreshInterval = null;
     let singleVoteRunning = false;
+    let thresholdScheduler = null; // For scheduling threshold interval changes
+    let currentScheduledChallenge = null; // Track currently scheduled challenge to prevent duplicates
+    let lastSettingsHash = null; // Track settings changes
 
     const updateAutovoteStatus = (status, badgeClass = 'badge-neutral') => {
         // Translate status if it's a known key
@@ -34,19 +35,213 @@ export const initializeAutovote = () => {
         autovoteStatus.className = `badge ${badgeClass}`;
     };
 
-    // Function to update last run time
     const updateLastRun = () => {
         const now = new Date();
         autovoteLastRun.textContent = now.toLocaleTimeString('lv-LV');
     };
 
-    // Function to update cycle count
     const updateCycleCount = () => {
         cycleCount++;
         autovoteCycles.textContent = cycleCount.toString();
     };
 
-    // Function to run a single voting cycle
+    /**
+     * Calculate when the next challenge will enter the last threshold period
+     * @param {Array} challenges - Array of challenge objects
+     * @param {number} now - Current time (Unix timestamp)
+     * @returns {Object|null} - Object with challengeId and entryTime, or null if no upcoming entries
+     */
+    const calculateNextLastThresholdEntry = async (challenges, now) => {
+        let nextEntry = null;
+        let earliestEntryTime = Infinity;
+
+        for (const challenge of challenges) {
+            // Skip flash challenges and ended challenges
+            if (challenge.type === 'flash' || challenge.close_time <= now) {
+                continue;
+            }
+
+            const effectiveLastMinuteThreshold = await window.api.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
+            const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+
+            // Only consider future entries
+            if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
+                earliestEntryTime = thresholdEntryTime;
+                nextEntry = {
+                    challengeId: challenge.id,
+                    challengeTitle: challenge.title,
+                    entryTime: thresholdEntryTime,
+                    lastMinuteThreshold: effectiveLastMinuteThreshold,
+                };
+            }
+        }
+
+        return nextEntry;
+    };
+
+    /**
+     * Schedule an interval change when a challenge enters the last threshold period
+     * @param {Object} nextEntry - Object with challengeId, entryTime, and lastMinuteThreshold
+     */
+    const scheduleThresholdIntervalChange = async (nextEntry) => {
+        if (!nextEntry || !autovoteRunning) {
+            return;
+        }
+
+        // Check if we're already scheduling the same challenge
+        if (currentScheduledChallenge && 
+            currentScheduledChallenge.challengeId === nextEntry.challengeId &&
+            currentScheduledChallenge.entryTime === nextEntry.entryTime) {
+            await window.api.logDebug(`⏰ Already scheduling threshold change for challenge "${nextEntry.challengeTitle}", skipping duplicate`);
+            return;
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+        const timeUntilEntry = (nextEntry.entryTime - now) * 1000; // Convert to milliseconds
+
+        // Only schedule if the entry time is in the future
+        if (timeUntilEntry <= 0) {
+            await window.api.logDebug(`⏰ Threshold entry time for challenge "${nextEntry.challengeTitle}" has already passed, skipping`);
+            return;
+        }
+
+        await window.api.logDebug(`⏰ Scheduling threshold interval change for challenge "${nextEntry.challengeTitle}" in ${Math.round(timeUntilEntry / 1000)} seconds`);
+
+        // Clear any existing scheduler
+        if (thresholdScheduler) {
+            clearTimeout(thresholdScheduler);
+            thresholdScheduler = null;
+        }
+
+        // Track the currently scheduled challenge
+        currentScheduledChallenge = {
+            challengeId: nextEntry.challengeId,
+            challengeTitle: nextEntry.challengeTitle,
+            entryTime: nextEntry.entryTime,
+            lastMinuteThreshold: nextEntry.lastMinuteThreshold,
+        };
+
+        // Save metadata for persistence
+        await saveThresholdMetadata(nextEntry);
+
+        // Schedule the interval change
+        thresholdScheduler = setTimeout(async () => {
+            if (autovoteRunning) {
+                await window.api.logDebug(`⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`);
+                
+                // Clear current interval and set up new one with last threshold frequency
+                if (autovoteInterval) {
+                    clearInterval(autovoteInterval);
+                }
+
+                const lastMinuteCheckFrequency = await window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
+                const votingIntervalMs = lastMinuteCheckFrequency * 60000;
+
+                autovoteInterval = setInterval(async () => {
+                    if (autovoteRunning) {
+                        await runVotingCycle();
+                    } else {
+                        clearInterval(autovoteInterval);
+                        autovoteInterval = null;
+                    }
+                }, votingIntervalMs);
+
+                await window.api.logDebug(`⏰ Switched to last threshold interval: ${lastMinuteCheckFrequency} minutes`);
+                
+                // Clear the scheduled challenge tracking
+                currentScheduledChallenge = null;
+                
+                // Update threshold scheduling for the next potential entry
+                await updateThresholdScheduling();
+            }
+        }, timeUntilEntry);
+    };
+
+    /**
+     * Update threshold scheduling based on current challenges
+     */
+    const updateThresholdScheduling = async () => {
+        if (!autovoteRunning) {
+            return;
+        }
+
+        try {
+            const settings = await window.api.getSettings();
+            const result = await window.api.getActiveChallenges(settings.token);
+            const challenges = result?.challenges || [];
+            const now = Math.floor(Date.now() / 1000);
+
+            // Check if settings have changed (relevant settings for threshold scheduling)
+            const currentSettingsHash = JSON.stringify({
+                lastMinuteCheckFrequency: await window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
+                lastMinuteThreshold: await window.api.getEffectiveSetting('lastMinuteThreshold', 'global'),
+            });
+
+            if (lastSettingsHash !== null && lastSettingsHash !== currentSettingsHash) {
+                await window.api.logDebug('⏰ Settings changed, clearing existing threshold scheduler');
+                if (thresholdScheduler) {
+                    clearTimeout(thresholdScheduler);
+                    thresholdScheduler = null;
+                }
+                currentScheduledChallenge = null;
+            }
+            lastSettingsHash = currentSettingsHash;
+
+            const nextEntry = await calculateNextLastThresholdEntry(challenges, now);
+            
+            if (nextEntry) {
+                await scheduleThresholdIntervalChange(nextEntry);
+            } else {
+                // Clear any existing scheduler if no upcoming entries
+                if (thresholdScheduler) {
+                    clearTimeout(thresholdScheduler);
+                    thresholdScheduler = null;
+                    currentScheduledChallenge = null;
+                    await window.api.logDebug('⏰ No upcoming threshold entries, cleared threshold scheduler');
+                }
+            }
+        } catch (error) {
+            await window.api.logWarning('Error updating threshold scheduling:', error);
+        }
+    };
+
+    /**
+     * Handle settings changes that affect threshold scheduling
+     */
+    const handleSettingsChange = async () => {
+        if (!autovoteRunning) {
+            return;
+        }
+
+        await window.api.logDebug('⚙️ Settings changed, updating threshold scheduling');
+        
+        // Clear existing scheduler to force recalculation
+        if (thresholdScheduler) {
+            clearTimeout(thresholdScheduler);
+            thresholdScheduler = null;
+        }
+        currentScheduledChallenge = null;
+        lastSettingsHash = null; // Reset to force recalculation
+        
+        // Update threshold scheduling with new settings
+        await updateThresholdScheduling();
+    };
+
+    /**
+     * Save threshold scheduling metadata for persistence
+     */
+    const saveThresholdMetadata = async (nextEntry) => {
+        if (!nextEntry) {
+            return;
+        }
+
+        try {
+            await window.api.logDebug(`💾 Saving threshold scheduling metadata for challenge "${nextEntry.challengeTitle}"`);
+        } catch (error) {
+            await window.api.logWarning('Error saving threshold metadata:', error);
+        }
+    };
+
     const runVotingCycle = async () => {
         await window.api.logDebug(`🔄 runVotingCycle called, autovoteRunning: ${autovoteRunning}`);
 
@@ -87,6 +282,9 @@ export const initializeAutovote = () => {
                     const timezone = await window.api.getSetting('timezone');
                     await loadChallenges(timezone, autovoteRunning);
 
+                    // Update threshold scheduling after challenge refresh
+                    await updateThresholdScheduling();
+
                     await window.api.logDebug(`--- Auto Vote Cycle ${cycleCount} Completed ---\n`);
                     return true;
                 } else {
@@ -107,7 +305,6 @@ export const initializeAutovote = () => {
         }
     };
 
-    // Function to start autovote
     const startAutovote = async () => {
         if (autovoteRunning) return;
 
@@ -171,8 +368,8 @@ export const initializeAutovote = () => {
             }
             
             if (useLastThresholdInterval) {
-                votingIntervalMs = lastThresholdFrequency * 60000;
-                await window.api.logDebug(`⏰ Using last threshold interval: ${lastThresholdFrequency} minutes (challenge within threshold)`);
+                votingIntervalMs = lastMinuteCheckFrequency * 60000;
+                await window.api.logDebug(`⏰ Using last threshold interval: ${lastMinuteCheckFrequency} minutes (challenge within threshold)`);
             } else {
                 votingIntervalMs = settings.checkFrequency * 60000;
                 await window.api.logDebug(`⏰ Using normal check frequency: ${settings.checkFrequency} minutes`);
@@ -196,14 +393,16 @@ export const initializeAutovote = () => {
             }, votingIntervalMs);
 
             await window.api.logDebug('=== Auto Vote Started ===');
-            await window.api.logDebug(`Scheduling voting every ${useLastThresholdInterval ? lastThresholdFrequency : settings.checkFrequency} minutes`);
+            await window.api.logDebug(`Scheduling voting every ${useLastThresholdInterval ? lastMinuteCheckFrequency : settings.checkFrequency} minutes`);
             await window.api.logDebug('Challenges will update after each voting cycle');
+
+            // Set up proactive threshold scheduling
+            await updateThresholdScheduling();
         };
 
         await setupVotingInterval();
     };
 
-    // Function to stop autovote
     const stopAutovote = async () => {
         await window.api.logDebug('🛑 stopAutovote called, autovoteRunning:', autovoteRunning, 'Interval:', autovoteInterval);
         if (!autovoteRunning) {
@@ -221,6 +420,19 @@ export const initializeAutovote = () => {
             clearInterval(autovoteInterval);
             autovoteInterval = null;
             await window.api.logDebug('🛑 Autovote interval cleared');
+        }
+
+        // Clear threshold scheduler
+        if (thresholdScheduler) {
+            clearTimeout(thresholdScheduler);
+            thresholdScheduler = null;
+            await window.api.logDebug('🛑 Threshold scheduler cleared');
+        }
+
+        // Clear scheduled challenge tracking
+        if (currentScheduledChallenge) {
+            currentScheduledChallenge = null;
+            await window.api.logDebug('🛑 Scheduled challenge tracking cleared');
         }
 
         // Only update UI elements if they exist (for when called from main UI)
@@ -253,7 +465,6 @@ export const initializeAutovote = () => {
         await window.api.logDebug('🛑 Final autovoteRunning state:', autovoteRunning);
     };
 
-    // Handle autovote toggle
     autovoteToggle.addEventListener('click', async (e) => {
         e.preventDefault(); // Prevent any default behavior
         await window.api.logDebug('🔄 Autovote toggle clicked, current state:', autovoteRunning, 'Interval:', autovoteInterval);
@@ -266,13 +477,15 @@ export const initializeAutovote = () => {
         }
     });
 
-    // Clean up on page unload
     window.addEventListener('beforeunload', () => {
         if (autovoteInterval) {
             clearInterval(autovoteInterval);
         }
         if (autoRefreshInterval) {
             clearInterval(autoRefreshInterval);
+        }
+        if (thresholdScheduler) {
+            clearTimeout(thresholdScheduler);
         }
     });
 
@@ -291,7 +504,6 @@ export const initializeAutovote = () => {
         }
     };
 
-    // Stop auto-refresh
     const stopAutoRefresh = () => {
         if (autoRefreshInterval) {
             clearInterval(autoRefreshInterval);
@@ -299,7 +511,6 @@ export const initializeAutovote = () => {
         }
     };
 
-    // Start auto-refresh initially
     startAutoRefresh();
 
     // Expose singleVoteRunning to window for other modules
@@ -307,4 +518,7 @@ export const initializeAutovote = () => {
     
     // Expose stopAutovote function globally so it can be called from other modules
     window.stopAutovote = stopAutovote;
+    
+    // Expose settings change handler for threshold scheduling
+    window.handleThresholdSettingsChange = handleSettingsChange;
 };

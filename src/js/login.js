@@ -66,41 +66,6 @@ const loginMock = async (username, password) => {
 };
 
 
-const showToast = (message, type = 'info') => {
-    const toastContainer = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-
-    // Set toast classes based on type
-    let alertClass = 'alert';
-    switch (type) {
-    case 'success':
-        alertClass += ' alert-success';
-        break;
-    case 'error':
-        alertClass += ' alert-error';
-        break;
-    case 'warning':
-        alertClass += ' alert-warning';
-        break;
-    default:
-        alertClass += ' alert-info';
-    }
-
-    toast.className = alertClass;
-    toast.innerHTML = `
-        <span>${message}</span>
-        <button class="btn btn-sm btn-ghost" onclick="this.parentElement.remove()">✕</button>
-    `;
-
-    toastContainer.appendChild(toast);
-
-    // Auto-remove toast after 5 seconds
-    setTimeout(() => {
-        if (toast.parentElement) {
-            toast.remove();
-        }
-    }, 5000);
-};
 
 
 const validateForm = () => {
@@ -320,7 +285,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Check if login was successful
             if (!loginResult.success) {
-                showToast(loginResult.message || 'Login failed', 'error');
+                alert(loginResult.message || 'Login failed');
                 setLoadingState(false);
                 return;
             }
@@ -351,7 +316,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         } catch (error) {
             logger.error('Login error:', error);
-            showToast('An unexpected error occurred during login', 'error');
+            alert('An unexpected error occurred during login');
             setLoadingState(false);
         }
     });
