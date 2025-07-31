@@ -233,7 +233,8 @@ window.saveGlobalSettings = async () => {
                     value = input.checked;
                     input.classList.remove('input-error');
                 } else {
-                    value = parseInt(input.value) || input.value;
+                    const parsedValue = parseInt(input.value);
+                    value = isNaN(parsedValue) ? input.value : parsedValue;
                     input.classList.remove('input-error');
                 }
 
@@ -428,7 +429,8 @@ window.saveChallengeSettings = async (challengeId) => {
                     value = input.checked;
                     input.classList.remove('input-error');
                 } else {
-                    value = parseInt(input.value) || input.value;
+                    const parsedValue = parseInt(input.value);
+                    value = isNaN(parsedValue) ? input.value : parsedValue;
                     input.classList.remove('input-error');
                 }
 
