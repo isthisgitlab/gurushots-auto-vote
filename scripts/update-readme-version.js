@@ -67,6 +67,10 @@ try {
                 replacement: `GuruShotsAutoVote-v${version}-arm64.dmg`,
             },
             {
+                pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.app/g,
+                replacement: `GuruShotsAutoVote-v${version}-arm64.app`,
+            },
+            {
                 pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x86_64\.AppImage/g,
                 replacement: `GuruShotsAutoVote-v${version}-x86_64.AppImage`,
             },
@@ -106,6 +110,10 @@ try {
             {
                 pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.dmg/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.dmg`,
+            },
+            {
+                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.app/g,
+                replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.app`,
             },
             {
                 pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x86_64\.AppImage/g,
