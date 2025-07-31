@@ -201,6 +201,10 @@ const runVotingCycle = async (cycleNumber = 1) => {
         await getMiddlewareInstance().cliVote();
         
         logger.endOperation(`vote-cycle-${cycleNumber}`, `Voting cycle ${cycleNumber} completed`);
+        
+        // Note: Threshold scheduling update will be handled by the calling function
+        // since we need access to the threshold functions defined in startContinuousVoting
+        
         return true;
     } catch (error) {
         logger.cliError(`Error during voting cycle ${cycleNumber}`, error.message || error);
@@ -226,11 +230,27 @@ const startContinuousVoting = async () => {
 
     let cycleCount = 0;
     let isRunning = true;
+    let thresholdScheduler = null; // For scheduling threshold cron changes
+    let currentScheduledChallenge = null; // Track currently scheduled challenge to prevent duplicates
+    let lastSettingsHash = null; // Track settings changes
+    let currentCronJob = null; // Track current cron job
 
     // Function to handle graceful shutdown
     const handleShutdown = () => {
         logger.cliInfo('🛑 Shutting down continuous voting...');
         isRunning = false;
+        
+        // Clear threshold scheduler
+        if (thresholdScheduler) {
+            clearTimeout(thresholdScheduler);
+            thresholdScheduler = null;
+        }
+        
+        // Stop cron job
+        if (currentCronJob) {
+            currentCronJob.stop();
+        }
+        
         process.exit(0);
     };
 
@@ -238,22 +258,187 @@ const startContinuousVoting = async () => {
     process.on('SIGINT', handleShutdown);
     process.on('SIGTERM', handleShutdown);
 
+    /**
+     * Calculate when the next challenge will enter the last threshold period
+     */
+    const calculateNextLastThresholdEntry = async (challenges, now) => {
+        let nextEntry = null;
+        let earliestEntryTime = Infinity;
+
+        for (const challenge of challenges) {
+            // Skip flash challenges and ended challenges
+            if (challenge.type === 'flash' || challenge.close_time <= now) {
+                continue;
+            }
+
+            const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
+            const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+
+            // Only consider future entries
+            if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
+                earliestEntryTime = thresholdEntryTime;
+                nextEntry = {
+                    challengeId: challenge.id,
+                    challengeTitle: challenge.title,
+                    entryTime: thresholdEntryTime,
+                    lastMinuteThreshold: effectiveLastMinuteThreshold,
+                };
+            }
+        }
+
+        return nextEntry;
+    };
+
+    /**
+     * Schedule a cron change when a challenge enters the last threshold period
+     */
+    const scheduleThresholdCronChange = async (nextEntry) => {
+        if (!nextEntry || !isRunning) {
+            return;
+        }
+
+        // Check if we're already scheduling the same challenge
+        if (currentScheduledChallenge && 
+            currentScheduledChallenge.challengeId === nextEntry.challengeId &&
+            currentScheduledChallenge.entryTime === nextEntry.entryTime) {
+            logger.cliDebug(`⏰ Already scheduling threshold change for challenge "${nextEntry.challengeTitle}", skipping duplicate`);
+            return;
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+        const timeUntilEntry = (nextEntry.entryTime - now) * 1000; // Convert to milliseconds
+
+        // Only schedule if the entry time is in the future
+        if (timeUntilEntry <= 0) {
+            logger.cliDebug(`⏰ Threshold entry time for challenge "${nextEntry.challengeTitle}" has already passed, skipping`);
+            return;
+        }
+
+        logger.cliInfo(`⏰ Scheduling threshold cron change for challenge "${nextEntry.challengeTitle}" in ${Math.round(timeUntilEntry / 1000)} seconds`);
+
+        // Clear any existing scheduler
+        if (thresholdScheduler) {
+            clearTimeout(thresholdScheduler);
+            thresholdScheduler = null;
+        }
+
+        // Track the currently scheduled challenge
+        currentScheduledChallenge = {
+            challengeId: nextEntry.challengeId,
+            challengeTitle: nextEntry.challengeTitle,
+            entryTime: nextEntry.entryTime,
+            lastMinuteThreshold: nextEntry.lastMinuteThreshold,
+        };
+
+        // Schedule the cron change
+        thresholdScheduler = setTimeout(async () => {
+            if (isRunning) {
+                logger.cliInfo(`⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`);
+                
+                // Stop current cron job
+                if (currentCronJob) {
+                    currentCronJob.stop();
+                }
+
+                // Create new cron job with last threshold frequency
+                const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
+                const thresholdCronExpression = `*/${lastMinuteCheckFrequency} * * * *`;
+
+                currentCronJob = cron.schedule(thresholdCronExpression, async () => {
+                    if (!isRunning) {
+                        currentCronJob.stop();
+                        return;
+                    }
+
+                    try {
+                        await runVotingCycle(++cycleCount);
+                        
+                        // Update threshold scheduling after each voting cycle
+                        await updateThresholdScheduling();
+                    } catch (error) {
+                        logger.cliError('Error in scheduled voting cycle', error);
+                    }
+                }, {
+                    scheduled: false,
+                });
+
+                currentCronJob.start();
+                logger.cliInfo(`⏰ Switched to last threshold cron: ${thresholdCronExpression} (every ${lastMinuteCheckFrequency} minutes)`);
+                
+                // Clear the scheduled challenge tracking
+                currentScheduledChallenge = null;
+                
+                // Update threshold scheduling for the next potential entry
+                await updateThresholdScheduling();
+            }
+        }, timeUntilEntry);
+    };
+
+    /**
+     * Update threshold scheduling based on current challenges
+     */
+    const updateThresholdScheduling = async () => {
+        if (!isRunning) {
+            return;
+        }
+
+        try {
+            // Get current challenges
+            const challenges = await getMiddlewareInstance().getActiveChallenges();
+            const now = Math.floor(Date.now() / 1000);
+
+            // Check if settings have changed (relevant settings for threshold scheduling)
+            const currentSettingsHash = JSON.stringify({
+                lastMinuteCheckFrequency: settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
+                lastMinuteThreshold: settings.getEffectiveSetting('lastMinuteThreshold', 'global'),
+            });
+
+            if (lastSettingsHash !== null && lastSettingsHash !== currentSettingsHash) {
+                logger.cliInfo('⏰ Settings changed, clearing existing threshold scheduler');
+                if (thresholdScheduler) {
+                    clearTimeout(thresholdScheduler);
+                    thresholdScheduler = null;
+                }
+                currentScheduledChallenge = null;
+            }
+            lastSettingsHash = currentSettingsHash;
+
+            const nextEntry = await calculateNextLastThresholdEntry(challenges, now);
+            
+            if (nextEntry) {
+                await scheduleThresholdCronChange(nextEntry);
+            } else {
+                // Clear any existing scheduler if no upcoming entries
+                if (thresholdScheduler) {
+                    clearTimeout(thresholdScheduler);
+                    thresholdScheduler = null;
+                    currentScheduledChallenge = null;
+                    logger.cliInfo('⏰ No upcoming threshold entries, cleared threshold scheduler');
+                }
+            }
+        } catch (error) {
+            logger.cliWarning('Error updating threshold scheduling:', error);
+        }
+    };
+
     // Run initial cycle
     logger.cliInfo('🚀 Running initial voting cycle...');
     await runVotingCycle(++cycleCount);
 
-    // Get cron expression from CLI-specific setting
-    const cronExpression = settings.getSetting('cliCronExpression') || getDefaultSettings().cliCronExpression;
+    // Set up initial cron job with normal frequency
+    const normalCronExpression = settings.getSetting('cliCronExpression') || getDefaultSettings().cliCronExpression;
     
-    // Set up cron job using the setting
-    const cronJob = cron.schedule(cronExpression, async () => {
+    currentCronJob = cron.schedule(normalCronExpression, async () => {
         if (!isRunning) {
-            cronJob.stop();
+            currentCronJob.stop();
             return;
         }
 
         try {
             await runVotingCycle(++cycleCount);
+            
+            // Update threshold scheduling after each voting cycle
+            await updateThresholdScheduling();
         } catch (error) {
             logger.cliError('Error in scheduled voting cycle', error);
         }
@@ -262,9 +447,12 @@ const startContinuousVoting = async () => {
     });
 
     // Start the cron job
-    cronJob.start();
-    logger.cliSuccess(`Continuous voting started with cron expression: ${cronExpression}`);
+    currentCronJob.start();
+    logger.cliSuccess(`Continuous voting started with cron expression: ${normalCronExpression}`);
     logger.cliInfo('Press Ctrl+C to stop');
+
+    // Set up proactive threshold scheduling
+    await updateThresholdScheduling();
 
     // Keep the process running
     process.stdin.resume();

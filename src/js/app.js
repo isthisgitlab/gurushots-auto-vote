@@ -1,4 +1,3 @@
-// Import all UI modules
 import {updateSettingsDisplay, updateTranslations} from './ui/translations.js';
 // Removed unused imports: formatTimeRemaining, formatEndTime, getBoostStatus, getTurboStatus, renderChallenges
 import {loadChallenges} from './ui/challengeLoader.js';
@@ -13,8 +12,6 @@ import {initializeBoostEntry} from './ui/boostEntry.js';
 import {initializeUpdateDialog} from './ui/updateDialog.js';
 
 // Removed unused variable: translationManager
-
-// Global function to open settings modal
 window.openSettingsModal = async () => {
     try {
         // Get the settings schema and current values
@@ -53,7 +50,6 @@ window.openSettingsModal = async () => {
     }
 };
 
-// Global function to open challenge settings modal
 window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
     try {
         // Get the settings schema and current values
@@ -150,7 +146,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    // Global function to open challenge URL
     window.openChallengeUrl = async (url) => {
         try {
             await window.api.openExternalUrl(`https://gurushots.com/challenge/${url}`);
@@ -162,7 +157,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await window.api.logDebug('✅ Application initialized successfully');
 });
 
-// Global functions for settings modals
 window.closeSettingsModal = () => {
     const modal = document.querySelector('.modal');
     if (modal) {
@@ -244,6 +238,13 @@ window.saveGlobalSettings = async () => {
                 }
 
                 await window.api.setGlobalDefault(key, value);
+                
+                // Handle threshold scheduling changes for relevant settings
+                if (key === 'lastMinuteCheckFrequency' || key === 'lastMinuteThreshold') {
+                    if (window.handleThresholdSettingsChange) {
+                        await window.handleThresholdSettingsChange();
+                    }
+                }
             }
         }
 
