@@ -9,6 +9,7 @@ const {getActiveChallenges} = require('./challenges');
 const {getVoteImages, submitVotes} = require('./voting');
 const {applyBoost, applyBoostToEntry} = require('./boost');
 const settings = require('../settings');
+const {cleanupStaleMetadata} = require('../metadata');
 const {sleep, getRandomDelay} = require('./utils');
 const logger = require('../logger');
 
@@ -54,6 +55,20 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
             logger.warning('No active challenges found');
             logger.endOperation('voting-process', 'No challenges to process');
             return {success: true, message: 'No active challenges found'};
+        }
+
+        // Cleanup stale metadata for challenges that no longer exist
+        try {
+            const activeChallengeIds = challenges.map(challenge => challenge.id.toString());
+            logger.debug(`🔧 DEBUG: About to cleanup metadata, active challenge IDs: [${activeChallengeIds.join(', ')}]`);
+            const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds);
+            if (cleanupSuccess) {
+                logger.debug('Successfully cleaned up stale metadata');
+            } else {
+                logger.warning('Failed to cleanup stale metadata');
+            }
+        } catch (error) {
+            logger.warning('Error during metadata cleanup:', error);
         }
 
         // Process each challenge
@@ -113,12 +128,15 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
             const onlyBoost = settings.getEffectiveSetting('onlyBoost', challenge.id.toString());
 
             // Get the effective lastminute threshold for this challenge
-            const effectiveLastMinutes = settings.getEffectiveSetting('lastMinutes', challenge.id.toString());
+            const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+
+            // Check if we're within the last hour of the challenge
+            const isWithinLastHour = timeUntilEnd <= 3600 && timeUntilEnd > 0; // 3600 seconds = 1 hour
 
             // Get the vote-only-in-last-threshold setting for this challenge
-            const voteOnlyInLastThreshold = settings.getEffectiveSetting('voteOnlyInLastThreshold', challenge.id.toString());
+            const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
 
             // Determine if we should vote based on lastminute threshold logic
             let shouldVote = false;
@@ -138,16 +156,25 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
                 } else {
                     voteReason = 'flash type: exposure already at 100%';
                 }
-            } else if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
+            } else if (voteOnlyInLastMinute && !isWithinLastMinuteThreshold) {
                 // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
-                voteReason = `vote-only-in-last-threshold enabled: not within last ${effectiveLastMinutes}m threshold`;
+                voteReason = `vote-only-in-last-threshold enabled: not within last ${effectiveLastMinuteThreshold}m threshold`;
             } else if (isWithinLastMinuteThreshold) {
                 // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
                 if (challenge.member.ranking.exposure.exposure_factor < 100) {
                     shouldVote = true;
-                    voteReason = `lastminute threshold (${effectiveLastMinutes}m): exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
+                    voteReason = `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
                 } else {
-                    voteReason = `lastminute threshold (${effectiveLastMinutes}m): exposure already at 100%`;
+                    voteReason = `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`;
+                }
+            } else if (isWithinLastHour) {
+                // Within last hour: use lastHourExposure threshold
+                const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
+                if (challenge.member.ranking.exposure.exposure_factor < effectiveLastHourExposure) {
+                    shouldVote = true;
+                    voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveLastHourExposure}%`;
+                } else {
+                    voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveLastHourExposure}%`;
                 }
             } else {
                 // Normal logic: vote if exposure factor is less than the effective threshold
@@ -186,10 +213,13 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
                         logger.challengeInfo(challenge.id, challenge.title, `Submitting votes for ${voteImages.images.length} images`);
 
                         // Submit votes to 100% (always vote to 100, not just to threshold)
+                        logger.debug(`🔧 DEBUG: About to submit votes for challenge ${challenge.id}: ${challenge.title}`);
                         await submitVotes(voteImages, token);
+                        logger.debug(`🔧 DEBUG: Completed vote submission for challenge ${challenge.id}: ${challenge.title}`);
 
                         // Check for cancellation before delay
                         if (checkCancellation()) {
+                            logger.debug(`🔧 DEBUG: Cancellation detected after vote submission for challenge ${challenge.id}: ${challenge.title}`);
                             logger.warning('🛑 Voting cancelled by user after vote submission');
                             logger.endOperation('voting-process', null, 'Voting cancelled by user');
                             return {success: false, message: 'Voting cancelled by user'};

@@ -8,6 +8,7 @@
 const ApiStrategy = require('../interfaces/ApiStrategy');
 const {mockApiClient} = require('../mock');
 const settings = require('../settings');
+const logger = require('../logger');
 
 /**
  * Mock API Strategy implementation
@@ -22,7 +23,7 @@ class MockApiStrategy extends ApiStrategy {
      * @returns {Promise<object>} - Authentication response with token
      */
     async authenticate(email, password) {
-        console.log('🔧 Using mock authentication');
+        logger.debug('🔧 Using mock authentication');
         return await mockApiClient.authenticate(email, password);
     }
 
@@ -33,7 +34,7 @@ class MockApiStrategy extends ApiStrategy {
      * @returns {Promise<object>} - Response containing array of active challenges
      */
     async getActiveChallenges(token) {
-        console.log('🔧 Using mock getActiveChallenges');
+        logger.debug('🔧 Using mock getActiveChallenges');
         return await mockApiClient.getActiveChallenges(token);
     }
 
@@ -45,7 +46,7 @@ class MockApiStrategy extends ApiStrategy {
      * @returns {Promise<object>} - Response containing vote images
      */
     async getVoteImages(challenge, token) {
-        console.log('🔧 Using mock getVoteImages');
+        logger.debug('🔧 Using mock getVoteImages');
         return await mockApiClient.getVoteImages(challenge, token);
     }
 
@@ -58,7 +59,7 @@ class MockApiStrategy extends ApiStrategy {
      * @returns {Promise<object>} - Vote submission response
      */
     async submitVotes(voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) {
-        console.log('🔧 Using mock submitVotes');
+        logger.debug('🔧 Using mock submitVotes');
         return await mockApiClient.submitVotes(voteImages, token, exposureThreshold);
     }
 
@@ -70,7 +71,7 @@ class MockApiStrategy extends ApiStrategy {
      * @returns {Promise<object>} - Boost application response
      */
     async applyBoost(challenge, token) {
-        console.log('🔧 Using mock applyBoost');
+        logger.debug('🔧 Using mock applyBoost');
         return await mockApiClient.applyBoost(challenge, token);
     }
 
@@ -83,7 +84,7 @@ class MockApiStrategy extends ApiStrategy {
      * @returns {Promise<object>} - Boost application response
      */
     async applyBoostToEntry(challengeId, imageId, token) {
-        console.log('🔧 Using mock applyBoostToEntry');
+        logger.debug('🔧 Using mock applyBoostToEntry');
         return await mockApiClient.applyBoostToEntry(challengeId, imageId, token);
     }
 
@@ -95,7 +96,7 @@ class MockApiStrategy extends ApiStrategy {
      * @returns {Promise<object>} - Voting process response
      */
     async fetchChallengesAndVote(token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) {
-        console.log('🔧 Using mock fetchChallengesAndVote');
+        logger.debug('🔧 Using mock fetchChallengesAndVote');
         return await mockApiClient.fetchChallengesAndVote(token, exposureThreshold);
     }
 

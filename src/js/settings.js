@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const logger = require('./logger');
 
 // Try to import electron, but don't fail if it's not available (CLI context)
 let electronApp = null;
@@ -9,7 +10,7 @@ try {
     electronApp = electron.app;
 } catch (error) {
     // Electron not available (CLI context), we'll use fallback
-    console.log('Running in CLI context - using fallback userData path:', error.message);
+    logger.info('Running in CLI context - using fallback userData path:', error.message);
 }
 
 /**
@@ -80,9 +81,9 @@ const getSettingsPath = () => {
         if (!fs.existsSync(userDataPath)) {
             try {
                 fs.mkdirSync(userDataPath, {recursive: true});
-                console.log(`Created userData directory: ${userDataPath}`);
+                logger.info(`Created userData directory: ${userDataPath}`);
             } catch (error) {
-                console.error('Error creating userData directory:', error);
+                logger.error('Error creating userData directory:', error);
                 // Fallback to current directory if we can't create the proper path
                 userDataPath = path.join(process.cwd(), 'userData');
                 if (!fs.existsSync(userDataPath)) {
@@ -154,7 +155,7 @@ const getDefaultSettings = () => {
         language: 'en', // Default language
         // Timing settings (stored in user-friendly units)
         apiTimeout: 30, // API request timeout in seconds (default: 30 seconds)
-        votingInterval: 3, // Voting interval in minutes (default: 3 minutes)
+        checkFrequency: 3, // Check frequency in minutes (default: 3 minutes)
         cliCronExpression: '*/3 * * * *', // CLI cron expression (default: every 3 minutes)
         // Window position and size settings
         windowBounds: {
@@ -194,7 +195,7 @@ const settingsSchema = {
     customTimezones: (value) => Array.isArray(value),
     language: (value) => ['en', 'lv'].includes(value),
     apiTimeout: (value) => typeof value === 'number' && value >= 1 && value <= 120,
-    votingInterval: (value) => typeof value === 'number' && value >= 1 && value <= 60,
+    checkFrequency: (value) => typeof value === 'number' && value >= 1 && value <= 60,
     windowBounds: (value) => typeof value === 'object' && value !== null,
     challengeSettings: (value) => {
         if (typeof value !== 'object' || value === null) return false;
@@ -248,7 +249,7 @@ const validateSettings = (settings) => {
     Object.keys(validatedSettings).forEach(key => {
         if (settingsSchema[key] && !validateSetting(key, validatedSettings[key])) {
             // If invalid, reset to default
-            console.warn(`Invalid setting value for ${key}, resetting to default`);
+            logger.warning(`Invalid setting value for ${key}, resetting to default`);
             validatedSettings[key] = getDefaultSettings()[key];
             hasChanges = true;
         }
@@ -284,11 +285,62 @@ const loadSettings = () => {
                 mergedSettings.mock = getDefaultMockSetting();
             }
 
+            // Migration: Handle old setting names
+            let migrationChanges = false;
+            
+            // Migrate lastMinutes to lastMinuteThreshold
+            if (mergedSettings.lastMinutes !== undefined && mergedSettings.lastMinuteThreshold === undefined) {
+                mergedSettings.lastMinuteThreshold = mergedSettings.lastMinutes;
+                delete mergedSettings.lastMinutes;
+                migrationChanges = true;
+                logger.info('Migrated lastMinutes to lastMinuteThreshold');
+            }
+            
+            // Migrate voteOnlyInLastThreshold to voteOnlyInLastMinute
+            if (mergedSettings.voteOnlyInLastThreshold !== undefined && mergedSettings.voteOnlyInLastMinute === undefined) {
+                mergedSettings.voteOnlyInLastMinute = mergedSettings.voteOnlyInLastThreshold;
+                delete mergedSettings.voteOnlyInLastThreshold;
+                migrationChanges = true;
+                logger.info('Migrated voteOnlyInLastThreshold to voteOnlyInLastMinute');
+            }
+            
+            // Migrate lastThresholdCheckFrequency to lastMinuteCheckFrequency
+            if (mergedSettings.lastThresholdCheckFrequency !== undefined && mergedSettings.lastMinuteCheckFrequency === undefined) {
+                mergedSettings.lastMinuteCheckFrequency = mergedSettings.lastThresholdCheckFrequency;
+                delete mergedSettings.lastThresholdCheckFrequency;
+                migrationChanges = true;
+                logger.info('Migrated lastThresholdCheckFrequency to lastMinuteCheckFrequency');
+            }
+            
+            // Migrate votingInterval to votingFrequency
+            if (mergedSettings.votingInterval !== undefined && mergedSettings.votingFrequency === undefined) {
+                mergedSettings.votingFrequency = mergedSettings.votingInterval;
+                delete mergedSettings.votingInterval;
+                migrationChanges = true;
+                logger.info('Migrated votingInterval to votingFrequency');
+            }
+            
+            // Migrate votingFrequency to voteFrequency
+            if (mergedSettings.votingFrequency !== undefined && mergedSettings.voteFrequency === undefined) {
+                mergedSettings.voteFrequency = mergedSettings.votingFrequency;
+                delete mergedSettings.votingFrequency;
+                migrationChanges = true;
+                logger.info('Migrated votingFrequency to voteFrequency');
+            }
+            
+            // Migrate voteFrequency to checkFrequency
+            if (mergedSettings.voteFrequency !== undefined && mergedSettings.checkFrequency === undefined) {
+                mergedSettings.checkFrequency = mergedSettings.voteFrequency;
+                delete mergedSettings.voteFrequency;
+                migrationChanges = true;
+                logger.info('Migrated voteFrequency to checkFrequency');
+            }
+
             // Validate settings
             const {validatedSettings, hasChanges} = validateSettings(mergedSettings);
 
-            // If validation changed any settings, save the corrected settings
-            if (hasChanges) {
+            // If validation or migration changed any settings, save the corrected settings
+            if (hasChanges || migrationChanges) {
                 fs.writeFileSync(settingsPath, JSON.stringify(validatedSettings, null, 2), 'utf8');
             }
 
@@ -302,7 +354,7 @@ const loadSettings = () => {
                         global.cleanupCompleted = true;
                     }
                 } catch (migrationError) {
-                    console.warn('Cleanup failed:', migrationError);
+                    logger.warning('Cleanup failed:', migrationError);
                 } finally {
                     global.migrationInProgress = false;
                 }
@@ -313,13 +365,13 @@ const loadSettings = () => {
 
         // If the file doesn't exist, return default settings
         const defaultSettings = getDefaultSettings();
-        console.log('No settings file found, loaded default settings with keys:', Object.keys(defaultSettings));
+        logger.info('No settings file found, loaded default settings with keys:', Object.keys(defaultSettings));
         return defaultSettings;
     } catch (error) {
-        console.error('Error loading settings:', error);
+        logger.error('Error loading settings:', error);
         // Return default settings if there's an error
         const defaultSettings = getDefaultSettings();
-        console.log('Loaded default settings with keys:', Object.keys(defaultSettings));
+        logger.info('Loaded default settings with keys:', Object.keys(defaultSettings));
         return defaultSettings;
     }
 };
@@ -344,7 +396,7 @@ const saveSettings = (settings) => {
 
         // If validation made changes, log a warning
         if (hasChanges) {
-            console.warn('Some settings were invalid and have been reset to defaults');
+            logger.warning('Some settings were invalid and have been reset to defaults');
         }
 
         // Write the validated settings to the file
@@ -352,7 +404,7 @@ const saveSettings = (settings) => {
 
         return true;
     } catch (error) {
-        console.error('Error saving settings:', error);
+        logger.error('Error saving settings:', error);
         return false;
     }
 };
@@ -361,7 +413,7 @@ const saveSettings = (settings) => {
 const getSetting = (key) => {
     const settings = loadSettings();
     if (!settings) {
-        console.warn(`Settings not loaded, returning default for key: ${key}`);
+        logger.warning(`Settings not loaded, returning default for key: ${key}`);
         const defaultSettings = getDefaultSettings();
         return defaultSettings[key];
     }
@@ -447,12 +499,12 @@ const getGlobalDefault = (settingKey) => {
  */
 const setGlobalDefault = (settingKey, value) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
-        console.error(`Invalid setting key: ${settingKey}`);
+        logger.error(`Invalid setting key: ${settingKey}`);
         return false;
     }
 
     if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
-        console.error(`Invalid value for setting ${settingKey}:`, value);
+        logger.error(`Invalid value for setting ${settingKey}:`, value);
         return false;
     }
 
@@ -496,17 +548,17 @@ const getChallengeOverride = (settingKey, challengeId) => {
  */
 const setChallengeOverride = (settingKey, challengeId, value) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
-        console.error(`Invalid setting key: ${settingKey}`);
+        logger.error(`Invalid setting key: ${settingKey}`);
         return false;
     }
 
     if (!SETTINGS_SCHEMA[settingKey].perChallenge) {
-        console.error(`Setting ${settingKey} does not support per-challenge overrides`);
+        logger.error(`Setting ${settingKey} does not support per-challenge overrides`);
         return false;
     }
 
     if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
-        console.error(`Invalid value for setting ${settingKey}:`, value);
+        logger.error(`Invalid value for setting ${settingKey}:`, value);
         return false;
     }
 
@@ -565,17 +617,17 @@ const setChallengeOverrides = (challengeId, overrides) => {
     // Process each override
     for (const [settingKey, value] of Object.entries(overrides)) {
         if (!SETTINGS_SCHEMA[settingKey]) {
-            console.error(`Invalid setting key: ${settingKey}`);
+            logger.error(`Invalid setting key: ${settingKey}`);
             continue;
         }
 
         if (!SETTINGS_SCHEMA[settingKey].perChallenge) {
-            console.error(`Setting ${settingKey} does not support per-challenge overrides`);
+            logger.error(`Setting ${settingKey} does not support per-challenge overrides`);
             continue;
         }
 
         if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
-            console.error(`Invalid value for setting ${settingKey}:`, value);
+            logger.error(`Invalid value for setting ${settingKey}:`, value);
             continue;
         }
 
@@ -598,16 +650,16 @@ const setChallengeOverrides = (challengeId, overrides) => {
     // If challenge has no more overrides, remove the challenge entry
     if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
         delete settings.challengeSettings.perChallenge[challengeId];
-        console.log(`🗑️ Removed empty challenge settings for challenge ${challengeId}`);
+        logger.debug(`🗑️ Removed empty challenge settings for challenge ${challengeId}`);
         hasChanges = true;
     }
 
     // Log the changes for debugging
     if (savedOverrides.length > 0) {
-        console.log(`💾 Saved overrides for challenge ${challengeId}:`, savedOverrides.join(', '));
+        logger.debug(`💾 Saved overrides for challenge ${challengeId}:`, savedOverrides.join(', '));
     }
     if (removedOverrides.length > 0) {
-        console.log(`🗑️ Removed overrides for challenge ${challengeId}:`, removedOverrides.join(', '));
+        logger.debug(`🗑️ Removed overrides for challenge ${challengeId}:`, removedOverrides.join(', '));
     }
 
     return hasChanges ? saveSettings(settings) : true;
@@ -645,7 +697,7 @@ const removeChallengeOverride = (settingKey, challengeId) => {
  */
 const getEffectiveSetting = (settingKey, challengeId = null) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
-        console.error(`Invalid setting key: ${settingKey}`);
+        logger.error(`Invalid setting key: ${settingKey}`);
         return SETTINGS_SCHEMA[settingKey]?.default;
     }
 
@@ -679,7 +731,7 @@ const cleanupStaleChallengeSetting = (activeChallengeIds) => {
         return true; // Nothing to cleanup
     }
 
-    console.log(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
+    logger.debug(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
 
 
     staleChallengeIds.forEach(challengeId => {
@@ -700,7 +752,7 @@ const cleanupObsoleteSettings = () => {
 
 
         if (settings.boostConfig) {
-            console.log('Removing legacy boostConfig');
+            logger.debug('Removing legacy boostConfig');
             delete settings.boostConfig;
             hasChanges = true;
         }
@@ -714,7 +766,7 @@ const cleanupObsoleteSettings = () => {
                 const invalidGlobalKeys = globalDefaultKeys.filter(key => !validSchemaKeys.includes(key));
 
                 if (invalidGlobalKeys.length > 0) {
-                    console.log('Removing invalid global default keys:', invalidGlobalKeys);
+                    logger.debug('Removing invalid global default keys:', invalidGlobalKeys);
                     invalidGlobalKeys.forEach(key => {
                         delete settings.challengeSettings.globalDefaults[key];
                         hasChanges = true;
@@ -732,7 +784,7 @@ const cleanupObsoleteSettings = () => {
                     const invalidKeys = Object.keys(challengeOverrides).filter(key => !validSchemaKeys.includes(key));
 
                     if (invalidKeys.length > 0) {
-                        console.log(`Removing invalid override keys for challenge ${challengeId}:`, invalidKeys);
+                        logger.debug(`Removing invalid override keys for challenge ${challengeId}:`, invalidKeys);
                         invalidKeys.forEach(key => {
                             delete challengeOverrides[key];
                             hasChanges = true;
@@ -750,12 +802,12 @@ const cleanupObsoleteSettings = () => {
 
         // Save cleaned settings if any changes were made
         if (hasChanges) {
-            console.log('Settings cleanup completed - saving cleaned settings');
+            logger.debug('Settings cleanup completed - saving cleaned settings');
             saveSettings(settings);
         }
 
     } catch (error) {
-        console.error('Error during settings cleanup:', error);
+        logger.error('Error during settings cleanup:', error);
     }
 };
 
@@ -773,14 +825,14 @@ const resetSetting = (key) => {
         const defaultSettings = getDefaultSettings();
         
         if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
-            console.error(`Invalid setting key: ${key}`);
+            logger.error(`Invalid setting key: ${key}`);
             return false;
         }
 
         const defaultValue = defaultSettings[key];
         return setSetting(key, defaultValue);
     } catch (error) {
-        console.error(`Error resetting setting ${key}:`, error);
+        logger.error(`Error resetting setting ${key}:`, error);
         return false;
     }
 };
@@ -792,7 +844,7 @@ const resetSetting = (key) => {
  */
 const resetGlobalDefault = (settingKey) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
-        console.error(`Invalid setting key: ${settingKey}`);
+        logger.error(`Invalid setting key: ${settingKey}`);
         return false;
     }
 
@@ -820,7 +872,7 @@ const resetAllGlobalDefaults = () => {
         settings.challengeSettings.globalDefaults = globalDefaults;
         return saveSettings(settings);
     } catch (error) {
-        console.error('Error resetting all global defaults:', error);
+        logger.error('Error resetting all global defaults:', error);
         return false;
     }
 };
@@ -857,7 +909,7 @@ const resetAllSettings = () => {
 
         return saveResult;
     } catch (error) {
-        console.error('Error resetting all settings:', error);
+        logger.error('Error resetting all settings:', error);
         return false;
     }
 };
@@ -881,7 +933,7 @@ const isSettingModified = (key) => {
         
         return JSON.stringify(currentValue) !== JSON.stringify(defaultValue);
     } catch (error) {
-        console.error(`Error checking if setting ${key} is modified:`, error);
+        logger.error(`Error checking if setting ${key} is modified:`, error);
         return false;
     }
 };
@@ -902,7 +954,7 @@ const isGlobalDefaultModified = (settingKey) => {
         
         return JSON.stringify(currentValue) !== JSON.stringify(schemaDefault);
     } catch (error) {
-        console.error(`Error checking if global default ${settingKey} is modified:`, error);
+        logger.error(`Error checking if global default ${settingKey} is modified:`, error);
         return false;
     }
 };
@@ -930,13 +982,13 @@ const SETTINGS_SCHEMA = {
         label: 'app.exposure',
         description: 'app.exposureDesc',
     },
-    lastMinutes: {
+    lastMinuteThreshold: {
         type: 'number',
         default: 10,
         perChallenge: true,
         validation: (value) => typeof value === 'number' && value >= 1,
-        label: 'app.lastMinutes',
-        description: 'app.lastMinutesDesc',
+        label: 'app.lastMinuteThreshold',
+        description: 'app.lastMinuteThresholdDesc',
     },
     onlyBoost: {
         type: 'boolean',
@@ -946,21 +998,29 @@ const SETTINGS_SCHEMA = {
         label: 'app.onlyBoost',
         description: 'app.onlyBoostDesc',
     },
-    voteOnlyInLastThreshold: {
+    voteOnlyInLastMinute: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: (value) => typeof value === 'boolean',
-        label: 'app.voteOnlyInLastThreshold',
-        description: 'app.voteOnlyInLastThresholdDesc',
+        label: 'app.voteOnlyInLastMinute',
+        description: 'app.voteOnlyInLastMinuteDesc',
     },
-    lastThresholdCheckFrequency: {
+    lastMinuteCheckFrequency: {
         type: 'number',
         default: 0,
         perChallenge: false,
         validation: (value) => typeof value === 'number' && value >= 0 && value <= 60,
-        label: 'app.lastThresholdCheckFrequency',
-        description: 'app.lastThresholdCheckFrequencyDesc',
+        label: 'app.lastMinuteCheckFrequency',
+        description: 'app.lastMinuteCheckFrequencyDesc',
+    },
+    lastHourExposure: {
+        type: 'number',
+        default: 100,
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
+        label: 'app.lastHourExposure',
+        description: 'app.lastHourExposureDesc',
     },
 };
 

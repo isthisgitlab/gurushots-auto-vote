@@ -6,14 +6,20 @@
 
 /**
  * Generate dynamic mock challenges with realistic exposure factors
+ * IDs are generated once per app session to ensure session stability
  */
 const generateMockChallenges = () => {
     const now = Math.floor(Date.now() / 1000);
+    
+    // Generate unique challenge IDs for this session
+    // These will be different on each app restart but stable within the session
+    const baseId = 100000 + Math.floor(Math.random() * 50000); // Random base between 100000-150000
+    const challengeIds = Array.from({length: 20}, (_, i) => baseId + i);
 
     return {
         challenges: [
             {
-                id: 105755,
+                id: challengeIds[0],
                 title: 'Ultimate Exposure',
                 welcome_message: 'Play this challenge for the Ultimate Exposure! This is the ultimate prize - a massive online exposure bundle for your photos!',
                 url: 'ultimate-exposure82',
@@ -113,7 +119,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105508,
+                id: challengeIds[1],
                 title: 'Wood & Metal Combinations',
                 welcome_message: 'Creative combinations of wood and metal in photography',
                 url: 'wood-metal-combinations',
@@ -200,7 +206,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105522,
+                id: challengeIds[2],
                 title: 'Landscape Photography',
                 welcome_message: 'Breathtaking landscapes from around the world',
                 url: 'landscape-photography-2024',
@@ -273,7 +279,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105416,
+                id: challengeIds[3],
                 title: 'Macro Photography',
                 welcome_message: 'Discover the beauty in small details',
                 url: 'macro-photography-2024',
@@ -360,7 +366,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 104616,
+                id: challengeIds[4],
                 title: 'Wildlife Photography',
                 welcome_message: 'Capture nature in its purest form',
                 url: 'wildlife-photography-2024',
@@ -447,7 +453,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105519,
+                id: challengeIds[5],
                 title: 'Architecture Photography',
                 welcome_message: 'Modern and classical architectural marvels',
                 url: 'architecture-photography-2024',
@@ -534,7 +540,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105516,
+                id: challengeIds[6],
                 title: 'Urban Wildlife',
                 welcome_message: 'Wildlife found in urban environments',
                 url: 'urban-wildlife-2024',
@@ -634,7 +640,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105513,
+                id: challengeIds[7],
                 title: 'Street Art & Graffiti',
                 welcome_message: 'Urban art expressions on city walls',
                 url: 'street-art-graffiti-2024',
@@ -721,7 +727,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105512,
+                id: challengeIds[8],
                 title: 'Black & White Portraits',
                 welcome_message: 'Timeless monochrome portraits',
                 url: 'black-white-portraits-2024',
@@ -808,7 +814,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105507,
+                id: challengeIds[9],
                 title: 'Golden Hour Magic',
                 welcome_message: 'Photography during the magical golden hour',
                 url: 'golden-hour-magic-2024',
@@ -908,7 +914,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105504,
+                id: challengeIds[10],
                 title: 'Minimalist Composition',
                 welcome_message: 'Less is more - powerful minimal compositions',
                 url: 'minimalist-composition-2024',
@@ -995,7 +1001,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105501,
+                id: challengeIds[11],
                 title: 'Abstract Patterns',
                 welcome_message: 'Creative abstract patterns in everyday life',
                 url: 'abstract-patterns-2024',
@@ -1068,7 +1074,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105485,
+                id: challengeIds[12],
                 title: 'Night Photography',
                 welcome_message: 'Capture the beauty of the night',
                 url: 'night-photography-2024',
@@ -1155,7 +1161,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105484,
+                id: challengeIds[13],
                 title: 'Food Photography',
                 welcome_message: 'Delicious food presentations',
                 url: 'food-photography-2024',
@@ -1255,7 +1261,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105173,
+                id: challengeIds[14],
                 title: 'Symmetry & Reflections',
                 welcome_message: 'Perfect symmetry and beautiful reflections',
                 url: 'symmetry-reflections-2024',
@@ -1342,7 +1348,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 105176,
+                id: challengeIds[15],
                 title: 'Motion & Movement',
                 welcome_message: 'Capturing dynamic motion in photography',
                 url: 'motion-movement-2024',
@@ -1442,7 +1448,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 104742,
+                id: challengeIds[16],
                 title: 'Vintage Style',
                 welcome_message: 'Classic vintage photography aesthetics',
                 url: 'vintage-style-2024',
@@ -1529,7 +1535,7 @@ const generateMockChallenges = () => {
                 },
             },
             {
-                id: 104749,
+                id: challengeIds[17],
                 title: 'Urban Landscapes',
                 welcome_message: 'Cityscape and urban environment photography',
                 url: 'urban-landscapes-2024',
@@ -1621,7 +1627,7 @@ const mockEmptyChallenges = {
  * Mock challenge details for a specific challenge
  */
 const mockChallengeDetails = {
-    id: 105755,
+    id: 105755, // This can stay static as it's for testing specific challenge details
     title: 'Ultimate Exposure',
     description: 'Play this challenge for the Ultimate Exposure! This is the ultimate prize - a massive online exposure bundle for your photos!',
     url: 'ultimate-exposure82',

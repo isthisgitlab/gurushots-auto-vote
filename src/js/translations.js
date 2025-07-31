@@ -87,8 +87,8 @@ const translations = {
             hours: 'hours',
             language: 'Language',
             languageDesc: 'Select your preferred language',
-            lastMinutes: 'Last Minutes Threshold',
-            lastMinutesDesc: 'Threshold in minutes for last-minute actions',
+            lastMinuteThreshold: 'Last Minute Threshold',
+            lastMinuteThresholdDesc: 'Threshold in minutes for last-minute actions',
             lastRun: 'Last Run:',
             latestVersion: 'Latest version',
             latvian: 'Latviešu',
@@ -150,12 +150,14 @@ const translations = {
             votes: 'Votes',
             votesNeeded: 'votes needed',
             voting: 'Voting...',
-            votingInterval: 'Voting Interval',
-            votingIntervalDesc: 'Interval between voting cycles in minutes (1-60)',
-            voteOnlyInLastThreshold: 'Vote Only in Last Threshold',
-            voteOnlyInLastThresholdDesc: 'Only auto-vote when within the last minutes threshold, skip voting otherwise',
-            lastThresholdCheckFrequency: 'Last Threshold Check Frequency',
-            lastThresholdCheckFrequencyDesc: 'Check frequency in minutes when within last threshold (0-60, 0 = disabled)',
+            checkFrequency: 'Check Frequency',
+            checkFrequencyDesc: 'Frequency of API checks for voting opportunities in minutes (1-60)',
+            voteOnlyInLastMinute: 'Vote Only in Last Minute',
+            voteOnlyInLastMinuteDesc: 'Only auto-vote when within the last minute threshold, skip voting otherwise',
+            lastMinuteCheckFrequency: 'Last Minute Check Frequency',
+            lastMinuteCheckFrequencyDesc: 'Check frequency in minutes when within last minute threshold (0-60, 0 = disabled)',
+            lastHourExposure: 'Last Hour Exposure',
+            lastHourExposureDesc: 'Exposure threshold for actions within the last hour of challenge (0-100)',
             whatsNew: 'What\'s New:',
             yourEntries: 'Your Entries',
             yourProgress: 'Your Progress',
@@ -248,8 +250,8 @@ const translations = {
             hours: 'stunda(s)',
             language: 'Valoda',
             languageDesc: 'Izvēlieties lietotnes valodu',
-            lastMinutes: 'Pēdējo minūšu slieksnis',
-            lastMinutesDesc: 'Slieksnis minūtēs pēdējā brīža darbībām',
+            lastMinuteThreshold: 'Pēdējās minūtes slieksnis',
+            lastMinuteThresholdDesc: 'Slieksnis minūtēs pēdējā brīža darbībām',
             lastRun: 'Pēdējoreiz darbināts:',
             latestVersion: 'Jaunākā versija',
             latvian: 'Latviešu',
@@ -311,12 +313,14 @@ const translations = {
             votes: 'Balsis',
             votesNeeded: 'balsis nepieciešamas',
             voting: 'Balso...',
-            votingInterval: 'Balsošanas intervāls',
-            votingIntervalDesc: 'Intervāls starp balsošanas cikliem minūtēs (1-60)',
-            voteOnlyInLastThreshold: 'Balsot tikai pēdējo minūšu laikā',
-            voteOnlyInLastThresholdDesc: 'Balsot tikai tad, ja līdz izaicinājuma beigām ir mazāk laika, nekā norādīts pēdējo minūšu slieksnī.',
-            lastThresholdCheckFrequency: 'Pēdējo minūšu pārbaudes biežums',
-            lastThresholdCheckFrequencyDesc: 'Pārbaudes biežums minūtēs, kad atrodas pēdējo minūšu slieksnī (0-60, 0 = izslēgts)',
+            checkFrequency: 'Pārbaudes biežums',
+            checkFrequencyDesc: 'API pārbaudes biežums balsošanas iespējām minūtēs (1-60)',
+            voteOnlyInLastMinute: 'Balsot tikai pēdējās minūtes laikā',
+            voteOnlyInLastMinuteDesc: 'Balsot tikai tad, ja līdz izaicinājuma beigām ir mazāk laika, nekā norādīts pēdējās minūtes slieksnī.',
+            lastMinuteCheckFrequency: 'Pēdējās minūtes pārbaudes biežums',
+            lastMinuteCheckFrequencyDesc: 'Pārbaudes biežums minūtēs, kad atrodas pēdējās minūtes slieksnī (0-60, 0 = izslēgts)',
+            lastHourExposure: 'Pēdējās stundas ekspozīcija',
+            lastHourExposureDesc: 'Ekspozīcijas slieksnis darbībām pēdējās stundas laikā (0-100)',
             whatsNew: 'Kas jauns:',
             yourEntries: 'Jūsu bildes',
             yourProgress: 'Jūsu progress',
@@ -356,11 +360,13 @@ class TranslationManager {
                         this.currentLanguage = savedLanguage;
                     }
                 } catch (error) {
-                    console.warn('Could not load language from settings (Node.js):', error);
+                    const logger = require('./logger');
+                    logger.warning('Could not load language from settings (Node.js):', error);
                 }
             }
         } catch (error) {
-            console.warn('Could not load language from settings:', error);
+            const logger = require('./logger');
+            logger.warning('Could not load language from settings:', error);
         }
     }
 
@@ -378,11 +384,13 @@ class TranslationManager {
                     settings.setSetting('language', language);
                     this.currentLanguage = language;
                 } catch (error) {
-                    console.error('Could not save language to settings (Node.js):', error);
+                    const logger = require('./logger');
+                    logger.error('Could not save language to settings (Node.js):', error);
                 }
             }
         } catch (error) {
-            console.error('Could not save language to settings:', error);
+            const logger = require('./logger');
+            logger.error('Could not save language to settings:', error);
         }
     }
 

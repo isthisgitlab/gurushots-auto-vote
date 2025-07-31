@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const settings = require('./settings');
 const {initializeHeaders} = require('./api/randomizer');
+const logger = require('./logger');
 
 // Disable service workers at the application level
 app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
@@ -17,11 +18,11 @@ function ensureExit(reason) {
         clearTimeout(forceExitTimeout);
     }
 
-    console.log(`Ensuring exit after ${reason}...`);
+    logger.info(`Ensuring exit after ${reason}...`);
 
     // Set a timeout to force exit after a delay
     forceExitTimeout = setTimeout(() => {
-        console.log(`Force exiting after ${reason}...`);
+        logger.info(`Force exiting after ${reason}...`);
         process.exit(0);
     }, 1000); // 1 second timeout
 }
@@ -161,11 +162,11 @@ function createMainWindow() {
                     // Prevent reload if main window was just created (during login)
                     const timeSinceCreation = Date.now() - mainWindowCreatedTime;
                     if (timeSinceCreation < 2000) { // 2 second window
-                        console.log('🔄 Settings file changed, but skipping reload (window recently created)');
+                        logger.info('🔄 Settings file changed, but skipping reload (window recently created)');
                         return;
                     }
                     
-                    console.log('🔄 Settings file changed, reloading main window...');
+                    logger.info('🔄 Settings file changed, reloading main window...');
                     if (mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.reload();
                     }
@@ -193,35 +194,51 @@ function checkAutoLogin() {
 // When Electron has finished initialization
 app.whenReady().then(async () => {
     // Log userData path for verification
-    console.log(`[App] UserData path: ${settings.getUserDataPath()}`);
+    logger.info(`[App] UserData path: ${settings.getUserDataPath()}`);
     
     // Clear cache to prevent service worker database errors
     await session.defaultSession.clearCache();
-    console.log('[App] Browser cache cleared to prevent service worker database errors');
+    logger.info('[App] Browser cache cleared to prevent service worker database errors');
     
     // Initialize API headers on app startup
     initializeHeaders();
 
     // Run log cleanup on app startup
-    const logger = require('./logger');
     logger.cleanup();
 
-    // Check for updates in the background (only if not checked recently)
-    const UpdateChecker = require('./services/UpdateChecker');
-    const updateChecker = new UpdateChecker();
-    
-    // Check for updates after a short delay to not block app startup
-    setTimeout(async () => {
+    // Check if we should auto-login and run update check before creating main window
+    const userSettings = settings.loadSettings();
+    const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
+
+    // If auto-login is enabled, check for updates before creating the main window
+    if (shouldAutoLogin) {
+        const UpdateChecker = require('./services/UpdateChecker');
+        const updateChecker = new UpdateChecker();
+        
+        // Check for updates immediately (no delay) to prevent double challenge loading
         try {
-            // Only check if not checked recently, and save timestamp
             await updateChecker.checkForUpdates(true);
-            // Don't show dialog automatically - user can check manually in settings
         } catch (error) {
-            console.error('Error during update check:', error);
+            logger.error('Error during update check:', error);
         }
-    }, 3000); // 3 second delay
+    }
 
     await checkAutoLogin();
+
+    // If not auto-login, check for updates after login window is shown
+    if (!shouldAutoLogin) {
+        const UpdateChecker = require('./services/UpdateChecker');
+        const updateChecker = new UpdateChecker();
+        
+        // Check for updates after a short delay to not block app startup
+        setTimeout(async () => {
+            try {
+                await updateChecker.checkForUpdates(true);
+            } catch (error) {
+                logger.error('Error during update check:', error);
+            }
+        }, 3000); // 3 second delay
+    }
 
     // On macOS, re-create a window when dock icon is clicked and no windows are open
     app.on('activate', () => {
@@ -232,14 +249,14 @@ app.whenReady().then(async () => {
 
     // Handle SIGINT and SIGTERM signals to ensure clean exit
     process.on('SIGINT', () => {
-        console.log('Received SIGINT signal. Exiting...');
+        logger.info('Received SIGINT signal. Exiting...');
         app.quit();
         // Use the global force exit handler to ensure the process terminates
         ensureExit('SIGINT');
     });
 
     process.on('SIGTERM', () => {
-        console.log('Received SIGTERM signal. Exiting...');
+        logger.info('Received SIGTERM signal. Exiting...');
         app.quit();
         // Use the global force exit handler to ensure the process terminates
         ensureExit('SIGTERM');
@@ -247,7 +264,7 @@ app.whenReady().then(async () => {
 
     // Set up a global force exit handler to ensure the process always terminates
     process.on('exit', (code) => {
-        console.log(`Process exiting with code: ${code}`);
+        logger.info(`Process exiting with code: ${code}`);
     });
 });
 
@@ -260,7 +277,7 @@ app.on('before-quit', () => {
         settings.setSetting('token', '');
     }
 
-    console.log('Application is about to quit. Forcing exit...');
+    logger.info('Application is about to quit. Forcing exit...');
 
     // Use the global force exit handler to ensure the process terminates
     ensureExit('before-quit');
@@ -270,7 +287,7 @@ app.on('before-quit', () => {
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
-        console.log('All windows closed. Forcing exit...');
+        logger.info('All windows closed. Forcing exit...');
 
         // Use the global force exit handler to ensure the process terminates
         ensureExit('window-all-closed');
@@ -326,7 +343,7 @@ ipcMain.handle('get-settings', async () => {
     try {
         return settings.loadSettings();
     } catch (error) {
-        console.error('Error handling get-settings request:', error);
+        logger.error('Error handling get-settings request:', error);
         return settings.getDefaultSettings(); // Return default settings on error
     }
 });
@@ -340,7 +357,7 @@ ipcMain.handle('get-setting', async (event, key) => {
         }
         return settings.getSetting(key);
     } catch (error) {
-        console.error(`Error handling get-setting request for key "${key}":`, error);
+        logger.error(`Error handling get-setting request for key "${key}":`, error);
         // Return the default value for this key if it exists, otherwise null
         const defaultSettings = settings.getDefaultSettings();
         return defaultSettings[key] !== undefined
@@ -358,7 +375,7 @@ ipcMain.handle('set-setting', async (event, key, value) => {
         }
         return settings.setSetting(key, value);
     } catch (error) {
-        console.error(`Error handling set-setting request for key "${key}":`, error);
+        logger.error(`Error handling set-setting request for key "${key}":`, error);
         return false; // Indicate failure
     }
 });
@@ -372,7 +389,7 @@ ipcMain.handle('save-settings', async (event, newSettings) => {
         }
         return settings.saveSettings(newSettings);
     } catch (error) {
-        console.error('Error handling save-settings request:', error);
+        logger.error('Error handling save-settings request:', error);
         return false; // Indicate failure
     }
 });
@@ -397,7 +414,7 @@ ipcMain.handle('gui-vote', async () => {
         const result = await middleware.guiVote();
         return result;
     } catch (error) {
-        console.error('Error handling gui-vote request:', error);
+        logger.error('Error handling gui-vote request:', error);
         return {
             success: false,
             error: error.message || 'Failed to load challenges',
@@ -408,8 +425,8 @@ ipcMain.handle('gui-vote', async () => {
 // Handle get-active-challenges request
 ipcMain.handle('get-active-challenges', async (event, token) => {
     try {
-        console.log('=== IPC get-active-challenges ===');
-        console.log('Token received:', !!token);
+        logger.debug('=== IPC get-active-challenges ===');
+        logger.debug('Token received:', !!token);
 
         // Use the API factory to get the appropriate strategy
         const {getApiStrategy} = require('./apiFactory');
@@ -419,7 +436,7 @@ ipcMain.handle('get-active-challenges', async (event, token) => {
         const result = await strategy.getActiveChallenges(token);
         return result;
     } catch (error) {
-        console.error('Error handling get-active-challenges request:', error);
+        logger.error('Error handling get-active-challenges request:', error);
         throw error;
     }
 });
@@ -429,7 +446,7 @@ ipcMain.handle('get-environment-info', async () => {
     try {
         return settings.getEnvironmentInfo();
     } catch (error) {
-        console.error('Error handling get-environment-info request:', error);
+        logger.error('Error handling get-environment-info request:', error);
         return {
             nodeEnv: 'unknown',
             dev: undefined,
@@ -444,18 +461,17 @@ ipcMain.handle('get-environment-info', async () => {
 // Handle refresh-api request
 ipcMain.handle('refresh-api', async () => {
     try {
-        console.log('🔄 Refreshing API due to settings change');
+        logger.info('🔄 Refreshing API due to settings change');
         const apiFactory = require('./apiFactory');
         apiFactory.refreshApi();
         return {success: true};
     } catch (error) {
-        console.error('Error handling refresh-api request:', error);
+        logger.error('Error handling refresh-api request:', error);
         return {success: false, error: error.message};
     }
 });
 
 // Logger handlers
-const logger = require('./logger');
 
 ipcMain.handle('log-debug', async (event, message, data) => {
     logger.setContext('GUI');
@@ -495,7 +511,7 @@ ipcMain.handle('get-boost-threshold', async (event, challengeId) => {
     try {
         return settings.getEffectiveSetting('boostTime', challengeId);
     } catch (error) {
-        console.error('Error getting boost threshold:', error);
+        logger.error('Error getting boost threshold:', error);
         return settings.SETTINGS_SCHEMA.boostTime.default;
     }
 });
@@ -505,7 +521,7 @@ ipcMain.handle('set-boost-threshold', async (event, challengeId, threshold) => {
         settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
         return {success: true};
     } catch (error) {
-        console.error('Error setting boost threshold:', error);
+        logger.error('Error setting boost threshold:', error);
         return {success: false, error: error.message};
     }
 });
@@ -515,7 +531,7 @@ ipcMain.handle('set-default-boost-threshold', async (event, threshold) => {
         settings.setGlobalDefault('boostTime', threshold);
         return {success: true};
     } catch (error) {
-        console.error('Error setting default boost threshold:', error);
+        logger.error('Error setting default boost threshold:', error);
         return {success: false, error: error.message};
     }
 });
@@ -541,7 +557,7 @@ ipcMain.handle('get-settings-schema', async () => {
 
         return serializableSchema;
     } catch (error) {
-        console.error('Error getting settings schema:', error);
+        logger.error('Error getting settings schema:', error);
         return {};
     }
 });
@@ -551,7 +567,7 @@ ipcMain.handle('get-global-default', async (event, settingKey) => {
         const settings = require('./settings');
         return settings.getGlobalDefault(settingKey);
     } catch (error) {
-        console.error('Error getting global default:', error);
+        logger.error('Error getting global default:', error);
         return null;
     }
 });
@@ -561,7 +577,7 @@ ipcMain.handle('set-global-default', async (event, settingKey, value) => {
         const settings = require('./settings');
         return settings.setGlobalDefault(settingKey, value);
     } catch (error) {
-        console.error('Error setting global default:', error);
+        logger.error('Error setting global default:', error);
         return false;
     }
 });
@@ -571,8 +587,8 @@ ipcMain.handle('get-challenge-override', async (event, settingKey, challengeId) 
         const settings = require('./settings');
         return settings.getChallengeOverride(settingKey, challengeId);
     } catch (error) {
-        console.error('Error getting challenge override:', error);
-        return null;
+        logger.error('Error getting challenge override:', error);
+        return false;
     }
 });
 
@@ -581,7 +597,7 @@ ipcMain.handle('set-challenge-override', async (event, settingKey, challengeId, 
         const settings = require('./settings');
         return settings.setChallengeOverride(settingKey, challengeId, value);
     } catch (error) {
-        console.error('Error setting challenge override:', error);
+        logger.error('Error setting challenge override:', error);
         return false;
     }
 });
@@ -591,7 +607,7 @@ ipcMain.handle('set-challenge-overrides', async (event, challengeId, overrides) 
         const settings = require('./settings');
         return settings.setChallengeOverrides(challengeId, overrides);
     } catch (error) {
-        console.error('Error setting challenge overrides:', error);
+        logger.error('Error setting challenge overrides:', error);
         return false;
     }
 });
@@ -601,7 +617,7 @@ ipcMain.handle('remove-challenge-override', async (event, settingKey, challengeI
         const settings = require('./settings');
         return settings.removeChallengeOverride(settingKey, challengeId);
     } catch (error) {
-        console.error('Error removing challenge override:', error);
+        logger.error('Error removing challenge override:', error);
         return false;
     }
 });
@@ -611,7 +627,7 @@ ipcMain.handle('get-effective-setting', async (event, settingKey, challengeId) =
         const settings = require('./settings');
         return settings.getEffectiveSetting(settingKey, challengeId);
     } catch (error) {
-        console.error('Error getting effective setting:', error);
+        logger.error('Error getting effective setting:', error);
         return null;
     }
 });
@@ -621,7 +637,17 @@ ipcMain.handle('cleanup-stale-challenge-setting', async (event, activeChallengeI
         const settings = require('./settings');
         return settings.cleanupStaleChallengeSetting(activeChallengeIds);
     } catch (error) {
-        console.error('Error cleaning up stale challenge settings:', error);
+        logger.error('Error cleaning up stale challenge settings:', error);
+        return false;
+    }
+});
+
+ipcMain.handle('cleanup-stale-metadata', async (event, activeChallengeIds) => {
+    try {
+        const metadata = require('./metadata');
+        return metadata.cleanupStaleMetadata(activeChallengeIds);
+    } catch (error) {
+        logger.error('Error cleaning up stale metadata:', error);
         return false;
     }
 });
@@ -631,7 +657,7 @@ ipcMain.handle('cleanup-obsolete-settings', async () => {
         const settings = require('./settings');
         return settings.cleanupObsoleteSettings();
     } catch (error) {
-        console.error('Error cleaning up obsolete settings:', error);
+        logger.error('Error cleaning up obsolete settings:', error);
         return false;
     }
 });
@@ -642,7 +668,7 @@ ipcMain.handle('reset-setting', async (event, key) => {
         const settings = require('./settings');
         return settings.resetSetting(key);
     } catch (error) {
-        console.error('Error resetting setting:', error);
+        logger.error('Error resetting setting:', error);
         return false;
     }
 });
@@ -652,7 +678,7 @@ ipcMain.handle('reset-global-default', async (event, settingKey) => {
         const settings = require('./settings');
         return settings.resetGlobalDefault(settingKey);
     } catch (error) {
-        console.error('Error resetting global default:', error);
+        logger.error('Error resetting global default:', error);
         return false;
     }
 });
@@ -662,7 +688,7 @@ ipcMain.handle('reset-all-global-defaults', async () => {
         const settings = require('./settings');
         return settings.resetAllGlobalDefaults();
     } catch (error) {
-        console.error('Error resetting all global defaults:', error);
+        logger.error('Error resetting all global defaults:', error);
         return false;
     }
 });
@@ -672,7 +698,7 @@ ipcMain.handle('reset-all-settings', async () => {
         const settings = require('./settings');
         return settings.resetAllSettings();
     } catch (error) {
-        console.error('Error resetting all settings:', error);
+        logger.error('Error resetting all settings:', error);
         return false;
     }
 });
@@ -682,7 +708,7 @@ ipcMain.handle('is-setting-modified', async (event, key) => {
         const settings = require('./settings');
         return settings.isSettingModified(key);
     } catch (error) {
-        console.error('Error checking if setting is modified:', error);
+        logger.error('Error checking if setting is modified:', error);
         return false;
     }
 });
@@ -692,7 +718,7 @@ ipcMain.handle('is-global-default-modified', async (event, settingKey) => {
         const settings = require('./settings');
         return settings.isGlobalDefaultModified(settingKey);
     } catch (error) {
-        console.error('Error checking if global default is modified:', error);
+        logger.error('Error checking if global default is modified:', error);
         return false;
     }
 });
@@ -704,7 +730,7 @@ ipcMain.handle('open-external-url', async (event, url) => {
         await shell.openExternal(url);
         return {success: true};
     } catch (error) {
-        console.error('Error opening external URL:', error);
+        logger.error('Error opening external URL:', error);
         return {success: false, error: error.message};
     }
 });
@@ -774,7 +800,7 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
             }
         }
     } catch (error) {
-        console.error('Error handling authenticate request:', error);
+        logger.error('Error handling authenticate request:', error);
         return {
             success: false,
             message: error.message || 'Authentication failed due to network error',
@@ -785,12 +811,12 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
 // Handle run-voting-cycle request
 ipcMain.handle('run-voting-cycle', async () => {
     try {
-        console.log('🔄 Starting voting cycle...');
+        logger.info('🔄 Starting voting cycle...');
 
         const userSettings = settings.loadSettings();
 
         if (!userSettings.token) {
-            console.log('❌ No token found for voting cycle');
+            logger.warning('❌ No token found for voting cycle');
             return {
                 success: false,
                 error: 'No authentication token found',
@@ -806,7 +832,7 @@ ipcMain.handle('run-voting-cycle', async () => {
             try {
                 return settings.getEffectiveSetting('exposure', challengeId);
             } catch (error) {
-                console.warn(`Error getting exposure setting for challenge ${challengeId}:`, error);
+                logger.warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
                 return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
             }
         };
@@ -837,7 +863,7 @@ ipcMain.handle('run-voting-cycle', async () => {
             };
         }
     } catch (error) {
-        console.error('Error handling run-voting-cycle request:', error);
+        logger.error('Error handling run-voting-cycle request:', error);
         return {
             success: false,
             error: error.message || 'Failed to run voting cycle',
@@ -868,12 +894,12 @@ ipcMain.handle('set-cancel-voting', (event, shouldCancel) => {
 // Handle vote-on-challenge request
 ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) => {
     try {
-        console.log('🔄 Vote on challenge request:', {challengeId, challengeTitle});
+        logger.info('🔄 Vote on challenge request:', {challengeId, challengeTitle});
 
         const userSettings = settings.loadSettings();
 
         if (!userSettings.token) {
-            console.log('❌ No token found for voting');
+            logger.warning('❌ No token found for voting');
             return {
                 success: false,
                 error: 'No authentication token found',
@@ -888,23 +914,23 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
 
         if (!challengesResponse || !challengesResponse.challenges) {
-            console.log('❌ Failed to fetch challenges for voting');
+            logger.warning('❌ Failed to fetch challenges for voting');
             return {
                 success: false,
                 error: 'Failed to fetch challenges',
             };
         }
 
-        console.log('📋 Found challenges:', challengesResponse.challenges.map(c => ({id: c.id, title: c.title})));
-        console.log('🔍 Looking for challenge ID:', challengeId, 'Type:', typeof challengeId);
+        logger.debug('📋 Found challenges:', challengesResponse.challenges.map(c => ({id: c.id, title: c.title})));
+        logger.debug('🔍 Looking for challenge ID:', challengeId, 'Type:', typeof challengeId);
 
         // Find the specific challenge (convert challengeId to number for comparison)
         const challenge = challengesResponse.challenges.find(c => c.id === parseInt(challengeId));
 
-        console.log('🎯 Challenge found:', challenge ? {id: challenge.id, title: challenge.title} : 'NOT FOUND');
+        logger.debug('🎯 Challenge found:', challenge ? {id: challenge.id, title: challenge.title} : 'NOT FOUND');
 
         if (!challenge) {
-            console.log('❌ Challenge not found:', {challengeId, challengeTitle});
+            logger.warning('❌ Challenge not found:', {challengeId, challengeTitle});
             return {
                 success: false,
                 error: `Challenge "${challengeTitle}" not found`,
@@ -922,12 +948,15 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
 
         // Get the effective exposure threshold and lastminute threshold for this challenge
         const effectiveThreshold = settings.getEffectiveSetting('exposure', challengeId);
-        const effectiveLastMinutes = settings.getEffectiveSetting('lastMinutes', challengeId);
+        const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
         const timeUntilEnd = challenge.close_time - now;
-        const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+        const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+
+        // Check if we're within the last hour of the challenge
+        const isWithinLastHour = timeUntilEnd <= 3600 && timeUntilEnd > 0; // 3600 seconds = 1 hour
 
         // Get the vote-only-in-last-threshold setting for this challenge
-        const voteOnlyInLastThreshold = settings.getEffectiveSetting('voteOnlyInLastThreshold', challengeId);
+        const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
 
         // Check if we should allow voting based on lastminute threshold logic
         let shouldAllowVoting = false;
@@ -940,13 +969,21 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
             } else {
                 shouldAllowVoting = true;
             }
-        } else if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
+        } else if (voteOnlyInLastMinute && !isWithinLastMinuteThreshold) {
             // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
-            errorMessage = `Challenge "${challengeTitle}" voting is restricted to last ${effectiveLastMinutes} minutes only`;
+            errorMessage = `Challenge "${challengeTitle}" voting is restricted to last ${effectiveLastMinuteThreshold} minutes only`;
         } else if (isWithinLastMinuteThreshold) {
             // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
             if (challenge.member.ranking.exposure.exposure_factor >= 100) {
-                errorMessage = `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinutes}m)`;
+                errorMessage = `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`;
+            } else {
+                shouldAllowVoting = true;
+            }
+        } else if (isWithinLastHour) {
+            // Within last hour: check against lastHourExposure threshold
+            const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challengeId);
+            if (challenge.member.ranking.exposure.exposure_factor >= effectiveLastHourExposure) {
+                errorMessage = `Challenge "${challengeTitle}" already has ${effectiveLastHourExposure}% exposure (last hour threshold)`;
             } else {
                 shouldAllowVoting = true;
             }
@@ -967,19 +1004,19 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         }
 
         // Vote on the specific challenge
-        console.log('🗳️ Starting voting process for challenge:', challenge.title);
+        logger.info('🗳️ Starting voting process for challenge:', challenge.title);
 
         const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
-        console.log('📸 Vote images received:', voteImages ? {imageCount: voteImages.images?.length} : 'No vote images');
+        logger.debug('📸 Vote images received:', voteImages ? {imageCount: voteImages.images?.length} : 'No vote images');
 
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
-            console.log('✅ Submitting votes...');
+            logger.info('✅ Submitting votes...');
             // Always vote to 100% (always vote to 100, not just to threshold)
             const submissionThreshold = 100;
             await strategy.submitVotes(voteImages, userSettings.token, submissionThreshold);
-            console.log('✅ Votes submitted successfully');
+            logger.success('✅ Votes submitted successfully');
         } else {
-            console.log('⚠️ No vote images available');
+            logger.warning('⚠️ No vote images available');
         }
 
         return {
@@ -987,7 +1024,7 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
             message: `Successfully voted on challenge "${challengeTitle}"`,
         };
     } catch (error) {
-        console.error('Error handling vote-on-challenge request:', error);
+        logger.error('Error handling vote-on-challenge request:', error);
         return {
             success: false,
             error: error.message || 'Failed to vote on challenge',
@@ -998,12 +1035,12 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
 // Handle apply boost to entry request
 ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
     try {
-        console.log('🚀 Apply boost to entry request:', {challengeId, imageId});
+        logger.info('🚀 Apply boost to entry request:', {challengeId, imageId});
 
         const userSettings = settings.loadSettings();
 
         if (!userSettings.token) {
-            console.log('❌ No token found for boost');
+            logger.warning('❌ No token found for boost');
             return {
                 success: false,
                 error: 'No authentication token found',
@@ -1015,24 +1052,24 @@ ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
         const strategy = getApiStrategy();
 
         // Apply boost to the specific entry
-        console.log('🚀 Applying boost to entry:', {challengeId, imageId});
+        logger.info('🚀 Applying boost to entry:', {challengeId, imageId});
         const result = await strategy.applyBoostToEntry(challengeId, imageId, userSettings.token);
 
         if (result) {
-            console.log('✅ Boost applied successfully');
+            logger.success('✅ Boost applied successfully');
             return {
                 success: true,
                 message: 'Boost applied successfully',
             };
         } else {
-            console.log('❌ Failed to apply boost');
+            logger.warning('❌ Failed to apply boost');
             return {
                 success: false,
                 error: 'Failed to apply boost',
             };
         }
     } catch (error) {
-        console.error('Error applying boost to entry:', error);
+        logger.error('Error applying boost to entry:', error);
         return {
             success: false,
             error: error.message || 'Failed to apply boost',
@@ -1053,7 +1090,7 @@ ipcMain.handle('reload-window', async () => {
             return {success: false, error: 'No active window to reload'};
         }
     } catch (error) {
-        console.error('Error reloading window:', error);
+        logger.error('Error reloading window:', error);
         return {success: false, error: error.message};
     }
 });
@@ -1066,7 +1103,7 @@ ipcMain.handle('check-for-updates', async () => {
         const updateInfo = await updateChecker.checkForUpdates(false); // Don't save timestamp for manual checks
         return {success: true, updateInfo};
     } catch (error) {
-        console.error('Error checking for updates:', error);
+        logger.error('Error checking for updates:', error);
         return {success: false, error: error.message};
     }
 });
@@ -1084,7 +1121,7 @@ ipcMain.handle('skip-update-version', async () => {
         }
         return {success: false, error: 'No update info available'};
     } catch (error) {
-        console.error('Error skipping update version:', error);
+        logger.error('Error skipping update version:', error);
         return {success: false, error: error.message};
     }
 });
@@ -1096,7 +1133,7 @@ ipcMain.handle('clear-skip-version', async () => {
         updateChecker.clearSkipVersion();
         return {success: true};
     } catch (error) {
-        console.error('Error clearing skip version:', error);
+        logger.error('Error clearing skip version:', error);
         return {success: false, error: error.message};
     }
 });

@@ -19,6 +19,22 @@ const setCancellationFlag = (cancel) => {
     shouldCancelVoting = cancel;
 };
 
+// Session-stable mock data cache to prevent regeneration within same app run
+let sessionMockCache = {
+    challenges: null,
+    voteImages: new Map(), // challengeUrl -> voteImages
+    lastCacheTime: null,
+};
+
+// Function to clear session cache (for testing)
+const clearSessionCache = () => {
+    sessionMockCache = {
+        challenges: null,
+        voteImages: new Map(),
+        lastCacheTime: null,
+    };
+};
+
 /**
  * Complete mock data object
  */
@@ -112,12 +128,17 @@ const mockApiClient = {
 
         // In mock mode, accept any token (including real ones)
         if (token) {
-            // Generate fresh mock data each time to simulate changing exposure factors
-            const freshChallenges = challenges.generateMockChallenges ?
-                challenges.generateMockChallenges() :
-                challenges.mockActiveChallenges;
-            console.log('Returning mock challenges:', freshChallenges.challenges.length);
-            return simulateApiResponse(freshChallenges, 800);
+            // Use cached challenges for session stability, generate only once per session
+            if (!sessionMockCache.challenges) {
+                sessionMockCache.challenges = challenges.generateMockChallenges ?
+                    challenges.generateMockChallenges() :
+                    challenges.mockActiveChallenges;
+                sessionMockCache.lastCacheTime = Date.now();
+                console.log('Generated session-stable mock challenges:', sessionMockCache.challenges.challenges.length);
+            } else {
+                console.log('Using cached mock challenges:', sessionMockCache.challenges.challenges.length);
+            }
+            return simulateApiResponse(sessionMockCache.challenges, 800);
         } else {
             console.log('No token provided, returning error');
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
@@ -135,12 +156,22 @@ const mockApiClient = {
         // In mock mode, accept any token (including real ones)
         if (token) {
             const challengeUrl = challenge.url;
-            // Generate fresh vote images for the specific challenge
-            const freshVoteImages = voting.generateMockVoteImages ?
-                voting.generateMockVoteImages(challengeUrl) :
-                (voting.mockVoteImagesByChallenge[challengeUrl] || voting.mockEmptyVoteImages);
-            console.log('Returning mock vote images:', freshVoteImages.images.length);
-            return simulateApiResponse(freshVoteImages, 1200);
+            const cacheKey = `${challengeUrl}-${challenge.id}`;
+            
+            // Use cached vote images for session stability
+            if (!sessionMockCache.voteImages.has(cacheKey)) {
+                const voteImages = voting.generateMockVoteImages ?
+                    voting.generateMockVoteImages(challengeUrl, challenge) :
+                    (voting.mockVoteImagesByChallenge[challengeUrl] || voting.mockEmptyVoteImages);
+                sessionMockCache.voteImages.set(cacheKey, voteImages);
+                console.log('Generated session-stable vote images for', challenge.title, ':', voteImages.images.length);
+            } else {
+                console.log('Using cached vote images for', challenge.title);
+            }
+            
+            const cachedVoteImages = sessionMockCache.voteImages.get(cacheKey);
+            console.log('Returning mock vote images:', cachedVoteImages.images.length);
+            return simulateApiResponse(cachedVoteImages, 1200);
         } else {
             console.log('No token provided, returning error');
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
@@ -160,6 +191,29 @@ const mockApiClient = {
         if (token) {
             if (voteImages.images && voteImages.images.length > 0) {
                 console.log('Submitting mock votes successfully');
+                
+                // Update metadata after successful mock vote submission
+                try {
+                    const { updateChallengeVoteMetadata } = require('../metadata');
+                    if (voteImages.challenge && voteImages.challenge.id) {
+                        // Use the ORIGINAL exposure factor from before voting (the "from what" value)
+                        const originalExposure = voteImages.voting?.exposure?.exposure_factor || 50;
+                        
+                        console.log(`🔧 DEBUG: About to update mock metadata for challenge ${voteImages.challenge.id}, original exposure: ${Math.round(originalExposure)}%`);
+                        const success = updateChallengeVoteMetadata(voteImages.challenge.id.toString(), Math.round(originalExposure));
+                        if (success) {
+                            console.log(`🔧 DEBUG: Successfully updated mock metadata for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`);
+                            console.log(`✅ Mock metadata updated for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`);
+                        } else {
+                            console.log(`🔧 DEBUG: Failed to update mock metadata for challenge ${voteImages.challenge.id}`);
+                            console.log(`⚠️ Failed to update mock metadata for challenge ${voteImages.challenge.id}`);
+                        }
+                    }
+                } catch (error) {
+                    console.log(`🔧 DEBUG: Error updating mock metadata for challenge ${voteImages.challenge.id}:`, error);
+                    console.log('⚠️ Error updating mock metadata:', error.message);
+                }
+                
                 return simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
             } else {
                 console.log('No vote images, returning error');
@@ -265,13 +319,16 @@ const mockApiClient = {
                 const onlyBoost = settings.getEffectiveSetting('onlyBoost', challenge.id.toString());
 
                 // Get the effective lastminute threshold for this challenge
-                const effectiveLastMinutes = settings.getEffectiveSetting('lastMinutes', challenge.id.toString());
+                const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
                 const now = Math.floor(Date.now() / 1000);
                 const timeUntilEnd = challenge.close_time - now;
-                const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+                const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+
+                // Check if we're within the last hour of the challenge
+                const isWithinLastHour = timeUntilEnd <= 3600 && timeUntilEnd > 0; // 3600 seconds = 1 hour
 
                 // Get the vote-only-in-last-threshold setting for this challenge
-                const voteOnlyInLastThreshold = settings.getEffectiveSetting('voteOnlyInLastThreshold', challenge.id.toString());
+                const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
 
                 // Determine if we should vote based on lastminute threshold logic
                 let shouldVote = false;
@@ -291,16 +348,25 @@ const mockApiClient = {
                     } else {
                         voteReason = 'flash type: exposure already at 100%';
                     }
-                } else if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
+                } else if (voteOnlyInLastMinute && !isWithinLastMinuteThreshold) {
                     // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
-                    voteReason = `vote-only-in-last-threshold enabled: not within last ${effectiveLastMinutes}m threshold`;
+                    voteReason = `vote-only-in-last-threshold enabled: not within last ${effectiveLastMinuteThreshold}m threshold`;
                 } else if (isWithinLastMinuteThreshold) {
                     // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
                     if (challenge.member.ranking.exposure.exposure_factor < 100) {
                         shouldVote = true;
-                        voteReason = `lastminute threshold (${effectiveLastMinutes}m): exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
+                        voteReason = `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
                     } else {
-                        voteReason = `lastminute threshold (${effectiveLastMinutes}m): exposure already at 100%`;
+                        voteReason = `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`;
+                    }
+                } else if (isWithinLastHour) {
+                    // Within last hour: use lastHourExposure threshold
+                    const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
+                    if (challenge.member.ranking.exposure.exposure_factor < effectiveLastHourExposure) {
+                        shouldVote = true;
+                        voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveLastHourExposure}%`;
+                    } else {
+                        voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveLastHourExposure}%`;
                     }
                 } else {
                     // Normal logic: vote if exposure factor is less than the effective threshold
@@ -378,4 +444,7 @@ module.exports = {
 
     // Cancellation control
     setCancellationFlag,
+    
+    // Session cache control
+    clearSessionCache,
 }; 

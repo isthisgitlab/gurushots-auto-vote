@@ -7,6 +7,7 @@
 
 const axios = require('axios');
 const {createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
+const logger = require('../logger');
 
 /**
  * Authenticates with GuruShots and obtains an authentication token
@@ -21,7 +22,7 @@ const {createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
  * @returns {object|null} - Response data containing token or null if login failed
  */
 const authenticate = async (email, password) => {
-    console.log('Starting authentication...');
+    logger.info('Starting authentication...');
 
     // Prepare login data
     const data = `login=${encodeURIComponent(email)}&password=${password}`;
@@ -43,11 +44,11 @@ const authenticate = async (email, password) => {
     try {
         // Send login request
         const response = await axios(config);
-        console.log('Authentication successful');
+        logger.success('Authentication successful');
 
         return response.data;
     } catch (error) {
-        console.error('Authentication error:', error.message || error);
+        logger.error('Authentication error:', error.message || error);
         return null;
     }
 };

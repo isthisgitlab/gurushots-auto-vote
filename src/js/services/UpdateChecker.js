@@ -1,4 +1,5 @@
 const axios = require('axios');
+const logger = require('../logger');
 
 class UpdateChecker {
     constructor() {
@@ -36,12 +37,12 @@ class UpdateChecker {
             
             // If we checked less than 24 hours ago, skip
             if (lastCheck && (now - lastCheck) < oneDay) {
-                console.log('🔄 Update check skipped - checked recently');
+                logger.info('🔄 Update check skipped - checked recently');
                 return null;
             }
 
-            console.log('🔍 Checking for updates...');
-            console.log('📦 Current version:', this.currentVersion);
+            logger.info('🔍 Checking for updates...');
+            logger.info('📦 Current version:', this.currentVersion);
 
             const response = await axios.get(this.repositoryUrl, {
                 timeout: 10000, // 10 second timeout
@@ -53,17 +54,17 @@ class UpdateChecker {
             const latestRelease = response.data;
             const latestVersion = latestRelease.tag_name.replace('v', '');
 
-            console.log('📦 Latest version:', latestVersion);
+            logger.info('📦 Latest version:', latestVersion);
 
             // Compare versions
             if (this.isNewerVersion(latestVersion, this.currentVersion)) {
                 // Don't show update if user chose to skip this version
                 if (skipVersion === latestVersion) {
-                    console.log('⏭️ Update skipped by user for version:', latestVersion);
+                    logger.info('⏭️ Update skipped by user for version:', latestVersion);
                     return null;
                 }
 
-                console.log('🎉 New version available:', latestVersion);
+                logger.info('🎉 New version available:', latestVersion);
                 
                 // Save the check time only if requested
                 if (saveCheckTime) {
@@ -79,7 +80,7 @@ class UpdateChecker {
                     isPrerelease: latestRelease.prerelease,
                 };
             } else {
-                console.log('✅ App is up to date');
+                logger.info('✅ App is up to date');
                 // Save the check time only if requested
                 if (saveCheckTime) {
                     settings.setSetting(this.lastCheckKey, now);
@@ -87,7 +88,7 @@ class UpdateChecker {
                 return null;
             }
         } catch (error) {
-            console.error('❌ Error checking for updates:', error.message);
+            logger.error('❌ Error checking for updates:', error.message);
             return null;
         }
     }
@@ -122,7 +123,7 @@ class UpdateChecker {
     skipVersion(version) {
         const settings = require('../settings');
         settings.setSetting(this.skipVersionKey, version);
-        console.log('⏭️ Marked version to skip:', version);
+        logger.info('⏭️ Marked version to skip:', version);
     }
 
     /**
@@ -131,7 +132,7 @@ class UpdateChecker {
     clearSkipVersion() {
         const settings = require('../settings');
         settings.setSetting(this.skipVersionKey, '');
-        console.log('🔄 Cleared skip version setting');
+        logger.info('🔄 Cleared skip version setting');
     }
 
     /**

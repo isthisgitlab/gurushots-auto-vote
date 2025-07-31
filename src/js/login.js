@@ -1,9 +1,10 @@
 // Get translation manager from global scope
 const translationManager = window.translationManager;
+const logger = require('./logger');
 
 // Function for production login using real GuruShots API
 const loginProd = async (username, password) => {
-    console.log('Production login with:', username, password);
+    logger.info('Production login with:', username, password);
 
     try {
         // Use the IPC call to authenticate through the main process
@@ -11,7 +12,7 @@ const loginProd = async (username, password) => {
         return result;
 
     } catch (error) {
-        console.error('Production login error:', error);
+        logger.error('Production login error:', error);
         return {
             success: false,
             message: error.message || 'Authentication failed due to network error',
@@ -21,7 +22,7 @@ const loginProd = async (username, password) => {
 
 // Function for mock login using mock authentication data
 const loginMock = async (username, password) => {
-    console.log('Mock login with:', username, password);
+    logger.info('Mock login with:', username, password);
 
     try {
         // Use the IPC call to authenticate through the main process with mock flag
@@ -29,7 +30,7 @@ const loginMock = async (username, password) => {
         return result;
 
     } catch (error) {
-        console.error('Mock login error:', error);
+        logger.error('Mock login error:', error);
         return {
             success: false,
             message: error.message || 'Mock authentication failed',
@@ -240,7 +241,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Update the bottom text based on mock setting
         updateBottomText(mockToggle.checked);
 
-        console.log(`🔄 Login mock toggle changed to: ${mockToggle.checked}`);
+        logger.info(`🔄 Login mock toggle changed to: ${mockToggle.checked}`);
     });
 
     // Handle language change
@@ -279,7 +280,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Determine which login function to use based on current mock toggle state
             // (ignore saved settings, use toggle value)
             const isMock = mockToggle.checked;
-            console.log(`🔐 Login attempt with mock mode: ${isMock}`);
+            logger.info(`🔐 Login attempt with mock mode: ${isMock}`);
             const loginResult = isMock
                 ? await loginMock(username, password)
                 : await loginProd(username, password);
@@ -316,7 +317,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.api.login();
 
         } catch (error) {
-            console.error('Login error:', error);
+            logger.error('Login error:', error);
             showToast('An unexpected error occurred during login', 'error');
             setLoadingState(false);
         }

@@ -110,7 +110,7 @@ Examples:
 Note: You must login first before you can vote.
       The 'start' command will run continuously until stopped.
       Voting interval adjusts dynamically based on challenge states.
-      Use 'get-setting votingInterval' to view normal interval, 'set-setting votingInterval 5' to change.
+      Use 'get-setting checkFrequency' to view normal frequency, 'set-setting checkFrequency 5' to change.
       Current mode: ${isMockMode ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}
     `);
 };
@@ -292,8 +292,8 @@ const showStatus = () => {
     logger.cliInfo(`  Language: ${userSettings.language || 'en'}`);
     logger.cliInfo(`  Timezone: ${userSettings.timezone || 'local'}`);
     logger.cliInfo(`  API Timeout: ${userSettings.apiTimeout || getDefaultSettings().apiTimeout}s`);
-    logger.cliInfo(`  Voting Interval: ${userSettings.votingInterval || getDefaultSettings().votingInterval}min`);
-    logger.cliInfo(`  Last Threshold Check Frequency: ${settings.getEffectiveSetting('lastThresholdCheckFrequency', 'global') || 1}min`);
+    logger.cliInfo(`  Check Frequency: ${userSettings.checkFrequency || getDefaultSettings().checkFrequency}min`);
+    logger.cliInfo(`  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`);
     logger.cliInfo(`  CLI Cron Expression: ${userSettings.cliCronExpression || getDefaultSettings().cliCronExpression}`);
     
     // Show challenge settings if any exist
@@ -449,7 +449,7 @@ Available Commands:
 Common Settings:
   cliCronExpression     - Cron expression for continuous voting (default: "*/3 * * * *")
   apiTimeout           - API request timeout in seconds (default: 30)
-  votingInterval       - Voting interval in minutes (default: 3)
+  checkFrequency       - Check frequency in minutes (default: 3)
   mock                 - Use mock API for testing (default: false)
   theme                - UI theme: "light" or "dark" (default: "light")
   language             - UI language: "en" or "lv" (default: "en")

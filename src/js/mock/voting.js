@@ -7,7 +7,7 @@
 /**
  * Generate dynamic mock vote images for different challenges
  */
-const generateMockVoteImages = (challengeUrl) => {
+const generateMockVoteImages = (challengeUrl, originalChallenge = null) => {
     const photographers = [
         'John Doe', 'Jane Smith', 'Mike Johnson', 'Sarah Wilson', 'David Brown',
         'Lisa Davis', 'Tom Miller', 'Emma Taylor', 'Chris Anderson', 'Anna Garcia',
@@ -65,13 +65,13 @@ const generateMockVoteImages = (challengeUrl) => {
 
     return {
         challenge: {
-            id: Math.floor(Math.random() * 9000) + 1000,
-            title: challengeUrl.replace('-2024', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-            url: challengeUrl,
+            id: originalChallenge ? originalChallenge.id : Math.floor(Math.random() * 9000) + 1000,
+            title: originalChallenge ? originalChallenge.title : challengeUrl.replace('-2024', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            url: originalChallenge ? originalChallenge.url : challengeUrl,
         },
         voting: {
             exposure: {
-                exposure_factor: Math.floor(Math.random() * 30) + 20, // 20-50%
+                exposure_factor: originalChallenge?.member?.ranking?.exposure?.exposure_factor || Math.floor(Math.random() * 30) + 20, // Use original challenge's exposure or random 20-50%
                 max_exposure: 100,
             },
         },

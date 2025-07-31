@@ -7,6 +7,7 @@
 
 const {makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
 const logger = require('../logger');
+const { updateChallengeVoteMetadata } = require('../metadata');
 
 /**
  * Fetches images available for voting in a specific challenge
@@ -68,6 +69,7 @@ const submitVotes = async (voteImages, token) => {
     const viewedImages = images.map(img => `&viewed_image_ids[]=${encodeURIComponent(img.id)}`).join('');
     // Get current exposure factor from the challenge data
     let {exposure_factor} = voting.exposure;
+    const originalExposureFactor = exposure_factor; // Store original exposure level for metadata
 
     // Track unique images to avoid voting for the same image twice
     const uniqueImageIds = new Set();
@@ -102,6 +104,22 @@ const submitVotes = async (voteImages, token) => {
     if (!response) {
         logger.endOperation(operationId, null, 'Vote submission failed');
         return;
+    }
+
+    // Update metadata after successful vote submission
+    try {
+        logger.debug(`🔧 DEBUG: About to update metadata for challenge ${challenge.id}, original exposure: ${Math.round(originalExposureFactor)}%`);
+        const success = updateChallengeVoteMetadata(challenge.id, Math.round(originalExposureFactor));
+        if (success) {
+            logger.debug(`🔧 DEBUG: Successfully updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`);
+            logger.info(`Updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`);
+        } else {
+            logger.debug(`🔧 DEBUG: Failed to update metadata for challenge ${challenge.id}`);
+            logger.warning(`Failed to update metadata for challenge ${challenge.id}`);
+        }
+    } catch (error) {
+        logger.debug(`🔧 DEBUG: Error updating metadata for challenge ${challenge.id}:`, error);
+        logger.warning(`Error updating metadata for challenge ${challenge.id}:`, error);
     }
 
     logger.endOperation(operationId, `Votes submitted successfully (${uniqueImageIds.size} images, ~${exposure_factor.toFixed(1)}% exposure)`);
