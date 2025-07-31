@@ -123,7 +123,7 @@ const fetchChallengesAndVote = async (token) => {
             }
 
             // Use the centralized voting logic service
-            const {shouldVote, voteReason} = votingLogic.evaluateVotingDecision(challenge, now);
+            const {shouldVote, voteReason, targetExposure} = votingLogic.evaluateVotingDecision(challenge, now);
 
             // Vote on challenge if conditions are met
             if (shouldVote) {
@@ -151,9 +151,9 @@ const fetchChallengesAndVote = async (token) => {
 
                         logger.challengeInfo(challenge.id, challenge.title, `Submitting votes for ${voteImages.images.length} images`);
 
-                        // Submit votes to 100% (always vote to 100, not just to threshold)
-                        logger.debug(`🔧 DEBUG: About to submit votes for challenge ${challenge.id}: ${challenge.title}`);
-                        await submitVotes(voteImages, token);
+                        // Submit votes to target exposure (dynamic based on voting rules)
+                        logger.debug(`🔧 DEBUG: About to submit votes for challenge ${challenge.id}: ${challenge.title} (target: ${targetExposure}%)`);
+                        await submitVotes(voteImages, token, targetExposure);
                         logger.debug(`🔧 DEBUG: Completed vote submission for challenge ${challenge.id}: ${challenge.title}`);
 
                         // Check for cancellation before delay

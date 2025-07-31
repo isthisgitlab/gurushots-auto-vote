@@ -44,14 +44,15 @@ const getVoteImages = async (challenge, token) => {
  *
  * This function:
  * 1. Randomly selects images to vote on
- * 2. Continues voting until the exposure factor reaches the exposure threshold or all images are used
+ * 2. Continues voting until the exposure factor reaches the target exposure or all images are used
  * 3. Submits the votes to the GuruShots API
  *
  * @param {object} voteImages - Object containing challenge, voting, and images data
  * @param {string} token - Authentication token
+ * @param {number} targetExposure - Target exposure percentage (default: 100)
  * @returns {object|undefined} - API response or undefined if submission failed
  */
-const submitVotes = async (voteImages, token) => {
+const submitVotes = async (voteImages, token, targetExposure = 100) => {
     const {challenge, voting, images} = voteImages;
     const operationId = `submit-votes-${challenge.id}`;
     
@@ -61,7 +62,7 @@ const submitVotes = async (voteImages, token) => {
         return;
     }
     
-    logger.startOperation(operationId, `Submitting votes for challenge ${challenge.title} (target: 100%)`);
+    logger.startOperation(operationId, `Submitting votes for challenge ${challenge.title} (target: ${targetExposure}%)`);
 
     // Prepare data for vote submission
     let votedImages = '';
@@ -74,8 +75,8 @@ const submitVotes = async (voteImages, token) => {
     // Track unique images to avoid voting for the same image twice
     const uniqueImageIds = new Set();
 
-    // Continue voting until exposure factor reaches 100% (always vote to 100, not just to threshold)
-    while (exposure_factor < 100) {
+    // Continue voting until exposure factor reaches target exposure
+    while (exposure_factor < targetExposure) {
         // Select a random image from the available images
         const randomImage = images[Math.floor(Math.random() * images.length)];
         if (uniqueImageIds.has(randomImage.id)) continue;
@@ -85,9 +86,9 @@ const submitVotes = async (voteImages, token) => {
         votedImages += `&image_ids[]=${encodeURIComponent(randomImage.id)}`;
         exposure_factor += randomImage.ratio;
 
-        // Break if we've used all available images but still haven't reached 100%
+        // Break if we've used all available images but still haven't reached target exposure
         if (uniqueImageIds.size === images.length) {
-            logger.warning(`Insufficient images to reach 100% exposure for ${challenge.title} (only ${uniqueImageIds.size} images available)`);
+            logger.warning(`Insufficient images to reach ${targetExposure}% exposure for ${challenge.title} (only ${uniqueImageIds.size} images available)`);
             break;
         }
     }
