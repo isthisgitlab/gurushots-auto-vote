@@ -10,6 +10,7 @@ const voting = require('./voting');
 const boost = require('./boost');
 const errors = require('./errors');
 const settings = require('../settings');
+const votingLogic = require('../services/VotingLogic');
 
 // Global cancellation flag for mock API
 let shouldCancelVoting = false;
@@ -130,11 +131,14 @@ const mockApiClient = {
         if (token) {
             // Use cached challenges for session stability, generate only once per session
             if (!sessionMockCache.challenges) {
-                sessionMockCache.challenges = challenges.generateMockChallenges ?
-                    challenges.generateMockChallenges() :
-                    challenges.mockActiveChallenges;
+                if (challenges.generateMockChallenges) {
+                    sessionMockCache.challenges = challenges.generateMockChallenges();
+                    console.log('Generated session-stable mock challenges:', sessionMockCache.challenges.challenges.length);
+                } else {
+                    sessionMockCache.challenges = challenges.mockActiveChallenges;
+                    console.log('Using static mock challenges:', sessionMockCache.challenges.challenges.length);
+                }
                 sessionMockCache.lastCacheTime = Date.now();
-                console.log('Generated session-stable mock challenges:', sessionMockCache.challenges.challenges.length);
             } else {
                 console.log('Using cached mock challenges:', sessionMockCache.challenges.challenges.length);
             }
@@ -160,11 +164,15 @@ const mockApiClient = {
             
             // Use cached vote images for session stability
             if (!sessionMockCache.voteImages.has(cacheKey)) {
-                const voteImages = voting.generateMockVoteImages ?
-                    voting.generateMockVoteImages(challengeUrl, challenge) :
-                    (voting.mockVoteImagesByChallenge[challengeUrl] || voting.mockEmptyVoteImages);
-                sessionMockCache.voteImages.set(cacheKey, voteImages);
-                console.log('Generated session-stable vote images for', challenge.title, ':', voteImages.images.length);
+                if (voting.generateMockVoteImages) {
+                    const voteImages = voting.generateMockVoteImages(challengeUrl, challenge);
+                    sessionMockCache.voteImages.set(cacheKey, voteImages);
+                    console.log('Generated session-stable vote images for', challenge.title, ':', voteImages.images.length);
+                } else {
+                    const voteImages = voting.mockVoteImagesByChallenge[challengeUrl] || voting.mockEmptyVoteImages;
+                    sessionMockCache.voteImages.set(cacheKey, voteImages);
+                    console.log('Using static vote images for', challenge.title, ':', voteImages.images.length);
+                }
             } else {
                 console.log('Using cached vote images for', challenge.title);
             }
@@ -315,68 +323,9 @@ const mockApiClient = {
                     await simulateApiResponse(boost.mockBoostSuccess, 1500);
                 }
 
-                // Check if boost-only mode is enabled for this challenge
-                const onlyBoost = settings.getEffectiveSetting('onlyBoost', challenge.id.toString());
-
-                // Get the effective lastminute threshold for this challenge
-                const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
+                // Use the centralized voting logic service
                 const now = Math.floor(Date.now() / 1000);
-                const timeUntilEnd = challenge.close_time - now;
-                const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
-
-                // Check if we're within the last hour of the challenge
-                const isWithinLastHour = timeUntilEnd <= 3600 && timeUntilEnd > 0; // 3600 seconds = 1 hour
-
-                // Get the vote-only-in-last-threshold setting for this challenge
-                const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
-
-                // Determine if we should vote based on lastminute threshold logic
-                let shouldVote = false;
-                let voteReason = '';
-
-                if (onlyBoost) {
-                    // Skip voting if boost-only mode is enabled
-                    voteReason = 'boost-only mode enabled';
-                } else if (challenge.start_time >= now) {
-                    // Skip voting if challenge hasn't started yet
-                    voteReason = 'challenge not started';
-                } else if (challenge.type === 'flash') {
-                    // Flash type: ignore exposure threshold, boost only and vote when below 100
-                    if (challenge.member.ranking.exposure.exposure_factor < 100) {
-                        shouldVote = true;
-                        voteReason = `flash type: exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
-                    } else {
-                        voteReason = 'flash type: exposure already at 100%';
-                    }
-                } else if (voteOnlyInLastMinute && !isWithinLastMinuteThreshold) {
-                    // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
-                    voteReason = `vote-only-in-last-threshold enabled: not within last ${effectiveLastMinuteThreshold}m threshold`;
-                } else if (isWithinLastMinuteThreshold) {
-                    // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
-                    if (challenge.member.ranking.exposure.exposure_factor < 100) {
-                        shouldVote = true;
-                        voteReason = `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
-                    } else {
-                        voteReason = `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`;
-                    }
-                } else if (isWithinLastHour) {
-                    // Within last hour: use lastHourExposure threshold
-                    const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
-                    if (challenge.member.ranking.exposure.exposure_factor < effectiveLastHourExposure) {
-                        shouldVote = true;
-                        voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveLastHourExposure}%`;
-                    } else {
-                        voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveLastHourExposure}%`;
-                    }
-                } else {
-                    // Normal logic: vote if exposure factor is less than the effective threshold
-                    if (challenge.member.ranking.exposure.exposure_factor < effectiveThreshold) {
-                        shouldVote = true;
-                        voteReason = `normal threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveThreshold}%`;
-                    } else {
-                        voteReason = `normal threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveThreshold}%`;
-                    }
-                }
+                const {shouldVote, voteReason} = votingLogic.evaluateVotingDecision(challenge, now);
 
                 // Simulate voting if conditions are met
                 if (shouldVote) {

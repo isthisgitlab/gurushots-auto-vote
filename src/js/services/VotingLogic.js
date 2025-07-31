@@ -231,9 +231,9 @@ const getEffectiveBoostTime = (challengeId) => {
 const shouldApplyBoost = (challenge, now) => {
     const challengeId = challenge.id.toString();
     const effectiveBoostTime = getEffectiveBoostTime(challengeId);
-    const timeUntilEnd = challenge.close_time - now;
+    const timeUntilBoostExpires = challenge.member.boost.timeout - now;
     
-    return timeUntilEnd <= effectiveBoostTime && timeUntilEnd > 0;
+    return timeUntilBoostExpires <= effectiveBoostTime && timeUntilBoostExpires > 0;
 };
 
 module.exports = {

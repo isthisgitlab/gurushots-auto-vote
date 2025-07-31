@@ -81,7 +81,7 @@ const showHelp = () => {
     const userSettings = settings.loadSettings();
     const isMockMode = userSettings.mock;
     
-    console.log(`
+    logger.cliInfo(`
 GuruShots Auto Voter - CLI ${isMockMode ? '(MOCK MODE)' : '(REAL MODE)'}
 
 Usage: <command>
@@ -435,7 +435,7 @@ const resetAllSettings = () => {
  * Show detailed help about settings
  */
 const helpSettings = () => {
-    console.log(`
+    logger.cliInfo(`
 === Settings Management Help ===
 
 Available Commands:

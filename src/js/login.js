@@ -1,6 +1,33 @@
 // Get translation manager from global scope
 const translationManager = window.translationManager;
-const logger = require('./logger');
+
+// Browser-compatible logger
+const logger = {
+    info: (message, ...args) => {
+        console.log(`[INFO] ${message}`, ...args);
+        if (window.api && window.api.logDebug) {
+            window.api.logDebug(message, args.length > 0 ? args : null);
+        }
+    },
+    error: (message, ...args) => {
+        console.error(`[ERROR] ${message}`, ...args);
+        if (window.api && window.api.logError) {
+            window.api.logError(message, args.length > 0 ? args : null);
+        }
+    },
+    warning: (message, ...args) => {
+        console.warn(`[WARNING] ${message}`, ...args);
+        if (window.api && window.api.logDebug) {
+            window.api.logDebug(`WARNING: ${message}`, args.length > 0 ? args : null);
+        }
+    },
+    success: (message, ...args) => {
+        console.log(`[SUCCESS] ${message}`, ...args);
+        if (window.api && window.api.logDebug) {
+            window.api.logDebug(`SUCCESS: ${message}`, args.length > 0 ? args : null);
+        }
+    },
+};
 
 // Function for production login using real GuruShots API
 const loginProd = async (username, password) => {
@@ -264,8 +291,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Prevent the default form submission
         event.preventDefault();
 
+        logger.info('🔐 Login form submitted');
+
         // Validate form
         if (!validateForm()) {
+            logger.warning('❌ Form validation failed');
             return;
         }
 
@@ -281,9 +311,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             // (ignore saved settings, use toggle value)
             const isMock = mockToggle.checked;
             logger.info(`🔐 Login attempt with mock mode: ${isMock}`);
+            
             const loginResult = isMock
                 ? await loginMock(username, password)
                 : await loginProd(username, password);
+                
+            logger.info('🔐 Login result:', loginResult);
 
             // Check if login was successful
             if (!loginResult.success) {

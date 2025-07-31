@@ -4,6 +4,7 @@ const fs = require('fs');
 const settings = require('./settings');
 const {initializeHeaders} = require('./api/randomizer');
 const logger = require('./logger');
+const votingLogic = require('./services/VotingLogic');
 
 // Disable service workers at the application level
 app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
@@ -737,6 +738,7 @@ ipcMain.handle('open-external-url', async (event, url) => {
 
 // Handle authenticate request for login
 ipcMain.handle('authenticate', async (event, username, password, isMock) => {
+    logger.info(`🔐 Authentication request received - Mock: ${isMock}, Username: ${username}`);
     try {
         if (isMock) {
             // Use mock authentication
@@ -749,7 +751,7 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
             const isValidCredential = true;
 
             if (isValidCredential) {
-                return {
+                const result = {
                     success: true,
                     token: mockLoginSuccess.token,
                     message: 'Mock login successful',
@@ -760,11 +762,15 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
                         display_name: mockLoginSuccess.user.display_name,
                     },
                 };
+                logger.info('🔐 Mock authentication successful:', result);
+                return result;
             } else {
-                return {
+                const result = {
                     success: false,
                     message: mockLoginFailure.message || 'Invalid mock credentials',
                 };
+                logger.info('🔐 Mock authentication failed:', result);
+                return result;
             }
         } else {
             // Use real authentication
@@ -780,24 +786,36 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
             }
 
             // Check if the response indicates success
-            if (response.success === true && response.token) {
-                return {
-                    success: true,
-                    token: response.token,
-                    message: 'Production login successful',
-                    user: {
-                        id: response.member_id,
-                        email: username,
-                        username: response.user_name,
-                        display_name: response.user_name,
-                    },
-                };
-            } else {
-                return {
-                    success: false,
-                    message: 'Authentication failed - invalid response from server',
-                };
+            logger.info('🔐 Real authentication response:', response);
+            
+            // The GuruShots API might return different response structures
+            // Let's check for common success indicators
+            if (response && (response.token || response.success === true || response.status === 'success')) {
+                const token = response.token || response.access_token || response.auth_token;
+                if (token) {
+                    const result = {
+                        success: true,
+                        token: token,
+                        message: 'Production login successful',
+                        user: {
+                            id: response.member_id || response.user_id || response.id,
+                            email: username,
+                            username: response.user_name || response.username || response.name,
+                            display_name: response.user_name || response.username || response.name || response.display_name,
+                        },
+                    };
+                    logger.info('🔐 Real authentication successful:', result);
+                    return result;
+                }
             }
+            
+            // If we get here, the response doesn't indicate success
+            const result = {
+                success: false,
+                message: response.error || response.message || 'Authentication failed - invalid response from server',
+            };
+            logger.info('🔐 Real authentication failed:', result);
+            return result;
         }
     } catch (error) {
         logger.error('Error handling authenticate request:', error);
@@ -946,55 +964,8 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
             };
         }
 
-        // Get the effective exposure threshold and lastminute threshold for this challenge
-        const effectiveThreshold = settings.getEffectiveSetting('exposure', challengeId);
-        const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
-        const timeUntilEnd = challenge.close_time - now;
-        const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
-
-        // Check if we're within the last hour of the challenge
-        const isWithinLastHour = timeUntilEnd <= 3600 && timeUntilEnd > 0; // 3600 seconds = 1 hour
-
-        // Get the vote-only-in-last-threshold setting for this challenge
-        const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
-
-        // Check if we should allow voting based on lastminute threshold logic
-        let shouldAllowVoting = false;
-        let errorMessage = '';
-
-        if (challenge.type === 'flash') {
-            // Flash type: ignore exposure threshold, boost only and vote when below 100
-            if (challenge.member.ranking.exposure.exposure_factor >= 100) {
-                errorMessage = `Challenge "${challengeTitle}" already has 100% exposure (flash type)`;
-            } else {
-                shouldAllowVoting = true;
-            }
-        } else if (voteOnlyInLastMinute && !isWithinLastMinuteThreshold) {
-            // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
-            errorMessage = `Challenge "${challengeTitle}" voting is restricted to last ${effectiveLastMinuteThreshold} minutes only`;
-        } else if (isWithinLastMinuteThreshold) {
-            // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
-            if (challenge.member.ranking.exposure.exposure_factor >= 100) {
-                errorMessage = `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`;
-            } else {
-                shouldAllowVoting = true;
-            }
-        } else if (isWithinLastHour) {
-            // Within last hour: check against lastHourExposure threshold
-            const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challengeId);
-            if (challenge.member.ranking.exposure.exposure_factor >= effectiveLastHourExposure) {
-                errorMessage = `Challenge "${challengeTitle}" already has ${effectiveLastHourExposure}% exposure (last hour threshold)`;
-            } else {
-                shouldAllowVoting = true;
-            }
-        } else {
-            // Normal logic: check against exposure threshold
-            if (challenge.member.ranking.exposure.exposure_factor >= effectiveThreshold) {
-                errorMessage = `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`;
-            } else {
-                shouldAllowVoting = true;
-            }
-        }
+        // Use the centralized voting logic service for manual voting decisions
+        const {shouldAllowVoting, errorMessage} = votingLogic.evaluateManualVotingDecision(challenge, now, challengeTitle);
 
         if (!shouldAllowVoting) {
             return {

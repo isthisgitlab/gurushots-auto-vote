@@ -34,7 +34,10 @@ contextBridge.exposeInMainWorld(
         // API methods
         guiVote: () => ipcRenderer.invoke('gui-vote'),
         getActiveChallenges: (token) => ipcRenderer.invoke('get-active-challenges', token),
-        authenticate: (username, password, isMock) => ipcRenderer.invoke('authenticate', username, password, isMock),
+        authenticate: (username, password, isMock) => {
+            console.log('🔐 Preload: authenticate called with:', { username, password, isMock });
+            return ipcRenderer.invoke('authenticate', username, password, isMock);
+        },
         runVotingCycle: () => ipcRenderer.invoke('run-voting-cycle'),
         voteOnChallenge: (challengeId, challengeTitle) => ipcRenderer.invoke('vote-on-challenge', challengeId, challengeTitle),
         refreshApi: () => ipcRenderer.invoke('refresh-api'),

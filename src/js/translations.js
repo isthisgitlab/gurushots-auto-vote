@@ -337,6 +337,15 @@ class TranslationManager {
     }
 
     async init() {
+        // Wait a bit for window.api to be available
+        if (typeof window !== 'undefined' && !window.api) {
+            // Wait for window.api to be available
+            let attempts = 0;
+            while (!window.api && attempts < 50) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                attempts++;
+            }
+        }
         await this.loadLanguageFromSettings();
         this.initialized = true;
     }
