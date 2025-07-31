@@ -26,6 +26,13 @@
 - **Environment Variables**: Do not use environment variables (.env files) for application configuration - use the established settings logic instead
 - **Configuration Consistency**: Ensure settings are accessible and consistent between GUI and CLI interfaces
 
+## Git Operations
+- **Push Restrictions**: Never push changes to remote repositories under any circumstances. All git operations must remain local only.
+- **Commit Policy**: Adding commits and performing git read operations (status, log, diff, etc.) are permitted and encouraged for development workflow.
+- **File Reset Prohibition**: Never use `git checkout` to reset or revert files under any circumstances. This includes avoiding commands like `git checkout -- <file>` or `git checkout HEAD <file>`.
+- **Branch Operations**: Local branch operations are allowed, but all changes must remain in the local repository.
+- **Safe Git Commands**: Stick to read-only git commands (status, log, diff, show) and local commit operations only.
+
 ## Development Commands
 - **Linting**: Run `npm run lint` after code changes
 - **Type Checking**: Run `npm run typecheck` to verify TypeScript types

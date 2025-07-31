@@ -20,7 +20,9 @@
       "Bash(npm run settings:get:*)",
       "Bash(npm run settings:reset:*)",
       "Bash(npm run settings:global-defaults:*)",
-      "Bash(npm run verify:settings:*)"
+      "Bash(npm run verify:settings:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run:*)"
     ]
   },
   "enabledMcpjsonServers": [

@@ -90,11 +90,19 @@ function isElectronRunning() {
     return new Promise((resolve) => {
         const process = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], {stdio: 'pipe'});
 
+        // Add timeout to prevent hanging
+        const timeout = setTimeout(() => {
+            process.kill();
+            resolve(false);
+        }, 2000); // 2 second timeout
+
         process.on('close', (code) => {
+            clearTimeout(timeout);
             resolve(code === 0);
         });
 
         process.on('error', () => {
+            clearTimeout(timeout);
             resolve(false);
         });
     });
@@ -335,4 +343,9 @@ async function main() {
     }
 }
 
-main();
+main().then(() => {
+    process.exit(0);
+}).catch((error) => {
+    console.error('❌ Unhandled error:', error.message);
+    process.exit(1);
+});
