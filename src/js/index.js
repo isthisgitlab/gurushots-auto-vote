@@ -563,6 +563,17 @@ ipcMain.handle('get-settings-schema', async () => {
     }
 });
 
+// Handle get validation error
+ipcMain.handle('get-validation-error', async (event, settingKey, value, allSettings) => {
+    try {
+        const settings = require('./settings');
+        return settings.getValidationError(settingKey, value, allSettings);
+    } catch (error) {
+        logger.error('Error getting validation error:', error);
+        return 'Validation error';
+    }
+});
+
 ipcMain.handle('get-global-default', async (event, settingKey) => {
     try {
         const settings = require('./settings');
@@ -965,7 +976,7 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         }
 
         // Use the centralized voting logic service for manual voting decisions
-        const {shouldAllowVoting, errorMessage} = votingLogic.evaluateManualVotingDecision(challenge, now, challengeTitle);
+        const {shouldAllowVoting, errorMessage, targetExposure} = votingLogic.evaluateManualVotingDecision(challenge, now, challengeTitle);
 
         if (!shouldAllowVoting) {
             return {
@@ -982,9 +993,8 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
 
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
             logger.info('✅ Submitting votes...');
-            // Always vote to 100% (always vote to 100, not just to threshold)
-            const submissionThreshold = 100;
-            await strategy.submitVotes(voteImages, userSettings.token, submissionThreshold);
+            // Vote to target exposure (dynamic based on voting rules)
+            await strategy.submitVotes(voteImages, userSettings.token, targetExposure);
             logger.success('✅ Votes submitted successfully');
         } else {
             logger.warning('⚠️ No vote images available');

@@ -54,7 +54,7 @@ const getEffectiveLastHourExposureThreshold = (challengeId) => {
  * Evaluate whether voting should occur on a challenge
  * @param {Object} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
- * @returns {Object} - Voting decision with shouldVote boolean and reason string
+ * @returns {Object} - Voting decision with shouldVote boolean, reason string, and targetExposure number
  */
 const evaluateVotingDecision = (challenge, now) => {
     const challengeId = challenge.id.toString();
@@ -76,59 +76,64 @@ const evaluateVotingDecision = (challenge, now) => {
     // Evaluate voting decision based on business rules
     let shouldVote = false;
     let voteReason = '';
+    let targetExposure = 100; // Default target exposure
     
     // Rule 1: Skip if boost-only mode is enabled
     if (onlyBoost) {
         voteReason = 'boost-only mode enabled';
-        return { shouldVote, voteReason };
+        return { shouldVote, voteReason, targetExposure };
     }
     
     // Rule 2: Skip if challenge hasn't started yet
     if (challenge.start_time >= now) {
         voteReason = 'challenge not started';
-        return { shouldVote, voteReason };
+        return { shouldVote, voteReason, targetExposure };
     }
     
     // Rule 3: Flash type challenges - always use 100% threshold
     if (challenge.type === 'flash') {
-        if (currentExposure < 100) {
+        targetExposure = 100;
+        if (currentExposure < targetExposure) {
             shouldVote = true;
             voteReason = `flash type: exposure ${currentExposure}% < 100%`;
         } else {
             voteReason = 'flash type: exposure already at 100%';
         }
-        return { shouldVote, voteReason };
+        return { shouldVote, voteReason, targetExposure };
     }
     
     // Rule 4: Vote-only-in-last-minute mode - skip if not within threshold
     if (voteOnlyInLastMinute && !isWithinLastMinute) {
         voteReason = `vote-only-in-last-threshold enabled: not within last ${effectiveLastMinuteThreshold}m threshold`;
-        return { shouldVote, voteReason };
+        return { shouldVote, voteReason, targetExposure };
     }
     
     // Rule 5: Within last minute threshold - always use 100% threshold
     if (isWithinLastMinute) {
-        if (currentExposure < 100) {
+        targetExposure = 100;
+        if (currentExposure < targetExposure) {
             shouldVote = true;
             voteReason = `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure ${currentExposure}% < 100%`;
         } else {
             voteReason = `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`;
         }
-        return { shouldVote, voteReason };
+        return { shouldVote, voteReason, targetExposure };
     }
     
-    // Rule 6: Within last hour - use lastHourExposure threshold
+    // Rule 6: Within last hour - use lastHourExposure threshold as target
     if (withinLastHour) {
+        targetExposure = effectiveThreshold;
         if (currentExposure < effectiveLastHourExposure) {
             shouldVote = true;
             voteReason = `last hour threshold: exposure ${currentExposure}% < ${effectiveLastHourExposure}%`;
         } else {
             voteReason = `last hour threshold: exposure ${currentExposure}% >= ${effectiveLastHourExposure}%`;
         }
-        return { shouldVote, voteReason };
+        return { shouldVote, voteReason, targetExposure };
     }
     
-    // Rule 7: Normal logic - use regular exposure threshold
+    // Rule 7: Normal logic - use regular exposure threshold as target
+    targetExposure = 100; // Normal mode always votes to 100%
     if (currentExposure < effectiveThreshold) {
         shouldVote = true;
         voteReason = `normal threshold: exposure ${currentExposure}% < ${effectiveThreshold}%`;
@@ -136,7 +141,7 @@ const evaluateVotingDecision = (challenge, now) => {
         voteReason = `normal threshold: exposure ${currentExposure}% >= ${effectiveThreshold}%`;
     }
     
-    return { shouldVote, voteReason };
+    return { shouldVote, voteReason, targetExposure };
 };
 
 /**
@@ -145,7 +150,7 @@ const evaluateVotingDecision = (challenge, now) => {
  * @param {Object} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
  * @param {string} challengeTitle - Challenge title for error messages
- * @returns {Object} - Decision with shouldAllowVoting boolean and errorMessage string
+ * @returns {Object} - Decision with shouldAllowVoting boolean, errorMessage string, and targetExposure number
  */
 const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
     const challengeId = challenge.id.toString();
@@ -166,51 +171,56 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
     // Evaluate voting decision based on business rules
     let shouldAllowVoting = false;
     let errorMessage = '';
+    let targetExposure = 100; // Default target exposure
     
     // Rule 1: Flash type challenges - always use 100% threshold
     if (challenge.type === 'flash') {
+        targetExposure = 100;
         if (currentExposure >= 100) {
             errorMessage = `Challenge "${challengeTitle}" already has 100% exposure (flash type)`;
         } else {
             shouldAllowVoting = true;
         }
-        return { shouldAllowVoting, errorMessage };
+        return { shouldAllowVoting, errorMessage, targetExposure };
     }
     
     // Rule 2: Vote-only-in-last-minute mode - skip if not within threshold
     if (voteOnlyInLastMinute && !isWithinLastMinute) {
         errorMessage = `Challenge "${challengeTitle}" voting is restricted to last ${effectiveLastMinuteThreshold} minutes only`;
-        return { shouldAllowVoting, errorMessage };
+        return { shouldAllowVoting, errorMessage, targetExposure };
     }
     
     // Rule 3: Within last minute threshold - always use 100% threshold
     if (isWithinLastMinute) {
+        targetExposure = 100;
         if (currentExposure >= 100) {
             errorMessage = `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`;
         } else {
             shouldAllowVoting = true;
         }
-        return { shouldAllowVoting, errorMessage };
+        return { shouldAllowVoting, errorMessage, targetExposure };
     }
     
-    // Rule 4: Within last hour - use lastHourExposure threshold
+    // Rule 4: Within last hour - use lastHourExposure threshold as target
     if (withinLastHour) {
+        targetExposure = effectiveLastHourExposure;
         if (currentExposure >= effectiveLastHourExposure) {
             errorMessage = `Challenge "${challengeTitle}" already has ${effectiveLastHourExposure}% exposure (last hour threshold)`;
         } else {
             shouldAllowVoting = true;
         }
-        return { shouldAllowVoting, errorMessage };
+        return { shouldAllowVoting, errorMessage, targetExposure };
     }
     
-    // Rule 5: Normal logic - use regular exposure threshold
+    // Rule 5: Normal logic - use regular exposure threshold as target
+    targetExposure = 100; // Normal mode always votes to 100%
     if (currentExposure >= effectiveThreshold) {
         errorMessage = `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`;
     } else {
         shouldAllowVoting = true;
     }
     
-    return { shouldAllowVoting, errorMessage };
+    return { shouldAllowVoting, errorMessage, targetExposure };
 };
 
 /**

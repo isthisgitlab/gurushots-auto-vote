@@ -203,9 +203,10 @@ const settingsSchema = {
         if (typeof value.perChallenge !== 'object' || value.perChallenge === null) return false;
 
         // Validate global defaults against schema
-        for (const [key, schemaValue] of Object.entries(SETTINGS_SCHEMA)) {
+        for (const [key] of Object.entries(SETTINGS_SCHEMA)) {
             if (Object.prototype.hasOwnProperty.call(value.globalDefaults, key)) {
-                if (!schemaValue.validation(value.globalDefaults[key])) return false;
+                // Use the enhanced validateSetting function for consistency
+                if (!validateSetting(key, value.globalDefaults[key], value.globalDefaults)) return false;
             }
         }
 
@@ -213,7 +214,11 @@ const settingsSchema = {
         for (const [, challengeOverrides] of Object.entries(value.perChallenge)) {
             if (typeof challengeOverrides !== 'object' || challengeOverrides === null) return false;
             for (const [key, overrideValue] of Object.entries(challengeOverrides)) {
-                if (SETTINGS_SCHEMA[key] && !SETTINGS_SCHEMA[key].validation(overrideValue)) return false;
+                if (SETTINGS_SCHEMA[key]) {
+                    // Merge global defaults with challenge overrides for context
+                    const contextSettings = {...value.globalDefaults, ...challengeOverrides};
+                    if (!validateSetting(key, overrideValue, contextSettings)) return false;
+                }
             }
         }
 
@@ -226,37 +231,41 @@ const settingsSchema = {
  * Validates a single setting against its schema
  * @param {string} key - The setting key to validate
  * @param {any} value - The value to validate
+ * @param {Object} allSettings - All settings values for context validation (optional)
+ * @param {string} challengeId - Challenge ID for per-challenge validation context (optional)
  * @returns {boolean} - True if valid, false otherwise
  */
-const validateSetting = (key, value) => {
-    // If we don't have a validator for this key, assume it's valid
-    if (!settingsSchema[key]) return true;
-
-    // Run the validator
-    return settingsSchema[key](value);
-};
-
-/**
- * Validates all settings against their schemas
- * @param {Object} settings - The settings object to validate
- * @returns {Object} - Object containing validated settings and whether changes were made
- */
-const validateSettings = (settings) => {
-    const validatedSettings = {...settings};
-    let hasChanges = false;
-
-    // Check each setting against its validator
-    Object.keys(validatedSettings).forEach(key => {
-        if (settingsSchema[key] && !validateSetting(key, validatedSettings[key])) {
-            // If invalid, reset to default
-            logger.warning(`Invalid setting value for ${key}, resetting to default`);
-            validatedSettings[key] = getDefaultSettings()[key];
-            hasChanges = true;
+const validateSetting = (key, value, allSettings = null, challengeId = null) => {
+    // Check both settingsSchema (legacy) and SETTINGS_SCHEMA (new)
+    const legacyValidator = settingsSchema[key];
+    const schemaConfig = SETTINGS_SCHEMA[key];
+    
+    // If we have neither validator, assume it's valid
+    if (!legacyValidator && !schemaConfig) return true;
+    
+    // Run legacy validator if it exists
+    if (legacyValidator && !legacyValidator(value)) {
+        return false;
+    }
+    
+    // Run schema validation if it exists
+    if (schemaConfig) {
+        // Basic validation
+        if (schemaConfig.validation && !schemaConfig.validation(value)) {
+            return false;
         }
-    });
-
-    return {validatedSettings, hasChanges};
+        
+        // Context validation (requires allSettings)
+        if (schemaConfig.contextValidation && allSettings) {
+            if (!schemaConfig.contextValidation(value, allSettings, challengeId)) {
+                return false;
+            }
+        }
+    }
+    
+    return true;
 };
+
 
 /**
  * Simple settings storage without caching
@@ -336,12 +345,9 @@ const loadSettings = () => {
                 logger.info('Migrated voteFrequency to checkFrequency');
             }
 
-            // Validate settings
-            const {validatedSettings, hasChanges} = validateSettings(mergedSettings);
-
-            // If validation or migration changed any settings, save the corrected settings
-            if (hasChanges || migrationChanges) {
-                fs.writeFileSync(settingsPath, JSON.stringify(validatedSettings, null, 2), 'utf8');
+            // If migration made changes, save the updated settings
+            if (migrationChanges) {
+                fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2), 'utf8');
             }
 
             // Run migration for boost configuration if needed - but avoid recursion
@@ -360,7 +366,7 @@ const loadSettings = () => {
                 }
             }
 
-            return validatedSettings;
+            return mergedSettings;
         }
 
         // If the file doesn't exist, return default settings
@@ -391,16 +397,8 @@ const saveSettings = (settings) => {
         const currentSettings = loadSettings();
         const mergedSettings = {...currentSettings, ...settings};
 
-        // Validate the merged settings
-        const {validatedSettings, hasChanges} = validateSettings(mergedSettings);
-
-        // If validation made changes, log a warning
-        if (hasChanges) {
-            logger.warning('Some settings were invalid and have been reset to defaults');
-        }
-
-        // Write the validated settings to the file
-        fs.writeFileSync(settingsPath, JSON.stringify(validatedSettings, null, 2), 'utf8');
+        // Write the settings to the file
+        fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2), 'utf8');
 
         return true;
     } catch (error) {
@@ -492,6 +490,38 @@ const getGlobalDefault = (settingKey) => {
 };
 
 /**
+ * Get detailed validation error information for a setting
+ * @param {string} settingKey - The setting key
+ * @param {*} value - The value to validate
+ * @param {object} allSettings - All settings for context validation
+ * @returns {string|null} - Error message if validation fails, null if valid
+ */
+const getValidationError = (settingKey, value, allSettings = null) => {
+    const schemaConfig = SETTINGS_SCHEMA[settingKey];
+    if (!schemaConfig) {
+        return null; // No schema config, assume valid
+    }
+
+    // Check basic validation first
+    if (schemaConfig.validation && !schemaConfig.validation(value)) {
+        return 'Invalid value';
+    }
+
+    // Check context validation only if basic validation passes
+    if (schemaConfig.contextValidation && allSettings) {
+        if (!schemaConfig.contextValidation(value, allSettings)) {
+            // Return context-specific error if available
+            if (schemaConfig.getContextError) {
+                return schemaConfig.getContextError(value, allSettings);
+            }
+            return 'Invalid value in current context';
+        }
+    }
+
+    return null; // Valid
+};
+
+/**
  * Set global default value for a setting
  * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
  * @param {any} value - The value to set
@@ -503,12 +533,19 @@ const setGlobalDefault = (settingKey, value) => {
         return false;
     }
 
-    if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
+    // Get current global defaults for context validation
+    const settings = loadSettings();
+    const currentGlobalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const contextSettings = {...currentGlobalDefaults, [settingKey]: value};
+    
+    // Get detailed validation error information
+    const validationError = getValidationError(settingKey, value, contextSettings);
+    if (validationError) {
         logger.error(`Invalid value for setting ${settingKey}:`, value);
+        logger.error(validationError);
         return false;
     }
 
-    const settings = loadSettings();
     if (!settings.challengeSettings) {
         settings.challengeSettings = getDefaultSettings().challengeSettings;
     }
@@ -557,12 +594,17 @@ const setChallengeOverride = (settingKey, challengeId, value) => {
         return false;
     }
 
-    if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
+    // Get current settings for context validation
+    const settings = loadSettings();
+    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const existingOverrides = settings.challengeSettings?.perChallenge?.[challengeId] || {};
+    const contextSettings = {...globalDefaults, ...existingOverrides, [settingKey]: value};
+
+    if (!validateSetting(settingKey, value, contextSettings, challengeId)) {
         logger.error(`Invalid value for setting ${settingKey}:`, value);
         return false;
     }
 
-    const settings = loadSettings();
     if (!settings.challengeSettings) {
         settings.challengeSettings = getDefaultSettings().challengeSettings;
     }
@@ -626,7 +668,12 @@ const setChallengeOverrides = (challengeId, overrides) => {
             continue;
         }
 
-        if (!SETTINGS_SCHEMA[settingKey].validation(value)) {
+        // Create context with global defaults and current batch of overrides
+        const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+        const existingOverrides = settings.challengeSettings?.perChallenge?.[challengeId] || {};
+        const contextSettings = {...globalDefaults, ...existingOverrides, ...overrides};
+
+        if (!validateSetting(settingKey, value, contextSettings, challengeId)) {
             logger.error(`Invalid value for setting ${settingKey}:`, value);
             continue;
         }
@@ -971,6 +1018,7 @@ const SETTINGS_SCHEMA = {
         default: 3600, // 1 hour in seconds
         perChallenge: true,
         validation: (value) => typeof value === 'number' && value >= 0,
+        validationOrder: 1, // Validate first (no dependencies)
         label: 'app.boostTime',
         description: 'app.boostTimeDesc',
     },
@@ -978,7 +1026,8 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 100,
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
+        validation: (value) => typeof value === 'number' && value >= 1 && value <= 100,
+        validationOrder: 1, // Validate first (no dependencies)
         label: 'app.exposure',
         description: 'app.exposureDesc',
     },
@@ -986,7 +1035,8 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 10,
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 1,
+        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
+        validationOrder: 1, // Validate first (no dependencies)
         label: 'app.lastMinuteThreshold',
         description: 'app.lastMinuteThresholdDesc',
     },
@@ -995,6 +1045,7 @@ const SETTINGS_SCHEMA = {
         default: false,
         perChallenge: true,
         validation: (value) => typeof value === 'boolean',
+        validationOrder: 1, // Validate first (no dependencies)
         label: 'app.onlyBoost',
         description: 'app.onlyBoostDesc',
     },
@@ -1003,6 +1054,7 @@ const SETTINGS_SCHEMA = {
         default: false,
         perChallenge: true,
         validation: (value) => typeof value === 'boolean',
+        validationOrder: 1, // Validate first (no dependencies)
         label: 'app.voteOnlyInLastMinute',
         description: 'app.voteOnlyInLastMinuteDesc',
     },
@@ -1010,7 +1062,8 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 0,
         perChallenge: false,
-        validation: (value) => typeof value === 'number' && value >= 0 && value <= 60,
+        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
+        validationOrder: 1, // Validate first (no dependencies)
         label: 'app.lastMinuteCheckFrequency',
         description: 'app.lastMinuteCheckFrequencyDesc',
     },
@@ -1018,7 +1071,25 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 100,
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
+        validation: (value) => typeof value === 'number' && value >= 1 && value <= 100,
+        contextValidation: (value, allSettings) => {
+            const exposureValue = allSettings.exposure;
+            // If exposure is not set or invalid, use the exposure default for comparison
+            const effectiveExposure = (typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100) 
+                ? exposureValue 
+                : SETTINGS_SCHEMA.exposure.default;
+            return value <= effectiveExposure;
+        },
+        getContextError: (value, allSettings) => {
+            const exposureValue = allSettings.exposure;
+            const effectiveExposure = (typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100) 
+                ? exposureValue 
+                : SETTINGS_SCHEMA.exposure.default;
+            // Return a string that the UI will translate
+            return `VALIDATION_LESS_OR_EQUAL|app.exposure|${effectiveExposure}`;
+        },
+        dependsOn: ['exposure'],
+        validationOrder: 2, // Validate after dependencies
         label: 'app.lastHourExposure',
         description: 'app.lastHourExposureDesc',
     },
@@ -1053,6 +1124,7 @@ module.exports = {
     // Schema-based settings functions
     SETTINGS_SCHEMA,
     getSettingsSchema,
+    getValidationError,
     getGlobalDefault,
     setGlobalDefault,
     getChallengeOverride,

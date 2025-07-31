@@ -67,6 +67,7 @@ contextBridge.exposeInMainWorld(
         cleanupStaleMetadata: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-metadata', activeChallengeIds),
         cleanupObsoleteSettings: () => ipcRenderer.invoke('cleanup-obsolete-settings'),
         getSettingsSchema: () => ipcRenderer.invoke('get-settings-schema'),
+        getValidationError: (settingKey, value, allSettings) => ipcRenderer.invoke('get-validation-error', settingKey, value, allSettings),
 
         // Reset methods
         resetSetting: (key) => ipcRenderer.invoke('reset-setting', key),

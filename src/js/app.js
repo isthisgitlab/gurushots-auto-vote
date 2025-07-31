@@ -171,14 +171,21 @@ window.closeChallengeSettingsModal = () => {
     }
 };
 
-window.saveGlobalSettings = async () => {
+window.saveGlobalSettings = async (event) => {
+    // Prevent default form submission behavior immediately
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+    }
+    
     try {
         // Stop autovote if it's running before saving settings
         if (window.stopAutovote) {
             await window.stopAutovote();
         }
 
-        // Save all UI settings first
+        // Collect all UI settings without saving yet
         const themeToggle = document.getElementById('modal-theme-toggle');
         const languageSelect = document.getElementById('modal-language-select');
         const timezoneSelect = document.getElementById('modal-timezone-select');
@@ -186,33 +193,31 @@ window.saveGlobalSettings = async () => {
         const apiTimeout = document.getElementById('modal-api-timeout');
         const checkFrequency = document.getElementById('modal-check-frequency');
 
+        const uiSettingsToSave = {};
+        
         if (themeToggle) {
-            await window.api.setSetting('theme', themeToggle.checked ? 'dark' : 'light');
-            themeToggle.classList.remove('input-error');
+            uiSettingsToSave.theme = themeToggle.checked ? 'dark' : 'light';
         }
         if (languageSelect) {
-            await window.api.setSetting('language', languageSelect.value);
-            languageSelect.classList.remove('input-error');
+            uiSettingsToSave.language = languageSelect.value;
         }
         if (timezoneSelect) {
-            await window.api.setSetting('timezone', timezoneSelect.value);
-            timezoneSelect.classList.remove('input-error');
+            uiSettingsToSave.timezone = timezoneSelect.value;
         }
         if (stayLoggedIn) {
-            await window.api.setSetting('stayLoggedIn', stayLoggedIn.checked);
-            stayLoggedIn.classList.remove('input-error');
+            uiSettingsToSave.stayLoggedIn = stayLoggedIn.checked;
         }
         if (apiTimeout) {
-            await window.api.setSetting('apiTimeout', parseInt(apiTimeout.value));
-            apiTimeout.classList.remove('input-error');
+            uiSettingsToSave.apiTimeout = parseInt(apiTimeout.value);
         }
         if (checkFrequency) {
-            await window.api.setSetting('checkFrequency', parseInt(checkFrequency.value));
-            checkFrequency.classList.remove('input-error');
+            uiSettingsToSave.checkFrequency = parseInt(checkFrequency.value);
         }
 
-        // Save all global settings
+        // Collect all schema settings and validate without saving yet
         const schema = await window.api.getSettingsSchema();
+        const validationErrors = [];
+        const schemaSettingsToSave = {};
 
         for (const [key, config] of Object.entries(schema)) {
             const inputId = `global-${key}`;
@@ -225,28 +230,86 @@ window.saveGlobalSettings = async () => {
                     const minutesInput = document.getElementById(`${inputId}-minutes`);
                     if (hoursInput && minutesInput) {
                         value = (parseInt(hoursInput.value) * 3600) + (parseInt(minutesInput.value) * 60);
-                        // Clear warning classes after saving
-                        hoursInput.classList.remove('input-error');
-                        minutesInput.classList.remove('input-error');
                     }
                 } else if (config.type === 'boolean') {
                     value = input.checked;
-                    input.classList.remove('input-error');
                 } else {
                     const parsedValue = parseInt(input.value);
                     value = isNaN(parsedValue) ? input.value : parsedValue;
-                    input.classList.remove('input-error');
                 }
 
-                await window.api.setGlobalDefault(key, value);
+                // Test validation without saving
+                const validationError = await window.api.getValidationError(key, value, {...schemaSettingsToSave, [key]: value});
                 
-                // Handle threshold scheduling changes for relevant settings
-                if (key === 'lastMinuteCheckFrequency' || key === 'lastMinuteThreshold') {
-                    if (window.handleThresholdSettingsChange) {
-                        await window.handleThresholdSettingsChange();
+                if (!validationError) {
+                    // Valid - store for saving later
+                    schemaSettingsToSave[key] = value;
+                    
+                    // Clear error styling
+                    if (config.type === 'time') {
+                        const hoursInput = document.getElementById(`${inputId}-hours`);
+                        const minutesInput = document.getElementById(`${inputId}-minutes`);
+                        if (hoursInput && minutesInput) {
+                            hoursInput.classList.remove('input-error');
+                            minutesInput.classList.remove('input-error');
+                        }
+                    } else {
+                        input.classList.remove('input-error');
+                    }
+                } else {
+                    // Invalid - add to error list and add error styling
+                    const settingLabel = window.translationManager ? window.translationManager.t(config.label || key) : (config.label || key);
+                    // Handle special validation error formats
+                    let errorMessage = validationError;
+                    if (validationError && validationError.startsWith('VALIDATION_LESS_OR_EQUAL|')) {
+                        const parts = validationError.split('|');
+                        const exposureLabel = window.translationManager ? window.translationManager.t(parts[1]) : parts[1];
+                        const currentValue = parts[2];
+                        errorMessage = window.translationManager 
+                            ? window.translationManager.t('app.validationMustBeLessOrEqual').replace('{0}', exposureLabel).replace('{1}', currentValue)
+                            : `Must be ≤ ${exposureLabel} (currently ${currentValue})`;
+                    } else if (!errorMessage) {
+                        errorMessage = window.translationManager ? window.translationManager.t('app.validationInvalidValue') : 'Invalid value';
+                    }
+                    validationErrors.push(`${settingLabel}: ${errorMessage}`);
+                    
+                    if (config.type === 'time') {
+                        const hoursInput = document.getElementById(`${inputId}-hours`);
+                        const minutesInput = document.getElementById(`${inputId}-minutes`);
+                        if (hoursInput && minutesInput) {
+                            hoursInput.classList.add('input-error');
+                            minutesInput.classList.add('input-error');
+                        }
+                    } else {
+                        input.classList.add('input-error');
                     }
                 }
             }
+        }
+
+        // If there were validation errors, show them to the user
+        if (validationErrors.length > 0) {
+            // Prevent any navigation
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+            }
+            
+            const errorMessage = `The following settings have invalid values:\n\n${validationErrors.join('\n')}\n\nPlease correct these values and try again.`;
+            alert(errorMessage);
+            return false; // Don't close modal or refresh
+        }
+
+        // All validation passed - now save everything
+        // First save UI settings
+        for (const [key, value] of Object.entries(uiSettingsToSave)) {
+            await window.api.setSetting(key, value);
+        }
+
+        // Then save schema settings
+        for (const [key, value] of Object.entries(schemaSettingsToSave)) {
+            await window.api.setGlobalDefault(key, value);
         }
 
         // Close modal
@@ -263,6 +326,12 @@ window.saveGlobalSettings = async () => {
     } catch (error) {
         await window.api.logError('Error saving settings:', error);
         alert('Failed to save settings. Check console for details.');
+        // Prevent navigation on error
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        return false;
     }
 };
 
@@ -401,7 +470,12 @@ window.resetUISetting = async (key) => {
     }
 };
 
-window.saveChallengeSettings = async (challengeId) => {
+window.saveChallengeSettings = async (challengeId, event) => {
+    // Prevent default form submission behavior
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
     try {
         // Stop autovote if it's running before saving challenge settings
         if (window.stopAutovote) {
@@ -409,6 +483,7 @@ window.saveChallengeSettings = async (challengeId) => {
         }
 
         const schema = await window.api.getSettingsSchema();
+        const validationErrors = [];
 
         for (const [key, config] of Object.entries(schema)) {
             const inputId = `${key}-${challengeId}`;
@@ -421,21 +496,53 @@ window.saveChallengeSettings = async (challengeId) => {
                     const minutesInput = document.getElementById(`${inputId}-minutes`);
                     if (hoursInput && minutesInput) {
                         value = (parseInt(hoursInput.value) * 3600) + (parseInt(minutesInput.value) * 60);
-                        // Clear warning classes after saving
-                        hoursInput.classList.remove('input-error');
-                        minutesInput.classList.remove('input-error');
                     }
                 } else if (config.type === 'boolean') {
                     value = input.checked;
-                    input.classList.remove('input-error');
                 } else {
                     const parsedValue = parseInt(input.value);
                     value = isNaN(parsedValue) ? input.value : parsedValue;
-                    input.classList.remove('input-error');
                 }
 
-                await window.api.setChallengeOverride(key, challengeId, value);
+                const result = await window.api.setChallengeOverride(key, challengeId, value);
+                
+                if (result) {
+                    // Success - clear warning classes
+                    if (config.type === 'time') {
+                        const hoursInput = document.getElementById(`${inputId}-hours`);
+                        const minutesInput = document.getElementById(`${inputId}-minutes`);
+                        if (hoursInput && minutesInput) {
+                            hoursInput.classList.remove('input-error');
+                            minutesInput.classList.remove('input-error');
+                        }
+                    } else {
+                        input.classList.remove('input-error');
+                    }
+                } else {
+                    // Validation failed - keep error styling and add to error list
+                    const settingLabel = window.translationManager ? window.translationManager.t(config.label || key) : (config.label || key);
+                    const invalidMessage = window.translationManager ? window.translationManager.t('app.validationInvalidValue') : 'Invalid value';
+                    validationErrors.push(`${settingLabel}: ${invalidMessage}`);
+                    
+                    if (config.type === 'time') {
+                        const hoursInput = document.getElementById(`${inputId}-hours`);
+                        const minutesInput = document.getElementById(`${inputId}-minutes`);
+                        if (hoursInput && minutesInput) {
+                            hoursInput.classList.add('input-error');
+                            minutesInput.classList.add('input-error');
+                        }
+                    } else {
+                        input.classList.add('input-error');
+                    }
+                }
             }
+        }
+
+        // If there were validation errors, show them to the user
+        if (validationErrors.length > 0) {
+            const errorMessage = `The following challenge settings have invalid values:\n\n${validationErrors.join('\n')}\n\nPlease correct these values and try again.`;
+            alert(errorMessage);
+            return; // Don't close modal or refresh
         }
 
         // Close modal
