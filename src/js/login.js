@@ -6,25 +6,25 @@ const logger = {
     info: (message, ...args) => {
         console.log(`[INFO] ${message}`, ...args);
         if (window.api && window.api.logDebug) {
-            window.api.logDebug(message, args.length > 0 ? args : null);
+            window.api.logDebug(`${message} ${args.length > 0 ? args.join(' ') : ''}`);
         }
     },
     error: (message, ...args) => {
         console.error(`[ERROR] ${message}`, ...args);
         if (window.api && window.api.logError) {
-            window.api.logError(message, args.length > 0 ? args : null);
+            window.api.logError(`${message} ${args.length > 0 ? args.join(' ') : ''}`);
         }
     },
     warning: (message, ...args) => {
         console.warn(`[WARNING] ${message}`, ...args);
         if (window.api && window.api.logDebug) {
-            window.api.logDebug(`WARNING: ${message}`, args.length > 0 ? args : null);
+            window.api.logDebug(`WARNING: ${message} ${args.length > 0 ? args.join(' ') : ''}`);
         }
     },
     success: (message, ...args) => {
         console.log(`[SUCCESS] ${message}`, ...args);
         if (window.api && window.api.logDebug) {
-            window.api.logDebug(`SUCCESS: ${message}`, args.length > 0 ? args : null);
+            window.api.logDebug(`SUCCESS: ${message} ${args.length > 0 ? args.join(' ') : ''}`);
         }
     },
 };
@@ -248,6 +248,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             updateTranslations();
             updateBottomText(mockToggle.checked); // Update bottom text with new language
+            
+            // Refresh menu to update language
+            if (window.api && window.api.refreshMenu) {
+                await window.api.refreshMenu();
+            }
+            
+            // Close the dropdown by removing focus
+            const dropdown = document.querySelector('.dropdown');
+            if (dropdown) {
+                dropdown.blur();
+                // Also blur any focused elements inside the dropdown
+                const focusedElement = document.activeElement;
+                if (focusedElement && dropdown.contains(focusedElement)) {
+                    focusedElement.blur();
+                }
+            }
         });
     });
 

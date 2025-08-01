@@ -6,7 +6,7 @@ const {initializeHeaders} = require('./api/randomizer');
 const logger = require('./logger');
 const votingLogic = require('./services/VotingLogic');
 const { createApplicationMenu, updateMenuTranslations } = require('./ui/applicationMenu');
-const { translationManager } = require('./translations');
+const { translationManager } = require('./translations/index');
 
 // Initialize global translation manager for menu module access
 global.translationManager = translationManager;
@@ -435,7 +435,7 @@ ipcMain.handle('gui-vote', async () => {
 ipcMain.handle('get-active-challenges', async (event, token) => {
     try {
         logger.debug('=== IPC get-active-challenges ===');
-        logger.debug('Token received:', !!token);
+        logger.debug(`Token received: ${!!token}`);
 
         // Use the API factory to get the appropriate strategy
         const {getApiStrategy} = require('./apiFactory');
@@ -931,7 +931,7 @@ ipcMain.handle('set-cancel-voting', (event, shouldCancel) => {
 // Handle vote-on-challenge request
 ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) => {
     try {
-        logger.info('🔄 Vote on challenge request:', {challengeId, challengeTitle});
+        logger.info(`🔄 Vote on challenge request: ID=${challengeId}, Title="${challengeTitle}"`);
 
         const userSettings = settings.loadSettings();
 
@@ -958,13 +958,13 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
             };
         }
 
-        logger.debug('📋 Found challenges:', challengesResponse.challenges.map(c => ({id: c.id, title: c.title})));
+        logger.debug(`📋 Found challenges: [${challengesResponse.challenges.map(c => `${c.id}:"${c.title}"`).join(', ')}]`);
         logger.debug('🔍 Looking for challenge ID:', challengeId, 'Type:', typeof challengeId);
 
         // Find the specific challenge (convert challengeId to number for comparison)
         const challenge = challengesResponse.challenges.find(c => c.id === parseInt(challengeId));
 
-        logger.debug('🎯 Challenge found:', challenge ? {id: challenge.id, title: challenge.title} : 'NOT FOUND');
+        logger.debug(`🎯 Challenge found: ${challenge ? `ID=${challenge.id}, Title="${challenge.title}"` : 'NOT FOUND'}`);
 
         if (!challenge) {
             logger.warning('❌ Challenge not found:', {challengeId, challengeTitle});
@@ -997,7 +997,7 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         logger.info('🗳️ Starting voting process for challenge:', challenge.title);
 
         const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
-        logger.debug('📸 Vote images received:', voteImages ? {imageCount: voteImages.images?.length} : 'No vote images');
+        logger.debug(`📸 Vote images received: ${voteImages ? `Count=${voteImages.images?.length}` : 'No vote images'}`);
 
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
             logger.info('✅ Submitting votes...');
@@ -1024,7 +1024,7 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
 // Handle apply boost to entry request
 ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
     try {
-        logger.info('🚀 Apply boost to entry request:', {challengeId, imageId});
+        logger.info(`🚀 Apply boost to entry request: Challenge=${challengeId}, Image=${imageId}`);
 
         const userSettings = settings.loadSettings();
 
@@ -1041,7 +1041,7 @@ ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
         const strategy = getApiStrategy();
 
         // Apply boost to the specific entry
-        logger.info('🚀 Applying boost to entry:', {challengeId, imageId});
+        logger.info(`🚀 Applying boost to entry: Challenge=${challengeId}, Image=${imageId}`);
         const result = await strategy.applyBoostToEntry(challengeId, imageId, userSettings.token);
 
         if (result) {

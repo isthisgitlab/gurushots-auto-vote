@@ -371,13 +371,13 @@ const loadSettings = () => {
 
         // If the file doesn't exist, return default settings
         const defaultSettings = getDefaultSettings();
-        logger.info('No settings file found, loaded default settings with keys:', Object.keys(defaultSettings));
+        logger.info(`No settings file found, loaded default settings with keys: ${Object.keys(defaultSettings).join(', ')}`);
         return defaultSettings;
     } catch (error) {
         logger.error('Error loading settings:', error);
         // Return default settings if there's an error
         const defaultSettings = getDefaultSettings();
-        logger.info('Loaded default settings with keys:', Object.keys(defaultSettings));
+        logger.info(`Loaded default settings with keys: ${Object.keys(defaultSettings).join(', ')}`);
         return defaultSettings;
     }
 };
@@ -813,7 +813,7 @@ const cleanupObsoleteSettings = () => {
                 const invalidGlobalKeys = globalDefaultKeys.filter(key => !validSchemaKeys.includes(key));
 
                 if (invalidGlobalKeys.length > 0) {
-                    logger.debug('Removing invalid global default keys:', invalidGlobalKeys);
+                    logger.debug(`Removing invalid global default keys: ${invalidGlobalKeys.join(', ')}`);
                     invalidGlobalKeys.forEach(key => {
                         delete settings.challengeSettings.globalDefaults[key];
                         hasChanges = true;

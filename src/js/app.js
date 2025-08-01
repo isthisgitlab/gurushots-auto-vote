@@ -30,7 +30,7 @@ window.openSettingsModal = async () => {
             try {
                 globalDefaults[key] = await window.api.getGlobalDefault(key);
             } catch (error) {
-                await window.api.logWarning(`Error loading global default for ${key}:`, error);
+                await window.api.logWarning(`Error loading global default for ${key}: ${error.message || error}`);
                 globalDefaults[key] = schema[key].default;
             }
         }
@@ -45,7 +45,7 @@ window.openSettingsModal = async () => {
         initializeSettingsModal(schema, []);
 
     } catch (error) {
-        await window.api.logError('Error opening settings modal:', error);
+        await window.api.logError(`Error opening settings modal: ${error.message || error}`);
         alert('Failed to open settings modal. Check console for details.');
     }
 };
@@ -70,7 +70,7 @@ window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
                 globalDefaults[key] = await window.api.getGlobalDefault(key);
                 challengeSettings[key] = await window.api.getChallengeOverride(key, challengeId);
             } catch (error) {
-                await window.api.logWarning(`Error loading settings for ${key}:`, error);
+                await window.api.logWarning(`Error loading settings for ${key}: ${error.message || error}`);
                 globalDefaults[key] = schema[key].default;
                 challengeSettings[key] = null;
             }
@@ -86,7 +86,7 @@ window.openChallengeSettingsModal = async (challengeId, challengeTitle) => {
         initializeChallengeSettingsModal(schema, challengeId);
 
     } catch (error) {
-        await window.api.logError('Error opening challenge settings modal:', error);
+        await window.api.logError(`Error opening challenge settings modal: ${error.message || error}`);
         alert('Failed to open challenge settings modal. Check console for details.');
     }
 };
@@ -97,6 +97,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize challenge timers array
     window.challengeTimers = [];
+
+    // Expose loadChallenges function to window object
+    window.loadChallenges = loadChallenges;
 
     // Initialize update dialog
     initializeUpdateDialog();
@@ -123,7 +126,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await loadChallenges(settings.timezone || 'Europe/Riga', false);
 
     } catch (error) {
-        await window.api.logError('Error loading initial settings:', error);
+        await window.api.logError(`Error loading initial settings: ${error.message || error}`);
     }
 
     // Event listeners
@@ -150,7 +153,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             await window.api.openExternalUrl(`https://gurushots.com/challenge/${url}`);
         } catch (error) {
-            await window.api.logError('Error opening challenge URL:', error);
+            await window.api.logError(`Error opening challenge URL: ${error.message || error}`);
         }
     };
 
@@ -327,7 +330,7 @@ window.saveGlobalSettings = async (event) => {
         await loadChallenges(timezone, false);
 
     } catch (error) {
-        await window.api.logError('Error saving settings:', error);
+        await window.api.logError(`Error saving settings: ${error.message || error}`);
         alert('Failed to save settings. Check console for details.');
         // Prevent navigation on error
         if (event) {
@@ -398,7 +401,7 @@ window.resetAllSettings = async () => {
         }
 
     } catch (error) {
-        await window.api.logError('Error resetting settings:', error);
+        await window.api.logError(`Error resetting settings: ${error.message || error}`);
         alert('Failed to reset settings. Check console for details.');
     }
 };
@@ -436,7 +439,7 @@ window.resetGlobalDefault = async (key) => {
             }
         }
     } catch (error) {
-        await window.api.logError('Error resetting global default:', error);
+        await window.api.logError(`Error resetting global default: ${error.message || error}`);
     }
 };
 
@@ -469,7 +472,7 @@ window.resetUISetting = async (key) => {
             }
         }
     } catch (error) {
-        await window.api.logError('Error resetting UI setting:', error);
+        await window.api.logError(`Error resetting UI setting: ${error.message || error}`);
     }
 };
 
@@ -556,7 +559,7 @@ window.saveChallengeSettings = async (challengeId, event) => {
         await loadChallenges(timezone, false);
 
     } catch (error) {
-        await window.api.logError('Error saving challenge settings:', error);
+        await window.api.logError(`Error saving challenge settings: ${error.message || error}`);
         alert('Failed to save challenge settings. Check console for details.');
     }
 };
@@ -596,7 +599,7 @@ window.resetChallengeSettings = async (challengeId) => {
         }
 
     } catch (error) {
-        await window.api.logError('Error resetting challenge settings:', error);
+        await window.api.logError(`Error resetting challenge settings: ${error.message || error}`);
         alert('Failed to reset challenge settings. Check console for details.');
     }
 };
@@ -635,6 +638,6 @@ window.resetChallengeOverride = async (key, challengeId) => {
             }
         }
     } catch (error) {
-        await window.api.logError('Error resetting challenge override:', error);
+        await window.api.logError(`Error resetting challenge override: ${error.message || error}`);
     }
 };

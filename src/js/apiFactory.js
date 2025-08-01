@@ -29,8 +29,8 @@ const getApiStrategy = () => {
     // Check if we need to recreate the strategy due to setting change
     if (lastMockSetting !== userSettings.mock || !currentStrategy) {
         logger.debug('=== API Factory Debug ===');
-        logger.debug('Mock setting:', userSettings.mock);
-        logger.debug('Token exists:', !!userSettings.token);
+        logger.debug(`Mock setting: ${userSettings.mock}`);
+        logger.debug(`Token exists: ${!!userSettings.token}`);
 
         // Create the appropriate strategy
         if (userSettings.mock) {
