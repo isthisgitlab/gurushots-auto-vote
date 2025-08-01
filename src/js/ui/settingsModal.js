@@ -84,6 +84,25 @@ export const generateSettingsModalHtml = async (schema, globalDefaults, challeng
                     </button>
                 </div>
                 
+                <!-- Duplicate buttons at top for better UX -->
+                <div class="flex justify-end gap-2 mb-4">
+                    <button class="btn btn-latvian" onclick="saveGlobalSettings(event)" type="button">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>${translationManager.t('app.save')}</span>
+                    </button>
+                    <button class="btn btn-warning" onclick="resetAllSettings()">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <span>${translationManager.t('app.resetAll')}</span>
+                    </button>
+                    <button class="btn" onclick="closeSettingsModal()">
+                        <span>${translationManager.t('app.cancel')}</span>
+                    </button>
+                </div>
+                
                 <div class="space-y-6">
                     <!-- App Settings Section -->
                     <div>
@@ -588,6 +607,25 @@ export const generateChallengeSettingsModalHtml = async (challengeId, challengeT
                 <div class="mb-4">
                     <h4 class="font-semibold text-base mb-2">${challengeTitle}</h4>
                     <p class="text-sm text-base-content/60">${translationManager.t('app.challengeSettingsDesc')}</p>
+                </div>
+                
+                <!-- Duplicate buttons at top for better UX -->
+                <div class="flex justify-end gap-2 mb-4">
+                    <button class="btn btn-latvian" onclick="saveChallengeSettings('${challengeId}', event)" type="button">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                        <span>${translationManager.t('app.save')}</span>
+                    </button>
+                    <button class="btn btn-warning" onclick="resetChallengeSettings('${challengeId}')">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        <span>${translationManager.t('app.resetAll')}</span>
+                    </button>
+                    <button class="btn" onclick="closeChallengeSettingsModal()">
+                        <span>${translationManager.t('app.cancel')}</span>
+                    </button>
                 </div>
                 
                 <div class="space-y-4">
