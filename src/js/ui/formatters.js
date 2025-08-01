@@ -157,7 +157,7 @@ export const getLevelStatus = (level, levelName) => {
         return { text: `${levelName} ${level}`, colorClass: 'badge-premier' };
     case 'ELITE':
         return { text: `${levelName} ${level}`, colorClass: 'badge-elite' };
-    case 'ALLSTAR':
+    case 'ALL STAR':
         return { text: `${levelName} ${level}`, colorClass: 'badge-allstar' };
     default:
         return { text: `${levelName} ${level}`, colorClass: 'badge-warning' };

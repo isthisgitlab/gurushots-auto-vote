@@ -82,7 +82,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                         case 4:
                             return 'ELITE';
                         case 5:
-                            return 'ALLSTAR';
+                            return 'ALL STAR';
                         default:
                             return `LEVEL ${level}`;
                         }
@@ -241,8 +241,10 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                             <div class="w-full bg-base-300 rounded-full h-1.5">
                                 <div class="bg-latvian h-1.5 rounded-full" style="width: ${userProgress.percent}%"></div>
                             </div>
+                            ${challenge.type !== 'flash' ? `
+                            <div class="text-xs text-base-content/60 mt-1">${userProgress.next_message}</div>
+                            ` : ''}
                             ${nextLevelInfo ? `
-                                <div class="text-xs text-base-content/60 mt-1">${userProgress.next_message}</div>
                                 <div class="text-xs text-base-content/60 mt-1">
                                     ${translationManager.t('app.next')}: ${nextLevelInfo.levelName} (${nextLevelInfo.votesNeeded} ${translationManager.t('app.votesNeeded')})
                                 </div>
