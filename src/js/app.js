@@ -320,6 +320,9 @@ window.saveGlobalSettings = async (event) => {
         updateSettingsDisplay(settings);
         updateTranslations();
 
+        // Refresh menu to update language
+        await window.api.refreshMenu();
+
         const timezone = await window.api.getSetting('timezone');
         await loadChallenges(timezone, false);
 

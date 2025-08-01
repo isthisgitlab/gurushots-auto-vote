@@ -23,6 +23,27 @@ const translations = {
             theme: 'Theme',
             title: 'GuruShots Auto Vote',
             yes: 'Yes',
+            ok: 'OK',
+        },
+        // Menu translations
+        menu: {
+            file: 'File',
+            view: 'View',
+            window: 'Window',
+            help: 'Help',
+            reload: 'Reload',
+            toggleDevTools: 'Toggle Developer Tools',
+            toggleFullscreen: 'Toggle Fullscreen',
+            minimize: 'Minimize',
+            zoom: 'Zoom',
+            close: 'Close',
+            bringAllToFront: 'Bring All to Front',
+            about: 'About GuruShots Auto Vote',
+            aboutTitle: 'About GuruShots Auto Vote',
+            aboutAuthor: 'Author',
+            aboutElectron: 'Electron',
+            aboutNode: 'Node.js',
+            aboutDescription: 'GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)',
         },
         // Login screen specific
         login: {
@@ -190,6 +211,27 @@ const translations = {
             theme: 'Tēma',
             title: 'GuruShots Auto Vote',
             yes: 'Jā',
+            ok: 'Labi',
+        },
+        // Menu translations
+        menu: {
+            file: 'Fails',
+            view: 'Skats',
+            window: 'Logs',
+            help: 'Palīdzība',
+            reload: 'Pārlādēt',
+            toggleDevTools: 'Pārslēgt izstrādātāja rīkus',
+            toggleFullscreen: 'Pārslēgt pilnekrāna režīmu',
+            minimize: 'Samazināt',
+            zoom: 'Mērogot',
+            close: 'Aizvērt',
+            bringAllToFront: 'Pārvietot visus uz priekšu',
+            about: 'Par GuruShots Auto Vote',
+            aboutTitle: 'Par GuruShots Auto Vote',
+            aboutAuthor: 'Autors',
+            aboutElectron: 'Electron',
+            aboutNode: 'Node.js',
+            aboutDescription: 'GuruShots Auto Vote - Electron lietojumprogramma automātiskai balsošanai GuruShots izaicinājumos ar apvienotu GUI un CLI saskarni (atbalsta gan īstos, gan testa režīmus)',
         },
         // Login screen specific
         login: {
@@ -464,5 +506,10 @@ if (typeof window !== 'undefined' && !window.translationManager) {
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {translationManager: window.translationManager || new TranslationManager(), translations};
+    // Create instance for Node.js (main process)
+    const mainProcessTranslationManager = new TranslationManager();
+    module.exports = {
+        translationManager: typeof window !== 'undefined' ? window.translationManager : mainProcessTranslationManager,
+        translations,
+    };
 }

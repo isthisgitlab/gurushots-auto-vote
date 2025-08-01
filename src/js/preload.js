@@ -96,6 +96,9 @@ contextBridge.exposeInMainWorld(
         clearSkipVersion: () => ipcRenderer.invoke('clear-skip-version'),
         onShowUpdateDialog: (callback) => ipcRenderer.on('show-update-dialog', (event, updateInfo) => callback(updateInfo)),
 
+        // Menu methods
+        refreshMenu: () => ipcRenderer.invoke('refresh-menu'),
+
         // Optional: Add listeners for responses from main process
         // Example: on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args))
     },

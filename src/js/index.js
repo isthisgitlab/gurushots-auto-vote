@@ -5,6 +5,11 @@ const settings = require('./settings');
 const {initializeHeaders} = require('./api/randomizer');
 const logger = require('./logger');
 const votingLogic = require('./services/VotingLogic');
+const { createApplicationMenu, updateMenuTranslations } = require('./ui/applicationMenu');
+const { translationManager } = require('./translations');
+
+// Initialize global translation manager for menu module access
+global.translationManager = translationManager;
 
 // Disable service workers at the application level
 app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
@@ -206,6 +211,9 @@ app.whenReady().then(async () => {
 
     // Run log cleanup on app startup
     logger.cleanup();
+
+    // Create application menu
+    createApplicationMenu();
 
     // Check if we should auto-login and run update check before creating main window
     const userSettings = settings.loadSettings();
@@ -1115,6 +1123,20 @@ ipcMain.handle('clear-skip-version', async () => {
         return {success: true};
     } catch (error) {
         logger.error('Error clearing skip version:', error);
+        return {success: false, error: error.message};
+    }
+});
+
+// Handle refresh menu request
+ipcMain.handle('refresh-menu', async () => {
+    try {
+        // Update global translation manager language from settings
+        await global.translationManager.loadLanguageFromSettings();
+        // Refresh menu with new translations
+        updateMenuTranslations();
+        return {success: true};
+    } catch (error) {
+        logger.error('Error refreshing menu:', error);
         return {success: false, error: error.message};
     }
 });
