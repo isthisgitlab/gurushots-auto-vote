@@ -1,7 +1,18 @@
-const translationManager = window.translationManager;
+// Get translation manager with fallback
+const getTranslationManager = () => {
+    if (window.translationManager && typeof window.translationManager.t === 'function') {
+        return window.translationManager;
+    }
+    // Fallback translation manager - return key if translation manager is not available
+    return {
+        t: (key) => key,
+    };
+};
+
+const translationManager = getTranslationManager();
 
 export const generateSettingsModalHtml = async (schema, globalDefaults, challenges) => {
-    await window.api.logDebug('generateSettingsModalHtml called with:', {schema, globalDefaults, challengesCount: challenges.length});
+    await window.api.logDebug(`generateSettingsModalHtml called with: schema=${Object.keys(schema).length} keys, globalDefaults=${Object.keys(globalDefaults).length} keys, challengesCount=${challenges.length}`);
 
     // Validate inputs
     if (!schema || Object.keys(schema).length === 0) {
@@ -19,10 +30,10 @@ export const generateSettingsModalHtml = async (schema, globalDefaults, challeng
     for (const [key, config] of Object.entries(schema)) {
         try {
             const value = globalDefaults[key];
-            await window.api.logDebug(`Processing global setting ${key}:`, {value, config});
+            await window.api.logDebug(`Processing global setting ${key}: value=${value}, config.type=${config.type}`);
 
             if (value === undefined || value === null) {
-                await window.api.logDebug(`Missing value for global setting ${key}, using default`);
+                await window.api.logDebug(`Missing value for global setting ${key}, using default: ${config.default}`);
                 globalDefaults[key] = config.default;
             }
 
@@ -35,7 +46,7 @@ export const generateSettingsModalHtml = async (schema, globalDefaults, challeng
             `;
             globalSettingsHtml += generateSettingHtml(key, config.label, config.description, globalInputWithReset, 'globalDefault');
         } catch (error) {
-            await window.api.logError(`Error generating HTML for global setting ${key}:`, error);
+            await window.api.logError(`Error generating HTML for global setting ${key}: ${error.message || error}`);
             // Add a simple fallback
             globalSettingsHtml += `
                 <div class="form-control mb-4">
@@ -50,7 +61,7 @@ export const generateSettingsModalHtml = async (schema, globalDefaults, challeng
         }
     }
 
-    await window.api.logDebug('Generated global settings HTML length:', globalSettingsHtml.length);
+    await window.api.logDebug(`Generated global settings HTML length: ${globalSettingsHtml.length}`);
 
     // Generate UI settings HTML
     const uiSettingsHtml = await generateUISettingsHtml();
@@ -112,7 +123,7 @@ export const generateSettingsModalHtml = async (schema, globalDefaults, challeng
         </div>
     `;
 
-    await window.api.logDebug('Final modal HTML length:', modalHtml.length);
+    await window.api.logDebug(`Final modal HTML length: ${modalHtml.length}`);
     return modalHtml;
 };
 
@@ -248,7 +259,7 @@ const generateUISettingsHtml = async () => {
 
         return uiSettingsHtml;
     } catch (error) {
-        await window.api.logError('Error generating UI settings HTML:', error);
+        await window.api.logError(`Error generating UI settings HTML: ${error.message || error}`);
         return `<div class="text-error">${translationManager.t('app.errorLoadingUiSettings')}</div>`;
     }
 };
@@ -256,7 +267,8 @@ const generateUISettingsHtml = async () => {
 // Function to generate input HTML based on setting type
 const generateInputHtml = async (key, config, value, challengeId = '', hasOverride = false) => {
     try {
-        await window.api.logDebug(`Generating input HTML for ${key}:`, {config, value, challengeId, hasOverride});
+        await window.api.logDebug(`=== generateInputHtml START for ${key} ===`);
+        await window.api.logDebug(`Generating input HTML for ${key}: config=${JSON.stringify(config)}, value=${value}, challengeId=${challengeId}, hasOverride=${hasOverride}`);
 
         if (!config) {
             await window.api.logError(`No config provided for setting ${key}`);
@@ -268,7 +280,7 @@ const generateInputHtml = async (key, config, value, challengeId = '', hasOverri
 
         // Handle undefined/null values
         if (value === undefined || value === null) {
-            await window.api.logDebug(`Using default value for ${key}:`, config.default);
+            await window.api.logDebug(`Using default value for ${key}: ${config.default}`);
             value = config.default || 0;
         }
 
@@ -284,7 +296,7 @@ const generateInputHtml = async (key, config, value, challengeId = '', hasOverri
         case 'time': {
             const hours = Math.floor(Number(value) / 3600);
             const minutes = Math.floor((Number(value) % 3600) / 60);
-            return `
+            const html = `
                     <div class="flex gap-2 items-center">
                         <input type="number" id="${inputId}-hours" class="input input-bordered input-sm w-20 ${inputClass}" 
                                value="${hours}" min="0" max="24" data-setting="${key}" data-challenge="${challengeId}">
@@ -295,30 +307,39 @@ const generateInputHtml = async (key, config, value, challengeId = '', hasOverri
                         ${challengeResetButton}
                     </div>
                 `;
+            await window.api.logDebug(`=== generateInputHtml END for ${key} (time) ===`);
+            return html;
         }
 
         case 'boolean': {
-            return `
+            const html = `
                     <div class="flex items-center gap-2">
                         <input type="checkbox" id="${inputId}" class="checkbox checkbox-sm ${inputClass}" 
                                ${value ? 'checked' : ''} data-setting="${key}" data-challenge="${challengeId}">
                         ${challengeResetButton}
                     </div>
                 `;
+            await window.api.logDebug(`=== generateInputHtml END for ${key} (boolean) ===`);
+            return html;
         }
 
         case 'number':
-        default:
-            return `
+        default: {
+            const html = `
                     <div class="flex items-center gap-2">
                         <input type="number" id="${inputId}" class="input input-bordered input-sm w-24 ${inputClass}" 
                                value="${Number(value)}" min="0" data-setting="${key}" data-challenge="${challengeId}">
                         ${challengeResetButton}
                     </div>
                 `;
+            await window.api.logDebug(`=== generateInputHtml END for ${key} (number) ===`);
+            return html;
+        }
         }
     } catch (error) {
-        await window.api.logError(`Error generating input HTML for ${key}:`, error);
+        await window.api.logError(`Error generating input HTML for ${key}: ${error.message || error}`);
+        await window.api.logError(`Translation manager available: ${!!window.translationManager}`);
+        await window.api.logError(`Translation manager type: ${typeof window.translationManager}`);
         return `<div class="text-error">Error generating input for ${key}: ${error.message || 'Unknown error'}</div>`;
     }
 };
@@ -449,7 +470,7 @@ const initializeUISettingsHandlers = () => {
                     }, 5000);
                 }
             } catch (error) {
-                await window.api.logError('Error checking for updates:', error);
+                await window.api.logError(`Error checking for updates: ${error.message || error}`);
                 updateCheckStatus.textContent = translationManager.t('app.errorCheckingUpdates');
                 updateCheckStatus.classList.remove('text-base-content/60');
                 updateCheckStatus.classList.add('text-error');
@@ -481,7 +502,7 @@ export const closeSettingsModal = () => {
 
 // Function to generate challenge settings modal HTML
 export const generateChallengeSettingsModalHtml = async (challengeId, challengeTitle, schema, globalDefaults, challengeSettings) => {
-    await window.api.logDebug('generateChallengeSettingsModalHtml called with:', {challengeId, challengeTitle, schema, globalDefaults, challengeSettings});
+    await window.api.logDebug(`generateChallengeSettingsModalHtml called with: challengeId=${challengeId}, challengeTitle=${challengeTitle}, schema=${Object.keys(schema).length} keys`);
 
     // Validate inputs
     if (!schema || Object.keys(schema).length === 0) {
@@ -507,10 +528,10 @@ export const generateChallengeSettingsModalHtml = async (challengeId, challengeT
             const hasOverride = challengeValue !== null && challengeValue !== undefined;
             const effectiveValue = hasOverride ? challengeValue : globalValue;
 
-            await window.api.logDebug(`Processing challenge setting ${key}:`, {globalValue, challengeValue, hasOverride, effectiveValue});
+            await window.api.logDebug(`Processing challenge setting ${key}: globalValue=${globalValue}, challengeValue=${challengeValue}, hasOverride=${hasOverride}, effectiveValue=${effectiveValue}`);
 
             if (effectiveValue === undefined || effectiveValue === null) {
-                await window.api.logDebug(`Missing value for challenge setting ${key}, using default`);
+                await window.api.logDebug(`Missing value for challenge setting ${key}, using default: ${config.default}`);
                 challengeSettings[key] = config.default;
             }
 
@@ -531,7 +552,7 @@ export const generateChallengeSettingsModalHtml = async (challengeId, challengeT
                 </div>
             `;
         } catch (error) {
-            await window.api.logError(`Error generating HTML for challenge setting ${key}:`, error);
+            await window.api.logError(`Error generating HTML for challenge setting ${key}: ${error.message || error}`);
             // Add a simple fallback
             challengeSettingsHtml += `
                 <div class="form-control mb-4">
@@ -594,7 +615,9 @@ export const generateChallengeSettingsModalHtml = async (challengeId, challengeT
         </div>
     `;
 
-    await window.api.logDebug('Final challenge settings modal HTML length:', modalHtml.length);
+    await window.api.logDebug(`Final challenge settings modal HTML length: ${modalHtml.length}`);
+    await window.api.logDebug(`Challenge settings HTML content length: ${challengeSettingsHtml.length}`);
+    await window.api.logDebug(`Translation manager available: ${!!window.translationManager}`);
     return modalHtml;
 };
 

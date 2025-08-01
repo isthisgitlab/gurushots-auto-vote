@@ -1,14 +1,9 @@
-import { formatTimeRemaining, formatEndTime, getBoostStatus, getTurboStatus, initializeTimers } from './formatters.js';
+import { formatTimeRemaining, formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus, initializeTimers } from './formatters.js';
 
 const translationManager = window.translationManager;
 
 export const renderChallenges = async (challenges, timezone = 'local', autovoteRunning = false) => {
-    await window.api.logDebug('🎨 Rendering challenges in UI', {
-        challengeCount: challenges.length,
-        timezone,
-        autovoteRunning,
-        hasFirstChallenge: !!challenges[0],
-    });
+    await window.api.logDebug('🎨 Rendering challenges in UI');
 
     const container = document.getElementById('challenges-container');
 
@@ -27,13 +22,9 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
 
     const challengesHtmlArray = await Promise.all(sortedChallenges.map(async challenge => {
         // Log challenge processing for debugging
-        await window.api.logDebug(`🎨 Processing challenge: ${challenge.title}`, {
-            challengeId: challenge.id,
-            type: challenge.type,
-            exposureFactor: challenge.member.ranking.exposure.exposure_factor,
-        });
+        await window.api.logDebug(`🎨 Processing challenge: ${challenge.title}`);
 
-        const timeRemaining = formatTimeRemaining(challenge.close_time, timezone);
+        const timeRemaining = formatTimeRemaining(challenge.close_time);
         const endTime = formatEndTime(challenge.close_time, timezone);
         const boostStatus = getBoostStatus(challenge.member.boost);
         const turboStatus = getTurboStatus(challenge.member.turbo);
@@ -56,7 +47,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                 }
             }
         } catch (error) {
-            await window.api.logWarning('Error checking for custom settings:', error);
+            await window.api.logWarning(`Error checking for custom settings: ${error.message || error}`);
         }
 
         // Get user progress data
@@ -71,7 +62,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
 
         // Get next ranking level info
         const getNextLevelInfo = () => {
-            if (challenge.ranking_levels && userProgress && userProgress.level !== undefined) {
+            if (challenge.ranking_levels && userProgress && userProgress.level !== undefined && challenge.type !== 'flash') {
                 const currentLevel = userProgress.level;
                 const nextLevel = currentLevel + 1;
                 const nextLevelKey = `level_${nextLevel}`;
@@ -109,20 +100,20 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
 
         const nextLevelInfo = getNextLevelInfo();
 
-        await window.api.logDebug('🎨 Processed values:', {
+        await window.api.logDebug(`🎨 Processed values: ${JSON.stringify({
             timeRemaining,
             endTime,
             boostStatus,
             turboStatus,
             exposureFactor,
             entriesCount: entries.length,
-        });
+        })}`);
 
         // Create entries display with detailed information
         let entriesHtml = entries.map(entry => {
             // Show boost icon only if entry is actually boosted
             const isEntryBoosted = entry.boost === 1 || entry.boosted === true;
-            const isBoostUsed = boostStatus === 'Used';
+            const isBoostUsed = boostStatus.text === 'Used';
             const boostIcon = isEntryBoosted ? '🚀' : '';
             const guruIcon = entry.guru_pick ? '⭐' : '';
             // Show camera only for regular entries (no turbo, no boost, no guru pick)
@@ -131,7 +122,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
             const boostClass = (isEntryBoosted || isBoostUsed) ? 'badge-success' : 'badge-secondary';
 
             // Show boost button only if boost is available and entry is not already boosted
-            const showBoostButton = boostStatus.includes('Available') && entry.boost !== 1;
+            const showBoostButton = boostStatus.text.includes('Available') && entry.boost !== 1;
             const boostButtonHtml = showBoostButton ? `
                 <button class="btn btn-xs btn-warning ml-1 entry-boost-btn" 
                         data-challenge-id="${challenge.id}" 
@@ -239,7 +230,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                         <div class="bg-base-200 rounded p-2">
                             <div class="flex justify-between items-center mb-1">
                                 <span class="text-xs font-medium">${translationManager.t('app.yourProgress')}</span>
-                                <span class="badge badge-xs ${userProgress.level_name === 'ELITE' ? 'badge-warning' : 'badge-info'}">
+                                <span class="badge badge-xs ${getLevelStatus(userProgress.level, userProgress.level_name).colorClass}">
                                     ${userProgress.level_name} ${userProgress.level}
                                 </span>
                             </div>
@@ -250,8 +241,8 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                             <div class="w-full bg-base-300 rounded-full h-1.5">
                                 <div class="bg-latvian h-1.5 rounded-full" style="width: ${userProgress.percent}%"></div>
                             </div>
-                            <div class="text-xs text-base-content/60 mt-1">${userProgress.next_message}</div>
                             ${nextLevelInfo ? `
+                                <div class="text-xs text-base-content/60 mt-1">${userProgress.next_message}</div>
                                 <div class="text-xs text-base-content/60 mt-1">
                                     ${translationManager.t('app.next')}: ${nextLevelInfo.levelName} (${nextLevelInfo.votesNeeded} ${translationManager.t('app.votesNeeded')})
                                 </div>
@@ -275,11 +266,11 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                         </div>
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.boost')}</div>
-                            <div class="${boostStatus.includes('Available') ? 'text-success' : boostStatus === 'Used' ? 'text-warning' : 'text-error'}">${boostStatus.includes('Available') ? translationManager.t('app.available') : boostStatus === 'Used' ? translationManager.t('app.used') : boostStatus === 'Unavailable' ? translationManager.t('app.unavailable') : boostStatus}</div>
+                            <div class="${boostStatus.colorClass}">${boostStatus.text}</div>
                         </div>
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.turbo')}</div>
-                            <div class="${turboStatus === 'Free' ? 'text-success' : turboStatus.includes('Won') || turboStatus.includes('Progress') ? 'text-warning' : turboStatus === 'Used' ? 'text-info' : 'text-error'}">${turboStatus}</div>
+                            <div class="${turboStatus.colorClass}">${turboStatus.text}</div>
                         </div>
                         <div class="text-center p-2 bg-base-200 rounded">
                             <div class="font-medium">${translationManager.t('app.yourEntries')}</div>
@@ -373,7 +364,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                         }
                     } else {
                         // Show error feedback for API error
-                        await window.api.logError('Voting failed', result?.error || 'Unknown error');
+                        await window.api.logError(`Voting failed: ${result?.error || 'Unknown error'}`);
                         btn.innerHTML = `
                             <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
@@ -395,7 +386,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                     }
 
                 } catch (error) {
-                    await window.api.logError('Error voting on challenge', error.message || error);
+                    await window.api.logError(`Error voting on challenge: ${error.message || error}`);
 
                     // Show error feedback
                     btn.innerHTML = `

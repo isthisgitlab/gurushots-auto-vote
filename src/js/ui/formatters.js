@@ -89,46 +89,77 @@ export const formatEndTime = (endTime, timezone = 'local') => {
                 timeZone: timezone,
             });
         } catch (error) {
-            window.api.logWarning('Error formatting date with timezone, falling back to local:', error);
+            window.api.logWarning(`Error formatting date with timezone, falling back to local: ${error.message || error}`);
             return date.toLocaleString('lv-LV', formatOptions);
         }
     }
 };
 
-// Function to get boost status
+// Function to get boost status with color class
 export const getBoostStatus = (boost) => {
     if (boost.state === 'AVAILABLE') {
         const now = Math.floor(Date.now() / 1000);
         const remaining = boost.timeout - now;
         if (remaining > 0) {
             const minutes = Math.floor(remaining / 60);
-            return `Available (${minutes}m left)`;
+            return { text: `Available (${minutes}m left)`, colorClass: 'text-blue-500' };
         } else {
-            return 'Available';
+            return { text: 'Available', colorClass: 'text-blue-500' };
         }
     } else if (boost.state === 'USED') {
-        return 'Used';
+        return { text: 'Used', colorClass: 'text-green-500' };
+    } else if (boost.state === 'UNAVAILABLE') {
+        return { text: 'Unavailable', colorClass: 'text-red-500' };
+    } else if (boost.state === 'LOCKED') {
+        return { text: 'Locked', colorClass: 'text-red-500' };
     } else {
-        return 'Unavailable';
+        return { text: boost.state || 'Unknown', colorClass: 'text-purple-500' };
     }
 };
 
-// Function to get turbo status
+// Function to get turbo status with color class
 export const getTurboStatus = (turbo) => {
     if (!turbo || !turbo.state) {
-        return 'Unavailable';
+        return { text: 'Unavailable', colorClass: 'text-red-500' };
     }
     if (turbo.state === 'FREE') {
-        return 'Free';
+        return { text: 'Free', colorClass: 'text-blue-400' };
     } else if (turbo.state === 'TIMER') {
-        return 'Timer';
+        return { text: 'Timer', colorClass: 'text-red-500' };
     } else if (turbo.state === 'IN_PROGRESS') {
-        return 'In Progress';
+        return { text: 'In Progress', colorClass: 'text-orange-500' };
     } else if (turbo.state === 'WON') {
-        return 'Won';
+        return { text: 'Won', colorClass: 'text-lime-800' };
     } else if (turbo.state === 'USED') {
-        return 'Used';
+        return { text: 'Used', colorClass: 'text-green-500' };
+    } else if (turbo.state === 'UNAVAILABLE') {
+        return { text: 'Unavailable', colorClass: 'text-red-500' };
+    } else if (turbo.state === 'LOCKED') {
+        return { text: 'Locked', colorClass: 'text-latvian' };
     } else {
-        return 'Locked';
+        return { text: turbo.state || 'Unknown', colorClass: 'text-purple-500' };
+    }
+};
+
+// Function to get level status with color class
+export const getLevelStatus = (level, levelName) => {
+    if (!level || !levelName) {
+        return { text: 'Unknown', colorClass: 'badge-success' };
+    }
+
+    // Map level names to colors
+    switch (levelName.toUpperCase()) {
+    case 'POPULAR':
+        return { text: `${levelName} ${level}`, colorClass: 'badge-popular' };
+    case 'SKILLED':
+        return { text: `${levelName} ${level}`, colorClass: 'badge-skilled' };
+    case 'PREMIER':
+        return { text: `${levelName} ${level}`, colorClass: 'badge-premier' };
+    case 'ELITE':
+        return { text: `${levelName} ${level}`, colorClass: 'badge-elite' };
+    case 'ALLSTAR':
+        return { text: `${levelName} ${level}`, colorClass: 'badge-allstar' };
+    default:
+        return { text: `${levelName} ${level}`, colorClass: 'badge-warning' };
     }
 };

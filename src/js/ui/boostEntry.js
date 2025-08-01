@@ -28,7 +28,7 @@ export const initializeBoostEntry = () => {
                         loadChallenges(timezone, false);
                     }, 1000);
                 } else {
-                    await window.api.logError('❌ Failed to apply boost:', result?.error || 'Unknown error');
+                    await window.api.logError(`❌ Failed to apply boost: ${result?.error || 'Unknown error'}`);
                     // Reset button on error
                     button.disabled = false;
                     button.innerHTML = originalText;
@@ -38,7 +38,7 @@ export const initializeBoostEntry = () => {
                 }
             }
         } catch (error) {
-            await window.api.logError('❌ Error boosting entry:', error);
+            await window.api.logError(`❌ Error boosting entry: ${error.message || error}`);
             alert(`Error boosting entry: ${error.message || 'Unknown error'}`);
 
             // Reset button on error

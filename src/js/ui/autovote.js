@@ -201,7 +201,7 @@ export const initializeAutovote = () => {
                 }
             }
         } catch (error) {
-            await window.api.logWarning('Error updating threshold scheduling:', error);
+            await window.api.logWarning(`Error updating threshold scheduling: ${error.message || error}`);
         }
     };
 
@@ -238,7 +238,7 @@ export const initializeAutovote = () => {
         try {
             await window.api.logDebug(`💾 Saving threshold scheduling metadata for challenge "${nextEntry.challengeTitle}"`);
         } catch (error) {
-            await window.api.logWarning('Error saving threshold metadata:', error);
+            await window.api.logWarning(`Error saving threshold metadata: ${error.message || error}`);
         }
     };
 
@@ -292,14 +292,14 @@ export const initializeAutovote = () => {
                     return false;
                 }
             } else {
-                await window.api.logError('Voting cycle failed', result?.error || 'Unknown error');
+                await window.api.logError(`Voting cycle failed: ${result?.error || 'Unknown error'}`);
                 if (autovoteRunning) {
                     updateAutovoteStatus('Error', 'badge-error');
                 }
                 return false;
             }
         } catch (error) {
-            await window.api.logError(`Error during auto vote cycle ${cycleCount + 1}:`, error);
+            await window.api.logError(`Error during auto vote cycle ${cycleCount + 1}: ${error.message || error}`);
             updateAutovoteStatus('Error', 'badge-error');
             return false;
         }
@@ -382,7 +382,7 @@ export const initializeAutovote = () => {
             
             await window.api.logDebug('⏰ Setting up autovote interval');
             autovoteInterval = setInterval(async () => {
-                await window.api.logDebug('⏰ Interval triggered, autovoteRunning:', autovoteRunning);
+                await window.api.logDebug(`⏰ Interval triggered, autovoteRunning: ${autovoteRunning}`);
                 if (autovoteRunning) {
                     await runVotingCycle();
                 } else {
@@ -404,7 +404,7 @@ export const initializeAutovote = () => {
     };
 
     const stopAutovote = async () => {
-        await window.api.logDebug('🛑 stopAutovote called, autovoteRunning:', autovoteRunning, 'Interval:', autovoteInterval);
+        await window.api.logDebug(`🛑 stopAutovote called, autovoteRunning: ${autovoteRunning}, Interval: ${autovoteInterval}`);
         if (!autovoteRunning) {
             await window.api.logDebug('🛑 Autovote already stopped, returning');
             return;
@@ -415,7 +415,7 @@ export const initializeAutovote = () => {
         await window.api.setCancelVoting(true);
 
         // Clear autovote interval
-        await window.api.logDebug('🛑 Clearing autovote interval:', autovoteInterval);
+        await window.api.logDebug(`🛑 Clearing autovote interval: ${autovoteInterval}`);
         if (autovoteInterval) {
             clearInterval(autovoteInterval);
             autovoteInterval = null;
@@ -462,12 +462,12 @@ export const initializeAutovote = () => {
         startAutoRefresh();
 
         await window.api.logDebug('=== Auto Vote Stopped ===');
-        await window.api.logDebug('🛑 Final autovoteRunning state:', autovoteRunning);
+        await window.api.logDebug(`🛑 Final autovoteRunning state: ${autovoteRunning}`);
     };
 
     autovoteToggle.addEventListener('click', async (e) => {
         e.preventDefault(); // Prevent any default behavior
-        await window.api.logDebug('🔄 Autovote toggle clicked, current state:', autovoteRunning, 'Interval:', autovoteInterval);
+        await window.api.logDebug(`🔄 Autovote toggle clicked, current state: ${autovoteRunning}, Interval: ${autovoteInterval}`);
         if (autovoteRunning) {
             await window.api.logDebug('🛑 Stopping autovote...');
             await stopAutovote();
@@ -497,7 +497,7 @@ export const initializeAutovote = () => {
                     const timezone = await window.api.getSetting('timezone');
                     loadChallenges(timezone, autovoteRunning);
                 } catch (error) {
-                    await window.api.logWarning('Could not get timezone for auto-refresh:', error);
+                    await window.api.logWarning(`Could not get timezone for auto-refresh: ${error.message || error}`);
                     loadChallenges('Europe/Riga', autovoteRunning); // Default fallback
                 }
             }, 60000); // 60 seconds

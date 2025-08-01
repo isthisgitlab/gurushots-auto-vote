@@ -56,7 +56,7 @@ function initializeUpdateDialogElements() {
             await window.api.openExternalUrl('https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest');
             window.hideUpdateDialog();
         } catch (error) {
-            await window.api.logError('Error opening download URL:', error);
+            await window.api.logError(`Error opening download URL: ${error.message || error}`);
         }
     });
 
@@ -69,7 +69,7 @@ function initializeUpdateDialogElements() {
             await window.api.skipUpdateVersion();
             window.hideUpdateDialog();
         } catch (error) {
-            await window.api.logError('Error skipping update version:', error);
+            await window.api.logError(`Error skipping update version: ${error.message || error}`);
         }
     });
 

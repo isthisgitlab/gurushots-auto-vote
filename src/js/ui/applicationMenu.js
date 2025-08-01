@@ -14,12 +14,12 @@ function initializeTranslations() {
     }
 }
 
-// Get translated text with fallback
-function t(key, fallback = key) {
+// Get translated text
+function t(key) {
     if (translationManager) {
         return translationManager.t(key);
     }
-    return fallback;
+    return key;
 }
 
 // Create application menu
@@ -46,9 +46,41 @@ function createApplicationMenu() {
             ],
         }] : []),
         
+        // Edit menu - essential for clipboard operations
+        {
+            label: t('menu.edit'),
+            submenu: [
+                { 
+                    label: t('menu.undo'),
+                    role: 'undo', 
+                },
+                { 
+                    label: t('menu.redo'),
+                    role: 'redo', 
+                },
+                { type: 'separator' },
+                { 
+                    label: t('menu.cut'),
+                    role: 'cut', 
+                },
+                { 
+                    label: t('menu.copy'),
+                    role: 'copy', 
+                },
+                { 
+                    label: t('menu.paste'),
+                    role: 'paste', 
+                },
+                { 
+                    label: t('menu.selectAll'),
+                    role: 'selectall', 
+                },
+            ],
+        },
+        
         // File menu - simplified for this app
         ...(isMac ? [] : [{
-            label: t('menu.file', 'File'),
+            label: t('menu.file'),
             submenu: [
                 { role: 'quit' },
             ],
@@ -56,19 +88,19 @@ function createApplicationMenu() {
         
         // View menu - relevant items for this app
         {
-            label: t('menu.view', 'View'),
+            label: t('menu.view'),
             submenu: [
                 { 
-                    label: t('menu.reload', 'Reload'),
+                    label: t('menu.reload'),
                     role: 'reload',
                 },
                 { 
-                    label: t('menu.toggleDevTools', 'Toggle Developer Tools'),
+                    label: t('menu.toggleDevTools'),
                     role: 'toggleDevTools',
                 },
                 { type: 'separator' },
                 { 
-                    label: t('menu.toggleFullscreen', 'Toggle Fullscreen'),
+                    label: t('menu.toggleFullscreen'),
                     role: 'togglefullscreen',
                 },
             ],
@@ -76,25 +108,25 @@ function createApplicationMenu() {
         
         // Window menu - simplified
         {
-            label: t('menu.window', 'Window'),
+            label: t('menu.window'),
             submenu: [
                 { 
-                    label: t('menu.minimize', 'Minimize'),
+                    label: t('menu.minimize'),
                     role: 'minimize',
                 },
                 ...(isMac ? [
                     { 
-                        label: t('menu.zoom', 'Zoom'),
+                        label: t('menu.zoom'),
                         role: 'zoom',
                     },
                     { type: 'separator' },
                     { 
-                        label: t('menu.bringAllToFront', 'Bring All to Front'),
+                        label: t('menu.bringAllToFront'),
                         role: 'front',
                     },
                 ] : [
                     { 
-                        label: t('menu.close', 'Close'),
+                        label: t('menu.close'),
                         role: 'close',
                     },
                 ]),
@@ -103,10 +135,10 @@ function createApplicationMenu() {
         
         // Help menu
         {
-            label: t('menu.help', 'Help'),
+            label: t('menu.help'),
             submenu: [
                 {
-                    label: t('menu.about', 'About GuruShots Auto Vote'),
+                    label: t('menu.about'),
                     click: () => showAbout(),
                 },
             ],
@@ -123,10 +155,10 @@ function showAbout() {
     
     dialog.showMessageBox({
         type: 'info',
-        title: t('menu.aboutTitle', 'About GuruShots Auto Vote'),
+        title: t('menu.aboutTitle'),
         message: `${packageInfo.name} v${packageInfo.version}`,
-        detail: `${t('menu.aboutDescription', packageInfo.description)}\n\n${t('menu.aboutAuthor', 'Author')}: ${packageInfo.author.name}\n${t('menu.aboutElectron', 'Electron')}: ${process.versions.electron}\n${t('menu.aboutNode', 'Node.js')}: ${process.versions.node}`,
-        buttons: [t('common.ok', 'OK')],
+        detail: `${t('menu.aboutDescription')}\n\n${t('menu.aboutAuthor')}: ${packageInfo.author.name}\n${t('menu.aboutElectron')}: ${process.versions.electron}\n${t('menu.aboutNode')}: ${process.versions.node}`,
+        buttons: [t('common.ok')],
     });
 }
 

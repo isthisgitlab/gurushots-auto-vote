@@ -19,28 +19,15 @@ export const loadChallenges = async (timezone = 'local', autovoteRunning = false
             return;
         }
 
-        await window.api.logDebug('🌐 Fetching challenges from API', {
-            tokenExists: !!settings.token,
-            mockMode: settings.mock,
-        });
+        await window.api.logDebug('🌐 Fetching challenges from API');
 
         // Use the real API call that works in both mock and production
         const result = await window.api.getActiveChallenges(settings.token);
 
-        await window.api.logDebug('📋 Challenges received from API', {
-            challengeCount: result?.challenges?.length || 0,
-            hasResult: !!result,
-            resultStructure: result ? Object.keys(result) : [],
-        });
+        await window.api.logDebug('📋 Challenges received from API');
 
         if (result && result.challenges) {
-            await window.api.logDebug(`✅ Rendering ${result.challenges.length} challenges`, {
-                sampleChallenge: result.challenges[0] ? {
-                    id: result.challenges[0].id,
-                    title: result.challenges[0].title,
-                    type: result.challenges[0].type,
-                } : null,
-            });
+            await window.api.logDebug(`✅ Rendering ${result.challenges.length} challenges`);
 
             // Extract challenge IDs for cleanup
             const activeChallengeIds = result.challenges.map(challenge => challenge.id.toString());
@@ -49,24 +36,24 @@ export const loadChallenges = async (timezone = 'local', autovoteRunning = false
             try {
                 await window.api.cleanupStaleChallengeSetting(activeChallengeIds);
             } catch (error) {
-                await window.api.logWarning('Failed to cleanup stale challenge settings:', error);
+                await window.api.logWarning(`Failed to cleanup stale challenge settings: ${error.message || error}`);
             }
 
             // Cleanup stale metadata
             try {
                 await window.api.cleanupStaleMetadata(activeChallengeIds);
             } catch (error) {
-                await window.api.logWarning('Failed to cleanup stale metadata:', error);
+                await window.api.logWarning(`Failed to cleanup stale metadata: ${error.message || error}`);
             }
 
             renderChallenges(result.challenges, timezone, autovoteRunning);
         } else {
-            await window.api.logError('❌ No challenges in result', {result});
+            await window.api.logError('❌ No challenges in result');
             renderChallenges([], timezone, autovoteRunning);
         }
 
     } catch (error) {
-        await window.api.logError('❌ Error loading challenges', error);
+        await window.api.logError(`❌ Error loading challenges: ${error.message || error}`);
         renderChallenges([], timezone);
     }
 };
