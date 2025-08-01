@@ -177,7 +177,13 @@ describe('api-client', () => {
             await makePostRequest(mockUrl, headers, mockData);
 
             expect(logger.apiRequest).toHaveBeenCalledWith('POST', mockUrl);
-            expect(logger.apiResponse).toHaveBeenCalledWith('POST', mockUrl, mockResponse.status, expect.any(Number));
+            expect(logger.api).toHaveBeenCalledWith('API Response', {
+                method: 'POST',
+                url: mockUrl,
+                status: mockResponse.status,
+                duration: expect.any(Number),
+                responseData: mockResponse.data
+            });
         });
 
         test('should log API errors', async () => {
@@ -194,14 +200,12 @@ describe('api-client', () => {
             const headers = createCommonHeaders(mockToken);
             await makePostRequest(mockUrl, headers, mockData);
 
-            expect(logger.apiResponse).toHaveBeenCalledWith('POST', mockUrl, 400, expect.any(Number));
-            expect(logger.error).toHaveBeenCalledWith('API Request Failed', {
-                endpoint: 'test',
-                url: mockUrl,
+            expect(logger.api).toHaveBeenCalledWith('API Error Response', {
                 method: 'POST',
-                duration: expect.stringMatching(/^\d+ms$/),
-                error: mockError.message,
+                url: mockUrl,
                 status: 400,
+                duration: expect.any(Number),
+                error: mockError.message,
                 responseData: {error: 'Bad request'},
                 timeout: false,
             });
@@ -216,22 +220,19 @@ describe('api-client', () => {
             const headers = createCommonHeaders(mockToken);
             await makePostRequest(mockUrl, headers, mockData);
 
-            expect(logger.apiResponse).toHaveBeenCalledWith('POST', mockUrl, 'NO_RESPONSE', expect.any(Number));
-            expect(logger.error).toHaveBeenCalledWith('API Request Failed', {
-                endpoint: 'test',
-                url: mockUrl,
+            expect(logger.api).toHaveBeenCalledWith('API Error Response', {
                 method: 'POST',
-                duration: expect.stringMatching(/^\d+ms$/),
-                error: mockError.message,
+                url: mockUrl,
                 status: 'NO_RESPONSE',
+                duration: expect.any(Number),
+                error: mockError.message,
                 responseData: null,
                 timeout: false,
             });
         });
 
-        test('should log detailed API response when in dev mode', async () => {
+        test('should log API response with full data', async () => {
             const logger = require('../../src/js/logger');
-            logger.isDevMode.mockReturnValueOnce(true);
 
             const mockResponse = {
                 status: 200,
@@ -244,12 +245,12 @@ describe('api-client', () => {
             const headers = createCommonHeaders(mockToken);
             await makePostRequest(mockUrl, headers, mockData);
 
-            expect(logger.api).toHaveBeenCalledWith('API Response Details', {
-                endpoint: 'test',
+            expect(logger.api).toHaveBeenCalledWith('API Response', {
+                method: 'POST',
+                url: mockUrl,
                 status: mockResponse.status,
-                responseSize: JSON.stringify(mockResponse.data).length,
-                headers: mockResponse.headers,
-                duration: expect.stringMatching(/^\d+ms$/),
+                duration: expect.any(Number),
+                responseData: mockResponse.data
             });
         });
     });
