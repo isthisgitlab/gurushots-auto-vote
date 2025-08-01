@@ -23,7 +23,6 @@ const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
  */
 const makePostRequest = async (url, headers, data = '') => {
     const startTime = Date.now();
-    const endpoint = url.split('/').pop() || 'unknown';
     
     // Log the request with enhanced context
     logger.apiRequest('POST', url);
@@ -39,36 +38,27 @@ const makePostRequest = async (url, headers, data = '') => {
 
         const duration = Date.now() - startTime;
         
-        // Log successful response with timing
-        logger.apiResponse('POST', url, response.status, duration);
-        
-        // Log detailed response data only in debug mode
-        if (logger.isDevMode()) {
-            logger.api('API Response Details', {
-                endpoint,
-                status: response.status,
-                responseSize: JSON.stringify(response.data).length,
-                headers: response.headers,
-                duration: `${duration}ms`,
-            });
-        }
+        // Log successful response with full data
+        logger.api('API Response', {
+            method: 'POST',
+            url: url,
+            status: response.status,
+            duration: duration,
+            responseData: response.data,
+        });
 
         return response.data;
     } catch (error) {
         const duration = Date.now() - startTime;
         const status = error.response?.status || 'NO_RESPONSE';
         
-        // Log failed response with timing
-        logger.apiResponse('POST', url, status, duration);
-        
-        // Log detailed error information
-        logger.error('API Request Failed', {
-            endpoint,
-            url,
+        // Log failed response with full error details
+        logger.api('API Error Response', {
             method: 'POST',
-            duration: `${duration}ms`,
+            url: url,
+            status: status,
+            duration: duration,
             error: error.message,
-            status: error.response?.status || 'NO_RESPONSE',
             responseData: error.response?.data || null,
             timeout: error.code === 'ECONNABORTED',
         });
