@@ -1093,6 +1093,15 @@ const SETTINGS_SCHEMA = {
         label: 'app.lastHourExposure',
         description: 'app.lastHourExposureDesc',
     },
+    useLastHourExposure: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1, // Validate first (no dependencies)
+        label: 'app.useLastHourExposure',
+        description: 'app.useLastHourExposureDesc',
+    },
 };
 
 /**

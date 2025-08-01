@@ -65,6 +65,7 @@ const evaluateVotingDecision = (challenge, now) => {
     const effectiveThreshold = getEffectiveExposureThreshold(challengeId);
     const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
     const effectiveLastHourExposure = getEffectiveLastHourExposureThreshold(challengeId);
+    const useLastHourExposure = settings.getEffectiveSetting('useLastHourExposure', challengeId);
     
     // Check time-based conditions
     const isWithinLastMinute = isWithinLastMinuteThreshold(challenge.close_time, now, challengeId);
@@ -120,8 +121,8 @@ const evaluateVotingDecision = (challenge, now) => {
         return { shouldVote, voteReason, targetExposure };
     }
     
-    // Rule 6: Within last hour - use lastHourExposure threshold as target
-    if (withinLastHour) {
+    // Rule 6: Within last hour - use lastHourExposure threshold as target (only if useLastHourExposure is enabled)
+    if (withinLastHour && useLastHourExposure) {
         targetExposure = effectiveThreshold;
         if (currentExposure < effectiveLastHourExposure) {
             shouldVote = true;
@@ -160,6 +161,7 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
     const effectiveThreshold = getEffectiveExposureThreshold(challengeId);
     const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
     const effectiveLastHourExposure = getEffectiveLastHourExposureThreshold(challengeId);
+    const useLastHourExposure = settings.getEffectiveSetting('useLastHourExposure', challengeId);
     
     // Check time-based conditions
     const isWithinLastMinute = isWithinLastMinuteThreshold(challenge.close_time, now, challengeId);
@@ -201,8 +203,8 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
         return { shouldAllowVoting, errorMessage, targetExposure };
     }
     
-    // Rule 4: Within last hour - use lastHourExposure threshold as target
-    if (withinLastHour) {
+    // Rule 4: Within last hour - use lastHourExposure threshold as target (only if useLastHourExposure is enabled)
+    if (withinLastHour && useLastHourExposure) {
         targetExposure = effectiveLastHourExposure;
         if (currentExposure >= effectiveLastHourExposure) {
             errorMessage = `Challenge "${challengeTitle}" already has ${effectiveLastHourExposure}% exposure (last hour threshold)`;
