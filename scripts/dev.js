@@ -1,4 +1,5 @@
 const {spawn} = require('child_process');
+const logger = require('../src/js/logger');
 
 // Start nodemon
 const nodemon = spawn('npx', ['nodemon'], {
@@ -26,7 +27,7 @@ function isElectronRunning() {
 const checkInterval = setInterval(async () => {
     const isRunning = await isElectronRunning();
     if (!isRunning) {
-        console.log('Electron process not found, killing nodemon...');
+        logger.cliInfo('Electron process not found, killing nodemon...');
         clearInterval(checkInterval);
         nodemon.kill('SIGTERM');
         setTimeout(() => {

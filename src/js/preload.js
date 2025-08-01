@@ -34,7 +34,10 @@ contextBridge.exposeInMainWorld(
         // API methods
         guiVote: () => ipcRenderer.invoke('gui-vote'),
         getActiveChallenges: (token) => ipcRenderer.invoke('get-active-challenges', token),
-        authenticate: (username, password, isMock) => ipcRenderer.invoke('authenticate', username, password, isMock),
+        authenticate: (username, password, isMock) => {
+            console.log('🔐 Preload: authenticate called with:', { username, password, isMock });
+            return ipcRenderer.invoke('authenticate', username, password, isMock);
+        },
         runVotingCycle: () => ipcRenderer.invoke('run-voting-cycle'),
         voteOnChallenge: (challengeId, challengeTitle) => ipcRenderer.invoke('vote-on-challenge', challengeId, challengeTitle),
         refreshApi: () => ipcRenderer.invoke('refresh-api'),
@@ -61,8 +64,10 @@ contextBridge.exposeInMainWorld(
         removeChallengeOverride: (settingKey, challengeId) => ipcRenderer.invoke('remove-challenge-override', settingKey, challengeId),
         getEffectiveSetting: (settingKey, challengeId) => ipcRenderer.invoke('get-effective-setting', settingKey, challengeId),
         cleanupStaleChallengeSetting: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-challenge-setting', activeChallengeIds),
+        cleanupStaleMetadata: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-metadata', activeChallengeIds),
         cleanupObsoleteSettings: () => ipcRenderer.invoke('cleanup-obsolete-settings'),
         getSettingsSchema: () => ipcRenderer.invoke('get-settings-schema'),
+        getValidationError: (settingKey, value, allSettings) => ipcRenderer.invoke('get-validation-error', settingKey, value, allSettings),
 
         // Reset methods
         resetSetting: (key) => ipcRenderer.invoke('reset-setting', key),
@@ -90,6 +95,9 @@ contextBridge.exposeInMainWorld(
         skipUpdateVersion: () => ipcRenderer.invoke('skip-update-version'),
         clearSkipVersion: () => ipcRenderer.invoke('clear-skip-version'),
         onShowUpdateDialog: (callback) => ipcRenderer.on('show-update-dialog', (event, updateInfo) => callback(updateInfo)),
+
+        // Menu methods
+        refreshMenu: () => ipcRenderer.invoke('refresh-menu'),
 
         // Optional: Add listeners for responses from main process
         // Example: on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args))

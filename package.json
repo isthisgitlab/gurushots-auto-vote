@@ -1,20 +1,20 @@
 {
   "name": "gurushots-auto-vote",
-  "version": "0.2.1",
+  "version": "0.3.0-beta.8",
   "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)",
   "main": "src/js/index.js",
   "scripts": {
     "build": "cross-env NODE_ENV=production electron-builder",
     "build:all": "cross-env NODE_ENV=production electron-builder -mwl",
-    "build:cli:all": "npm run build:css && node scripts/build-cli.js",
-    "build:cli:linux": "npm run build:css && node scripts/build-cli.js gurucli-linux",
-    "build:cli:linux-arm": "npm run build:css && node scripts/build-cli.js gurucli-linux-arm",
-    "build:cli:mac": "npm run build:css && node scripts/build-cli.js gurucli-mac",
+    "build:cli:all": "node scripts/build-cli.js",
+    "build:cli:linux": "node scripts/build-cli.js gurucli-linux",
+    "build:cli:linux-arm": "node scripts/build-cli.js gurucli-linux-arm",
+    "build:cli:mac": "node scripts/build-cli.js gurucli-mac",
     "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
-    "build:linux": "cross-env NODE_ENV=production electron-builder --linux",
-    "build:linux-arm": "cross-env NODE_ENV=production electron-builder --linux --arm64",
-    "build:mac": "cross-env NODE_ENV=production electron-builder --mac",
-    "build:win": "cross-env NODE_ENV=production electron-builder --win",
+    "build:linux": "npm run build:css && cross-env NODE_ENV=production electron-builder --linux",
+    "build:linux-arm": "npm run build:css && cross-env NODE_ENV=production electron-builder --linux --arm64",
+    "build:mac": "npm run build:css && cross-env NODE_ENV=production electron-builder --mac",
+    "build:win": "npm run build:css && cross-env NODE_ENV=production electron-builder --win",
     "bump": "npx npm-check-updates -u && npm i",
     "cleanup:logs": "node scripts/cleanup-logs.js",
     "cli:help": "node src/js/cli/cli.js help",
@@ -40,6 +40,7 @@
     "settings:reset-global": "node scripts/settings-cli.js reset-global",
     "settings:schema": "node scripts/settings-cli.js schema",
     "settings:set": "node scripts/settings-cli.js set",
+    "settings:set-global": "node scripts/settings-cli.js set-global",
     "start": "electron .",
     "tag": "git tag v$(node -p \"require('./package.json').version\")",
     "tag:push": "npm run tag && git push origin v$(node -p \"require('./package.json').version\")",
@@ -105,21 +106,7 @@
     "files": [
       "dist/**/*",
       "src/html/**/*",
-      "src/js/app.js",
-      "src/js/index.js",
-      "src/js/login.js",
-      "src/js/preload.js",
-      "src/js/settings.js",
-      "src/js/translations.js",
-      "src/js/logger.js",
-      "src/js/apiFactory.js",
-      "src/js/api/**/*",
-      "src/js/api/randomizer.js",
-      "src/js/ui/**/*",
-      "src/js/mock/**/*",
-      "src/js/services/**/*",
-      "src/js/strategies/**/*",
-      "src/js/interfaces/**/*",
+      "src/js/**/*",
       "src/assets/**/*",
       "package.json"
     ],
@@ -128,11 +115,24 @@
     },
     "mac": {
       "category": "public.app-category.utilities",
-      "target": "dmg",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "dir",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "icon": "src/assets/logo.png",
       "gatekeeperAssess": false,
       "hardenedRuntime": false,
-      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.dmg"
+      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.${ext}"
     },
     "win": {
       "target": "portable",

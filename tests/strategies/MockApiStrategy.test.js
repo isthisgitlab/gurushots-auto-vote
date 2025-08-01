@@ -21,12 +21,19 @@ jest.mock('../../src/js/mock', () => ({
     }
 }));
 
-// Mock console.log to avoid noise in tests
-jest.spyOn(console, 'log').mockImplementation();
+// Mock logger
+jest.mock('../../src/js/logger', () => ({
+    info: jest.fn(),
+    error: jest.fn(),
+    success: jest.fn(),
+    warning: jest.fn(),
+    debug: jest.fn(),
+}));
 
 describe('MockApiStrategy', () => {
     let mockApiStrategy;
     const {mockApiClient} = require('../../src/js/mock');
+    const mockLogger = require('../../src/js/logger');
 
     beforeEach(() => {
         mockApiStrategy = new MockApiStrategy();
@@ -56,7 +63,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.authenticate(mockEmail, mockPassword);
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock authentication');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock authentication');
             expect(mockApiClient.authenticate).toHaveBeenCalledWith(mockEmail, mockPassword);
             expect(result).toEqual(mockResponse);
         });
@@ -68,7 +75,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.authenticate('test@example.com', 'wrongpassword'))
                 .rejects.toThrow('Authentication failed');
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock authentication');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock authentication');
             expect(mockApiClient.authenticate).toHaveBeenCalledWith('test@example.com', 'wrongpassword');
         });
     });
@@ -87,7 +94,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.getActiveChallenges(mockToken);
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock getActiveChallenges');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock getActiveChallenges');
             expect(mockApiClient.getActiveChallenges).toHaveBeenCalledWith(mockToken);
             expect(result).toEqual(mockResponse);
         });
@@ -99,7 +106,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.getActiveChallenges('invalid-token'))
                 .rejects.toThrow('Failed to get challenges');
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock getActiveChallenges');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock getActiveChallenges');
             expect(mockApiClient.getActiveChallenges).toHaveBeenCalledWith('invalid-token');
         });
     });
@@ -119,7 +126,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.getVoteImages(mockChallenge, mockToken);
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock getVoteImages');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock getVoteImages');
             expect(mockApiClient.getVoteImages).toHaveBeenCalledWith(mockChallenge, mockToken);
             expect(result).toEqual(mockResponse);
         });
@@ -133,7 +140,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.getVoteImages(mockChallenge, 'invalid-token'))
                 .rejects.toThrow('Failed to get vote images');
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock getVoteImages');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock getVoteImages');
             expect(mockApiClient.getVoteImages).toHaveBeenCalledWith(mockChallenge, 'invalid-token');
         });
     });
@@ -151,7 +158,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.submitVotes(mockVoteImages, mockToken);
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock submitVotes');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock submitVotes');
             expect(mockApiClient.submitVotes).toHaveBeenCalledWith(mockVoteImages, mockToken, settings.SETTINGS_SCHEMA.exposure.default);
             expect(result).toEqual(mockResponse);
         });
@@ -165,7 +172,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.submitVotes(mockVoteImages, 'invalid-token'))
                 .rejects.toThrow('Failed to submit votes');
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock submitVotes');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock submitVotes');
             expect(mockApiClient.submitVotes).toHaveBeenCalledWith(mockVoteImages, 'invalid-token', settings.SETTINGS_SCHEMA.exposure.default);
         });
     });
@@ -184,7 +191,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.applyBoost(mockChallenge, mockToken);
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock applyBoost');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock applyBoost');
             expect(mockApiClient.applyBoost).toHaveBeenCalledWith(mockChallenge, mockToken);
             expect(result).toEqual(mockResponse);
         });
@@ -198,7 +205,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.applyBoost(mockChallenge, 'invalid-token'))
                 .rejects.toThrow('Failed to apply boost');
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock applyBoost');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock applyBoost');
             expect(mockApiClient.applyBoost).toHaveBeenCalledWith(mockChallenge, 'invalid-token');
         });
     });
@@ -214,7 +221,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.applyBoostToEntry(mockChallengeId, mockImageId, mockToken);
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock applyBoostToEntry');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock applyBoostToEntry');
             expect(mockApiClient.applyBoostToEntry).toHaveBeenCalledWith(mockChallengeId, mockImageId, mockToken);
             expect(result).toEqual(mockResponse);
         });
@@ -226,7 +233,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.applyBoostToEntry('123', 'img456', 'invalid-token'))
                 .rejects.toThrow('Failed to apply boost to entry');
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock applyBoostToEntry');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock applyBoostToEntry');
             expect(mockApiClient.applyBoostToEntry).toHaveBeenCalledWith('123', 'img456', 'invalid-token');
         });
     });
@@ -240,7 +247,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.fetchChallengesAndVote(mockToken);
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote');
             expect(mockApiClient.fetchChallengesAndVote).toHaveBeenCalledWith(mockToken, settings.SETTINGS_SCHEMA.exposure.default);
             expect(result).toEqual(mockResponse);
         });
@@ -253,7 +260,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.fetchChallengesAndVote('invalid-token'))
                 .rejects.toThrow('Failed to fetch challenges and vote');
 
-            expect(console.log).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote');
             expect(mockApiClient.fetchChallengesAndVote).toHaveBeenCalledWith('invalid-token', settings.SETTINGS_SCHEMA.exposure.default);
         });
     });

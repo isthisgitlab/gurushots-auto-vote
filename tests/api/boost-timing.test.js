@@ -120,7 +120,6 @@ describe('boost timing settings', () => {
             // Import the main module
             const {fetchChallengesAndVote} = require('../../src/js/api/main');
 
-            // Call the function
             await fetchChallengesAndVote(mockToken);
 
             // Verify that getEffectiveSetting was called with boostTime
@@ -170,7 +169,6 @@ describe('boost timing settings', () => {
             // Import the main module
             const {fetchChallengesAndVote} = require('../../src/js/api/main');
 
-            // Call the function
             await fetchChallengesAndVote(mockToken);
 
             // Verify that getEffectiveSetting was called with boostTime
@@ -210,7 +208,6 @@ describe('boost timing settings', () => {
             // Import the main module
             const {fetchChallengesAndVote} = require('../../src/js/api/main');
 
-            // Call the function
             await fetchChallengesAndVote(mockToken);
 
             // Verify that getEffectiveSetting was called with boostTime
@@ -269,7 +266,6 @@ describe('boost timing settings', () => {
             // Import the main module
             const {fetchChallengesAndVote} = require('../../src/js/api/main');
 
-            // Call the function
             await fetchChallengesAndVote(mockToken);
 
             // Verify that getEffectiveSetting was called for each challenge

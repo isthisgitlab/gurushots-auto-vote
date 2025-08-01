@@ -81,7 +81,7 @@ const showHelp = () => {
     const userSettings = settings.loadSettings();
     const isMockMode = userSettings.mock;
     
-    console.log(`
+    logger.cliInfo(`
 GuruShots Auto Voter - CLI ${isMockMode ? '(MOCK MODE)' : '(REAL MODE)'}
 
 Usage: <command>
@@ -94,6 +94,7 @@ Commands:
   status   - Show current status and settings
   get-setting <key> - Get a setting value
   set-setting <key> <value> - Set a setting value
+  set-global-default <key> <value> - Set global default with validation
   list-settings - Show all settings and their values
   reset-setting <key> - Reset a setting to default
   reset-all-settings - Reset all settings to defaults
@@ -110,7 +111,7 @@ Examples:
 Note: You must login first before you can vote.
       The 'start' command will run continuously until stopped.
       Voting interval adjusts dynamically based on challenge states.
-      Use 'get-setting votingInterval' to view normal interval, 'set-setting votingInterval 5' to change.
+      Use 'get-setting checkFrequency' to view normal frequency, 'set-setting checkFrequency 5' to change.
       Current mode: ${isMockMode ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}
     `);
 };
@@ -201,6 +202,10 @@ const runVotingCycle = async (cycleNumber = 1) => {
         await getMiddlewareInstance().cliVote();
         
         logger.endOperation(`vote-cycle-${cycleNumber}`, `Voting cycle ${cycleNumber} completed`);
+        
+        // Note: Threshold scheduling update will be handled by the calling function
+        // since we need access to the threshold functions defined in startContinuousVoting
+        
         return true;
     } catch (error) {
         logger.cliError(`Error during voting cycle ${cycleNumber}`, error.message || error);
@@ -226,11 +231,27 @@ const startContinuousVoting = async () => {
 
     let cycleCount = 0;
     let isRunning = true;
+    let thresholdScheduler = null; // For scheduling threshold cron changes
+    let currentScheduledChallenge = null; // Track currently scheduled challenge to prevent duplicates
+    let lastSettingsHash = null; // Track settings changes
+    let currentCronJob = null; // Track current cron job
 
     // Function to handle graceful shutdown
     const handleShutdown = () => {
         logger.cliInfo('🛑 Shutting down continuous voting...');
         isRunning = false;
+        
+        // Clear threshold scheduler
+        if (thresholdScheduler) {
+            clearTimeout(thresholdScheduler);
+            thresholdScheduler = null;
+        }
+        
+        // Stop cron job
+        if (currentCronJob) {
+            currentCronJob.stop();
+        }
+        
         process.exit(0);
     };
 
@@ -238,22 +259,187 @@ const startContinuousVoting = async () => {
     process.on('SIGINT', handleShutdown);
     process.on('SIGTERM', handleShutdown);
 
+    /**
+     * Calculate when the next challenge will enter the last threshold period
+     */
+    const calculateNextLastThresholdEntry = async (challenges, now) => {
+        let nextEntry = null;
+        let earliestEntryTime = Infinity;
+
+        for (const challenge of challenges) {
+            // Skip flash challenges and ended challenges
+            if (challenge.type === 'flash' || challenge.close_time <= now) {
+                continue;
+            }
+
+            const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
+            const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+
+            // Only consider future entries
+            if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
+                earliestEntryTime = thresholdEntryTime;
+                nextEntry = {
+                    challengeId: challenge.id,
+                    challengeTitle: challenge.title,
+                    entryTime: thresholdEntryTime,
+                    lastMinuteThreshold: effectiveLastMinuteThreshold,
+                };
+            }
+        }
+
+        return nextEntry;
+    };
+
+    /**
+     * Schedule a cron change when a challenge enters the last threshold period
+     */
+    const scheduleThresholdCronChange = async (nextEntry) => {
+        if (!nextEntry || !isRunning) {
+            return;
+        }
+
+        // Check if we're already scheduling the same challenge
+        if (currentScheduledChallenge && 
+            currentScheduledChallenge.challengeId === nextEntry.challengeId &&
+            currentScheduledChallenge.entryTime === nextEntry.entryTime) {
+            logger.cliDebug(`⏰ Already scheduling threshold change for challenge "${nextEntry.challengeTitle}", skipping duplicate`);
+            return;
+        }
+
+        const now = Math.floor(Date.now() / 1000);
+        const timeUntilEntry = (nextEntry.entryTime - now) * 1000; // Convert to milliseconds
+
+        // Only schedule if the entry time is in the future
+        if (timeUntilEntry <= 0) {
+            logger.cliDebug(`⏰ Threshold entry time for challenge "${nextEntry.challengeTitle}" has already passed, skipping`);
+            return;
+        }
+
+        logger.cliInfo(`⏰ Scheduling threshold cron change for challenge "${nextEntry.challengeTitle}" in ${Math.round(timeUntilEntry / 1000)} seconds`);
+
+        // Clear any existing scheduler
+        if (thresholdScheduler) {
+            clearTimeout(thresholdScheduler);
+            thresholdScheduler = null;
+        }
+
+        // Track the currently scheduled challenge
+        currentScheduledChallenge = {
+            challengeId: nextEntry.challengeId,
+            challengeTitle: nextEntry.challengeTitle,
+            entryTime: nextEntry.entryTime,
+            lastMinuteThreshold: nextEntry.lastMinuteThreshold,
+        };
+
+        // Schedule the cron change
+        thresholdScheduler = setTimeout(async () => {
+            if (isRunning) {
+                logger.cliInfo(`⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`);
+                
+                // Stop current cron job
+                if (currentCronJob) {
+                    currentCronJob.stop();
+                }
+
+                // Create new cron job with last threshold frequency
+                const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
+                const thresholdCronExpression = `*/${lastMinuteCheckFrequency} * * * *`;
+
+                currentCronJob = cron.schedule(thresholdCronExpression, async () => {
+                    if (!isRunning) {
+                        currentCronJob.stop();
+                        return;
+                    }
+
+                    try {
+                        await runVotingCycle(++cycleCount);
+                        
+                        // Update threshold scheduling after each voting cycle
+                        await updateThresholdScheduling();
+                    } catch (error) {
+                        logger.cliError('Error in scheduled voting cycle', error);
+                    }
+                }, {
+                    scheduled: false,
+                });
+
+                currentCronJob.start();
+                logger.cliInfo(`⏰ Switched to last threshold cron: ${thresholdCronExpression} (every ${lastMinuteCheckFrequency} minutes)`);
+                
+                // Clear the scheduled challenge tracking
+                currentScheduledChallenge = null;
+                
+                // Update threshold scheduling for the next potential entry
+                await updateThresholdScheduling();
+            }
+        }, timeUntilEntry);
+    };
+
+    /**
+     * Update threshold scheduling based on current challenges
+     */
+    const updateThresholdScheduling = async () => {
+        if (!isRunning) {
+            return;
+        }
+
+        try {
+            // Get current challenges
+            const challenges = await getMiddlewareInstance().getActiveChallenges();
+            const now = Math.floor(Date.now() / 1000);
+
+            // Check if settings have changed (relevant settings for threshold scheduling)
+            const currentSettingsHash = JSON.stringify({
+                lastMinuteCheckFrequency: settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
+                lastMinuteThreshold: settings.getEffectiveSetting('lastMinuteThreshold', 'global'),
+            });
+
+            if (lastSettingsHash !== null && lastSettingsHash !== currentSettingsHash) {
+                logger.cliInfo('⏰ Settings changed, clearing existing threshold scheduler');
+                if (thresholdScheduler) {
+                    clearTimeout(thresholdScheduler);
+                    thresholdScheduler = null;
+                }
+                currentScheduledChallenge = null;
+            }
+            lastSettingsHash = currentSettingsHash;
+
+            const nextEntry = await calculateNextLastThresholdEntry(challenges, now);
+            
+            if (nextEntry) {
+                await scheduleThresholdCronChange(nextEntry);
+            } else {
+                // Clear any existing scheduler if no upcoming entries
+                if (thresholdScheduler) {
+                    clearTimeout(thresholdScheduler);
+                    thresholdScheduler = null;
+                    currentScheduledChallenge = null;
+                    logger.cliInfo('⏰ No upcoming threshold entries, cleared threshold scheduler');
+                }
+            }
+        } catch (error) {
+            logger.cliWarning('Error updating threshold scheduling:', error);
+        }
+    };
+
     // Run initial cycle
     logger.cliInfo('🚀 Running initial voting cycle...');
     await runVotingCycle(++cycleCount);
 
-    // Get cron expression from CLI-specific setting
-    const cronExpression = settings.getSetting('cliCronExpression') || getDefaultSettings().cliCronExpression;
+    // Set up initial cron job with normal frequency
+    const normalCronExpression = settings.getSetting('cliCronExpression') || getDefaultSettings().cliCronExpression;
     
-    // Set up cron job using the setting
-    const cronJob = cron.schedule(cronExpression, async () => {
+    currentCronJob = cron.schedule(normalCronExpression, async () => {
         if (!isRunning) {
-            cronJob.stop();
+            currentCronJob.stop();
             return;
         }
 
         try {
             await runVotingCycle(++cycleCount);
+            
+            // Update threshold scheduling after each voting cycle
+            await updateThresholdScheduling();
         } catch (error) {
             logger.cliError('Error in scheduled voting cycle', error);
         }
@@ -262,9 +448,12 @@ const startContinuousVoting = async () => {
     });
 
     // Start the cron job
-    cronJob.start();
-    logger.cliSuccess(`Continuous voting started with cron expression: ${cronExpression}`);
+    currentCronJob.start();
+    logger.cliSuccess(`Continuous voting started with cron expression: ${normalCronExpression}`);
     logger.cliInfo('Press Ctrl+C to stop');
+
+    // Set up proactive threshold scheduling
+    await updateThresholdScheduling();
 
     // Keep the process running
     process.stdin.resume();
@@ -292,8 +481,8 @@ const showStatus = () => {
     logger.cliInfo(`  Language: ${userSettings.language || 'en'}`);
     logger.cliInfo(`  Timezone: ${userSettings.timezone || 'local'}`);
     logger.cliInfo(`  API Timeout: ${userSettings.apiTimeout || getDefaultSettings().apiTimeout}s`);
-    logger.cliInfo(`  Voting Interval: ${userSettings.votingInterval || getDefaultSettings().votingInterval}min`);
-    logger.cliInfo(`  Last Threshold Check Frequency: ${settings.getEffectiveSetting('lastThresholdCheckFrequency', 'global') || 1}min`);
+    logger.cliInfo(`  Check Frequency: ${userSettings.checkFrequency || getDefaultSettings().checkFrequency}min`);
+    logger.cliInfo(`  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`);
     logger.cliInfo(`  CLI Cron Expression: ${userSettings.cliCronExpression || getDefaultSettings().cliCronExpression}`);
     
     // Show challenge settings if any exist
@@ -348,6 +537,53 @@ const setSetting = (key, value) => {
         logger.cliSuccess(`Set ${key} = ${JSON.stringify(parsedValue)}`);
     } catch (error) {
         logger.cliError(`Error setting '${key}'`, error.message);
+    }
+};
+
+/**
+ * Set a global default value for a schema-based setting with validation
+ */
+const setGlobalDefault = (key, value) => {
+    try {
+        // Parse value appropriately
+        let parsedValue = value;
+        if (value === 'true') parsedValue = true;
+        else if (value === 'false') parsedValue = false;
+        else if (!isNaN(value) && value !== '') parsedValue = Number(value);
+        else if (value.startsWith('[') || value.startsWith('{')) {
+            try {
+                parsedValue = JSON.parse(value);
+            } catch {
+                // Keep as string if JSON parsing fails
+            }
+        }
+
+        // Check if this is a valid schema setting
+        const schema = settings.SETTINGS_SCHEMA;
+        if (!schema[key]) {
+            logger.cliError(`Unknown schema setting '${key}'`);
+            logger.cliInfo('Available settings:');
+            Object.keys(schema).forEach(settingKey => {
+                logger.cliInfo(`  ${settingKey}`);
+            });
+            return;
+        }
+
+        // Use schema-based validation
+        const success = settings.setGlobalDefault(key, parsedValue);
+        if (success) {
+            const actualValue = settings.getGlobalDefault(key);
+            logger.cliSuccess(`Set global default ${key} = ${JSON.stringify(actualValue)}`);
+        } else {
+            logger.cliError(`Failed to set global default '${key}' - validation failed`);
+            logger.cliError(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
+            
+            // Show setting info
+            const config = schema[key];
+            logger.cliInfo(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
+        }
+    } catch (error) {
+        logger.cliError(`Error setting global default '${key}'`, error.message);
     }
 };
 
@@ -435,7 +671,7 @@ const resetAllSettings = () => {
  * Show detailed help about settings
  */
 const helpSettings = () => {
-    console.log(`
+    logger.cliInfo(`
 === Settings Management Help ===
 
 Available Commands:
@@ -449,7 +685,7 @@ Available Commands:
 Common Settings:
   cliCronExpression     - Cron expression for continuous voting (default: "*/3 * * * *")
   apiTimeout           - API request timeout in seconds (default: 30)
-  votingInterval       - Voting interval in minutes (default: 3)
+  checkFrequency       - Check frequency in minutes (default: 3)
   mock                 - Use mock API for testing (default: false)
   theme                - UI theme: "light" or "dark" (default: "light")
   language             - UI language: "en" or "lv" (default: "en")
@@ -547,6 +783,16 @@ const main = async () => {
                 process.exit(1);
             }
             resetSetting(args[1]);
+            process.exit(0);
+            break;
+        case 'set-global-default':
+            if (!args[1] || !args[2]) {
+                logger.cliError('Please specify both setting key and value');
+                logger.cliInfo('Usage: set-global-default <key> <value>');
+                logger.cliInfo('Example: set-global-default exposure 80');
+                process.exit(1);
+            }
+            setGlobalDefault(args[1], args[2]);
             process.exit(0);
             break;
         case 'reset-all-settings':

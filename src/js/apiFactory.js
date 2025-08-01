@@ -10,6 +10,7 @@ const settings = require('./settings');
 const BaseMiddleware = require('./services/BaseMiddleware');
 const RealApiStrategy = require('./strategies/RealApiStrategy');
 const MockApiStrategy = require('./strategies/MockApiStrategy');
+const logger = require('./logger');
 
 // Cache for strategy instances to avoid recreating them
 let currentStrategy = null;
@@ -27,16 +28,16 @@ const getApiStrategy = () => {
 
     // Check if we need to recreate the strategy due to setting change
     if (lastMockSetting !== userSettings.mock || !currentStrategy) {
-        console.log('=== API Factory Debug ===');
-        console.log('Mock setting:', userSettings.mock);
-        console.log('Token exists:', !!userSettings.token);
+        logger.debug('=== API Factory Debug ===');
+        logger.debug(`Mock setting: ${userSettings.mock}`);
+        logger.debug(`Token exists: ${!!userSettings.token}`);
 
         // Create the appropriate strategy
         if (userSettings.mock) {
-            console.log('✅ Using MOCK API strategy for development/testing');
+            logger.info('✅ Using MOCK API strategy for development/testing');
             currentStrategy = new MockApiStrategy();
         } else {
-            console.log('🌐 Using REAL API strategy for production');
+            logger.info('🌐 Using REAL API strategy for production');
             currentStrategy = new RealApiStrategy();
         }
 
@@ -59,7 +60,7 @@ const getMiddleware = () => {
 
     // Create middleware if not cached or strategy changed
     if (!currentMiddleware) {
-        console.log(`Creating middleware with ${strategy.getStrategyType()} strategy`);
+        logger.debug(`Creating middleware with ${strategy.getStrategyType()} strategy`);
         currentMiddleware = new BaseMiddleware(strategy);
     }
 
@@ -68,7 +69,7 @@ const getMiddleware = () => {
 
 // Function to force refresh API (useful when settings change)
 const refreshApi = () => {
-    console.log('🔄 Forcing API refresh due to settings change');
+    logger.info('🔄 Forcing API refresh due to settings change');
     currentStrategy = null;
     currentMiddleware = null;
     lastMockSetting = null;

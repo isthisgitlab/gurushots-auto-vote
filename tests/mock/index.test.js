@@ -24,7 +24,7 @@ jest.mock('../../src/js/mock/voting', () => ({
     mockEmptyVoteImages: {images: []},
     mockVoteSubmissionSuccess: {success: true, votes: 5},
     mockVoteSubmissionFailure: {error: 'Vote submission failed'},
-    generateMockVoteImages: jest.fn((url) => ({images: [{id: 'generated-img', ratio: 30}]}))
+    generateMockVoteImages: jest.fn((url, challenge) => ({images: [{id: 'generated-img', ratio: 30}]}))
 }));
 
 jest.mock('../../src/js/mock/boost', () => ({
@@ -221,6 +221,9 @@ describe('mock/index', () => {
             });
 
             test('should generate fresh challenges if generator exists', async () => {
+                // Clear the session cache to ensure the generator is called
+                mockIndex.clearSessionCache();
+                
                 challenges.generateMockChallenges.mockReturnValueOnce({
                     challenges: [{
                         id: 'fresh',
@@ -267,7 +270,7 @@ describe('mock/index', () => {
 
                 const result = await mockIndex.mockApiClient.getVoteImages(challenge, 'test-token');
 
-                expect(voting.generateMockVoteImages).toHaveBeenCalledWith('test-url');
+                expect(voting.generateMockVoteImages).toHaveBeenCalledWith('test-url', challenge);
                 expect(result).toEqual({images: [{id: 'fresh-img', ratio: 20}]});
             });
 

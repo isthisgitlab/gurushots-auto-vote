@@ -23,7 +23,7 @@ function initializeUpdateDialogElements() {
     // Check if all elements exist
     if (!updateDialog || !currentVersion || !latestVersion || !releaseNotes || 
         !prereleaseBadge || !skipButton || !remindLaterButton || !downloadButton) {
-        console.warn('Update dialog elements not found, skipping initialization');
+        window.api.logWarning('Update dialog elements not found, skipping initialization');
         return;
     }
 
@@ -56,7 +56,7 @@ function initializeUpdateDialogElements() {
             await window.api.openExternalUrl('https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest');
             window.hideUpdateDialog();
         } catch (error) {
-            console.error('Error opening download URL:', error);
+            await window.api.logError(`Error opening download URL: ${error.message || error}`);
         }
     });
 
@@ -69,7 +69,7 @@ function initializeUpdateDialogElements() {
             await window.api.skipUpdateVersion();
             window.hideUpdateDialog();
         } catch (error) {
-            console.error('Error skipping update version:', error);
+            await window.api.logError(`Error skipping update version: ${error.message || error}`);
         }
     });
 

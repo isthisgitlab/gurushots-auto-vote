@@ -90,11 +90,19 @@ function isElectronRunning() {
     return new Promise((resolve) => {
         const process = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], {stdio: 'pipe'});
 
+        // Add timeout to prevent hanging
+        const timeout = setTimeout(() => {
+            process.kill();
+            resolve(false);
+        }, 2000); // 2 second timeout
+
         process.on('close', (code) => {
+            clearTimeout(timeout);
             resolve(code === 0);
         });
 
         process.on('error', () => {
+            clearTimeout(timeout);
             resolve(false);
         });
     });
@@ -142,11 +150,44 @@ async function main() {
                 process.exit(1);
             }
 
-            const allSettings = settings.loadSettings();
+            // Try to parse value appropriately
+            let parsedValue = value;
+            try {
+                parsedValue = JSON.parse(value);
+            } catch {
+                if (!isNaN(value) && !isNaN(parseFloat(value))) {
+                    parsedValue = parseFloat(value);
+                } else if (value === 'true' || value === 'false') {
+                    parsedValue = value === 'true';
+                }
+            }
 
-            // Handle nested keys by modifying the settings object
-            if (key.includes('.')) {
-                setNestedProperty(allSettings, key, value);
+            // Handle nested keys for schema-based global defaults
+            if (key.startsWith('challengeSettings.globalDefaults.')) {
+                const settingKey = key.replace('challengeSettings.globalDefaults.', '');
+                const schema = settings.SETTINGS_SCHEMA;
+                
+                if (schema[settingKey]) {
+                    // Use schema-based validation for global defaults
+                    const success = settings.setGlobalDefault(settingKey, parsedValue);
+                    if (success) {
+                        const actualValue = settings.getGlobalDefault(settingKey);
+                        console.log(`✅ Set global default ${settingKey} = ${formatValue(actualValue)}`);
+                        await informAboutGuiReload();
+                    } else {
+                        console.error(`❌ Failed to set global default '${settingKey}' - validation failed`);
+                        console.error(`   Value ${formatValue(parsedValue)} is invalid for this setting`);
+                        process.exit(1);
+                    }
+                } else {
+                    console.error(`❌ Unknown schema setting '${settingKey}'`);
+                    console.error('   Run "npm run settings:schema" to see available settings');
+                    process.exit(1);
+                }
+            } else if (key.includes('.')) {
+                // Handle other nested keys by modifying the settings object directly
+                const allSettings = settings.loadSettings();
+                setNestedProperty(allSettings, key, parsedValue);
                 const success = settings.saveSettings(allSettings);
                 if (success) {
                     console.log(`✅ Set ${key} = ${formatValue(getNestedProperty(allSettings, key))}`);
@@ -158,24 +199,11 @@ async function main() {
                         await informAboutGuiReload();
                     }
                 } else {
-                    console.error(`❌ Failed to save setting '${key}'`);
+                    console.error(`❌ Failed to save setting '${key}' - validation failed`);
                     process.exit(1);
                 }
             } else {
                 // Handle top-level settings
-                let parsedValue = value;
-
-                // Try to parse value appropriately
-                try {
-                    parsedValue = JSON.parse(value);
-                } catch {
-                    if (!isNaN(value) && !isNaN(parseFloat(value))) {
-                        parsedValue = parseFloat(value);
-                    } else if (value === 'true' || value === 'false') {
-                        parsedValue = value === 'true';
-                    }
-                }
-
                 const success = settings.setSetting(key, parsedValue);
                 if (success) {
                     console.log(`✅ Set ${key} = ${formatValue(parsedValue)}`);
@@ -186,7 +214,7 @@ async function main() {
                         await informAboutGuiReload();
                     }
                 } else {
-                    console.error(`❌ Failed to save setting '${key}'`);
+                    console.error(`❌ Failed to save setting '${key}' - validation failed`);
                     process.exit(1);
                 }
             }
@@ -269,6 +297,53 @@ async function main() {
             break;
         }
 
+        case 'set-global': {
+            if (!key || value === undefined) {
+                console.error('Usage: npm run settings:set-global <settingKey> <value>');
+                console.error('Example: npm run settings:set-global exposure 80');
+                console.error('Example: npm run settings:set-global lastHourExposure 70');
+                process.exit(1);
+            }
+
+            // Try to parse value appropriately
+            let parsedValue = value;
+            try {
+                parsedValue = JSON.parse(value);
+            } catch {
+                if (!isNaN(value) && !isNaN(parseFloat(value))) {
+                    parsedValue = parseFloat(value);
+                } else if (value === 'true' || value === 'false') {
+                    parsedValue = value === 'true';
+                }
+            }
+
+            const schema = settings.SETTINGS_SCHEMA;
+            if (!schema[key]) {
+                console.error(`❌ Unknown schema setting '${key}'`);
+                console.error('   Run "npm run settings:schema" to see available settings');
+                process.exit(1);
+            }
+
+            // Use schema-based validation for global defaults
+            const success = settings.setGlobalDefault(key, parsedValue);
+            if (success) {
+                const actualValue = settings.getGlobalDefault(key);
+                console.log(`✅ Set global default ${key} = ${formatValue(actualValue)}`);
+                await informAboutGuiReload();
+            } else {
+                console.error(`❌ Failed to set global default '${key}' - validation failed`);
+                console.error(`   Value ${formatValue(parsedValue)} is invalid for this setting`);
+                
+                // Show validation constraints
+                const config = schema[key];
+                if (config.validation) {
+                    console.error(`   Constraints: ${config.type} type, valid range varies by setting`);
+                }
+                process.exit(1);
+            }
+            break;
+        }
+
         case 'reset-all': {
             const confirmMessage = 'Are you sure you want to reset ALL settings to their default values?\nThis will reset all UI settings, global challenge defaults, window positions, and preferences.\nOnly your login token, last update check time, mock mode setting, and API headers will be preserved.\nType "yes" to confirm:';
             
@@ -299,14 +374,15 @@ async function main() {
             console.log('================');
             console.log('');
             console.log('Available commands:');
-            console.log('  npm run settings:get [key]          - Get setting value (all if no key)');
-            console.log('  npm run settings:set <key> <value>  - Set setting value');
-            console.log('  npm run settings:reset <key>        - Reset setting to default value');
-            console.log('  npm run settings:reset-global <key> - Reset global default to schema default');
-            console.log('  npm run settings:reset-all yes      - Reset all settings to defaults');
-            console.log('  npm run settings:schema             - Show settings schema');
-            console.log('  npm run settings:global-defaults    - Show global defaults');
-            console.log('  npm run settings:help               - Show this help');
+            console.log('  npm run settings:get [key]             - Get setting value (all if no key)');
+            console.log('  npm run settings:set <key> <value>     - Set setting value');
+            console.log('  npm run settings:set-global <key> <val> - Set global default (with validation)');
+            console.log('  npm run settings:reset <key>           - Reset setting to default value');
+            console.log('  npm run settings:reset-global <key>    - Reset global default to schema default');
+            console.log('  npm run settings:reset-all yes         - Reset all settings to defaults');
+            console.log('  npm run settings:schema                - Show settings schema');
+            console.log('  npm run settings:global-defaults       - Show global defaults');
+            console.log('  npm run settings:help                  - Show this help');
             console.log('  npm run gui:refresh                 - Get info about refreshing GUI');
             console.log('');
             console.log('Examples:');
@@ -314,6 +390,8 @@ async function main() {
             console.log('  npm run settings:get theme');
             console.log('  npm run settings:set theme dark');
             console.log('  npm run settings:set stayLoggedIn true');
+            console.log('  npm run settings:set-global exposure 80');
+            console.log('  npm run settings:set-global lastHourExposure 70');
             console.log('  npm run settings:set challengeSettings.globalDefaults.boostTime 7200');
             console.log('  npm run settings:reset theme');
             console.log('  npm run settings:reset-global boostTime');
@@ -335,4 +413,9 @@ async function main() {
     }
 }
 
-main();
+main().then(() => {
+    process.exit(0);
+}).catch((error) => {
+    console.error('❌ Unhandled error:', error.message);
+    process.exit(1);
+});

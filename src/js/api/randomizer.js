@@ -7,6 +7,7 @@
  */
 
 const settings = require('../settings');
+const logger = require('../logger');
 
 // Current app version - update this when releasing new versions
 const CURRENT_APP_VERSION = '2.41.3';
@@ -114,7 +115,7 @@ const initializeHeaders = () => {
 
         // Save headers to settings
         settings.setSetting('apiHeaders', savedHeaders);
-        console.log('🔄 Generated new random API headers');
+        logger.info('🔄 Generated new random API headers');
     } else if (savedHeaders._version !== CURRENT_APP_VERSION) {
         // Update version-related fields while preserving randomized values
         const iosVersion = savedHeaders['user-agent']?.match(/iOS ([^)]+)/)?.[1] || '16.7.11';
@@ -129,7 +130,7 @@ const initializeHeaders = () => {
 
         // Save updated headers
         settings.setSetting('apiHeaders', savedHeaders);
-        console.log('🔄 Updated API headers for new app version');
+        logger.info('🔄 Updated API headers for new app version');
     }
 
     return savedHeaders;

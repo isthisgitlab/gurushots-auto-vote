@@ -15,7 +15,7 @@ jest.mock('../../src/js/settings', () => ({
         lastMinutes: { default: 30 },
         onlyBoost: { default: false },
         voteOnlyInLastThreshold: { default: false },
-        lastThresholdCheckFrequency: { default: 1 },
+        lastMinuteCheckFrequency: { default: 1 },
     },
 }));
 
@@ -49,7 +49,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 2; // 2 minutes when in last threshold
                     default:
                         return 100;
@@ -65,7 +65,7 @@ describe('last threshold check frequency functionality', () => {
             expect(isWithinLastMinuteThreshold).toBe(true);
 
             // Should use last threshold frequency
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(2);
         });
 
@@ -90,7 +90,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 1; // 1 minute when in last threshold
                     default:
                         return 100;
@@ -106,7 +106,7 @@ describe('last threshold check frequency functionality', () => {
             expect(isWithinLastMinuteThreshold).toBe(false);
 
             // Should not use last threshold frequency since not within threshold
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(1);
         });
 
@@ -131,7 +131,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 0; // Disabled (0)
                     default:
                         return 100;
@@ -147,7 +147,7 @@ describe('last threshold check frequency functionality', () => {
             expect(isWithinLastMinuteThreshold).toBe(true);
 
             // Should not use last threshold frequency since it's disabled (0)
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(0);
             
             // Should use normal voting interval instead
@@ -155,7 +155,7 @@ describe('last threshold check frequency functionality', () => {
             expect(useLastThreshold).toBe(false);
         });
 
-        test('should handle per-challenge overrides for last threshold frequency', () => {
+        test('should use global last threshold check frequency setting', () => {
             const now = Math.floor(Date.now() / 1000);
             const challenge = {
                 id: '12345',
@@ -171,16 +171,13 @@ describe('last threshold check frequency functionality', () => {
                 }
             };
 
-            // Mock settings to return different values based on the setting key and challenge ID
-            mockSettings.getEffectiveSetting.mockImplementation((settingKey, challengeId) => {
+            // Mock settings to return different values based on the setting key
+            mockSettings.getEffectiveSetting.mockImplementation((settingKey) => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
-                        if (challengeId === '12345') {
-                            return 3; // Per-challenge override: 3 minutes
-                        }
-                        return 1; // Global default: 1 minute
+                    case 'lastMinuteCheckFrequency':
+                        return 3; // 3 minutes when in last threshold
                     default:
                         return 100;
                 }
@@ -194,12 +191,12 @@ describe('last threshold check frequency functionality', () => {
             // Should be within lastminute threshold (15 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
 
-            // Should use per-challenge override for last threshold frequency
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', challenge.id.toString());
+            // Should use global last threshold frequency setting
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(3);
 
-            // Verify that getEffectiveSetting was called with the challenge ID
-            expect(mockSettings.getEffectiveSetting).toHaveBeenCalledWith('lastThresholdCheckFrequency', '12345');
+            // Verify that getEffectiveSetting was called with 'global' for the global setting
+            expect(mockSettings.getEffectiveSetting).toHaveBeenCalledWith('lastMinuteCheckFrequency', 'global');
         });
 
         test('should handle multiple challenges with different threshold states', () => {
@@ -238,7 +235,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 2; // 2 minutes when in last threshold
                     default:
                         return 100;
@@ -261,7 +258,7 @@ describe('last threshold check frequency functionality', () => {
             // Should use last threshold interval because Challenge 1 is within threshold
             expect(useLastThresholdInterval).toBe(true);
 
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(2);
         });
 
@@ -286,7 +283,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 1;
                     default:
                         return 100;
@@ -301,7 +298,7 @@ describe('last threshold check frequency functionality', () => {
             // Should be within lastminute threshold (30 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
 
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(1);
         });
 
@@ -310,8 +307,8 @@ describe('last threshold check frequency functionality', () => {
             const challenge = {
                 id: '12345',
                 title: 'Test Challenge',
-                close_time: now - 60, // Ended 1 minute ago
-                start_time: now - 3600, // Started 1 hour ago
+                close_time: now - 3600, // Ended 1 hour ago
+                start_time: now - 7200, // Started 2 hours ago
                 member: {
                     ranking: {
                         exposure: {
@@ -326,7 +323,7 @@ describe('last threshold check frequency functionality', () => {
                 switch (settingKey) {
                     case 'lastMinutes':
                         return 30;
-                    case 'lastThresholdCheckFrequency':
+                    case 'lastMinuteCheckFrequency':
                         return 1;
                     default:
                         return 100;
@@ -338,11 +335,80 @@ describe('last threshold check frequency functionality', () => {
             const timeUntilEnd = challenge.close_time - now;
             const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
 
-            // Should not be within lastminute threshold (timeUntilEnd is negative)
+            // Should not be within lastminute threshold (challenge has ended)
             expect(isWithinLastMinuteThreshold).toBe(false);
 
-            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastThresholdCheckFrequency', 'global');
+            // Should not use last threshold frequency since challenge has ended
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
             expect(lastThresholdFrequency).toBe(1);
+        });
+
+        test('should verify GUI implementation logic matches expected behavior', () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [
+                {
+                    id: '12345',
+                    title: 'Challenge 1',
+                    close_time: now + 900, // 15 minutes remaining - within threshold
+                    start_time: now - 3600,
+                    member: {
+                        ranking: {
+                            exposure: {
+                                exposure_factor: 75
+                            }
+                        }
+                    }
+                },
+                {
+                    id: '67890',
+                    title: 'Challenge 2',
+                    close_time: now + 3600, // 1 hour remaining - not within threshold
+                    start_time: now - 3600,
+                    member: {
+                        ranking: {
+                            exposure: {
+                                exposure_factor: 75
+                            }
+                        }
+                    }
+                }
+            ];
+
+            // Mock settings to return different values based on the setting key
+            mockSettings.getEffectiveSetting.mockImplementation((settingKey) => {
+                switch (settingKey) {
+                    case 'lastMinutes':
+                        return 30;
+                    case 'lastMinuteCheckFrequency':
+                        return 2; // 2 minutes when in last threshold
+                    default:
+                        return 100;
+                }
+            });
+
+            // Simulate the GUI implementation logic
+            const lastThresholdFrequency = mockSettings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
+            const useLastThreshold = lastThresholdFrequency > 0;
+            
+            let useLastThresholdInterval = false;
+            
+            if (useLastThreshold) {
+                // Check if any challenges are within the last minutes threshold
+                for (const challenge of challenges) {
+                    const effectiveLastMinutes = mockSettings.getEffectiveSetting('lastMinutes', challenge.id.toString());
+                    const timeUntilEnd = challenge.close_time - now;
+                    const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+                    
+                    if (isWithinLastMinuteThreshold) {
+                        useLastThresholdInterval = true;
+                        break;
+                    }
+                }
+            }
+
+            // Should use last threshold interval because Challenge 1 is within threshold
+            expect(useLastThresholdInterval).toBe(true);
+            expect(lastThresholdFrequency).toBe(2);
         });
     });
 }); 

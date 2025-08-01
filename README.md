@@ -6,6 +6,25 @@
 An Electron application for automated voting on GuruShots challenges. Features both a graphical interface and
 command-line tools for easy automation.
 
+## ⚠️ IMPORTANT: Single Instance Warning
+
+**🚨 CRITICAL**: This application is designed to run **ONLY ONE INSTANCE** per computer. Running multiple instances (GUI or CLI) simultaneously will likely cause:
+
+- **API Rate Limit Exceeded**: GuruShots will block your requests
+- **Failed Voting**: The application will stop working properly
+- **Account Issues**: Potential temporary restrictions on your GuruShots account
+- **Unpredictable Behavior**: Conflicts between instances
+
+**✅ Recommended Usage:**
+- Use **either** the GUI **or** CLI version, but not both at the same time
+- Close any existing instances before starting a new one
+- If you need to switch between GUI and CLI, stop the current instance first
+
+**🔧 If you encounter rate limit errors:**
+1. Stop all instances of the application
+2. Wait 5-10 minutes before trying again
+3. Ensure only one instance is running
+
 ## ☕ Support the Project
 
 If you find this tool helpful, consider supporting its development:
@@ -34,24 +53,25 @@ If you find this tool helpful, consider supporting its development:
 
 ### **🚀 Quick Download Links**
 
-**Latest Version: v0.2.1**
+**Latest Version: v0.3.0-beta.8**
 
 #### **🖥️ GUI Applications (Recommended for most users)**
 
 | Platform          | Download                                                                                                                                                             | Size   | Type                |
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
-| **Windows**       | [📥 GuruShotsAutoVote-v0.2.1-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.2.1-x64.exe)                 | ~50 MB | Portable Executable |
-| **macOS**         | [📥 GuruShotsAutoVote-v0.2.1-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.2.1-arm64.dmg)             | ~50 MB | DMG Installer       |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.2.1-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.2.1-x86_64.AppImage) | ~50 MB | AppImage            |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.2.1-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.2.1-arm64.AppImage)   | ~50 MB | AppImage            |
+| **Windows**       | [📥 GuruShotsAutoVote-v0.3.0-beta.8-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.8-x64.exe)                 | ~50 MB | Portable Executable |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.8-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.8-arm64.dmg)             | ~50 MB | DMG Installer       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.8-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.8-arm64.app.zip)             | ~50 MB | App Bundle (ZIP)    |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.3.0-beta.8-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.8-x86_64.AppImage) | ~50 MB | AppImage            |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.3.0-beta.8-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.3.0-beta.8-arm64.AppImage)   | ~50 MB | AppImage            |
 
 #### **💻 CLI Applications (For advanced users)**
 
 | Platform              | Download                                                                                                                           | Size   | Type                |
 |-----------------------|------------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
-| **macOS CLI**         | [📥 gurucli-v0.2.1-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.2.1-mac)             | ~55 MB | Terminal Executable |
-| **Linux CLI (x64)**   | [📥 gurucli-v0.2.1-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.2.1-linux)         | ~50 MB | Terminal Executable |
-| **Linux CLI (ARM64)** | [📥 gurucli-v0.2.1-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.2.1-linux-arm) | ~47 MB | Terminal Executable |
+| **macOS CLI**         | [📥 gurucli-v0.3.0-beta.8-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.3.0-beta.8-mac)             | ~55 MB | Terminal Executable |
+| **Linux CLI (x64)**   | [📥 gurucli-v0.3.0-beta.8-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.3.0-beta.8-linux)         | ~50 MB | Terminal Executable |
+| **Linux CLI (ARM64)** | [📥 gurucli-v0.3.0-beta.8-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.3.0-beta.8-linux-arm) | ~47 MB | Terminal Executable |
 
 ### **📋 Installation Instructions**
 
@@ -66,9 +86,16 @@ If you find this tool helpful, consider supporting its development:
 
 #### **🍎 macOS Users**
 
-1. **Download**: Click the macOS link above to download the `.dmg` file
+**Option 1: DMG Installer (Recommended)**
+1. **Download**: Click the macOS (DMG) link above to download the `.dmg` file
 2. **Open DMG**: Double-click the downloaded `.dmg` file
 3. **Install**: Drag the app icon to the Applications folder
+4. **Launch**: Open the app from your Applications folder
+
+**Option 2: App Bundle (Direct)**
+1. **Download**: Click the macOS (APP) link above to download the `.app.zip` file
+2. **Extract**: Double-click the zip file to extract the `.app` bundle
+3. **Move**: Move the extracted app to your Applications folder
 4. **Launch**: Open the app from your Applications folder
 
 **🔧 If you get security warnings:**
@@ -80,11 +107,11 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 **💻 For CLI users on macOS:**
 
-1. Download the `gurucli-v0.2.1-mac` file
+1. Download the `gurucli-v0.3.0-beta.8-mac` file
 2. Open Terminal
 3. Navigate to the download folder: `cd ~/Downloads`
-4. Make executable: `chmod +x gurucli-v0.2.1-mac`
-5. Run: `./gurucli-v0.2.1-mac`
+4. Make executable: `chmod +x gurucli-v0.3.0-beta.8-mac`
+5. Run: `./gurucli-v0.3.0-beta.8-mac`
 
 #### **🐧 Linux Users**
 
@@ -92,15 +119,15 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 1. **Download**: Click the appropriate Linux link above
 2. **Make Executable**: Right-click the file → Properties → Permissions → Check "Allow executing file as program"
-    - Or use terminal: `chmod +x GuruShotsAutoVote-v0.2.1-*.AppImage`
-3. **Run**: Double-click the file or run from terminal: `./GuruShotsAutoVote-v0.2.1-*.AppImage`
+    - Or use terminal: `chmod +x GuruShotsAutoVote-v0.3.0-beta.8-*.AppImage`
+3. **Run**: Double-click the file or run from terminal: `./GuruShotsAutoVote-v0.3.0-beta.8-*.AppImage`
 
 **CLI App:**
 
-1. Download the appropriate `gurucli-v0.2.1-linux` file
+1. Download the appropriate `gurucli-v0.3.0-beta.8-linux` file
 2. Open terminal and navigate to download folder: `cd ~/Downloads`
-3. Make executable: `chmod +x gurucli-v0.2.1-linux`
-4. Run: `./gurucli-v0.2.1-linux`
+3. Make executable: `chmod +x gurucli-v0.3.0-beta.8-linux`
+4. Run: `./gurucli-v0.3.0-beta.8-linux`
 
 ### **🎯 Which Version Should I Download?**
 
@@ -144,17 +171,17 @@ For CLI applications, use these commands after making the file executable:
 
 Login with your credentials:
 ```
-./gurucli-v0.2.0-[platform] login
+./gurucli-v0.3.0-beta.8-[platform] login
 ```
 
 Run a single voting cycle:
 ```
-./gurucli-v0.2.0-[platform] vote
+./gurucli-v0.3.0-beta.8-[platform] vote
 ```
 
 Start continuous voting:
 ```
-./gurucli-v0.2.0-[platform] start
+./gurucli-v0.3.0-beta.8-[platform] start
 ```
 
 ## 🔧 Usage
@@ -192,31 +219,33 @@ The GUI provides a user-friendly interface for managing your GuruShots voting:
 
 ### **CLI Commands**
 
+> **⚠️ Remember**: Only run ONE instance (GUI or CLI) at a time to avoid API rate limits.
+
 For the CLI application, use these commands:
 
 Login with your credentials:
 ```
-./gurucli-v0.2.0-[platform] login
+./gurucli-v0.3.0-beta.8-[platform] login
 ```
 
 Run one voting cycle:
 ```
-./gurucli-v0.2.0-[platform] vote
+./gurucli-v0.3.0-beta.8-[platform] vote
 ```
 
 Start continuous voting:
 ```
-./gurucli-v0.2.0-[platform] start
+./gurucli-v0.3.0-beta.8-[platform] start
 ```
 
 Check current status:
 ```
-./gurucli-v0.2.0-[platform] status
+./gurucli-v0.3.0-beta.8-[platform] status
 ```
 
 Show help:
 ```
-./gurucli-v0.2.0-[platform] help
+./gurucli-v0.3.0-beta.8-[platform] help
 ```
 
 ### **Continuous Voting**
@@ -224,7 +253,7 @@ Show help:
 The continuous voting mode automatically runs voting cycles with dynamic interval scheduling:
 
 - **Normal Operation**: Runs every 3 minutes (configurable via settings)
-- **Within Last Threshold**: Automatically switches to higher frequency (default: 1 minute)
+- **Within Last Threshold**: Automatically switches to higher frequency (default: 0 = disabled)
 - **Automatic Detection**: Monitors all active challenges and adjusts frequency based on their end times
 
 ## 📝 Logging
@@ -239,6 +268,9 @@ The application automatically logs activity to help with troubleshooting:
 
 ## ⚙️ Settings
 
+> **⚠️ Important**: Changing settings while auto-vote is running will stop the voting process. You will need to manually restart auto-vote after applying your new settings.
+> **WINDOW MOVEMENT**: If you move the app window, it will automatically save its position but it will stop autovoting process as it is saving the position in settings.
+
 The app automatically saves your preferences:
 
 - **Theme**: Light or dark mode
@@ -247,8 +279,8 @@ The app automatically saves your preferences:
 - **Window Position**: Remembers where you placed the app window
 - **API Timeout**: Configurable timeout for API requests (1-120 seconds)
 - **Voting Interval**: Customizable interval between voting cycles (1-60 minutes)
-- **Last Threshold Check Frequency**: Dynamic check frequency when within last threshold (1-60 minutes, default: 1)
-- **Challenge Settings**: Per-challenge overrides for boost time, exposure, last minutes threshold, and check frequency
+- **Last Threshold Check Frequency**: Dynamic check frequency when within last threshold (1-60 minutes, default: 0 = disabled, global setting)
+- **Challenge Settings**: Per-challenge overrides for boost time, exposure, last minutes threshold, and vote only in last threshold
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly.
 
@@ -267,7 +299,7 @@ The application uses a hierarchical settings system that gives you powerful cont
 - **Scenario 1**: Set global exposure to 80% but override a specific challenge to 100%
 - **Scenario 2**: Configure most challenges to vote normally, but set a few to "boost only" mode
 - **Scenario 3**: Use different last-minute thresholds for different types of challenges
-- **Scenario 4**: Apply more aggressive check frequencies to high-priority challenges
+- **Scenario 4**: Apply more aggressive check frequencies during critical time periods
 
 #### **Benefits of This Approach**
 
@@ -361,8 +393,7 @@ The Last Threshold Check Frequency feature allows you to configure different che
 
 You can configure this setting in the app:
 
-- **Global Default**: Set a default frequency for all challenges
-- **Per-Challenge Override**: Set different frequencies for specific challenges
+- **Global Setting**: Set the frequency for all challenges (no per-challenge overrides)
 - **Range**: 0-60 minutes (0 = disabled, recommended: 1-5 minutes for last threshold)
 
 ### **Example Scenarios**
@@ -408,6 +439,12 @@ You can change the application language through the settings interface. The lang
 **Windows open off-screen**
 - Restart the application
 - If using CLI, run the reset-windows command
+
+**"API Rate Limit Exceeded" or "Too Many Requests"**
+- **Stop all instances** of the application (GUI and CLI)
+- Wait 5-10 minutes before trying again
+- Ensure only **one instance** is running at a time
+- Check that no other applications are accessing GuruShots API
 
 ### **Get Help**
 

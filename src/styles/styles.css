@@ -26,10 +26,33 @@
     border-color: #7a0014;
 }
 
-.text-latvian {
-    color: var(--color-latvian);
+.badge-allstar {
+    --badge-color: #1c1c1c;
+    --badge-fg: var(--color-base-100);
 }
 
-.bg-latvian {
-    background-color: var(--color-latvian);
+.badge-elite {
+    --badge-color: #234f64;
+    --badge-fg: var(--color-base-100);
+}
+
+.badge-premier {
+    --badge-color: #853445;
+    --badge-fg: var(--color-base-100);
+}
+
+.badge-skilled {
+    --badge-color: #0a655c;
+    --badge-fg: var(--color-base-100);
+}
+
+.badge-popular {
+    --badge-color: #2c7fa6;
+    --badge-fg: var(--color-base-100);
+}
+
+[data-theme="dark"] {
+    .badge-allstar, .badge-elite, .badge-premier, .badge-skilled, .badge-popular {
+        --badge-fg: var(--color-base-content);
+    }
 }

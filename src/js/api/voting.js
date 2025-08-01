@@ -7,6 +7,7 @@
 
 const {makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
 const logger = require('../logger');
+const { updateChallengeVoteMetadata } = require('../metadata');
 
 /**
  * Fetches images available for voting in a specific challenge
@@ -43,14 +44,15 @@ const getVoteImages = async (challenge, token) => {
  *
  * This function:
  * 1. Randomly selects images to vote on
- * 2. Continues voting until the exposure factor reaches the exposure threshold or all images are used
+ * 2. Continues voting until the exposure factor reaches the target exposure or all images are used
  * 3. Submits the votes to the GuruShots API
  *
  * @param {object} voteImages - Object containing challenge, voting, and images data
  * @param {string} token - Authentication token
+ * @param {number} targetExposure - Target exposure percentage (default: 100)
  * @returns {object|undefined} - API response or undefined if submission failed
  */
-const submitVotes = async (voteImages, token) => {
+const submitVotes = async (voteImages, token, targetExposure = 100) => {
     const {challenge, voting, images} = voteImages;
     const operationId = `submit-votes-${challenge.id}`;
     
@@ -60,7 +62,7 @@ const submitVotes = async (voteImages, token) => {
         return;
     }
     
-    logger.startOperation(operationId, `Submitting votes for challenge ${challenge.title} (target: 100%)`);
+    logger.startOperation(operationId, `Submitting votes for challenge ${challenge.title} (target: ${targetExposure}%)`);
 
     // Prepare data for vote submission
     let votedImages = '';
@@ -68,12 +70,13 @@ const submitVotes = async (voteImages, token) => {
     const viewedImages = images.map(img => `&viewed_image_ids[]=${encodeURIComponent(img.id)}`).join('');
     // Get current exposure factor from the challenge data
     let {exposure_factor} = voting.exposure;
+    const originalExposureFactor = exposure_factor; // Store original exposure level for metadata
 
     // Track unique images to avoid voting for the same image twice
     const uniqueImageIds = new Set();
 
-    // Continue voting until exposure factor reaches 100% (always vote to 100, not just to threshold)
-    while (exposure_factor < 100) {
+    // Continue voting until exposure factor reaches target exposure
+    while (exposure_factor < targetExposure) {
         // Select a random image from the available images
         const randomImage = images[Math.floor(Math.random() * images.length)];
         if (uniqueImageIds.has(randomImage.id)) continue;
@@ -83,9 +86,9 @@ const submitVotes = async (voteImages, token) => {
         votedImages += `&image_ids[]=${encodeURIComponent(randomImage.id)}`;
         exposure_factor += randomImage.ratio;
 
-        // Break if we've used all available images but still haven't reached 100%
+        // Break if we've used all available images but still haven't reached target exposure
         if (uniqueImageIds.size === images.length) {
-            logger.warning(`Insufficient images to reach 100% exposure for ${challenge.title} (only ${uniqueImageIds.size} images available)`);
+            logger.warning(`Insufficient images to reach ${targetExposure}% exposure for ${challenge.title} (only ${uniqueImageIds.size} images available)`);
             break;
         }
     }
@@ -102,6 +105,22 @@ const submitVotes = async (voteImages, token) => {
     if (!response) {
         logger.endOperation(operationId, null, 'Vote submission failed');
         return;
+    }
+
+    // Update metadata after successful vote submission
+    try {
+        logger.debug(`🔧 DEBUG: About to update metadata for challenge ${challenge.id}, original exposure: ${Math.round(originalExposureFactor)}%`);
+        const success = updateChallengeVoteMetadata(challenge.id, Math.round(originalExposureFactor));
+        if (success) {
+            logger.debug(`🔧 DEBUG: Successfully updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`);
+            logger.info(`Updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`);
+        } else {
+            logger.debug(`🔧 DEBUG: Failed to update metadata for challenge ${challenge.id}`);
+            logger.warning(`Failed to update metadata for challenge ${challenge.id}`);
+        }
+    } catch (error) {
+        logger.debug(`🔧 DEBUG: Error updating metadata for challenge ${challenge.id}:`, error);
+        logger.warning(`Error updating metadata for challenge ${challenge.id}:`, error);
     }
 
     logger.endOperation(operationId, `Votes submitted successfully (${uniqueImageIds.size} images, ~${exposure_factor.toFixed(1)}% exposure)`);

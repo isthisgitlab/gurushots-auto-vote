@@ -170,6 +170,16 @@ describe('challenges', () => {
             // The logger module handles the error message, not console.error
         });
 
+        test('should handle falsy response object', async () => {
+            // Test with false (which is falsy but not null/undefined)
+            makePostRequest.mockResolvedValueOnce(false);
+
+            const result = await getActiveChallenges(mockToken);
+
+            expect(result).toEqual({challenges: []});
+            expect(logger.endOperation).toHaveBeenCalledWith(expect.any(String), null, 'API request failed');
+        });
+
         test('should truncate long tokens in logs', async () => {
             const longToken = 'very-long-token-that-should-be-truncated-for-security';
             const mockResponse = {challenges: []};

@@ -1,9 +1,37 @@
 // Get translation manager from global scope
 const translationManager = window.translationManager;
 
+// Browser-compatible logger
+const logger = {
+    info: (message, ...args) => {
+        console.log(`[INFO] ${message}`, ...args);
+        if (window.api && window.api.logDebug) {
+            window.api.logDebug(`${message} ${args.length > 0 ? args.join(' ') : ''}`);
+        }
+    },
+    error: (message, ...args) => {
+        console.error(`[ERROR] ${message}`, ...args);
+        if (window.api && window.api.logError) {
+            window.api.logError(`${message} ${args.length > 0 ? args.join(' ') : ''}`);
+        }
+    },
+    warning: (message, ...args) => {
+        console.warn(`[WARNING] ${message}`, ...args);
+        if (window.api && window.api.logDebug) {
+            window.api.logDebug(`WARNING: ${message} ${args.length > 0 ? args.join(' ') : ''}`);
+        }
+    },
+    success: (message, ...args) => {
+        console.log(`[SUCCESS] ${message}`, ...args);
+        if (window.api && window.api.logDebug) {
+            window.api.logDebug(`SUCCESS: ${message} ${args.length > 0 ? args.join(' ') : ''}`);
+        }
+    },
+};
+
 // Function for production login using real GuruShots API
 const loginProd = async (username, password) => {
-    console.log('Production login with:', username, password);
+    logger.info('Production login with:', username, password);
 
     try {
         // Use the IPC call to authenticate through the main process
@@ -11,7 +39,7 @@ const loginProd = async (username, password) => {
         return result;
 
     } catch (error) {
-        console.error('Production login error:', error);
+        logger.error('Production login error:', error);
         return {
             success: false,
             message: error.message || 'Authentication failed due to network error',
@@ -21,7 +49,7 @@ const loginProd = async (username, password) => {
 
 // Function for mock login using mock authentication data
 const loginMock = async (username, password) => {
-    console.log('Mock login with:', username, password);
+    logger.info('Mock login with:', username, password);
 
     try {
         // Use the IPC call to authenticate through the main process with mock flag
@@ -29,7 +57,7 @@ const loginMock = async (username, password) => {
         return result;
 
     } catch (error) {
-        console.error('Mock login error:', error);
+        logger.error('Mock login error:', error);
         return {
             success: false,
             message: error.message || 'Mock authentication failed',
@@ -38,41 +66,6 @@ const loginMock = async (username, password) => {
 };
 
 
-const showToast = (message, type = 'info') => {
-    const toastContainer = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-
-    // Set toast classes based on type
-    let alertClass = 'alert';
-    switch (type) {
-    case 'success':
-        alertClass += ' alert-success';
-        break;
-    case 'error':
-        alertClass += ' alert-error';
-        break;
-    case 'warning':
-        alertClass += ' alert-warning';
-        break;
-    default:
-        alertClass += ' alert-info';
-    }
-
-    toast.className = alertClass;
-    toast.innerHTML = `
-        <span>${message}</span>
-        <button class="btn btn-sm btn-ghost" onclick="this.parentElement.remove()">✕</button>
-    `;
-
-    toastContainer.appendChild(toast);
-
-    // Auto-remove toast after 5 seconds
-    setTimeout(() => {
-        if (toast.parentElement) {
-            toast.remove();
-        }
-    }, 5000);
-};
 
 
 const validateForm = () => {
@@ -240,7 +233,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Update the bottom text based on mock setting
         updateBottomText(mockToggle.checked);
 
-        console.log(`🔄 Login mock toggle changed to: ${mockToggle.checked}`);
+        logger.info(`🔄 Login mock toggle changed to: ${mockToggle.checked}`);
     });
 
     // Handle language change
@@ -255,6 +248,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             updateTranslations();
             updateBottomText(mockToggle.checked); // Update bottom text with new language
+            
+            // Refresh menu to update language
+            if (window.api && window.api.refreshMenu) {
+                await window.api.refreshMenu();
+            }
+            
+            // Close the dropdown by removing focus
+            const dropdown = document.querySelector('.dropdown');
+            if (dropdown) {
+                dropdown.blur();
+                // Also blur any focused elements inside the dropdown
+                const focusedElement = document.activeElement;
+                if (focusedElement && dropdown.contains(focusedElement)) {
+                    focusedElement.blur();
+                }
+            }
         });
     });
 
@@ -263,8 +272,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Prevent the default form submission
         event.preventDefault();
 
+        logger.info('🔐 Login form submitted');
+
         // Validate form
         if (!validateForm()) {
+            logger.warning('❌ Form validation failed');
             return;
         }
 
@@ -279,14 +291,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Determine which login function to use based on current mock toggle state
             // (ignore saved settings, use toggle value)
             const isMock = mockToggle.checked;
-            console.log(`🔐 Login attempt with mock mode: ${isMock}`);
+            logger.info(`🔐 Login attempt with mock mode: ${isMock}`);
+            
             const loginResult = isMock
                 ? await loginMock(username, password)
                 : await loginProd(username, password);
+                
+            logger.info('🔐 Login result:', loginResult);
 
             // Check if login was successful
             if (!loginResult.success) {
-                showToast(loginResult.message || 'Login failed', 'error');
+                alert(loginResult.message || 'Login failed');
                 setLoadingState(false);
                 return;
             }
@@ -316,8 +331,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.api.login();
 
         } catch (error) {
-            console.error('Login error:', error);
-            showToast('An unexpected error occurred during login', 'error');
+            logger.error('Login error:', error);
+            alert('An unexpected error occurred during login');
             setLoadingState(false);
         }
     });

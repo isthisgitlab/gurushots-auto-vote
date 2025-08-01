@@ -32,10 +32,12 @@ jobs:
 
   version-bump:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: github.event_name == 'push'
     outputs:
       new-version: ${{ steps.bump_version.outputs.NEW_VERSION }}
       bump-type: ${{ steps.version_bump_type.outputs.BUMP_TYPE }}
+      is-beta: ${{ steps.is_beta.outputs.IS_BETA }}
+      is-prerelease: ${{ steps.is_beta.outputs.IS_BETA }}
 
     steps:
       - name: Checkout code
@@ -46,10 +48,18 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Determine if beta
+        id: is_beta
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "IS_BETA=true" >> $GITHUB_OUTPUT
+          else
+            echo "IS_BETA=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Determine version bump type
         id: version_bump_type
         run: |
-          # Check commit message for version bump indicators
           COMMIT_MSG="${{ github.event.head_commit.message }}"
           
           if [[ "$COMMIT_MSG" =~ \[major\] ]]; then
@@ -58,25 +68,32 @@ jobs:
             echo "BUMP_TYPE=minor" >> $GITHUB_OUTPUT
           elif [[ "$COMMIT_MSG" =~ \[patch\] ]]; then
             echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
-          elif [[ "$COMMIT_MSG" =~ ^feat: ]]; then
-            echo "BUMP_TYPE=minor" >> $GITHUB_OUTPUT
           else
             echo "BUMP_TYPE=patch" >> $GITHUB_OUTPUT
           fi
-          echo "Version bump type: ${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
 
       - name: Bump version
         id: bump_version
         run: |
-          # Bump version based on determined type
           BUMP_TYPE="${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
-          echo "Bumping $BUMP_TYPE version..."
-          npm version $BUMP_TYPE --no-git-tag-version
+          IS_BETA="${{ steps.is_beta.outputs.IS_BETA }}"
           
-          # Get new version
+          if [[ "$IS_BETA" == "true" ]]; then
+            # For beta releases, use the appropriate prerelease command
+            if [[ "$BUMP_TYPE" == "major" ]]; then
+              npm version premajor --preid=beta --no-git-tag-version
+            elif [[ "$BUMP_TYPE" == "minor" ]]; then
+              npm version preminor --preid=beta --no-git-tag-version
+            else
+              # For patch, just increment the beta number
+              npm version prerelease --preid=beta --no-git-tag-version
+            fi
+          else
+            npm version $BUMP_TYPE --no-git-tag-version
+          fi
+          
           NEW_VERSION=$(node -p "require('./package.json').version")
           echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
       - name: Upload bumped package.json
         uses: actions/upload-artifact@v4
@@ -88,7 +105,7 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     needs: [ version-bump ]
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: github.event_name == 'push'
     strategy:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
@@ -131,84 +148,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_ENV: production
 
-      - name: Build Linux ARM app
-        if: matrix.platform == 'linux'
-        run: npm run build:linux-arm
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_ENV: production
-
-      - name: Setup Node.js 22 for CLI builds
-        if: matrix.platform != 'win'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Build CLI app (macOS/Linux only)
-        if: matrix.platform != 'win'
-        run: npm run build:cli:${{ matrix.platform }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build CLI Linux ARM app
-        if: matrix.platform == 'linux'
-        run: npm run build:cli:linux-arm
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: List CLI files
-        if: matrix.platform != 'win'
-        run: ls -la build/cli/
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.platform }}-builds
-          path: |
-            build/*.dmg
-            build/*.exe
-            build/*.AppImage
-            ${{ matrix.platform != 'win' && 'build/cli/' || '' }}
-          retention-days: 1
-
-  build-develop:
-    runs-on: ${{ matrix.os }}
-    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
-        include:
-          - os: macos-latest
-            platform: mac
-          - os: ubuntu-latest
-            platform: linux
-          - os: windows-latest
-            platform: win
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run linter
-        run: npm run lint
-
-      - name: Build CSS
-        run: npm run build:css
-
-      - name: Build Electron app
-        run: npm run build:${{ matrix.platform }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NODE_ENV: production
+      - name: Zip macOS .app file with version
+        if: matrix.platform == 'mac'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ -d "build/mac-arm64/GuruShotsAutoVote.app" ]; then
+            cd build/mac-arm64
+            zip -r "../GuruShotsAutoVote-v${VERSION}-arm64.app.zip" "GuruShotsAutoVote.app"
+            cd ../..
+          fi
 
       - name: Build Linux ARM app
         if: matrix.platform == 'linux'
@@ -235,16 +183,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: List CLI files
-        if: matrix.platform != 'win'
-        run: ls -la build/cli/
-
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: develop-${{ matrix.platform }}-builds
+          name: ${{ needs.version-bump.outputs.is-beta == 'true' && format('develop-{0}-builds', matrix.platform) || format('{0}-builds', matrix.platform) }}
           path: |
             build/*.dmg
+            build/GuruShotsAutoVote-v*.app.zip
             build/*.exe
             build/*.AppImage
             ${{ matrix.platform != 'win' && 'build/cli/' || '' }}
@@ -253,11 +198,13 @@ jobs:
   create-release:
     needs: [ build, version-bump ]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    if: github.event_name == 'push'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -291,47 +238,62 @@ jobs:
         with:
           path: artifacts
 
+      - name: Set release variables
+        id: release_vars
+        run: |
+          IS_BETA="${{ needs.version-bump.outputs.is-beta }}"
+          
+          # Set title prefix
+          if [[ "$IS_BETA" == "true" ]]; then
+            echo "TITLE_PREFIX=Pre-Release" >> $GITHUB_OUTPUT
+            echo "BODY_PREFIX=🧪 Pre-Release" >> $GITHUB_OUTPUT
+            echo "ARTIFACT_PREFIX=develop-" >> $GITHUB_OUTPUT
+            echo "WARNING_TEXT=### ⚠️ Important! This is a **pre-release** from the develop branch. Use at your own risk." >> $GITHUB_OUTPUT
+            echo "BUILD_DATE=Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_OUTPUT
+          else
+            echo "TITLE_PREFIX=Release" >> $GITHUB_OUTPUT
+            echo "BODY_PREFIX=📦 Release" >> $GITHUB_OUTPUT
+            echo "ARTIFACT_PREFIX=" >> $GITHUB_OUTPUT
+            echo "WARNING_TEXT=" >> $GITHUB_OUTPUT
+            echo "BUILD_DATE=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_name.outputs.RELEASE_NAME }}
-          name: Release ${{ steps.release_name.outputs.RELEASE_NAME }}
+          target_commitish: ${{ github.ref_name }}
+          name: ${{ steps.release_vars.outputs.TITLE_PREFIX }} ${{ steps.release_name.outputs.RELEASE_NAME }}
           generate_release_notes: true
           body: |
-            ## 📦 Build
+            ## ${{ steps.release_vars.outputs.BODY_PREFIX }}
+            
+            ${{ steps.release_vars.outputs.WARNING_TEXT }}
             
             ### 🖥️ GUI Applications
             - **Windows**: Portable executable (x64)
-            - **macOS**: DMG installer (ARM64)
+            - **macOS**: DMG installer + App bundle (ARM64)
             - **Linux**: AppImage (x64 + ARM64)
             
             ### 💻 CLI Applications
             - **macOS**: Native CLI executable (x64)
             - **Linux**: Native CLI executables (x64 + ARM64)
-            - **Features**: Supports both real and mock modes via settings
-            
-            ### 🔧 Features
-            - Automated voting on GuruShots challenges
-            - Boost management and application
-            - Dual interface: GUI and command-line
-            - Secure authentication with remember me
-            - Theme support (light/dark mode)
-            - Cross-platform compatibility
             
             ### 🔗 Build Info
             - Commit: ${{ github.sha }}
-            - Branch: ${{ github.ref_name }}
             - Version: ${{ steps.get_version.outputs.VERSION }}
             - Version Bump Type: ${{ needs.version-bump.outputs.bump-type }}
+            ${{ steps.release_vars.outputs.BUILD_DATE }}
           draft: false
-          prerelease: false
+          prerelease: ${{ needs.version-bump.outputs.is-beta == 'true' }}
           files: |
-            artifacts/mac-builds/GuruShotsAutoVote-v*.dmg
-            artifacts/linux-builds/GuruShotsAutoVote-v*.AppImage
-            artifacts/win-builds/GuruShotsAutoVote-v*.exe
-            artifacts/mac-builds/cli/gurucli-mac
-            artifacts/linux-builds/cli/gurucli-linux
-            artifacts/linux-builds/cli/gurucli-linux-arm
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.dmg
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.app.zip
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/GuruShotsAutoVote-v*.AppImage
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/GuruShotsAutoVote-v*.exe
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux-arm
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -341,4 +303,4 @@ jobs:
           git config --local user.name "GitHub Action"
           git add package.json README.md docs/
           git commit -m "Bump version to ${{ needs.version-bump.outputs.new-version }} (${{ needs.version-bump.outputs.bump-type }}) and update documentation [skip ci]"
-          git push origin master 
+          git push origin ${{ github.ref_name }} 

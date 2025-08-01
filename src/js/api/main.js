@@ -8,9 +8,10 @@
 const {getActiveChallenges} = require('./challenges');
 const {getVoteImages, submitVotes} = require('./voting');
 const {applyBoost, applyBoostToEntry} = require('./boost');
-const settings = require('../settings');
+const {cleanupStaleMetadata} = require('../metadata');
 const {sleep, getRandomDelay} = require('./utils');
 const logger = require('../logger');
+const votingLogic = require('../services/VotingLogic');
 
 // Global cancellation flag
 let shouldCancelVoting = false;
@@ -38,7 +39,7 @@ const setCancellationFlag = (cancel) => {
  * @param {number|function} exposureThreshold - Exposure threshold (default: schema default) or function to get threshold per challenge
  * @returns {void}
  */
-const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
+const fetchChallengesAndVote = async (token) => {
     logger.startOperation('voting-process', 'Voting process');
     
     try {
@@ -56,6 +57,20 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
             return {success: true, message: 'No active challenges found'};
         }
 
+        // Cleanup stale metadata for challenges that no longer exist
+        try {
+            const activeChallengeIds = challenges.map(challenge => challenge.id.toString());
+            logger.debug(`🔧 DEBUG: About to cleanup metadata, active challenge IDs: [${activeChallengeIds.join(', ')}]`);
+            const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds);
+            if (cleanupSuccess) {
+                logger.debug('Successfully cleaned up stale metadata');
+            } else {
+                logger.warning('Failed to cleanup stale metadata');
+            }
+        } catch (error) {
+            logger.warning('Error during metadata cleanup:', error);
+        }
+
         // Process each challenge
         let processedCount = 0;
         for (const challenge of challenges) {
@@ -71,21 +86,19 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
             // Log progress
             logger.progress(`Processing challenge ${processedCount}/${challenges.length}: ${challenge.title}`, processedCount, challenges.length);
 
-            // Get the effective exposure threshold for this challenge
-            const effectiveThreshold = typeof exposureThreshold === 'function'
-                ? exposureThreshold(challenge.id.toString())
-                : exposureThreshold;
+            // Note: effectiveThreshold is now handled by the voting logic service
 
             // Check if boost is available for this challenge
             const {boost} = challenge.member;
             if (boost.state === 'AVAILABLE' && boost.timeout) {
                 logger.challengeInfo(challenge.id, challenge.title, 'Boost available');
 
-                // Get the effective boost time setting for this challenge
-                const effectiveBoostTime = settings.getEffectiveSetting('boostTime', challenge.id.toString());
+                // Use the centralized voting logic service for boost decisions
+                const shouldApplyBoost = votingLogic.shouldApplyBoost(challenge, now);
+                const effectiveBoostTime = votingLogic.getEffectiveBoostTime(challenge.id.toString());
                 const timeUntilDeadline = boost.timeout - now;
 
-                if (timeUntilDeadline <= effectiveBoostTime && timeUntilDeadline > 0) {
+                if (shouldApplyBoost) {
                     const minutesRemaining = Math.floor(timeUntilDeadline / 60);
                     const hoursRemaining = Math.floor(minutesRemaining / 60);
                     const timeDisplay = hoursRemaining > 0
@@ -109,55 +122,8 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
                 }
             }
 
-            // Check if boost-only mode is enabled for this challenge
-            const onlyBoost = settings.getEffectiveSetting('onlyBoost', challenge.id.toString());
-
-            // Get the effective lastminute threshold for this challenge
-            const effectiveLastMinutes = settings.getEffectiveSetting('lastMinutes', challenge.id.toString());
-            const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
-
-            // Get the vote-only-in-last-threshold setting for this challenge
-            const voteOnlyInLastThreshold = settings.getEffectiveSetting('voteOnlyInLastThreshold', challenge.id.toString());
-
-            // Determine if we should vote based on lastminute threshold logic
-            let shouldVote = false;
-            let voteReason = '';
-
-            if (onlyBoost) {
-                // Skip voting if boost-only mode is enabled
-                voteReason = 'boost-only mode enabled';
-            } else if (challenge.start_time >= now) {
-                // Skip voting if challenge hasn't started yet
-                voteReason = 'challenge not started';
-            } else if (challenge.type === 'flash') {
-                // Flash type: ignore exposure threshold, boost only and vote when below 100
-                if (challenge.member.ranking.exposure.exposure_factor < 100) {
-                    shouldVote = true;
-                    voteReason = `flash type: exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
-                } else {
-                    voteReason = 'flash type: exposure already at 100%';
-                }
-            } else if (voteOnlyInLastThreshold && !isWithinLastMinuteThreshold) {
-                // Skip voting if vote-only-in-last-threshold is enabled and we're not within the last threshold
-                voteReason = `vote-only-in-last-threshold enabled: not within last ${effectiveLastMinutes}m threshold`;
-            } else if (isWithinLastMinuteThreshold) {
-                // Within lastminute threshold: ignore exposure threshold, auto-vote if exposure < 100
-                if (challenge.member.ranking.exposure.exposure_factor < 100) {
-                    shouldVote = true;
-                    voteReason = `lastminute threshold (${effectiveLastMinutes}m): exposure ${challenge.member.ranking.exposure.exposure_factor}% < 100%`;
-                } else {
-                    voteReason = `lastminute threshold (${effectiveLastMinutes}m): exposure already at 100%`;
-                }
-            } else {
-                // Normal logic: vote if exposure factor is less than the effective threshold
-                if (challenge.member.ranking.exposure.exposure_factor < effectiveThreshold) {
-                    shouldVote = true;
-                    voteReason = `normal threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveThreshold}%`;
-                } else {
-                    voteReason = `normal threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveThreshold}%`;
-                }
-            }
+            // Use the centralized voting logic service
+            const {shouldVote, voteReason, targetExposure} = votingLogic.evaluateVotingDecision(challenge, now);
 
             // Vote on challenge if conditions are met
             if (shouldVote) {
@@ -185,11 +151,14 @@ const fetchChallengesAndVote = async (token, exposureThreshold = settings.SETTIN
 
                         logger.challengeInfo(challenge.id, challenge.title, `Submitting votes for ${voteImages.images.length} images`);
 
-                        // Submit votes to 100% (always vote to 100, not just to threshold)
-                        await submitVotes(voteImages, token);
+                        // Submit votes to target exposure (dynamic based on voting rules)
+                        logger.debug(`🔧 DEBUG: About to submit votes for challenge ${challenge.id}: ${challenge.title} (target: ${targetExposure}%)`);
+                        await submitVotes(voteImages, token, targetExposure);
+                        logger.debug(`🔧 DEBUG: Completed vote submission for challenge ${challenge.id}: ${challenge.title}`);
 
                         // Check for cancellation before delay
                         if (checkCancellation()) {
+                            logger.debug(`🔧 DEBUG: Cancellation detected after vote submission for challenge ${challenge.id}: ${challenge.title}`);
                             logger.warning('🛑 Voting cancelled by user after vote submission');
                             logger.endOperation('voting-process', null, 'Voting cancelled by user');
                             return {success: false, message: 'Voting cancelled by user'};
