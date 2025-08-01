@@ -10,6 +10,7 @@ export const initializeAutovote = () => {
     const refreshBtn = document.getElementById('refresh-challenges');
 
     let autovoteRunning = false;
+    window.autovoteRunning = autovoteRunning;
     let cycleCount = 0;
     let autovoteInterval = null;
     let autoRefreshInterval = null;
@@ -309,6 +310,7 @@ export const initializeAutovote = () => {
         if (autovoteRunning) return;
 
         autovoteRunning = true;
+        window.autovoteRunning = autovoteRunning;
         await window.api.setCancelVoting(false);
         updateAutovoteStatus('Running', 'badge-success');
 
@@ -412,6 +414,7 @@ export const initializeAutovote = () => {
 
         await window.api.logDebug('🛑 Setting autovoteRunning to false and canceling voting');
         autovoteRunning = false;
+        window.autovoteRunning = autovoteRunning;
         await window.api.setCancelVoting(true);
 
         // Clear autovote interval

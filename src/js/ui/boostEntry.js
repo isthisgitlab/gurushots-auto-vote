@@ -25,7 +25,7 @@ export const initializeBoostEntry = () => {
                     // Refresh challenges to show updated state
                     setTimeout(async () => {
                         const timezone = await window.api.getSetting('timezone');
-                        loadChallenges(timezone, false);
+                        loadChallenges(timezone, window.autovoteRunning || false);
                     }, 1000);
                 } else {
                     await window.api.logError(`❌ Failed to apply boost: ${result?.error || 'Unknown error'}`);
