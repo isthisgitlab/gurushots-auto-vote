@@ -448,17 +448,15 @@ module.exports = {
     error: (message, data) => writeToLogFile(currentLogFiles.error, 'ERROR', message, data),
     info: (message, data) => writeToLogFile(currentLogFiles.app, 'INFO', message, data),
     debug: (message, data) => {
-        // CLI mode: always log debug
-        // GUI mode: only log debug in development
-        if (isCliMode || isDevMode) {
+        // Only log debug messages in non-built app (source code)
+        if (isSourceCode()) {
             writeToLogFile(currentLogFiles.app, 'DEBUG', message, data);
-        } else {
-            // In GUI production mode, only log to console, not to file
-            console.log(formatConsoleMessage('DEBUG', message));
         }
+        // In built app, debug logs are completely silent
     },
     api: (message, data) => {
-        if (isDevMode || isCliMode) {
+        // Always log API messages to file in non-built app
+        if (isSourceCode()) {
             writeToLogFile(currentLogFiles.api, 'API', message, data);
         }
     },
@@ -496,7 +494,8 @@ module.exports = {
         const message = duration ? 
             `${method} ${url} (${duration}ms)` : 
             `${method} ${url}`;
-        if (isDevMode || isCliMode) {
+        // Always log API requests to file in non-built app
+        if (isSourceCode()) {
             writeToLogFile(currentLogFiles.api, 'API', `🌐 REQUEST: ${message}`);
         }
     },
@@ -506,7 +505,8 @@ module.exports = {
         const message = duration ? 
             `${method} ${url} → ${status} (${duration}ms)` : 
             `${method} ${url} → ${status}`;
-        if (isDevMode || isCliMode) {
+        // Always log API responses to file in non-built app
+        if (isSourceCode()) {
             writeToLogFile(currentLogFiles.api, 'API', `${statusEmoji} RESPONSE: ${message}`);
         }
     },
