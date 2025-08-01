@@ -98,8 +98,8 @@ describe('apiFactory', () => {
             getApiStrategy();
 
             expect(mockLogger.debug).toHaveBeenCalledWith('=== API Factory Debug ===');
-            expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting:', true);
-            expect(mockLogger.debug).toHaveBeenCalledWith('Token exists:', true);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting: true');
+            expect(mockLogger.debug).toHaveBeenCalledWith('Token exists: true');
         });
 
         test('should handle missing token', () => {
@@ -111,7 +111,7 @@ describe('apiFactory', () => {
 
             getApiStrategy();
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('Token exists:', false);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Token exists: false');
         });
 
         test('should handle undefined token', () => {
@@ -122,7 +122,7 @@ describe('apiFactory', () => {
 
             getApiStrategy();
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('Token exists:', false);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Token exists: false');
         });
 
         test('should cache strategy when settings do not change', () => {
@@ -334,7 +334,7 @@ describe('apiFactory', () => {
             const strategy = getApiStrategy();
 
             expect(strategy.mockRealStrategy).toBe(true);
-            expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting:', undefined);
+            expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting: undefined');
             expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production');
         });
     });
