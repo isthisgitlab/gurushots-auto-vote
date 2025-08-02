@@ -1,28 +1,24 @@
 // Get translation manager from global scope
 const translationManager = window.translationManager;
 
-// Browser-compatible logger
+// Browser-compatible logger - forwards to main process logger
 const logger = {
     info: (message, ...args) => {
-        console.log(`[INFO] ${message}`, ...args);
         if (window.api && window.api.logDebug) {
             window.api.logDebug(`${message} ${args.length > 0 ? args.join(' ') : ''}`);
         }
     },
     error: (message, ...args) => {
-        console.error(`[ERROR] ${message}`, ...args);
         if (window.api && window.api.logError) {
             window.api.logError(`${message} ${args.length > 0 ? args.join(' ') : ''}`);
         }
     },
     warning: (message, ...args) => {
-        console.warn(`[WARNING] ${message}`, ...args);
         if (window.api && window.api.logDebug) {
             window.api.logDebug(`WARNING: ${message} ${args.length > 0 ? args.join(' ') : ''}`);
         }
     },
     success: (message, ...args) => {
-        console.log(`[SUCCESS] ${message}`, ...args);
         if (window.api && window.api.logDebug) {
             window.api.logDebug(`SUCCESS: ${message} ${args.length > 0 ? args.join(' ') : ''}`);
         }
