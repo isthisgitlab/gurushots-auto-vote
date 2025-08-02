@@ -1,4 +1,4 @@
-const { Menu, dialog, app } = require('electron');
+const { Menu, dialog, app, BrowserWindow } = require('electron');
 
 /**
  * Application Menu Module
@@ -138,6 +138,11 @@ function createApplicationMenu() {
             label: t('menu.help'),
             submenu: [
                 {
+                    label: t('menu.logs'),
+                    click: () => openLogsWindow(),
+                },
+                { type: 'separator' },
+                {
                     label: t('menu.about'),
                     click: () => showAbout(),
                 },
@@ -168,6 +173,41 @@ function updateMenuTranslations() {
     initializeTranslations();
     // Recreate menu with new translations
     createApplicationMenu();
+}
+
+// Open logs window
+function openLogsWindow() {
+    const path = require('path');
+    
+    // Check if logs window already exists
+    const existingWindow = BrowserWindow.getAllWindows().find(win => win.getTitle() === 'Logs');
+    if (existingWindow) {
+        existingWindow.focus();
+        return;
+    }
+    
+    const logsWindow = new BrowserWindow({
+        width: 1000,
+        height: 700,
+        title: 'Logs',
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, '../preload.js'),
+        },
+        show: false,
+    });
+    
+    logsWindow.loadFile(path.join(__dirname, '../../html/logs.html'));
+    
+    logsWindow.once('ready-to-show', () => {
+        logsWindow.show();
+    });
+    
+    // Clean up when window is closed
+    logsWindow.on('closed', () => {
+        // Window will be garbage collected
+    });
 }
 
 module.exports = {
