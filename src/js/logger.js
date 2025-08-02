@@ -274,10 +274,15 @@ const getTimeString = () => {
 };
 
 /**
- * Apply color to text (only in CLI mode)
+ * Apply color to text (only in CLI mode and when not sending to GUI)
  */
-const colorize = (text, color) => {
-    if (!isCliMode || !process.stdout.isTTY) {
+const colorize = (text, color, forConsole = false) => {
+    // Only apply colors in CLI mode with TTY or when explicitly for console output
+    if ((!isCliMode || !process.stdout.isTTY) && !forConsole) {
+        return text;
+    }
+    // Don't apply colors if we're sending to GUI (even in CLI mode)
+    if (typeof global !== 'undefined' && global.sendLogToGUI && !forConsole) {
         return text;
     }
     return `${colors[color]}${text}${colors.reset}`;
@@ -286,7 +291,7 @@ const colorize = (text, color) => {
 /**
  * Format console output with context and colors
  */
-const formatConsoleMessage = (level, message, context = getContext(), timestamp = getTimeString()) => {
+const formatConsoleMessage = (level, message, context = getContext(), timestamp = getTimeString(), forConsole = false) => {
     const levelColors = {
         'INFO': 'blue',
         'SUCCESS': 'green',
@@ -298,9 +303,9 @@ const formatConsoleMessage = (level, message, context = getContext(), timestamp 
     };
 
     const color = levelColors[level] || 'white';
-    const coloredLevel = colorize(`[${level}]`, color);
-    const coloredContext = colorize(`[${context}]`, 'cyan');
-    const coloredTime = colorize(`[${timestamp}]`, 'gray');
+    const coloredLevel = colorize(`[${level}]`, color, forConsole);
+    const coloredContext = colorize(`[${context}]`, 'cyan', forConsole);
+    const coloredTime = colorize(`[${timestamp}]`, 'gray', forConsole);
 
     return `${coloredContext} ${coloredTime} ${coloredLevel} ${message}`;
 };
@@ -326,8 +331,14 @@ const writeToLogFile = (logFile, level, message, data = null, context = getConte
         // Write to file
         fs.appendFileSync(logFile, logEntry);
 
-        // Also log to console with formatting
-        console.log(formatConsoleMessage(level, message, context));
+        // Also log to console with formatting (colors enabled for console)
+        console.log(formatConsoleMessage(level, message, context, getTimeString(), true));
+        
+        // Send to GUI if available and log stream is active (no colors for GUI)
+        if (typeof global !== 'undefined' && global.sendLogToGUI) {
+            const timeString = getTimeString();
+            global.sendLogToGUI(level, message, context, timeString);
+        }
     } catch (error) {
         console.error('Error writing to log file:', error);
     }
@@ -337,20 +348,24 @@ const writeToLogFile = (logFile, level, message, data = null, context = getConte
  * Enhanced logging with operation tracking
  */
 const logWithOperation = (level, operation, message, data = null, duration = null) => {
-    let formattedMessage = message;
+    let baseMessage = message;
     
     if (operation) {
-        formattedMessage = `${operation}: ${message}`;
+        baseMessage = `${operation}: ${message}`;
     }
     
+    // Create clean message for GUI/file (without colors)
+    let cleanMessage = baseMessage;
+    
     if (duration !== null) {
-        formattedMessage += ` ${colorize(`(${duration}ms)`, 'dim')}`;
+        cleanMessage += ` (${duration}ms)`;
     }
     
     const logFile = level === 'ERROR' ? currentLogFiles.error : 
         level === 'API' ? currentLogFiles.api : currentLogFiles.app;
     
-    writeToLogFile(logFile, level, formattedMessage, data);
+    // Use the clean message for file/GUI logging
+    writeToLogFile(logFile, level, cleanMessage, data);
 };
 
 /**
@@ -366,7 +381,7 @@ const logProgress = (message, current = null, total = null) => {
         progressMessage += ` [${progressBar}] ${percentage}% (${current}/${total})`;
     }
     
-    console.log(formatConsoleMessage('PROGRESS', progressMessage));
+    console.log(formatConsoleMessage('PROGRESS', progressMessage, getContext(), getTimeString(), true));
 };
 
 /**
@@ -375,7 +390,7 @@ const logProgress = (message, current = null, total = null) => {
 const logSuccess = (message, data = null, duration = null) => {
     let successMessage = `✅ ${message}`;
     if (duration !== null) {
-        successMessage += ` ${colorize(`(${duration}ms)`, 'dim')}`;
+        successMessage += ` (${duration}ms)`;
     }
     writeToLogFile(currentLogFiles.app, 'SUCCESS', successMessage, data);
 };
@@ -452,7 +467,7 @@ module.exports = {
         if (isSourceCode()) {
             writeToLogFile(currentLogFiles.app, 'DEBUG', message, data);
         }
-        // In built app, debug logs are completely silent
+        // In built app, debug messages are completely suppressed for both CLI and GUI
     },
     api: (message, data) => {
         // Always log API messages to file in non-built app
