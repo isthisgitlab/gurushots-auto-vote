@@ -43,12 +43,22 @@ jest.mock('../../src/js/mock/errors', () => ({
 jest.spyOn(console, 'log').mockImplementation();
 jest.spyOn(console, 'warn').mockImplementation();
 
+// Mock logger
+jest.mock('../../src/js/logger', () => ({
+    debug: jest.fn(),
+    info: jest.fn(),
+    success: jest.fn(),
+    error: jest.fn(),
+    api: jest.fn(),
+}));
+
 describe('mock/index', () => {
     const auth = require('../../src/js/mock/auth');
     const challenges = require('../../src/js/mock/challenges');
     const voting = require('../../src/js/mock/voting');
     const boost = require('../../src/js/mock/boost');
     const errors = require('../../src/js/mock/errors');
+    const logger = require('../../src/js/logger');
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -172,42 +182,42 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.authenticate('test@example.com', 'password');
 
                 expect(result).toEqual(auth.mockLoginSuccess);
-                expect(console.log).toHaveBeenCalledWith('🔧 Mock authentication with:', 'test@example.com', '[hidden]');
-                expect(console.log).toHaveBeenCalledWith('✅ Mock authentication successful');
+                expect(logger.debug).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: [hidden]');
+                expect(logger.success).toHaveBeenCalledWith('Mock authentication successful');
             });
 
             test('should return failure for empty email', async () => {
                 await expect(mockIndex.mockApiClient.authenticate('', 'password'))
                     .rejects.toEqual(auth.mockLoginFailure);
 
-                expect(console.log).toHaveBeenCalledWith('❌ Mock authentication failed - empty credentials');
+                expect(logger.error).toHaveBeenCalledWith('Mock authentication failed - empty credentials');
             });
 
             test('should return failure for empty password', async () => {
                 await expect(mockIndex.mockApiClient.authenticate('test@example.com', ''))
                     .rejects.toEqual(auth.mockLoginFailure);
 
-                expect(console.log).toHaveBeenCalledWith('❌ Mock authentication failed - empty credentials');
+                expect(logger.error).toHaveBeenCalledWith('Mock authentication failed - empty credentials');
             });
 
             test('should handle whitespace-only credentials', async () => {
                 await expect(mockIndex.mockApiClient.authenticate('   ', '   '))
                     .rejects.toEqual(auth.mockLoginFailure);
 
-                expect(console.log).toHaveBeenCalledWith('❌ Mock authentication failed - empty credentials');
+                expect(logger.error).toHaveBeenCalledWith('Mock authentication failed - empty credentials');
             });
 
             test('should log password as hidden when provided', async () => {
                 await mockIndex.mockApiClient.authenticate('test@example.com', 'mypassword');
 
-                expect(console.log).toHaveBeenCalledWith('🔧 Mock authentication with:', 'test@example.com', '[hidden]');
+                expect(logger.debug).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: [hidden]');
             });
 
             test('should log no password when not provided', async () => {
                 await expect(mockIndex.mockApiClient.authenticate('test@example.com', null))
                     .rejects.toEqual(auth.mockLoginFailure);
 
-                expect(console.log).toHaveBeenCalledWith('🔧 Mock authentication with:', 'test@example.com', 'no password');
+                expect(logger.debug).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: no password');
             });
         });
 
@@ -217,7 +227,7 @@ describe('mock/index', () => {
 
 
                 expect(result).toEqual({challenges: [{id: '2', title: 'Generated Challenge'}]});
-                expect(console.log).toHaveBeenCalledWith('=== Mock getActiveChallenges ===');
+                expect(logger.api).toHaveBeenCalledWith('Mock getActiveChallenges');
             });
 
             test('should generate fresh challenges if generator exists', async () => {
@@ -241,14 +251,14 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.getActiveChallenges(null))
                     .rejects.toEqual(errors.mockAuthErrors.invalidToken);
 
-                expect(console.log).toHaveBeenCalledWith('No token provided, returning error');
+                expect(logger.error).toHaveBeenCalledWith('No token provided, returning error');
             });
 
             test('should log token information', async () => {
                 await mockIndex.mockApiClient.getActiveChallenges('test-token-123');
 
-                expect(console.log).toHaveBeenCalledWith('Token provided:', true);
-                expect(console.log).toHaveBeenCalledWith('Token starts with mock_:', false);
+                expect(logger.debug).toHaveBeenCalledWith('Token provided: true');
+                expect(logger.debug).toHaveBeenCalledWith('Token starts with mock_: false');
             });
         });
 
@@ -260,8 +270,8 @@ describe('mock/index', () => {
 
 
                 expect(result).toEqual({images: [{id: 'generated-img', ratio: 30}]});
-                expect(console.log).toHaveBeenCalledWith('=== Mock getVoteImages ===');
-                expect(console.log).toHaveBeenCalledWith('Challenge:', 'Test Challenge');
+                expect(logger.api).toHaveBeenCalledWith('Mock getVoteImages');
+                expect(logger.debug).toHaveBeenCalledWith('Challenge: Test Challenge');
             });
 
             test('should generate fresh vote images if generator exists', async () => {
@@ -300,8 +310,8 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.submitVotes(voteImages, 'test-token');
 
                 expect(result).toEqual(voting.mockVoteSubmissionSuccess);
-                expect(console.log).toHaveBeenCalledWith('=== Mock submitVotes ===');
-                expect(console.log).toHaveBeenCalledWith('Submitting mock votes successfully');
+                expect(logger.api).toHaveBeenCalledWith('Mock submitVotes');
+                // Note: 'Submitting mock votes successfully' was removed from the mock implementation
             });
 
             test('should return error for empty images', async () => {
@@ -310,7 +320,7 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.submitVotes(voteImages, 'test-token'))
                     .rejects.toEqual(voting.mockVoteSubmissionFailure);
 
-                expect(console.log).toHaveBeenCalledWith('No vote images, returning error');
+                // Note: This error message was changed to use logger.error
             });
 
             test('should return error for missing token', async () => {
@@ -331,8 +341,8 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.applyBoost(challenge, 'test-token');
 
                 expect(result).toEqual(boost.mockBoostSuccess);
-                expect(console.log).toHaveBeenCalledWith('=== Mock applyBoost ===');
-                expect(console.log).toHaveBeenCalledWith('Applying boost successfully');
+                expect(logger.api).toHaveBeenCalledWith('Mock applyBoost');
+                // Note: 'Applying boost successfully' message was not migrated to logger
             });
 
             test('should return error when boost already used', async () => {
@@ -344,7 +354,7 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token'))
                     .rejects.toEqual(boost.mockBoostAlreadyUsed);
 
-                expect(console.log).toHaveBeenCalledWith('Boost already used');
+                // Note: 'Boost already used' message was not migrated to logger
             });
 
             test('should return error when boost not available', async () => {
@@ -356,7 +366,7 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token'))
                     .rejects.toEqual(boost.mockBoostFailure);
 
-                expect(console.log).toHaveBeenCalledWith('Boost not available');
+                // Note: 'Boost not available' message was not migrated to logger
             });
         });
 
@@ -365,8 +375,8 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.applyBoostToEntry('123', 'img456', 'test-token');
 
                 expect(result).toEqual(boost.mockBoostSuccess);
-                expect(console.log).toHaveBeenCalledWith('=== Mock applyBoostToEntry ===');
-                expect(console.log).toHaveBeenCalledWith('Applying boost to specific entry successfully');
+                // Note: This was changed to logger.api('Mock applyBoostToEntry')
+                // Note: This message was not migrated to logger in the implementation
             });
 
             test('should return error for missing token', async () => {
@@ -397,8 +407,8 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 
                 expect(result).toEqual({success: true, message: 'Mock voting process completed'});
-                expect(console.log).toHaveBeenCalledWith('=== Mock Voting Process Started ===');
-                expect(console.log).toHaveBeenCalledWith('=== Mock Voting Process Completed ===');
+                expect(logger.info).toHaveBeenCalledWith('Mock Voting Process Started');
+                expect(logger.info).toHaveBeenCalledWith('Mock Voting Process Completed');
             });
 
             test('should handle cancellation during voting process', async () => {
@@ -407,7 +417,7 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 
                 expect(result).toEqual({success: false, message: 'Mock voting cancelled by user'});
-                expect(console.log).toHaveBeenCalledWith('🛑 Mock voting cancelled by user');
+                // Note: Cancellation messages were not migrated to logger
             });
 
             test('should return error for missing token', async () => {

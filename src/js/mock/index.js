@@ -11,6 +11,7 @@ const boost = require('./boost');
 const errors = require('./errors');
 const settings = require('../settings');
 const votingLogic = require('../services/VotingLogic');
+const logger = require('../logger');
 
 // Global cancellation flag for mock API
 let shouldCancelVoting = false;
@@ -107,14 +108,14 @@ const mockApiClient = {
      * Simulate authentication
      */
     authenticate: async (email, password) => {
-        console.log('🔧 Mock authentication with:', email, password ? '[hidden]' : 'no password');
+        logger.debug(`Mock authentication with: ${email}, password: ${password ? '[hidden]' : 'no password'}`);
 
         // Accept any non-empty email and password for mock mode
         if (email && email.trim() !== '' && password && password.trim() !== '') {
-            console.log('✅ Mock authentication successful');
+            logger.success('Mock authentication successful');
             return simulateApiResponse(auth.mockLoginSuccess, 1500);
         } else {
-            console.log('❌ Mock authentication failed - empty credentials');
+            logger.error('Mock authentication failed - empty credentials');
             return simulateApiError(auth.mockLoginFailure, 1000);
         }
     },
@@ -123,9 +124,9 @@ const mockApiClient = {
      * Simulate getting active challenges
      */
     getActiveChallenges: async (token) => {
-        console.log('=== Mock getActiveChallenges ===');
-        console.log('Token provided:', !!token);
-        console.log('Token starts with mock_:', token ? token.startsWith('mock_') : false);
+        logger.api('Mock getActiveChallenges');
+        logger.debug(`Token provided: ${!!token}`);
+        logger.debug(`Token starts with mock_: ${token ? token.startsWith('mock_') : false}`);
 
         // In mock mode, accept any token (including real ones)
         if (token) {
@@ -133,18 +134,18 @@ const mockApiClient = {
             if (!sessionMockCache.challenges) {
                 if (challenges.generateMockChallenges) {
                     sessionMockCache.challenges = challenges.generateMockChallenges();
-                    console.log('Generated session-stable mock challenges:', sessionMockCache.challenges.challenges.length);
+                    logger.info(`Generated session-stable mock challenges: ${sessionMockCache.challenges.challenges.length}`);
                 } else {
                     sessionMockCache.challenges = challenges.mockActiveChallenges;
-                    console.log('Using static mock challenges:', sessionMockCache.challenges.challenges.length);
+                    logger.info(`Using static mock challenges: ${sessionMockCache.challenges.challenges.length}`);
                 }
                 sessionMockCache.lastCacheTime = Date.now();
             } else {
-                console.log('Using cached mock challenges:', sessionMockCache.challenges.challenges.length);
+                logger.info(`Using cached mock challenges: ${sessionMockCache.challenges.challenges.length}`);
             }
             return simulateApiResponse(sessionMockCache.challenges, 800);
         } else {
-            console.log('No token provided, returning error');
+            logger.error('No token provided, returning error');
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
         }
     },
@@ -153,9 +154,9 @@ const mockApiClient = {
      * Simulate getting vote images
      */
     getVoteImages: async (challenge, token) => {
-        console.log('=== Mock getVoteImages ===');
-        console.log('Challenge:', challenge.title);
-        console.log('Token provided:', !!token);
+        logger.api('Mock getVoteImages');
+        logger.debug(`Challenge: ${challenge.title}`);
+        logger.debug(`Token provided: ${!!token}`);
 
         // In mock mode, accept any token (including real ones)
         if (token) {
@@ -167,21 +168,21 @@ const mockApiClient = {
                 if (voting.generateMockVoteImages) {
                     const voteImages = voting.generateMockVoteImages(challengeUrl, challenge);
                     sessionMockCache.voteImages.set(cacheKey, voteImages);
-                    console.log('Generated session-stable vote images for', challenge.title, ':', voteImages.images.length);
+                    logger.debug(`Generated session-stable vote images for ${challenge.title}: ${voteImages.images.length}`);
                 } else {
                     const voteImages = voting.mockVoteImagesByChallenge[challengeUrl] || voting.mockEmptyVoteImages;
                     sessionMockCache.voteImages.set(cacheKey, voteImages);
-                    console.log('Using static vote images for', challenge.title, ':', voteImages.images.length);
+                    logger.debug(`Using static vote images for ${challenge.title}: ${voteImages.images.length}`);
                 }
             } else {
-                console.log('Using cached vote images for', challenge.title);
+                logger.debug(`Using cached vote images for ${challenge.title}`);
             }
             
             const cachedVoteImages = sessionMockCache.voteImages.get(cacheKey);
-            console.log('Returning mock vote images:', cachedVoteImages.images.length);
+            logger.debug(`Returning mock vote images: ${cachedVoteImages.images.length}`);
             return simulateApiResponse(cachedVoteImages, 1200);
         } else {
-            console.log('No token provided, returning error');
+            logger.error('No token provided, returning error');
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
         }
     },
@@ -190,15 +191,15 @@ const mockApiClient = {
      * Simulate submitting votes
      */
     submitVotes: async (voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
-        console.log('=== Mock submitVotes ===');
-        console.log('Vote images count:', voteImages.images ? voteImages.images.length : 0);
-        console.log('Token provided:', !!token);
-        console.log('Exposure threshold:', exposureThreshold);
+        logger.api('Mock submitVotes');
+        logger.debug(`Vote images count: ${voteImages.images ? voteImages.images.length : 0}`);
+        logger.debug(`Token provided: ${!!token}`);
+        logger.debug(`Exposure threshold: ${exposureThreshold}`);
 
         // In mock mode, accept any token (including real ones)
         if (token) {
             if (voteImages.images && voteImages.images.length > 0) {
-                console.log('Submitting mock votes successfully');
+                logger.info('Submitting mock votes successfully');
                 
                 // Update metadata after successful mock vote submission
                 try {
@@ -207,28 +208,28 @@ const mockApiClient = {
                         // Use the ORIGINAL exposure factor from before voting (the "from what" value)
                         const originalExposure = voteImages.voting?.exposure?.exposure_factor || 50;
                         
-                        console.log(`🔧 DEBUG: About to update mock metadata for challenge ${voteImages.challenge.id}, original exposure: ${Math.round(originalExposure)}%`);
+                        logger.debug(`About to update mock metadata for challenge ${voteImages.challenge.id}, original exposure: ${Math.round(originalExposure)}%`);
                         const success = updateChallengeVoteMetadata(voteImages.challenge.id.toString(), Math.round(originalExposure));
                         if (success) {
-                            console.log(`🔧 DEBUG: Successfully updated mock metadata for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`);
-                            console.log(`✅ Mock metadata updated for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`);
+                            logger.debug(`Successfully updated mock metadata for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`);
+                            logger.success(`Mock metadata updated for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`);
                         } else {
-                            console.log(`🔧 DEBUG: Failed to update mock metadata for challenge ${voteImages.challenge.id}`);
-                            console.log(`⚠️ Failed to update mock metadata for challenge ${voteImages.challenge.id}`);
+                            logger.debug(`Failed to update mock metadata for challenge ${voteImages.challenge.id}`);
+                            logger.warning(`Failed to update mock metadata for challenge ${voteImages.challenge.id}`);
                         }
                     }
                 } catch (error) {
-                    console.log(`🔧 DEBUG: Error updating mock metadata for challenge ${voteImages.challenge.id}:`, error);
-                    console.log('⚠️ Error updating mock metadata:', error.message);
+                    logger.debug(`Error updating mock metadata for challenge ${voteImages.challenge.id}: ${error.message}`);
+                    logger.error(`Error updating mock metadata: ${error.message}`);
                 }
                 
                 return simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
             } else {
-                console.log('No vote images, returning error');
+                logger.error('No vote images, returning error');
                 return simulateApiError(voting.mockVoteSubmissionFailure, 1000);
             }
         } else {
-            console.log('No token provided, returning error');
+            logger.error('No token provided, returning error');
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
         }
     },
@@ -237,26 +238,26 @@ const mockApiClient = {
      * Simulate applying boost
      */
     applyBoost: async (challenge, token) => {
-        console.log('=== Mock applyBoost ===');
-        console.log('Challenge:', challenge.title);
-        console.log('Boost state:', challenge.member.boost.state);
-        console.log('Token provided:', !!token);
+        logger.api('Mock applyBoost');
+        logger.debug(`Challenge: ${challenge.title}`);
+        logger.debug(`Boost state: ${challenge.member.boost.state}`);
+        logger.debug(`Token provided: ${!!token}`);
 
         // In mock mode, accept any token (including real ones)
         if (token) {
             const boostState = challenge.member.boost.state;
             if (boostState === 'AVAILABLE') {
-                console.log('Applying boost successfully');
+                logger.debug('Applying boost successfully');
                 return simulateApiResponse(boost.mockBoostSuccess, 1500);
             } else if (boostState === 'USED') {
-                console.log('Boost already used');
+                logger.info('Boost already used');
                 return simulateApiError(boost.mockBoostAlreadyUsed, 800);
             } else {
-                console.log('Boost not available');
+                logger.info('Boost not available');
                 return simulateApiError(boost.mockBoostFailure, 800);
             }
         } else {
-            console.log('No token provided, returning error');
+            logger.error('No token provided, returning error');
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
         }
     },
@@ -265,17 +266,17 @@ const mockApiClient = {
      * Simulate applying boost to a specific entry
      */
     applyBoostToEntry: async (challengeId, imageId, token) => {
-        console.log('=== Mock applyBoostToEntry ===');
-        console.log('Challenge ID:', challengeId);
-        console.log('Image ID:', imageId);
-        console.log('Token provided:', token ? `${token.substring(0, 10)}...` : 'none');
+        logger.api('Mock applyBoostToEntry');
+        logger.debug(`Challenge ID: ${challengeId}`);
+        logger.debug(`Image ID: ${imageId}`);
+        logger.debug(`Token provided: ${token ? `${token.substring(0, 10)}...` : 'none'}`);
 
         // In mock mode, accept any token (including real ones)
         if (token) {
-            console.log('Applying boost to specific entry successfully');
+            logger.debug('Applying boost to specific entry successfully');
             return simulateApiResponse(boost.mockBoostSuccess, 1500);
         } else {
-            console.log('No token provided, returning error');
+            logger.error('No token provided, returning error');
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
         }
     },
@@ -284,42 +285,42 @@ const mockApiClient = {
      * Simulate the main voting process (fetchChallengesAndVote)
      */
     fetchChallengesAndVote: async (token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
-        console.log('=== Mock Voting Process Started ===');
-        console.log('Token provided:', !!token);
-        console.log('Exposure threshold type:', typeof exposureThreshold);
+        logger.info('Mock Voting Process Started');
+        logger.debug(`Token provided: ${!!token}`);
+        logger.debug(`Exposure threshold type: ${typeof exposureThreshold}`);
 
         // In mock mode, accept any token (including real ones)
         if (token) {
             // Simulate getting challenges
             const challengesResponse = await simulateApiResponse(challenges.mockActiveChallenges, 800);
-            console.log(`Found ${challengesResponse.challenges.length} active challenges`);
+            logger.info(`Found ${challengesResponse.challenges.length} active challenges`);
 
             // Simulate processing each challenge
             for (const challenge of challengesResponse.challenges) {
                 // Check for cancellation before processing each challenge
                 if (shouldCancelVoting) {
-                    console.log('🛑 Mock voting cancelled by user');
+                    logger.info('Mock voting cancelled by user');
                     return {success: false, message: 'Mock voting cancelled by user'};
                 }
 
-                console.log(`Processing challenge: ${challenge.title}`);
+                logger.debug(`Processing challenge: ${challenge.title}`);
 
                 // Get the effective exposure threshold for this challenge
                 const effectiveThreshold = typeof exposureThreshold === 'function'
                     ? exposureThreshold(challenge.id.toString())
                     : exposureThreshold;
 
-                console.log(`Challenge ${challenge.id} exposure threshold: ${effectiveThreshold}`);
+                logger.debug(`Challenge ${challenge.id} exposure threshold: ${effectiveThreshold}`);
 
                 // Simulate boost application if available
                 if (challenge.member.boost.state === 'AVAILABLE') {
                     // Check for cancellation before boost
                     if (shouldCancelVoting) {
-                        console.log('🛑 Mock voting cancelled by user before boost');
+                        logger.info('Mock voting cancelled by user before boost');
                         return {success: false, message: 'Mock voting cancelled by user'};
                     }
 
-                    console.log(`Applying boost to challenge: ${challenge.title}`);
+                    logger.debug(`Applying boost to challenge: ${challenge.title}`);
                     await simulateApiResponse(boost.mockBoostSuccess, 1500);
                 }
 
@@ -331,18 +332,18 @@ const mockApiClient = {
                 if (shouldVote) {
                     // Check for cancellation before voting
                     if (shouldCancelVoting) {
-                        console.log('🛑 Mock voting cancelled by user before voting');
+                        logger.info('Mock voting cancelled by user before voting');
                         return {success: false, message: 'Mock voting cancelled by user'};
                     }
 
-                    console.log(`Voting on challenge: ${challenge.title}`);
+                    logger.debug(`Voting on challenge: ${challenge.title}`);
                     const challengeUrl = challenge.url;
                     if (voting.mockVoteImagesByChallenge[challengeUrl]) {
                         const voteImages = await simulateApiResponse(voting.mockVoteImagesByChallenge[challengeUrl], 1200);
                         if (voteImages && voteImages.images && voteImages.images.length > 0) {
                             // Check for cancellation before vote submission
                             if (shouldCancelVoting) {
-                                console.log('🛑 Mock voting cancelled by user before vote submission');
+                                logger.info('Mock voting cancelled by user before vote submission');
                                 return {success: false, message: 'Mock voting cancelled by user'};
                             }
 
@@ -351,12 +352,12 @@ const mockApiClient = {
                     }
                 } else {
                     // Log why voting was skipped
-                    console.log(`Skipping voting on challenge: ${challenge.title} - ${voteReason}`);
+                    logger.debug(`Skipping voting on challenge: ${challenge.title} - ${voteReason}`);
                 }
 
                 // Check for cancellation before delay
                 if (shouldCancelVoting) {
-                    console.log('🛑 Mock voting cancelled by user before delay');
+                    logger.info('Mock voting cancelled by user before delay');
                     return {success: false, message: 'Mock voting cancelled by user'};
                 }
 
@@ -364,7 +365,7 @@ const mockApiClient = {
                 await new Promise(resolve => setTimeout(resolve, 500));
             }
 
-            console.log('=== Mock Voting Process Completed ===');
+            logger.info('Mock Voting Process Completed');
             return {success: true, message: 'Mock voting process completed'};
         } else {
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
