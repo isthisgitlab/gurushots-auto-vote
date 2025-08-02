@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html data-theme="light" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Logs - GuruShots Auto Vote</title>
+    <link href="../../dist/styles.css" rel="stylesheet">
+    <script src="../js/translations/index.js"></script>
+    <script type="module" defer src="../js/ui/logViewer.js"></script>
+</head>
+<body class="min-h-screen bg-base-200">
+
+<div class="navbar bg-base-100 shadow-md">
+    <div class="flex justify-between items-center px-4 py-2 max-w-6xl w-full mx-auto">
+        <div class="flex items-center">
+            <span class="card-title text-latvian text-xl" data-translate="logs.title">Logs</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="text-sm" data-translate="logs.status">Status:</span>
+            <span class="badge badge-sm" id="log-status">Disconnected</span>
+        </div>
+    </div>
+</div>
+
+<div class="container mx-auto p-6">
+    <div class="card bg-base-100 shadow-md">
+        <div class="card-body p-4">
+            <div class="h-[600px] overflow-y-auto bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg">
+                <div id="log-container" class="space-y-1">
+                    <div class="text-gray-500 text-center py-8" data-translate="logs.waiting">
+                        Waiting for log messages...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
