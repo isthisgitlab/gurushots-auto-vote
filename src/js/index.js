@@ -396,7 +396,17 @@ ipcMain.handle('save-settings', async (event, newSettings) => {
         if (typeof newSettings !== 'object' || newSettings === null) {
             throw new Error('Invalid settings type, expected object');
         }
-        return settings.saveSettings(newSettings);
+        const result = settings.saveSettings(newSettings);
+        
+        // Broadcast settings change to all windows
+        if (result) {
+            const { BrowserWindow } = require('electron');
+            BrowserWindow.getAllWindows().forEach(win => {
+                win.webContents.send('settings-changed', newSettings);
+            });
+        }
+        
+        return result;
     } catch (error) {
         logger.error('Error handling save-settings request:', error);
         return false; // Indicate failure
@@ -1140,3 +1150,55 @@ ipcMain.handle('refresh-menu', async () => {
         return {success: false, error: error.message};
     }
 });
+
+// Log streaming for GUI
+let logStreamWindows = new Set();
+
+// Handle start log stream request
+ipcMain.handle('start-log-stream', async (event) => {
+    try {
+        // Add this window to the set of log stream windows
+        logStreamWindows.add(event.sender);
+        
+        // Clean up when window is closed
+        event.sender.on('destroyed', () => {
+            logStreamWindows.delete(event.sender);
+        });
+        
+        return {success: true};
+    } catch (error) {
+        logger.error('Error starting log stream:', error);
+        return {success: false, error: error.message};
+    }
+});
+
+// Handle stop log stream request
+ipcMain.handle('stop-log-stream', async (event) => {
+    try {
+        logStreamWindows.delete(event.sender);
+        return {success: true};
+    } catch (error) {
+        logger.error('Error stopping log stream:', error);
+        return {success: false, error: error.message};
+    }
+});
+
+// Function to send log message to all connected log stream windows
+function sendLogToGUI(level, message, context, timestamp) {
+    const logData = {
+        level,
+        message,
+        context,
+        timestamp,
+    };
+    
+    // Send to all connected log stream windows
+    logStreamWindows.forEach(webContents => {
+        if (!webContents.isDestroyed()) {
+            webContents.send('log-message', logData);
+        }
+    });
+}
+
+// Export for use by logger
+global.sendLogToGUI = sendLogToGUI;

@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
         // Load challenges
-        await loadChallenges(settings.timezone || 'Europe/Riga', false);
+        await loadChallenges(settings.timezone, false);
 
     } catch (error) {
         await window.api.logError(`Error loading initial settings: ${error.message || error}`);

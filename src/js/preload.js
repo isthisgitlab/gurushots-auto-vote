@@ -35,7 +35,7 @@ contextBridge.exposeInMainWorld(
         guiVote: () => ipcRenderer.invoke('gui-vote'),
         getActiveChallenges: (token) => ipcRenderer.invoke('get-active-challenges', token),
         authenticate: (username, password, isMock) => {
-            console.log('🔐 Preload: authenticate called with:', { username, password, isMock });
+            // Authentication call - logging handled by main process
             return ipcRenderer.invoke('authenticate', username, password, isMock);
         },
         runVotingCycle: () => ipcRenderer.invoke('run-voting-cycle'),
@@ -98,6 +98,14 @@ contextBridge.exposeInMainWorld(
 
         // Menu methods
         refreshMenu: () => ipcRenderer.invoke('refresh-menu'),
+
+        // Log streaming methods
+        startLogStream: () => ipcRenderer.invoke('start-log-stream'),
+        stopLogStream: () => ipcRenderer.invoke('stop-log-stream'),
+        onLogMessage: (callback) => ipcRenderer.on('log-message', (event, logData) => callback(logData)),
+        
+        // Settings change events
+        onSettingsChanged: (callback) => ipcRenderer.on('settings-changed', (event, settings) => callback(settings)),
 
         // Optional: Add listeners for responses from main process
         // Example: on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args))
