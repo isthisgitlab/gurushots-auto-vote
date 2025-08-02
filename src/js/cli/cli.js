@@ -477,13 +477,13 @@ const showStatus = () => {
     }
     
     logger.cliInfo('\nSettings:');
-    logger.cliInfo(`  Theme: ${userSettings.theme || 'default'}`);
-    logger.cliInfo(`  Language: ${userSettings.language || 'en'}`);
-    logger.cliInfo(`  Timezone: ${userSettings.timezone || 'local'}`);
-    logger.cliInfo(`  API Timeout: ${userSettings.apiTimeout || getDefaultSettings().apiTimeout}s`);
-    logger.cliInfo(`  Check Frequency: ${userSettings.checkFrequency || getDefaultSettings().checkFrequency}min`);
+    logger.cliInfo(`  Theme: ${userSettings.theme}`);
+    logger.cliInfo(`  Language: ${userSettings.language}`);
+    logger.cliInfo(`  Timezone: ${userSettings.timezone}`);
+    logger.cliInfo(`  API Timeout: ${userSettings.apiTimeout}s`);
+    logger.cliInfo(`  Check Frequency: ${userSettings.checkFrequency}min`);
     logger.cliInfo(`  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`);
-    logger.cliInfo(`  CLI Cron Expression: ${userSettings.cliCronExpression || getDefaultSettings().cliCronExpression}`);
+    logger.cliInfo(`  CLI Cron Expression: ${userSettings.cliCronExpression}`);
     
     // Show challenge settings if any exist
     if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {
