@@ -21,21 +21,33 @@
  * - Node.js with required dependencies
  */
 
+// Import logger first for debugging
+const logger = require('../logger');
+logger.withCategory('api').debug('Logger imported', null);
+
 // Import node-cron for scheduling
 const cron = require('node-cron');
+logger.withCategory('api').debug('cron imported', null);
 const readline = require('readline');
+logger.withCategory('api').debug('readline imported', null);
 
 // Import the API factory (CLI respects the mock setting from GUI)
+logger.withCategory('api').debug('About to import apiFactory', null);
 const {getMiddleware} = require('../apiFactory');
+logger.withCategory('api').debug('apiFactory imported', null);
 const settings = require('../settings');
+logger.withCategory('settings').debug('settings imported');
 const {getDefaultSettings} = require('../settings');
+logger.withCategory('settings').debug('getDefaultSettings imported');
 
 // Get the middleware instance - but don't destructure methods at module level
 const getMiddlewareInstance = () => getMiddleware();
+logger.withCategory('api').debug('About to import randomizer', null);
 const {initializeHeaders} = require('../api/randomizer');
+logger.withCategory('api').debug('randomizer imported', null);
 
-// Import logger for cleanup
-const logger = require('../logger');
+// Debug module loading
+logger.withCategory('api').debug('CLI module loaded, starting initialization', null);
 
 // Get command line arguments
 const args = process.argv.slice(2);
@@ -81,7 +93,7 @@ const showHelp = () => {
     const userSettings = settings.loadSettings();
     const isMockMode = userSettings.mock;
     
-    logger.cliInfo(`
+    logger.withCategory('ui').info(`
 GuruShots Auto Voter - CLI ${isMockMode ? '(MOCK MODE)' : '(REAL MODE)'}
 
 Usage: <command>
@@ -123,13 +135,13 @@ const handleLogin = async () => {
     const rl = createReadlineInterface();
     
     try {
-        logger.cliInfo('=== GuruShots Auto Voter - Login ===');
+        logger.withCategory('ui').info('=== GuruShots Auto Voter - Login ===');
         
         // Check current mock setting
         const userSettings = settings.loadSettings();
         const currentMockMode = userSettings.mock;
         
-        logger.cliInfo(`Current mode: ${currentMockMode ? 'MOCK' : 'REAL'}`);
+        logger.withCategory('ui').info(`Current mode: ${currentMockMode ? 'MOCK' : 'REAL'}`);
         
         // Ask if user wants to change the mode
         const changeMode = await askYesNo('Do you want to change the mode?', rl);
@@ -137,23 +149,23 @@ const handleLogin = async () => {
         let useMockMode = currentMockMode;
         
         if (changeMode) {
-            logger.cliInfo('Mode options:');
-            logger.cliInfo('  REAL  - Connect to actual GuruShots API (production)');
-            logger.cliInfo('  MOCK  - Simulate API calls for testing (development)');
+            logger.withCategory('ui').info('Mode options:');
+            logger.withCategory('ui').info('  REAL  - Connect to actual GuruShots API (production)');
+            logger.withCategory('ui').info('  MOCK  - Simulate API calls for testing (development)');
             
             const useMock = await askYesNo('Use MOCK mode?', rl);
             useMockMode = useMock;
             
             // Update the setting
             settings.setSetting('mock', useMockMode);
-            logger.cliSuccess(`Mode changed to: ${useMockMode ? 'MOCK' : 'REAL'}`);
+            logger.withCategory('settings').success(`Mode changed to: ${useMockMode ? 'MOCK' : 'REAL'}`);
         }
         
         // Get credentials
         const email = await askInput('\nEnter your GuruShots email: ', rl);
         const password = await askInput('Enter your GuruShots password: ', rl);
         
-        logger.startOperation('login-auth', 'Authenticating with GuruShots');
+        logger.withCategory('auth').startOperation('login-auth', 'Authenticating with GuruShots');
         
         // Get fresh middleware instance with updated settings
         const {refreshApi} = require('../apiFactory');
@@ -164,14 +176,14 @@ const handleLogin = async () => {
         const loginResult = await middleware.cliLogin(email, password);
         
         if (loginResult.success) {
-            logger.endOperation('login-auth', 'Login successful');
-            logger.cliSuccess(`Token saved for ${useMockMode ? 'MOCK' : 'REAL'} mode`);
+            logger.withCategory('auth').endOperation('login-auth', 'Login successful');
+            logger.withCategory('authentication').success(`Token saved for ${useMockMode ? 'MOCK' : 'REAL'} mode`);
         } else {
-            logger.endOperation('login-auth', null, loginResult.error || 'Unknown error');
+            logger.withCategory('auth').endOperation('login-auth', null, loginResult.error || 'Unknown error');
         }
         
     } catch (error) {
-        logger.cliError('Login error', error.message || error);
+        logger.withCategory('authentication').error('Login error', error);
     } finally {
         rl.close();
     }
@@ -185,30 +197,31 @@ const runVotingCycle = async (cycleNumber = 1) => {
         const userSettings = settings.loadSettings();
         const isMockMode = userSettings.mock;
         
-        logger.cliInfo(`--- Voting Cycle ${cycleNumber} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
-        logger.cliInfo(`Time: ${new Date().toLocaleString()}`);
+        logger.withCategory('voting').info(`--- Voting Cycle ${cycleNumber} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
+        logger.withCategory('voting').info(`Time: ${new Date().toLocaleString()}`);
 
         // Check if user is authenticated
         if (!getMiddlewareInstance().isAuthenticated()) {
-            logger.cliError('No authentication token found. Please login first');
-            logger.cliInfo('Run: login');
+            logger.withCategory('authentication').error('No authentication token found. Please login first');
+            logger.withCategory('ui').info('Run: login');
             return false;
         }
 
         // Start voting operation
-        logger.startOperation(`vote-cycle-${cycleNumber}`, `Voting cycle ${cycleNumber}`);
+        logger.withCategory('voting').startOperation(`vote-cycle-${cycleNumber}`, `Voting cycle ${cycleNumber}`);
         
         // Run the voting process with per-challenge exposure settings
         await getMiddlewareInstance().cliVote();
         
-        logger.endOperation(`vote-cycle-${cycleNumber}`, `Voting cycle ${cycleNumber} completed`);
+        logger.withCategory('voting').endOperation(`vote-cycle-${cycleNumber}`, `Voting cycle ${cycleNumber} completed`);
         
         // Note: Threshold scheduling update will be handled by the calling function
         // since we need access to the threshold functions defined in startContinuousVoting
         
         return true;
     } catch (error) {
-        logger.cliError(`Error during voting cycle ${cycleNumber}`, error.message || error);
+        logger.withCategory('voting').error(`Error during voting cycle ${cycleNumber}`, error);
+        logger.withCategory('voting').debug('Full voting cycle error details:', error);
         return false;
     }
 };
@@ -217,15 +230,17 @@ const runVotingCycle = async (cycleNumber = 1) => {
  * Start continuous voting with dynamic interval scheduling
  */
 const startContinuousVoting = async () => {
+    logger.withCategory('voting').debug('startContinuousVoting: Function entered', null);
     const userSettings = settings.loadSettings();
+    logger.withCategory('settings').debug('startContinuousVoting: Settings loaded');
     const isMockMode = userSettings.mock;
     
-    logger.cliInfo(`=== Starting Continuous Voting Mode (${isMockMode ? 'MOCK' : 'REAL'} MODE) ===`);
+    logger.withCategory('voting').info(`=== Starting Continuous Voting Mode (${isMockMode ? 'MOCK' : 'REAL'} MODE) ===`);
 
     // Check if user is authenticated
     if (!getMiddlewareInstance().isAuthenticated()) {
-        logger.cliError('No authentication token found. Please login first');
-        logger.cliInfo('Run: login');
+        logger.withCategory('authentication').error('No authentication token found. Please login first');
+        logger.withCategory('ui').info('Run: login');
         return;
     }
 
@@ -238,7 +253,7 @@ const startContinuousVoting = async () => {
 
     // Function to handle graceful shutdown
     const handleShutdown = () => {
-        logger.cliInfo('🛑 Shutting down continuous voting...');
+        logger.withCategory('voting').info('🛑 Shutting down continuous voting...');
         isRunning = false;
         
         // Clear threshold scheduler
@@ -302,7 +317,7 @@ const startContinuousVoting = async () => {
         if (currentScheduledChallenge && 
             currentScheduledChallenge.challengeId === nextEntry.challengeId &&
             currentScheduledChallenge.entryTime === nextEntry.entryTime) {
-            logger.cliDebug(`⏰ Already scheduling threshold change for challenge "${nextEntry.challengeTitle}", skipping duplicate`);
+            logger.withCategory('voting').debug(`⏰ Already scheduling threshold change for challenge "${nextEntry.challengeTitle}", skipping duplicate`);
             return;
         }
 
@@ -311,11 +326,11 @@ const startContinuousVoting = async () => {
 
         // Only schedule if the entry time is in the future
         if (timeUntilEntry <= 0) {
-            logger.cliDebug(`⏰ Threshold entry time for challenge "${nextEntry.challengeTitle}" has already passed, skipping`);
+            logger.withCategory('voting').debug(`⏰ Threshold entry time for challenge "${nextEntry.challengeTitle}" has already passed, skipping`);
             return;
         }
 
-        logger.cliInfo(`⏰ Scheduling threshold cron change for challenge "${nextEntry.challengeTitle}" in ${Math.round(timeUntilEntry / 1000)} seconds`);
+        logger.withCategory('voting').info(`⏰ Scheduling threshold cron change for challenge "${nextEntry.challengeTitle}" in ${Math.round(timeUntilEntry / 1000)} seconds`);
 
         // Clear any existing scheduler
         if (thresholdScheduler) {
@@ -334,7 +349,7 @@ const startContinuousVoting = async () => {
         // Schedule the cron change
         thresholdScheduler = setTimeout(async () => {
             if (isRunning) {
-                logger.cliInfo(`⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`);
+                logger.withCategory('voting').info(`⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`);
                 
                 // Stop current cron job
                 if (currentCronJob) {
@@ -357,14 +372,15 @@ const startContinuousVoting = async () => {
                         // Update threshold scheduling after each voting cycle
                         await updateThresholdScheduling();
                     } catch (error) {
-                        logger.cliError('Error in scheduled voting cycle', error);
+                        logger.withCategory('voting').error('Error in scheduled voting cycle');
+                        logger.withCategory('voting').debug('Full threshold cron error details:', error);
                     }
                 }, {
                     scheduled: false,
                 });
 
                 currentCronJob.start();
-                logger.cliInfo(`⏰ Switched to last threshold cron: ${thresholdCronExpression} (every ${lastMinuteCheckFrequency} minutes)`);
+                logger.withCategory('voting').info(`⏰ Switched to last threshold cron: ${thresholdCronExpression} (every ${lastMinuteCheckFrequency} minutes)`);
                 
                 // Clear the scheduled challenge tracking
                 currentScheduledChallenge = null;
@@ -379,23 +395,39 @@ const startContinuousVoting = async () => {
      * Update threshold scheduling based on current challenges
      */
     const updateThresholdScheduling = async () => {
+        logger.withCategory('voting').debug('updateThresholdScheduling: Function entered', null);
         if (!isRunning) {
+            logger.withCategory('voting').debug('updateThresholdScheduling: Not running, returning', null);
             return;
         }
 
         try {
+            logger.withCategory('challenges').debug('updateThresholdScheduling: About to get active challenges', null);
             // Get current challenges
-            const challenges = await getMiddlewareInstance().getActiveChallenges();
+            const challengesResponse = await getMiddlewareInstance().getActiveChallenges();
+            logger.withCategory('api').debug(`updateThresholdScheduling: Got response, type: ${typeof challengesResponse}`, null);
+            const challenges = challengesResponse?.challenges || [];
+            logger.withCategory('challenges').debug(`updateThresholdScheduling: Extracted challenges array, length: ${challenges.length}`, null);
             const now = Math.floor(Date.now() / 1000);
+            logger.withCategory('voting').debug(`updateThresholdScheduling: Current timestamp: ${now}`, null);
 
             // Check if settings have changed (relevant settings for threshold scheduling)
+            logger.withCategory('settings').debug('updateThresholdScheduling: About to get settings');
+            const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
+            logger.withCategory('settings').debug(`updateThresholdScheduling: Got lastMinuteCheckFrequency: ${lastMinuteCheckFrequency}`, null);
+            const lastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', 'global');
+            logger.withCategory('settings').debug(`updateThresholdScheduling: Got lastMinuteThreshold: ${lastMinuteThreshold}`, null);
+            
             const currentSettingsHash = JSON.stringify({
-                lastMinuteCheckFrequency: settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
-                lastMinuteThreshold: settings.getEffectiveSetting('lastMinuteThreshold', 'global'),
+                lastMinuteCheckFrequency,
+                lastMinuteThreshold,
             });
-
+            logger.withCategory('settings').debug(`updateThresholdScheduling: Created settings hash: ${currentSettingsHash.length} chars`);
+            logger.withCategory('settings').debug(`updateThresholdScheduling: lastSettingsHash is: ${lastSettingsHash}`);
+            logger.withCategory('settings').debug('updateThresholdScheduling: About to compare settings hashes');
+            
             if (lastSettingsHash !== null && lastSettingsHash !== currentSettingsHash) {
-                logger.cliInfo('⏰ Settings changed, clearing existing threshold scheduler');
+                logger.withCategory('settings').info('⏰ Settings changed, clearing existing threshold scheduler');
                 if (thresholdScheduler) {
                     clearTimeout(thresholdScheduler);
                     thresholdScheduler = null;
@@ -414,16 +446,17 @@ const startContinuousVoting = async () => {
                     clearTimeout(thresholdScheduler);
                     thresholdScheduler = null;
                     currentScheduledChallenge = null;
-                    logger.cliInfo('⏰ No upcoming threshold entries, cleared threshold scheduler');
+                    logger.withCategory('voting').info('⏰ No upcoming threshold entries, cleared threshold scheduler');
                 }
             }
         } catch (error) {
-            logger.cliWarning('Error updating threshold scheduling:', error);
+            logger.withCategory('voting').warning('Error updating threshold scheduling:');
+            logger.withCategory('voting').debug('updateThresholdScheduling error details:', error);
         }
     };
 
     // Run initial cycle
-    logger.cliInfo('🚀 Running initial voting cycle...');
+    logger.withCategory('voting').info('🚀 Running initial voting cycle...');
     await runVotingCycle(++cycleCount);
 
     // Set up initial cron job with normal frequency
@@ -441,7 +474,8 @@ const startContinuousVoting = async () => {
             // Update threshold scheduling after each voting cycle
             await updateThresholdScheduling();
         } catch (error) {
-            logger.cliError('Error in scheduled voting cycle', error);
+            logger.withCategory('voting').error('Error in scheduled voting cycle');
+            logger.withCategory('voting').debug('Full normal cron error details:', error);
         }
     }, {
         scheduled: false,
@@ -449,8 +483,8 @@ const startContinuousVoting = async () => {
 
     // Start the cron job
     currentCronJob.start();
-    logger.cliSuccess(`Continuous voting started with cron expression: ${normalCronExpression}`);
-    logger.cliInfo('Press Ctrl+C to stop');
+    logger.withCategory('voting').success(`Continuous voting started with cron expression: ${normalCronExpression}`);
+    logger.withCategory('ui').info('Press Ctrl+C to stop');
 
     // Set up proactive threshold scheduling
     await updateThresholdScheduling();
@@ -467,36 +501,36 @@ const showStatus = () => {
     const isMockMode = userSettings.mock;
     const isAuthenticated = getMiddlewareInstance().isAuthenticated();
     
-    logger.cliInfo('=== GuruShots Auto Voter - Status ===');
+    logger.withCategory('ui').info('=== GuruShots Auto Voter - Status ===');
     
-    logger.cliInfo(`Mode: ${isMockMode ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}`);
-    logger.cliInfo(`Authentication: ${isAuthenticated ? '✅ Authenticated' : '❌ Not authenticated'}`);
+    logger.withCategory('ui').info(`Mode: ${isMockMode ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}`);
+    logger.withCategory('authentication').info(`Authentication: ${isAuthenticated ? '✅ Authenticated' : '❌ Not authenticated'}`);
     
     if (isAuthenticated) {
-        logger.cliInfo(`Token: ${userSettings.token ? '✅ Present' : '❌ Missing'}`);
+        logger.withCategory('authentication').info(`Token: ${userSettings.token ? '✅ Present' : '❌ Missing'}`);
     }
     
-    logger.cliInfo('\nSettings:');
-    logger.cliInfo(`  Theme: ${userSettings.theme}`);
-    logger.cliInfo(`  Language: ${userSettings.language}`);
-    logger.cliInfo(`  Timezone: ${userSettings.timezone}`);
-    logger.cliInfo(`  API Timeout: ${userSettings.apiTimeout}s`);
-    logger.cliInfo(`  Check Frequency: ${userSettings.checkFrequency}min`);
-    logger.cliInfo(`  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`);
-    logger.cliInfo(`  CLI Cron Expression: ${userSettings.cliCronExpression}`);
+    logger.withCategory('settings').info('\nSettings:');
+    logger.withCategory('settings').info(`  Theme: ${userSettings.theme}`);
+    logger.withCategory('settings').info(`  Language: ${userSettings.language}`);
+    logger.withCategory('settings').info(`  Timezone: ${userSettings.timezone}`);
+    logger.withCategory('settings').info(`  API Timeout: ${userSettings.apiTimeout}s`);
+    logger.withCategory('settings').info(`  Check Frequency: ${userSettings.checkFrequency}min`);
+    logger.withCategory('settings').info(`  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`);
+    logger.withCategory('settings').info(`  CLI Cron Expression: ${userSettings.cliCronExpression}`);
     
     // Show challenge settings if any exist
     if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {
-        logger.cliInfo('\nChallenge Settings:');
+        logger.withCategory('settings').info('\nChallenge Settings:');
         Object.entries(userSettings.challengeSettings).forEach(([challengeId, challengeSettings]) => {
-            logger.cliInfo(`  Challenge ${challengeId}:`);
+            logger.withCategory('settings').info(`  Challenge ${challengeId}:`);
             Object.entries(challengeSettings).forEach(([key, value]) => {
-                logger.cliInfo(`    ${key}: ${value}`);
+                logger.withCategory('settings').info(`    ${key}: ${value}`);
             });
         });
     }
     
-    logger.cliInfo('\nTo change mode, run: login');
+    logger.withCategory('ui').info('\nTo change mode, run: login');
 };
 
 /**
@@ -506,12 +540,12 @@ const getSetting = (key) => {
     try {
         const value = settings.getSetting(key);
         if (value === undefined) {
-            logger.cliError(`Setting '${key}' not found`);
+            logger.withCategory('settings').error(`Setting '${key}' not found`);
             return;
         }
-        logger.cliInfo(`${key}: ${JSON.stringify(value)}`);
+        logger.withCategory('settings').info(`${key}: ${JSON.stringify(value)}`);
     } catch (error) {
-        logger.cliError(`Error getting setting '${key}'`, error.message);
+        logger.withCategory('settings').error(`Error getting setting '${key}'`, error);
     }
 };
 
@@ -534,9 +568,9 @@ const setSetting = (key, value) => {
         }
 
         settings.setSetting(key, parsedValue);
-        logger.cliSuccess(`Set ${key} = ${JSON.stringify(parsedValue)}`);
+        logger.withCategory('settings').success(`Set ${key} = ${JSON.stringify(parsedValue)}`);
     } catch (error) {
-        logger.cliError(`Error setting '${key}'`, error.message);
+        logger.withCategory('settings').error(`Error setting '${key}'`, error);
     }
 };
 
@@ -561,10 +595,10 @@ const setGlobalDefault = (key, value) => {
         // Check if this is a valid schema setting
         const schema = settings.SETTINGS_SCHEMA;
         if (!schema[key]) {
-            logger.cliError(`Unknown schema setting '${key}'`);
-            logger.cliInfo('Available settings:');
+            logger.withCategory('settings').error(`Unknown schema setting '${key}'`);
+            logger.withCategory('settings').info('Available settings:');
             Object.keys(schema).forEach(settingKey => {
-                logger.cliInfo(`  ${settingKey}`);
+                logger.withCategory('settings').info(`  ${settingKey}`);
             });
             return;
         }
@@ -573,17 +607,17 @@ const setGlobalDefault = (key, value) => {
         const success = settings.setGlobalDefault(key, parsedValue);
         if (success) {
             const actualValue = settings.getGlobalDefault(key);
-            logger.cliSuccess(`Set global default ${key} = ${JSON.stringify(actualValue)}`);
+            logger.withCategory('settings').success(`Set global default ${key} = ${JSON.stringify(actualValue)}`);
         } else {
-            logger.cliError(`Failed to set global default '${key}' - validation failed`);
-            logger.cliError(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
+            logger.withCategory('settings').error(`Failed to set global default '${key}' - validation failed`);
+            logger.withCategory('settings').error(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
             
             // Show setting info
             const config = schema[key];
-            logger.cliInfo(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
+            logger.withCategory('settings').info(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
         }
     } catch (error) {
-        logger.cliError(`Error setting global default '${key}'`, error.message);
+        logger.withCategory('settings').error(`Error setting global default '${key}'`, error);
     }
 };
 
@@ -595,7 +629,7 @@ const listSettings = () => {
         const userSettings = settings.loadSettings();
         const defaultSettings = getDefaultSettings();
         
-        logger.cliInfo('=== All Settings ===');
+        logger.withCategory('settings').info('=== All Settings ===');
         
         // Get all possible setting keys (user settings + defaults)
         const allKeys = new Set([
@@ -611,20 +645,20 @@ const listSettings = () => {
             const defaultValue = defaultSettings[key];
             const isModified = JSON.stringify(currentValue) !== JSON.stringify(defaultValue);
             
-            logger.cliInfo(`${key}:`);
-            logger.cliInfo(`  Current: ${JSON.stringify(currentValue)}`);
-            logger.cliInfo(`  Default: ${JSON.stringify(defaultValue)}`);
+            logger.withCategory('settings').info(`${key}:`);
+            logger.withCategory('settings').info(`  Current: ${JSON.stringify(currentValue)}`);
+            logger.withCategory('settings').info(`  Default: ${JSON.stringify(defaultValue)}`);
             if (isModified) {
-                logger.cliInfo('  Status:  Modified ✏️');
+                logger.withCategory('settings').info('  Status:  Modified ✏️');
             } else {
-                logger.cliInfo('  Status:  Default ✅');
+                logger.withCategory('settings').info('  Status:  Default ✅');
             }
-            logger.cliInfo('');
+            logger.withCategory('settings').info('');
         });
         
-        logger.cliInfo('💡 Use "help-settings" for detailed information about each setting');
+        logger.withCategory('ui').info('💡 Use "help-settings" for detailed information about each setting');
     } catch (error) {
-        logger.cliError('Error listing settings', error.message);
+        logger.withCategory('settings').error('Error listing settings', error);
     }
 };
 
@@ -637,14 +671,14 @@ const resetSetting = (key) => {
         const defaultValue = defaultSettings[key];
         
         if (defaultValue === undefined) {
-            logger.cliError(`Setting '${key}' not found in defaults`);
+            logger.withCategory('settings').error(`Setting '${key}' not found in defaults`);
             return;
         }
         
         settings.setSetting(key, defaultValue);
-        logger.cliSuccess(`Reset ${key} to default: ${JSON.stringify(defaultValue)}`);
+        logger.withCategory('settings').success(`Reset ${key} to default: ${JSON.stringify(defaultValue)}`);
     } catch (error) {
-        logger.cliError(`Error resetting setting '${key}'`, error.message);
+        logger.withCategory('settings').error(`Error resetting setting '${key}'`, error);
     }
 };
 
@@ -660,10 +694,10 @@ const resetAllSettings = () => {
             settings.setSetting(key, defaultSettings[key]);
         });
         
-        logger.cliSuccess('All settings reset to defaults');
-        logger.cliInfo('💡 Run "list-settings" to see all current values');
+        logger.withCategory('settings').success('All settings reset to defaults');
+        logger.withCategory('ui').info('💡 Run "list-settings" to see all current values');
     } catch (error) {
-        logger.cliError('Error resetting all settings', error.message);
+        logger.withCategory('settings').error('Error resetting all settings', error);
     }
 };
 
@@ -671,7 +705,7 @@ const resetAllSettings = () => {
  * Show detailed help about settings
  */
 const helpSettings = () => {
-    logger.cliInfo(`
+    logger.withCategory('ui').info(`
 === Settings Management Help ===
 
 Available Commands:
@@ -723,9 +757,9 @@ const resetWindows = () => {
         // Save the updated settings
         settings.saveSettings(userSettings);
         
-        logger.cliSuccess('Window positions reset to default');
+        logger.withCategory('settings').success('Window positions reset to default');
     } catch (error) {
-        logger.cliError('Error resetting window positions', error.message || error);
+        logger.withCategory('settings').error('Error resetting window positions', error);
     }
 };
 
@@ -734,8 +768,11 @@ const resetWindows = () => {
  */
 const main = async () => {
     try {
+        logger.withCategory('api').debug('main: Function started', null);
         // Initialize headers for API calls
         initializeHeaders();
+        logger.withCategory('api').debug('main: Headers initialized', null);
+        logger.withCategory('api').debug('main: Command is:', command);
 
         switch (command) {
         case 'login':
@@ -747,7 +784,9 @@ const main = async () => {
             process.exit(0);
             break;
         case 'start':
+            logger.withCategory('voting').debug('About to start continuous voting', null);
             await startContinuousVoting();
+            logger.withCategory('voting').debug('startContinuousVoting completed', null);
             // Don't exit for continuous mode - it keeps running
             break;
         case 'status':
@@ -756,8 +795,8 @@ const main = async () => {
             break;
         case 'get-setting':
             if (!args[1]) {
-                logger.cliError('Please specify a setting key');
-                logger.cliInfo('Usage: get-setting <key>');
+                logger.withCategory('ui').error('Please specify a setting key');
+                logger.withCategory('ui').info('Usage: get-setting <key>');
                 process.exit(1);
             }
             getSetting(args[1]);
@@ -765,8 +804,8 @@ const main = async () => {
             break;
         case 'set-setting':
             if (!args[1] || !args[2]) {
-                logger.cliError('Please specify both key and value');
-                logger.cliInfo('Usage: set-setting <key> <value>');
+                logger.withCategory('ui').error('Please specify both key and value');
+                logger.withCategory('ui').info('Usage: set-setting <key> <value>');
                 process.exit(1);
             }
             setSetting(args[1], args[2]);
@@ -778,8 +817,8 @@ const main = async () => {
             break;
         case 'reset-setting':
             if (!args[1]) {
-                logger.cliError('Please specify a setting key');
-                logger.cliInfo('Usage: reset-setting <key>');
+                logger.withCategory('ui').error('Please specify a setting key');
+                logger.withCategory('ui').info('Usage: reset-setting <key>');
                 process.exit(1);
             }
             resetSetting(args[1]);
@@ -787,9 +826,9 @@ const main = async () => {
             break;
         case 'set-global-default':
             if (!args[1] || !args[2]) {
-                logger.cliError('Please specify both setting key and value');
-                logger.cliInfo('Usage: set-global-default <key> <value>');
-                logger.cliInfo('Example: set-global-default exposure 80');
+                logger.withCategory('ui').error('Please specify both setting key and value');
+                logger.withCategory('ui').info('Usage: set-global-default <key> <value>');
+                logger.withCategory('ui').info('Example: set-global-default exposure 80');
                 process.exit(1);
             }
             setGlobalDefault(args[1], args[2]);
@@ -815,16 +854,17 @@ const main = async () => {
             break;
         default:
             if (!command) {
-                logger.cliInfo('No command specified. Use "help" to see available commands');
+                logger.withCategory('ui').info('No command specified. Use "help" to see available commands');
             } else {
-                logger.cliError(`Unknown command: ${command}`);
-                logger.cliInfo('Use "help" to see available commands');
+                logger.withCategory('ui').error(`Unknown command: ${command}`);
+                logger.withCategory('ui').info('Use "help" to see available commands');
             }
             process.exit(1);
             break;
         }
     } catch (error) {
-        logger.cliError('Error', error.message || error);
+        logger.withCategory('api').error('Error');
+        logger.withCategory('api').debug('Full main function error details:', error);
         process.exit(1);
     } finally {
         // Clean up logger
@@ -832,5 +872,23 @@ const main = async () => {
     }
 };
 
+// Add global error handlers
+process.on('unhandledRejection', (reason, promise) => {
+    logger.withCategory('api').error('Unhandled Promise Rejection');
+    logger.withCategory('api').debug('Unhandled Promise Rejection details:', { reason, promise });
+    process.exit(1);
+});
+
+process.on('uncaughtException', (error) => {
+    logger.withCategory('api').error('Uncaught Exception');
+    logger.withCategory('api').debug('Uncaught Exception details:', error);
+    process.exit(1);
+});
+
 // Run the main function
-main();
+logger.withCategory('api').debug('About to call main() function', null);
+main().catch(error => {
+    logger.withCategory('api').error('Error caught in main() call');
+    logger.withCategory('error').debug('Main() call error details:', error);
+    process.exit(1);
+});
