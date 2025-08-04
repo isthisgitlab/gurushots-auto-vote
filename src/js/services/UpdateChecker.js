@@ -1,5 +1,6 @@
 const axios = require('axios');
 const logger = require('../logger');
+const metadata = require('../metadata');
 
 class UpdateChecker {
     constructor() {
@@ -15,8 +16,6 @@ class UpdateChecker {
         }
         
         this.repositoryUrl = 'https://api.github.com/repos/isthisgitlab/gurushots-auto-vote/releases/latest';
-        this.lastCheckKey = 'lastUpdateCheck';
-        this.skipVersionKey = 'skipUpdateVersion';
     }
 
     /**
@@ -26,23 +25,23 @@ class UpdateChecker {
      */
     async checkForUpdates(saveCheckTime = true) {
         try {
-            // Check if we should skip this version
-            const settings = require('../settings');
-            const skipVersion = settings.getSetting(this.skipVersionKey);
+            // Get update check data from metadata
+            const updateCheckData = metadata.getUpdateCheckData();
+            const skipVersion = updateCheckData.skipVersion;
             
             // Get last check time to avoid too frequent checks
-            const lastCheck = settings.getSetting(this.lastCheckKey);
+            const lastCheck = updateCheckData.lastCheck;
             const now = Date.now();
             const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
             
             // If we checked less than 24 hours ago, skip
             if (lastCheck && (now - lastCheck) < oneDay) {
-                logger.info('🔄 Update check skipped - checked recently');
+                logger.withCategory('update').info('🔄 Update check skipped - checked recently', null);
                 return null;
             }
 
-            logger.info('🔍 Checking for updates...');
-            logger.info('📦 Current version:', this.currentVersion);
+            logger.withCategory('update').info('🔍 Checking for updates...', null);
+            logger.withCategory('update').info('📦 Current version:', this.currentVersion);
 
             const response = await axios.get(this.repositoryUrl, {
                 timeout: 10000, // 10 second timeout
@@ -54,21 +53,21 @@ class UpdateChecker {
             const latestRelease = response.data;
             const latestVersion = latestRelease.tag_name.replace('v', '');
 
-            logger.info('📦 Latest version:', latestVersion);
+            logger.withCategory('update').info('📦 Latest version:', latestVersion);
 
             // Compare versions
             if (this.isNewerVersion(latestVersion, this.currentVersion)) {
                 // Don't show update if user chose to skip this version
                 if (skipVersion === latestVersion) {
-                    logger.info('⏭️ Update skipped by user for version:', latestVersion);
+                    logger.withCategory('update').info('⏭️ Update skipped by user for version:', latestVersion);
                     return null;
                 }
 
-                logger.info('🎉 New version available:', latestVersion);
+                logger.withCategory('update').info('🎉 New version available:', latestVersion);
                 
                 // Save the check time only if requested
                 if (saveCheckTime) {
-                    settings.setSetting(this.lastCheckKey, now);
+                    metadata.setLastUpdateCheck(now);
                 }
 
                 return {
@@ -80,15 +79,15 @@ class UpdateChecker {
                     isPrerelease: latestRelease.prerelease,
                 };
             } else {
-                logger.info('✅ App is up to date');
+                logger.withCategory('update').info('✅ App is up to date', null);
                 // Save the check time only if requested
                 if (saveCheckTime) {
-                    settings.setSetting(this.lastCheckKey, now);
+                    metadata.setLastUpdateCheck(now);
                 }
                 return null;
             }
         } catch (error) {
-            logger.error('❌ Error checking for updates:', error.message);
+            logger.withCategory('update').error('❌ Error checking for updates:', error.message);
             return null;
         }
     }
@@ -121,18 +120,16 @@ class UpdateChecker {
      * @param {string} version 
      */
     skipVersion(version) {
-        const settings = require('../settings');
-        settings.setSetting(this.skipVersionKey, version);
-        logger.info('⏭️ Marked version to skip:', version);
+        metadata.setSkipUpdateVersion(version);
+        logger.withCategory('update').info('⏭️ Marked version to skip:', version);
     }
 
     /**
      * Clear skip version setting
      */
     clearSkipVersion() {
-        const settings = require('../settings');
-        settings.setSetting(this.skipVersionKey, '');
-        logger.info('🔄 Cleared skip version setting');
+        metadata.clearSkipUpdateVersion();
+        logger.withCategory('update').info('🔄 Cleared skip version setting', null);
     }
 
     /**
@@ -140,21 +137,21 @@ class UpdateChecker {
      * @returns {Promise<Object|null>} Update info or null if no update available
      */
     async forceCheckForUpdates() {
-        const settings = require('../settings');
-        const originalLastCheck = settings.getSetting(this.lastCheckKey);
+        const updateCheckData = metadata.getUpdateCheckData();
+        const originalLastCheck = updateCheckData.lastCheck;
         
         // Temporarily clear last check to force update
-        settings.setSetting(this.lastCheckKey, '');
+        metadata.setLastUpdateCheck(0);
         
         let result = null;
         try {
-            // Don't save check time during manual checks to avoid triggering settings reload
+            // Don't save check time during manual checks
             result = await this.checkForUpdates(false);
             return result;
         } finally {
             // Restore original last check if no update was found
-            if (!result) {
-                settings.setSetting(this.lastCheckKey, originalLastCheck);
+            if (!result && originalLastCheck) {
+                metadata.setLastUpdateCheck(originalLastCheck);
             }
         }
     }

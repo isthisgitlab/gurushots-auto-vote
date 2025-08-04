@@ -105,7 +105,7 @@
                         savedLanguage = settings.getSetting('language');
                     } catch (error) {
                         const logger = require('../logger');
-                        logger.warning('Could not load language from settings (Node.js):', error);
+                        logger.withCategory('translation').warning('Could not load language from settings (Node.js):', error);
                     }
                 }
             
@@ -115,7 +115,7 @@
             
             } catch (error) {
                 const logger = require('../logger');
-                logger.warning('Could not load language from settings:', error);
+                logger.withCategory('translation').warning('Could not load language from settings:', error);
             }
         }
 
@@ -137,12 +137,12 @@
                         this.currentLanguage = language;
                     } catch (error) {
                         const logger = require('../logger');
-                        logger.error('Could not save language to settings (Node.js):', error);
+                        logger.withCategory('translation').error('Could not save language to settings (Node.js):', error);
                     }
                 }
             } catch (error) {
                 const logger = require('../logger');
-                logger.error('Could not save language to settings:', error);
+                logger.withCategory('translation').error('Could not save language to settings:', error);
             }
         }
 

@@ -22,28 +22,28 @@ class BaseMiddleware {
      * @returns {object|null} - Login response or null if failed
      */
     async cliLogin(email, password) {
-        logger.info('=== GuruShots Auto Voter - CLI Login ===');
+        logger.withCategory('authentication').info('=== GuruShots Auto Voter - CLI Login ===', null);
 
-        logger.startOperation('cli-login', 'CLI Authentication');
+        logger.withCategory('auth').startOperation('cli-login', 'CLI Authentication');
 
         try {
             // Attempt authentication using the provided strategy
             const response = await this.apiStrategy.authenticate(email, password);
 
             if (response && response.token) {
-                logger.endOperation('cli-login', 'Authentication successful');
-                logger.success('Token obtained and saved to settings');
+                logger.withCategory('auth').endOperation('cli-login', 'Authentication successful');
+                logger.withCategory('authentication').success('Token obtained and saved to settings');
 
                 // Save token to settings
                 settings.setSetting('token', response.token);
 
                 return {success: true, token: response.token};
             } else {
-                logger.endOperation('cli-login', null, 'Invalid credentials');
+                logger.withCategory('auth').endOperation('cli-login', null, 'Invalid credentials');
                 return {success: false, error: 'Login failed. Please check your credentials.'};
             }
         } catch (error) {
-            logger.endOperation('cli-login', null, error.message || error);
+            logger.withCategory('auth').endOperation('cli-login', null, error.message || error);
             return {success: false, error: error.message || error};
         }
     }
@@ -87,18 +87,18 @@ class BaseMiddleware {
      * @returns {void}
      */
     async cliVote() {
-        logger.info('=== GuruShots Auto Voter - CLI Voting ===');
+        logger.withCategory('voting').info('=== GuruShots Auto Voter - CLI Voting ===', null);
 
         // Load token from settings
         const token = settings.getSetting('token');
 
         if (!token) {
-            logger.error('No authentication token found. Please login first');
-            logger.info('Run the login command to authenticate');
+            logger.withCategory('authentication').error('No authentication token found. Please login first', null);
+            logger.withCategory('authentication').info('Run the login command to authenticate', null);
             return;
         }
 
-        logger.startOperation('cli-vote', 'CLI Voting Process');
+        logger.withCategory('voting').startOperation('cli-vote', 'CLI Voting Process');
 
         try {
             // Create a function to get the effective exposure setting for each challenge
@@ -106,15 +106,15 @@ class BaseMiddleware {
                 try {
                     return settings.getEffectiveSetting('exposure', challengeId);
                 } catch (error) {
-                    logger.warning(`Error getting exposure setting for challenge ${challengeId}`, error);
+                    logger.withCategory('settings').warning(`Error getting exposure setting for challenge ${challengeId}`, error);
                     return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
                 }
             };
 
             await this.apiStrategy.fetchChallengesAndVote(token, getExposureThreshold);
-            logger.endOperation('cli-vote', 'Voting process completed successfully');
+            logger.withCategory('voting').endOperation('cli-vote', 'Voting process completed successfully');
         } catch (error) {
-            logger.endOperation('cli-vote', null, error.message || error);
+            logger.withCategory('voting').endOperation('cli-vote', null, error.message || error);
         }
     }
 
@@ -140,7 +140,7 @@ class BaseMiddleware {
                 try {
                     return settings.getEffectiveSetting('exposure', challengeId);
                 } catch (error) {
-                    logger.warning(`Error getting exposure setting for challenge ${challengeId}`, error);
+                    logger.withCategory('settings').warning(`Error getting exposure setting for challenge ${challengeId}`, error);
                     return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
                 }
             };
@@ -177,7 +177,7 @@ class BaseMiddleware {
     logout(clearToken = true) {
         if (clearToken) {
             settings.setSetting('token', '');
-            logger.success('Logged out successfully');
+            logger.withCategory('authentication').success('Logged out successfully', null, null);
         }
     }
 
