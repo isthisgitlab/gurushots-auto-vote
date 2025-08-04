@@ -1186,6 +1186,8 @@ module.exports = {
     
     // Utility functions
     getSettingsSchema,
+    isSettingModified,
+    isGlobalDefaultModified,
     
     // Schema
     SETTINGS_SCHEMA,
