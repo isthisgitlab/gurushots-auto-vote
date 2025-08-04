@@ -24,7 +24,7 @@ try {
         throw new Error('No version found in package.json');
     }
 
-    logger.cliInfo(`Updating documentation with version ${version}...`);
+    logger.withCategory('ui').info(`Updating documentation with version ${version}...`);
 
     // Files to update
     const filesToUpdate = [
@@ -42,7 +42,7 @@ try {
 
     filesToUpdate.forEach(fileInfo => {
         if (!fs.existsSync(fileInfo.path)) {
-            logger.cliWarning(`⚠️  ${fileInfo.name} not found, skipping...`);
+            logger.withCategory('ui').warning(`⚠️  ${fileInfo.name} not found, skipping...`);
             return;
         }
 
@@ -192,24 +192,24 @@ try {
         fs.writeFileSync(fileInfo.path, content, 'utf8');
 
         if (changesMade > 0) {
-            logger.cliSuccess(`✅ ${fileInfo.name} updated successfully with version ${version} (${changesMade} changes)`);
+            logger.withCategory('ui').success(`✅ ${fileInfo.name} updated successfully with version ${version} (${changesMade} changes)`);
             totalChanges += changesMade;
         } else {
-            logger.cliInfo(`ℹ️  ${fileInfo.name} is already up to date with version ${version}`);
+            logger.withCategory('ui').info(`ℹ️  ${fileInfo.name} is already up to date with version ${version}`);
         }
     });
 
     if (totalChanges > 0) {
-        logger.cliInfo(`\n📝 Total changes made: ${totalChanges}`);
-        logger.cliInfo(`   - Updated version numbers to v${version}`);
-        logger.cliInfo(`   - Updated all download file names to v${version}`);
-        logger.cliInfo(`   - Updated all download URLs to v${version}`);
-        logger.cliInfo(`   - Updated command examples to v${version}`);
+        logger.withCategory('ui').info(`\n📝 Total changes made: ${totalChanges}`);
+        logger.withCategory('ui').info(`   - Updated version numbers to v${version}`);
+        logger.withCategory('ui').info(`   - Updated all download file names to v${version}`);
+        logger.withCategory('ui').info(`   - Updated all download URLs to v${version}`);
+        logger.withCategory('ui').info(`   - Updated command examples to v${version}`);
     } else {
-        logger.cliInfo(`\nℹ️  All documentation is already up to date with version ${version}`);
+        logger.withCategory('ui').info(`\nℹ️  All documentation is already up to date with version ${version}`);
     }
 
 } catch (error) {
-    logger.cliError(`❌ Error updating documentation: ${error.message}`);
+    logger.withCategory('ui').error(`❌ Error updating documentation: ${error.message}`);
     process.exit(1);
 } 
