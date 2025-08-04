@@ -43,14 +43,45 @@ jest.mock('../../src/js/mock/errors', () => ({
 jest.spyOn(console, 'log').mockImplementation();
 jest.spyOn(console, 'warn').mockImplementation();
 
-// Mock logger
-jest.mock('../../src/js/logger', () => ({
-    debug: jest.fn(),
-    info: jest.fn(),
-    success: jest.fn(),
-    error: jest.fn(),
-    api: jest.fn(),
-}));
+// Mock logger with shared mock functions defined inside
+jest.mock('../../src/js/logger', () => {
+    // Create shared mock functions inside the mock factory
+    const mockDebugFn = jest.fn();
+    const mockInfoFn = jest.fn();
+    const mockSuccessFn = jest.fn();
+    const mockErrorFn = jest.fn();
+    const mockApiFn = jest.fn();
+    
+    const mock = {
+        debug: jest.fn(),
+        info: jest.fn(),
+        success: jest.fn(),
+        error: jest.fn(),
+        api: jest.fn(),
+        startOperation: jest.fn(),
+        endOperation: jest.fn(),
+        apiRequest: jest.fn(),
+        apiResponse: jest.fn(),
+        isDevMode: jest.fn(() => false),
+        // Export the shared functions for access in tests
+        __mockDebugFn: mockDebugFn,
+        __mockInfoFn: mockInfoFn,
+        __mockSuccessFn: mockSuccessFn,
+        __mockErrorFn: mockErrorFn,
+        __mockApiFn: mockApiFn,
+    };
+    
+    mock.withCategory = jest.fn(() => ({
+        info: mockInfoFn,
+        error: mockErrorFn,
+        debug: mockDebugFn,
+        success: mockSuccessFn,
+        warning: jest.fn(),
+        api: mockApiFn,
+    }));
+    
+    return mock;
+});
 
 describe('mock/index', () => {
     const auth = require('../../src/js/mock/auth');
@@ -62,6 +93,11 @@ describe('mock/index', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        logger.__mockDebugFn.mockClear();
+        logger.__mockInfoFn.mockClear();
+        logger.__mockSuccessFn.mockClear();
+        logger.__mockErrorFn.mockClear();
+        logger.__mockApiFn.mockClear();
         // Reset cancellation flag
         mockIndex.setCancellationFlag(false);
     });
@@ -182,42 +218,42 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.authenticate('test@example.com', 'password');
 
                 expect(result).toEqual(auth.mockLoginSuccess);
-                expect(logger.debug).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: [hidden]');
-                expect(logger.success).toHaveBeenCalledWith('Mock authentication successful');
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: [hidden]', null);
+                expect(logger.__mockSuccessFn).toHaveBeenCalledWith('Mock authentication successful', null, null);
             });
 
             test('should return failure for empty email', async () => {
                 await expect(mockIndex.mockApiClient.authenticate('', 'password'))
                     .rejects.toEqual(auth.mockLoginFailure);
 
-                expect(logger.error).toHaveBeenCalledWith('Mock authentication failed - empty credentials');
+                expect(logger.__mockErrorFn).toHaveBeenCalledWith('Mock authentication failed - empty credentials', null);
             });
 
             test('should return failure for empty password', async () => {
                 await expect(mockIndex.mockApiClient.authenticate('test@example.com', ''))
                     .rejects.toEqual(auth.mockLoginFailure);
 
-                expect(logger.error).toHaveBeenCalledWith('Mock authentication failed - empty credentials');
+                expect(logger.__mockErrorFn).toHaveBeenCalledWith('Mock authentication failed - empty credentials', null);
             });
 
             test('should handle whitespace-only credentials', async () => {
                 await expect(mockIndex.mockApiClient.authenticate('   ', '   '))
                     .rejects.toEqual(auth.mockLoginFailure);
 
-                expect(logger.error).toHaveBeenCalledWith('Mock authentication failed - empty credentials');
+                expect(logger.__mockErrorFn).toHaveBeenCalledWith('Mock authentication failed - empty credentials', null);
             });
 
             test('should log password as hidden when provided', async () => {
                 await mockIndex.mockApiClient.authenticate('test@example.com', 'mypassword');
 
-                expect(logger.debug).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: [hidden]');
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: [hidden]', null);
             });
 
             test('should log no password when not provided', async () => {
                 await expect(mockIndex.mockApiClient.authenticate('test@example.com', null))
                     .rejects.toEqual(auth.mockLoginFailure);
 
-                expect(logger.debug).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: no password');
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: no password', null);
             });
         });
 
@@ -227,7 +263,7 @@ describe('mock/index', () => {
 
 
                 expect(result).toEqual({challenges: [{id: '2', title: 'Generated Challenge'}]});
-                expect(logger.api).toHaveBeenCalledWith('Mock getActiveChallenges');
+                expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock getActiveChallenges', null);
             });
 
             test('should generate fresh challenges if generator exists', async () => {
@@ -251,14 +287,14 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.getActiveChallenges(null))
                     .rejects.toEqual(errors.mockAuthErrors.invalidToken);
 
-                expect(logger.error).toHaveBeenCalledWith('No token provided, returning error');
+                expect(logger.__mockErrorFn).toHaveBeenCalledWith('No token provided, returning error', null);
             });
 
             test('should log token information', async () => {
                 await mockIndex.mockApiClient.getActiveChallenges('test-token-123');
 
-                expect(logger.debug).toHaveBeenCalledWith('Token provided: true');
-                expect(logger.debug).toHaveBeenCalledWith('Token starts with mock_: false');
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith('Token provided: true', null);
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith('Token starts with mock_: false', null);
             });
         });
 
@@ -270,8 +306,8 @@ describe('mock/index', () => {
 
 
                 expect(result).toEqual({images: [{id: 'generated-img', ratio: 30}]});
-                expect(logger.api).toHaveBeenCalledWith('Mock getVoteImages');
-                expect(logger.debug).toHaveBeenCalledWith('Challenge: Test Challenge');
+                expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock getVoteImages', null);
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith('Challenge: Test Challenge', null);
             });
 
             test('should generate fresh vote images if generator exists', async () => {
@@ -310,7 +346,7 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.submitVotes(voteImages, 'test-token');
 
                 expect(result).toEqual(voting.mockVoteSubmissionSuccess);
-                expect(logger.api).toHaveBeenCalledWith('Mock submitVotes');
+                expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock submitVotes', null);
                 // Note: 'Submitting mock votes successfully' was removed from the mock implementation
             });
 
@@ -341,7 +377,7 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.applyBoost(challenge, 'test-token');
 
                 expect(result).toEqual(boost.mockBoostSuccess);
-                expect(logger.api).toHaveBeenCalledWith('Mock applyBoost');
+                expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock applyBoost', null);
                 // Note: 'Applying boost successfully' message was not migrated to logger
             });
 
@@ -407,8 +443,8 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 
                 expect(result).toEqual({success: true, message: 'Mock voting process completed'});
-                expect(logger.info).toHaveBeenCalledWith('Mock Voting Process Started');
-                expect(logger.info).toHaveBeenCalledWith('Mock Voting Process Completed');
+                expect(logger.__mockInfoFn).toHaveBeenCalledWith('Mock Voting Process Started', null);
+                expect(logger.__mockInfoFn).toHaveBeenCalledWith('Mock Voting Process Completed', null);
             });
 
             test('should handle cancellation during voting process', async () => {

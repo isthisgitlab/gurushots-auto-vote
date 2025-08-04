@@ -17,12 +17,32 @@ jest.mock('../../src/js/api/api-client', () => ({
 }));
 
 // Mock the logger module
-jest.mock('../../src/js/logger', () => ({
-    debug: jest.fn(),
-    error: jest.fn(),
-    startOperation: jest.fn(),
-    endOperation: jest.fn(),
-}));
+jest.mock('../../src/js/logger', () => {
+    const mockDebugFn = jest.fn();
+    const mockEndOperationFn = jest.fn();
+    
+    return {
+        debug: jest.fn(),
+        error: jest.fn(),
+        startOperation: jest.fn(),
+        endOperation: jest.fn(),
+        withCategory: jest.fn(() => ({
+            info: jest.fn(),
+            error: jest.fn(),
+            debug: mockDebugFn,
+            success: jest.fn(),
+            warning: jest.fn(),
+            api: jest.fn(),
+            apiRequest: jest.fn(),
+            startOperation: jest.fn(),
+            endOperation: mockEndOperationFn,
+            progress: jest.fn(),
+        })),
+        // Export the mock functions for testing
+        __mockDebugFn: mockDebugFn,
+        __mockEndOperationFn: mockEndOperationFn,
+    };
+});
 
 describe('challenges', () => {
     const mockToken = 'test-token-123';
@@ -77,11 +97,12 @@ describe('challenges', () => {
             );
 
             expect(result).toEqual(mockResponse);
-            expect(logger.debug).toHaveBeenCalledWith('Requesting active challenges from API', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockDebugFn).toHaveBeenCalledWith('Requesting active challenges from API', {
                 hasToken: true,
                 tokenPrefix: 'test-token...',
             });
-            expect(logger.debug).toHaveBeenCalledWith('Active challenges response received', {
+            expect(logger.__mockDebugFn).toHaveBeenCalledWith('Active challenges response received', {
                 challengeCount: 2,
                 hasValidStructure: true,
                 responseKeys: ['challenges'],
@@ -96,7 +117,8 @@ describe('challenges', () => {
 
             await getActiveChallenges(shortToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('Requesting active challenges from API', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockDebugFn).toHaveBeenCalledWith('Requesting active challenges from API', {
                 hasToken: true,
                 tokenPrefix: 'short...',
             });
@@ -109,7 +131,8 @@ describe('challenges', () => {
 
             await getActiveChallenges();
 
-            expect(logger.debug).toHaveBeenCalledWith('Requesting active challenges from API', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockDebugFn).toHaveBeenCalledWith('Requesting active challenges from API', {
                 hasToken: false,
                 tokenPrefix: 'none',
             });
@@ -138,7 +161,8 @@ describe('challenges', () => {
 
             await getActiveChallenges(mockToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('Active challenges response received', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockDebugFn).toHaveBeenCalledWith('Active challenges response received', {
                 challengeCount: 2,
                 hasValidStructure: true,
                 responseKeys: ['challenges', 'other_field'],
@@ -154,7 +178,8 @@ describe('challenges', () => {
 
             await getActiveChallenges(mockToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('Active challenges response received', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockDebugFn).toHaveBeenCalledWith('Active challenges response received', {
                 challengeCount: 0,
                 hasValidStructure: false,
                 responseKeys: ['other_field'],
@@ -177,7 +202,8 @@ describe('challenges', () => {
             const result = await getActiveChallenges(mockToken);
 
             expect(result).toEqual({challenges: []});
-            expect(logger.endOperation).toHaveBeenCalledWith(expect.any(String), null, 'API request failed');
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(expect.any(String), null, 'API request failed');
         });
 
         test('should truncate long tokens in logs', async () => {
@@ -188,7 +214,8 @@ describe('challenges', () => {
 
             await getActiveChallenges(longToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('Requesting active challenges from API', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockDebugFn).toHaveBeenCalledWith('Requesting active challenges from API', {
                 hasToken: true,
                 tokenPrefix: 'very-long-...',
             });

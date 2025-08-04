@@ -17,6 +17,15 @@ jest.mock('../../src/js/api/api-client', () => ({
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8'
 }));
 
+// Create shared mock functions to track calls across categories
+const mockInfoFn = jest.fn();
+const mockErrorFn = jest.fn();
+const mockSuccessFn = jest.fn();
+const mockWarningFn = jest.fn();
+const mockDebugFn = jest.fn();
+const mockApiFn = jest.fn();
+const mockApiRequestFn = jest.fn();
+
 // Mock logger
 jest.mock('../../src/js/logger', () => ({
     info: jest.fn(),
@@ -27,17 +36,34 @@ jest.mock('../../src/js/logger', () => ({
     apiRequest: jest.fn(),
     apiResponse: jest.fn(),
     api: jest.fn(),
+    withCategory: jest.fn(() => ({
+        info: mockInfoFn,
+        error: mockErrorFn,
+        success: mockSuccessFn,
+        warning: mockWarningFn,
+        debug: mockDebugFn,
+        api: mockApiFn,
+        apiRequest: mockApiRequestFn,
+        startOperation: jest.fn(),
+        endOperation: jest.fn(),
+        progress: jest.fn(),
+    })),
 }));
 
 describe('login', () => {
     const mockEmail = 'test@example.com';
     const mockPassword = 'testpassword123';
     const {createCommonHeaders} = require('../../src/js/api/api-client');
-    const mockLogger = require('../../src/js/logger');
+    const logger = require('../../src/js/logger');
 
     beforeEach(() => {
         jest.clearAllMocks();
         axios.mockClear();
+        mockInfoFn.mockClear();
+        mockErrorFn.mockClear();
+        mockSuccessFn.mockClear();
+        mockWarningFn.mockClear();
+        mockDebugFn.mockClear();
     });
 
     describe('authenticate', () => {
@@ -72,16 +98,17 @@ describe('login', () => {
             });
 
             expect(result).toEqual(mockResponse.data);
-            expect(mockLogger.info).toHaveBeenCalledWith('Starting authentication...');
-            expect(mockLogger.apiRequest).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
-            expect(mockLogger.api).toHaveBeenCalledWith('API Response', {
+            expect(mockInfoFn).toHaveBeenCalledWith('Starting authentication...', null);
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
+            expect(mockApiFn).toHaveBeenCalledWith('API Response', {
                 method: 'POST',
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
                 duration: expect.any(Number),
                 responseData: mockResponse.data
             });
-            expect(mockLogger.success).toHaveBeenCalledWith('Authentication successful');
+            expect(mockSuccessFn).toHaveBeenCalledWith('Authentication successful', null, null);
         });
 
         test('should encode email in request data', async () => {
@@ -98,8 +125,9 @@ describe('login', () => {
             expect(axios).toHaveBeenCalledWith(expect.objectContaining({
                 data: `login=${encodeURIComponent(emailWithSpecialChars)}&password=${mockPassword}`,
             }));
-            expect(mockLogger.apiRequest).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
-            expect(mockLogger.api).toHaveBeenCalledWith('API Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
+            expect(mockApiFn).toHaveBeenCalledWith('API Response', {
                 method: 'POST',
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
@@ -124,8 +152,9 @@ describe('login', () => {
                     'content-length': expectedData.length.toString(),
                 }),
             }));
-            expect(mockLogger.apiRequest).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
-            expect(mockLogger.api).toHaveBeenCalledWith('API Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
+            expect(mockApiFn).toHaveBeenCalledWith('API Response', {
                 method: 'POST',
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
@@ -171,8 +200,9 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(mockLogger.apiRequest).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
-            expect(mockLogger.api).toHaveBeenCalledWith('API Error Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
+            expect(mockApiFn).toHaveBeenCalledWith('API Error Response', {
                 method: 'POST',
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 'NO_RESPONSE',
@@ -180,7 +210,7 @@ describe('login', () => {
                 error: 'Invalid credentials',
                 responseData: null
             });
-            expect(mockLogger.error).toHaveBeenCalledWith('Authentication error:', 'Invalid credentials');
+            expect(mockErrorFn).toHaveBeenCalledWith('Authentication error:', 'Invalid credentials');
         });
 
         test('should return null on network error', async () => {
@@ -190,8 +220,9 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(mockLogger.apiRequest).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
-            expect(mockLogger.api).toHaveBeenCalledWith('API Error Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
+            expect(mockApiFn).toHaveBeenCalledWith('API Error Response', {
                 method: 'POST',
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 'NO_RESPONSE',
@@ -199,7 +230,7 @@ describe('login', () => {
                 error: 'Network timeout',
                 responseData: null
             });
-            expect(mockLogger.error).toHaveBeenCalledWith('Authentication error:', 'Network timeout');
+            expect(mockErrorFn).toHaveBeenCalledWith('Authentication error:', 'Network timeout');
         });
 
         test('should handle error without message', async () => {
@@ -209,8 +240,9 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(mockLogger.apiRequest).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
-            expect(mockLogger.api).toHaveBeenCalledWith('API Error Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
+            expect(mockApiFn).toHaveBeenCalledWith('API Error Response', {
                 method: 'POST',
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 'NO_RESPONSE',
@@ -218,7 +250,7 @@ describe('login', () => {
                 error: undefined,
                 responseData: null
             });
-            expect(mockLogger.error).toHaveBeenCalledWith('Authentication error:', mockError);
+            expect(mockErrorFn).toHaveBeenCalledWith('Authentication error:', mockError);
         });
 
         test('should handle axios error with response', async () => {
@@ -232,8 +264,9 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(mockLogger.apiRequest).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
-            expect(mockLogger.api).toHaveBeenCalledWith('API Error Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
+            expect(mockApiFn).toHaveBeenCalledWith('API Error Response', {
                 method: 'POST',
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 401,
@@ -241,7 +274,7 @@ describe('login', () => {
                 error: 'Request failed',
                 responseData: {error: 'Unauthorized'}
             });
-            expect(mockLogger.error).toHaveBeenCalledWith('Authentication error:', 'Request failed');
+            expect(mockErrorFn).toHaveBeenCalledWith('Authentication error:', 'Request failed');
         });
 
         test('should remove x-token from headers for login request', async () => {
@@ -293,15 +326,16 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeNull();
-            expect(mockLogger.apiRequest).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
-            expect(mockLogger.api).toHaveBeenCalledWith('API Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
+            expect(mockApiFn).toHaveBeenCalledWith('API Response', {
                 method: 'POST',
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
                 duration: expect.any(Number),
                 responseData: null
             });
-            expect(mockLogger.success).toHaveBeenCalledWith('Authentication successful');
+            expect(mockSuccessFn).toHaveBeenCalledWith('Authentication successful', null, null);
         });
 
         test('should handle response without data field', async () => {
@@ -314,15 +348,16 @@ describe('login', () => {
             const result = await authenticate(mockEmail, mockPassword);
 
             expect(result).toBeUndefined();
-            expect(mockLogger.apiRequest).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
-            expect(mockLogger.api).toHaveBeenCalledWith('API Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
+            expect(mockApiFn).toHaveBeenCalledWith('API Response', {
                 method: 'POST',
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
                 duration: expect.any(Number),
                 responseData: undefined
             });
-            expect(mockLogger.success).toHaveBeenCalledWith('Authentication successful');
+            expect(mockSuccessFn).toHaveBeenCalledWith('Authentication successful', null, null);
         });
     });
 });
