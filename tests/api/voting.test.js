@@ -13,15 +13,39 @@ jest.mock('../../src/js/api/api-client', () => ({
     createCommonHeaders: jest.fn(() => ({'x-token': 'test-token'}))
 }));
 
+// Create shared mock functions to track calls across categories
+const mockInfoFn = jest.fn();
+const mockWarningFn = jest.fn();
+const mockDebugFn = jest.fn();
+const mockErrorFn = jest.fn();
+
 // Mock the logger module
-jest.mock('../../src/js/logger', () => ({
-    info: jest.fn(),
-    warning: jest.fn(),
-    debug: jest.fn(),
-    error: jest.fn(),
-    startOperation: jest.fn(() => 'mock-operation-id'),
-    endOperation: jest.fn(),
-}));
+jest.mock('../../src/js/logger', () => {
+    const mockEndOperationFn = jest.fn();
+    
+    return {
+        info: jest.fn(),
+        warning: jest.fn(),
+        debug: jest.fn(),
+        error: jest.fn(),
+        startOperation: jest.fn(() => 'mock-operation-id'),
+        endOperation: jest.fn(),
+        withCategory: jest.fn(() => ({
+            info: mockInfoFn,
+            warning: mockWarningFn,
+            debug: mockDebugFn,
+            error: mockErrorFn,
+            api: jest.fn(),
+            apiRequest: jest.fn(),
+            startOperation: jest.fn(),
+            endOperation: mockEndOperationFn,
+            progress: jest.fn(),
+            success: jest.fn(),
+        })),
+        // Export the mock functions for testing
+        __mockEndOperationFn: mockEndOperationFn,
+    };
+});
 
 // Mock the metadata module
 jest.mock('../../src/js/metadata', () => ({
@@ -35,6 +59,10 @@ const { updateChallengeVoteMetadata } = require('../../src/js/metadata');
 describe('voting', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        mockInfoFn.mockClear();
+        mockWarningFn.mockClear();
+        mockDebugFn.mockClear();
+        mockErrorFn.mockClear();
     });
 
     describe('getVoteImages', () => {
@@ -192,8 +220,9 @@ describe('voting', () => {
             const result = await submitVotes(mockVoteImages, mockToken, targetThreshold);
 
             // Should log warning about insufficient images
-            expect(logger.warning).toHaveBeenCalledWith(
-                expect.stringContaining('Insufficient images to reach 100% exposure for Test Challenge (only 1 images available)')
+            expect(mockWarningFn).toHaveBeenCalledWith(
+                expect.stringContaining('Insufficient images to reach 100% exposure for Test Challenge (only 1 images available)'),
+                null
             );
             expect(result).toEqual(mockResponse);
         });
@@ -212,7 +241,8 @@ describe('voting', () => {
 
             const result = await submitVotes(mockVoteImages, mockToken);
 
-            expect(logger.endOperation).toHaveBeenCalledWith(expect.any(String), null, 'Vote submission failed');
+            expect(logger.withCategory).toHaveBeenCalledWith('voting');
+            expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(expect.any(String), null, 'Vote submission failed');
             expect(result).toBeUndefined();
         });
 
@@ -232,8 +262,8 @@ describe('voting', () => {
 
             const result = await submitVotes(mockVoteImages, mockToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('🔧 DEBUG: Failed to update metadata for challenge 123');
-            expect(logger.warning).toHaveBeenCalledWith('Failed to update metadata for challenge 123');
+            expect(mockDebugFn).toHaveBeenCalledWith('🔧 DEBUG: Failed to update metadata for challenge 123', null);
+            expect(mockWarningFn).toHaveBeenCalledWith('Failed to update metadata for challenge 123', null);
             expect(result).toEqual(mockResponse);
         });
 
@@ -256,8 +286,8 @@ describe('voting', () => {
 
             const result = await submitVotes(mockVoteImages, mockToken);
 
-            expect(logger.debug).toHaveBeenCalledWith('🔧 DEBUG: Error updating metadata for challenge 123:', mockError);
-            expect(logger.warning).toHaveBeenCalledWith('Error updating metadata for challenge 123:', mockError);
+            expect(mockDebugFn).toHaveBeenCalledWith('🔧 DEBUG: Error updating metadata for challenge 123:', mockError);
+            expect(mockWarningFn).toHaveBeenCalledWith('Error updating metadata for challenge 123:', mockError);
             expect(result).toEqual(mockResponse);
         });
     });

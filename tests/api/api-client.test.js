@@ -19,20 +19,43 @@ jest.mock('../../src/js/api/randomizer', () => ({
 }));
 
 // Mock the logger module
-jest.mock('../../src/js/logger', () => ({
-    api: jest.fn(),
-    error: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn(),
-    apiRequest: jest.fn(),
-    apiResponse: jest.fn(),
-    isDevMode: jest.fn(() => false),
-}));
+jest.mock('../../src/js/logger', () => {
+    const mockApiFn = jest.fn();
+    const mockApiRequestFn = jest.fn();
+    
+    return {
+        api: jest.fn(),
+        error: jest.fn(),
+        info: jest.fn(),
+        debug: jest.fn(),
+        apiRequest: jest.fn(),
+        apiResponse: jest.fn(),
+        isDevMode: jest.fn(() => false),
+        startOperation: jest.fn(),
+        endOperation: jest.fn(),
+        withCategory: jest.fn(() => ({
+            info: jest.fn(),
+            error: jest.fn(),
+            debug: jest.fn(),
+            success: jest.fn(),
+            warning: jest.fn(),
+            api: mockApiFn,
+            apiRequest: mockApiRequestFn,
+            startOperation: jest.fn(),
+            endOperation: jest.fn(),
+            progress: jest.fn(),
+        })),
+        // Export the mock functions for testing
+        __mockApiFn: mockApiFn,
+        __mockApiRequestFn: mockApiRequestFn,
+    };
+});
 
 describe('api-client', () => {
     const mockToken = 'test-token-123';
     const mockUrl = 'https://api.gurushots.com/test';
     const mockData = 'test=data';
+    const logger = require('../../src/js/logger');
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -176,8 +199,9 @@ describe('api-client', () => {
             const headers = createCommonHeaders(mockToken);
             await makePostRequest(mockUrl, headers, mockData);
 
-            expect(logger.apiRequest).toHaveBeenCalledWith('POST', mockUrl);
-            expect(logger.api).toHaveBeenCalledWith('API Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockApiRequestFn).toHaveBeenCalledWith('POST', mockUrl);
+            expect(logger.__mockApiFn).toHaveBeenCalledWith('API Response', {
                 method: 'POST',
                 url: mockUrl,
                 status: mockResponse.status,
@@ -200,7 +224,8 @@ describe('api-client', () => {
             const headers = createCommonHeaders(mockToken);
             await makePostRequest(mockUrl, headers, mockData);
 
-            expect(logger.api).toHaveBeenCalledWith('API Error Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockApiFn).toHaveBeenCalledWith('API Error Response', {
                 method: 'POST',
                 url: mockUrl,
                 status: 400,
@@ -220,7 +245,8 @@ describe('api-client', () => {
             const headers = createCommonHeaders(mockToken);
             await makePostRequest(mockUrl, headers, mockData);
 
-            expect(logger.api).toHaveBeenCalledWith('API Error Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockApiFn).toHaveBeenCalledWith('API Error Response', {
                 method: 'POST',
                 url: mockUrl,
                 status: 'NO_RESPONSE',
@@ -245,7 +271,8 @@ describe('api-client', () => {
             const headers = createCommonHeaders(mockToken);
             await makePostRequest(mockUrl, headers, mockData);
 
-            expect(logger.api).toHaveBeenCalledWith('API Response', {
+            expect(logger.withCategory).toHaveBeenCalledWith('api');
+            expect(logger.__mockApiFn).toHaveBeenCalledWith('API Response', {
                 method: 'POST',
                 url: mockUrl,
                 status: mockResponse.status,

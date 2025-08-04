@@ -139,6 +139,7 @@ const getLogFilePaths = (date = getCurrentDate()) => {
         error: path.join(logsDir, `errors-${date}.log`),
         app: path.join(logsDir, `app-${date}.log`),
         api: path.join(logsDir, `api-${date}.log`),
+        settings: path.join(logsDir, `settings-${date}.log`),
     };
 };
 
@@ -146,15 +147,17 @@ const getLogFilePaths = (date = getCurrentDate()) => {
 const ERROR_RETENTION_DAYS = 30;
 const GENERAL_RETENTION_DAYS = 7;
 const API_RETENTION_DAYS = 1; // Only keep API logs for 1 day in dev mode
+const SETTINGS_RETENTION_DAYS = 7; // Keep settings logs for 7 days
 
 // Maximum file sizes in MB
 const MAX_ERROR_LOG_SIZE = 10; // 10 MB
 const MAX_APP_LOG_SIZE = 50;   // 50 MB
 const MAX_API_LOG_SIZE = 20;   // 20 MB
+const MAX_SETTINGS_LOG_SIZE = 10; // 10 MB
 
 // Parse date from filename (e.g., "errors-2025-07-28.log" -> "2025-07-28")
 const parseDateFromFilename = (filename) => {
-    const match = filename.match(/(errors|app|api)-(\d{4}-\d{2}-\d{2})\.log$/);
+    const match = filename.match(/(errors|app|api|settings)-(\d{4}-\d{2}-\d{2})\.log$/);
     return match ? match[2] : null;
 };
 
@@ -204,6 +207,9 @@ const cleanupOldLogs = () => {
                     } else if (file.startsWith('api-')) {
                         shouldDelete = isDateOlderThan(fileDate, API_RETENTION_DAYS) || fileSizeMB > MAX_API_LOG_SIZE;
                         reason = isDateOlderThan(fileDate, API_RETENTION_DAYS) ? 'age' : 'size';
+                    } else if (file.startsWith('settings-')) {
+                        shouldDelete = isDateOlderThan(fileDate, SETTINGS_RETENTION_DAYS) || fileSizeMB > MAX_SETTINGS_LOG_SIZE;
+                        reason = isDateOlderThan(fileDate, SETTINGS_RETENTION_DAYS) ? 'age' : 'size';
                     }
                 } else if (file.startsWith('api-debug-')) {
                     // Clean up old timestamped files
@@ -274,10 +280,15 @@ const getTimeString = () => {
 };
 
 /**
- * Apply color to text (only in CLI mode)
+ * Apply color to text (only in CLI mode and when not sending to GUI)
  */
-const colorize = (text, color) => {
-    if (!isCliMode || !process.stdout.isTTY) {
+const colorize = (text, color, forConsole = false) => {
+    // Only apply colors in CLI mode with TTY or when explicitly for console output
+    if ((!isCliMode || !process.stdout.isTTY) && !forConsole) {
+        return text;
+    }
+    // Don't apply colors if we're sending to GUI (even in CLI mode)
+    if (typeof global !== 'undefined' && global.sendLogToGUI && !forConsole) {
         return text;
     }
     return `${colors[color]}${text}${colors.reset}`;
@@ -286,7 +297,7 @@ const colorize = (text, color) => {
 /**
  * Format console output with context and colors
  */
-const formatConsoleMessage = (level, message, context = getContext(), timestamp = getTimeString()) => {
+const formatConsoleMessage = (level, message, context = getContext(), timestamp = getTimeString(), forConsole = false, category = null) => {
     const levelColors = {
         'INFO': 'blue',
         'SUCCESS': 'green',
@@ -298,20 +309,22 @@ const formatConsoleMessage = (level, message, context = getContext(), timestamp 
     };
 
     const color = levelColors[level] || 'white';
-    const coloredLevel = colorize(`[${level}]`, color);
-    const coloredContext = colorize(`[${context}]`, 'cyan');
-    const coloredTime = colorize(`[${timestamp}]`, 'gray');
+    const coloredLevel = colorize(`[${level}]`, color, forConsole);
+    const coloredContext = colorize(`[${context}]`, 'cyan', forConsole);
+    const coloredTime = colorize(`[${timestamp}]`, 'gray', forConsole);
+    const categoryString = category ? colorize(`[${category.toUpperCase()}]`, 'yellow', forConsole) + ' ' : '';
 
-    return `${coloredContext} ${coloredTime} ${coloredLevel} ${message}`;
+    return `${categoryString}${coloredContext} ${coloredLevel} ${coloredTime} ${message}`;
 };
 
 /**
  * Write to log file with enhanced formatting
  */
-const writeToLogFile = (logFile, level, message, data = null, context = getContext()) => {
+const writeToLogFile = (logFile, level, message, data = null, context = getContext(), category = null) => {
     try {
         const timestamp = new Date().toISOString();
-        let logEntry = `[${timestamp}] [${context}] [${level}] ${message}`;
+        const categoryString = category ? `[${category.toUpperCase()}] ` : '';
+        let logEntry = `${categoryString}[${context}] [${level}] [${timestamp}] ${message}`;
 
         if (data) {
             if (typeof data === 'object') {
@@ -323,11 +336,23 @@ const writeToLogFile = (logFile, level, message, data = null, context = getConte
 
         logEntry += '\n' + '='.repeat(80) + '\n';
 
-        // Write to file
-        fs.appendFileSync(logFile, logEntry);
+        // Route settings logs to settings file
+        let targetLogFile = logFile;
+        if (category === 'settings') {
+            targetLogFile = currentLogFiles.settings;
+        }
 
-        // Also log to console with formatting
-        console.log(formatConsoleMessage(level, message, context));
+        // Write to file
+        fs.appendFileSync(targetLogFile, logEntry);
+
+        // Also log to console with formatting (colors enabled for console)
+        console.log(formatConsoleMessage(level, message, context, getTimeString(), true, category));
+        
+        // Send to GUI if available and log stream is active (no colors for GUI)
+        if (typeof global !== 'undefined' && global.sendLogToGUI) {
+            const timeString = getTimeString();
+            global.sendLogToGUI(level, message, context, timeString, category);
+        }
     } catch (error) {
         console.error('Error writing to log file:', error);
     }
@@ -337,20 +362,24 @@ const writeToLogFile = (logFile, level, message, data = null, context = getConte
  * Enhanced logging with operation tracking
  */
 const logWithOperation = (level, operation, message, data = null, duration = null) => {
-    let formattedMessage = message;
+    let baseMessage = message;
     
     if (operation) {
-        formattedMessage = `${operation}: ${message}`;
+        baseMessage = `${operation}: ${message}`;
     }
     
+    // Create clean message for GUI/file (without colors)
+    let cleanMessage = baseMessage;
+    
     if (duration !== null) {
-        formattedMessage += ` ${colorize(`(${duration}ms)`, 'dim')}`;
+        cleanMessage += ` (${duration}ms)`;
     }
     
     const logFile = level === 'ERROR' ? currentLogFiles.error : 
         level === 'API' ? currentLogFiles.api : currentLogFiles.app;
     
-    writeToLogFile(logFile, level, formattedMessage, data);
+    // Use the clean message for file/GUI logging
+    writeToLogFile(logFile, level, cleanMessage, data);
 };
 
 /**
@@ -366,26 +395,26 @@ const logProgress = (message, current = null, total = null) => {
         progressMessage += ` [${progressBar}] ${percentage}% (${current}/${total})`;
     }
     
-    console.log(formatConsoleMessage('PROGRESS', progressMessage));
+    console.log(formatConsoleMessage('PROGRESS', progressMessage, getContext(), getTimeString(), true));
 };
 
 /**
  * Success message with checkmark
  */
-const logSuccess = (message, data = null, duration = null) => {
+const logSuccess = (message, data = null, duration = null, category = null) => {
     let successMessage = `✅ ${message}`;
     if (duration !== null) {
-        successMessage += ` ${colorize(`(${duration}ms)`, 'dim')}`;
+        successMessage += ` (${duration}ms)`;
     }
-    writeToLogFile(currentLogFiles.app, 'SUCCESS', successMessage, data);
+    writeToLogFile(currentLogFiles.app, 'SUCCESS', successMessage, data, getContext(), category);
 };
 
 /**
  * Warning message with warning symbol
  */
-const logWarning = (message, data = null) => {
+const logWarning = (message, data = null, category = null) => {
     const warningMessage = `⚠️ ${message}`;
-    writeToLogFile(currentLogFiles.app, 'WARNING', warningMessage, data);
+    writeToLogFile(currentLogFiles.app, 'WARNING', warningMessage, data, getContext(), category);
 };
 
 /**
@@ -442,22 +471,37 @@ if (typeof process !== 'undefined') {
 // Get current log file paths
 const currentLogFiles = getLogFilePaths();
 
+// Log categories for consistent usage across the application
+const LOG_CATEGORIES = {
+    SETTINGS: 'settings',
+    AUTHENTICATION: 'authentication', 
+    VOTING: 'voting',
+    CHALLENGES: 'challenges',
+    API: 'api',
+    UI: 'ui',
+    TRANSLATION: 'translation',
+    MIDDLEWARE: 'middleware',
+    UPDATE: 'update',
+};
+
 // Export logger functions
 module.exports = {
+    // Category constants
+    CATEGORIES: LOG_CATEGORIES,
     // Basic logging methods (backward compatibility)
-    error: (message, data) => writeToLogFile(currentLogFiles.error, 'ERROR', message, data),
-    info: (message, data) => writeToLogFile(currentLogFiles.app, 'INFO', message, data),
-    debug: (message, data) => {
+    error: (message, data, category) => writeToLogFile(currentLogFiles.error, 'ERROR', message, data, getContext(), category),
+    info: (message, data, category) => writeToLogFile(currentLogFiles.app, 'INFO', message, data, getContext(), category),
+    debug: (message, data, category) => {
         // Only log debug messages in non-built app (source code)
         if (isSourceCode()) {
-            writeToLogFile(currentLogFiles.app, 'DEBUG', message, data);
+            writeToLogFile(currentLogFiles.app, 'DEBUG', message, data, getContext(), category);
         }
-        // In built app, debug logs are completely silent
+        // In built app, debug messages are completely suppressed for both CLI and GUI
     },
-    api: (message, data) => {
+    api: (message, data, category) => {
         // Always log API messages to file in non-built app
         if (isSourceCode()) {
-            writeToLogFile(currentLogFiles.api, 'API', message, data);
+            writeToLogFile(currentLogFiles.api, 'API', message, data, getContext(), category);
         }
     },
 
@@ -465,6 +509,72 @@ module.exports = {
     success: logSuccess,
     warning: logWarning,
     progress: logProgress,
+    
+    // Category logging - creates a logger for any category
+    withCategory: (category) => ({
+        info: (message, data) => writeToLogFile(currentLogFiles.app, 'INFO', message, data, getContext(), category),
+        error: (message, data) => writeToLogFile(currentLogFiles.error, 'ERROR', message, data, getContext(), category),
+        debug: (message, data) => {
+            if (isSourceCode()) {
+                writeToLogFile(currentLogFiles.app, 'DEBUG', message, data, getContext(), category);
+            }
+        },
+        api: (message, data) => {
+            // Always log API messages to file in non-built app
+            if (isSourceCode()) {
+                writeToLogFile(currentLogFiles.api, 'API', message, data, getContext(), category);
+            }
+        },
+        apiRequest: (method, url, duration = null) => {
+            const message = duration ? 
+                `${method} ${url} (${duration}ms)` : 
+                `${method} ${url}`;
+            // Always log API requests to file in non-built app
+            if (isSourceCode()) {
+                writeToLogFile(currentLogFiles.api, 'API', `🌐 REQUEST: ${message}`, null, getContext(), category);
+            }
+        },
+        success: (message, data, duration) => logSuccess(message, data, duration, category),
+        warning: (message, data) => logWarning(message, data, category),
+        progress: (message, current = null, total = null) => {
+            let progressMessage = message;
+            
+            if (current !== null && total !== null) {
+                const percentage = Math.round((current / total) * 100);
+                const progressBar = '█'.repeat(Math.floor(percentage / 5)) + 
+                                   '░'.repeat(20 - Math.floor(percentage / 5));
+                progressMessage += ` [${progressBar}] ${percentage}% (${current}/${total})`;
+            }
+            
+            console.log(formatConsoleMessage('PROGRESS', progressMessage, getContext(), getTimeString(), true, category));
+        },
+        startOperation: (operationId, message) => {
+            const startTime = Date.now();
+            operations.set(operationId, { startTime, message });
+            
+            const startMessage = `🔄 ${message}...`;
+            writeToLogFile(currentLogFiles.app, 'INFO', startMessage, null, getContext(), category);
+            
+            return startTime;
+        },
+        endOperation: (operationId, successMessage = null, errorMessage = null) => {
+            const operation = operations.get(operationId);
+            if (!operation) return;
+            
+            const duration = Date.now() - operation.startTime;
+            operations.delete(operationId);
+            
+            if (errorMessage) {
+                const failMessage = `❌ ${operation.message} failed: ${errorMessage}`;
+                writeToLogFile(currentLogFiles.error, 'ERROR', failMessage, null, getContext(), category);
+            } else {
+                const completeMessage = successMessage || `${operation.message} completed`;
+                logSuccess(completeMessage, null, duration, category);
+            }
+            
+            return duration;
+        },
+    }),
     
     // Operation tracking
     startOperation,
@@ -512,21 +622,33 @@ module.exports = {
     },
     
     // CLI-specific methods
-    cliInfo: (message, data) => {
+    cliInfo: (message, data, category) => {
         if (isCliMode) {
-            writeToLogFile(currentLogFiles.app, 'INFO', message, data);
+            writeToLogFile(currentLogFiles.app, 'INFO', message, data, getContext(), category);
         }
     },
     
-    cliSuccess: (message, data, duration) => {
+    cliSuccess: (message, data, duration, category) => {
         if (isCliMode) {
-            logSuccess(message, data, duration);
+            logSuccess(message, data, duration, category);
         }
     },
     
-    cliError: (message, data) => {
+    cliError: (message, data, category) => {
         if (isCliMode) {
-            writeToLogFile(currentLogFiles.error, 'ERROR', message, data);
+            writeToLogFile(currentLogFiles.error, 'ERROR', message, data, getContext(), category);
+        }
+    },
+    
+    cliDebug: (message, data, category) => {
+        if (isCliMode && isSourceCode()) {
+            writeToLogFile(currentLogFiles.app, 'DEBUG', message, data, getContext(), category);
+        }
+    },
+    
+    cliWarning: (message, data, category) => {
+        if (isCliMode) {
+            logWarning(message, data, category);
         }
     },
 
@@ -534,6 +656,7 @@ module.exports = {
     getLogFile: () => currentLogFiles.app,
     getErrorLogFile: () => currentLogFiles.error,
     getApiLogFile: () => currentLogFiles.api,
+    getSettingsLogFile: () => currentLogFiles.settings,
     getLogFileForDate: (date) => getLogFilePaths(date),
     cleanup: cleanupOldLogs,
     

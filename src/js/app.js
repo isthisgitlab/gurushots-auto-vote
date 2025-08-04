@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
         // Load challenges
-        await loadChallenges(settings.timezone || 'Europe/Riga', false);
+        await loadChallenges(settings.timezone, false);
 
     } catch (error) {
         await window.api.logError(`Error loading initial settings: ${error.message || error}`);
@@ -183,11 +183,6 @@ window.saveGlobalSettings = async (event) => {
     }
     
     try {
-        // Stop autovote if it's running before saving settings
-        if (window.stopAutovote) {
-            await window.stopAutovote();
-        }
-
         // Collect all UI settings without saving yet
         const themeToggle = document.getElementById('modal-theme-toggle');
         const languageSelect = document.getElementById('modal-language-select');
@@ -226,13 +221,13 @@ window.saveGlobalSettings = async (event) => {
             const inputId = `global-${key}`;
             const input = document.getElementById(inputId);
 
-            if (input) {
+            if (input || config.type === 'time') {
                 let value;
                 if (config.type === 'time') {
                     const hoursInput = document.getElementById(`${inputId}-hours`);
                     const minutesInput = document.getElementById(`${inputId}-minutes`);
-                    if (hoursInput && minutesInput) {
-                        value = (parseInt(hoursInput.value) * 3600) + (parseInt(minutesInput.value) * 60);
+                    if (hoursInput || minutesInput) {
+                        value = (parseInt(hoursInput.value || '0') * 3600) + (parseInt(minutesInput.value || '0') * 60);
                     }
                 } else if (config.type === 'boolean') {
                     value = input.checked;
@@ -252,7 +247,7 @@ window.saveGlobalSettings = async (event) => {
                     if (config.type === 'time') {
                         const hoursInput = document.getElementById(`${inputId}-hours`);
                         const minutesInput = document.getElementById(`${inputId}-minutes`);
-                        if (hoursInput && minutesInput) {
+                        if (hoursInput || minutesInput) {
                             hoursInput.classList.remove('input-error');
                             minutesInput.classList.remove('input-error');
                         }
@@ -327,7 +322,7 @@ window.saveGlobalSettings = async (event) => {
         await window.api.refreshMenu();
 
         const timezone = await window.api.getSetting('timezone');
-        await loadChallenges(timezone, false);
+        await loadChallenges(timezone, window.autovoteRunning || false);
 
     } catch (error) {
         await window.api.logError(`Error saving settings: ${error.message || error}`);
@@ -415,7 +410,7 @@ window.resetGlobalDefault = async (key) => {
             const inputId = `global-${key}`;
             const input = document.getElementById(inputId);
 
-            if (input) {
+            if (input || config.type === 'time') {
                 if (config.type === 'time') {
                     const hours = Math.floor(config.default / 3600);
                     const minutes = Math.floor((config.default % 3600) / 60);
@@ -483,25 +478,19 @@ window.saveChallengeSettings = async (challengeId, event) => {
         event.stopPropagation();
     }
     try {
-        // Stop autovote if it's running before saving challenge settings
-        if (window.stopAutovote) {
-            await window.stopAutovote();
-        }
-
-        const schema = await window.api.getSettingsSchema();
         const validationErrors = [];
 
         for (const [key, config] of Object.entries(schema)) {
             const inputId = `${key}-${challengeId}`;
             const input = document.getElementById(inputId);
 
-            if (input) {
+            if (input || config.type === 'time') {
                 let value;
                 if (config.type === 'time') {
                     const hoursInput = document.getElementById(`${inputId}-hours`);
                     const minutesInput = document.getElementById(`${inputId}-minutes`);
-                    if (hoursInput && minutesInput) {
-                        value = (parseInt(hoursInput.value) * 3600) + (parseInt(minutesInput.value) * 60);
+                    if (hoursInput || minutesInput) {
+                        value = (parseInt(hoursInput.value || '0') * 3600) + (parseInt(minutesInput.value || '0') * 60);
                     }
                 } else if (config.type === 'boolean') {
                     value = input.checked;
@@ -556,7 +545,7 @@ window.saveChallengeSettings = async (challengeId, event) => {
 
         // Refresh challenges to show updated settings
         const timezone = await window.api.getSetting('timezone');
-        await loadChallenges(timezone, false);
+        await loadChallenges(timezone, window.autovoteRunning || false);
 
     } catch (error) {
         await window.api.logError(`Error saving challenge settings: ${error.message || error}`);

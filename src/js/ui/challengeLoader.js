@@ -32,9 +32,14 @@ export const loadChallenges = async (timezone = 'local', autovoteRunning = false
             // Extract challenge IDs for cleanup
             const activeChallengeIds = result.challenges.map(challenge => challenge.id.toString());
 
-            // Cleanup stale challenge settings
+            // Cleanup stale challenge settings (only when autovote is not running)
             try {
-                await window.api.cleanupStaleChallengeSetting(activeChallengeIds);
+                // Use the autovoteRunning parameter passed to this function
+                if (autovoteRunning) {
+                    await window.api.logDebug('⏸️ Skipping stale challenge settings cleanup - autovote is running');
+                } else {
+                    await window.api.cleanupStaleChallengeSetting(activeChallengeIds);
+                }
             } catch (error) {
                 await window.api.logWarning(`Failed to cleanup stale challenge settings: ${error.message || error}`);
             }

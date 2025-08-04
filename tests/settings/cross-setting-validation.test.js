@@ -16,6 +16,19 @@ jest.mock('../../src/js/logger', () => ({
     warning: jest.fn(),
     error: jest.fn(),
     debug: jest.fn(),
+    api: jest.fn(),
+    startOperation: jest.fn(),
+    endOperation: jest.fn(),
+    apiRequest: jest.fn(),
+    apiResponse: jest.fn(),
+    isDevMode: jest.fn(() => false),
+    withCategory: jest.fn(() => ({
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+        success: jest.fn(),
+        warning: jest.fn(),
+    })),
 }));
 
 describe('Cross-Setting Validation System', () => {

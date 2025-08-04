@@ -190,7 +190,7 @@ const generateUISettingsHtml = async () => {
         uiSettingsHtml += generateSettingHtml('theme', 'app.theme', 'app.themeDesc', themeInputHtml);
 
         // Language Setting
-        const currentLang = settings.language || 'en';
+        const currentLang = settings.language;
         const languageInputHtml = `
             <div class="flex items-center gap-2">
                 <select id="modal-language-select" class="select select-bordered select-sm">
@@ -203,7 +203,7 @@ const generateUISettingsHtml = async () => {
         uiSettingsHtml += generateSettingHtml('language', 'app.language', 'app.languageDesc', languageInputHtml);
 
         // Timezone Setting
-        const currentTimezone = settings.timezone || 'Europe/Riga';
+        const currentTimezone = settings.timezone;
         const customTimezones = settings.customTimezones || [];
         let timezoneOptions = '<option value="Europe/Riga">Europe/Riga</option>';
         
@@ -258,7 +258,7 @@ const generateUISettingsHtml = async () => {
         const apiTimeoutInputHtml = `
             <div class="flex items-center gap-2">
                 <input type="number" id="modal-api-timeout" class="input input-bordered input-sm w-20" 
-                       value="${settings.apiTimeout || 30}" min="1" max="120" step="1">
+                       value="${settings.apiTimeout}" min="1" max="120" step="1">
                 <span class="text-sm text-base-content/60">${translationManager.t('app.seconds')}</span>
                 ${generateResetButton('apiTimeout')}
             </div>
@@ -269,7 +269,7 @@ const generateUISettingsHtml = async () => {
         const checkFrequencyInputHtml = `
             <div class="flex items-center gap-2">
                 <input type="number" id="modal-check-frequency" class="input input-bordered input-sm w-20" 
-                       value="${settings.checkFrequency || 3}" min="1" max="60" step="1">
+                       value="${settings.checkFrequency}" min="1" max="60" step="1">
                 <span class="text-sm text-base-content/60">${translationManager.t('app.minutes')}</span>
                 ${generateResetButton('checkFrequency')}
             </div>

@@ -54,6 +54,7 @@
             zoom: 'Zoom',
             close: 'Close',
             bringAllToFront: 'Bring All to Front',
+            logs: 'Logs',
             about: 'About GuruShots Auto Vote',
             aboutTitle: 'About GuruShots Auto Vote',
             aboutAuthor: 'Author',
@@ -202,6 +203,14 @@
             whatsNew: 'What\'s New:',
             yourEntries: 'Your Entries',
             yourProgress: 'Your Progress',
+        },
+        // Logs page specific
+        logs: {
+            title: 'Logs',
+            status: 'Status',
+            waiting: 'Waiting for log messages...',
+            connected: 'Connected',
+            disconnected: 'Disconnected',
         },
     };
 }));

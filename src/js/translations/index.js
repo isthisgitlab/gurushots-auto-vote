@@ -68,7 +68,12 @@
             
                 return translations;
             } catch (error) {
-                console.warn(`Could not load translations for ${language}:`, error);
+                // Try to use the logger if available (browser context), fallback to console.warn
+                if (typeof window !== 'undefined' && window.api && window.api.logDebug) {
+                    window.api.logDebug(`Could not load translations for ${language}: ${error.message}`);
+                } else {
+                    console.warn(`Could not load translations for ${language}:`, error);
+                }
                 return null;
             }
         }
@@ -87,20 +92,20 @@
         // Load language from settings
         async loadLanguageFromSettings() {
             try {
-                let savedLanguage = 'en'; // default
+                let savedLanguage;
             
                 // Check if we're in a browser context with window.api
                 if (typeof window !== 'undefined' && window.api && window.api.getSettings) {
                     const settings = await window.api.getSettings();
-                    savedLanguage = settings.language || 'en';
+                    savedLanguage = settings.language;
                 } else {
                 // Fallback for Node.js context
                     try {
                         const settings = require('../settings');
-                        savedLanguage = settings.getSetting('language') || 'en';
+                        savedLanguage = settings.getSetting('language');
                     } catch (error) {
                         const logger = require('../logger');
-                        logger.warning('Could not load language from settings (Node.js):', error);
+                        logger.withCategory('translation').warning('Could not load language from settings (Node.js):', error);
                     }
                 }
             
@@ -110,7 +115,7 @@
             
             } catch (error) {
                 const logger = require('../logger');
-                logger.warning('Could not load language from settings:', error);
+                logger.withCategory('translation').warning('Could not load language from settings:', error);
             }
         }
 
@@ -132,12 +137,12 @@
                         this.currentLanguage = language;
                     } catch (error) {
                         const logger = require('../logger');
-                        logger.error('Could not save language to settings (Node.js):', error);
+                        logger.withCategory('translation').error('Could not save language to settings (Node.js):', error);
                     }
                 }
             } catch (error) {
                 const logger = require('../logger');
-                logger.error('Could not save language to settings:', error);
+                logger.withCategory('translation').error('Could not save language to settings:', error);
             }
         }
 
@@ -154,7 +159,12 @@
                     value = translationCache.en;
                     if (!value && this.currentLanguage !== 'en') {
                     // Try to load English as fallback
-                        console.warn(`Fallback to English for key: ${key}`);
+                        // Try to use the logger if available (browser context), fallback to console.warn
+                        if (typeof window !== 'undefined' && window.api && window.api.logDebug) {
+                            window.api.logDebug(`Fallback to English for key: ${key}`);
+                        } else {
+                            console.warn(`Fallback to English for key: ${key}`);
+                        }
                         return key;
                     }
                     for (const fallbackKey of keys) {

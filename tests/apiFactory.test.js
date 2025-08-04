@@ -35,16 +35,32 @@ jest.mock('../src/js/strategies/MockApiStrategy', () => {
 });
 
 // Mock logger
-jest.mock('../src/js/logger', () => ({
-    info: jest.fn(),
-    error: jest.fn(),
-    success: jest.fn(),
-    warning: jest.fn(),
-    debug: jest.fn(),
-    cliInfo: jest.fn(),
-    cliSuccess: jest.fn(),
-    cliError: jest.fn(),
-}));
+jest.mock('../src/js/logger', () => {
+    const mock = {
+        info: jest.fn(),
+        error: jest.fn(),
+        success: jest.fn(),
+        warning: jest.fn(),
+        debug: jest.fn(),
+        cliInfo: jest.fn(),
+        cliSuccess: jest.fn(),
+        cliError: jest.fn(),
+        api: jest.fn(),
+        startOperation: jest.fn(),
+        endOperation: jest.fn(),
+        apiRequest: jest.fn(),
+        apiResponse: jest.fn(),
+        isDevMode: jest.fn(() => false),
+        withCategory: jest.fn(() => ({
+            info: mock.info,
+            error: mock.error,
+            debug: mock.debug,
+            success: mock.success,
+            warning: mock.warning,
+        })),
+    };
+    return mock;
+});
 
 describe('apiFactory', () => {
     const settings = require('../src/js/settings');
@@ -71,7 +87,7 @@ describe('apiFactory', () => {
             expect(settings.loadSettings).toHaveBeenCalled();
             expect(MockApiStrategy).toHaveBeenCalled();
             expect(strategy.mockMockStrategy).toBe(true);
-            expect(mockLogger.info).toHaveBeenCalledWith('✅ Using MOCK API strategy for development/testing');
+            expect(mockLogger.info).toHaveBeenCalledWith('✅ Using MOCK API strategy for development/testing', null);
         });
 
         test('should return RealApiStrategy when mock is false', () => {
@@ -85,7 +101,7 @@ describe('apiFactory', () => {
             expect(settings.loadSettings).toHaveBeenCalled();
             expect(RealApiStrategy).toHaveBeenCalled();
             expect(strategy.mockRealStrategy).toBe(true);
-            expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production');
+            expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production', null);
         });
 
         test('should log debug information', () => {
@@ -97,7 +113,7 @@ describe('apiFactory', () => {
 
             getApiStrategy();
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('=== API Factory Debug ===');
+            expect(mockLogger.debug).toHaveBeenCalledWith('=== API Factory Debug ===', null);
             expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting: true');
             expect(mockLogger.debug).toHaveBeenCalledWith('Token exists: true');
         });
@@ -189,7 +205,7 @@ describe('apiFactory', () => {
                 mockMockStrategy: true
             }));
             expect(middleware.mockMiddlewareInstance).toBe(true);
-            expect(mockLogger.debug).toHaveBeenCalledWith('Creating middleware with MockAPI strategy');
+            expect(mockLogger.debug).toHaveBeenCalledWith('Creating middleware with MockAPI strategy', null);
         });
 
         test('should create middleware with RealApiStrategy', () => {
@@ -204,7 +220,7 @@ describe('apiFactory', () => {
                 mockRealStrategy: true
             }));
             expect(middleware.mockMiddlewareInstance).toBe(true);
-            expect(mockLogger.debug).toHaveBeenCalledWith('Creating middleware with RealAPI strategy');
+            expect(mockLogger.debug).toHaveBeenCalledWith('Creating middleware with RealAPI strategy', null);
         });
 
         test('should cache middleware instance', () => {
@@ -335,7 +351,7 @@ describe('apiFactory', () => {
 
             expect(strategy.mockRealStrategy).toBe(true);
             expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting: undefined');
-            expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production');
+            expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production', null);
         });
     });
 });

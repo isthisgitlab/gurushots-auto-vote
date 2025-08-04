@@ -28,16 +28,16 @@ const getApiStrategy = () => {
 
     // Check if we need to recreate the strategy due to setting change
     if (lastMockSetting !== userSettings.mock || !currentStrategy) {
-        logger.debug('=== API Factory Debug ===');
-        logger.debug(`Mock setting: ${userSettings.mock}`);
-        logger.debug(`Token exists: ${!!userSettings.token}`);
+        logger.withCategory('api').debug('=== API Factory Debug ===', null);
+        logger.withCategory('settings').debug(`Mock setting: ${userSettings.mock}`);
+        logger.withCategory('settings').debug(`Token exists: ${!!userSettings.token}`);
 
         // Create the appropriate strategy
         if (userSettings.mock) {
-            logger.info('✅ Using MOCK API strategy for development/testing');
+            logger.withCategory('api').info('✅ Using MOCK API strategy for development/testing', null);
             currentStrategy = new MockApiStrategy();
         } else {
-            logger.info('🌐 Using REAL API strategy for production');
+            logger.withCategory('api').info('🌐 Using REAL API strategy for production', null);
             currentStrategy = new RealApiStrategy();
         }
 
@@ -60,7 +60,7 @@ const getMiddleware = () => {
 
     // Create middleware if not cached or strategy changed
     if (!currentMiddleware) {
-        logger.debug(`Creating middleware with ${strategy.getStrategyType()} strategy`);
+        logger.withCategory('api').debug(`Creating middleware with ${strategy.getStrategyType()} strategy`, null);
         currentMiddleware = new BaseMiddleware(strategy);
     }
 
@@ -69,7 +69,7 @@ const getMiddleware = () => {
 
 // Function to force refresh API (useful when settings change)
 const refreshApi = () => {
-    logger.info('🔄 Forcing API refresh due to settings change');
+    logger.withCategory('settings').info('🔄 Forcing API refresh due to settings change');
     currentStrategy = null;
     currentMiddleware = null;
     lastMockSetting = null;

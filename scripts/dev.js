@@ -27,7 +27,7 @@ function isElectronRunning() {
 const checkInterval = setInterval(async () => {
     const isRunning = await isElectronRunning();
     if (!isRunning) {
-        logger.cliInfo('Electron process not found, killing nodemon...');
+        logger.withCategory('ui').info('Electron process not found, killing nodemon...');
         clearInterval(checkInterval);
         nodemon.kill('SIGTERM');
         setTimeout(() => {

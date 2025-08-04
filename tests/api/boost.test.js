@@ -17,6 +17,24 @@ jest.mock('../../src/js/api/api-client', () => ({
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8'
 }));
 
+// Mock the logger module
+jest.mock('../../src/js/logger', () => ({
+    withCategory: jest.fn(() => ({
+        error: jest.fn(),
+        info: jest.fn(),
+        debug: jest.fn(),
+        warning: jest.fn(),
+        success: jest.fn(),
+        startOperation: jest.fn(),
+        endOperation: jest.fn(),
+    })),
+    error: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
+    warning: jest.fn(),
+    success: jest.fn(),
+}));
+
 // Mock console methods
 jest.spyOn(console, 'log').mockImplementation();
 jest.spyOn(console, 'error').mockImplementation();

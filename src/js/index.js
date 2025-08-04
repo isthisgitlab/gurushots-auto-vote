@@ -24,11 +24,11 @@ function ensureExit(reason) {
         clearTimeout(forceExitTimeout);
     }
 
-    logger.info(`Ensuring exit after ${reason}...`);
+    logger.withCategory('ui').info(`Ensuring exit after ${reason}...`, null);
 
     // Set a timeout to force exit after a delay
     forceExitTimeout = setTimeout(() => {
-        logger.info(`Force exiting after ${reason}...`);
+        logger.withCategory('ui').info(`Force exiting after ${reason}...`, null);
         process.exit(0);
     }, 1000); // 1 second timeout
 }
@@ -46,6 +46,65 @@ let settingsReloadTimeout = null;
 
 // Track main window creation time to prevent reload during login
 let mainWindowCreatedTime = null;
+
+/**
+ * Compare two settings objects and return array of changes
+ * @param {Object} oldSettings - Previous settings object
+ * @param {Object} newSettings - New settings object
+ * @returns {Array} Array of change objects with key, oldValue, newValue
+ */
+function compareSettings(oldSettings, newSettings) {
+    const changes = [];
+    
+    // Function to safely stringify values for comparison and logging
+    const stringify = (value) => {
+        if (value === null || value === undefined) return 'null';
+        if (typeof value === 'object') return JSON.stringify(value);
+        return String(value);
+    };
+    
+    // Recursive function to compare nested objects
+    const compareRecursive = (oldObj, newObj, path = '') => {
+        // Handle null/undefined cases
+        if (oldObj === null || oldObj === undefined || newObj === null || newObj === undefined) {
+            if (oldObj !== newObj) {
+                changes.push({
+                    key: path,
+                    oldValue: stringify(oldObj),
+                    newValue: stringify(newObj),
+                });
+            }
+            return;
+        }
+        
+        // If both are objects, recurse into them
+        if (typeof oldObj === 'object' && typeof newObj === 'object' && !Array.isArray(oldObj) && !Array.isArray(newObj)) {
+            const allKeys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
+            
+            for (const key of allKeys) {
+                const newPath = path ? `${path}.${key}` : key;
+                const oldValue = oldObj[key];
+                const newValue = newObj[key];
+                
+                compareRecursive(oldValue, newValue, newPath);
+            }
+        } else {
+            // For primitive values or arrays, do direct comparison
+            if (JSON.stringify(oldObj) !== JSON.stringify(newObj)) {
+                changes.push({
+                    key: path,
+                    oldValue: stringify(oldObj),
+                    newValue: stringify(newObj),
+                });
+            }
+        }
+    };
+    
+    // Start recursive comparison
+    compareRecursive(oldSettings, newSettings);
+    
+    return changes;
+}
 
 function createLoginWindow() {
     // Get saved window bounds
@@ -155,7 +214,16 @@ function createMainWindow() {
 
     // Watch settings file for changes and auto-reload with debouncing
     const settingsPath = path.join(settings.getUserDataPath(), 'settings.json');
+    let previousSettings = null;
+    
+    // Store initial settings state
     if (fs.existsSync(settingsPath)) {
+        try {
+            previousSettings = settings.loadSettings();
+        } catch (error) {
+            logger.withCategory('settings').error('Failed to load initial settings for comparison:', error.message);
+        }
+        
         settingsWatcher = fs.watch(settingsPath, (eventType) => {
             if (eventType === 'change') {
                 // Clear existing timeout to debounce rapid file changes
@@ -168,12 +236,54 @@ function createMainWindow() {
                     // Prevent reload if main window was just created (during login)
                     const timeSinceCreation = Date.now() - mainWindowCreatedTime;
                     if (timeSinceCreation < 2000) { // 2 second window
-                        logger.info('🔄 Settings file changed, but skipping reload (window recently created)');
+                        logger.withCategory('settings').info('🔄 Settings file changed, but skipping reload (window recently created)');
                         return;
                     }
                     
-                    logger.info('🔄 Settings file changed, reloading main window...');
-                    if (mainWindow && !mainWindow.isDestroyed()) {
+                    // Load new settings and compare with previous
+                    let newSettings = null;
+                    let shouldReload = false;
+                    try {
+                        newSettings = settings.loadSettings();
+                        
+                        if (previousSettings) {
+                            const changes = compareSettings(previousSettings, newSettings);
+                            if (changes.length > 0) {
+                                // Check if any of the changed settings require reload
+                                const reloadRequiredChanges = changes.filter(change => {
+                                    const settingKey = change.key.split('.')[0]; // Get main setting key
+                                    return settings.isReloadRequired(settingKey);
+                                });
+                                
+                                if (reloadRequiredChanges.length > 0) {
+                                    logger.withCategory('settings').info('🔄 Reload-required settings changed, reloading main window...');
+                                    reloadRequiredChanges.forEach(change => {
+                                        logger.withCategory('settings').info(`  • ${change.key}: ${change.oldValue} → ${change.newValue} (reload required)`);
+                                    });
+                                    shouldReload = true;
+                                } else {
+                                    logger.withCategory('settings').info('🔄 Settings changed (no reload required):');
+                                    changes.forEach(change => {
+                                        logger.withCategory('settings').info(`  • ${change.key}: ${change.oldValue} → ${change.newValue}`);
+                                    });
+                                }
+                            } else {
+                                logger.withCategory('settings').info('🔄 Settings file changed (no property differences detected)');
+                            }
+                        } else {
+                            logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
+                            shouldReload = true;
+                        }
+                        
+                        // Update previous settings for next comparison
+                        previousSettings = newSettings;
+                    } catch (error) {
+                        logger.withCategory('settings').error('Failed to load new settings for comparison:', error.message);
+                        logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
+                        shouldReload = true;
+                    }
+                    
+                    if (shouldReload && mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.reload();
                     }
                 }, 500); // 500ms debounce
@@ -200,11 +310,11 @@ function checkAutoLogin() {
 // When Electron has finished initialization
 app.whenReady().then(async () => {
     // Log userData path for verification
-    logger.info(`[App] UserData path: ${settings.getUserDataPath()}`);
+    logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
     
     // Clear cache to prevent service worker database errors
     await session.defaultSession.clearCache();
-    logger.info('[App] Browser cache cleared to prevent service worker database errors');
+    logger.withCategory('ui').info('[App] Browser cache cleared to prevent service worker database errors', null);
     
     // Initialize API headers on app startup
     initializeHeaders();
@@ -228,7 +338,7 @@ app.whenReady().then(async () => {
         try {
             await updateChecker.checkForUpdates(true);
         } catch (error) {
-            logger.error('Error during update check:', error);
+            logger.withCategory('update').error('Error during update check:', error);
         }
     }
 
@@ -244,7 +354,7 @@ app.whenReady().then(async () => {
             try {
                 await updateChecker.checkForUpdates(true);
             } catch (error) {
-                logger.error('Error during update check:', error);
+                logger.withCategory('update').error('Error during update check:', error);
             }
         }, 3000); // 3 second delay
     }
@@ -258,14 +368,14 @@ app.whenReady().then(async () => {
 
     // Handle SIGINT and SIGTERM signals to ensure clean exit
     process.on('SIGINT', () => {
-        logger.info('Received SIGINT signal. Exiting...');
+        logger.withCategory('ui').info('Received SIGINT signal. Exiting...', null);
         app.quit();
         // Use the global force exit handler to ensure the process terminates
         ensureExit('SIGINT');
     });
 
     process.on('SIGTERM', () => {
-        logger.info('Received SIGTERM signal. Exiting...');
+        logger.withCategory('ui').info('Received SIGTERM signal. Exiting...', null);
         app.quit();
         // Use the global force exit handler to ensure the process terminates
         ensureExit('SIGTERM');
@@ -273,7 +383,7 @@ app.whenReady().then(async () => {
 
     // Set up a global force exit handler to ensure the process always terminates
     process.on('exit', (code) => {
-        logger.info(`Process exiting with code: ${code}`);
+        logger.withCategory('ui').info(`Process exiting with code: ${code}`, null);
     });
 });
 
@@ -286,7 +396,7 @@ app.on('before-quit', () => {
         settings.setSetting('token', '');
     }
 
-    logger.info('Application is about to quit. Forcing exit...');
+    logger.withCategory('ui').info('Application is about to quit. Forcing exit...', null);
 
     // Use the global force exit handler to ensure the process terminates
     ensureExit('before-quit');
@@ -296,7 +406,7 @@ app.on('before-quit', () => {
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
-        logger.info('All windows closed. Forcing exit...');
+        logger.withCategory('ui').info('All windows closed. Forcing exit...', null);
 
         // Use the global force exit handler to ensure the process terminates
         ensureExit('window-all-closed');
@@ -352,7 +462,7 @@ ipcMain.handle('get-settings', async () => {
     try {
         return settings.loadSettings();
     } catch (error) {
-        logger.error('Error handling get-settings request:', error);
+        logger.withCategory('settings').error('Error handling get-settings request:', error);
         return settings.getDefaultSettings(); // Return default settings on error
     }
 });
@@ -366,7 +476,7 @@ ipcMain.handle('get-setting', async (event, key) => {
         }
         return settings.getSetting(key);
     } catch (error) {
-        logger.error(`Error handling get-setting request for key "${key}":`, error);
+        logger.withCategory('settings').error(`Error handling get-setting request for key "${key}":`, error);
         // Return the default value for this key if it exists, otherwise null
         const defaultSettings = settings.getDefaultSettings();
         return defaultSettings[key] !== undefined
@@ -384,7 +494,7 @@ ipcMain.handle('set-setting', async (event, key, value) => {
         }
         return settings.setSetting(key, value);
     } catch (error) {
-        logger.error(`Error handling set-setting request for key "${key}":`, error);
+        logger.withCategory('settings').error(`Error handling set-setting request for key "${key}":`, error);
         return false; // Indicate failure
     }
 });
@@ -396,9 +506,19 @@ ipcMain.handle('save-settings', async (event, newSettings) => {
         if (typeof newSettings !== 'object' || newSettings === null) {
             throw new Error('Invalid settings type, expected object');
         }
-        return settings.saveSettings(newSettings);
+        const result = settings.saveSettings(newSettings);
+        
+        // Broadcast settings change to all windows
+        if (result) {
+            const { BrowserWindow } = require('electron');
+            BrowserWindow.getAllWindows().forEach(win => {
+                win.webContents.send('settings-changed', newSettings);
+            });
+        }
+        
+        return result;
     } catch (error) {
-        logger.error('Error handling save-settings request:', error);
+        logger.withCategory('settings').error('Error handling save-settings request:', error);
         return false; // Indicate failure
     }
 });
@@ -423,7 +543,7 @@ ipcMain.handle('gui-vote', async () => {
         const result = await middleware.guiVote();
         return result;
     } catch (error) {
-        logger.error('Error handling gui-vote request:', error);
+        logger.withCategory('voting').error('Error handling gui-vote request:', error);
         return {
             success: false,
             error: error.message || 'Failed to load challenges',
@@ -434,8 +554,8 @@ ipcMain.handle('gui-vote', async () => {
 // Handle get-active-challenges request
 ipcMain.handle('get-active-challenges', async (event, token) => {
     try {
-        logger.debug('=== IPC get-active-challenges ===');
-        logger.debug(`Token received: ${!!token}`);
+        logger.withCategory('api').debug('=== IPC get-active-challenges ===', null);
+        logger.withCategory('api').debug(`Token received: ${!!token}`, null);
 
         // Use the API factory to get the appropriate strategy
         const {getApiStrategy} = require('./apiFactory');
@@ -445,7 +565,7 @@ ipcMain.handle('get-active-challenges', async (event, token) => {
         const result = await strategy.getActiveChallenges(token);
         return result;
     } catch (error) {
-        logger.error('Error handling get-active-challenges request:', error);
+        logger.withCategory('api').error('Error handling get-active-challenges request:', error);
         throw error;
     }
 });
@@ -455,7 +575,7 @@ ipcMain.handle('get-environment-info', async () => {
     try {
         return settings.getEnvironmentInfo();
     } catch (error) {
-        logger.error('Error handling get-environment-info request:', error);
+        logger.withCategory('api').error('Error handling get-environment-info request:', error);
         return {
             nodeEnv: 'unknown',
             dev: undefined,
@@ -470,12 +590,12 @@ ipcMain.handle('get-environment-info', async () => {
 // Handle refresh-api request
 ipcMain.handle('refresh-api', async () => {
     try {
-        logger.info('🔄 Refreshing API due to settings change');
+        logger.withCategory('settings').info('🔄 Refreshing API due to settings change');
         const apiFactory = require('./apiFactory');
         apiFactory.refreshApi();
         return {success: true};
     } catch (error) {
-        logger.error('Error handling refresh-api request:', error);
+        logger.withCategory('api').error('Error handling refresh-api request:', error);
         return {success: false, error: error.message};
     }
 });
@@ -484,21 +604,21 @@ ipcMain.handle('refresh-api', async () => {
 
 ipcMain.handle('log-debug', async (event, message, data) => {
     logger.setContext('GUI');
-    logger.debug(message, data);
+    logger.withCategory('ui').debug(message, data);
     logger.clearContext();
     return {success: true};
 });
 
 ipcMain.handle('log-error', async (event, message, data) => {
     logger.setContext('GUI');
-    logger.error(message, data);
+    logger.withCategory('ui').error(message, data);
     logger.clearContext();
     return {success: true};
 });
 
 ipcMain.handle('log-api', async (event, message, data) => {
     logger.setContext('GUI');
-    logger.api(message, data);
+    logger.withCategory('api').api(message, data);
     logger.clearContext();
     return {success: true};
 });
@@ -520,7 +640,7 @@ ipcMain.handle('get-boost-threshold', async (event, challengeId) => {
     try {
         return settings.getEffectiveSetting('boostTime', challengeId);
     } catch (error) {
-        logger.error('Error getting boost threshold:', error);
+        logger.withCategory('settings').error('Error getting boost threshold:', error);
         return settings.SETTINGS_SCHEMA.boostTime.default;
     }
 });
@@ -530,7 +650,7 @@ ipcMain.handle('set-boost-threshold', async (event, challengeId, threshold) => {
         settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
         return {success: true};
     } catch (error) {
-        logger.error('Error setting boost threshold:', error);
+        logger.withCategory('settings').error('Error setting boost threshold:', error);
         return {success: false, error: error.message};
     }
 });
@@ -540,7 +660,7 @@ ipcMain.handle('set-default-boost-threshold', async (event, threshold) => {
         settings.setGlobalDefault('boostTime', threshold);
         return {success: true};
     } catch (error) {
-        logger.error('Error setting default boost threshold:', error);
+        logger.withCategory('settings').error('Error setting default boost threshold:', error);
         return {success: false, error: error.message};
     }
 });
@@ -566,7 +686,7 @@ ipcMain.handle('get-settings-schema', async () => {
 
         return serializableSchema;
     } catch (error) {
-        logger.error('Error getting settings schema:', error);
+        logger.withCategory('settings').error('Error getting settings schema:', error);
         return {};
     }
 });
@@ -577,7 +697,7 @@ ipcMain.handle('get-validation-error', async (event, settingKey, value, allSetti
         const settings = require('./settings');
         return settings.getValidationError(settingKey, value, allSettings);
     } catch (error) {
-        logger.error('Error getting validation error:', error);
+        logger.withCategory('settings').error('Error getting validation error:', error);
         return 'Validation error';
     }
 });
@@ -587,7 +707,7 @@ ipcMain.handle('get-global-default', async (event, settingKey) => {
         const settings = require('./settings');
         return settings.getGlobalDefault(settingKey);
     } catch (error) {
-        logger.error('Error getting global default:', error);
+        logger.withCategory('settings').error('Error getting global default:', error);
         return null;
     }
 });
@@ -597,7 +717,7 @@ ipcMain.handle('set-global-default', async (event, settingKey, value) => {
         const settings = require('./settings');
         return settings.setGlobalDefault(settingKey, value);
     } catch (error) {
-        logger.error('Error setting global default:', error);
+        logger.withCategory('settings').error('Error setting global default:', error);
         return false;
     }
 });
@@ -607,7 +727,7 @@ ipcMain.handle('get-challenge-override', async (event, settingKey, challengeId) 
         const settings = require('./settings');
         return settings.getChallengeOverride(settingKey, challengeId);
     } catch (error) {
-        logger.error('Error getting challenge override:', error);
+        logger.withCategory('settings').error('Error getting challenge override:', error);
         return false;
     }
 });
@@ -617,7 +737,7 @@ ipcMain.handle('set-challenge-override', async (event, settingKey, challengeId, 
         const settings = require('./settings');
         return settings.setChallengeOverride(settingKey, challengeId, value);
     } catch (error) {
-        logger.error('Error setting challenge override:', error);
+        logger.withCategory('settings').error('Error setting challenge override:', error);
         return false;
     }
 });
@@ -627,7 +747,7 @@ ipcMain.handle('set-challenge-overrides', async (event, challengeId, overrides) 
         const settings = require('./settings');
         return settings.setChallengeOverrides(challengeId, overrides);
     } catch (error) {
-        logger.error('Error setting challenge overrides:', error);
+        logger.withCategory('settings').error('Error setting challenge overrides:', error);
         return false;
     }
 });
@@ -637,7 +757,7 @@ ipcMain.handle('remove-challenge-override', async (event, settingKey, challengeI
         const settings = require('./settings');
         return settings.removeChallengeOverride(settingKey, challengeId);
     } catch (error) {
-        logger.error('Error removing challenge override:', error);
+        logger.withCategory('settings').error('Error removing challenge override:', error);
         return false;
     }
 });
@@ -647,7 +767,7 @@ ipcMain.handle('get-effective-setting', async (event, settingKey, challengeId) =
         const settings = require('./settings');
         return settings.getEffectiveSetting(settingKey, challengeId);
     } catch (error) {
-        logger.error('Error getting effective setting:', error);
+        logger.withCategory('settings').error('Error getting effective setting:', error);
         return null;
     }
 });
@@ -657,7 +777,7 @@ ipcMain.handle('cleanup-stale-challenge-setting', async (event, activeChallengeI
         const settings = require('./settings');
         return settings.cleanupStaleChallengeSetting(activeChallengeIds);
     } catch (error) {
-        logger.error('Error cleaning up stale challenge settings:', error);
+        logger.withCategory('settings').error('Error cleaning up stale challenge settings:', error);
         return false;
     }
 });
@@ -667,7 +787,7 @@ ipcMain.handle('cleanup-stale-metadata', async (event, activeChallengeIds) => {
         const metadata = require('./metadata');
         return metadata.cleanupStaleMetadata(activeChallengeIds);
     } catch (error) {
-        logger.error('Error cleaning up stale metadata:', error);
+        logger.withCategory('api').error('Error cleaning up stale metadata:', error);
         return false;
     }
 });
@@ -677,7 +797,7 @@ ipcMain.handle('cleanup-obsolete-settings', async () => {
         const settings = require('./settings');
         return settings.cleanupObsoleteSettings();
     } catch (error) {
-        logger.error('Error cleaning up obsolete settings:', error);
+        logger.withCategory('settings').error('Error cleaning up obsolete settings:', error);
         return false;
     }
 });
@@ -688,7 +808,7 @@ ipcMain.handle('reset-setting', async (event, key) => {
         const settings = require('./settings');
         return settings.resetSetting(key);
     } catch (error) {
-        logger.error('Error resetting setting:', error);
+        logger.withCategory('settings').error('Error resetting setting:', error);
         return false;
     }
 });
@@ -698,7 +818,7 @@ ipcMain.handle('reset-global-default', async (event, settingKey) => {
         const settings = require('./settings');
         return settings.resetGlobalDefault(settingKey);
     } catch (error) {
-        logger.error('Error resetting global default:', error);
+        logger.withCategory('settings').error('Error resetting global default:', error);
         return false;
     }
 });
@@ -708,7 +828,7 @@ ipcMain.handle('reset-all-global-defaults', async () => {
         const settings = require('./settings');
         return settings.resetAllGlobalDefaults();
     } catch (error) {
-        logger.error('Error resetting all global defaults:', error);
+        logger.withCategory('settings').error('Error resetting all global defaults:', error);
         return false;
     }
 });
@@ -718,7 +838,7 @@ ipcMain.handle('reset-all-settings', async () => {
         const settings = require('./settings');
         return settings.resetAllSettings();
     } catch (error) {
-        logger.error('Error resetting all settings:', error);
+        logger.withCategory('settings').error('Error resetting all settings:', error);
         return false;
     }
 });
@@ -728,7 +848,7 @@ ipcMain.handle('is-setting-modified', async (event, key) => {
         const settings = require('./settings');
         return settings.isSettingModified(key);
     } catch (error) {
-        logger.error('Error checking if setting is modified:', error);
+        logger.withCategory('settings').error('Error checking if setting is modified:', error);
         return false;
     }
 });
@@ -738,7 +858,7 @@ ipcMain.handle('is-global-default-modified', async (event, settingKey) => {
         const settings = require('./settings');
         return settings.isGlobalDefaultModified(settingKey);
     } catch (error) {
-        logger.error('Error checking if global default is modified:', error);
+        logger.withCategory('settings').error('Error checking if global default is modified:', error);
         return false;
     }
 });
@@ -750,14 +870,14 @@ ipcMain.handle('open-external-url', async (event, url) => {
         await shell.openExternal(url);
         return {success: true};
     } catch (error) {
-        logger.error('Error opening external URL:', error);
+        logger.withCategory('ui').error('Error opening external URL:', error);
         return {success: false, error: error.message};
     }
 });
 
 // Handle authenticate request for login
 ipcMain.handle('authenticate', async (event, username, password, isMock) => {
-    logger.info(`🔐 Authentication request received - Mock: ${isMock}, Username: ${username}`);
+    logger.withCategory('general').info(`🔐 Authentication request received - Mock: ${isMock}, Username: ${username}`, null, logger.CATEGORIES.AUTHENTICATION);
     try {
         if (isMock) {
             // Use mock authentication
@@ -781,14 +901,14 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
                         display_name: mockLoginSuccess.user.display_name,
                     },
                 };
-                logger.info('🔐 Mock authentication successful:', result);
+                logger.withCategory('authentication').info('🔐 Mock authentication successful:', result);
                 return result;
             } else {
                 const result = {
                     success: false,
                     message: mockLoginFailure.message || 'Invalid mock credentials',
                 };
-                logger.info('🔐 Mock authentication failed:', result);
+                logger.withCategory('authentication').info('🔐 Mock authentication failed:', result);
                 return result;
             }
         } else {
@@ -805,7 +925,7 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
             }
 
             // Check if the response indicates success
-            logger.info('🔐 Real authentication response:', response);
+            logger.withCategory('authentication').info('🔐 Real authentication response:', response);
             
             // The GuruShots API might return different response structures
             // Let's check for common success indicators
@@ -823,7 +943,7 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
                             display_name: response.user_name || response.username || response.name || response.display_name,
                         },
                     };
-                    logger.info('🔐 Real authentication successful:', result);
+                    logger.withCategory('authentication').info('🔐 Real authentication successful:', result);
                     return result;
                 }
             }
@@ -833,11 +953,11 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
                 success: false,
                 message: response.error || response.message || 'Authentication failed - invalid response from server',
             };
-            logger.info('🔐 Real authentication failed:', result);
+            logger.withCategory('authentication').info('🔐 Real authentication failed:', result);
             return result;
         }
     } catch (error) {
-        logger.error('Error handling authenticate request:', error);
+        logger.withCategory('authentication').error('Error handling authenticate request:', error);
         return {
             success: false,
             message: error.message || 'Authentication failed due to network error',
@@ -848,12 +968,12 @@ ipcMain.handle('authenticate', async (event, username, password, isMock) => {
 // Handle run-voting-cycle request
 ipcMain.handle('run-voting-cycle', async () => {
     try {
-        logger.info('🔄 Starting voting cycle...');
+        logger.withCategory('voting').info('🔄 Starting voting cycle...', null);
 
         const userSettings = settings.loadSettings();
 
         if (!userSettings.token) {
-            logger.warning('❌ No token found for voting cycle');
+            logger.withCategory('authentication').warning('❌ No token found for voting cycle', null);
             return {
                 success: false,
                 error: 'No authentication token found',
@@ -869,7 +989,7 @@ ipcMain.handle('run-voting-cycle', async () => {
             try {
                 return settings.getEffectiveSetting('exposure', challengeId);
             } catch (error) {
-                logger.warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
+                logger.withCategory('settings').warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
                 return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
             }
         };
@@ -900,7 +1020,7 @@ ipcMain.handle('run-voting-cycle', async () => {
             };
         }
     } catch (error) {
-        logger.error('Error handling run-voting-cycle request:', error);
+        logger.withCategory('voting').error('Error handling run-voting-cycle request:', error);
         return {
             success: false,
             error: error.message || 'Failed to run voting cycle',
@@ -931,12 +1051,12 @@ ipcMain.handle('set-cancel-voting', (event, shouldCancel) => {
 // Handle vote-on-challenge request
 ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) => {
     try {
-        logger.info(`🔄 Vote on challenge request: ID=${challengeId}, Title="${challengeTitle}"`);
+        logger.withCategory('general').info(`🔄 Vote on challenge request: ID=${challengeId}, Title="${challengeTitle}"`, null, logger.CATEGORIES.VOTING);
 
         const userSettings = settings.loadSettings();
 
         if (!userSettings.token) {
-            logger.warning('❌ No token found for voting');
+            logger.withCategory('authentication').warning('❌ No token found for voting', null);
             return {
                 success: false,
                 error: 'No authentication token found',
@@ -951,23 +1071,23 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
 
         if (!challengesResponse || !challengesResponse.challenges) {
-            logger.warning('❌ Failed to fetch challenges for voting');
+            logger.withCategory('challenges').warning('❌ Failed to fetch challenges for voting', null);
             return {
                 success: false,
                 error: 'Failed to fetch challenges',
             };
         }
 
-        logger.debug(`📋 Found challenges: [${challengesResponse.challenges.map(c => `${c.id}:"${c.title}"`).join(', ')}]`);
-        logger.debug('🔍 Looking for challenge ID:', challengeId, 'Type:', typeof challengeId);
+        logger.withCategory('challenges').debug(`📋 Found challenges: [${challengesResponse.challenges.map(c => `${c.id}:"${c.title}"`).join(', ')}]`);
+        logger.withCategory('challenges').debug('🔍 Looking for challenge ID:', challengeId);
 
         // Find the specific challenge (convert challengeId to number for comparison)
         const challenge = challengesResponse.challenges.find(c => c.id === parseInt(challengeId));
 
-        logger.debug(`🎯 Challenge found: ${challenge ? `ID=${challenge.id}, Title="${challenge.title}"` : 'NOT FOUND'}`);
+        logger.withCategory('general').debug(`🎯 Challenge found: ${challenge ? `ID=${challenge.id}, Title="${challenge.title}"` : 'NOT FOUND'}`, null, logger.CATEGORIES.CHALLENGES);
 
         if (!challenge) {
-            logger.warning('❌ Challenge not found:', {challengeId, challengeTitle});
+            logger.withCategory('general').warning('❌ Challenge not found:', {challengeId, challengeTitle}, logger.CATEGORIES.CHALLENGES);
             return {
                 success: false,
                 error: `Challenge "${challengeTitle}" not found`,
@@ -994,18 +1114,18 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         }
 
         // Vote on the specific challenge
-        logger.info('🗳️ Starting voting process for challenge:', challenge.title);
+        logger.withCategory('voting').info('🗳️ Starting voting process for challenge:', challenge.title);
 
         const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
-        logger.debug(`📸 Vote images received: ${voteImages ? `Count=${voteImages.images?.length}` : 'No vote images'}`);
+        logger.withCategory('voting').debug(`📸 Vote images received: ${voteImages ? `Count=${voteImages.images?.length}` : 'No vote images'}`, null);
 
         if (voteImages && voteImages.images && voteImages.images.length > 0) {
-            logger.info('✅ Submitting votes...');
+            logger.withCategory('voting').info('✅ Submitting votes...', null);
             // Vote to target exposure (dynamic based on voting rules)
             await strategy.submitVotes(voteImages, userSettings.token, targetExposure);
-            logger.success('✅ Votes submitted successfully');
+            logger.withCategory('voting').success('✅ Votes submitted successfully');
         } else {
-            logger.warning('⚠️ No vote images available');
+            logger.withCategory('voting').warning('⚠️ No vote images available', null);
         }
 
         return {
@@ -1013,7 +1133,7 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
             message: `Successfully voted on challenge "${challengeTitle}"`,
         };
     } catch (error) {
-        logger.error('Error handling vote-on-challenge request:', error);
+        logger.withCategory('voting').error('Error handling vote-on-challenge request:', error);
         return {
             success: false,
             error: error.message || 'Failed to vote on challenge',
@@ -1024,12 +1144,12 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
 // Handle apply boost to entry request
 ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
     try {
-        logger.info(`🚀 Apply boost to entry request: Challenge=${challengeId}, Image=${imageId}`);
+        logger.withCategory('general').info(`🚀 Apply boost to entry request: Challenge=${challengeId}, Image=${imageId}`, null, logger.CATEGORIES.VOTING);
 
         const userSettings = settings.loadSettings();
 
         if (!userSettings.token) {
-            logger.warning('❌ No token found for boost');
+            logger.withCategory('authentication').warning('❌ No token found for boost', null);
             return {
                 success: false,
                 error: 'No authentication token found',
@@ -1041,24 +1161,24 @@ ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
         const strategy = getApiStrategy();
 
         // Apply boost to the specific entry
-        logger.info(`🚀 Applying boost to entry: Challenge=${challengeId}, Image=${imageId}`);
+        logger.withCategory('general').info(`🚀 Applying boost to entry: Challenge=${challengeId}, Image=${imageId}`, null, logger.CATEGORIES.VOTING);
         const result = await strategy.applyBoostToEntry(challengeId, imageId, userSettings.token);
 
         if (result) {
-            logger.success('✅ Boost applied successfully');
+            logger.withCategory('voting').success('✅ Boost applied successfully');
             return {
                 success: true,
                 message: 'Boost applied successfully',
             };
         } else {
-            logger.warning('❌ Failed to apply boost');
+            logger.withCategory('voting').warning('❌ Failed to apply boost', null);
             return {
                 success: false,
                 error: 'Failed to apply boost',
             };
         }
     } catch (error) {
-        logger.error('Error applying boost to entry:', error);
+        logger.withCategory('voting').error('Error applying boost to entry:', error);
         return {
             success: false,
             error: error.message || 'Failed to apply boost',
@@ -1079,7 +1199,7 @@ ipcMain.handle('reload-window', async () => {
             return {success: false, error: 'No active window to reload'};
         }
     } catch (error) {
-        logger.error('Error reloading window:', error);
+        logger.withCategory('ui').error('Error reloading window:', error);
         return {success: false, error: error.message};
     }
 });
@@ -1092,7 +1212,7 @@ ipcMain.handle('check-for-updates', async () => {
         const updateInfo = await updateChecker.checkForUpdates(false); // Don't save timestamp for manual checks
         return {success: true, updateInfo};
     } catch (error) {
-        logger.error('Error checking for updates:', error);
+        logger.withCategory('update').error('Error checking for updates:', error);
         return {success: false, error: error.message};
     }
 });
@@ -1110,7 +1230,7 @@ ipcMain.handle('skip-update-version', async () => {
         }
         return {success: false, error: 'No update info available'};
     } catch (error) {
-        logger.error('Error skipping update version:', error);
+        logger.withCategory('update').error('Error skipping update version:', error);
         return {success: false, error: error.message};
     }
 });
@@ -1122,7 +1242,7 @@ ipcMain.handle('clear-skip-version', async () => {
         updateChecker.clearSkipVersion();
         return {success: true};
     } catch (error) {
-        logger.error('Error clearing skip version:', error);
+        logger.withCategory('update').error('Error clearing skip version:', error);
         return {success: false, error: error.message};
     }
 });
@@ -1136,7 +1256,60 @@ ipcMain.handle('refresh-menu', async () => {
         updateMenuTranslations();
         return {success: true};
     } catch (error) {
-        logger.error('Error refreshing menu:', error);
+        logger.withCategory('ui').error('Error refreshing menu:', error);
         return {success: false, error: error.message};
     }
 });
+
+// Log streaming for GUI
+let logStreamWindows = new Set();
+
+// Handle start log stream request
+ipcMain.handle('start-log-stream', async (event) => {
+    try {
+        // Add this window to the set of log stream windows
+        logStreamWindows.add(event.sender);
+        
+        // Clean up when window is closed
+        event.sender.on('destroyed', () => {
+            logStreamWindows.delete(event.sender);
+        });
+        
+        return {success: true};
+    } catch (error) {
+        logger.withCategory('ui').error('Error starting log stream:', error);
+        return {success: false, error: error.message};
+    }
+});
+
+// Handle stop log stream request
+ipcMain.handle('stop-log-stream', async (event) => {
+    try {
+        logStreamWindows.delete(event.sender);
+        return {success: true};
+    } catch (error) {
+        logger.withCategory('ui').error('Error stopping log stream:', error);
+        return {success: false, error: error.message};
+    }
+});
+
+// Function to send log message to all connected log stream windows
+function sendLogToGUI(level, message, context, timestamp, category) {
+    const logData = {
+        level,
+        message,
+        context,
+        timestamp,
+        category,
+    };
+    
+    // Send to all connected log stream windows
+    logStreamWindows.forEach(webContents => {
+        if (!webContents.isDestroyed()) {
+            webContents.send('log-message', logData);
+        }
+    });
+}
+
+// Export for use by logger
+global.sendLogToGUI = sendLogToGUI;

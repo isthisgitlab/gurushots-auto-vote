@@ -22,7 +22,7 @@ const logger = require('../logger');
  * @returns {object|null} - Response data containing token or null if login failed
  */
 const authenticate = async (email, password) => {
-    logger.info('Starting authentication...');
+    logger.withCategory('authentication').info('Starting authentication...', null);
     const startTime = Date.now();
 
     // Prepare login data
@@ -44,26 +44,26 @@ const authenticate = async (email, password) => {
 
     try {
         // Log the request
-        logger.apiRequest('POST', config.url);
+        logger.withCategory('api').apiRequest('POST', config.url);
         
         // Send login request
         const response = await axios(config);
         
         // Log successful response with full data
-        logger.api('API Response', {
+        logger.withCategory('api').api('API Response', {
             method: 'POST',
             url: config.url,
             status: response.status,
             duration: Date.now() - startTime,
             responseData: response.data,
         });
-        logger.success('Authentication successful');
+        logger.withCategory('authentication').success('Authentication successful', null, null);
 
         return response.data;
     } catch (error) {
         // Log failed response with error details
         const status = error.response?.status || 'NO_RESPONSE';
-        logger.api('API Error Response', {
+        logger.withCategory('api').api('API Error Response', {
             method: 'POST',
             url: config.url,
             status: status,
@@ -71,7 +71,7 @@ const authenticate = async (email, password) => {
             error: error.message,
             responseData: error.response?.data || null,
         });
-        logger.error('Authentication error:', error.message || error);
+        logger.withCategory('authentication').error('Authentication error:', error.message || error);
         return null;
     }
 };

@@ -21,14 +21,29 @@ jest.mock('../../src/js/mock', () => ({
     }
 }));
 
-// Mock logger
-jest.mock('../../src/js/logger', () => ({
-    info: jest.fn(),
-    error: jest.fn(),
-    success: jest.fn(),
-    warning: jest.fn(),
-    debug: jest.fn(),
-}));
+// Mock logger with shared mock functions
+jest.mock('../../src/js/logger', () => {
+    const mockDebugFn = jest.fn();
+    
+    const mock = {
+        info: jest.fn(),
+        error: jest.fn(),
+        success: jest.fn(),
+        warning: jest.fn(),
+        debug: jest.fn(),
+        __mockDebugFn: mockDebugFn,
+    };
+    
+    mock.withCategory = jest.fn(() => ({
+        info: jest.fn(),
+        error: jest.fn(),
+        debug: mockDebugFn,
+        success: jest.fn(),
+        warning: jest.fn(),
+    }));
+    
+    return mock;
+});
 
 describe('MockApiStrategy', () => {
     let mockApiStrategy;
@@ -38,6 +53,7 @@ describe('MockApiStrategy', () => {
     beforeEach(() => {
         mockApiStrategy = new MockApiStrategy();
         jest.clearAllMocks();
+        mockLogger.__mockDebugFn.mockClear();
     });
 
     describe('constructor', () => {
@@ -63,7 +79,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.authenticate(mockEmail, mockPassword);
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock authentication');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock authentication', null);
             expect(mockApiClient.authenticate).toHaveBeenCalledWith(mockEmail, mockPassword);
             expect(result).toEqual(mockResponse);
         });
@@ -75,7 +91,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.authenticate('test@example.com', 'wrongpassword'))
                 .rejects.toThrow('Authentication failed');
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock authentication');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock authentication', null);
             expect(mockApiClient.authenticate).toHaveBeenCalledWith('test@example.com', 'wrongpassword');
         });
     });
@@ -94,7 +110,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.getActiveChallenges(mockToken);
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock getActiveChallenges');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock getActiveChallenges', null);
             expect(mockApiClient.getActiveChallenges).toHaveBeenCalledWith(mockToken);
             expect(result).toEqual(mockResponse);
         });
@@ -106,7 +122,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.getActiveChallenges('invalid-token'))
                 .rejects.toThrow('Failed to get challenges');
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock getActiveChallenges');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock getActiveChallenges', null);
             expect(mockApiClient.getActiveChallenges).toHaveBeenCalledWith('invalid-token');
         });
     });
@@ -126,7 +142,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.getVoteImages(mockChallenge, mockToken);
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock getVoteImages');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock getVoteImages', null);
             expect(mockApiClient.getVoteImages).toHaveBeenCalledWith(mockChallenge, mockToken);
             expect(result).toEqual(mockResponse);
         });
@@ -140,7 +156,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.getVoteImages(mockChallenge, 'invalid-token'))
                 .rejects.toThrow('Failed to get vote images');
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock getVoteImages');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock getVoteImages', null);
             expect(mockApiClient.getVoteImages).toHaveBeenCalledWith(mockChallenge, 'invalid-token');
         });
     });
@@ -158,7 +174,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.submitVotes(mockVoteImages, mockToken);
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock submitVotes');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock submitVotes', null);
             expect(mockApiClient.submitVotes).toHaveBeenCalledWith(mockVoteImages, mockToken, settings.SETTINGS_SCHEMA.exposure.default);
             expect(result).toEqual(mockResponse);
         });
@@ -172,7 +188,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.submitVotes(mockVoteImages, 'invalid-token'))
                 .rejects.toThrow('Failed to submit votes');
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock submitVotes');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock submitVotes', null);
             expect(mockApiClient.submitVotes).toHaveBeenCalledWith(mockVoteImages, 'invalid-token', settings.SETTINGS_SCHEMA.exposure.default);
         });
     });
@@ -191,7 +207,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.applyBoost(mockChallenge, mockToken);
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock applyBoost');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock applyBoost', null);
             expect(mockApiClient.applyBoost).toHaveBeenCalledWith(mockChallenge, mockToken);
             expect(result).toEqual(mockResponse);
         });
@@ -205,7 +221,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.applyBoost(mockChallenge, 'invalid-token'))
                 .rejects.toThrow('Failed to apply boost');
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock applyBoost');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock applyBoost', null);
             expect(mockApiClient.applyBoost).toHaveBeenCalledWith(mockChallenge, 'invalid-token');
         });
     });
@@ -221,7 +237,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.applyBoostToEntry(mockChallengeId, mockImageId, mockToken);
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock applyBoostToEntry');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock applyBoostToEntry', null);
             expect(mockApiClient.applyBoostToEntry).toHaveBeenCalledWith(mockChallengeId, mockImageId, mockToken);
             expect(result).toEqual(mockResponse);
         });
@@ -233,7 +249,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.applyBoostToEntry('123', 'img456', 'invalid-token'))
                 .rejects.toThrow('Failed to apply boost to entry');
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock applyBoostToEntry');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock applyBoostToEntry', null);
             expect(mockApiClient.applyBoostToEntry).toHaveBeenCalledWith('123', 'img456', 'invalid-token');
         });
     });
@@ -247,7 +263,7 @@ describe('MockApiStrategy', () => {
 
             const result = await mockApiStrategy.fetchChallengesAndVote(mockToken);
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote', null);
             expect(mockApiClient.fetchChallengesAndVote).toHaveBeenCalledWith(mockToken, settings.SETTINGS_SCHEMA.exposure.default);
             expect(result).toEqual(mockResponse);
         });
@@ -260,7 +276,7 @@ describe('MockApiStrategy', () => {
             await expect(mockApiStrategy.fetchChallengesAndVote('invalid-token'))
                 .rejects.toThrow('Failed to fetch challenges and vote');
 
-            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote');
+            expect(mockLogger.__mockDebugFn).toHaveBeenCalledWith('🔧 Using mock fetchChallengesAndVote', null);
             expect(mockApiClient.fetchChallengesAndVote).toHaveBeenCalledWith('invalid-token', settings.SETTINGS_SCHEMA.exposure.default);
         });
     });

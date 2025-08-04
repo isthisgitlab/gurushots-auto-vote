@@ -25,7 +25,7 @@ const makePostRequest = async (url, headers, data = '') => {
     const startTime = Date.now();
     
     // Log the request with enhanced context
-    logger.apiRequest('POST', url);
+    logger.withCategory('api').apiRequest('POST', url);
     
     try {
         const response = await axios({
@@ -39,7 +39,7 @@ const makePostRequest = async (url, headers, data = '') => {
         const duration = Date.now() - startTime;
         
         // Log successful response with full data
-        logger.api('API Response', {
+        logger.withCategory('api').api('API Response', {
             method: 'POST',
             url: url,
             status: response.status,
@@ -53,7 +53,7 @@ const makePostRequest = async (url, headers, data = '') => {
         const status = error.response?.status || 'NO_RESPONSE';
         
         // Log failed response with full error details
-        logger.api('API Error Response', {
+        logger.withCategory('api').api('API Error Response', {
             method: 'POST',
             url: url,
             status: status,

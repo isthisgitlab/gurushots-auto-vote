@@ -54,6 +54,7 @@
             zoom: 'Mērogot',
             close: 'Aizvērt',
             bringAllToFront: 'Pārvietot visus uz priekšu',
+            logs: 'Žurnāli',
             about: 'Par GuruShots Auto Vote',
             aboutTitle: 'Par GuruShots Auto Vote',
             aboutAuthor: 'Autors',
@@ -202,6 +203,14 @@
             whatsNew: 'Kas jauns:',
             yourEntries: 'Jūsu bildes',
             yourProgress: 'Jūsu progress',
+        },
+        // Logs page specific
+        logs: {
+            title: 'Žurnāli',
+            status: 'Statuss',
+            waiting: 'Gaida žurnāla ziņojumus...',
+            connected: 'Savienots',
+            disconnected: 'Nav savienots',
         },
     };
 }));
