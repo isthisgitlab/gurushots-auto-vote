@@ -38,7 +38,7 @@ const applyBoost = async (challenge, token) => {
     // Find a photo to boost
     const boostImageId = getFirstNonTurboKey(member.ranking.entries);
     if (!boostImageId) {
-        logger.error('No non-turboed entries found for boosting', {challengeId: id});
+        logger.withCategory('voting').error('No non-turboed entries found for boosting', {challengeId: id});
         return null;
     }
 
@@ -51,15 +51,15 @@ const applyBoost = async (challenge, token) => {
 
     // Send boost request to API
     const operationId = `apply-boost-${id}`;
-    logger.startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${id}`);
+    logger.withCategory('boost').startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${id}`);
     
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
     if (!response) {
-        logger.endOperation(operationId, null, 'Boost application failed');
+        logger.withCategory('boost').endOperation(operationId, null, 'Boost application failed');
         return;
     }
 
-    logger.endOperation(operationId, `Boost applied successfully to image ${boostImageId}`);
+    logger.withCategory('boost').endOperation(operationId, `Boost applied successfully to image ${boostImageId}`);
     return response;
 };
 
@@ -81,15 +81,15 @@ const applyBoostToEntry = async (challengeId, imageId, token) => {
 
     // Send boost request to API
     const operationId = `apply-boost-entry-${challengeId}-${imageId}`;
-    logger.startOperation(operationId, `Applying boost to specific entry ${imageId} in challenge ${challengeId}`);
+    logger.withCategory('boost').startOperation(operationId, `Applying boost to specific entry ${imageId} in challenge ${challengeId}`);
     
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
     if (!response) {
-        logger.endOperation(operationId, null, 'Boost application to entry failed');
+        logger.withCategory('boost').endOperation(operationId, null, 'Boost application to entry failed');
         return null;
     }
 
-    logger.endOperation(operationId, `Boost applied successfully to entry ${imageId}`);
+    logger.withCategory('boost').endOperation(operationId, `Boost applied successfully to entry ${imageId}`);
     return response;
 };
 

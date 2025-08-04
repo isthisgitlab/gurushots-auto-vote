@@ -40,35 +40,35 @@ const setCancellationFlag = (cancel) => {
  * @returns {void}
  */
 const fetchChallengesAndVote = async (token) => {
-    logger.startOperation('voting-process', 'Voting process');
+    logger.withCategory('voting').startOperation('voting-process', 'Voting process');
     
     try {
         // Get all active challenges
-        logger.info('🔄 Loading active challenges');
+        logger.withCategory('challenges').info('🔄 Loading active challenges', null);
         const {challenges} = await getActiveChallenges(token);
         // Current timestamp in seconds (Unix epoch time)
         const now = Math.floor(Date.now() / 1000);
         
-        logger.info(`📋 Found ${challenges.length} active challenges`);
+        logger.withCategory('challenges').info(`📋 Found ${challenges.length} active challenges`, null);
         
         if (challenges.length === 0) {
-            logger.warning('No active challenges found');
-            logger.endOperation('voting-process', 'No challenges to process');
+            logger.withCategory('challenges').warning('No active challenges found', null);
+            logger.withCategory('voting').endOperation('voting-process', 'No challenges to process');
             return {success: true, message: 'No active challenges found'};
         }
 
         // Cleanup stale metadata for challenges that no longer exist
         try {
             const activeChallengeIds = challenges.map(challenge => challenge.id.toString());
-            logger.debug(`🔧 DEBUG: About to cleanup metadata, active challenge IDs: [${activeChallengeIds.join(', ')}]`);
+            logger.withCategory('api').debug(`🔧 DEBUG: About to cleanup metadata, active challenge IDs: [${activeChallengeIds.join(', ')}]`, null);
             const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds);
             if (cleanupSuccess) {
-                logger.debug('Successfully cleaned up stale metadata');
+                logger.withCategory('api').debug('Successfully cleaned up stale metadata', null);
             } else {
-                logger.warning('Failed to cleanup stale metadata');
+                logger.withCategory('api').warning('Failed to cleanup stale metadata', null);
             }
         } catch (error) {
-            logger.warning('Error during metadata cleanup:', error);
+            logger.withCategory('api').warning('Error during metadata cleanup:', error);
         }
 
         // Process each challenge
@@ -78,13 +78,13 @@ const fetchChallengesAndVote = async (token) => {
             
             // Check for cancellation before processing each challenge
             if (checkCancellation()) {
-                logger.warning('🛑 Voting cancelled by user');
-                logger.endOperation('voting-process', null, 'Voting cancelled by user');
+                logger.withCategory('voting').warning('🛑 Voting cancelled by user', null);
+                logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
                 return {success: false, message: 'Voting cancelled by user'};
             }
 
             // Log progress
-            logger.progress(`Processing challenge ${processedCount}/${challenges.length}: ${challenge.title}`, processedCount, challenges.length);
+            logger.withCategory('voting').progress(`Processing challenge ${processedCount}/${challenges.length}: ${challenge.title}`, processedCount, challenges.length);
 
             // Note: effectiveThreshold is now handled by the voting logic service
 
@@ -105,13 +105,13 @@ const fetchChallengesAndVote = async (token) => {
                         ? `${hoursRemaining}h ${minutesRemaining % 60}m`
                         : `${minutesRemaining}m`;
                     
-                    logger.startOperation(`boost-${challenge.id}`, `Applying boost to challenge ${challenge.title}`);
+                    logger.withCategory('boost').startOperation(`boost-${challenge.id}`, `Applying boost to challenge ${challenge.title}`);
                     
                     try {
                         await applyBoost(challenge, token);
-                        logger.endOperation(`boost-${challenge.id}`, `Boost applied successfully (${timeDisplay} remaining)`);
+                        logger.withCategory('boost').endOperation(`boost-${challenge.id}`, `Boost applied successfully (${timeDisplay} remaining)`);
                     } catch (error) {
-                        logger.endOperation(`boost-${challenge.id}`, null, error.message || error);
+                        logger.withCategory('boost').endOperation(`boost-${challenge.id}`, null, error.message || error);
                     }
                 } else {
                     const minutesRemaining = Math.floor(timeUntilDeadline / 60);
@@ -127,13 +127,13 @@ const fetchChallengesAndVote = async (token) => {
 
             // Vote on challenge if conditions are met
             if (shouldVote) {
-                logger.startOperation(`vote-${challenge.id}`, `Voting on challenge ${challenge.title}`);
+                logger.withCategory('voting').startOperation(`vote-${challenge.id}`, `Voting on challenge ${challenge.title}`);
                 
                 try {
                     // Check for cancellation before voting
                     if (checkCancellation()) {
-                        logger.warning('🛑 Voting cancelled by user during challenge processing');
-                        logger.endOperation('voting-process', null, 'Voting cancelled by user');
+                        logger.withCategory('voting').warning('🛑 Voting cancelled by user during challenge processing', null);
+                        logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
                         return {success: false, message: 'Voting cancelled by user'};
                     }
 
@@ -144,39 +144,39 @@ const fetchChallengesAndVote = async (token) => {
                     if (voteImages && voteImages.images) {
                         // Check for cancellation before submitting votes
                         if (checkCancellation()) {
-                            logger.warning('🛑 Voting cancelled by user before vote submission');
-                            logger.endOperation('voting-process', null, 'Voting cancelled by user');
+                            logger.withCategory('voting').warning('🛑 Voting cancelled by user before vote submission', null);
+                            logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
                             return {success: false, message: 'Voting cancelled by user'};
                         }
 
                         logger.challengeInfo(challenge.id, challenge.title, `Submitting votes for ${voteImages.images.length} images`);
 
                         // Submit votes to target exposure (dynamic based on voting rules)
-                        logger.debug(`🔧 DEBUG: About to submit votes for challenge ${challenge.id}: ${challenge.title} (target: ${targetExposure}%)`);
+                        logger.withCategory('voting').debug(`🔧 DEBUG: About to submit votes for challenge ${challenge.id}: ${challenge.title} (target: ${targetExposure}%)`, null);
                         await submitVotes(voteImages, token, targetExposure);
-                        logger.debug(`🔧 DEBUG: Completed vote submission for challenge ${challenge.id}: ${challenge.title}`);
+                        logger.withCategory('voting').debug(`🔧 DEBUG: Completed vote submission for challenge ${challenge.id}: ${challenge.title}`, null);
 
                         // Check for cancellation before delay
                         if (checkCancellation()) {
-                            logger.debug(`🔧 DEBUG: Cancellation detected after vote submission for challenge ${challenge.id}: ${challenge.title}`);
-                            logger.warning('🛑 Voting cancelled by user after vote submission');
-                            logger.endOperation('voting-process', null, 'Voting cancelled by user');
+                            logger.withCategory('voting').debug(`🔧 DEBUG: Cancellation detected after vote submission for challenge ${challenge.id}: ${challenge.title}`, null);
+                            logger.withCategory('voting').warning('🛑 Voting cancelled by user after vote submission', null);
+                            logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
                             return {success: false, message: 'Voting cancelled by user'};
                         }
 
-                        logger.endOperation(`vote-${challenge.id}`, 'Votes submitted successfully');
+                        logger.withCategory('voting').endOperation(`vote-${challenge.id}`, 'Votes submitted successfully');
 
                         // Add random delay between challenges to mimic human behavior
                         const delay = getRandomDelay(2000, 5000);
-                        logger.debug(`Adding ${delay}ms delay between challenges`);
+                        logger.withCategory('voting').debug(`Adding ${delay}ms delay between challenges`, null);
                         await sleep(delay);
                     } else {
                         logger.challengeError(challenge.id, challenge.title, 'No vote images available');
-                        logger.endOperation(`vote-${challenge.id}`, null, 'No vote images available');
+                        logger.withCategory('voting').endOperation(`vote-${challenge.id}`, null, 'No vote images available');
                     }
                 } catch (error) {
                     logger.challengeError(challenge.id, challenge.title, `Voting failed: ${error.message || error}`);
-                    logger.endOperation(`vote-${challenge.id}`, null, error.message || error);
+                    logger.withCategory('voting').endOperation(`vote-${challenge.id}`, null, error.message || error);
                 }
             } else {
                 // Log why voting was skipped
@@ -185,11 +185,11 @@ const fetchChallengesAndVote = async (token) => {
         }
 
         // Complete the voting process
-        logger.endOperation('voting-process', `All ${challenges.length} challenges processed successfully`);
+        logger.withCategory('voting').endOperation('voting-process', `All ${challenges.length} challenges processed successfully`);
 
         return {success: true, message: 'Voting process completed successfully'};
     } catch (error) {
-        logger.endOperation('voting-process', null, error.message || error);
+        logger.withCategory('voting').endOperation('voting-process', null, error.message || error);
         return {success: false, error: error.message || 'Voting process failed'};
     }
 };

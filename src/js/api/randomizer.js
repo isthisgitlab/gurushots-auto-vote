@@ -115,7 +115,7 @@ const initializeHeaders = () => {
 
         // Save headers to settings
         settings.setSetting('apiHeaders', savedHeaders);
-        logger.info('🔄 Generated new random API headers');
+        logger.withCategory('api').info('🔄 Generated new random API headers', null);
     } else if (savedHeaders._version !== CURRENT_APP_VERSION) {
         // Update version-related fields while preserving randomized values
         const iosVersion = savedHeaders['user-agent']?.match(/iOS ([^)]+)/)?.[1] || '16.7.11';
@@ -130,7 +130,7 @@ const initializeHeaders = () => {
 
         // Save updated headers
         settings.setSetting('apiHeaders', savedHeaders);
-        logger.info('🔄 Updated API headers for new app version');
+        logger.withCategory('api').info('🔄 Updated API headers for new app version', null);
     }
 
     return savedHeaders;
