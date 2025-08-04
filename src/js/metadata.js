@@ -18,32 +18,46 @@ const getMetadataPath = () => {
  * @returns {Object} - Empty metadata object
  */
 const getDefaultMetadata = () => {
-    return {};
+    return {
+        updateCheck: {
+            lastCheck: null,
+            skipVersion: null,
+        },
+    };
 };
 
 /**
  * Validate metadata entry
  * @param {Object} entry - Metadata entry to validate
- * @returns {boolean} - True if valid, false otherwise
+ * @returns {Object} - {isValid, reason} where reason describes validation failure
  */
 const validateMetadataEntry = (entry) => {
-    if (typeof entry !== 'object' || entry === null) return false;
+    if (typeof entry !== 'object' || entry === null) {
+        return { isValid: false, reason: 'Entry is not an object or is null' };
+    }
     
     // Check lastVoteTime
-    if (entry.lastVoteTime && typeof entry.lastVoteTime !== 'string') return false;
+    if (entry.lastVoteTime && typeof entry.lastVoteTime !== 'string') {
+        return { isValid: false, reason: `lastVoteTime is not a string (type: ${typeof entry.lastVoteTime})` };
+    }
     if (entry.lastVoteTime) {
         const date = new Date(entry.lastVoteTime);
-        if (isNaN(date.getTime())) return false;
+        if (isNaN(date.getTime())) {
+            return { isValid: false, reason: `lastVoteTime "${entry.lastVoteTime}" is not a valid date format` };
+        }
     }
     
     // Check exposureBump (allow values > 100% as this can happen when insufficient images are available)
     if (entry.exposureBump !== undefined) {
-        if (typeof entry.exposureBump !== 'number' || entry.exposureBump < 0) {
-            return false;
+        if (typeof entry.exposureBump !== 'number') {
+            return { isValid: false, reason: `exposureBump is not a number (type: ${typeof entry.exposureBump}, value: ${entry.exposureBump})` };
+        }
+        if (entry.exposureBump < 0) {
+            return { isValid: false, reason: `exposureBump is negative (${entry.exposureBump})` };
         }
     }
     
-    return true;
+    return { isValid: true, reason: null };
 };
 
 /**
@@ -55,13 +69,70 @@ const validateMetadata = (metadata) => {
     const validatedMetadata = {};
     let hasChanges = false;
 
+    // Validate update check data first
+    if (metadata.updateCheck) {
+        const updateCheck = metadata.updateCheck;
+        const validUpdateCheck = {};
+        
+        // Validate lastCheck timestamp
+        if (updateCheck.lastCheck !== null && updateCheck.lastCheck !== undefined) {
+            if (typeof updateCheck.lastCheck === 'number' && updateCheck.lastCheck > 0) {
+                validUpdateCheck.lastCheck = updateCheck.lastCheck;
+            } else {
+                const valueType = typeof updateCheck.lastCheck;
+                const valueDesc = valueType === 'number' ? `${updateCheck.lastCheck} (must be > 0)` : `${updateCheck.lastCheck} (type: ${valueType}, expected: number)`;
+                logger.withCategory('general').warning(`Invalid lastCheck timestamp in metadata: ${valueDesc}, removing`, null, logger.CATEGORIES.UPDATE);
+                validUpdateCheck.lastCheck = null;
+                hasChanges = true;
+            }
+        } else {
+            validUpdateCheck.lastCheck = null;
+        }
+        
+        // Validate skipVersion
+        if (updateCheck.skipVersion !== null && updateCheck.skipVersion !== undefined) {
+            if (typeof updateCheck.skipVersion === 'string' && updateCheck.skipVersion.length > 0) {
+                validUpdateCheck.skipVersion = updateCheck.skipVersion;
+            } else {
+                const valueType = typeof updateCheck.skipVersion;
+                const valueDesc = valueType === 'string' ? `"${updateCheck.skipVersion}" (empty string)` : `${updateCheck.skipVersion} (type: ${valueType}, expected: non-empty string)`;
+                logger.withCategory('general').warning(`Invalid skipVersion in metadata: ${valueDesc}, removing`, null, logger.CATEGORIES.UPDATE);
+                validUpdateCheck.skipVersion = null;
+                hasChanges = true;
+            }
+        } else {
+            validUpdateCheck.skipVersion = null;
+        }
+        
+        validatedMetadata.updateCheck = validUpdateCheck;
+    } else {
+        // Add missing updateCheck structure
+        validatedMetadata.updateCheck = {
+            lastCheck: null,
+            skipVersion: null,
+        };
+        hasChanges = true;
+    }
+
+    // Validate challenge entries
+    const removedEntries = [];
     for (const [challengeId, entry] of Object.entries(metadata)) {
-        if (validateMetadataEntry(entry)) {
+        // Skip updateCheck as we handled it above
+        if (challengeId === 'updateCheck') continue;
+        
+        const validation = validateMetadataEntry(entry);
+        if (validation.isValid) {
             validatedMetadata[challengeId] = entry;
         } else {
-            logger.warning(`Invalid metadata entry for challenge ${challengeId}, removing`);
+            logger.withCategory('challenges').warning(`Removing invalid metadata entry for challenge ${challengeId}: ${validation.reason}`);
+            removedEntries.push({ challengeId, reason: validation.reason });
             hasChanges = true;
         }
+    }
+    
+    // Log summary if multiple entries were removed
+    if (removedEntries.length > 1) {
+        logger.withCategory('api').warning(`Cleaned up ${removedEntries.length} invalid metadata entries total`, null);
     }
 
     return { validatedMetadata, hasChanges };
@@ -93,7 +164,7 @@ const loadMetadata = () => {
         // Return empty metadata if file doesn't exist
         return getDefaultMetadata();
     } catch (error) {
-        logger.error('Error loading metadata:', error);
+        logger.withCategory('api').error('Error loading metadata:', error);
         return getDefaultMetadata();
     }
 };
@@ -114,17 +185,13 @@ const saveMetadata = (metadata) => {
         }
 
         // Validate metadata before saving
-        const { validatedMetadata, hasChanges } = validateMetadata(metadata);
-
-        if (hasChanges) {
-            logger.warning('Some metadata entries were invalid and have been removed');
-        }
+        const { validatedMetadata } = validateMetadata(metadata);
 
         // Write validated metadata to file
         fs.writeFileSync(metadataPath, JSON.stringify(validatedMetadata, null, 2), 'utf8');
         return true;
     } catch (error) {
-        logger.error('Error saving metadata:', error);
+        logger.withCategory('api').error('Error saving metadata:', error);
         return false;
     }
 };
@@ -148,7 +215,7 @@ const getChallengeMetadata = (challengeId) => {
  */
 const setChallengeMetadata = (challengeId, lastVoteTime, exposureBump) => {
     if (!challengeId) {
-        logger.error('Challenge ID is required');
+        logger.withCategory('challenges').error('Challenge ID is required', null);
         return false;
     }
 
@@ -158,7 +225,7 @@ const setChallengeMetadata = (challengeId, lastVoteTime, exposureBump) => {
         // Validate timestamp
         const date = new Date(lastVoteTime);
         if (isNaN(date.getTime())) {
-            logger.error('Invalid timestamp provided');
+            logger.withCategory('voting').error('Invalid timestamp provided', null);
             return false;
         }
         entry.lastVoteTime = lastVoteTime;
@@ -167,7 +234,7 @@ const setChallengeMetadata = (challengeId, lastVoteTime, exposureBump) => {
     if (exposureBump !== undefined) {
         // Validate exposure value (allow values > 100% as this can happen when insufficient images are available)
         if (typeof exposureBump !== 'number' || exposureBump < 0) {
-            logger.error('Invalid exposure value provided');
+            logger.withCategory('voting').error('Invalid exposure value provided', null);
             return false;
         }
         entry.exposureBump = exposureBump;
@@ -248,7 +315,7 @@ const removeChallengeMetadata = (challengeId) => {
 const cleanupStaleMetadata = (activeChallengeIds) => {
     // Safety check: don't cleanup if we have no active challenges (likely an error state)
     if (!activeChallengeIds || activeChallengeIds.length === 0) {
-        logger.debug('Skipping metadata cleanup: no active challenges provided (possibly loading error)');
+        logger.withCategory('api').debug('Skipping metadata cleanup: no active challenges provided (possibly loading error)', null);
         return true;
     }
 
@@ -267,7 +334,7 @@ const cleanupStaleMetadata = (activeChallengeIds) => {
             const hourAgo = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
             
             if (voteTime > hourAgo) {
-                logger.debug(`Preserving recent metadata for challenge ${id} (voted ${voteTime.toLocaleTimeString()})`);
+                logger.withCategory('voting').debug(`Preserving recent metadata for challenge ${id} (voted ${voteTime.toLocaleTimeString()})`, null);
                 return false; // Don't cleanup recent votes
             }
         }
@@ -279,7 +346,7 @@ const cleanupStaleMetadata = (activeChallengeIds) => {
         return true; // Nothing to cleanup
     }
 
-    logger.debug(`Cleaning up metadata for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
+    logger.withCategory('api').debug(`Cleaning up metadata for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
 
     staleChallengeIds.forEach(challengeId => {
         delete metadata[challengeId];
@@ -304,6 +371,69 @@ const resetAllMetadata = () => {
     return saveMetadata(getDefaultMetadata());
 };
 
+/**
+ * Get update check data
+ * @returns {Object} - {lastCheck: number|null, skipVersion: string|null}
+ */
+const getUpdateCheckData = () => {
+    const metadata = loadMetadata();
+    return metadata.updateCheck || { lastCheck: null, skipVersion: null };
+};
+
+/**
+ * Set last update check timestamp
+ * @param {number} timestamp - Unix timestamp in milliseconds
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const setLastUpdateCheck = (timestamp) => {
+    if (typeof timestamp !== 'number' || timestamp <= 0) {
+        logger.withCategory('update').error('Invalid timestamp provided for last update check', null);
+        return false;
+    }
+
+    const metadata = loadMetadata();
+    if (!metadata.updateCheck) {
+        metadata.updateCheck = { lastCheck: null, skipVersion: null };
+    }
+    
+    metadata.updateCheck.lastCheck = timestamp;
+    return saveMetadata(metadata);
+};
+
+/**
+ * Set version to skip for updates
+ * @param {string} version - Version string to skip
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const setSkipUpdateVersion = (version) => {
+    if (typeof version !== 'string' || version.length === 0) {
+        logger.withCategory('update').error('Invalid version provided for skip update', null);
+        return false;
+    }
+
+    const metadata = loadMetadata();
+    if (!metadata.updateCheck) {
+        metadata.updateCheck = { lastCheck: null, skipVersion: null };
+    }
+    
+    metadata.updateCheck.skipVersion = version;
+    return saveMetadata(metadata);
+};
+
+/**
+ * Clear skip update version
+ * @returns {boolean} - True if successful, false otherwise
+ */
+const clearSkipUpdateVersion = () => {
+    const metadata = loadMetadata();
+    if (!metadata.updateCheck) {
+        metadata.updateCheck = { lastCheck: null, skipVersion: null };
+    }
+    
+    metadata.updateCheck.skipVersion = null;
+    return saveMetadata(metadata);
+};
+
 module.exports = {
     // Core functions
     loadMetadata,
@@ -317,6 +447,12 @@ module.exports = {
     updateChallengeVoteMetadata,
     removeChallengeMetadata,
     cleanupStaleMetadata,
+    
+    // Update check functions
+    getUpdateCheckData,
+    setLastUpdateCheck,
+    setSkipUpdateVersion,
+    clearSkipUpdateVersion,
     
     // Utility functions
     getAllMetadata,

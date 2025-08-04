@@ -45,6 +45,8 @@ contextBridge.exposeInMainWorld(
         // Logger methods
         logDebug: (message, data) => ipcRenderer.invoke('log-debug', message, data),
         logError: (message, data) => ipcRenderer.invoke('log-error', message, data),
+        logWarning: (message, data) => ipcRenderer.invoke('log-warning', message, data),
+        logSuccess: (message, data) => ipcRenderer.invoke('log-success', message, data),
         logApi: (message, data) => ipcRenderer.invoke('log-api', message, data),
         getLogFile: () => ipcRenderer.invoke('get-log-file'),
         getErrorLogFile: () => ipcRenderer.invoke('get-error-log-file'),

@@ -23,11 +23,33 @@ const logger = {
             window.api.logDebug(`SUCCESS: ${message} ${args.length > 0 ? args.join(' ') : ''}`);
         }
     },
+    withCategory: (category) => ({
+        info: (message, ...args) => {
+            if (window.api && window.api.logDebug) {
+                window.api.logDebug(`[${category}] ${message} ${args.length > 0 ? args.join(' ') : ''}`);
+            }
+        },
+        error: (message, ...args) => {
+            if (window.api && window.api.logError) {
+                window.api.logError(`[${category}] ${message} ${args.length > 0 ? args.join(' ') : ''}`);
+            }
+        },
+        warning: (message, ...args) => {
+            if (window.api && window.api.logDebug) {
+                window.api.logDebug(`[${category}] WARNING: ${message} ${args.length > 0 ? args.join(' ') : ''}`);
+            }
+        },
+        success: (message, ...args) => {
+            if (window.api && window.api.logDebug) {
+                window.api.logDebug(`[${category}] SUCCESS: ${message} ${args.length > 0 ? args.join(' ') : ''}`);
+            }
+        },
+    }),
 };
 
 // Function for production login using real GuruShots API
 const loginProd = async (username, password) => {
-    logger.info('Production login with:', username, password);
+    logger.withCategory('authentication').info('Production login with:', username, password);
 
     try {
         // Use the IPC call to authenticate through the main process
@@ -35,7 +57,7 @@ const loginProd = async (username, password) => {
         return result;
 
     } catch (error) {
-        logger.error('Production login error:', error);
+        logger.withCategory('authentication').error('Production login error:', error);
         return {
             success: false,
             message: error.message || 'Authentication failed due to network error',
@@ -45,7 +67,7 @@ const loginProd = async (username, password) => {
 
 // Function for mock login using mock authentication data
 const loginMock = async (username, password) => {
-    logger.info('Mock login with:', username, password);
+    logger.withCategory('authentication').info('Mock login with:', username, password);
 
     try {
         // Use the IPC call to authenticate through the main process with mock flag
@@ -53,7 +75,7 @@ const loginMock = async (username, password) => {
         return result;
 
     } catch (error) {
-        logger.error('Mock login error:', error);
+        logger.withCategory('authentication').error('Mock login error:', error);
         return {
             success: false,
             message: error.message || 'Mock authentication failed',
@@ -229,7 +251,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Update the bottom text based on mock setting
         updateBottomText(mockToggle.checked);
 
-        logger.info(`🔄 Login mock toggle changed to: ${mockToggle.checked}`);
+        logger.withCategory('settings').info(`🔄 Login mock toggle changed to: ${mockToggle.checked}`, null);
     });
 
     // Handle language change
@@ -268,11 +290,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Prevent the default form submission
         event.preventDefault();
 
-        logger.info('🔐 Login form submitted');
+        logger.withCategory('ui').info('🔐 Login form submitted', null);
 
         // Validate form
         if (!validateForm()) {
-            logger.warning('❌ Form validation failed');
+            logger.withCategory('ui').warning('❌ Form validation failed', null);
             return;
         }
 
@@ -287,13 +309,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Determine which login function to use based on current mock toggle state
             // (ignore saved settings, use toggle value)
             const isMock = mockToggle.checked;
-            logger.info(`🔐 Login attempt with mock mode: ${isMock}`);
+            logger.withCategory('authentication').info(`🔐 Login attempt with mock mode: ${isMock}`, null);
             
             const loginResult = isMock
                 ? await loginMock(username, password)
                 : await loginProd(username, password);
                 
-            logger.info('🔐 Login result:', loginResult);
+            logger.withCategory('authentication').info('🔐 Login result:', loginResult);
 
             // Check if login was successful
             if (!loginResult.success) {
@@ -327,7 +349,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             window.api.login();
 
         } catch (error) {
-            logger.error('Login error:', error);
+            logger.withCategory('authentication').error('Login error:', error);
             alert('An unexpected error occurred during login');
             setLoadingState(false);
         }
