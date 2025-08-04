@@ -87,7 +87,7 @@ function addLogEntry(logData) {
     logEntry.className = 'log-entry';
     
     // Format the log message (same as CLI format)
-    const { level, message, context, timestamp } = logData;
+    const { level, message, context, timestamp, category } = logData;
     
     // Color coding based on log level
     const levelColors = {
@@ -101,12 +101,13 @@ function addLogEntry(logData) {
     };
     
     const levelColor = levelColors[level] || 'text-green-400';
+    const categoryDisplay = category ? `<span class="text-yellow-400">[${category}]</span> ` : '';
     
     logEntry.innerHTML = `
         <span class="text-cyan-400">[${context}]</span>
         <span class="text-gray-400">[${timestamp}]</span>
         <span class="${levelColor}">[${level}]</span>
-        <span class="text-white">${escapeHtml(message)}</span>
+        ${categoryDisplay}<span class="text-white">${escapeHtml(message)}</span>
     `;
     
     // Insert at the top (newest first)

@@ -311,6 +311,13 @@ export const initializeAutovote = () => {
 
         autovoteRunning = true;
         window.autovoteRunning = autovoteRunning;
+        // Set global for settings cleanup checks (works in both browser and Node.js)
+        if (typeof global !== 'undefined') {
+            global.autovoteRunning = autovoteRunning;
+        }
+        if (typeof globalThis !== 'undefined') {
+            globalThis.autovoteRunning = autovoteRunning;
+        }
         await window.api.setCancelVoting(false);
         updateAutovoteStatus('Running', 'badge-success');
 
@@ -415,6 +422,13 @@ export const initializeAutovote = () => {
         await window.api.logDebug('🛑 Setting autovoteRunning to false and canceling voting');
         autovoteRunning = false;
         window.autovoteRunning = autovoteRunning;
+        // Set global for settings cleanup checks (works in both browser and Node.js)
+        if (typeof global !== 'undefined') {
+            global.autovoteRunning = autovoteRunning;
+        }
+        if (typeof globalThis !== 'undefined') {
+            globalThis.autovoteRunning = autovoteRunning;
+        }
         await window.api.setCancelVoting(true);
 
         // Clear autovote interval
@@ -480,7 +494,15 @@ export const initializeAutovote = () => {
         }
     });
 
-    window.addEventListener('beforeunload', () => {
+    window.addEventListener('beforeunload', async () => {
+        // Stop autovote if it's running
+        if (autovoteRunning) {
+            await window.api.setCancelVoting(true);
+            autovoteRunning = false;
+            window.autovoteRunning = false;
+        }
+        
+        // Clear all intervals and timers
         if (autovoteInterval) {
             clearInterval(autovoteInterval);
         }
