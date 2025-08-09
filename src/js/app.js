@@ -300,6 +300,10 @@ window.saveGlobalSettings = async (event) => {
         }
 
         // All validation passed - now save everything
+        // Check if language will change before saving
+        const currentSettings = await window.api.getSettings();
+        const languageWillChange = uiSettingsToSave.language && currentSettings.language !== uiSettingsToSave.language;
+        
         // First save UI settings
         for (const [key, value] of Object.entries(uiSettingsToSave)) {
             await window.api.setSetting(key, value);
@@ -316,10 +320,13 @@ window.saveGlobalSettings = async (event) => {
         // Refresh UI and challenges
         const settings = await window.api.getSettings();
         updateSettingsDisplay(settings);
-        updateTranslations();
-
-        // Refresh menu to update language
-        await window.api.refreshMenu();
+        
+        // Only update translations if language actually changed
+        if (languageWillChange) {
+            updateTranslations();
+            // Refresh menu to update language
+            await window.api.refreshMenu();
+        }
 
         const timezone = await window.api.getSetting('timezone');
         await loadChallenges(timezone, window.autovoteRunning || false);
@@ -479,6 +486,7 @@ window.saveChallengeSettings = async (challengeId, event) => {
     }
     try {
         const validationErrors = [];
+        const schema = await window.api.getSettingsSchema();
 
         for (const [key, config] of Object.entries(schema)) {
             const inputId = `${key}-${challengeId}`;

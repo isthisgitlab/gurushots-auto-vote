@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld(
         },
         runVotingCycle: () => ipcRenderer.invoke('run-voting-cycle'),
         voteOnChallenge: (challengeId, challengeTitle) => ipcRenderer.invoke('vote-on-challenge', challengeId, challengeTitle),
+        voteOnChallengeManual: (challengeId, challengeTitle) => ipcRenderer.invoke('vote-on-challenge-manual', challengeId, challengeTitle),
+        voteAllChallengesManual: () => ipcRenderer.invoke('vote-all-challenges-manual'),
         refreshApi: () => ipcRenderer.invoke('refresh-api'),
 
         // Logger methods

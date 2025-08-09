@@ -100,7 +100,7 @@ Usage: <command>
 
 Commands:
   login    - Authenticate with GuruShots and save token
-  vote     - Start the voting process (requires authentication)
+  vote     - Run one manual voting cycle (votes to 100% regardless of settings)
   start    - Start continuous voting with cron scheduling
   stop     - Stop continuous voting (if running)
   status   - Show current status and settings
@@ -222,6 +222,41 @@ const runVotingCycle = async (cycleNumber = 1) => {
     } catch (error) {
         logger.withCategory('voting').error(`Error during voting cycle ${cycleNumber}`, error);
         logger.withCategory('voting').debug('Full voting cycle error details:', error);
+        return false;
+    }
+};
+
+/**
+ * Run a single manual voting cycle (votes to 100% regardless of settings)
+ */
+const runManualVotingCycle = async (cycleNumber = 1) => {
+    try {
+        const userSettings = settings.loadSettings();
+        const isMockMode = userSettings.mock;
+        
+        logger.withCategory('voting').info(`--- Manual Voting Cycle ${cycleNumber} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
+        logger.withCategory('voting').info(`Time: ${new Date().toLocaleString()}`);
+        logger.withCategory('voting').info('Mode: Manual (votes to 100% regardless of threshold settings)');
+
+        // Check if user is authenticated
+        if (!getMiddlewareInstance().isAuthenticated()) {
+            logger.withCategory('authentication').error('No authentication token found. Please login first');
+            logger.withCategory('ui').info('Run: login');
+            return false;
+        }
+
+        // Start manual voting operation
+        logger.withCategory('voting').startOperation(`manual-vote-cycle-${cycleNumber}`, `Manual voting cycle ${cycleNumber}`);
+        
+        // Run the manual voting process (bypasses all thresholds, always votes to 100%)
+        await getMiddlewareInstance().cliVoteManual();
+        
+        logger.withCategory('voting').endOperation(`manual-vote-cycle-${cycleNumber}`, `Manual voting cycle ${cycleNumber} completed`);
+        
+        return true;
+    } catch (error) {
+        logger.withCategory('voting').error(`Error during manual voting cycle ${cycleNumber}`, error);
+        logger.withCategory('voting').debug('Full manual voting cycle error details:', error);
         return false;
     }
 };
@@ -780,7 +815,7 @@ const main = async () => {
             process.exit(0);
             break;
         case 'vote':
-            await runVotingCycle();
+            await runManualVotingCycle();
             process.exit(0);
             break;
         case 'start':
