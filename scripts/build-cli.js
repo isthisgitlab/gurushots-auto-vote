@@ -47,7 +47,7 @@ async function buildCli(platform = null) {
             entryPoints: [path.join(__dirname, '..', 'src', 'js', 'cli', 'cli.js')],
             bundle: true,
             platform: 'node',
-            target: 'node18',
+            target: 'node22',
             format: 'cjs',
             outfile: path.join(distDir, 'cli-bundled.js'),
             external: ['electron'], // Don't bundle electron
