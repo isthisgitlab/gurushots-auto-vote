@@ -14,6 +14,10 @@
     --color-latvian: #960018;
 }
 
+:root {
+    scrollbar-color: color-mix(in oklch,currentColor 0%,var(--color-latvian))transparent;
+}
+
 /* Latvian color utility classes */
 .btn-latvian {
     background-color: var(--color-latvian);
@@ -24,6 +28,34 @@
 .btn-latvian:hover {
     background-color: #7a0014;
     border-color: #7a0014;
+}
+
+.progress-latvian::-webkit-progress-value {
+    background-color: var(--color-latvian);
+}
+
+.progress-latvian::-moz-progress-bar {
+    background-color: var(--color-latvian);
+}
+
+.bg-latvian {
+    background-color: var(--color-latvian);
+}
+
+.text-latvian {
+    color: var(--color-latvian);
+}
+
+.border-latvian {
+    border-color: var(--color-latvian);
+}
+
+.progress-latvian::-webkit-progress-value {
+    background-color: var(--color-latvian);
+}
+
+.progress-latvian::-moz-progress-bar {
+    background-color: var(--color-latvian);
 }
 
 .badge-allstar {
@@ -50,6 +82,7 @@
     --badge-color: #2c7fa6;
     --badge-fg: var(--color-base-100);
 }
+
 
 [data-theme="dark"] {
     .badge-allstar, .badge-elite, .badge-premier, .badge-skilled, .badge-popular {

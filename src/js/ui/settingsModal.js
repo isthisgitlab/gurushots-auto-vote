@@ -219,14 +219,14 @@ const generateUISettingsHtml = async () => {
 
         const timezoneInputHtml = `
             <div class="flex items-center gap-2">
-                <select id="modal-timezone-select" class="select select-bordered select-sm" style="width: 200px;">
+                <select id="modal-timezone-select" class="select select-bordered select-sm w-48">
                     ${timezoneOptions}
                 </select>
                 <button id="modal-timezone-add" class="btn btn-ghost btn-sm" title="${translationManager.t('app.addCustomTimezone')}">+</button>
-                <button id="modal-timezone-remove" class="btn btn-ghost btn-sm text-red-500" title="${translationManager.t('app.removeCurrentTimezone')}" style="visibility: ${currentTimezone !== 'Europe/Riga' ? 'visible' : 'hidden'}">×</button>
+                <button id="modal-timezone-remove" class="btn btn-ghost btn-sm text-error ${currentTimezone !== 'Europe/Riga' ? '' : 'invisible'}" title="${translationManager.t('app.removeCurrentTimezone')}">×</button>
                 ${generateResetButton('timezone')}
             </div>
-            <input id="modal-timezone-input" type="text" placeholder="${translationManager.t('app.timezonePlaceholder')}" class="input input-bordered input-sm mt-2" style="display: none; width: 250px;">
+            <input id="modal-timezone-input" type="text" placeholder="${translationManager.t('app.timezonePlaceholder')}" class="input input-bordered input-sm mt-2 w-60 hidden">
         `;
         uiSettingsHtml += generateSettingHtml('timezone', 'app.timezone', 'app.timezoneDesc', timezoneInputHtml);
 
