@@ -1042,6 +1042,13 @@ const isGlobalDefaultModified = (settingKey) => {
 };
 
 /**
+ * Helper to get schema default at runtime (avoids circular reference during schema construction)
+ * @param {string} key - The schema key
+ * @returns {any} - The default value for the key
+ */
+const getSchemaDefault = (key) => SETTINGS_SCHEMA[key]?.default;
+
+/**
  * Centralized Settings Schema
  *
  * Single source of truth for all configurable settings.
@@ -1112,14 +1119,14 @@ const SETTINGS_SCHEMA = {
             // If exposure is not set or invalid, use the exposure default for comparison
             const effectiveExposure = (typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100) 
                 ? exposureValue 
-                : SETTINGS_SCHEMA.exposure.default;
+                : getSchemaDefault('exposure');
             return value <= effectiveExposure;
         },
         getContextError: (value, allSettings) => {
             const exposureValue = allSettings.exposure;
             const effectiveExposure = (typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100) 
                 ? exposureValue 
-                : SETTINGS_SCHEMA.exposure.default;
+                : getSchemaDefault('exposure');
             // Return a string that the UI will translate
             return `VALIDATION_LESS_OR_EQUAL|app.exposure|${effectiveExposure}`;
         },

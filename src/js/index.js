@@ -1028,6 +1028,69 @@ ipcMain.handle('run-voting-cycle', async () => {
     }
 });
 
+// Handle vote-all-challenges-manual request
+ipcMain.handle('vote-all-challenges-manual', async () => {
+    try {
+        logger.withCategory('voting').info('🔄 Starting manual vote all challenges...', null);
+
+        const userSettings = settings.loadSettings();
+
+        if (!userSettings.token) {
+            logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
+            return {
+                success: false,
+                error: 'No authentication token found',
+            };
+        }
+
+        // Use the API factory to get the appropriate strategy
+        const {getApiStrategy} = require('./apiFactory');
+        const strategy = getApiStrategy();
+
+        // Create a function to get the effective exposure setting for each challenge
+        const getExposureThreshold = (challengeId) => {
+            try {
+                return settings.getEffectiveSetting('exposure', challengeId);
+            } catch (error) {
+                logger.withCategory('settings').warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
+                return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
+            }
+        };
+
+        // Reset cancellation flag before starting
+        shouldCancelVoting = false;
+
+        // Set the cancellation flag in the API module
+        const mainApi = require('./api/main');
+        mainApi.setCancellationFlag(false);
+
+        // Also set the cancellation flag in the mock API
+        const mockApi = require('./mock');
+        mockApi.setCancellationFlag(false);
+
+        // Run the voting cycle with per-challenge exposure settings (same as run-voting-cycle)
+        const result = await strategy.fetchChallengesAndVote(userSettings.token, getExposureThreshold);
+
+        if (result && result.success) {
+            return {
+                success: true,
+                message: result.message || 'Manual vote all challenges completed successfully',
+            };
+        } else {
+            return {
+                success: false,
+                error: result?.error || 'Manual vote all challenges failed',
+            };
+        }
+    } catch (error) {
+        logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
+        return {
+            success: false,
+            error: error.message || 'Failed to vote on all challenges manually',
+        };
+    }
+});
+
 // Handle should-cancel-voting request
 ipcMain.handle('should-cancel-voting', () => {
     return shouldCancelVoting;
@@ -1137,6 +1200,99 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
         return {
             success: false,
             error: error.message || 'Failed to vote on challenge',
+        };
+    }
+});
+
+// Handle vote-on-challenge-manual request (identical to vote-on-challenge)
+ipcMain.handle('vote-on-challenge-manual', async (event, challengeId, challengeTitle) => {
+    try {
+        logger.withCategory('general').info(`🔄 Manual vote on challenge request: ID=${challengeId}, Title="${challengeTitle}"`, null, logger.CATEGORIES.VOTING);
+
+        const userSettings = settings.loadSettings();
+
+        if (!userSettings.token) {
+            logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
+            return {
+                success: false,
+                error: 'No authentication token found',
+            };
+        }
+
+        // Use the API factory to get the appropriate strategy
+        const {getApiStrategy} = require('./apiFactory');
+        const strategy = getApiStrategy();
+
+        // Get active challenges to find the specific challenge
+        const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
+
+        if (!challengesResponse || !challengesResponse.challenges) {
+            logger.withCategory('challenges').warning('❌ Failed to fetch challenges for manual voting', null);
+            return {
+                success: false,
+                error: 'Failed to fetch challenges',
+            };
+        }
+
+        logger.withCategory('challenges').debug(`📋 Found challenges: [${challengesResponse.challenges.map(c => `${c.id}:"${c.title}"`).join(', ')}]`);
+        logger.withCategory('challenges').debug('🔍 Looking for challenge ID:', challengeId);
+
+        // Find the specific challenge (convert challengeId to number for comparison)
+        const challenge = challengesResponse.challenges.find(c => c.id === parseInt(challengeId));
+
+        logger.withCategory('general').debug(`🎯 Challenge found: ${challenge ? `ID=${challenge.id}, Title="${challenge.title}"` : 'NOT FOUND'}`, null, logger.CATEGORIES.CHALLENGES);
+
+        if (!challenge) {
+            logger.withCategory('general').warning('❌ Challenge not found:', {challengeId, challengeTitle}, logger.CATEGORIES.CHALLENGES);
+            return {
+                success: false,
+                error: `Challenge "${challengeTitle}" not found`,
+            };
+        }
+
+        // Check if challenge is active and can be voted on
+        const now = Math.floor(Date.now() / 1000);
+        if (challenge.start_time >= now) {
+            return {
+                success: false,
+                error: `Challenge "${challengeTitle}" has not started yet`,
+            };
+        }
+
+        // Use the centralized voting logic service for manual voting decisions
+        const {shouldAllowVoting, errorMessage, targetExposure} = votingLogic.evaluateManualVotingDecision(challenge, now, challengeTitle);
+
+        if (!shouldAllowVoting) {
+            return {
+                success: false,
+                error: errorMessage,
+            };
+        }
+
+        // Vote on the specific challenge
+        logger.withCategory('voting').info('🗳️ Starting manual voting process for challenge:', challenge.title);
+
+        const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
+        logger.withCategory('voting').debug(`📸 Vote images received: ${voteImages ? `Count=${voteImages.images?.length}` : 'No vote images'}`, null);
+
+        if (voteImages && voteImages.images && voteImages.images.length > 0) {
+            logger.withCategory('voting').info('✅ Submitting manual votes...', null);
+            // Vote to target exposure (dynamic based on voting rules)
+            await strategy.submitVotes(voteImages, userSettings.token, targetExposure);
+            logger.withCategory('voting').success('✅ Manual votes submitted successfully');
+        } else {
+            logger.withCategory('voting').warning('⚠️ No vote images available for manual voting', null);
+        }
+
+        return {
+            success: true,
+            message: `Successfully voted on challenge "${challengeTitle}" manually`,
+        };
+    } catch (error) {
+        logger.withCategory('voting').error('Error handling vote-on-challenge-manual request:', error);
+        return {
+            success: false,
+            error: error.message || 'Failed to vote on challenge manually',
         };
     }
 });

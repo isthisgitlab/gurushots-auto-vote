@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html data-theme="light" lang="en">
+<html data-theme="light" lang="en" class="overflow-y-scroll">
 <head>
     <meta charset="UTF-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
@@ -59,13 +59,13 @@
                         <span class="text-sm font-medium whitespace-nowrap"
                               data-translate="common.status">Status:</span>
                         <span class="badge badge-neutral whitespace-nowrap" data-translate="common.stopped"
-                              id="autovote-status">Stopped</span>
+                              id="autovote-status"></span>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-sm font-medium whitespace-nowrap"
                               data-translate="app.lastRun">Last Run:</span>
                         <span class="text-sm text-gray-500 whitespace-nowrap" data-translate="common.never"
-                              id="autovote-last-run">Never</span>
+                              id="autovote-last-run"></span>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-sm font-medium whitespace-nowrap" data-translate="app.cycles">Cycles:</span>
@@ -91,14 +91,22 @@
         <div class="card-body p-4">
             <div class="flex justify-between items-center mb-3">
                 <h2 class="card-title text-lg" data-translate="app.activeChallenges">Active Challenges</h2>
-                <button class="btn btn-latvian btn-sm" id="refresh-challenges">
-                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                              stroke-linecap="round" stroke-linejoin="round"
-                              stroke-width="2"></path>
-                    </svg>
-                    <span data-translate="common.refresh">Refresh</span>
-                </button>
+                <div class="flex gap-2">
+                    <button class="btn btn-latvian btn-sm" id="vote-all-challenges">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span data-translate="app.voteAll">Vote All</span>
+                    </button>
+                    <button class="btn btn-latvian btn-sm" id="refresh-challenges">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                  stroke-linecap="round" stroke-linejoin="round"
+                                  stroke-width="2"></path>
+                        </svg>
+                        <span data-translate="common.refresh">Refresh</span>
+                    </button>
+                </div>
             </div>
 
             <div id="challenges-container">
@@ -112,25 +120,25 @@
 </div>
 
 <!-- Update Dialog -->
-<div id="updateDialog" class="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 hidden">
-    <div class="bg-white rounded-xl p-6 max-w-lg w-11/12 max-h-4/5 overflow-y-auto shadow-2xl">
+<div id="updateDialog" class="modal z-50 hidden">
+    <div class="modal-box max-w-lg">
         <div class="flex items-center mb-4">
-            <div class="text-2xl mr-3 text-blue-500">🚀</div>
-            <h2 class="text-xl font-semibold text-gray-800 m-0">Update Available</h2>
-            <span id="prereleaseBadge" class="ml-2 px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded hidden">Pre-release</span>
+            <div class="text-2xl mr-3 text-primary">🚀</div>
+            <h2 class="text-xl font-semibold text-base-content m-0">Update Available</h2>
+            <span id="prereleaseBadge" class="ml-2 badge badge-warning badge-xs hidden">Pre-release</span>
         </div>
 
-        <div class="bg-gray-100 rounded-lg p-3 mb-4">
-            <div class="text-gray-600 text-sm">Current version: <span id="currentVersion"></span></div>
-            <div class="text-green-600 font-semibold text-base">Latest version: <span id="latestVersion"></span></div>
+        <div class="bg-base-200 rounded-lg p-3 mb-4">
+            <div class="text-base-content/70 text-sm">Current version: <span id="currentVersion"></span></div>
+            <div class="text-success font-semibold text-base">Latest version: <span id="latestVersion"></span></div>
         </div>
 
-        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-5 max-h-48 overflow-y-auto">
+        <div class="bg-base-100 border border-base-300 rounded-lg p-4 mb-5 max-h-48 overflow-y-auto">
             <h4 class="font-medium mb-2">What's New:</h4>
-            <div id="releaseNotes" class="text-sm text-gray-700"></div>
+            <div id="releaseNotes" class="text-sm text-base-content/80"></div>
         </div>
 
-        <div class="flex flex-col sm:flex-row gap-2 justify-end">
+        <div class="modal-action">
             <button id="skipButton" class="btn btn-ghost btn-sm">Skip This Version</button>
             <button id="remindLaterButton" class="btn btn-secondary btn-sm">Remind Me Later</button>
             <button id="downloadButton" class="btn btn-primary btn-sm">Download Update</button>

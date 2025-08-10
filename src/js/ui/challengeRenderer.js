@@ -100,31 +100,32 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
 
         const nextLevelInfo = getNextLevelInfo();
 
-        await window.api.logDebug(`🎨 Processed values: ${JSON.stringify({
-            timeRemaining,
-            endTime,
-            boostStatus,
-            turboStatus,
-            exposureFactor,
-            entriesCount: entries.length,
-        })}`);
-
         // Create entries display with detailed information
         let entriesHtml = entries.map(entry => {
             // Show boost icon only if entry is actually boosted
             const isEntryBoosted = entry.boost === 1 || entry.boosted === true;
-            const isBoostUsed = boostStatus.text === 'Used';
             const boostIcon = isEntryBoosted ? '🚀' : '';
             const guruIcon = entry.guru_pick ? '⭐' : '';
             // Show camera only for regular entries (no turbo, no boost, no guru pick)
             const isRegularEntry = !entry.turbo && !isEntryBoosted && !entry.guru_pick;
             const turboIcon = entry.turbo ? '⚡' : (isRegularEntry ? '📷' : '');
-            const boostClass = (isEntryBoosted || isBoostUsed) ? 'badge-success' : 'badge-secondary';
+            // Determine entry type and appropriate color class
+            let entryTypeClass = '';
+            if (isEntryBoosted) {
+                entryTypeClass = 'border-info text-info';
+            } else if (entry.turbo) {
+                entryTypeClass = 'border-warning text-warning';
+            } else if (isRegularEntry) {
+                entryTypeClass = 'border-success text-success';
+            } else {
+                // Fallback for guru pick or other special entries
+                entryTypeClass = 'badge-secondary';
+            }
 
             // Show boost button only if boost is available and entry is not already boosted
             const showBoostButton = boostStatus.text.includes('Available') && entry.boost !== 1;
             const boostButtonHtml = showBoostButton ? `
-                <button class="btn btn-xs btn-warning ml-1 entry-boost-btn" 
+                <button class="btn btn-xs btn-success ml-1 entry-boost-btn" 
                         data-challenge-id="${challenge.id}" 
                         data-image-id="${entry.id}" 
                         data-entry-rank="${entry.rank}"
@@ -134,7 +135,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
             ` : '';
 
             return `
-                <div class="badge badge-outline ${boostClass} ${entry.turbo ? 'badge-warning' : ''} flex items-center">
+                <div class="badge badge-outline ${entryTypeClass} flex items-center">
                     ${turboIcon} ${boostIcon} ${guruIcon} ${translationManager.t('app.rank')} ${entry.rank} (${entry.votes} ${translationManager.t('app.votes')})
                     ${boostButtonHtml}
                 </div>
@@ -238,9 +239,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                                 <span>${translationManager.t('app.rank')} ${userProgress.rank} ${translationManager.t('app.of')} ${challengeStats.players}</span>
                                 <span>${userProgress.votes} ${translationManager.t('app.votes')}</span>
                             </div>
-                            <div class="w-full bg-base-300 rounded-full h-1.5">
-                                <div class="bg-latvian h-1.5 rounded-full" style="width: ${userProgress.percent}%"></div>
-                            </div>
+                            <progress class="progress progress-latvian w-full" value="${userProgress.percent}" max="100"></progress>
                             ${challenge.type !== 'flash' ? `
                             <div class="text-xs text-base-content/60 mt-1">${userProgress.next_message}</div>
                             ` : ''}
@@ -337,23 +336,10 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                 }
 
                 try {
-                    // Call the voting function for this specific challenge
-                    const result = await window.api.voteOnChallenge(challengeId, challengeTitle);
+                    // Call the manual voting function for this specific challenge (bypasses all thresholds)
+                    const result = await window.api.voteOnChallengeManual(challengeId, challengeTitle);
 
                     if (result && result.success) {
-                        // Show success feedback
-                        btn.innerHTML = `
-                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                            </svg>
-                            ${translationManager.t('app.voted')}
-                        `;
-                        btn.className = 'challenge-vote-btn btn btn-success btn-sm';
-
-                        // Refresh challenges immediately after successful vote
-                        const timezone = await window.api.getSetting('timezone');
-                        await window.loadChallenges(timezone, autovoteRunning);
-
                         // Re-enable immediately and show refresh button
                         btn.disabled = false;
                         btn.innerHTML = originalText;
@@ -362,18 +348,15 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                         // Show refresh button again immediately
                         window.singleVoteRunning = false;
                         if (refreshBtn && !autovoteRunning) {
-                            refreshBtn.style.display = 'inline-flex';
+                            refreshBtn.classList.remove('hidden');
                         }
+
+                        // Refresh challenges in background after successful vote
+                        const timezone = await window.api.getSetting('timezone');
+                        window.loadChallenges(timezone, autovoteRunning); // No await - let it run in background
                     } else {
                         // Show error feedback for API error
                         await window.api.logError(`Voting failed: ${result?.error || 'Unknown error'}`);
-                        btn.innerHTML = `
-                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                            </svg>
-                            ${translationManager.t('app.error')}
-                        `;
-                        btn.className = 'challenge-vote-btn btn btn-error btn-sm';
 
                         // Re-enable immediately and show refresh button
                         btn.disabled = false;
@@ -383,21 +366,12 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
                         // Show refresh button again immediately
                         window.singleVoteRunning = false;
                         if (refreshBtn && !autovoteRunning) {
-                            refreshBtn.style.display = 'inline-flex';
+                            refreshBtn.classList.remove('hidden');
                         }
                     }
 
                 } catch (error) {
                     await window.api.logError(`Error voting on challenge: ${error.message || error}`);
-
-                    // Show error feedback
-                    btn.innerHTML = `
-                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
-                        ${translationManager.t('app.error')}
-                    `;
-                    btn.className = 'challenge-vote-btn btn btn-error btn-sm';
 
                     // Re-enable immediately and show refresh button
                     btn.disabled = false;
@@ -422,6 +396,93 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
             window.openChallengeSettingsModal(challengeId, challengeTitle);
         });
     });
+
+    // Add event listener to Vote All button (only when autovote is not running)
+    if (!autovoteRunning) {
+        const voteAllBtn = document.getElementById('vote-all-challenges');
+        if (voteAllBtn) {
+            // Ensure button is visible when autovote is not running
+            voteAllBtn.classList.remove('hidden');
+            // Remove any existing event listeners to prevent duplicates
+            const newVoteAllBtn = voteAllBtn.cloneNode(true);
+            voteAllBtn.parentNode.replaceChild(newVoteAllBtn, voteAllBtn);
+
+            newVoteAllBtn.addEventListener('click', async (e) => {
+                // Disable button and show loading
+                const btn = e.target.closest('#vote-all-challenges');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = `
+                    <span class="loading loading-spinner loading-xs"></span>
+                    ${translationManager.t('app.votingAll')}
+                `;
+
+                // Hide refresh button while Vote All is running
+                window.singleVoteRunning = true;
+                const refreshBtn = document.getElementById('refresh-challenges');
+                if (refreshBtn) {
+                    refreshBtn.classList.add('hidden');
+                }
+
+                try {
+                    // Call the Vote All function (votes on all challenges below 100%)
+                    const result = await window.api.voteAllChallengesManual();
+
+                    if (result && result.success) {
+                        // Re-enable immediately and show refresh button
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        btn.className = 'btn btn-latvian btn-sm';
+
+                        // Show refresh button again
+                        window.singleVoteRunning = false;
+                        if (refreshBtn && !window.autovoteRunning) {
+                            refreshBtn.classList.remove('hidden');
+                        }
+
+                        // Refresh challenges in background after successful vote all
+                        const timezone = await window.api.getSetting('timezone');
+                        window.loadChallenges(timezone, autovoteRunning); // No await - let it run in background
+
+                    } else {
+                        // Show error feedback for API error
+                        await window.api.logError(`Vote All failed: ${result?.error || 'Unknown error'}`);
+
+                        // Re-enable immediately and show refresh button
+                        btn.disabled = false;
+                        btn.innerHTML = originalText;
+                        btn.className = 'btn btn-latvian btn-sm';
+
+                        // Show refresh button again
+                        window.singleVoteRunning = false;
+                        if (refreshBtn && !window.autovoteRunning) {
+                            refreshBtn.classList.remove('hidden');
+                        }
+                    }
+
+                } catch (error) {
+                    await window.api.logError(`Error during Vote All: ${error.message || error}`);
+
+                    // Re-enable immediately and show refresh button
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    btn.className = 'btn btn-latvian btn-sm';
+
+                    // Show refresh button again
+                    window.singleVoteRunning = false;
+                    if (refreshBtn && !window.autovoteRunning) {
+                        refreshBtn.classList.remove('hidden');
+                    }
+                }
+            });
+        }
+    } else {
+        // Hide Vote All button when autovote is running
+        const voteAllBtn = document.getElementById('vote-all-challenges');
+        if (voteAllBtn) {
+            voteAllBtn.classList.add('hidden');
+        }
+    }
     
     // Initialize timers for all challenge cards
     initializeTimers();

@@ -226,6 +226,45 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
 };
 
 /**
+ * Evaluate whether manual voting to 100% should be allowed on a challenge
+ * (Used for manual vote buttons - bypasses all threshold configurations)
+ * @param {Object} challenge - Challenge object
+ * @param {number} now - Current time (Unix timestamp)
+ * @param {string} challengeTitle - Challenge title for error messages
+ * @returns {Object} - Decision with shouldAllowVoting boolean, errorMessage string, and targetExposure number
+ */
+const evaluateManualVotingToHundred = (challenge, now, challengeTitle) => {
+    // Get current exposure
+    const currentExposure = challenge.member.ranking.exposure.exposure_factor;
+    
+    // Simple logic: allow voting if exposure is below 100%
+    let shouldAllowVoting = false;
+    let errorMessage = '';
+    const targetExposure = 100; // Always target 100% for manual voting
+    
+    // Rule 1: Skip if challenge hasn't started yet
+    if (challenge.start_time >= now) {
+        errorMessage = `Challenge "${challengeTitle}" has not started yet`;
+        return { shouldAllowVoting, errorMessage, targetExposure };
+    }
+    
+    // Rule 2: Skip if challenge has ended
+    if (challenge.close_time <= now) {
+        errorMessage = `Challenge "${challengeTitle}" has already ended`;
+        return { shouldAllowVoting, errorMessage, targetExposure };
+    }
+    
+    // Rule 3: Allow voting if exposure is below 100%
+    if (currentExposure < 100) {
+        shouldAllowVoting = true;
+    } else {
+        errorMessage = `Challenge "${challengeTitle}" already has 100% exposure`;
+    }
+    
+    return { shouldAllowVoting, errorMessage, targetExposure };
+};
+
+/**
  * Get effective boost time for a challenge
  * @param {string} challengeId - Challenge ID
  * @returns {number} - Effective boost time in seconds
@@ -255,6 +294,7 @@ module.exports = {
     getEffectiveLastHourExposureThreshold,
     evaluateVotingDecision,
     evaluateManualVotingDecision,
+    evaluateManualVotingToHundred,
     getEffectiveBoostTime,
     shouldApplyBoost,
 }; 
