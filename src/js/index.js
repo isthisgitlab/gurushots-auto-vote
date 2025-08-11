@@ -1031,7 +1031,7 @@ ipcMain.handle('run-voting-cycle', async () => {
 // Handle vote-all-challenges-manual request
 ipcMain.handle('vote-all-challenges-manual', async () => {
     try {
-        logger.withCategory('voting').info('🔄 Starting manual vote all challenges...', null);
+        logger.withCategory('voting').info('🔄 Starting manual vote all challenges (bypass thresholds)...', null);
 
         const userSettings = settings.loadSettings();
 
@@ -1042,46 +1042,77 @@ ipcMain.handle('vote-all-challenges-manual', async () => {
                 error: 'No authentication token found',
             };
         }
-
+        
         // Use the API factory to get the appropriate strategy
         const {getApiStrategy} = require('./apiFactory');
         const strategy = getApiStrategy();
-
-        // Create a function to get the effective exposure setting for each challenge
-        const getExposureThreshold = (challengeId) => {
-            try {
-                return settings.getEffectiveSetting('exposure', challengeId);
-            } catch (error) {
-                logger.withCategory('settings').warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
-                return settings.SETTINGS_SCHEMA.exposure.default; // Fallback to schema default
-            }
-        };
-
-        // Reset cancellation flag before starting
-        shouldCancelVoting = false;
-
-        // Set the cancellation flag in the API module
-        const mainApi = require('./api/main');
-        mainApi.setCancellationFlag(false);
-
-        // Also set the cancellation flag in the mock API
-        const mockApi = require('./mock');
-        mockApi.setCancellationFlag(false);
-
-        // Run the voting cycle with per-challenge exposure settings (same as run-voting-cycle)
-        const result = await strategy.fetchChallengesAndVote(userSettings.token, getExposureThreshold);
-
-        if (result && result.success) {
-            return {
-                success: true,
-                message: result.message || 'Manual vote all challenges completed successfully',
-            };
-        } else {
+        
+        // Get active challenges
+        const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
+        if (!challengesResponse || !challengesResponse.challenges) {
+            logger.withCategory('challenges').warning('❌ Failed to fetch challenges for manual vote all', null);
             return {
                 success: false,
-                error: result?.error || 'Manual vote all challenges failed',
+                error: 'Failed to fetch challenges',
             };
         }
+        
+        const challenges = challengesResponse.challenges;
+        const now = Math.floor(Date.now() / 1000);
+        let processedCount = 0;
+        let votedCount = 0;
+        let skippedCount = 0;
+        
+        logger.withCategory('voting').info(`📋 Found ${challenges.length} challenges to process`, null);
+        
+        // Process each challenge with manual logic (bypass all thresholds)
+        for (const challenge of challenges) {
+            processedCount++;
+            
+            logger.withCategory('voting').progress(`Processing challenge ${processedCount}/${challenges.length}: ${challenge.title}`, processedCount, challenges.length);
+            
+            // Use the manual voting logic (bypass all thresholds)
+            const {shouldAllowVoting, errorMessage, targetExposure} = votingLogic.evaluateManualVotingToHundred(challenge, now, challenge.title);
+            
+            if (shouldAllowVoting) {
+                try {
+                    logger.withCategory('voting').info(`🗳️ Voting on challenge: ${challenge.title} (target: ${targetExposure}%)`, null);
+                    
+                    const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
+                    if (voteImages && voteImages.images && voteImages.images.length > 0) {
+                        await strategy.submitVotes(voteImages, userSettings.token, targetExposure);
+                        votedCount++;
+                        logger.withCategory('voting').success(`✅ Voted on challenge: ${challenge.title}`, null);
+                        
+                        // Add small delay between challenges
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    } else {
+                        logger.withCategory('voting').warning(`⚠️ No vote images available for: ${challenge.title}`, null);
+                        skippedCount++;
+                    }
+                } catch (error) {
+                    logger.withCategory('voting').error(`❌ Error voting on challenge ${challenge.title}:`, error);
+                    skippedCount++;
+                }
+            } else {
+                logger.withCategory('voting').info(`⏭️ Skipping challenge: ${challenge.title} - ${errorMessage}`, null);
+                skippedCount++;
+            }
+        }
+        
+        const message = `Manual vote all completed: ${votedCount} voted, ${skippedCount} skipped out of ${challenges.length} challenges`;
+        logger.withCategory('voting').success(message, null);
+        
+        return {
+            success: true,
+            message,
+            stats: {
+                total: challenges.length,
+                voted: votedCount,
+                skipped: skippedCount,
+            },
+        };
+        
     } catch (error) {
         logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
         return {
@@ -1166,8 +1197,8 @@ ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) =
             };
         }
 
-        // Use the centralized voting logic service for manual voting decisions
-        const {shouldAllowVoting, errorMessage, targetExposure} = votingLogic.evaluateManualVotingDecision(challenge, now, challengeTitle);
+        // Use the centralized voting logic service for manual voting decisions (bypass all thresholds)
+        const {shouldAllowVoting, errorMessage, targetExposure} = votingLogic.evaluateManualVotingToHundred(challenge, now, challengeTitle);
 
         if (!shouldAllowVoting) {
             return {
@@ -1259,8 +1290,8 @@ ipcMain.handle('vote-on-challenge-manual', async (event, challengeId, challengeT
             };
         }
 
-        // Use the centralized voting logic service for manual voting decisions
-        const {shouldAllowVoting, errorMessage, targetExposure} = votingLogic.evaluateManualVotingDecision(challenge, now, challengeTitle);
+        // Use the centralized voting logic service for manual voting decisions (bypass all thresholds)
+        const {shouldAllowVoting, errorMessage, targetExposure} = votingLogic.evaluateManualVotingToHundred(challenge, now, challengeTitle);
 
         if (!shouldAllowVoting) {
             return {
