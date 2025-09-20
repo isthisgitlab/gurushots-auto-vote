@@ -4,17 +4,17 @@
 
 ### **🚀 Ātrās lejupielādes saites**
 
-**Latest Version: v0.4.3**
+**Latest Version: v0.4.4**
 
 #### **🖥️ Grafiskā lietotne (Ieteicams lielākajai daļai lietotāju)**
 
 | Platforma         | Lejupielāde                                                                                                                                                          | Izmērs | Tips                  |
 |-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|-----------------------|
-| **Windows**       | [📥 GuruShotsAutoVote-v0.4.3-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.3-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.4.3-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.3-arm64.dmg)             | ~50 MB | DMG instalētājs       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.4.3-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.3-arm64.app.zip)             | ~50 MB | App komplekts (ZIP)   |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.4.3-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.3-x86_64.AppImage) | ~50 MB | AppImage              |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.4.3-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.3-arm64.AppImage)   | ~50 MB | AppImage              |
+| **Windows**       | [📥 GuruShotsAutoVote-v0.4.4-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.4-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.4.4-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.4-arm64.dmg)             | ~50 MB | DMG instalētājs       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.4.4-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.4-arm64.app.zip)             | ~50 MB | App komplekts (ZIP)   |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.4.4-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.4-x86_64.AppImage) | ~50 MB | AppImage              |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.4.4-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.4.4-arm64.AppImage)   | ~50 MB | AppImage              |
 
 ### **📋 Detalizētas instalācijas instrukcijas**
 
@@ -67,8 +67,8 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 1. **Lejupielādēt**: Noklikšķiniet uz atbilstošās Linux saites augšā
 2. **Padarīt izpildāmu**: Labais klikšķis uz faila → Properties → Permissions → Atzīmējiet "Allow executing file as program"
-   - Vai izmantojiet termināli: `chmod +x GuruShotsAutoVote-v0.4.3-*.AppImage`
-3. **Palaist**: Veiciet dubultklikšķi uz faila vai palaidiet no termināļa: `./GuruShotsAutoVote-v0.4.3-*.AppImage`
+   - Vai izmantojiet termināli: `chmod +x GuruShotsAutoVote-v0.4.4-*.AppImage`
+3. **Palaist**: Veiciet dubultklikšķi uz faila vai palaidiet no termināļa: `./GuruShotsAutoVote-v0.4.4-*.AppImage`
 4. **Konfigurācijas faili**: Lietotne saglabā iestatījumus mapē `~/.config/gurushots-auto-vote/`
 5. **Žurnālfaili**: Žurnālfaili tiek saglabāti mapē `~/.config/gurushots-auto-vote/logs/`
 
@@ -79,7 +79,7 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
    cat > ~/.local/share/applications/gurushots-auto-vote.desktop << EOL
    [Desktop Entry]
    Name=GuruShots Auto Vote
-   Exec=/pilns/ceļš/uz/GuruShotsAutoVote-v0.4.3-x86_64.AppImage
+   Exec=/pilns/ceļš/uz/GuruShotsAutoVote-v0.4.4-x86_64.AppImage
    Icon=
    Type=Application
    Categories=Utility;
