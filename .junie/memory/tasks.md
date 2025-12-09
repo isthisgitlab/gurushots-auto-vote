@@ -38,3 +38,23 @@
     "NEW INSTRUCTION": "WHEN boost button visibility uses includes('Available') THEN compute state-based flag from challenge.member.boost"
 }
 
+[2025-12-09 16:55] - Updated by Junie - Trajectory analysis
+{
+    "PLAN QUALITY": "near-optimal",
+    "REDUNDANT STEPS": "broad search",
+    "MISSING STEPS": "scan settings, scan tests, scan logs",
+    "BOTTLENECK": "Key-unlocked window is inconsistent between logs (10m) and code (15m).",
+    "PROJECT NOTE": "Verify whether 10 or 15 minutes is intended and align code and logs.",
+    "NEW INSTRUCTION": "WHEN search results exceed 100 with warning THEN narrow query or restrict to relevant directories"
+}
+
+[2025-12-09 16:57] - Updated by Junie - Trajectory analysis
+{
+    "PLAN QUALITY": "suboptimal",
+    "REDUNDANT STEPS": "-",
+    "MISSING STEPS": "align terminology,update configuration,update code,update logs,add tests,run tests",
+    "BOTTLENECK": "10m vs 15m key-unlocked window mismatch remains unresolved.",
+    "PROJECT NOTE": "Turbo is implemented as boost; key-unlocked window is enforced in VotingLogic.js (15m) while main.js logs state 10m; consider a single configurable setting.",
+    "NEW INSTRUCTION": "WHEN key-unlocked auto-apply window differs across code and logs THEN use single settings value and update VotingLogic and log messages"
+}
+

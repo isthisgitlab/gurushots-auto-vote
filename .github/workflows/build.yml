@@ -108,7 +108,7 @@ jobs:
     if: github.event_name == 'push'
     strategy:
       matrix:
-        os: [ ubuntu-slim, windows-latest, macos-latest ]
+        os: [ ubuntu-slim, windows-latest, macos-26 ]
         include:
           - os: macos-26
             platform: mac
