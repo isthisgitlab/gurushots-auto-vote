@@ -246,7 +246,7 @@ const mockApiClient = {
         // In mock mode, accept any token (including real ones)
         if (token) {
             const boostState = challenge.member.boost.state;
-            if (boostState === 'AVAILABLE') {
+            if (boostState === 'AVAILABLE' || boostState === 'AVAILABLE_KEY') {
                 logger.withCategory('voting').debug('Applying boost successfully', null);
                 return simulateApiResponse(boost.mockBoostSuccess, 1500);
             } else if (boostState === 'USED') {

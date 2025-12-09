@@ -90,35 +90,60 @@ const fetchChallengesAndVote = async (token) => {
 
             // Check if boost is available for this challenge
             const {boost} = challenge.member;
-            if (boost.state === 'AVAILABLE' && boost.timeout) {
+            const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
+            const isTimerBasedAvailable = boost.state === 'AVAILABLE' && hasTimeout;
+            const isKeyUnlockedAvailable = boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout);
+            if (isTimerBasedAvailable || isKeyUnlockedAvailable) {
                 logger.challengeInfo(challenge.id, challenge.title, 'Boost available');
 
                 // Use the centralized voting logic service for boost decisions
                 const shouldApplyBoost = votingLogic.shouldApplyBoost(challenge, now);
                 const effectiveBoostTime = votingLogic.getEffectiveBoostTime(challenge.id.toString());
-                const timeUntilDeadline = boost.timeout - now;
+                // For timer-based availability use boost.timeout; for key-unlocked use challenge end time
+                const timeUntilDisplayBase = isTimerBasedAvailable
+                    ? (boost.timeout - now)
+                    : (challenge.close_time - now);
 
                 if (shouldApplyBoost) {
-                    const minutesRemaining = Math.floor(timeUntilDeadline / 60);
+                    const minutesRemaining = Math.floor(timeUntilDisplayBase / 60);
                     const hoursRemaining = Math.floor(minutesRemaining / 60);
                     const timeDisplay = hoursRemaining > 0
                         ? `${hoursRemaining}h ${minutesRemaining % 60}m`
                         : `${minutesRemaining}m`;
                     
-                    logger.withCategory('boost').startOperation(`boost-${challenge.id}`, `Applying boost to challenge ${challenge.title}`);
+                    const applyingMsg = isTimerBasedAvailable
+                        ? `Applying boost to challenge ${challenge.title}`
+                        : `Applying boost to challenge ${challenge.title} (key-unlocked)`;
+                    logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
                     
                     try {
                         await applyBoost(challenge, token);
-                        logger.withCategory('boost').endOperation(`boost-${challenge.id}`, `Boost applied successfully (${timeDisplay} remaining)`);
+                        const successSuffix = isTimerBasedAvailable
+                            ? `${timeDisplay} remaining`
+                            : `${timeDisplay} until challenge ends`;
+                        logger.withCategory('boost').endOperation(`boost-${challenge.id}`, `Boost applied successfully (${successSuffix})`);
                     } catch (error) {
                         logger.withCategory('boost').endOperation(`boost-${challenge.id}`, null, error.message || error);
                     }
                 } else {
-                    const minutesRemaining = Math.floor(timeUntilDeadline / 60);
+                    const minutesRemaining = Math.floor(timeUntilDisplayBase / 60);
                     const timeDisplay = minutesRemaining > 60 
                         ? `${Math.floor(minutesRemaining / 60)}h ${minutesRemaining % 60}m`
                         : `${minutesRemaining}m`;
-                    logger.challengeInfo(challenge.id, challenge.title, `Boost not ready - ${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`);
+                    if (isTimerBasedAvailable) {
+                        logger.challengeInfo(
+                            challenge.id,
+                            challenge.title,
+                            `Boost not ready - ${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`,
+                        );
+                    } else {
+                        // Key-unlocked path uses the 10-minute rule; omit timer threshold language
+                        logger.challengeInfo(
+                            challenge.id,
+                            challenge.title,
+                            `Boost not ready - ${timeDisplay} until challenge ends (needs ≤ 10m to auto-apply)`,
+                        );
+                    }
                 }
             }
 

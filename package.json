@@ -90,7 +90,7 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "daisyui": "^5.5.8",
-    "electron": "^39.2.5",
+    "electron": "^39.2.6",
     "electron-builder": "^26.0.12",
     "esbuild": "^0.27.1",
     "eslint": "^9.39.1",

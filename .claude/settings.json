@@ -1,0 +1,26 @@
+{
+  "extraKnownMarketplaces": {
+    "anthropic-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-code"
+      }
+    },
+    "mag-claude-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "MadAppGang/claude-code"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "explanatory-output-style@anthropic-plugins": true,
+    "feature-dev@anthropic-plugins": true,
+    "frontend-design@anthropic-plugins": true
+  },
+  "installedPluginVersions": {
+    "explanatory-output-style@anthropic-plugins": "1.0.0",
+    "feature-dev@anthropic-plugins": "1.0.0",
+    "frontend-design@anthropic-plugins": "1.0.0"
+  }
+}

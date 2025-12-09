@@ -275,16 +275,47 @@ const getEffectiveBoostTime = (challengeId) => {
 
 /**
  * Check if boost should be applied to a challenge
+ * - Timer-based available (state === 'AVAILABLE' with timeout):
+ *   apply when timeUntilBoostExpires <= effectiveBoostTime
+ * - Key-unlocked available (state === 'AVAILABLE_KEY' or available with no timeout):
+ *   ignore boost timer completely and apply only if challenge ends in next 10 minutes
  * @param {Object} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
  * @returns {boolean} - True if boost should be applied
  */
 const shouldApplyBoost = (challenge, now) => {
-    const challengeId = challenge.id.toString();
-    const effectiveBoostTime = getEffectiveBoostTime(challengeId);
-    const timeUntilBoostExpires = challenge.member.boost.timeout - now;
-    
-    return timeUntilBoostExpires <= effectiveBoostTime && timeUntilBoostExpires > 0;
+    if (!challenge) return false;
+
+    // Never apply if challenge already ended or not started yet
+    if (challenge.close_time <= now) return false;
+
+    const challengeId = challenge.id?.toString?.() || '';
+    const effectiveBoostTime = getEffectiveBoostTime(challengeId); // seconds
+
+    const boost = challenge.member?.boost || {};
+    const boostState = boost.state;
+    const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
+
+    // Determine if this is a key-unlocked availability
+    // Treat AVAILABLE without timeout as key-unlocked as well
+    const isKeyUnlocked = boostState === 'AVAILABLE_KEY' || (boostState === 'AVAILABLE' && !hasTimeout);
+
+    const timeUntilEnd = challenge.close_time - now;
+    const CLOSING = 15 * 60; // seconds
+
+    if (isKeyUnlocked) {
+        // Auto-apply only if the challenge ends within next 10 minutes
+        return timeUntilEnd > 0 && timeUntilEnd <= CLOSING;
+    }
+
+    // Timer-based AVAILABLE with a timeout: use existing effectiveBoostTime window
+    if (boostState === 'AVAILABLE' && hasTimeout) {
+        const timeUntilBoostExpires = boost.timeout - now;
+        return timeUntilBoostExpires > 0 && timeUntilBoostExpires <= effectiveBoostTime;
+    }
+
+    // All other states: do not auto-apply
+    return false;
 };
 
 module.exports = {

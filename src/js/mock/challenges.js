@@ -371,7 +371,8 @@ const generateMockChallenges = () => {
                 welcome_message: 'Capture nature in its purest form',
                 url: 'wildlife-photography-2024',
                 start_time: now - 21600, // Started 6 hours ago
-                close_time: now + 21600, // Ends in 6 hours
+                // For key-unlocked mock: set end within next 9 minutes to trigger auto-apply path
+                close_time: now + 9 * 60, // Ends in 9 minutes
                 status: 'active',
                 entries: 567,
                 players: 423,
@@ -404,8 +405,9 @@ const generateMockChallenges = () => {
                 member: {
                     time_joined: now - 21600,
                     boost: {
-                        state: 'AVAILABLE',
-                        timeout: now + 900, // Available for 15 minutes
+                        // Key-unlocked boost: no timeout provided
+                        state: 'AVAILABLE_KEY',
+                        timeout: null,
                     },
                     turbo: {
                         max_selections: 10,
@@ -545,7 +547,8 @@ const generateMockChallenges = () => {
                 welcome_message: 'Wildlife found in urban environments',
                 url: 'urban-wildlife-2024',
                 start_time: now - 14400, // Started 4 hours ago
-                close_time: now + 14400, // Ends in 4 hours
+                // For key-unlocked mock: set end after 12 minutes to NOT auto-apply
+                close_time: now + 12 * 60, // Ends in 12 minutes
                 status: 'active',
                 entries: 892,
                 players: 654,
@@ -578,8 +581,9 @@ const generateMockChallenges = () => {
                 member: {
                     time_joined: now - 14400,
                     boost: {
-                        state: 'USED',
-                        timeout: 0,
+                        // Key-unlocked but outside 10-minute window
+                        state: 'AVAILABLE_KEY',
+                        timeout: null,
                     },
                     turbo: {
                         max_selections: 10,

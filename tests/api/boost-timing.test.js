@@ -346,5 +346,73 @@ describe('boost timing settings', () => {
             expect(mockBoost.applyBoost).toHaveBeenCalledWith(challenges[0], mockToken);
             expect(mockBoost.applyBoost).toHaveBeenCalledWith(challenges[1], mockToken);
         });
+
+        test('AVAILABLE_KEY within 10 minutes should apply boost and not crash without timeout', async () => {
+            jest.resetModules();
+            const now = Math.floor(Date.now() / 1000);
+            const keyUnlockedChallenge = {
+                id: 'k1',
+                title: 'Key Unlocked Short',
+                url: 'key-unlocked-short',
+                start_time: now - 3600,
+                close_time: now + 9 * 60, // within 10 minutes window
+                member: {
+                    boost: {
+                        state: 'AVAILABLE_KEY',
+                        timeout: null,
+                    },
+                    ranking: {
+                        exposure: { exposure_factor: 50 },
+                    },
+                },
+            };
+
+            mockChallenges.getActiveChallenges.mockResolvedValue({ challenges: [keyUnlockedChallenge] });
+            // Voting logic decides to apply in this scenario
+            mockVotingLogic.shouldApplyBoost.mockReturnValue(true);
+            mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800);
+            mockVotingLogic.evaluateVotingDecision.mockReturnValue({ shouldVote: false, voteReason: 'No voting needed', targetExposure: 100 });
+
+            const { fetchChallengesAndVote } = require('../../src/js/api/main');
+
+            await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
+
+            // Ensure applyBoost was called despite no timeout
+            expect(mockBoost.applyBoost).toHaveBeenCalledWith(keyUnlockedChallenge, mockToken);
+        });
+
+        test('AVAILABLE_KEY beyond 10 minutes should NOT apply boost', async () => {
+            jest.resetModules();
+            const now = Math.floor(Date.now() / 1000);
+            const keyUnlockedChallenge = {
+                id: 'k2',
+                title: 'Key Unlocked Long',
+                url: 'key-unlocked-long',
+                start_time: now - 3600,
+                close_time: now + 12 * 60, // outside 10 minutes window
+                member: {
+                    boost: {
+                        state: 'AVAILABLE_KEY',
+                        timeout: null,
+                    },
+                    ranking: {
+                        exposure: { exposure_factor: 50 },
+                    },
+                },
+            };
+
+            mockChallenges.getActiveChallenges.mockResolvedValue({ challenges: [keyUnlockedChallenge] });
+            // Voting logic decides NOT to apply in this scenario
+            mockVotingLogic.shouldApplyBoost.mockReturnValue(false);
+            mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800);
+            mockVotingLogic.evaluateVotingDecision.mockReturnValue({ shouldVote: false, voteReason: 'No voting needed', targetExposure: 100 });
+
+            const { fetchChallengesAndVote } = require('../../src/js/api/main');
+
+            await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
+
+            // Ensure applyBoost was NOT called
+            expect(mockBoost.applyBoost).not.toHaveBeenCalled();
+        });
     });
-}); 
+});

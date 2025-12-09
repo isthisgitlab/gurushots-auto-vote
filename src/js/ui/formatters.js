@@ -97,7 +97,7 @@ export const formatEndTime = (endTime, timezone = 'local') => {
 
 // Function to get boost status with color class
 export const getBoostStatus = (boost) => {
-    if (boost.state === 'AVAILABLE') {
+    if (boost.state === 'AVAILABLE' || boost.state === 'AVAILABLE_KEY') {
         const now = Math.floor(Date.now() / 1000);
         const remaining = boost.timeout - now;
         if (remaining > 0) {

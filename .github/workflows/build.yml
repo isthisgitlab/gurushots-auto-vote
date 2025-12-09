@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,7 +31,7 @@ jobs:
         continue-on-error: true
 
   version-bump:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     if: github.event_name == 'push'
     outputs:
       new-version: ${{ steps.bump_version.outputs.NEW_VERSION }}
@@ -108,11 +108,11 @@ jobs:
     if: github.event_name == 'push'
     strategy:
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        os: [ ubuntu-slim, windows-latest, macos-latest ]
         include:
-          - os: macos-latest
+          - os: macos-26
             platform: mac
-          - os: ubuntu-latest
+          - os: ubuntu-slim
             platform: linux
           - os: windows-latest
             platform: win
@@ -197,7 +197,7 @@ jobs:
 
   create-release:
     needs: [ build, version-bump ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     if: github.event_name == 'push'
 
     steps:
