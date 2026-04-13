@@ -94,11 +94,25 @@ contextBridge.exposeInMainWorld(
         // Window methods
         reloadWindow: () => ipcRenderer.invoke('reload-window'),
 
-        // Update checker methods
+        // AutoUpdater methods
         checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+        downloadUpdate: () => ipcRenderer.invoke('download-update'),
+        installUpdate: () => ipcRenderer.invoke('install-update'),
         skipUpdateVersion: () => ipcRenderer.invoke('skip-update-version'),
         clearSkipVersion: () => ipcRenderer.invoke('clear-skip-version'),
-        onShowUpdateDialog: (callback) => ipcRenderer.on('show-update-dialog', (event, updateInfo) => callback(updateInfo)),
+        getReleasesUrl: () => ipcRenderer.invoke('get-releases-url'),
+        canAutoUpdate: () => ipcRenderer.invoke('can-auto-update'),
+
+        // AutoUpdater event listeners
+        onUpdateChecking: (callback) => ipcRenderer.on('update-checking', () => callback()),
+        onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, updateInfo) => callback(updateInfo)),
+        onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', (event, info) => callback(info)),
+        onDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', (event, progress) => callback(progress)),
+        onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, updateInfo) => callback(updateInfo)),
+        onUpdateError: (callback) => ipcRenderer.on('update-error', (event, error) => callback(error)),
+
+        // Legacy update dialog listener (for backward compatibility)
+        onShowUpdateDialog: (callback) => ipcRenderer.on('update-available', (event, updateInfo) => callback(updateInfo)),
 
         // Menu methods
         refreshMenu: () => ipcRenderer.invoke('refresh-menu'),

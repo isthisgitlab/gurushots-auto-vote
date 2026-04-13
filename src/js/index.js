@@ -5,6 +5,7 @@ const settings = require('./settings');
 const {initializeHeaders} = require('./api/randomizer');
 const logger = require('./logger');
 const votingLogic = require('./services/VotingLogic');
+const AutoUpdater = require('./services/AutoUpdater');
 const { createApplicationMenu, updateMenuTranslations } = require('./ui/applicationMenu');
 const { translationManager } = require('./translations/index');
 
@@ -43,6 +44,9 @@ let shouldCancelVoting = false;
 // Settings file watcher
 let settingsWatcher = null;
 let settingsReloadTimeout = null;
+
+// Global AutoUpdater instance
+let autoUpdater = null;
 
 // Track main window creation time to prevent reload during login
 let mainWindowCreatedTime = null;
@@ -184,6 +188,11 @@ function createMainWindow() {
     // Load the main application HTML file
     mainWindow.loadFile(path.join(__dirname, '../html/app.html'));
 
+    // Set main window reference for AutoUpdater IPC events
+    if (autoUpdater) {
+        autoUpdater.setMainWindow(mainWindow);
+    }
+
     // Ensure window is visible on screen
     mainWindow.once('ready-to-show', () => {
         if (!mainWindow.isVisible()) {
@@ -241,7 +250,7 @@ function createMainWindow() {
                     }
                     
                     // Load new settings and compare with previous
-                    let newSettings = null;
+                    let newSettings;
                     let shouldReload = false;
                     try {
                         newSettings = settings.loadSettings();
@@ -329,14 +338,14 @@ app.whenReady().then(async () => {
     const userSettings = settings.loadSettings();
     const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
 
+    // Initialize global AutoUpdater instance
+    autoUpdater = new AutoUpdater();
+
     // If auto-login is enabled, check for updates before creating the main window
     if (shouldAutoLogin) {
-        const UpdateChecker = require('./services/UpdateChecker');
-        const updateChecker = new UpdateChecker();
-        
         // Check for updates immediately (no delay) to prevent double challenge loading
         try {
-            await updateChecker.checkForUpdates(true);
+            await autoUpdater.checkForUpdates(false);
         } catch (error) {
             logger.withCategory('update').error('Error during update check:', error);
         }
@@ -346,13 +355,10 @@ app.whenReady().then(async () => {
 
     // If not auto-login, check for updates after login window is shown
     if (!shouldAutoLogin) {
-        const UpdateChecker = require('./services/UpdateChecker');
-        const updateChecker = new UpdateChecker();
-        
         // Check for updates after a short delay to not block app startup
         setTimeout(async () => {
             try {
-                await updateChecker.checkForUpdates(true);
+                await autoUpdater.checkForUpdates(false);
             } catch (error) {
                 logger.withCategory('update').error('Error during update check:', error);
             }
@@ -673,6 +679,7 @@ ipcMain.handle('get-settings-schema', async () => {
 
         // Create a serializable version of the schema (without functions)
         const serializableSchema = {};
+        const defaults = {};
         Object.keys(schema).forEach(key => {
             serializableSchema[key] = {
                 type: schema[key].type,
@@ -680,14 +687,18 @@ ipcMain.handle('get-settings-schema', async () => {
                 perChallenge: schema[key].perChallenge,
                 label: schema[key].label,
                 description: schema[key].description,
-
+                min: schema[key].min,
+                max: schema[key].max,
+                unit: schema[key].unit,
             };
+            // Get actual global default (may differ from schema default if user changed it)
+            defaults[key] = settings.getGlobalDefault(key);
         });
 
-        return serializableSchema;
+        return { schema: serializableSchema, defaults };
     } catch (error) {
         logger.withCategory('settings').error('Error getting settings schema:', error);
-        return {};
+        return { schema: {}, defaults: {} };
     }
 });
 
@@ -1391,12 +1402,13 @@ ipcMain.handle('reload-window', async () => {
     }
 });
 
-// Update checker handlers
+// AutoUpdater handlers
 ipcMain.handle('check-for-updates', async () => {
     try {
-        const UpdateChecker = require('./services/UpdateChecker');
-        const updateChecker = new UpdateChecker();
-        const updateInfo = await updateChecker.checkForUpdates(false); // Don't save timestamp for manual checks
+        if (!autoUpdater) {
+            autoUpdater = new AutoUpdater(mainWindow);
+        }
+        const updateInfo = await autoUpdater.checkForUpdates(true); // Force check for manual trigger
         return {success: true, updateInfo};
     } catch (error) {
         logger.withCategory('update').error('Error checking for updates:', error);
@@ -1404,15 +1416,44 @@ ipcMain.handle('check-for-updates', async () => {
     }
 });
 
+ipcMain.handle('download-update', async () => {
+    try {
+        if (!autoUpdater) {
+            return {success: false, error: 'AutoUpdater not initialized'};
+        }
+        await autoUpdater.downloadUpdate();
+        return {success: true};
+    } catch (error) {
+        logger.withCategory('update').error('Error downloading update:', error);
+        return {
+            success: false,
+            error: error.message,
+            fallbackUrl: autoUpdater.getReleasesUrl(),
+        };
+    }
+});
+
+ipcMain.handle('install-update', async () => {
+    try {
+        if (!autoUpdater) {
+            return {success: false, error: 'AutoUpdater not initialized'};
+        }
+        autoUpdater.quitAndInstall();
+        return {success: true};
+    } catch (error) {
+        logger.withCategory('update').error('Error installing update:', error);
+        return {success: false, error: error.message};
+    }
+});
+
 ipcMain.handle('skip-update-version', async () => {
     try {
-        const UpdateChecker = require('./services/UpdateChecker');
-        const updateChecker = new UpdateChecker();
-        
-        // Get the latest version to skip
-        const updateInfo = await updateChecker.forceCheckForUpdates();
+        if (!autoUpdater) {
+            return {success: false, error: 'AutoUpdater not initialized'};
+        }
+        const updateInfo = autoUpdater.getUpdateInfo();
         if (updateInfo) {
-            updateChecker.skipVersion(updateInfo.latestVersion);
+            autoUpdater.skipVersion(updateInfo.latestVersion);
             return {success: true};
         }
         return {success: false, error: 'No update info available'};
@@ -1424,14 +1465,29 @@ ipcMain.handle('skip-update-version', async () => {
 
 ipcMain.handle('clear-skip-version', async () => {
     try {
-        const UpdateChecker = require('./services/UpdateChecker');
-        const updateChecker = new UpdateChecker();
-        updateChecker.clearSkipVersion();
+        if (!autoUpdater) {
+            autoUpdater = new AutoUpdater(mainWindow);
+        }
+        autoUpdater.clearSkipVersion();
         return {success: true};
     } catch (error) {
         logger.withCategory('update').error('Error clearing skip version:', error);
         return {success: false, error: error.message};
     }
+});
+
+ipcMain.handle('get-releases-url', () => {
+    if (autoUpdater) {
+        return {success: true, url: autoUpdater.getReleasesUrl()};
+    }
+    return {success: true, url: 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest'};
+});
+
+ipcMain.handle('can-auto-update', () => {
+    if (autoUpdater) {
+        return {success: true, canAutoUpdate: autoUpdater.canAutoUpdate()};
+    }
+    return {success: false, canAutoUpdate: false};
 });
 
 // Handle refresh menu request

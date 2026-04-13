@@ -138,6 +138,11 @@ function createApplicationMenu() {
             label: t('menu.help'),
             submenu: [
                 {
+                    label: t('menu.checkForUpdates') || 'Check for Updates...',
+                    click: () => checkForUpdatesFromMenu(),
+                },
+                { type: 'separator' },
+                {
                     label: t('menu.logs'),
                     click: () => openLogsWindow(),
                 },
@@ -152,6 +157,44 @@ function createApplicationMenu() {
     
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
+}
+
+// Check for updates from menu
+async function checkForUpdatesFromMenu() {
+    const AutoUpdater = require('../services/AutoUpdater');
+    const logger = require('../logger');
+
+    try {
+        // Get the main window to send events to
+        const mainWindow = BrowserWindow.getAllWindows().find(win =>
+            win.getTitle() !== 'Logs' && !win.isDestroyed(),
+        );
+
+        const autoUpdater = new AutoUpdater(mainWindow);
+        const updateInfo = await autoUpdater.checkForUpdates(true); // Force check
+
+        if (updateInfo) {
+            // Update is available - the autoUpdater will send event to renderer
+            logger.withCategory('update').info('Update available from menu check:', updateInfo.latestVersion);
+        } else {
+            // No update available - show dialog
+            dialog.showMessageBox({
+                type: 'info',
+                title: t('menu.noUpdates') || 'No Updates',
+                message: t('menu.noUpdatesMessage') || 'You are using the latest version.',
+                buttons: [t('common.ok') || 'OK'],
+            });
+        }
+    } catch (error) {
+        logger.withCategory('update').error('Error checking for updates from menu:', error);
+        dialog.showMessageBox({
+            type: 'error',
+            title: t('menu.updateError') || 'Update Error',
+            message: t('menu.updateErrorMessage') || 'Failed to check for updates.',
+            detail: error.message,
+            buttons: [t('common.ok') || 'OK'],
+        });
+    }
 }
 
 // Show About dialog

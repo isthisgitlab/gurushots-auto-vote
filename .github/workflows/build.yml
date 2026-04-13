@@ -192,6 +192,7 @@ jobs:
             build/GuruShotsAutoVote-v*.app.zip
             build/*.exe
             build/*.AppImage
+            build/latest*.yml
             ${{ matrix.platform != 'win' && 'build/cli/' || '' }}
           retention-days: 1
 
@@ -289,8 +290,11 @@ jobs:
           files: |
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.dmg
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.app.zip
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/latest-mac.yml
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/GuruShotsAutoVote-v*.AppImage
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/latest-linux.yml
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/GuruShotsAutoVote-v*.exe
+            artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/latest.yml
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux
             artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux-arm
