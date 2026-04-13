@@ -20,8 +20,8 @@ export default [
     // Override for renderer processes (browser environment)
     {
         files: [
-            'src/js/app.js', 
-            'src/js/login.js', 
+            'src/js/app.js',
+            'src/js/login.js',
             'src/js/translations.js',
             'src/js/ui/**/*.js'
         ],
@@ -29,6 +29,23 @@ export default [
             globals: {
                 ...globals.browser,
                 ...globals.node,
+            },
+        },
+        rules: {
+            'no-undef': 'off', // Disable no-undef for browser globals
+        },
+    },
+    // React JSX files (browser environment)
+    {
+        files: ['src/js/react/**/*.jsx', 'src/js/react/**/*.js'],
+        languageOptions: {
+            globals: {
+                ...globals.browser,
+            },
+            parserOptions: {
+                ecmaFeatures: {
+                    jsx: true,
+                },
             },
         },
         rules: {

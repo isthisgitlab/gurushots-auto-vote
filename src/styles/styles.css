@@ -2,6 +2,7 @@
 
 @source "../../src/html/**/*.html";
 @source "../../src/js/**/*.js";
+@source "../../src/js/**/*.jsx";
 @plugin "daisyui" {
     themes: light, dark;
     base: true;
