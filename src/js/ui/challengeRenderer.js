@@ -110,7 +110,7 @@ export const renderChallenges = async (challenges, timezone = 'local', autovoteR
             const isRegularEntry = !entry.turbo && !isEntryBoosted && !entry.guru_pick;
             const turboIcon = entry.turbo ? '⚡' : (isRegularEntry ? '📷' : '');
             // Determine entry type and appropriate color class
-            let entryTypeClass = '';
+            let entryTypeClass;
             if (isEntryBoosted) {
                 entryTypeClass = 'border-info text-info';
             } else if (entry.turbo) {

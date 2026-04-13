@@ -10,8 +10,8 @@ const settings = require('../settings');
 const logger = require('../logger');
 
 // Current app version - update this when releasing new versions
-const CURRENT_APP_VERSION = '2.41.6';
-const CURRENT_BUILD_NUMBER = '510';
+const CURRENT_APP_VERSION = '2.41.9';
+const CURRENT_BUILD_NUMBER = '511';
 
 // iPhone models that can be randomized
 const IPHONE_MODELS = [

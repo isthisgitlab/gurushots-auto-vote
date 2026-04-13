@@ -76,7 +76,7 @@ const evaluateVotingDecision = (challenge, now) => {
     
     // Evaluate voting decision based on business rules
     let shouldVote = false;
-    let voteReason = '';
+    let voteReason;
     let targetExposure = 100; // Default target exposure
     
     // Rule 1: Skip if boost-only mode is enabled
