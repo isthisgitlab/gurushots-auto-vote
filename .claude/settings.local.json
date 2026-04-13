@@ -25,9 +25,15 @@
       "Bash(npm start)",
       "Bash(timeout 10s npm run cli:start)",
       "Bash(timeout:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(npm install:*)",
+      "Bash(npm run lint:fix:*)",
+      "Bash(npm i:*)",
+      "Bash(npm run build:react:*)",
+      "Bash(npm run build:css:*)"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "browsermcp",
     "docfork",
