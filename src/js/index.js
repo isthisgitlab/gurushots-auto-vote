@@ -674,13 +674,10 @@ ipcMain.handle('set-default-boost-threshold', async (event, threshold) => {
 // New schema-based settings handlers
 ipcMain.handle('get-settings-schema', async () => {
     try {
-        const settings = require('./settings');
         const schema = settings.SETTINGS_SCHEMA;
-
-        // Create a serializable version of the schema (without functions)
         const serializableSchema = {};
         const defaults = {};
-        Object.keys(schema).forEach(key => {
+        Object.keys(schema).forEach((key) => {
             serializableSchema[key] = {
                 type: schema[key].type,
                 default: schema[key].default,
@@ -691,106 +688,45 @@ ipcMain.handle('get-settings-schema', async () => {
                 max: schema[key].max,
                 unit: schema[key].unit,
             };
-            // Get actual global default (may differ from schema default if user changed it)
             defaults[key] = settings.getGlobalDefault(key);
         });
-
-        return { schema: serializableSchema, defaults };
+        return {schema: serializableSchema, defaults};
     } catch (error) {
         logger.withCategory('settings').error('Error getting settings schema:', error);
-        return { schema: {}, defaults: {} };
+        return {schema: {}, defaults: {}};
     }
 });
 
-// Handle get validation error
-ipcMain.handle('get-validation-error', async (event, settingKey, value, allSettings) => {
-    try {
-        const settings = require('./settings');
-        return settings.getValidationError(settingKey, value, allSettings);
-    } catch (error) {
-        logger.withCategory('settings').error('Error getting validation error:', error);
-        return 'Validation error';
-    }
-});
-
-ipcMain.handle('get-global-default', async (event, settingKey) => {
-    try {
-        const settings = require('./settings');
-        return settings.getGlobalDefault(settingKey);
-    } catch (error) {
-        logger.withCategory('settings').error('Error getting global default:', error);
-        return null;
-    }
-});
-
-ipcMain.handle('set-global-default', async (event, settingKey, value) => {
-    try {
-        const settings = require('./settings');
-        return settings.setGlobalDefault(settingKey, value);
-    } catch (error) {
-        logger.withCategory('settings').error('Error setting global default:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('get-challenge-override', async (event, settingKey, challengeId) => {
-    try {
-        const settings = require('./settings');
-        return settings.getChallengeOverride(settingKey, challengeId);
-    } catch (error) {
-        logger.withCategory('settings').error('Error getting challenge override:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('set-challenge-override', async (event, settingKey, challengeId, value) => {
-    try {
-        const settings = require('./settings');
-        return settings.setChallengeOverride(settingKey, challengeId, value);
-    } catch (error) {
-        logger.withCategory('settings').error('Error setting challenge override:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('set-challenge-overrides', async (event, challengeId, overrides) => {
-    try {
-        const settings = require('./settings');
-        return settings.setChallengeOverrides(challengeId, overrides);
-    } catch (error) {
-        logger.withCategory('settings').error('Error setting challenge overrides:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('remove-challenge-override', async (event, settingKey, challengeId) => {
-    try {
-        const settings = require('./settings');
-        return settings.removeChallengeOverride(settingKey, challengeId);
-    } catch (error) {
-        logger.withCategory('settings').error('Error removing challenge override:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('get-effective-setting', async (event, settingKey, challengeId) => {
-    try {
-        const settings = require('./settings');
-        return settings.getEffectiveSetting(settingKey, challengeId);
-    } catch (error) {
-        logger.withCategory('settings').error('Error getting effective setting:', error);
-        return null;
-    }
-});
-
-ipcMain.handle('cleanup-stale-challenge-setting', async (event, activeChallengeIds) => {
-    try {
-        const settings = require('./settings');
-        return settings.cleanupStaleChallengeSetting(activeChallengeIds);
-    } catch (error) {
-        logger.withCategory('settings').error('Error cleaning up stale challenge settings:', error);
-        return false;
-    }
+// Thin settings IPC handlers — channel name, the settings.* method to
+// invoke (signature `(...args) => any`), the fallback returned on
+// error, and the human-readable verb used in the error log.
+const SETTINGS_IPC_HANDLERS = [
+    ['get-validation-error', 'getValidationError', 'Validation error', 'getting validation error'],
+    ['get-global-default', 'getGlobalDefault', null, 'getting global default'],
+    ['set-global-default', 'setGlobalDefault', false, 'setting global default'],
+    ['get-challenge-override', 'getChallengeOverride', false, 'getting challenge override'],
+    ['set-challenge-override', 'setChallengeOverride', false, 'setting challenge override'],
+    ['set-challenge-overrides', 'setChallengeOverrides', false, 'setting challenge overrides'],
+    ['remove-challenge-override', 'removeChallengeOverride', false, 'removing challenge override'],
+    ['get-effective-setting', 'getEffectiveSetting', null, 'getting effective setting'],
+    ['cleanup-stale-challenge-setting', 'cleanupStaleChallengeSetting', false, 'cleaning up stale challenge settings'],
+    ['cleanup-obsolete-settings', 'cleanupObsoleteSettings', false, 'cleaning up obsolete settings'],
+    ['reset-setting', 'resetSetting', false, 'resetting setting'],
+    ['reset-global-default', 'resetGlobalDefault', false, 'resetting global default'],
+    ['reset-all-global-defaults', 'resetAllGlobalDefaults', false, 'resetting all global defaults'],
+    ['reset-all-settings', 'resetAllSettings', false, 'resetting all settings'],
+    ['is-setting-modified', 'isSettingModified', false, 'checking if setting is modified'],
+    ['is-global-default-modified', 'isGlobalDefaultModified', false, 'checking if global default is modified'],
+];
+SETTINGS_IPC_HANDLERS.forEach(([channel, method, fallback, verb]) => {
+    ipcMain.handle(channel, async (event, ...args) => {
+        try {
+            return settings[method](...args);
+        } catch (error) {
+            logger.withCategory('settings').error(`Error ${verb}:`, error);
+            return fallback;
+        }
+    });
 });
 
 ipcMain.handle('cleanup-stale-metadata', async (event, activeChallengeIds) => {
@@ -799,77 +735,6 @@ ipcMain.handle('cleanup-stale-metadata', async (event, activeChallengeIds) => {
         return metadata.cleanupStaleMetadata(activeChallengeIds);
     } catch (error) {
         logger.withCategory('api').error('Error cleaning up stale metadata:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('cleanup-obsolete-settings', async () => {
-    try {
-        const settings = require('./settings');
-        return settings.cleanupObsoleteSettings();
-    } catch (error) {
-        logger.withCategory('settings').error('Error cleaning up obsolete settings:', error);
-        return false;
-    }
-});
-
-// Reset settings handlers
-ipcMain.handle('reset-setting', async (event, key) => {
-    try {
-        const settings = require('./settings');
-        return settings.resetSetting(key);
-    } catch (error) {
-        logger.withCategory('settings').error('Error resetting setting:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('reset-global-default', async (event, settingKey) => {
-    try {
-        const settings = require('./settings');
-        return settings.resetGlobalDefault(settingKey);
-    } catch (error) {
-        logger.withCategory('settings').error('Error resetting global default:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('reset-all-global-defaults', async () => {
-    try {
-        const settings = require('./settings');
-        return settings.resetAllGlobalDefaults();
-    } catch (error) {
-        logger.withCategory('settings').error('Error resetting all global defaults:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('reset-all-settings', async () => {
-    try {
-        const settings = require('./settings');
-        return settings.resetAllSettings();
-    } catch (error) {
-        logger.withCategory('settings').error('Error resetting all settings:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('is-setting-modified', async (event, key) => {
-    try {
-        const settings = require('./settings');
-        return settings.isSettingModified(key);
-    } catch (error) {
-        logger.withCategory('settings').error('Error checking if setting is modified:', error);
-        return false;
-    }
-});
-
-ipcMain.handle('is-global-default-modified', async (event, settingKey) => {
-    try {
-        const settings = require('./settings');
-        return settings.isGlobalDefaultModified(settingKey);
-    } catch (error) {
-        logger.withCategory('settings').error('Error checking if global default is modified:', error);
         return false;
     }
 });
