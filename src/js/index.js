@@ -256,18 +256,20 @@ function createMainWindow() {
                     // Load new settings and compare with previous
                     let newSettings;
                     let shouldReload = false;
+                    let hasChanges = false;
                     try {
                         newSettings = settings.loadSettings();
-                        
+
                         if (previousSettings) {
                             const changes = compareSettings(previousSettings, newSettings);
                             if (changes.length > 0) {
+                                hasChanges = true;
                                 // Check if any of the changed settings require reload
                                 const reloadRequiredChanges = changes.filter(change => {
                                     const settingKey = change.key.split('.')[0]; // Get main setting key
                                     return settings.isReloadRequired(settingKey);
                                 });
-                                
+
                                 if (reloadRequiredChanges.length > 0) {
                                     logger.withCategory('settings').info('🔄 Reload-required settings changed, reloading main window...');
                                     reloadRequiredChanges.forEach(change => {
@@ -287,7 +289,7 @@ function createMainWindow() {
                             logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
                             shouldReload = true;
                         }
-                        
+
                         // Update previous settings for next comparison
                         previousSettings = newSettings;
                     } catch (error) {
@@ -298,6 +300,14 @@ function createMainWindow() {
                     
                     if (shouldReload && mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.reload();
+                    } else if (hasChanges && newSettings) {
+                        // Notify all renderer windows so React hooks can refetch
+                        // without a full reload. Catches CLI-originated changes.
+                        BrowserWindow.getAllWindows().forEach((win) => {
+                            if (!win.isDestroyed()) {
+                                win.webContents.send('settings-changed', newSettings);
+                            }
+                        });
                     }
                 }, 500); // 500ms debounce
             }

@@ -10,12 +10,20 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
  */
 export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challengeTitle }) {
     const { t } = useTranslation();
-    const { schema, defaults, loading: schemaLoading } = useSettingsSchema();
+    const { schema, defaults, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
     // Local state for override values
     const [overrides, setOverrides] = useState({});
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
+
+    // Refresh global defaults each time the modal opens so the
+    // "Global default: …" hint reflects current persisted state.
+    useEffect(() => {
+        if (isOpen) {
+            refetchSchema();
+        }
+    }, [isOpen, refetchSchema]);
 
     // Load existing overrides when modal opens
     useEffect(() => {

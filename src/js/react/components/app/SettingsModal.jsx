@@ -11,8 +11,8 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
  */
 export function SettingsModal({ isOpen, onClose }) {
     const { t, language, setLanguage } = useTranslation();
-    const { settings, updateSetting } = useSettings();
-    const { schema, defaults, loading: schemaLoading } = useSettingsSchema();
+    const { settings, updateSetting, refetch: refetchSettings } = useSettings();
+    const { schema, defaults, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
     // Local state for form values
     const [formValues, setFormValues] = useState({});
@@ -34,6 +34,15 @@ export function SettingsModal({ isOpen, onClose }) {
     // Store original values to revert on cancel
     const [originalUiValues, setOriginalUiValues] = useState(null);
     const [originalFormValues, setOriginalFormValues] = useState(null);
+
+    // Refetch from disk every time the modal opens so we never display
+    // a value that another writer (CLI, another window) has since changed.
+    useEffect(() => {
+        if (isOpen) {
+            refetchSettings();
+            refetchSchema();
+        }
+    }, [isOpen, refetchSettings, refetchSchema]);
 
     // Initialize form values when modal opens
     useEffect(() => {

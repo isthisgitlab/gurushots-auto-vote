@@ -29,6 +29,11 @@ export function useSettingsSchema() {
         refetch();
     }, [refetch]);
 
+    useEffect(() => {
+        if (!window.api?.onSettingsChanged) return undefined;
+        return window.api.onSettingsChanged(() => { refetch(); });
+    }, [refetch]);
+
     return {
         schema,
         defaults,

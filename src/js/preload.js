@@ -128,6 +128,10 @@ contextBridge.exposeInMainWorld(
         onLogMessage: (callback) => ipcRenderer.on('log-message', (event, logData) => callback(logData)),
         
         // Settings change events
-        onSettingsChanged: (callback) => ipcRenderer.on('settings-changed', (event, settings) => callback(settings)),
+        onSettingsChanged: (callback) => {
+            const handler = (_event, settings) => callback(settings);
+            ipcRenderer.on('settings-changed', handler);
+            return () => ipcRenderer.removeListener('settings-changed', handler);
+        },
     },
 );

@@ -44,6 +44,11 @@ export function useSettings() {
         refetch();
     }, [refetch]);
 
+    useEffect(() => {
+        if (!window.api?.onSettingsChanged) return undefined;
+        return window.api.onSettingsChanged(() => { refetch(); });
+    }, [refetch]);
+
     return {
         settings,
         loading,
