@@ -42,6 +42,8 @@ If you find this tool helpful, consider supporting its development:
 - **Turbo Auto-Earn**: Automatically play the in-app mini-game to earn turbo when none is held
 - **Turbo Auto-Apply**: Automatically apply earned turbo to a configured entry slot before challenge end
 - **Per-Entry Boost & Turbo**: Manually apply boost or turbo to a specific photo from the GUI
+- **Auto-Fill Missing Entries**: Submit additional photos when a challenge nears its deadline and you have empty slots; staggered one-per-cycle so vote dilution doesn't penalize the new entries
+- **Manual Fill Buttons**: `+1` and `+N` buttons on each challenge card to fill empty entry slots on demand, bypassing the auto spacing
 - **Last Minute Threshold**: Auto-vote when challenges are within the last-minute threshold, ignoring exposure limits
 - **Last Hour Exposure Cap**: Separate, tighter exposure ceiling that kicks in during the final hour
 - **Only-Boost Mode**: Disable normal voting on a challenge until a boost (or turbo) is available
@@ -359,6 +361,8 @@ These can be set as global defaults and overridden per challenge:
 | `turboTime` | `7200` seconds (2h) | ≥ 0 | How long before challenge end to apply turbo |
 | `turboImageIndex` | `1` | integer ≥ 1 | Which entry slot receives the auto-applied turbo |
 | `turboApplyWhenBoostActive` | `false` | bool | Allow turbo auto-apply during a boost-active window |
+| `autoFill` | `false` | bool | Auto-submit photos to fill empty entry slots near the deadline |
+| `autoFillIntervalMinutes` | `10` | 1-60 min | Spacing between consecutive auto-fill submissions |
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly. Use the CLI `list-settings` command to see every setting and which ones you've modified.
 
@@ -517,6 +521,64 @@ In the GUI, each photo badge shows an `⚡` button when a turbo is held and that
 
 - **Per-entry**: A single photo can be either boosted or turboed, never both.
 - **Per-challenge timing**: By default, turbo auto-apply waits for the boost-active window to pass. Set `turboApplyWhenBoostActive` to `true` to allow both to apply within the same challenge (on different photos).
+
+## 📥 Auto-Fill Missing Entries
+
+When a challenge allows multiple submissions (`max_photo_submits` > 1) and you've only submitted a subset, the unfilled slots are wasted at close time. Auto-Fill detects this case near the deadline and submits photos from your eligible photo library to fill the open slots.
+
+### **Auto Mode (`autoFill`)**
+
+- **What it does**: When enabled, the scheduler submits **one photo per check cycle** to fill empty slots, spaced by `autoFillIntervalMinutes`.
+- **Default**: Disabled (`false`)
+- **Per-challenge override**: Yes
+
+The trigger is `secondsRemaining ≤ slotsRemaining × autoFillIntervalMinutes × 60`. With the default 10-minute interval:
+
+- 2 missing slots → fills land at T-20m and T-10m
+- 3 missing slots → fills at T-30m, T-20m, T-10m
+- 1 missing slot → fill at T-10m
+
+The spacing matters because GuruShots' ranking algorithm dilutes votes per entry when multiple photos are submitted simultaneously. Time-spacing each submission gives every entry independent exposure.
+
+### **Manual Buttons**
+
+Each challenge card with empty slots shows two buttons in the **Your Entries** cell, alongside the existing turbo controls:
+
+- **`+1`** — submits the best-ranked eligible photo immediately (one slot)
+- **`+N`** — submits all `N` remaining slots at once, bypassing the spacing math (only shown when more than one slot is missing)
+
+Manual click is explicit user intent, so it ignores both the `autoFill` toggle and the spacing rules. Both buttons are disabled while auto-vote is running, mirroring the existing turbo button behavior.
+
+### **Photo Selection**
+
+The picker ranks your eligible photos lexicographically by:
+
+1. **Theme match score** — keywords from the challenge URL slug, title, and welcome message (HTML-stripped, light-stemmed) are matched against each photo's vision labels with a photography-noise stopword list (`shots`, `coins`, `level`, `allstar`, etc.) so welcome-message tokens stay meaningful
+2. **Achievements count** — past wins are a strong quality signal when no theme match exists
+3. **Vote total** — proven photos beat unproven ones
+4. **Upload date** — last-resort tiebreak
+
+The achievements + votes layers prevent the failure mode where a recently-uploaded but low-quality photo wins by default just because it's newest.
+
+### **Configuration**
+
+| Setting | Default | Range | Purpose |
+|---|---|---|---|
+| `autoFill` | `false` | bool | Enable staggered auto-fill for this challenge |
+| `autoFillIntervalMinutes` | `10` | 1-60 min | Spacing between consecutive submissions |
+
+The interval is intentionally tunable because the right gap depends on your check-frequency setting and how aggressive you want to be near the deadline.
+
+### **Boost & Turbo on New Entries**
+
+Newly-submitted entries are picked up by the existing boost and turbo decision gates on the **next** check cycle, with no special-case wiring. As long as the last fill lands at least one cycle (≈3 minutes) before the boost key-unlocked window (T-15m), boost and turbo can apply to the new entries naturally. With the default 10-minute interval and a 3-minute cycle, this works for up to 3 missing slots.
+
+### **Use Cases**
+
+- **Forgot to upload everything**: You submitted 1 of 4 allowed photos and the challenge ends in 30 minutes — auto-fill submits the remaining 3, spaced
+- **Multiple challenges, limited time**: Enable on all multi-photo challenges as a safety net so empty slots are never wasted
+- **Manual top-up before bed**: Click `+N` on a card to immediately fill remaining slots before going offline
+- **Test on a low-stakes challenge**: Defaults are off, so you opt in per-challenge when you trust the picker
 
 ## 🎚️ Last Hour Exposure
 
