@@ -20,11 +20,17 @@ export function SettingsModal({ isOpen, onClose }) {
         theme: 'light',
         language: 'en',
         timezone: 'Europe/Riga',
+        customTimezones: [],
         stayLoggedIn: false,
         apiTimeout: 30000,
-        checkFrequency: 5,
+        checkFrequencyMin: 3,
+        checkFrequencyMax: 3,
     });
     const [saving, setSaving] = useState(false);
+    // Timezone "+" toggle — local UI state, never persisted.
+    const [tzInputVisible, setTzInputVisible] = useState(false);
+    const [tzInputValue, setTzInputValue] = useState('');
+    const [tzInputError, setTzInputError] = useState(false);
     // Store original values to revert on cancel
     const [originalUiValues, setOriginalUiValues] = useState(null);
     const [originalFormValues, setOriginalFormValues] = useState(null);
@@ -40,12 +46,17 @@ export function SettingsModal({ isOpen, onClose }) {
                 theme: settings.theme || 'light',
                 language: settings.language || 'en',
                 timezone: settings.timezone || 'Europe/Riga',
+                customTimezones: Array.isArray(settings.customTimezones) ? settings.customTimezones : [],
                 stayLoggedIn: settings.stayLoggedIn || false,
                 apiTimeout: settings.apiTimeout || 30000,
-                checkFrequency: settings.checkFrequency || 5,
+                checkFrequencyMin: settings.checkFrequencyMin ?? 3,
+                checkFrequencyMax: settings.checkFrequencyMax ?? 3,
             };
             setUiValues(initialUiValues);
             setOriginalUiValues(initialUiValues);
+            setTzInputVisible(false);
+            setTzInputValue('');
+            setTzInputError(false);
         }
     }, [isOpen, defaults, settings]);
 
@@ -73,9 +84,11 @@ export function SettingsModal({ isOpen, onClose }) {
             theme: 'light',
             language: 'en',
             timezone: 'Europe/Riga',
+            customTimezones: [],
             stayLoggedIn: false,
             apiTimeout: 30000,
-            checkFrequency: 5,
+            checkFrequencyMin: 3,
+            checkFrequencyMax: 3,
         };
         setUiValues((prev) => ({ ...prev, [key]: defaultUiValues[key] }));
 
@@ -99,12 +112,47 @@ export function SettingsModal({ isOpen, onClose }) {
             theme: 'light',
             language: 'en',
             timezone: 'Europe/Riga',
+            customTimezones: [],
             stayLoggedIn: false,
             apiTimeout: 30000,
-            checkFrequency: 5,
+            checkFrequencyMin: 3,
+            checkFrequencyMax: 3,
         });
         document.documentElement.setAttribute('data-theme', 'light');
     }, [schema]);
+
+    const isValidTimezone = (tz) => {
+        try {
+            new Intl.DateTimeFormat(undefined, { timeZone: tz });
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
+    const handleTimezoneAdd = useCallback(() => {
+        const value = tzInputValue.trim();
+        if (!value || !isValidTimezone(value)) {
+            setTzInputError(true);
+            return;
+        }
+        setUiValues((prev) => {
+            const list = prev.customTimezones || [];
+            const nextList = list.includes(value) ? list : [...list, value];
+            return { ...prev, customTimezones: nextList, timezone: value };
+        });
+        setTzInputValue('');
+        setTzInputError(false);
+        setTzInputVisible(false);
+    }, [tzInputValue]);
+
+    const handleTimezoneRemove = useCallback(() => {
+        setUiValues((prev) => ({
+            ...prev,
+            customTimezones: (prev.customTimezones || []).filter((tz) => tz !== prev.timezone),
+            timezone: 'Europe/Riga',
+        }));
+    }, []);
 
     const handleCancel = useCallback(() => {
         // Revert theme to original if it was changed
@@ -240,6 +288,76 @@ export function SettingsModal({ isOpen, onClose }) {
                                 </div>
                             </div>
 
+                            {/* Timezone */}
+                            <div className="form-control">
+                                <label className="label">
+                                    <span className="label-text font-medium">{t('app.timezone')}</span>
+                                    <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
+                                </label>
+                                <p className="text-xs text-base-content/60 mb-2">{t('app.timezoneDesc')}</p>
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        className="select select-bordered select-sm w-48"
+                                        value={uiValues.timezone}
+                                        onChange={(e) => handleUiChange('timezone', e.target.value)}
+                                    >
+                                        <option value="Europe/Riga">Europe/Riga</option>
+                                        {(uiValues.customTimezones || []).map((tz) => (
+                                            <option key={tz} value={tz}>{tz}</option>
+                                        ))}
+                                        {uiValues.timezone !== 'Europe/Riga' &&
+                                            !(uiValues.customTimezones || []).includes(uiValues.timezone) && (
+                                            <option value={uiValues.timezone}>{uiValues.timezone}</option>
+                                        )}
+                                    </select>
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        title={t('app.addCustomTimezone')}
+                                        onClick={() => {
+                                            setTzInputVisible((v) => !v);
+                                            setTzInputError(false);
+                                        }}
+                                    >+</button>
+                                    <button
+                                        className={`btn btn-ghost btn-sm text-error ${uiValues.timezone !== 'Europe/Riga' ? '' : 'invisible'}`}
+                                        title={t('app.removeCurrentTimezone')}
+                                        onClick={handleTimezoneRemove}
+                                    >×</button>
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => handleResetUi('timezone')}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                {tzInputVisible && (
+                                    <input
+                                        type="text"
+                                        placeholder={t('app.timezonePlaceholder')}
+                                        className={`input input-bordered input-sm mt-2 w-60 ${tzInputError ? 'input-error' : ''}`}
+                                        value={tzInputValue}
+                                        onChange={(e) => {
+                                            setTzInputValue(e.target.value);
+                                            if (tzInputError) setTzInputError(false);
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleTimezoneAdd();
+                                            } else if (e.key === 'Escape') {
+                                                setTzInputVisible(false);
+                                                setTzInputValue('');
+                                                setTzInputError(false);
+                                            }
+                                        }}
+                                        onBlur={handleTimezoneAdd}
+                                        autoFocus
+                                    />
+                                )}
+                            </div>
+
                             {/* Check Frequency */}
                             <div className="form-control">
                                 <label className="label">
@@ -248,18 +366,37 @@ export function SettingsModal({ isOpen, onClose }) {
                                 </label>
                                 <p className="text-xs text-base-content/60 mb-2">{t('app.checkFrequencyDesc')}</p>
                                 <div className="flex items-center gap-2">
+                                    <span className="text-sm">{t('app.checkFrequencyMin')}</span>
                                     <input
                                         type="number"
-                                        className="input input-bordered input-sm w-24"
+                                        className="input input-bordered input-sm w-20"
                                         min="1"
                                         max="60"
-                                        value={uiValues.checkFrequency}
-                                        onChange={(e) => handleUiChange('checkFrequency', parseInt(e.target.value, 10) || 5)}
+                                        value={uiValues.checkFrequencyMin}
+                                        onChange={(e) => handleUiChange('checkFrequencyMin', parseInt(e.target.value, 10) || 1)}
+                                    />
+                                    <span className="text-sm">{t('app.checkFrequencyMax')}</span>
+                                    <input
+                                        type="number"
+                                        className="input input-bordered input-sm w-20"
+                                        min="1"
+                                        max="60"
+                                        value={uiValues.checkFrequencyMax}
+                                        onChange={(e) => handleUiChange('checkFrequencyMax', parseInt(e.target.value, 10) || 1)}
+                                        onBlur={(e) => {
+                                            const v = parseInt(e.target.value, 10) || 1;
+                                            if (v < uiValues.checkFrequencyMin) {
+                                                handleUiChange('checkFrequencyMax', uiValues.checkFrequencyMin);
+                                            }
+                                        }}
                                     />
                                     <span className="text-sm">{t('app.minutes')}</span>
                                     <button
                                         className="btn btn-ghost btn-sm"
-                                        onClick={() => handleResetUi('checkFrequency')}
+                                        onClick={() => {
+                                            handleResetUi('checkFrequencyMin');
+                                            handleResetUi('checkFrequencyMax');
+                                        }}
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />

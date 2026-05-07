@@ -28,6 +28,7 @@ logger.withCategory('api').debug('Logger imported', null);
 // Import node-cron for scheduling
 const cron = require('node-cron');
 logger.withCategory('api').debug('cron imported', null);
+const {getRandomCheckFrequencyMs} = require('../scheduling/randomDelay');
 const readline = require('readline');
 logger.withCategory('api').debug('readline imported', null);
 
@@ -124,7 +125,7 @@ Examples:
 Note: You must login first before you can vote.
       The 'start' command will run continuously until stopped.
       Voting interval adjusts dynamically based on challenge states.
-      Use 'get-setting checkFrequency' to view normal frequency, 'set-setting checkFrequency 5' to change.
+      Use 'get-setting checkFrequencyMin'/'checkFrequencyMax' to view, 'set-setting checkFrequencyMin 2' / 'set-setting checkFrequencyMax 5' to set the random range.
       Current mode: ${isMockMode ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}
     `);
 };
@@ -253,24 +254,31 @@ const startContinuousVoting = async () => {
     let thresholdScheduler = null; // For scheduling threshold cron changes
     let currentScheduledChallenge = null; // Track currently scheduled challenge to prevent duplicates
     let lastSettingsHash = null; // Track settings changes
-    let currentCronJob = null; // Track current cron job
+    let currentCronJob = null; // Threshold-mode cron job (last-minute cadence). null while normal mode is active.
+    let normalScheduler = null; // Normal-mode setTimeout handle. null once we switch into threshold mode.
 
     // Function to handle graceful shutdown
     const handleShutdown = () => {
         logger.withCategory('voting').info('🛑 Shutting down continuous voting...');
         isRunning = false;
-        
+
         // Clear threshold scheduler
         if (thresholdScheduler) {
             clearTimeout(thresholdScheduler);
             thresholdScheduler = null;
         }
-        
+
+        // Clear normal-mode setTimeout
+        if (normalScheduler) {
+            clearTimeout(normalScheduler);
+            normalScheduler = null;
+        }
+
         // Stop cron job
         if (currentCronJob) {
             currentCronJob.stop();
         }
-        
+
         process.exit(0);
     };
 
@@ -354,8 +362,12 @@ const startContinuousVoting = async () => {
         thresholdScheduler = setTimeout(async () => {
             if (isRunning) {
                 logger.withCategory('voting').info(`⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`);
-                
-                // Stop current cron job
+
+                // Stop normal-mode setTimeout chain (one-way transition into threshold cron)
+                if (normalScheduler) {
+                    clearTimeout(normalScheduler);
+                    normalScheduler = null;
+                }
                 if (currentCronJob) {
                     currentCronJob.stop();
                 }
@@ -463,31 +475,37 @@ const startContinuousVoting = async () => {
     logger.withCategory('voting').info('🚀 Running initial voting cycle...');
     await runVotingCycle(++cycleCount);
 
-    // Set up initial cron job with normal frequency
-    const normalCronExpression = settings.getSetting('cliCronExpression') || getDefaultSettings().cliCronExpression;
-    
-    currentCronJob = cron.schedule(normalCronExpression, async () => {
+    // Normal mode uses a recursive setTimeout chain so each cycle re-rolls a random delay
+    // in [checkFrequencyMin, checkFrequencyMax]. Re-loading settings each tick lets a live
+    // `set-setting checkFrequencyMax 25` apply to the next cycle without restart.
+    const scheduleNextNormalCycle = () => {
         if (!isRunning) {
-            currentCronJob.stop();
+            normalScheduler = null;
             return;
         }
+        const fresh = settings.loadSettings();
+        const delayMs = getRandomCheckFrequencyMs(fresh);
+        logger.withCategory('voting').info(`Next normal cycle in ${(delayMs / 60_000).toFixed(2)} min (range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`);
 
-        try {
-            await runVotingCycle(++cycleCount);
-            
-            // Update threshold scheduling after each voting cycle
-            await updateThresholdScheduling();
-        } catch (error) {
-            logger.withCategory('voting').error('Error in scheduled voting cycle');
-            logger.withCategory('voting').debug('Full normal cron error details:', error);
-        }
-    }, {
-        scheduled: false,
-    });
+        normalScheduler = setTimeout(async () => {
+            if (!isRunning) {
+                normalScheduler = null;
+                return;
+            }
+            try {
+                await runVotingCycle(++cycleCount);
+                await updateThresholdScheduling();
+            } catch (error) {
+                logger.withCategory('voting').error('Error in scheduled voting cycle');
+                logger.withCategory('voting').debug('Full normal cycle error details:', error);
+            } finally {
+                scheduleNextNormalCycle();
+            }
+        }, delayMs);
+    };
 
-    // Start the cron job
-    currentCronJob.start();
-    logger.withCategory('voting').success(`Continuous voting started with cron expression: ${normalCronExpression}`);
+    scheduleNextNormalCycle();
+    logger.withCategory('voting').success(`Continuous voting started with check frequency range ${settings.getSetting('checkFrequencyMin')}-${settings.getSetting('checkFrequencyMax')} min`);
     logger.withCategory('ui').info('Press Ctrl+C to stop');
 
     // Set up proactive threshold scheduling
@@ -519,9 +537,13 @@ const showStatus = () => {
     logger.withCategory('settings').info(`  Language: ${userSettings.language}`);
     logger.withCategory('settings').info(`  Timezone: ${userSettings.timezone}`);
     logger.withCategory('settings').info(`  API Timeout: ${userSettings.apiTimeout}s`);
-    logger.withCategory('settings').info(`  Check Frequency: ${userSettings.checkFrequency}min`);
+    {
+        const min = userSettings.checkFrequencyMin;
+        const max = userSettings.checkFrequencyMax;
+        const label = min === max ? `${min}min` : `${min}–${max}min (random per cycle)`;
+        logger.withCategory('settings').info(`  Check Frequency: ${label}`);
+    }
     logger.withCategory('settings').info(`  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`);
-    logger.withCategory('settings').info(`  CLI Cron Expression: ${userSettings.cliCronExpression}`);
     
     // Show challenge settings if any exist
     if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {
@@ -698,9 +720,10 @@ Available Commands:
   help-settings         - Show this help message
 
 Common Settings:
-  cliCronExpression     - Cron expression for continuous voting (default: "*/3 * * * *")
   apiTimeout           - API request timeout in seconds (default: 30)
-  checkFrequency       - Check frequency in minutes (default: 3)
+  checkFrequencyMin    - Minimum minutes between voting cycles (default: 3)
+  checkFrequencyMax    - Maximum minutes between voting cycles (default: 3). Each cycle picks
+                         a random delay in [min, max]; set min === max for a fixed cadence.
   mock                 - Use mock API for testing (default: false)
   theme                - UI theme: "light" or "dark" (default: "light")
   language             - UI language: "en" or "lv" (default: "en")
@@ -714,11 +737,12 @@ Value Types:
   Object:   {"key": "value"}
 
 Examples:
-  set-setting cliCronExpression "*/5 * * * *"
+  set-setting checkFrequencyMin 2
+  set-setting checkFrequencyMax 5
   set-setting apiTimeout 60
   set-setting mock true
-  get-setting cliCronExpression
-  reset-setting cliCronExpression
+  get-setting checkFrequencyMin
+  reset-setting checkFrequencyMax
 
 💡 Tip: Use "list-settings" to see all available settings and their current values
 `);

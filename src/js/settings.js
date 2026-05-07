@@ -113,8 +113,8 @@ const getDefaultSettings = () => {
         language: 'en', // Default language
         // Timing settings (stored in user-friendly units)
         apiTimeout: 30, // API request timeout in seconds (default: 30 seconds)
-        checkFrequency: 3, // Check frequency in minutes (default: 3 minutes)
-        cliCronExpression: '*/3 * * * *', // CLI cron expression (default: every 3 minutes)
+        checkFrequencyMin: 3, // Lower bound (minutes). Equal to max → fixed-cadence behavior.
+        checkFrequencyMax: 3, // Upper bound (minutes). Each cycle picks a random delay in [min, max].
         // Window position and size settings
         windowBounds: {
             login: {x: undefined, y: undefined, width: 800, height: 960},
@@ -244,12 +244,30 @@ const loadSettings = () => {
                 logger.withCategory('settings').info('Migrated votingFrequency to voteFrequency', null);
             }
             
-            // Migrate voteFrequency to checkFrequency
+            // Migrate voteFrequency to checkFrequency (legacy → intermediate)
             if (mergedSettings.voteFrequency !== undefined && mergedSettings.checkFrequency === undefined) {
                 mergedSettings.checkFrequency = mergedSettings.voteFrequency;
                 delete mergedSettings.voteFrequency;
                 migrationChanges = true;
                 logger.withCategory('settings').info('Migrated voteFrequency to checkFrequency', null);
+            }
+
+            // Migrate checkFrequency to checkFrequencyMin/Max (single value → range)
+            if (mergedSettings.checkFrequency !== undefined &&
+                mergedSettings.checkFrequencyMin === undefined &&
+                mergedSettings.checkFrequencyMax === undefined) {
+                mergedSettings.checkFrequencyMin = mergedSettings.checkFrequency;
+                mergedSettings.checkFrequencyMax = mergedSettings.checkFrequency;
+                delete mergedSettings.checkFrequency;
+                migrationChanges = true;
+                logger.withCategory('settings').info('Migrated checkFrequency to checkFrequencyMin/Max', null);
+            }
+
+            // Drop the orphaned cliCronExpression — the new CLI scheduler uses checkFrequencyMin/Max directly.
+            if (mergedSettings.cliCronExpression !== undefined) {
+                delete mergedSettings.cliCronExpression;
+                migrationChanges = true;
+                logger.withCategory('settings').info('Removed obsolete cliCronExpression', null);
             }
 
             // If migration made changes, save the updated settings

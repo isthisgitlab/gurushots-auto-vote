@@ -1,4 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
+import { getRandomCheckFrequencyMs } from '../../scheduling/randomDelay';
 
 // Action types
 const ACTIONS = {
@@ -258,7 +259,6 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         const lastMinuteCheckFrequency = await window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
         const useLastThreshold = lastMinuteCheckFrequency > 0;
 
-        let votingIntervalMs;
         let useLastThresholdInterval = false;
 
         if (useLastThreshold) {
@@ -283,24 +283,44 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
             }
         }
 
-        if (useLastThresholdInterval) {
-            votingIntervalMs = lastMinuteCheckFrequency * 60000;
-        } else {
-            votingIntervalMs = settings.checkFrequency * 60000;
-        }
-
         if (autovoteIntervalRef.current) {
             clearInterval(autovoteIntervalRef.current);
+            autovoteIntervalRef.current = null;
         }
 
-        autovoteIntervalRef.current = setInterval(async () => {
-            if (runningRef.current) {
-                await runVotingCycle();
-            } else {
-                clearInterval(autovoteIntervalRef.current);
-                autovoteIntervalRef.current = null;
-            }
-        }, votingIntervalMs);
+        if (useLastThresholdInterval) {
+            // Last-minute mode keeps a fixed cadence — deadline timing matters more than randomness.
+            const votingIntervalMs = lastMinuteCheckFrequency * 60000;
+            autovoteIntervalRef.current = setInterval(async () => {
+                if (runningRef.current) {
+                    await runVotingCycle();
+                } else {
+                    clearInterval(autovoteIntervalRef.current);
+                    autovoteIntervalRef.current = null;
+                }
+            }, votingIntervalMs);
+        } else {
+            // Normal mode re-rolls a random delay in [min, max] after every cycle, so the voting
+            // pattern looks less like a metronome to anti-bot heuristics. The threshold path
+            // (updateThresholdScheduling) may swap the ref out for a fixed-cadence setInterval
+            // while we're mid-await — the captured timeoutId guard below stops us from clobbering it.
+            const scheduleNext = (currentSettings) => {
+                if (!runningRef.current) {
+                    autovoteIntervalRef.current = null;
+                    return;
+                }
+                const delayMs = getRandomCheckFrequencyMs(currentSettings);
+                const timeoutId = setTimeout(async () => {
+                    if (!runningRef.current) return;
+                    await runVotingCycle();
+                    if (autovoteIntervalRef.current !== timeoutId) return; // threshold path took over
+                    const fresh = await window.api.getSettings();
+                    scheduleNext(fresh);
+                }, delayMs);
+                autovoteIntervalRef.current = timeoutId;
+            };
+            scheduleNext(settings);
+        }
 
         // Setup threshold scheduling
         await updateThresholdScheduling();

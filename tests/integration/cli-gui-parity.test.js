@@ -109,7 +109,8 @@ describe('CLI-GUI Parity Tests', () => {
             expect(allSettings).toHaveProperty('customTimezones');
             expect(allSettings).toHaveProperty('language');
             expect(allSettings).toHaveProperty('apiTimeout');
-            expect(allSettings).toHaveProperty('checkFrequency');
+            expect(allSettings).toHaveProperty('checkFrequencyMin');
+            expect(allSettings).toHaveProperty('checkFrequencyMax');
             expect(allSettings).toHaveProperty('windowBounds');
             expect(allSettings).toHaveProperty('challengeSettings');
             expect(allSettings).toHaveProperty('apiHeaders');
