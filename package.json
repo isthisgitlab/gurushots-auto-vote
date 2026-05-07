@@ -52,12 +52,7 @@
     "test:coverage": "jest --coverage",
     "test:watch": "jest --watch",
     "update:readme": "node scripts/update-readme-version.js",
-    "verify:challenges": "node scripts/verify-challenges.js",
-    "verify:login": "node scripts/verify-login.js",
     "verify:readme": "node scripts/verify-readme-version.js",
-    "verify:settings": "node scripts/verify-settings.js",
-    "verify:settings:dev": "NODE_ENV=development node scripts/verify-settings.js",
-    "verify:settings:prod": "NODE_ENV=production node scripts/verify-settings.js",
     "watch:app": "nodemon --no-restart-on exit",
     "watch:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --watch",
     "watch:react": "node scripts/build-react.js --watch"
