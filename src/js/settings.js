@@ -202,6 +202,27 @@ const validateSetting = (key, value, allSettings = null, challengeId = null) => 
  * between CLI and GUI, especially for edit operations.
  */
 
+// Module-local guards so cleanupObsoleteSettings (which itself calls
+// loadSettings) doesn't recurse and doesn't re-run on every read.
+let migrationInProgress = false;
+let cleanupCompleted = false;
+
+// Detects whether autovote is currently running. The flag is set by
+// the autovote orchestration code, possibly on different global
+// surfaces depending on whether we're in Electron main, renderer, or
+// the CLI.
+const isAutovoteRunning = () => {
+    if (typeof global !== 'undefined' && global.autovoteRunning) return true;
+    if (typeof globalThis !== 'undefined' && globalThis.autovoteRunning) return true;
+    try {
+        // eslint-disable-next-line no-undef
+        if (typeof window !== 'undefined' && window.autovoteRunning) return true;
+    } catch {
+        // window not available outside the renderer; ignore
+    }
+    return false;
+};
+
 // Load settings from the userData directory
 const loadSettings = () => {
 
@@ -278,39 +299,22 @@ const loadSettings = () => {
                 fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2), 'utf8');
             }
 
-            // Run migration for boost configuration if needed - but avoid recursion
-            if (!global.migrationInProgress) {
-                global.migrationInProgress = true;
+            // Run obsolete-settings cleanup once per process. The
+            // re-entry guard exists because cleanupObsoleteSettings
+            // calls back into loadSettings.
+            if (!migrationInProgress) {
+                migrationInProgress = true;
                 try {
-                    // Only run cleanup once per app session, not on every settings load
-                    // Also skip cleanup if autovote is running to avoid interfering with active operations
-                    // Check if autovote is running across different environments
-                    let isAutovoteRunning = false;
-                    if (typeof global !== 'undefined' && global.autovoteRunning) {
-                        isAutovoteRunning = true;
-                    }
-                    if (typeof globalThis !== 'undefined' && globalThis.autovoteRunning) {
-                        isAutovoteRunning = true;
-                    }
-                    try {
-                        // eslint-disable-next-line no-undef
-                        if (typeof window !== 'undefined' && window.autovoteRunning) {
-                            isAutovoteRunning = true;
-                        }
-                    } catch {
-                        // window not available (Node.js context)
-                    }
-                    
-                    if (!global.cleanupCompleted && !isAutovoteRunning) {
+                    if (!cleanupCompleted && !isAutovoteRunning()) {
                         cleanupObsoleteSettings();
-                        global.cleanupCompleted = true;
-                    } else if (isAutovoteRunning) {
+                        cleanupCompleted = true;
+                    } else if (isAutovoteRunning()) {
                         logger.withCategory('settings').debug('⏸️ Skipping obsolete settings cleanup - autovote is running');
                     }
                 } catch (migrationError) {
                     logger.withCategory('settings').warning('Cleanup failed:', migrationError);
                 } finally {
-                    global.migrationInProgress = false;
+                    migrationInProgress = false;
                 }
             }
 
