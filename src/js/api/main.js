@@ -9,10 +9,13 @@ const {getActiveChallenges} = require('./challenges');
 const {getVoteImages, submitVotes} = require('./voting');
 const {applyBoost, applyBoostToEntry} = require('./boost');
 const {getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS} = require('./turbo');
+const {getEligiblePhotos, submitToChallenge} = require('./submissions');
 const {cleanupStaleMetadata} = require('../metadata');
 const {sleep, getRandomDelay} = require('./utils');
 const logger = require('../logger');
+const settings = require('../settings');
 const votingLogic = require('../services/VotingLogic');
+const autoFill = require('../services/autoFill');
 const cancellation = require('../voting/cancellation');
 
 /**
@@ -221,6 +224,21 @@ const fetchChallengesAndVote = async (token) => {
                 } catch (error) {
                     logger.withCategory('turbo').endOperation(`turbo-apply-${challenge.id}`, null, error.message || error);
                 }
+            }
+
+            // Auto-fill missing entries near deadline (one slot per cycle, staggered)
+            const fillResult = await autoFill.maybeAutoFillChallenge(challenge, token, now, {
+                settings,
+                logger,
+                getEligiblePhotos,
+                submitToChallenge,
+            });
+            if (fillResult === 'submitted') {
+                logger.challengeInfo(
+                    challenge.id,
+                    challenge.title,
+                    'autoFill: entry submitted; boost/turbo will be evaluated on next cycle',
+                );
             }
 
             // Use the centralized voting logic service

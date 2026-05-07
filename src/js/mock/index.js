@@ -296,6 +296,62 @@ const mockApiClient = {
     },
 
     /**
+     * Simulate fetching the user's challenge-eligible photo library.
+     * Mirrors /rest/get_photos_private; returns an array of items each
+     * with the fields the picker uses (id, labels, votes, upload_date,
+     * permission). Eight photos with varied labels so the tag-match
+     * picker has something to differentiate.
+     */
+    getEligiblePhotos: async (challengeId, token) => {
+        logger.withCategory('api').api('Mock getEligiblePhotos', null);
+        logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
+        if (!token) {
+            logger.withCategory('authentication').error('No token provided, returning empty', null);
+            return [];
+        }
+        const now = Math.floor(Date.now() / 1000);
+        const items = [
+            {id: 'photo_pink_flower_001', labels: ['Pink', 'Flower', 'Petal', 'Plant'], votes: 312, upload_date: now - 86400 * 2, permission: {allowed: true, message: null}},
+            {id: 'photo_nature_landscape_002', labels: ['Nature', 'Landscape', 'Tree', 'Sky'], votes: 178, upload_date: now - 86400 * 5, permission: {allowed: true, message: null}},
+            {id: 'photo_urban_003', labels: ['Architecture', 'Building', 'Urban'], votes: 89, upload_date: now - 86400 * 7, permission: {allowed: true, message: null}},
+            {id: 'photo_recent_004', labels: ['Portrait', 'Person'], votes: 24, upload_date: now - 3600, permission: {allowed: true, message: null}},
+            {id: 'photo_pink_petal_005', labels: ['Pink', 'Petal', 'Macro'], votes: 401, upload_date: now - 86400 * 4, permission: {allowed: true, message: null}},
+            {id: 'photo_animal_006', labels: ['Animal', 'Wildlife', 'Bird'], votes: 156, upload_date: now - 86400 * 10, permission: {allowed: true, message: null}},
+            {id: 'photo_blocked_007', labels: ['Pink', 'Flower'], votes: 999, upload_date: now - 86400 * 1, permission: {allowed: false, message: 'Already used in another challenge'}},
+            {id: 'photo_old_008', labels: ['Misc'], votes: 12, upload_date: now - 86400 * 30, permission: {allowed: true, message: null}},
+        ];
+        await simulateApiResponse({}, 400);
+        return items;
+    },
+
+    /**
+     * Simulate submitting one or more photos to a challenge. Mirrors
+     * /rest/submit_to_challenge; returns { ok, raw }.
+     */
+    submitToChallenge: async (challengeId, imageIds, token) => {
+        logger.withCategory('api').api('Mock submitToChallenge', null);
+        logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}, photos: ${Array.isArray(imageIds) ? imageIds.join(',') : 'invalid'}`, null);
+        if (!token) {
+            logger.withCategory('authentication').error('No token provided, returning error', null);
+            return {ok: false, raw: null};
+        }
+        if (!Array.isArray(imageIds) || imageIds.length === 0) {
+            return {ok: false, raw: {success: false, error: 'No image_ids provided'}};
+        }
+        await simulateApiResponse({}, 600);
+        return {
+            ok: true,
+            raw: {
+                success: true,
+                challenge_id: Number(challengeId),
+                member_challenge_count: 5,
+                join: false,
+                show_join_message: false,
+            },
+        };
+    },
+
+    /**
      * Simulate the main voting process (fetchChallengesAndVote)
      */
     fetchChallengesAndVote: async (token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {

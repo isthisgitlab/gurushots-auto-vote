@@ -13,6 +13,7 @@ const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
 const votingLogic = require('../services/VotingLogic');
+const autoFill = require('../services/autoFill');
 const {runTurboMiniGame} = require('../api/main');
 
 // In-process guard that prevents two simultaneous mini-game runs on
@@ -214,6 +215,56 @@ const register = (ipcMain) => {
         } catch (error) {
             logger.withCategory('turbo').error('Error applying turbo to entry:', error);
             return {success: false, error: error.message || 'Failed to apply turbo'};
+        }
+    });
+
+    // Manual fill of empty challenge entries on demand. mode = 'one' fills
+    // a single slot with the best-ranked eligible photo; mode = 'all' fills
+    // every empty slot in one batch. Bypasses both the autoFill toggle and
+    // the spacing math — manual click is explicit user intent.
+    ipcMain.handle('fill-challenge-now', async (event, challengeId, mode) => {
+        const safeChallengeId = sanitizeForLog(challengeId);
+        const safeMode = mode === 'all' ? 'all' : 'one';
+        try {
+            logger.withCategory('autoFill').info(
+                `📝 Manual fill request: Challenge=${safeChallengeId}, Mode=${safeMode}`,
+                null,
+            );
+            const guard = auth.requireAuthToken('manual fill');
+            if (!guard.ok) return guard.response;
+
+            const strategy = apiFactory.getApiStrategy();
+            const challengesResponse = await strategy.getActiveChallenges(guard.token);
+            const liveChallenge = challengesResponse?.challenges?.find(
+                (c) => String(c.id) === String(challengeId),
+            );
+            if (!liveChallenge) {
+                return {success: false, error: 'Challenge no longer active'};
+            }
+
+            const result = await autoFill.fillChallengeNow(
+                liveChallenge,
+                guard.token,
+                safeMode,
+                {
+                    logger,
+                    getEligiblePhotos: strategy.getEligiblePhotos,
+                    submitToChallenge: strategy.submitToChallenge,
+                },
+            );
+
+            return {
+                success: result.success === true,
+                submitted: result.submitted,
+                skipped: result.skipped,
+                error: result.error,
+                message: result.success
+                    ? `Submitted ${result.submitted} entr${result.submitted === 1 ? 'y' : 'ies'}`
+                    : undefined,
+            };
+        } catch (error) {
+            logger.withCategory('autoFill').error('Error handling fill-challenge-now request:', error);
+            return {success: false, error: error.message || 'Failed to fill challenge'};
         }
     });
 

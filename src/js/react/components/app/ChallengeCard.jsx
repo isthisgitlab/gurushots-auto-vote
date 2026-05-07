@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus } from '@/utils/formatters';
 import { useTurbo } from '@/api/useTurbo';
+import { useFillChallenge } from '@/api/useFillChallenge';
 import { VoteButton } from './VoteButton';
 import { EntryBadge } from './EntryBadge';
 
 const TURBO_ERROR_DISPLAY_MS = 5000;
+const FILL_ERROR_DISPLAY_MS = 5000;
 
 /**
  * Challenge card component displaying all challenge details
@@ -21,7 +23,9 @@ export function ChallengeCard({
     const { t } = useTranslation();
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
     const [onlyBoost, setOnlyBoost] = useState(false);
+    const [autoFillEnabled, setAutoFillEnabled] = useState(false);
     const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
+    const { fillNow, loading: filling, error: fillError, clearError: clearFillError } = useFillChallenge();
 
     // Tick once a second — only meaningful when this challenge is in TIMER
     // state and we want canPlayAutoTurbo to flip to true the moment the
@@ -53,10 +57,24 @@ export function ChallengeCard({
         return () => clearTimeout(id);
     }, [turboError, clearTurboError]);
 
+    useEffect(() => {
+        if (!fillError) return undefined;
+        const id = setTimeout(clearFillError, FILL_ERROR_DISPLAY_MS);
+        return () => clearTimeout(id);
+    }, [fillError, clearFillError]);
+
     const handlePlayAutoTurbo = async () => {
         const result = await playAutoTurbo(challenge.id, challenge.title);
         if (result?.success && onVoteComplete) onVoteComplete();
     };
+
+    const handleFill = async (mode) => {
+        const result = await fillNow(challenge.id, mode);
+        if (result?.success && onVoteComplete) onVoteComplete();
+    };
+
+    const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
+    const canFill = challengeStillOpen && slotsRemaining > 0;
 
     // Check for custom settings
     useEffect(() => {
@@ -74,6 +92,9 @@ export function ChallengeCard({
 
                 const boostOnly = await window.api.getEffectiveSetting('onlyBoost', challenge.id.toString());
                 setOnlyBoost(boostOnly);
+
+                const fillOn = await window.api.getEffectiveSetting('autoFill', challenge.id.toString());
+                setAutoFillEnabled(fillOn === true);
             } catch {
                 // Ignore errors
             }
@@ -147,6 +168,11 @@ export function ChallengeCard({
                             {hasCustomSettings && (
                                 <span className="badge badge-xs badge-accent" title="Custom settings configured">
                                     ⚙️
+                                </span>
+                            )}
+                            {autoFillEnabled && (
+                                <span className="badge badge-xs badge-accent" title={t('app.autoFill')}>
+                                    📥 {t('app.autoFillBadge')}
                                 </span>
                             )}
                         </div>
@@ -272,6 +298,36 @@ export function ChallengeCard({
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.yourEntries')}</div>
                         <div>{entries.length}/{challenge.max_photo_submits}</div>
+                        {canFill && (
+                            <div className="flex gap-1 mt-1 justify-center">
+                                <button
+                                    className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
+                                    onClick={() => handleFill('one')}
+                                    disabled={filling || autovoteRunning}
+                                    title={fillError || t('app.addOnePhoto')}
+                                >
+                                    {filling ? (
+                                        <span className="loading loading-spinner loading-xs" />
+                                    ) : (
+                                        '+1'
+                                    )}
+                                </button>
+                                {slotsRemaining > 1 && (
+                                    <button
+                                        className="btn btn-xs btn-warning"
+                                        onClick={() => handleFill('all')}
+                                        disabled={filling || autovoteRunning}
+                                        title={t('app.fillAllPhotos')}
+                                    >
+                                        {filling ? (
+                                            <span className="loading loading-spinner loading-xs" />
+                                        ) : (
+                                            `+${slotsRemaining}`
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 

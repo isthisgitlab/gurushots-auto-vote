@@ -96,6 +96,9 @@ contextBridge.exposeInMainWorld(
         applyTurbo: (challengeId, imageId) => ipcRenderer.invoke('apply-turbo-to-entry', challengeId, imageId),
         playAutoTurbo: (challengeId, challengeTitle) => ipcRenderer.invoke('play-auto-turbo', challengeId, challengeTitle),
 
+        // Auto-fill methods
+        fillChallengeNow: (challengeId, mode) => ipcRenderer.invoke('fill-challenge-now', challengeId, mode),
+
         // Window methods
         reloadWindow: () => ipcRenderer.invoke('reload-window'),
 

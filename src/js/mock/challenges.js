@@ -371,16 +371,18 @@ const generateMockChallenges = () => {
                 welcome_message: 'Capture nature in its purest form',
                 url: 'wildlife-photography-2024',
                 start_time: now - 21600, // Started 6 hours ago
-                // For key-unlocked mock: set end within next 9 minutes to trigger auto-apply path
+                // For key-unlocked mock + auto-fill demo: ending soon so the
+                // auto-fill spacing trigger fires (slotsRemaining=3 with the
+                // default 10m interval = up to T-30m window).
                 close_time: now + 9 * 60, // Ends in 9 minutes
                 status: 'active',
                 entries: 567,
                 players: 423,
                 votes: 89234,
-                max_photo_submits: 2,
+                max_photo_submits: 4,
                 badge: '',
                 type: 'default',
-                tags: ['2 photos', 'No comm'],
+                tags: ['4 photos', 'No comm'],
                 vote_minimum_players: 200,
                 prizes_worth: 120,
                 ranking_levels: {

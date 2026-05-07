@@ -1074,6 +1074,24 @@ const SETTINGS_SCHEMA = {
         label: 'app.turboApplyWhenBoostActive',
         description: 'app.turboApplyWhenBoostActiveDesc',
     },
+    autoFill: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        label: 'app.autoFill',
+        description: 'app.autoFillDesc',
+    },
+    autoFillIntervalMinutes: {
+        type: 'number',
+        default: 10,
+        perChallenge: true,
+        validation: (value) => Number.isInteger(value) && value >= 1 && value <= 60,
+        validationOrder: 1,
+        label: 'app.autoFillIntervalMinutes',
+        description: 'app.autoFillIntervalMinutesDesc',
+    },
 };
 
 /**
