@@ -133,3 +133,6 @@ dist
 .claude/backups/
 .claude/logs/
 
+# Playwright CLI capture outputs (may contain auth tokens)
+.playwright-cli/
+
