@@ -77,32 +77,32 @@
     "npm": ">=8.0.0"
   },
   "dependencies": {
-    "axios": "^1.15.0",
+    "axios": "^1.16.0",
     "electron-updater": "^6.8.3",
     "node-cron": "^4.2.1",
     "prompt-sync": "^4.2.0",
-    "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@jest/globals": "^30.3.0",
-    "@tailwindcss/cli": "^4.2.2",
+    "@tailwindcss/cli": "^4.2.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "daisyui": "^5.5.19",
-    "electron": "^41.2.0",
+    "electron": "^42.0.0",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0",
     "esbuild-jest": "^0.5.0",
-    "eslint": "^10.2.0",
-    "globals": "^17.5.0",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
     "jest": "^30.3.0",
     "jest-environment-node": "^30.3.0",
     "nodemon": "^3.1.14",
-    "tailwindcss": "^4.2.2"
+    "tailwindcss": "^4.2.4"
   },
   "build": {
     "appId": "com.gurushots.autovote",
