@@ -69,6 +69,7 @@ function AppContent() {
 
     const timezone = settings?.timezone || 'Europe/Riga';
     const isMock = settings?.mock || false;
+    const isLoggedIn = !!settings?.token;
 
     return (
         <div className="min-h-screen bg-base-200">
@@ -94,6 +95,7 @@ function AppContent() {
                 <ChallengesSection
                     timezone={timezone}
                     autovoteRunning={autovote.running}
+                    isLoggedIn={isLoggedIn}
                     onChallengeSettingsClick={handleChallengeSettingsClick}
                 />
 

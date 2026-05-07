@@ -78,6 +78,8 @@ function LoginPageContent() {
         const result = await authenticate(username, password, mockMode);
 
         if (result.success) {
+            await updateSetting('token', result.token);
+
             // Save username if stay logged in is enabled
             if (stayLoggedIn) {
                 await updateSetting('lastUsername', username);

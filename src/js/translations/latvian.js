@@ -154,6 +154,7 @@
             overrideForChallenge: 'Pielāgot iestatījumus izaicinājumam',
             photo: 'bilde',
             photos: 'bildes',
+            noActiveChallenges: 'Nav aktīvu izaicinājumu',
             players: 'Spēlētāji',
             pleaseLogin: 'Lai apskatītu izaicinājumus, lūdzu, piesakieties',
             prerelease: 'Pirmizlaides versija',

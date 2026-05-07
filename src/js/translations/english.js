@@ -154,6 +154,7 @@
             overrideForChallenge: 'Override for Challenge',
             photo: 'photo',
             photos: 'photos',
+            noActiveChallenges: 'No active challenges',
             players: 'Players',
             pleaseLogin: 'Please log in to view challenges',
             prerelease: 'Pre-release',

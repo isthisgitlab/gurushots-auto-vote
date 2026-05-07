@@ -11,6 +11,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 export function ChallengesSection({
     timezone,
     autovoteRunning,
+    isLoggedIn,
     onChallengeSettingsClick,
 }) {
     const { t } = useTranslation();
@@ -54,7 +55,7 @@ export function ChallengesSection({
     if (!challenges || challenges.length === 0) {
         return (
             <div className="text-center py-4 text-base-content/60">
-                {t('app.pleaseLogin')}
+                {isLoggedIn ? t('app.noActiveChallenges') : t('app.pleaseLogin')}
             </div>
         );
     }
