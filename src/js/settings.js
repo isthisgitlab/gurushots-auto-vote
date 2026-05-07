@@ -174,95 +174,23 @@ const getDefaultSettings = () => {
 };
 
 /**
- * Settings validation system
+ * Validates a single setting value against SETTINGS_SCHEMA. Keys that
+ * are not in the schema are treated as valid because the schema is
+ * the only source of validation rules for per-challenge tunables.
  *
- * This validation system ensures data integrity by validating settings values
- * against a schema. Invalid values are automatically reset to their defaults.
- * This prevents issues caused by corrupted settings or manual edits to the settings file.
- */
-
-/**
- * Validation schema for settings
- * Each key has a function that returns true if the value is valid, false otherwise
- */
-const settingsSchema = {
-    theme: (value) => ['light', 'dark'].includes(value),
-    stayLoggedIn: (value) => typeof value === 'boolean',
-    lastUsername: (value) => typeof value === 'string',
-    mock: (value) => typeof value === 'boolean',
-    token: (value) => typeof value === 'string',
-    timezone: (value) => typeof value === 'string',
-    customTimezones: (value) => Array.isArray(value),
-    language: (value) => ['en', 'lv'].includes(value),
-    apiTimeout: (value) => typeof value === 'number' && value >= 1 && value <= 120,
-    checkFrequency: (value) => typeof value === 'number' && value >= 1 && value <= 60,
-    windowBounds: (value) => typeof value === 'object' && value !== null,
-    challengeSettings: (value) => {
-        if (typeof value !== 'object' || value === null) return false;
-        if (typeof value.globalDefaults !== 'object' || value.globalDefaults === null) return false;
-        if (typeof value.perChallenge !== 'object' || value.perChallenge === null) return false;
-
-        // Validate global defaults against schema
-        for (const [key] of Object.entries(SETTINGS_SCHEMA)) {
-            if (Object.prototype.hasOwnProperty.call(value.globalDefaults, key)) {
-                // Use the enhanced validateSetting function for consistency
-                if (!validateSetting(key, value.globalDefaults[key], value.globalDefaults)) return false;
-            }
-        }
-
-        // Validate per-challenge overrides against schema
-        for (const [, challengeOverrides] of Object.entries(value.perChallenge)) {
-            if (typeof challengeOverrides !== 'object' || challengeOverrides === null) return false;
-            for (const [key, overrideValue] of Object.entries(challengeOverrides)) {
-                if (SETTINGS_SCHEMA[key]) {
-                    // Merge global defaults with challenge overrides for context
-                    const contextSettings = {...value.globalDefaults, ...challengeOverrides};
-                    if (!validateSetting(key, overrideValue, contextSettings)) return false;
-                }
-            }
-        }
-
-        return true;
-    },
-    apiHeaders: (value) => typeof value === 'object' && value !== null,
-};
-
-/**
- * Validates a single setting against its schema
- * @param {string} key - The setting key to validate
- * @param {any} value - The value to validate
- * @param {Object} allSettings - All settings values for context validation (optional)
- * @param {string} challengeId - Challenge ID for per-challenge validation context (optional)
- * @returns {boolean} - True if valid, false otherwise
+ * @param {string} key
+ * @param {any} value
+ * @param {Object} [allSettings] - Other settings for context-aware validation.
+ * @param {string} [challengeId]
+ * @returns {boolean}
  */
 const validateSetting = (key, value, allSettings = null, challengeId = null) => {
-    // Check both settingsSchema (legacy) and SETTINGS_SCHEMA (new)
-    const legacyValidator = settingsSchema[key];
     const schemaConfig = SETTINGS_SCHEMA[key];
-    
-    // If we have neither validator, assume it's valid
-    if (!legacyValidator && !schemaConfig) return true;
-    
-    // Run legacy validator if it exists
-    if (legacyValidator && !legacyValidator(value)) {
-        return false;
+    if (!schemaConfig) return true;
+    if (schemaConfig.validation && !schemaConfig.validation(value)) return false;
+    if (schemaConfig.contextValidation && allSettings) {
+        if (!schemaConfig.contextValidation(value, allSettings, challengeId)) return false;
     }
-    
-    // Run schema validation if it exists
-    if (schemaConfig) {
-        // Basic validation
-        if (schemaConfig.validation && !schemaConfig.validation(value)) {
-            return false;
-        }
-        
-        // Context validation (requires allSettings)
-        if (schemaConfig.contextValidation && allSettings) {
-            if (!schemaConfig.contextValidation(value, allSettings, challengeId)) {
-                return false;
-            }
-        }
-    }
-    
     return true;
 };
 
