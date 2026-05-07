@@ -55,10 +55,20 @@ jest.mock('../../src/js/api/utils', () => mockUtils);
 const mockVotingLogic = {
     shouldApplyBoost: jest.fn(),
     getEffectiveBoostTime: jest.fn(),
-    evaluateVotingDecision: jest.fn()
+    evaluateVotingDecision: jest.fn(),
+    shouldPlayAutoTurbo: jest.fn(() => false),
+    shouldApplyTurbo: jest.fn(() => ({apply: false, imageId: null, reason: 'mocked'})),
 };
 
 jest.mock('../../src/js/services/VotingLogic', () => mockVotingLogic);
+
+// Mock the turbo module so its imports are not loaded
+jest.mock('../../src/js/api/turbo', () => ({
+    getChallengeTurbo: jest.fn(),
+    submitTurboSelection: jest.fn(),
+    applyTurbo: jest.fn(),
+    TURBO_SELECTION_DELAY_MS: 1200,
+}));
 
 // Mock the metadata module
 const mockMetadata = {

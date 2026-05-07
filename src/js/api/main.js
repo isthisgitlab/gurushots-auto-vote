@@ -8,10 +8,65 @@
 const {getActiveChallenges} = require('./challenges');
 const {getVoteImages, submitVotes} = require('./voting');
 const {applyBoost, applyBoostToEntry} = require('./boost');
+const {getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS} = require('./turbo');
 const {cleanupStaleMetadata} = require('../metadata');
 const {sleep, getRandomDelay} = require('./utils');
 const logger = require('../logger');
 const votingLogic = require('../services/VotingLogic');
+
+/**
+ * Plays through the Turbo mini-game for a single challenge.
+ * Iterates pair-by-pair, picks first_image, flips to second_image on a wrong
+ * pick, and stops early once the response reports state === 'WON'.
+ */
+const runTurboMiniGame = async (challenge, token) => {
+    const set = await getChallengeTurbo(challenge.id, token);
+    if (!set) {
+        logger.withCategory('turbo').warning(`No turbo battle set returned for challenge ${challenge.id}`, null);
+        return {played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false};
+    }
+
+    let played = 0;
+    let correct = 0;
+    let flipped = 0;
+    let doubleFailed = 0;
+    let won = false;
+
+    for (const battle of set.battles) {
+        if (battle.isSuccess !== null) continue;
+        if (!battle.firstImageId || !battle.secondImageId) {
+            doubleFailed++;
+            continue;
+        }
+
+        played++;
+        const first = await submitTurboSelection(challenge.id, battle.firstImageId, token);
+        if (first.ok) {
+            correct++;
+            if (first.state === 'WON') { won = true; break; }
+            await sleep(TURBO_SELECTION_DELAY_MS);
+            continue;
+        }
+
+        // First pick lost or errored — flip to the other image.
+        await sleep(TURBO_SELECTION_DELAY_MS);
+        const second = await submitTurboSelection(challenge.id, battle.secondImageId, token);
+        if (second.ok) {
+            correct++;
+            flipped++;
+            if (second.state === 'WON') { won = true; break; }
+        } else {
+            doubleFailed++;
+            const code = second.errorCode || first.errorCode;
+            if (code) {
+                logger.withCategory('turbo').warning(`Battle skipped on challenge ${challenge.id}, error_code=${code}`, null);
+            }
+        }
+        await sleep(TURBO_SELECTION_DELAY_MS);
+    }
+
+    return {played, correct, flipped, doubleFailed, won};
+};
 
 // Global cancellation flag
 let shouldCancelVoting = false;
@@ -144,6 +199,34 @@ const fetchChallengesAndVote = async (token) => {
                             `Boost not ready - ${timeDisplay} until challenge ends (needs ≤ 10m to auto-apply)`,
                         );
                     }
+                }
+            }
+
+            // Auto-earn turbo by playing the mini-game when eligible
+            if (votingLogic.shouldPlayAutoTurbo(challenge, now)) {
+                logger.withCategory('turbo').startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}`);
+                try {
+                    const result = await runTurboMiniGame(challenge, token);
+                    const summary = `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
+                    logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
+                } catch (error) {
+                    logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, null, error.message || error);
+                }
+            }
+
+            // Auto-apply a won turbo when eligible
+            const turboApply = votingLogic.shouldApplyTurbo(challenge, now);
+            if (turboApply.apply) {
+                logger.withCategory('turbo').startOperation(`turbo-apply-${challenge.id}`, `Applying turbo to entry ${turboApply.imageId} on ${challenge.title}`);
+                try {
+                    const result = await applyTurbo(challenge.id, turboApply.imageId, token);
+                    if (result.ok) {
+                        logger.withCategory('turbo').endOperation(`turbo-apply-${challenge.id}`, `Turbo applied to entry ${turboApply.imageId}`);
+                    } else {
+                        logger.withCategory('turbo').endOperation(`turbo-apply-${challenge.id}`, null, 'Apply request returned ok=false');
+                    }
+                } catch (error) {
+                    logger.withCategory('turbo').endOperation(`turbo-apply-${challenge.id}`, null, error.message || error);
                 }
             }
 

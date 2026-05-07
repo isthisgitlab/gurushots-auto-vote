@@ -474,7 +474,7 @@ const currentLogFiles = getLogFilePaths();
 // Log categories for consistent usage across the application
 const LOG_CATEGORIES = {
     SETTINGS: 'settings',
-    AUTHENTICATION: 'authentication', 
+    AUTHENTICATION: 'authentication',
     VOTING: 'voting',
     CHALLENGES: 'challenges',
     API: 'api',
@@ -482,6 +482,8 @@ const LOG_CATEGORIES = {
     TRANSLATION: 'translation',
     MIDDLEWARE: 'middleware',
     UPDATE: 'update',
+    BOOST: 'boost',
+    TURBO: 'turbo',
 };
 
 // Export logger functions

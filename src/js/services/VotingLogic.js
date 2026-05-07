@@ -318,6 +318,90 @@ const shouldApplyBoost = (challenge, now) => {
     return false;
 };
 
+/**
+ * Returns true while the boost window is currently usable (state AVAILABLE
+ * with an active timer, or AVAILABLE_KEY / AVAILABLE without timeout).
+ * Used by both shouldApplyBoost (for its own decision) and shouldApplyTurbo
+ * (to optionally skip turbo while a boost is queued for the same challenge).
+ * @param {Object} challenge
+ * @param {number} now - Unix timestamp in seconds
+ * @returns {boolean}
+ */
+const isBoostWindowOpen = (challenge, now) => {
+    const boost = challenge?.member?.boost || {};
+    const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
+    if (boost.state === 'AVAILABLE_KEY') return true;
+    if (boost.state === 'AVAILABLE') {
+        return hasTimeout ? boost.timeout > now : true;
+    }
+    return false;
+};
+
+const getEffectiveTurboTime = (challengeId) => {
+    return settings.getEffectiveSetting('turboTime', challengeId);
+};
+
+/**
+ * Decides whether to play the Turbo mini-game on a challenge.
+ * @param {Object} challenge
+ * @param {number} now - Unix timestamp in seconds
+ * @returns {boolean}
+ */
+const shouldPlayAutoTurbo = (challenge, now) => {
+    if (!challenge) return false;
+    if (challenge.close_time <= now) return false;
+
+    const challengeId = challenge.id?.toString?.() || '';
+    if (!settings.getEffectiveSetting('autoTurbo', challengeId)) return false;
+
+    const turbo = challenge.member?.turbo || {};
+    const state = turbo.state;
+    if (state === 'FREE' || state === 'IN_PROGRESS') return true;
+    if (state === 'TIMER' && typeof turbo.time_to_open === 'number' && turbo.time_to_open <= now) {
+        return true;
+    }
+    return false;
+};
+
+/**
+ * Decides whether to apply a won Turbo to one of the user's entries.
+ * @param {Object} challenge
+ * @param {number} now - Unix timestamp in seconds
+ * @returns {{apply: boolean, imageId: string|null, reason: string}}
+ */
+const shouldApplyTurbo = (challenge, now) => {
+    const noop = (reason) => ({apply: false, imageId: null, reason});
+    if (!challenge) return noop('no challenge');
+    if (challenge.close_time <= now) return noop('challenge ended');
+
+    const challengeId = challenge.id?.toString?.() || '';
+    if (!settings.getEffectiveSetting('useTurbo', challengeId)) return noop('useTurbo disabled');
+
+    const turbo = challenge.member?.turbo || {};
+    if (turbo.state !== 'WON') return noop(`turbo state ${turbo.state || 'unknown'}`);
+
+    const effectiveTurboTime = getEffectiveTurboTime(challengeId);
+    const timeUntilEnd = challenge.close_time - now;
+    if (timeUntilEnd > effectiveTurboTime) {
+        return noop(`${Math.floor(timeUntilEnd / 60)}m remaining > ${Math.floor(effectiveTurboTime / 60)}m threshold`);
+    }
+
+    const allowDuringBoost = settings.getEffectiveSetting('turboApplyWhenBoostActive', challengeId);
+    if (!allowDuringBoost && isBoostWindowOpen(challenge, now)) {
+        return noop('boost window currently open');
+    }
+
+    const entries = challenge.member?.ranking?.entries;
+    if (!Array.isArray(entries) || entries.length === 0) {
+        return noop('no entries to apply turbo to');
+    }
+    const requestedIndex = settings.getEffectiveSetting('turboImageIndex', challengeId);
+    const safeIndex = Math.max(0, Math.min(entries.length - 1, requestedIndex - 1));
+    const imageId = entries[safeIndex]?.id;
+    if (!imageId) return noop('selected entry has no id');
+    return {apply: true, imageId, reason: 'eligible'};
+};
+
 module.exports = {
     isWithinLastHour,
     isWithinLastMinuteThreshold,
@@ -328,4 +412,8 @@ module.exports = {
     evaluateManualVotingToHundred,
     getEffectiveBoostTime,
     shouldApplyBoost,
-}; 
+    isBoostWindowOpen,
+    getEffectiveTurboTime,
+    shouldPlayAutoTurbo,
+    shouldApplyTurbo,
+};

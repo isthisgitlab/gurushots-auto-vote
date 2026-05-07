@@ -1144,6 +1144,51 @@ const SETTINGS_SCHEMA = {
         label: 'app.useLastHourExposure',
         description: 'app.useLastHourExposureDesc',
     },
+    autoTurbo: {
+        type: 'boolean',
+        default: true,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        label: 'app.autoTurbo',
+        description: 'app.autoTurboDesc',
+    },
+    useTurbo: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        label: 'app.useTurbo',
+        description: 'app.useTurboDesc',
+    },
+    turboTime: {
+        type: 'time',
+        default: 7200, // 2 hours in seconds
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 0,
+        validationOrder: 1,
+        label: 'app.turboTime',
+        description: 'app.turboTimeDesc',
+    },
+    turboImageIndex: {
+        type: 'number',
+        default: 1,
+        perChallenge: true,
+        validation: (value) => Number.isInteger(value) && value >= 1,
+        validationOrder: 1,
+        label: 'app.turboImageIndex',
+        description: 'app.turboImageIndexDesc',
+    },
+    turboApplyWhenBoostActive: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        label: 'app.turboApplyWhenBoostActive',
+        description: 'app.turboApplyWhenBoostActiveDesc',
+    },
 };
 
 /**
