@@ -306,4 +306,5 @@ module.exports = {
     fetchChallengesAndVote,
     setCancellationFlag,
     applyBoostToEntry,
-}; 
+    runTurboMiniGame,
+};

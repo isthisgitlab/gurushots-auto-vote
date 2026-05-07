@@ -90,6 +90,11 @@ contextBridge.exposeInMainWorld(
 
         // Boost methods
         applyBoostToEntry: (challengeId, imageId) => ipcRenderer.invoke('apply-boost-to-entry', challengeId, imageId),
+        applyBoost: (challengeId, imageId) => ipcRenderer.invoke('apply-boost-to-entry', challengeId, imageId),
+
+        // Turbo methods
+        applyTurbo: (challengeId, imageId) => ipcRenderer.invoke('apply-turbo-to-entry', challengeId, imageId),
+        playAutoTurbo: (challengeId, challengeTitle) => ipcRenderer.invoke('play-auto-turbo', challengeId, challengeTitle),
 
         // Window methods
         reloadWindow: () => ipcRenderer.invoke('reload-window'),

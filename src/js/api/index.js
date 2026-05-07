@@ -29,4 +29,5 @@ module.exports = {
     submitVotes: middleware.submitVotes.bind(middleware),
     applyBoost: middleware.applyBoost.bind(middleware),
     applyBoostToEntry: middleware.applyBoostToEntry.bind(middleware),
-}; 
+    applyTurbo: middleware.applyTurbo.bind(middleware),
+};

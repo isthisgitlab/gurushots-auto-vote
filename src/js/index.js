@@ -1204,6 +1204,55 @@ ipcMain.handle('vote-on-challenge-manual', async (event, challengeId, challengeT
     }
 });
 
+// Handle a manual run of the Turbo mini-game on a single challenge.
+// Independent of autovote — gives the user a way to earn a Turbo on
+// demand without enabling continuous voting.
+ipcMain.handle('play-auto-turbo', async (event, challengeId, challengeTitle) => {
+    try {
+        logger.withCategory('turbo').info(`▶️ Manual auto-turbo run requested for challenge ${challengeId}`, null);
+        const userSettings = settings.loadSettings();
+        if (!userSettings.token) {
+            return {success: false, error: 'No authentication token found'};
+        }
+        const {runTurboMiniGame} = require('./api/main');
+        const result = await runTurboMiniGame(
+            {id: challengeId, title: challengeTitle || `challenge ${challengeId}`},
+            userSettings.token,
+        );
+        return {success: true, result};
+    } catch (error) {
+        logger.withCategory('turbo').error('Error running manual auto-turbo:', error);
+        return {success: false, error: error.message || 'Failed to run turbo mini-game'};
+    }
+});
+
+// Handle apply turbo to entry request — same surface as boost-to-entry but
+// for the won-Turbo apply flow.
+ipcMain.handle('apply-turbo-to-entry', async (event, challengeId, imageId) => {
+    try {
+        logger.withCategory('turbo').info(`⚡ Apply turbo to entry request: Challenge=${challengeId}, Image=${imageId}`, null);
+        const userSettings = settings.loadSettings();
+        if (!userSettings.token) {
+            logger.withCategory('authentication').warning('❌ No token found for turbo apply', null);
+            return {success: false, error: 'No authentication token found'};
+        }
+
+        const {getApiStrategy} = require('./apiFactory');
+        const strategy = getApiStrategy();
+        const result = await strategy.applyTurbo(challengeId, imageId, userSettings.token);
+
+        if (result?.ok) {
+            logger.withCategory('turbo').success('✅ Turbo applied successfully');
+            return {success: true, message: 'Turbo applied successfully'};
+        }
+        logger.withCategory('turbo').warning('❌ Failed to apply turbo', result?.raw || null);
+        return {success: false, error: 'Failed to apply turbo'};
+    } catch (error) {
+        logger.withCategory('turbo').error('Error applying turbo to entry:', error);
+        return {success: false, error: error.message || 'Failed to apply turbo'};
+    }
+});
+
 // Handle apply boost to entry request
 ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
     try {

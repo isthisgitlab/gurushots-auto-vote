@@ -130,6 +130,10 @@ class BaseMiddleware {
     applyBoostToEntry(challengeId, imageId) {
         return this.apiStrategy.applyBoostToEntry(challengeId, imageId, requireToken());
     }
+
+    applyTurbo(challengeId, imageId) {
+        return this.apiStrategy.applyTurbo(challengeId, imageId, requireToken());
+    }
 }
 
 module.exports = BaseMiddleware;

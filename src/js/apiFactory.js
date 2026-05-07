@@ -16,6 +16,7 @@ const {fetchChallengesAndVote} = require('./api/main');
 const {getActiveChallenges} = require('./api/challenges');
 const {getVoteImages, submitVotes} = require('./api/voting');
 const {applyBoost, applyBoostToEntry} = require('./api/boost');
+const {applyTurbo} = require('./api/turbo');
 const {mockApiClient} = require('./mock');
 
 const realApi = {
@@ -26,6 +27,7 @@ const realApi = {
     submitVotes,
     applyBoost,
     applyBoostToEntry,
+    applyTurbo,
     getStrategyType: () => 'RealAPI',
 };
 
@@ -42,6 +44,7 @@ const mockApi = {
     submitVotes: withMockDebug('submitVotes', mockApiClient.submitVotes.bind(mockApiClient)),
     applyBoost: withMockDebug('applyBoost', mockApiClient.applyBoost.bind(mockApiClient)),
     applyBoostToEntry: withMockDebug('applyBoostToEntry', mockApiClient.applyBoostToEntry.bind(mockApiClient)),
+    applyTurbo: withMockDebug('applyTurbo', mockApiClient.applyTurbo.bind(mockApiClient)),
     getStrategyType: () => 'MockAPI',
 };
 

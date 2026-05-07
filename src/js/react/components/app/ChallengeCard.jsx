@@ -18,6 +18,7 @@ export function ChallengeCard({
     const { t } = useTranslation();
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
     const [onlyBoost, setOnlyBoost] = useState(false);
+    const [playingTurbo, setPlayingTurbo] = useState(false);
 
     const member = challenge.member;
     const entries = member.ranking.entries || [];
@@ -25,6 +26,25 @@ export function ChallengeCard({
     const boostStatus = getBoostStatus(member.boost);
     const turboStatus = getTurboStatus(member.turbo);
     const userProgress = member.ranking.total;
+
+    const turboState = member.turbo?.state;
+    const now = Math.floor(Date.now() / 1000);
+    const turboCooldownPassed = turboState === 'TIMER'
+        && typeof member.turbo?.time_to_open === 'number'
+        && member.turbo.time_to_open <= now;
+    const canPlayAutoTurbo = turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed;
+
+    const handlePlayAutoTurbo = async () => {
+        setPlayingTurbo(true);
+        try {
+            const result = await window.api.playAutoTurbo(challenge.id, challenge.title);
+            if (result?.success && onVoteComplete) onVoteComplete();
+        } catch (err) {
+            await window.api.logError(`Error running auto-turbo: ${err.message || err}`);
+        } finally {
+            setPlayingTurbo(false);
+        }
+    };
 
     // Check for custom settings
     useEffect(() => {
@@ -221,6 +241,20 @@ export function ChallengeCard({
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.turbo')}</div>
                         <div className={turboStatus.colorClass}>{turboStatus.text}</div>
+                        {canPlayAutoTurbo && (
+                            <button
+                                className="btn btn-xs btn-warning mt-1"
+                                onClick={handlePlayAutoTurbo}
+                                disabled={playingTurbo || autovoteRunning}
+                                title={autovoteRunning ? t('app.autoTurboRunsWithAutovote') : t('app.playAutoTurbo')}
+                            >
+                                {playingTurbo ? (
+                                    <span className="loading loading-spinner loading-xs" />
+                                ) : (
+                                    <>⚡ {t('app.play')}</>
+                                )}
+                            </button>
+                        )}
                     </div>
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.yourEntries')}</div>
@@ -248,7 +282,9 @@ export function ChallengeCard({
                                     entry={entry}
                                     challengeId={challenge.id}
                                     boostAvailable={boostStatus.text.includes('Available')}
+                                    turboAvailable={member.turbo?.state === 'WON'}
                                     onBoostApplied={onVoteComplete}
+                                    onTurboApplied={onVoteComplete}
                                 />
                             ))}
                         </div>

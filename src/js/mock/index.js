@@ -282,6 +282,22 @@ const mockApiClient = {
     },
 
     /**
+     * Simulate applying a won Turbo to a specific entry. The shape mirrors
+     * the live /rest/set_challenge_turbo response: { ok, raw }.
+     */
+    applyTurbo: async (challengeId, imageId, token) => {
+        logger.withCategory('api').api('Mock applyTurbo', null);
+        logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
+        logger.withCategory('voting').debug(`Image ID: ${imageId}`, null);
+        if (!token) {
+            logger.withCategory('authentication').error('No token provided, returning error', null);
+            return {ok: false, raw: null};
+        }
+        await simulateApiResponse({}, 800);
+        return {ok: true, raw: {success: true}};
+    },
+
+    /**
      * Simulate the main voting process (fetchChallengesAndVote)
      */
     fetchChallengesAndVote: async (token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
