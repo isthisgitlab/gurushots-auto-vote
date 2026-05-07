@@ -1102,7 +1102,7 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 1,
         perChallenge: true,
-        validation: (value) => Number.isInteger(value) && value >= 1,
+        validation: (value) => Number.isInteger(value) && value >= 0,
         validationOrder: 1,
         label: 'app.turboImageIndex',
         description: 'app.turboImageIndexDesc',

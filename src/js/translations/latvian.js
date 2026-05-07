@@ -109,7 +109,7 @@
             turboTime: 'Turbo pielietošanas laiks',
             turboTimeDesc: 'Pielieto Turbo, kad līdz izaicinājuma beigām ir atlicis šis laiks',
             turboImageIndex: 'Turbo foto',
-            turboImageIndexDesc: 'Kuram no taviem foto (sākot no 1) pielietot Turbo',
+            turboImageIndexDesc: 'Kuram no taviem foto (sākot no 1) pielietot Turbo. Izmanto 0, lai vienmēr lietotu pēdējo.',
             turboApplyWhenBoostActive: 'Pielietot Turbo Boost laikā',
             turboApplyWhenBoostActiveDesc: 'Ja izslēgts, nepielieto Turbo, kamēr šim izaicinājumam ir pieejams Boost',
             playAutoTurbo: 'Spēlēt Turbo mini-spēli, lai iegūtu Turbo',

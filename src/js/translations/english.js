@@ -109,7 +109,7 @@
             turboTime: 'Turbo Apply Time',
             turboTimeDesc: 'Apply Turbo when this much time remains before the challenge closes',
             turboImageIndex: 'Turbo Entry',
-            turboImageIndexDesc: 'Which of your entries (1-indexed) to apply Turbo to',
+            turboImageIndexDesc: 'Which of your entries (1-indexed) to apply Turbo to. Use 0 for the last entry.',
             turboApplyWhenBoostActive: 'Apply Turbo During Boost Window',
             turboApplyWhenBoostActiveDesc: 'When off, skip Turbo apply if a Boost is currently available on the same challenge',
             playAutoTurbo: 'Play the Turbo mini-game now to earn Turbo',

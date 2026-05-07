@@ -330,7 +330,9 @@ const shouldApplyTurbo = (challenge, now) => {
         return noop('no entries to apply turbo to');
     }
     const requestedIndex = settings.getEffectiveSetting('turboImageIndex', challengeId);
-    const safeIndex = Math.max(0, Math.min(entries.length - 1, requestedIndex - 1));
+    const safeIndex = requestedIndex === 0
+        ? entries.length - 1
+        : Math.max(0, Math.min(entries.length - 1, requestedIndex - 1));
     const imageId = entries[safeIndex]?.id;
     if (!imageId) return noop('selected entry has no id');
     return {apply: true, imageId, reason: 'eligible'};
