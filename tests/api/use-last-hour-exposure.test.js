@@ -185,6 +185,44 @@ describe('useLastHourExposure setting', () => {
         expect(result.voteReason).toContain('85% < 100%');
     });
 
+    test('should NOT auto-vote in normal path when current exposure is at or above the configured exposure ceiling', () => {
+        const now = Math.floor(Date.now() / 1000);
+        const challenge = {
+            id: '123',
+            title: 'Test Challenge',
+            type: 'regular',
+            close_time: now + 7200, // 2 hours out — outside last hour and last minute
+            start_time: now - 3600,
+            member: {
+                ranking: {
+                    exposure: {
+                        exposure_factor: 80 // currentExposure is AT or ABOVE configured ceiling (70)
+                    }
+                }
+            }
+        };
+
+        settings.getEffectiveSetting.mockImplementation((key) => {
+            switch (key) {
+            case 'onlyBoost': return false;
+            case 'voteOnlyInLastMinute': return false;
+            case 'exposure': return 70;
+            case 'lastMinuteThreshold': return 10;
+            case 'lastHourExposure': return 100;
+            case 'useLastHourExposure': return false;
+            default: return undefined;
+            }
+        });
+
+        const result = VotingLogic.evaluateVotingDecision(challenge, now);
+
+        // Pre-fix: would return shouldVote=true because target was hardcoded to 100 and 80 < 100.
+        // Post-fix: correctly returns shouldVote=false because 80 >= 70 (configured ceiling).
+        expect(result.shouldVote).toBe(false);
+        expect(result.voteReason).toContain('normal threshold');
+        expect(result.voteReason).toContain('80% >= 70%');
+    });
+
     test('should handle per-challenge useLastHourExposure override correctly', () => {
         // Mock challenge data within last hour
         const challenge = {

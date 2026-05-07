@@ -98,12 +98,10 @@ const _runVotingRules = (challenge, now, mode) => {
     }
 
     if (withinLastHour && useLastHourExposure) {
-        // Auto path keeps targetExposure at effectiveThreshold; manual path uses effectiveLastHourExposure.
-        const target = mode === 'auto' ? effectiveThreshold : effectiveLastHourExposure;
-        return decided('last-hour', target, {effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure});
+        return decided('last-hour', effectiveLastHourExposure, {effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure});
     }
 
-    return decided('normal', mode === 'auto' ? 100 : effectiveThreshold, {effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure});
+    return decided('normal', effectiveThreshold, {effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure});
 };
 
 /**
@@ -128,11 +126,7 @@ const evaluateVotingDecision = (challenge, now) => {
             ? `normal threshold: exposure ${currentExposure}% < ${effectiveThreshold}%`
             : `normal threshold: exposure ${currentExposure}% >= ${effectiveThreshold}%`,
     };
-    // Auto's last-hour rule uses currentExposure < effectiveLastHourExposure for eligibility, not r.atTarget.
-    const eligibleForAuto = r.ruleLabel === 'last-hour'
-        ? currentExposure < effectiveLastHourExposure
-        : r.eligible;
-    return {shouldVote: eligibleForAuto, voteReason: reasons[r.ruleLabel], targetExposure: r.targetExposure};
+    return {shouldVote: r.eligible, voteReason: reasons[r.ruleLabel], targetExposure: r.targetExposure};
 };
 
 /**
