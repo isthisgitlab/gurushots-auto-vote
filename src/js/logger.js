@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
+const runtime = require('./runtime');
 
 // ANSI color codes for CLI output (referenced via bracket notation in formatConsoleMessage)
 const colors = {
@@ -76,27 +76,16 @@ const getUserDataPath = () => {
         }
     } else {
         // CLI context - create fallback userData path (same as settings.js)
-        const appName = getAppName();
-
-        // Use platform-specific paths
-        switch (process.platform) {
-        case 'darwin': // macOS
-            userDataPath = path.join(os.homedir(), 'Library', 'Application Support', appName);
-            break;
-        case 'win32': // Windows
-            userDataPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), appName);
-            break;
-        default: // Linux and others
-            userDataPath = path.join(os.homedir(), '.config', appName);
-            break;
-        }
+        userDataPath = runtime.getUserDataDir(getAppName());
 
         // Ensure the directory exists
         if (!fs.existsSync(userDataPath)) {
             try {
                 fs.mkdirSync(userDataPath, {recursive: true});
-            } catch {
-                // Fallback to current directory if we can't create the proper path
+            } catch (mkdirError) {
+                // logger module isn't ready here (we're inside its bootstrap),
+                // so console.warn is the only safe channel.
+                console.warn(`[logger] failed to create userData dir ${userDataPath} (${mkdirError.code || mkdirError.message}); falling back to cwd/userData`);
                 userDataPath = path.join(process.cwd(), 'userData');
                 if (!fs.existsSync(userDataPath)) {
                     fs.mkdirSync(userDataPath, {recursive: true});
@@ -115,7 +104,7 @@ if (!fs.existsSync(logsDir)) {
 }
 
 // Check if we're in development mode (not mock)
-const isDevMode = process.env.NODE_ENV === 'development';
+const isDevMode = runtime.isDevelopment();
 
 // Check if we're in CLI mode vs GUI mode
 // CLI mode: running directly from cli.js or when electron main process handles CLI commands
@@ -209,7 +198,7 @@ const cleanupOldLogs = () => {
         }
     } catch (error) {
         // Silently ignore cleanup errors in test environments
-        if (process.env.NODE_ENV !== 'test') {
+        if (!runtime.isTest()) {
             console.error('Error during log cleanup:', error);
         }
     }

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const logger = require('./logger');
+const runtime = require('./runtime');
 
 // Try to import electron, but don't fail if it's not available (CLI context)
 let electronApp = null;
@@ -62,20 +62,7 @@ const getSettingsPath = () => {
         }
     } else {
         // CLI context - create fallback userData path
-        const appName = getAppName();
-
-        // Use platform-specific paths
-        switch (process.platform) {
-        case 'darwin': // macOS
-            userDataPath = path.join(os.homedir(), 'Library', 'Application Support', appName);
-            break;
-        case 'win32': // Windows
-            userDataPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), appName);
-            break;
-        default: // Linux and others
-            userDataPath = path.join(os.homedir(), '.config', appName);
-            break;
-        }
+        userDataPath = runtime.getUserDataDir(getAppName());
 
         // Ensure the directory exists
         if (!fs.existsSync(userDataPath)) {
@@ -97,42 +84,13 @@ const getSettingsPath = () => {
 };
 
 /**
- * Determine the default mock setting based on environment
+ * Determine the default mock setting based on environment.
+ * Dev wins over prod when both signals are set; default is prod (mock disabled).
  *
  * @returns {boolean} - True for development, false for production
  */
 const getDefaultMockSetting = () => {
-    // Check for explicit environment variables
-    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev') {
-        return true;
-    }
-
-    if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod') {
-        return false;
-    }
-
-    // Check for other development indicators
-    if (process.env.DEV === 'true' || process.env.DEV === '1') {
-        return true;
-    }
-
-    if (process.env.PROD === 'true' || process.env.PROD === '1') {
-        return false;
-    }
-
-    // Check if running in development mode (common patterns)
-    const isProd =
-        process.env.NODE_ENV === 'production' ||
-        process.env.NODE_ENV === 'prod' ||
-        process.env.PROD === 'true' ||
-        process.env.PROD === '1';
-
-    // Default to production mode (mock disabled) for safety
-    if (isProd) {
-        return false;
-    }
-
-    // Default to production mode (mock disabled) for safety
+    if (runtime.isDevelopment()) return true;
     return false;
 };
 
@@ -422,9 +380,7 @@ const getEnvironmentInfo = () => {
     const isBuiltApp = isElectronPackaged || !isSourceCode();
     
     return {
-        nodeEnv: process.env.NODE_ENV,
-        dev: process.env.DEV,
-        prod: process.env.PROD,
+        ...runtime.getEnvSnapshot(),
         defaultMock: getDefaultMockSetting(),
         platform: process.platform,
         userDataPath: getUserDataPath(),
