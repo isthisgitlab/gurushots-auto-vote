@@ -73,20 +73,20 @@
   },
   "homepage": "https://github.com/isthisgitlab/gurushots-auto-vote#readme",
   "engines": {
-    "node": ">=18.0.0",
+    "node": ">=24.0.0",
     "npm": ">=8.0.0"
   },
   "dependencies": {
     "axios": "^1.16.0",
     "electron-updater": "^6.8.3",
     "node-cron": "^4.2.1",
-    "prompt-sync": "^4.2.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@jest/globals": "^30.3.0",
+    "@swc/jest": "^0.2.39",
     "@tailwindcss/cli": "^4.2.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -96,7 +96,6 @@
     "electron": "^42.0.0",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0",
-    "esbuild-jest": "^0.5.0",
     "eslint": "^10.3.0",
     "globals": "^17.6.0",
     "jest": "^30.3.0",
@@ -173,7 +172,12 @@
       "**/?(*.)+(spec|test).jsx"
     ],
     "transform": {
-      "\\.[jt]sx?$": "esbuild-jest"
+      "\\.[jt]sx?$": ["@swc/jest", {
+        "jsc": {
+          "parser": { "syntax": "ecmascript", "jsx": true },
+          "transform": { "react": { "runtime": "automatic" } }
+        }
+      }]
     },
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/js/react/$1"

@@ -19,10 +19,18 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
     const { applyBoost, loading: boosting, error: boostError, clearError: clearBoostError } = useBoost();
     const { applyTurbo, loading: turboing, error: turboError, clearError: clearTurboError } = useTurbo();
 
-    const isEntryBoosted = !!entry.boost && entry.boost !== -1;
+    // entry.boost is an eligibility/availability indicator, not an
+    // applied flag — the API uses a separate boolean entry.boosted
+    // for that. Reading entry.boost here would light up the rocket
+    // icon on entries that are merely *eligible* for boost.
+    const isEntryBoosted = entry.boosted === true;
     const isEntryTurboed = !!entry.turbo;
-    const showBoostButton = boostAvailable && !isEntryBoosted;
-    const showTurboButton = turboAvailable && !isEntryTurboed;
+    // Boost and turbo are mutually exclusive on a single entry —
+    // applying one locks out the other on the same photo. Hide both
+    // buttons whenever the entry is already in either state.
+    const isEntryActioned = isEntryBoosted || isEntryTurboed;
+    const showBoostButton = boostAvailable && !isEntryActioned;
+    const showTurboButton = turboAvailable && !isEntryActioned;
 
     // Auto-clear errors after a few seconds so a stuck red button doesn't
     // block the user from retrying without page state reset.

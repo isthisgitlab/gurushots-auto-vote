@@ -185,4 +185,15 @@ describe('apiFactory', () => {
             expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production', null);
         });
     });
+
+    describe('mock surface debug wrapper', () => {
+        test('logs the mock label and forwards args/result to the wrapped client', async () => {
+            const {mockApiClient} = require('../src/js/mock');
+            mockApiClient.authenticate.mockResolvedValueOnce('token-xyz');
+            const result = await mockApi.authenticate('user@example.com', 'pw');
+            expect(result).toBe('token-xyz');
+            expect(mockApiClient.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
+            expect(mockLogger.debug).toHaveBeenCalledWith('🔧 Using mock authentication', null);
+        });
+    });
 });
