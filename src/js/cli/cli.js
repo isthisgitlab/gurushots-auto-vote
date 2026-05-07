@@ -38,6 +38,7 @@ logger.withCategory('api').debug('apiFactory imported', null);
 const settings = require('../settings');
 logger.withCategory('settings').debug('settings imported');
 const {getDefaultSettings} = require('../settings');
+const {parseSettingValue} = require('./parseValue');
 logger.withCategory('settings').debug('getDefaultSettings imported');
 
 // Get the middleware instance - but don't destructure methods at module level
@@ -557,19 +558,7 @@ const getSetting = (key) => {
  */
 const setSetting = (key, value) => {
     try {
-        // Parse value if it looks like JSON
-        let parsedValue = value;
-        if (value === 'true') parsedValue = true;
-        else if (value === 'false') parsedValue = false;
-        else if (!isNaN(value) && value !== '') parsedValue = Number(value);
-        else if (value.startsWith('[') || value.startsWith('{')) {
-            try {
-                parsedValue = JSON.parse(value);
-            } catch {
-                // Keep as string if JSON parsing fails
-            }
-        }
-
+        const parsedValue = parseSettingValue(value);
         settings.setSetting(key, parsedValue);
         logger.withCategory('settings').success(`Set ${key} = ${JSON.stringify(parsedValue)}`);
     } catch (error) {
@@ -582,18 +571,7 @@ const setSetting = (key, value) => {
  */
 const setGlobalDefault = (key, value) => {
     try {
-        // Parse value appropriately
-        let parsedValue = value;
-        if (value === 'true') parsedValue = true;
-        else if (value === 'false') parsedValue = false;
-        else if (!isNaN(value) && value !== '') parsedValue = Number(value);
-        else if (value.startsWith('[') || value.startsWith('{')) {
-            try {
-                parsedValue = JSON.parse(value);
-            } catch {
-                // Keep as string if JSON parsing fails
-            }
-        }
+        const parsedValue = parseSettingValue(value);
 
         // Check if this is a valid schema setting
         const schema = settings.SETTINGS_SCHEMA;

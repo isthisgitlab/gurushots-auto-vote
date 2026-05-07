@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const settings = require('../src/js/settings');
+const {parseSettingValue} = require('../src/js/cli/parseValue');
 const {spawn} = require('child_process');
 
 /**
@@ -20,19 +21,6 @@ const {spawn} = require('child_process');
 const command = process.argv[2];
 const key = process.argv[3];
 const value = process.argv[4];
-
-// Parses a CLI string argument into the most-specific JS value
-// it can be: JSON literal first, then number, then boolean, else
-// the raw string.
-function parseSettingValue(raw) {
-    try {
-        return JSON.parse(raw);
-    } catch {
-        if (!isNaN(raw) && !isNaN(parseFloat(raw))) return parseFloat(raw);
-        if (raw === 'true' || raw === 'false') return raw === 'true';
-        return raw;
-    }
-}
 
 // Helper function to get nested property value
 function getNestedProperty(obj, path) {
