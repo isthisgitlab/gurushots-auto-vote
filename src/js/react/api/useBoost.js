@@ -1,48 +1,19 @@
-import { useState, useCallback } from 'react';
+import { useAsyncIpcAction } from './useAsyncIpcAction';
 
 /**
- * Hook for boost operations via IPC
- * @returns {{ applyBoost: function, loading: boolean, error: string|null }}
+ * Hook for boost operations via IPC.
+ * Returns { applyBoost, loading, error, clearError }.
  */
 export function useBoost() {
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-
-    /**
-     * Apply boost to a challenge entry
-     */
-    const applyBoost = useCallback(async (challengeId, imageId, boostType = 'boost') => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            const result = await window.api.applyBoost(challengeId, imageId, boostType);
-
-            if (!result?.success) {
-                setError(result?.error || 'Boost failed');
-            }
-
-            return result;
-        } catch (err) {
-            const message = err.message || 'Boost error';
-            setError(message);
-            return { success: false, error: message };
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    /**
-     * Clear error
-     */
-    const clearError = useCallback(() => {
-        setError(null);
-    }, []);
+    const action = useAsyncIpcAction(
+        (challengeId, imageId, boostType = 'boost') => window.api.applyBoost(challengeId, imageId, boostType),
+        { failureMessage: 'Boost failed', errorMessage: 'Boost error' },
+    );
 
     return {
-        applyBoost,
-        loading,
-        error,
-        clearError,
+        applyBoost: action.run,
+        loading: action.loading,
+        error: action.error,
+        clearError: action.clearError,
     };
 }

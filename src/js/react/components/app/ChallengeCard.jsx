@@ -5,6 +5,8 @@ import { useTurbo } from '@/api/useTurbo';
 import { VoteButton } from './VoteButton';
 import { EntryBadge } from './EntryBadge';
 
+const TURBO_ERROR_DISPLAY_MS = 5000;
+
 /**
  * Challenge card component displaying all challenge details
  */
@@ -47,7 +49,7 @@ export function ChallengeCard({
 
     useEffect(() => {
         if (!turboError) return undefined;
-        const id = setTimeout(clearTurboError, 5000);
+        const id = setTimeout(clearTurboError, TURBO_ERROR_DISPLAY_MS);
         return () => clearTimeout(id);
     }, [turboError, clearTurboError]);
 
