@@ -13,6 +13,7 @@ const {cleanupStaleMetadata} = require('../metadata');
 const {sleep, getRandomDelay} = require('./utils');
 const logger = require('../logger');
 const votingLogic = require('../services/VotingLogic');
+const cancellation = require('../voting/cancellation');
 
 /**
  * Plays through the Turbo mini-game for a single challenge.
@@ -68,17 +69,9 @@ const runTurboMiniGame = async (challenge, token) => {
     return {played, correct, flipped, doubleFailed, won};
 };
 
-// Global cancellation flag
-let shouldCancelVoting = false;
-
-// Function to check if voting should be cancelled
-const checkCancellation = () => {
-    return shouldCancelVoting;
-};
-
-// Function to set cancellation flag
+// Thin delegate kept for backward compatibility with index.js callers.
 const setCancellationFlag = (cancel) => {
-    shouldCancelVoting = cancel;
+    cancellation.setCancelled(cancel);
 };
 
 /**
@@ -132,7 +125,7 @@ const fetchChallengesAndVote = async (token) => {
             processedCount++;
             
             // Check for cancellation before processing each challenge
-            if (checkCancellation()) {
+            if (cancellation.isCancelled()) {
                 logger.withCategory('voting').warning('🛑 Voting cancelled by user', null);
                 logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
                 return {success: false, message: 'Voting cancelled by user'};
@@ -239,7 +232,7 @@ const fetchChallengesAndVote = async (token) => {
                 
                 try {
                     // Check for cancellation before voting
-                    if (checkCancellation()) {
+                    if (cancellation.isCancelled()) {
                         logger.withCategory('voting').warning('🛑 Voting cancelled by user during challenge processing', null);
                         logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
                         return {success: false, message: 'Voting cancelled by user'};
@@ -251,7 +244,7 @@ const fetchChallengesAndVote = async (token) => {
                     const voteImages = await getVoteImages(challenge, token);
                     if (voteImages && voteImages.images) {
                         // Check for cancellation before submitting votes
-                        if (checkCancellation()) {
+                        if (cancellation.isCancelled()) {
                             logger.withCategory('voting').warning('🛑 Voting cancelled by user before vote submission', null);
                             logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
                             return {success: false, message: 'Voting cancelled by user'};
@@ -265,7 +258,7 @@ const fetchChallengesAndVote = async (token) => {
                         logger.withCategory('voting').debug(`🔧 DEBUG: Completed vote submission for challenge ${challenge.id}: ${challenge.title}`, null);
 
                         // Check for cancellation before delay
-                        if (checkCancellation()) {
+                        if (cancellation.isCancelled()) {
                             logger.withCategory('voting').debug(`🔧 DEBUG: Cancellation detected after vote submission for challenge ${challenge.id}: ${challenge.title}`, null);
                             logger.withCategory('voting').warning('🛑 Voting cancelled by user after vote submission', null);
                             logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');

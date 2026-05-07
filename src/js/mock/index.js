@@ -12,13 +12,11 @@ const errors = require('./errors');
 const settings = require('../settings');
 const votingLogic = require('../services/VotingLogic');
 const logger = require('../logger');
+const cancellation = require('../voting/cancellation');
 
-// Global cancellation flag for mock API
-let shouldCancelVoting = false;
-
-// Function to set cancellation flag
+// Thin delegate kept for backward compatibility with index.js + tests.
 const setCancellationFlag = (cancel) => {
-    shouldCancelVoting = cancel;
+    cancellation.setCancelled(cancel);
 };
 
 // Session-stable mock data cache to prevent regeneration within same app run
@@ -314,7 +312,7 @@ const mockApiClient = {
             // Simulate processing each challenge
             for (const challenge of challengesResponse.challenges) {
                 // Check for cancellation before processing each challenge
-                if (shouldCancelVoting) {
+                if (cancellation.isCancelled()) {
                     logger.withCategory('voting').info('Mock voting cancelled by user', null);
                     return {success: false, message: 'Mock voting cancelled by user'};
                 }
@@ -331,7 +329,7 @@ const mockApiClient = {
                 // Simulate boost application if available
                 if (challenge.member.boost.state === 'AVAILABLE') {
                     // Check for cancellation before boost
-                    if (shouldCancelVoting) {
+                    if (cancellation.isCancelled()) {
                         logger.withCategory('voting').info('Mock voting cancelled by user before boost', null);
                         return {success: false, message: 'Mock voting cancelled by user'};
                     }
@@ -347,7 +345,7 @@ const mockApiClient = {
                 // Simulate voting if conditions are met
                 if (shouldVote) {
                     // Check for cancellation before voting
-                    if (shouldCancelVoting) {
+                    if (cancellation.isCancelled()) {
                         logger.withCategory('voting').info('Mock voting cancelled by user before voting', null);
                         return {success: false, message: 'Mock voting cancelled by user'};
                     }
@@ -358,7 +356,7 @@ const mockApiClient = {
                         const voteImages = await simulateApiResponse(voting.mockVoteImagesByChallenge[challengeUrl], 1200);
                         if (voteImages && voteImages.images && voteImages.images.length > 0) {
                             // Check for cancellation before vote submission
-                            if (shouldCancelVoting) {
+                            if (cancellation.isCancelled()) {
                                 logger.withCategory('voting').info('Mock voting cancelled by user before vote submission', null);
                                 return {success: false, message: 'Mock voting cancelled by user'};
                             }
@@ -372,7 +370,7 @@ const mockApiClient = {
                 }
 
                 // Check for cancellation before delay
-                if (shouldCancelVoting) {
+                if (cancellation.isCancelled()) {
                     logger.withCategory('voting').info('Mock voting cancelled by user before delay', null);
                     return {success: false, message: 'Mock voting cancelled by user'};
                 }
