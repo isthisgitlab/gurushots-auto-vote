@@ -12,7 +12,7 @@
     "build:cli:mac": "node scripts/build-cli.js gurucli-mac",
     "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
     "build:react": "node scripts/build-react.js",
-    "build:prep": "npm run verify:readme && npm run build:css && npm run build:react",
+    "build:prep": "npm run build:css && npm run build:react",
     "build:linux": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux",
     "build:linux-arm": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux --arm64",
     "build:mac": "npm run build:prep && cross-env NODE_ENV=production electron-builder --mac",

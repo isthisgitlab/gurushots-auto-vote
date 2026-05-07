@@ -39,7 +39,12 @@ If you find this tool helpful, consider supporting its development:
 
 - **Automated Voting**: Automatically vote on images in active challenges
 - **Boost Management**: Apply boosts when available and near deadline
-- **Last Minutes Threshold**: Auto-vote when challenges are within the last minutes threshold, ignoring exposure limits
+- **Turbo Auto-Earn**: Automatically play the in-app mini-game to earn turbo when none is held
+- **Turbo Auto-Apply**: Automatically apply earned turbo to a configured entry slot before challenge end
+- **Per-Entry Boost & Turbo**: Manually apply boost or turbo to a specific photo from the GUI
+- **Last Minute Threshold**: Auto-vote when challenges are within the last-minute threshold, ignoring exposure limits
+- **Last Hour Exposure Cap**: Separate, tighter exposure ceiling that kicks in during the final hour
+- **Only-Boost Mode**: Disable normal voting on a challenge until a boost (or turbo) is available
 - **Dual Interface**: Use the GUI for manual control or CLI for automation
 - **Secure Login**: Safe authentication with GuruShots
 - **Remember Me**: Stay logged in across sessions
@@ -47,6 +52,7 @@ If you find this tool helpful, consider supporting its development:
 - **Internationalization**: Multi-language support with dynamic language selection
 - **Configurable Timeouts**: Customizable API timeout and voting interval settings
 - **Enhanced Security**: Improved token handling and reduced sensitive data exposure
+- **Auto-Updater**: Built-in update notifications and download flow
 - **Mock Mode**: Test the app without real API calls
 
 ## 📥 Download & Install
@@ -206,16 +212,37 @@ The GUI provides a user-friendly interface for managing your GuruShots voting:
   - **Settings Button**: Access application settings
   - **Logout**: Sign out of current session
 
+- **Auto-Vote Controls** (above the challenge list):
+  - **Start/Stop Auto-Vote**: Toggle button to start or stop the continuous voting loop
+  - **Status Badge**: Current loop state (running, waiting, idle, etc.)
+  - **Last Run**: Timestamp of the most recent voting cycle
+  - **Cycles**: Number of voting cycles completed in the current session
+
 - **Challenge List**:
   - **Title**: Challenge name
   - **End Time**: When the challenge will end
   - **Exposure**: Your current exposure percentage
   - **Status**: Voting status (Voted/Voting/Waiting)
+  - **Per-Challenge Settings (⚙️)**: Gear button on each card opens a per-challenge override modal (boost time, exposure, last-minute threshold, only-boost, vote-only-in-last-minute, last-hour exposure, turbo settings)
 
 - **Challenge Details**:
   - **Your Progress**: Current rank, exposure, and votes
   - **Your Photos**: Your submitted photos in this challenge
   - **Boost Status**: Whether boost is available and when it will be applied
+  - **Turbo Status**: Whether a turbo is held and ready to apply
+
+- **Per-Entry Actions** (on each photo badge):
+  - **🚀 Apply Boost**: Manually apply the available boost to this specific photo
+  - **⚡ Apply Turbo**: Manually apply the held turbo to this specific photo
+  - Boost and turbo are mutually exclusive per entry — once a photo is boosted or turboed, neither button shows for that photo
+
+- **Play Auto-Turbo** (on each open challenge card, when no turbo is held):
+  - Triggers the in-app mini-game to earn turbo for that challenge
+  - Hidden once a turbo is held; runs automatically during auto-vote when `autoTurbo` is enabled
+
+- **Update Dialog**:
+  - Appears when a new release is available
+  - States: available → downloading (with progress) → ready to install, or error
 
 ### **CLI Commands**
 
@@ -228,12 +255,12 @@ Login with your credentials:
 ./gurucli-v0.6.1-[platform] login
 ```
 
-Run one voting cycle:
+Run one manual voting cycle (votes to 100% on every active challenge regardless of threshold or exposure settings — useful for a one-shot top-up):
 ```
 ./gurucli-v0.6.1-[platform] vote
 ```
 
-Start continuous voting:
+Start continuous voting (respects all thresholds and per-challenge settings):
 ```
 ./gurucli-v0.6.1-[platform] start
 ```
@@ -248,12 +275,36 @@ Show help:
 ./gurucli-v0.6.1-[platform] help
 ```
 
+#### **Settings Management Commands**
+
+The CLI also exposes the full settings system. Settings are shared with the GUI, so changes made here apply to both.
+
+| Command | Purpose |
+|---|---|
+| `list-settings` | Show all settings, their current values, and which were modified by the user |
+| `get-setting <key>` | Print the current value of one setting |
+| `set-setting <key> <value>` | Set any setting directly (no schema validation — power-user) |
+| `set-global-default <key> <value>` | Set a global default with full schema validation |
+| `reset-setting <key>` | Reset one setting to its default |
+| `reset-all-settings` | Reset every setting to defaults (preserves token, mock flag, and API headers) |
+| `reset-windows` | Reset GUI window positions to defaults |
+| `help-settings` | Print detailed help for the settings system, including key names and value formats |
+
+**Examples:**
+
+```
+./gurucli-v0.6.1-[platform] set-global-default exposure 80
+./gurucli-v0.6.1-[platform] set-global-default autoTurbo true
+./gurucli-v0.6.1-[platform] list-settings
+./gurucli-v0.6.1-[platform] reset-setting lastMinuteThreshold
+```
+
 ### **Continuous Voting**
 
 The continuous voting mode automatically runs voting cycles with dynamic interval scheduling:
 
 - **Normal Operation**: Runs every 3 minutes (configurable via settings)
-- **Within Last Threshold**: Automatically switches to higher frequency (default: 0 = disabled)
+- **Within Last Minute Threshold**: Automatically switches to higher frequency (default: 1 minute)
 - **Automatic Detection**: Monitors all active challenges and adjusts frequency based on their end times
 
 ## 📝 Logging
@@ -271,18 +322,45 @@ The application automatically logs activity to help with troubleshooting:
 > **⚠️ Important**: Changing settings while auto-vote is running will stop the voting process. You will need to manually restart auto-vote after applying your new settings.
 > **WINDOW MOVEMENT**: If you move the app window, it will automatically save its position but it will stop autovoting process as it is saving the position in settings.
 
-The app automatically saves your preferences:
+The app automatically saves your preferences. Settings split into three groups: **app-wide preferences** (theme/language/window state), **global-only voting settings**, and **per-challenge voting settings** (which can be set globally as defaults and individually overridden per challenge).
 
-- **Theme**: Light or dark mode
-- **Language**: Application language selection
-- **Remember Me**: Stay logged in between sessions
-- **Window Position**: Remembers where you placed the app window
-- **API Timeout**: Configurable timeout for API requests (1-120 seconds)
-- **Voting Interval**: Customizable interval between voting cycles (1-60 minutes)
-- **Last Threshold Check Frequency**: Dynamic check frequency when within last threshold (1-60 minutes, default: 0 = disabled, global setting)
-- **Challenge Settings**: Per-challenge overrides for boost time, exposure, last minutes threshold, and vote only in last threshold
+#### **App Preferences**
 
-Settings are shared between GUI and CLI modes, so you can switch between them seamlessly.
+| Setting | Default | Notes |
+|---|---|---|
+| `theme` | `light` | Light or dark mode |
+| `language` | `en` | `en` or `lv` |
+| `stayLoggedIn` | `false` | Persist session across restarts |
+| `apiTimeout` | `30` seconds | API request timeout (1-120s recommended) |
+| `checkFrequencyMin` / `checkFrequencyMax` | `3` / `3` minutes | Voting cycle delay range; cycle picks random delay in `[min, max]`. Set both equal for fixed cadence. |
+| `windowBounds` | — | Remembers GUI window position and size |
+
+#### **Global-Only Voting Settings**
+
+| Setting | Default | Range | Notes |
+|---|---|---|---|
+| `lastMinuteCheckFrequency` | `1` minute | 1-59 | Polling cadence when any challenge is within its last-minute threshold |
+
+#### **Per-Challenge Voting Settings**
+
+These can be set as global defaults and overridden per challenge:
+
+| Setting | Default | Range | Purpose |
+|---|---|---|---|
+| `exposure` | `100` | 1-100% | Target exposure ceiling for normal voting |
+| `lastMinuteThreshold` | `10` | 1-59 min | Window before challenge end to ignore exposure cap and vote to 100% |
+| `voteOnlyInLastMinute` | `false` | bool | Restrict normal voting to the last-minute window only |
+| `onlyBoost` | `false` | bool | Disable normal voting; only act when boost or turbo is available |
+| `useLastHourExposure` | `false` | bool | Enable a tighter exposure ceiling for the final hour |
+| `lastHourExposure` | `100` | 1-100%, ≤ `exposure` | The ceiling used during the final hour |
+| `boostTime` | `3600` seconds (1h) | ≥ 0 | How long before challenge end to apply boost |
+| `autoTurbo` | `true` | bool | Auto-play the mini-game to earn turbo when none is held |
+| `useTurbo` | `false` | bool | Auto-apply held turbo before challenge end |
+| `turboTime` | `7200` seconds (2h) | ≥ 0 | How long before challenge end to apply turbo |
+| `turboImageIndex` | `1` | integer ≥ 1 | Which entry slot receives the auto-applied turbo |
+| `turboApplyWhenBoostActive` | `false` | bool | Allow turbo auto-apply during a boost-active window |
+
+Settings are shared between GUI and CLI modes, so you can switch between them seamlessly. Use the CLI `list-settings` command to see every setting and which ones you've modified.
 
 ### **Settings Logic: Global Defaults vs. Per-Challenge Overrides**
 
@@ -314,7 +392,7 @@ The Last Minutes Threshold feature allows the app to automatically vote on chall
 
 ### **How It Works**
 
-- **Default Threshold**: 30 minutes (configurable)
+- **Default Threshold**: 10 minutes (configurable, range 1-59)
 - **Behavior**: When a challenge is within the last minutes threshold:
   - The app ignores your normal exposure threshold
   - It will vote if your exposure is below 100%
@@ -326,11 +404,11 @@ You can set the Last Minutes Threshold in the app settings:
 
 - **Global Default**: Set a default threshold for all challenges
 - **Per-Challenge Override**: Set different thresholds for specific challenges
-- **Range**: 1-60 minutes (recommended: 15-30 minutes)
+- **Range**: 1-59 minutes (recommended: 10-30 minutes)
 
 ### **Example Scenarios**
 
-- **Competitive Challenge**: Set a longer threshold (30-60 minutes) to ensure maximum exposure
+- **Competitive Challenge**: Set a longer threshold (30-59 minutes) to ensure maximum exposure
 - **Less Important Challenge**: Use a shorter threshold (5-10 minutes) to conserve votes
 - **High-Value Challenge**: Set to 30+ minutes to maximize your chances of ranking well
 - **Multiple Challenges Ending**: Different thresholds help prioritize which challenges get votes first
@@ -343,9 +421,9 @@ You can set the Last Minutes Threshold in the app settings:
 - **Ranking Optimization**: Maximize your final position by voting aggressively in final minutes
 - **Time Management**: Automatically adjust voting behavior as deadlines approach
 
-## 🎯 Vote Only in Last Threshold
+## 🎯 Vote Only in Last Minute Threshold
 
-The Vote Only in Last Threshold feature allows you to restrict auto-voting to only occur when a challenge is within the last minutes threshold. This is useful when you want to conserve votes and only vote strategically in the final moments of a challenge.
+The Vote Only in Last Minute Threshold feature allows you to restrict auto-voting to only occur when a challenge is within the last-minute threshold. This is useful when you want to conserve votes and only vote strategically in the final moments of a challenge.
 
 ### **How It Works**
 
@@ -377,32 +455,31 @@ You can configure this setting in the app:
 - **Multiple Challenges**: When you're in many challenges and need to prioritize
 - **Competition Strategy**: When you want to surprise competitors with a late surge
 
-## ⚡ Last Threshold Check Frequency
+## ⚡ Last Minute Check Frequency
 
-The Last Threshold Check Frequency feature allows you to configure different check frequencies when challenges are within the last minutes threshold. This enables more aggressive voting during critical time periods.
+The Last Minute Check Frequency feature lets you tighten the polling cadence when at least one challenge has entered its last-minute threshold. This enables more responsive voting during critical time periods.
 
 ### **How It Works**
 
-- **Default Setting**: 1 minute (configurable)
+- **Default Setting**: 1 minute
 - **Dynamic Behavior**: The app automatically adjusts its check frequency based on challenge states:
   - **Normal Operation**: Uses the standard voting interval (default: 3 minutes)
-  - **Within Last Threshold**: Uses the last threshold check frequency (default: 1 minute)
-  - **Automatic Detection**: Monitors all active challenges and switches to higher frequency if any are within the last threshold
+  - **Within Last-Minute Threshold**: Uses the last-minute check frequency (default: 1 minute)
+  - **Automatic Detection**: Monitors all active challenges and switches to the tighter frequency if any are within their last-minute threshold
 
 ### **Configuration**
 
 You can configure this setting in the app:
 
-- **Global Setting**: Set the frequency for all challenges (no per-challenge overrides)
-- **Range**: 0-60 minutes (0 = disabled, recommended: 1-5 minutes for last threshold)
+- **Global Setting**: Sets the frequency for all challenges (no per-challenge overrides)
+- **Range**: 1-59 minutes (recommended: 1-5 minutes during the last-minute window)
 
 ### **Example Scenarios**
 
 - **Normal Operation**: App checks every 3 minutes (standard voting interval)
-- **Challenge within 30 minutes of ending**: App switches to checking every 1 minute (last threshold frequency)
-- **Multiple challenges**: If any challenge is within the last threshold, the higher frequency applies to all
+- **Challenge within its last-minute threshold**: App switches to checking every 1 minute
+- **Multiple challenges**: If any challenge is within its last-minute threshold, the higher frequency applies to all
 - **Challenge ends**: App automatically returns to normal frequency
-- **Feature Disabled (0)**: App always uses normal voting interval regardless of challenge state
 
 ### **Use Cases**
 
@@ -410,6 +487,56 @@ You can configure this setting in the app:
 - **Competitive Edge**: Maximize voting opportunities when time is limited
 - **Resource Optimization**: Balance between responsiveness and API usage
 - **Strategic Advantage**: Ensure votes are cast at optimal times
+
+## ⚡ Turbo (Auto-Earn & Auto-Apply)
+
+Turbo is GuruShots' long-game booster: you earn it by playing the in-app mini-game (a finite, slow-replenishing resource), then hold it until the moment you want to spend it on a specific photo. Unlike boost — which is tied to a per-challenge timer — turbo is a freely-applicable consumable. The app splits this lifecycle into two independent settings: **earn** and **apply**.
+
+### **Auto-Earn (`autoTurbo`)**
+
+- **What it does**: When enabled and no turbo is held, the app automatically plays the mini-game on each voting cycle to earn one turbo.
+- **Default**: Enabled (`true`)
+- **Per-challenge override**: Yes
+- **Manual equivalent (GUI)**: The "Play Auto-Turbo" button on each challenge card
+
+### **Auto-Apply (`useTurbo`)**
+
+- **What it does**: When enabled and a turbo is held, the app applies it to entry slot `turboImageIndex` once the challenge has `turboTime` seconds or less remaining.
+- **Default**: Disabled (`false`)
+- **Per-challenge override**: Yes
+- **Related settings**:
+  - `turboTime` — how long before challenge end to apply (default: 7200 seconds = 2 hours)
+  - `turboImageIndex` — which entry slot receives the turbo (default: 1, the first photo)
+  - `turboApplyWhenBoostActive` — if `false` (default), turbo auto-apply is suppressed during a boost-active window; if `true`, both can run
+
+### **Per-Entry Manual Apply**
+
+In the GUI, each photo badge shows an `⚡` button when a turbo is held and that photo isn't already actioned. Clicking it applies the turbo to that specific entry, overriding the auto-apply slot. Boost and turbo are mutually exclusive on a single photo — once one is applied, neither button shows for that entry.
+
+### **Coexistence with Boost**
+
+- **Per-entry**: A single photo can be either boosted or turboed, never both.
+- **Per-challenge timing**: By default, turbo auto-apply waits for the boost-active window to pass. Set `turboApplyWhenBoostActive` to `true` to allow both to apply within the same challenge (on different photos).
+
+## 🎚️ Last Hour Exposure
+
+A tighter exposure ceiling that only applies during the final hour of a challenge — useful for backing off voting once you're confident in your final position.
+
+### **How It Works**
+
+- **Default**: Disabled (`useLastHourExposure: false`)
+- **When enabled**: Within the last hour of a challenge, the app uses `lastHourExposure` (default: 100%) instead of the global `exposure` setting
+- **Constraint**: `lastHourExposure` must be ≤ `exposure` (you can't raise the ceiling for the final hour, only lower it)
+- **Per-challenge override**: Yes
+
+### **Example**
+
+- Global `exposure`: 100%, `lastHourExposure`: 80%, `useLastHourExposure`: enabled
+- Result: the app votes up to 100% during the bulk of the challenge, but in the final hour it stops voting once you reach 80% — conserving votes when extra exposure has diminishing returns.
+
+## 🛡️ Only-Boost Mode
+
+The `onlyBoost` setting (per-challenge, default: `false`) disables normal voting on a challenge entirely — the app will only act on that challenge when a boost or turbo is available to apply. Useful for low-priority challenges where you want to spend boosts/turbos but not votes.
 
 ## 🌍 Internationalization
 

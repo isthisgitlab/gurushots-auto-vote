@@ -256,7 +256,7 @@ Lietotne automātiski saglabā jūsu preferences:
   - **Ieteikums**: 80-90% optimālai efektivitātei
 
 - **Pēdējo minūšu slieksnis**: Slieksnis minūtēs pēdējā brīža darbībām
-  - **Diapazons**: Jebkurš pozitīvs skaitlis minūtēs
+  - **Diapazons**: 1-59 minūtes
   - **Noklusējums**: 10 minūtes
   - **Ieteikums**: 15-30 minūtes lielākajai daļai izaicinājumu
 
@@ -267,6 +267,54 @@ Lietotne automātiski saglabā jūsu preferences:
 - **Balsot tikai pēdējo minūšu laikā**: Balsot tikai tad, ja līdz izaicinājuma beigām ir mazāk laika, nekā norādīts pēdējo minūšu slieksnī
   - **Ieslēgts**: Balsot tikai pēdējās minūtēs pirms izaicinājuma beigām
   - **Izslēgts**: Balsot jebkurā laikā, ievērojot redzamības iestatījumus
+
+<!-- TODO(translation): The sections below document features added since the Latvian translation was last synced. Translate when convenient — find every occurrence by greping for `TODO(translation)` in this file. -->
+
+### **Additional Per-Challenge Settings (untranslated)**
+
+- **Last Hour Exposure** (`useLastHourExposure` + `lastHourExposure`): A tighter exposure ceiling that only applies during the final hour of a challenge. `lastHourExposure` must be ≤ `exposure`. Default: disabled, 100%.
+- **Auto-Turbo Earn** (`autoTurbo`): Automatically play the in-app mini-game to earn turbo when none is held. Default: enabled (`true`).
+- **Auto-Turbo Apply** (`useTurbo` + `turboTime` + `turboImageIndex` + `turboApplyWhenBoostActive`): Automatically apply held turbo to entry slot `turboImageIndex` when `turboTime` seconds remain before challenge end. `turboApplyWhenBoostActive` controls coexistence with active boost windows. Default: disabled, 7200 seconds (2h), entry 1, suppressed during boost.
+
+### **Global-Only: Last Minute Check Frequency (untranslated)**
+
+- **`lastMinuteCheckFrequency`**: Higher polling cadence used when at least one challenge is within its last-minute threshold. Range: 1-59 minutes. Default: 1.
+
+### **Turbo (Auto-Earn & Auto-Apply) (untranslated)**
+
+Turbo is GuruShots' long-game booster: you earn it by playing the in-app mini-game (slow-replenishing), then hold it until the moment you want to spend it on a specific photo. The app splits this lifecycle into two independent settings:
+
+- **Auto-Earn (`autoTurbo`)** — automatically plays the mini-game to earn turbo when none is held.
+- **Auto-Apply (`useTurbo`)** — applies the held turbo to a configured entry slot before challenge end.
+
+Per-entry manual apply: in the GUI, each photo badge shows an `⚡` button when a turbo is held; clicking it applies the turbo to that specific entry. Boost and turbo are mutually exclusive on a single photo.
+
+### **GUI Per-Entry Actions (untranslated)**
+
+Each photo badge in the GUI shows up to two action buttons:
+- **🚀** — apply the available boost to this specific photo
+- **⚡** — apply the held turbo to this specific photo
+
+Both buttons disappear once the photo is boosted or turboed.
+
+### **Auto-Updater (untranslated)**
+
+The GUI shows an Update Dialog when a new release is available. States: available → downloading (with progress) → ready to install (or error).
+
+### **CLI Settings Management Commands (untranslated)**
+
+| Command | Purpose |
+|---|---|
+| `list-settings` | Show all settings with their current values and modification status |
+| `get-setting <key>` | Print a setting's value |
+| `set-setting <key> <value>` | Set a setting directly (no validation) |
+| `set-global-default <key> <value>` | Set a global default with schema validation |
+| `reset-setting <key>` | Reset one setting to default |
+| `reset-all-settings` | Reset all settings (preserves token/mock/apiHeaders) |
+| `reset-windows` | Reset GUI window positions |
+| `help-settings` | Detailed settings help |
+
+<!-- /TODO(translation) -->
 
 ## 🚀 Detalizēti lietošanas scenāriji
 
