@@ -116,9 +116,6 @@ contextBridge.exposeInMainWorld(
         onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, updateInfo) => callback(updateInfo)),
         onUpdateError: (callback) => ipcRenderer.on('update-error', (event, error) => callback(error)),
 
-        // Legacy update dialog listener (for backward compatibility)
-        onShowUpdateDialog: (callback) => ipcRenderer.on('update-available', (event, updateInfo) => callback(updateInfo)),
-
         // Menu methods
         refreshMenu: () => ipcRenderer.invoke('refresh-menu'),
 
@@ -129,8 +126,5 @@ contextBridge.exposeInMainWorld(
         
         // Settings change events
         onSettingsChanged: (callback) => ipcRenderer.on('settings-changed', (event, settings) => callback(settings)),
-
-        // Optional: Add listeners for responses from main process
-        // Example: on: (channel, callback) => ipcRenderer.on(channel, (event, ...args) => callback(...args))
     },
 );

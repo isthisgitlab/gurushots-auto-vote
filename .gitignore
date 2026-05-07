@@ -136,3 +136,6 @@ dist
 # Playwright CLI capture outputs (may contain auth tokens)
 .playwright-cli/
 
+# macOS Finder metadata
+.DS_Store
+
