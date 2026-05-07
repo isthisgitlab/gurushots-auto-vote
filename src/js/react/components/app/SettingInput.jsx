@@ -1,4 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
 
 /**
  * Get default value for a config type to prevent uncontrolled inputs
@@ -29,19 +30,16 @@ export function SettingInput({ settingKey, config, value, onChange, onReset }) {
     // Normalize value to prevent uncontrolled-to-controlled transitions
     const normalizedValue = value ?? config.default ?? getDefaultForType(config.type);
 
-    // Handle time type (hours + minutes)
+    // Handle time type (hours + minutes). Stored as seconds.
     if (config.type === 'time') {
-        const hours = Math.floor(normalizedValue / 60);
-        const minutes = normalizedValue % 60;
+        const { hours, minutes } = secondsToHoursMinutes(normalizedValue);
 
         const handleHoursChange = (e) => {
-            const newHours = parseInt(e.target.value, 10) || 0;
-            onChange(settingKey, newHours * 60 + minutes);
+            onChange(settingKey, hoursMinutesToSeconds(parseInt(e.target.value, 10), minutes));
         };
 
         const handleMinutesChange = (e) => {
-            const newMinutes = parseInt(e.target.value, 10) || 0;
-            onChange(settingKey, hours * 60 + newMinutes);
+            onChange(settingKey, hoursMinutesToSeconds(hours, parseInt(e.target.value, 10)));
         };
 
         return (
@@ -50,7 +48,6 @@ export function SettingInput({ settingKey, config, value, onChange, onReset }) {
                     type="number"
                     className="input input-bordered input-sm w-20"
                     min="0"
-                    max="23"
                     value={hours}
                     onChange={handleHoursChange}
                 />

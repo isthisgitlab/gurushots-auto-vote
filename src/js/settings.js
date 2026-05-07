@@ -270,6 +270,48 @@ const loadSettings = () => {
                 logger.withCategory('settings').info('Removed obsolete cliCronExpression', null);
             }
 
+            // Migrate buggy-GUI-encoded time values. Pre-fix, SettingInput stored
+            // boostTime/turboTime as minutes (h*60+m) while the runtime treated
+            // them as seconds. The buggy GUI could only write values in [0, 1439]
+            // (max was 23h*60+59); schema defaults (3600, 7200) are above that
+            // band, so untouched defaults pass through unchanged.
+            if (!mergedSettings._timeUnitMigratedV1) {
+                const TIME_KEYS = ['boostTime', 'turboTime'];
+                const looksMinuteEncoded = (v) =>
+                    typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1440;
+
+                const globalDefaults = mergedSettings.challengeSettings?.globalDefaults || {};
+                for (const key of TIME_KEYS) {
+                    if (looksMinuteEncoded(globalDefaults[key])) {
+                        const before = globalDefaults[key];
+                        globalDefaults[key] = before * 60;
+                        migrationChanges = true;
+                        logger.withCategory('settings').info(
+                            `Migrated ${key} global default from minute-encoded ${before} to ${globalDefaults[key]}s`,
+                            null,
+                        );
+                    }
+                }
+
+                const perChallenge = mergedSettings.challengeSettings?.perChallenge || {};
+                for (const [challengeId, overrides] of Object.entries(perChallenge)) {
+                    for (const key of TIME_KEYS) {
+                        if (looksMinuteEncoded(overrides[key])) {
+                            const before = overrides[key];
+                            overrides[key] = before * 60;
+                            migrationChanges = true;
+                            logger.withCategory('settings').info(
+                                `Migrated ${key} override on challenge ${challengeId} from ${before} to ${overrides[key]}s`,
+                                null,
+                            );
+                        }
+                    }
+                }
+
+                mergedSettings._timeUnitMigratedV1 = true;
+                migrationChanges = true;
+            }
+
             // If migration made changes, save the updated settings
             if (migrationChanges) {
                 fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2), 'utf8');
