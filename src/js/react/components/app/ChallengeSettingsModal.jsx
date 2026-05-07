@@ -139,30 +139,13 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                     </div>
                                 </label>
                                 <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
-                                <div className="flex items-center gap-2">
-                                    {/* Enable override checkbox */}
-                                    <input
-                                        type="checkbox"
-                                        className="checkbox checkbox-sm"
-                                        checked={hasOverride}
-                                        onChange={(e) => {
-                                            if (e.target.checked) {
-                                                handleOverrideChange(key, globalDefault);
-                                            } else {
-                                                handleClearOverride(key);
-                                            }
-                                        }}
-                                        title={t('app.enableOverride')}
-                                    />
-                                    <div className={!hasOverride ? 'opacity-50' : ''}>
-                                        <SettingInput
-                                            settingKey={key}
-                                            config={config}
-                                            value={currentValue}
-                                            onChange={hasOverride ? handleOverrideChange : () => {}}
-                                        />
-                                    </div>
-                                </div>
+                                <SettingInput
+                                    settingKey={key}
+                                    config={config}
+                                    value={currentValue}
+                                    onChange={handleOverrideChange}
+                                    onReset={hasOverride ? handleClearOverride : null}
+                                />
                                 <p className="text-xs text-base-content/40 mt-1">
                                     {t('app.globalDefault')}: {String(globalDefault)}
                                 </p>
