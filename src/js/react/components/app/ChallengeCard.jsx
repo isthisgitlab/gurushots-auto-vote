@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus } from '@/utils/formatters';
+import { useTurbo } from '@/api/useTurbo';
 import { VoteButton } from './VoteButton';
 import { EntryBadge } from './EntryBadge';
 
@@ -18,7 +19,16 @@ export function ChallengeCard({
     const { t } = useTranslation();
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
     const [onlyBoost, setOnlyBoost] = useState(false);
-    const [playingTurbo, setPlayingTurbo] = useState(false);
+    const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
+
+    // Tick once a second — only meaningful when this challenge is in TIMER
+    // state and we want canPlayAutoTurbo to flip to true the moment the
+    // cooldown elapses without waiting for an external poll.
+    const [now, setNow] = useState(Math.floor(Date.now() / 1000));
+    useEffect(() => {
+        const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
+        return () => clearInterval(id);
+    }, []);
 
     const member = challenge.member;
     const entries = member.ranking.entries || [];
@@ -28,22 +38,22 @@ export function ChallengeCard({
     const userProgress = member.ranking.total;
 
     const turboState = member.turbo?.state;
-    const now = Math.floor(Date.now() / 1000);
     const turboCooldownPassed = turboState === 'TIMER'
         && typeof member.turbo?.time_to_open === 'number'
         && member.turbo.time_to_open <= now;
-    const canPlayAutoTurbo = turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed;
+    const challengeStillOpen = challenge.close_time > now;
+    const canPlayAutoTurbo = challengeStillOpen
+        && (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
+
+    useEffect(() => {
+        if (!turboError) return undefined;
+        const id = setTimeout(clearTurboError, 5000);
+        return () => clearTimeout(id);
+    }, [turboError, clearTurboError]);
 
     const handlePlayAutoTurbo = async () => {
-        setPlayingTurbo(true);
-        try {
-            const result = await window.api.playAutoTurbo(challenge.id, challenge.title);
-            if (result?.success && onVoteComplete) onVoteComplete();
-        } catch (err) {
-            await window.api.logError(`Error running auto-turbo: ${err.message || err}`);
-        } finally {
-            setPlayingTurbo(false);
-        }
+        const result = await playAutoTurbo(challenge.id, challenge.title);
+        if (result?.success && onVoteComplete) onVoteComplete();
     };
 
     // Check for custom settings
@@ -243,15 +253,16 @@ export function ChallengeCard({
                         <div className={turboStatus.colorClass}>{turboStatus.text}</div>
                         {canPlayAutoTurbo && (
                             <button
-                                className="btn btn-xs btn-warning mt-1"
+                                className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
                                 onClick={handlePlayAutoTurbo}
                                 disabled={playingTurbo || autovoteRunning}
-                                title={autovoteRunning ? t('app.autoTurboRunsWithAutovote') : t('app.playAutoTurbo')}
+                                title={turboError
+                                    || (autovoteRunning ? t('app.autoTurboRunsWithAutovote') : t('app.playAutoTurbo'))}
                             >
                                 {playingTurbo ? (
                                     <span className="loading loading-spinner loading-xs" />
                                 ) : (
-                                    <>⚡ {t('app.play')}</>
+                                    <>🎯 {t('app.earnTurbo')}</>
                                 )}
                             </button>
                         )}

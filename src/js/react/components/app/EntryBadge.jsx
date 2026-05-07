@@ -1,5 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { useBoost } from '@/api/useBoost';
+import { useTurbo } from '@/api/useTurbo';
 
 /**
  * Entry badge component showing entry details and per-entry action buttons.
@@ -14,13 +16,26 @@ import { useTranslation } from '@/contexts/TranslationContext';
  */
 export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable, onBoostApplied, onTurboApplied }) {
     const { t } = useTranslation();
-    const [boosting, setBoosting] = useState(false);
-    const [turboing, setTurboing] = useState(false);
+    const { applyBoost, loading: boosting, error: boostError, clearError: clearBoostError } = useBoost();
+    const { applyTurbo, loading: turboing, error: turboError, clearError: clearTurboError } = useTurbo();
 
-    const isEntryBoosted = entry.boost === 1 || entry.boosted === true;
-    const isEntryTurboed = entry.turbo === 1 || entry.turbo === true;
+    const isEntryBoosted = !!entry.boost && entry.boost !== -1;
+    const isEntryTurboed = !!entry.turbo;
     const showBoostButton = boostAvailable && !isEntryBoosted;
     const showTurboButton = turboAvailable && !isEntryTurboed;
+
+    // Auto-clear errors after a few seconds so a stuck red button doesn't
+    // block the user from retrying without page state reset.
+    useEffect(() => {
+        if (!boostError) return undefined;
+        const id = setTimeout(clearBoostError, 5000);
+        return () => clearTimeout(id);
+    }, [boostError, clearBoostError]);
+    useEffect(() => {
+        if (!turboError) return undefined;
+        const id = setTimeout(clearTurboError, 5000);
+        return () => clearTimeout(id);
+    }, [turboError, clearTurboError]);
 
     const getEntryStyle = () => {
         if (isEntryBoosted) {
@@ -37,29 +52,15 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
 
     const { className: entryTypeClass, icon } = getEntryStyle();
 
-    const handleBoost = useCallback(async () => {
-        setBoosting(true);
-        try {
-            const result = await window.api.applyBoost(challengeId, entry.id, 'boost');
-            if (result?.success && onBoostApplied) onBoostApplied();
-        } catch (err) {
-            await window.api.logError(`Error applying boost: ${err.message || err}`);
-        } finally {
-            setBoosting(false);
-        }
-    }, [challengeId, entry.id, onBoostApplied]);
+    const handleBoost = async () => {
+        const result = await applyBoost(challengeId, entry.id);
+        if (result?.success && onBoostApplied) onBoostApplied();
+    };
 
-    const handleTurbo = useCallback(async () => {
-        setTurboing(true);
-        try {
-            const result = await window.api.applyTurbo(challengeId, entry.id);
-            if (result?.success && onTurboApplied) onTurboApplied();
-        } catch (err) {
-            await window.api.logError(`Error applying turbo: ${err.message || err}`);
-        } finally {
-            setTurboing(false);
-        }
-    }, [challengeId, entry.id, onTurboApplied]);
+    const handleTurbo = async () => {
+        const result = await applyTurbo(challengeId, entry.id);
+        if (result?.success && onTurboApplied) onTurboApplied();
+    };
 
     return (
         <div className={`badge badge-outline ${entryTypeClass} flex items-center gap-1`}>
@@ -69,10 +70,10 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
             </span>
             {showBoostButton && (
                 <button
-                    className="btn btn-xs btn-success ml-1"
+                    className={`btn btn-xs ml-1 ${boostError ? 'btn-error' : 'btn-success'}`}
                     onClick={handleBoost}
                     disabled={boosting}
-                    title={t('app.boost')}
+                    title={boostError || t('app.applyBoostToThisEntry')}
                 >
                     {boosting ? (
                         <span className="loading loading-spinner loading-xs" />
@@ -83,10 +84,10 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
             )}
             {showTurboButton && (
                 <button
-                    className="btn btn-xs btn-warning ml-1"
+                    className={`btn btn-xs ml-1 ${turboError ? 'btn-error' : 'btn-warning'}`}
                     onClick={handleTurbo}
                     disabled={turboing}
-                    title={t('app.turbo')}
+                    title={turboError || t('app.applyTurboToThisEntry')}
                 >
                     {turboing ? (
                         <span className="loading loading-spinner loading-xs" />

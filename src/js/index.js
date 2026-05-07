@@ -5,6 +5,7 @@ const settings = require('./settings');
 const {initializeHeaders} = require('./api/randomizer');
 const logger = require('./logger');
 const votingLogic = require('./services/VotingLogic');
+const {runTurboMiniGame} = require('./api/main');
 const AutoUpdater = require('./services/AutoUpdater');
 const { createApplicationMenu, updateMenuTranslations } = require('./ui/applicationMenu');
 const { translationManager } = require('./translations/index');
@@ -1204,22 +1205,90 @@ ipcMain.handle('vote-on-challenge-manual', async (event, challengeId, challengeT
     }
 });
 
+// In-process guard that prevents two simultaneous mini-game runs on
+// the same challenge — defends against double-click and against an
+// autovote cycle racing with a manual click.
+const turboMiniGameInFlight = new Set();
+
+const sanitizeForLog = (value) => String(value ?? '').replace(/[\r\n\t]/g, ' ').slice(0, 200);
+
 // Handle a manual run of the Turbo mini-game on a single challenge.
 // Independent of autovote — gives the user a way to earn a Turbo on
 // demand without enabling continuous voting.
 ipcMain.handle('play-auto-turbo', async (event, challengeId, challengeTitle) => {
+    const safeId = sanitizeForLog(challengeId);
+    const safeTitle = sanitizeForLog(challengeTitle) || `challenge ${safeId}`;
     try {
-        logger.withCategory('turbo').info(`▶️ Manual auto-turbo run requested for challenge ${challengeId}`, null);
+        logger.withCategory('turbo').info(`▶️ Manual auto-turbo run requested for challenge ${safeId}`, null);
         const userSettings = settings.loadSettings();
         if (!userSettings.token) {
             return {success: false, error: 'No authentication token found'};
         }
-        const {runTurboMiniGame} = require('./api/main');
-        const result = await runTurboMiniGame(
-            {id: challengeId, title: challengeTitle || `challenge ${challengeId}`},
-            userSettings.token,
-        );
-        return {success: true, result};
+
+        // Claim the in-flight slot synchronously, before any await, so a
+        // second click in the same event-loop tick is rejected. The
+        // try/finally that owns the slot wraps the entire critical
+        // section including the live-fetch + validation.
+        if (turboMiniGameInFlight.has(safeId)) {
+            return {success: false, error: 'A turbo run is already in progress for this challenge'};
+        }
+        turboMiniGameInFlight.add(safeId);
+        try {
+            // Fetch the authoritative challenge from the server and
+            // validate state before kicking off a mini-game. Mirrors
+            // the shouldPlayAutoTurbo eligibility check that autovote
+            // uses and catches challenges closed since render.
+            const {getApiStrategy} = require('./apiFactory');
+            const strategy = getApiStrategy();
+            const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
+            const liveChallenge = challengesResponse?.challenges?.find((c) => String(c.id) === String(challengeId));
+            if (!liveChallenge) {
+                return {success: false, error: 'Challenge no longer active'};
+            }
+            const now = Math.floor(Date.now() / 1000);
+            if (!votingLogic.shouldPlayAutoTurbo(liveChallenge, now)) {
+                // Bypass the autoTurbo setting check for the manual
+                // button — the user is explicitly opting in by clicking.
+                const turboState = liveChallenge.member?.turbo?.state;
+                const cooldownPassed = turboState === 'TIMER'
+                    && typeof liveChallenge.member?.turbo?.time_to_open === 'number'
+                    && liveChallenge.member.turbo.time_to_open <= now;
+                const playable = turboState === 'FREE' || turboState === 'IN_PROGRESS' || cooldownPassed;
+                const closeTime = Number(liveChallenge.close_time);
+                if (!Number.isFinite(closeTime) || closeTime <= now || !playable) {
+                    return {success: false, error: `Turbo not playable (state=${turboState || 'unknown'})`};
+                }
+            }
+
+            const result = await runTurboMiniGame(
+                {id: liveChallenge.id, title: liveChallenge.title || safeTitle},
+                userSettings.token,
+            );
+            // Whitelist the fields returned to the renderer so any
+            // future expansion of runTurboMiniGame's internal result
+            // shape never accidentally leaks new data over IPC.
+            const safeResult = result
+                ? {
+                    played: result.played,
+                    correct: result.correct,
+                    flipped: result.flipped,
+                    doubleFailed: result.doubleFailed,
+                    won: result.won,
+                }
+                : null;
+            // Treat any run that produced zero correct picks as a
+            // failure so the renderer can show the user feedback,
+            // regardless of whether `won` is set on the result.
+            if (result?.played === 0) {
+                return {success: false, error: 'No battles to play right now', result: safeResult};
+            }
+            if (!result?.correct) {
+                return {success: false, error: 'Turbo not earned — try again later', result: safeResult};
+            }
+            return {success: true, result: safeResult};
+        } finally {
+            turboMiniGameInFlight.delete(safeId);
+        }
     } catch (error) {
         logger.withCategory('turbo').error('Error running manual auto-turbo:', error);
         return {success: false, error: error.message || 'Failed to run turbo mini-game'};
@@ -1229,8 +1298,10 @@ ipcMain.handle('play-auto-turbo', async (event, challengeId, challengeTitle) => 
 // Handle apply turbo to entry request — same surface as boost-to-entry but
 // for the won-Turbo apply flow.
 ipcMain.handle('apply-turbo-to-entry', async (event, challengeId, imageId) => {
+    const safeChallengeId = sanitizeForLog(challengeId);
+    const safeImageId = sanitizeForLog(imageId);
     try {
-        logger.withCategory('turbo').info(`⚡ Apply turbo to entry request: Challenge=${challengeId}, Image=${imageId}`, null);
+        logger.withCategory('turbo').info(`⚡ Apply turbo to entry request: Challenge=${safeChallengeId}, Image=${safeImageId}`, null);
         const userSettings = settings.loadSettings();
         if (!userSettings.token) {
             logger.withCategory('authentication').warning('❌ No token found for turbo apply', null);
@@ -1245,8 +1316,16 @@ ipcMain.handle('apply-turbo-to-entry', async (event, challengeId, imageId) => {
             logger.withCategory('turbo').success('✅ Turbo applied successfully');
             return {success: true, message: 'Turbo applied successfully'};
         }
-        logger.withCategory('turbo').warning('❌ Failed to apply turbo', result?.raw || null);
-        return {success: false, error: 'Failed to apply turbo'};
+        // Log only a small redacted summary of the raw response so any
+        // session-identifying material the upstream might reflect back
+        // is not persisted verbatim. Same sanitiser is applied to the
+        // user-facing error string returned to the renderer.
+        const safeMessage = sanitizeForLog(result?.raw?.message);
+        const safeRaw = result?.raw
+            ? {success: result.raw.success, error_code: result.raw.error_code, message: safeMessage}
+            : null;
+        logger.withCategory('turbo').warning('❌ Failed to apply turbo', safeRaw);
+        return {success: false, error: safeMessage || 'Failed to apply turbo'};
     } catch (error) {
         logger.withCategory('turbo').error('Error applying turbo to entry:', error);
         return {success: false, error: error.message || 'Failed to apply turbo'};

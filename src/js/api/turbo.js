@@ -13,6 +13,13 @@ const {makePostRequest, FORM_CONTENT_TYPE} = require('./api-client');
 const TURBO_SELECTION_DELAY_MS = 1200;
 const TURBO_BASE_URL = 'https://api.gurushots.com/rest';
 
+const requireValue = (value, label) => {
+    if (value === null || value === undefined || value === '') {
+        throw new Error(`turbo: ${label} is required`);
+    }
+    return value;
+};
+
 const createWebHeaders = (token) => ({
     'host': 'api.gurushots.com',
     'accept': '*/*',
@@ -31,8 +38,10 @@ const createWebHeaders = (token) => ({
  * @returns {Promise<{battles: Array, maxSelections: number, requiredSelections: number}|null>}
  */
 const getChallengeTurbo = async (challengeId, token) => {
+    requireValue(challengeId, 'challengeId');
+    requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const data = `challenge_id=${challengeId}`;
+    const data = `challenge_id=${encodeURIComponent(String(challengeId))}`;
     const response = await makePostRequest(`${TURBO_BASE_URL}/get_challenge_turbo`, headers, data);
     if (!response || !Array.isArray(response.images)) {
         return null;
@@ -57,8 +66,11 @@ const getChallengeTurbo = async (challengeId, token) => {
  * @returns {Promise<{ok: boolean, success: boolean, state: string, scores: object, errorCode: number, raw: object|null}>}
  */
 const submitTurboSelection = async (challengeId, imageId, token) => {
+    requireValue(challengeId, 'challengeId');
+    requireValue(imageId, 'imageId');
+    requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const data = `challenge_id=${challengeId}&image_id=${imageId}`;
+    const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
     const response = await makePostRequest(`${TURBO_BASE_URL}/submit_challenge_turbo_selection`, headers, data);
     if (!response) {
         return {ok: false, success: false, state: null, scores: null, errorCode: null, raw: null};
@@ -82,8 +94,11 @@ const submitTurboSelection = async (challengeId, imageId, token) => {
  * @returns {Promise<{ok: boolean, raw: object|null}>}
  */
 const applyTurbo = async (challengeId, imageId, token) => {
+    requireValue(challengeId, 'challengeId');
+    requireValue(imageId, 'imageId');
+    requireValue(token, 'token');
     const headers = createWebHeaders(token);
-    const data = `challenge_id=${challengeId}&image_id=${imageId}`;
+    const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
     const response = await makePostRequest(`${TURBO_BASE_URL}/set_challenge_turbo`, headers, data);
     if (!response) {
         return {ok: false, raw: null};
