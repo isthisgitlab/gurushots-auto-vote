@@ -190,73 +190,41 @@ const handleLogin = async () => {
 };
 
 /**
- * Run a single voting cycle
+ * Run a single voting cycle. Pass {isManual: true} to use the manual
+ * vote path (votes to 100% regardless of threshold settings).
  */
-const runVotingCycle = async (cycleNumber = 1) => {
+const runVotingCycle = async (cycleNumber = 1, {isManual = false} = {}) => {
+    const label = isManual ? 'Manual Voting' : 'Voting';
+    const opId = isManual ? `manual-vote-cycle-${cycleNumber}` : `vote-cycle-${cycleNumber}`;
     try {
         const userSettings = settings.loadSettings();
         const isMockMode = userSettings.mock;
-        
-        logger.withCategory('voting').info(`--- Voting Cycle ${cycleNumber} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
-        logger.withCategory('voting').info(`Time: ${new Date().toLocaleString()}`);
 
-        // Check if user is authenticated
+        logger.withCategory('voting').info(`--- ${label} Cycle ${cycleNumber} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
+        logger.withCategory('voting').info(`Time: ${new Date().toLocaleString()}`);
+        if (isManual) {
+            logger.withCategory('voting').info('Mode: Manual (votes to 100% regardless of threshold settings)');
+        }
+
         if (!getMiddlewareInstance().isAuthenticated()) {
             logger.withCategory('authentication').error('No authentication token found. Please login first');
             logger.withCategory('ui').info('Run: login');
             return false;
         }
 
-        // Start voting operation
-        logger.withCategory('voting').startOperation(`vote-cycle-${cycleNumber}`, `Voting cycle ${cycleNumber}`);
-        
-        // Run the voting process with per-challenge exposure settings
-        await getMiddlewareInstance().cliVote();
-        
-        logger.withCategory('voting').endOperation(`vote-cycle-${cycleNumber}`, `Voting cycle ${cycleNumber} completed`);
-        
-        // Note: Threshold scheduling update will be handled by the calling function
-        // since we need access to the threshold functions defined in startContinuousVoting
-        
-        return true;
-    } catch (error) {
-        logger.withCategory('voting').error(`Error during voting cycle ${cycleNumber}`, error);
-        logger.withCategory('voting').debug('Full voting cycle error details:', error);
-        return false;
-    }
-};
-
-/**
- * Run a single manual voting cycle (votes to 100% regardless of settings)
- */
-const runManualVotingCycle = async (cycleNumber = 1) => {
-    try {
-        const userSettings = settings.loadSettings();
-        const isMockMode = userSettings.mock;
-        
-        logger.withCategory('voting').info(`--- Manual Voting Cycle ${cycleNumber} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
-        logger.withCategory('voting').info(`Time: ${new Date().toLocaleString()}`);
-        logger.withCategory('voting').info('Mode: Manual (votes to 100% regardless of threshold settings)');
-
-        // Check if user is authenticated
-        if (!getMiddlewareInstance().isAuthenticated()) {
-            logger.withCategory('authentication').error('No authentication token found. Please login first');
-            logger.withCategory('ui').info('Run: login');
-            return false;
+        logger.withCategory('voting').startOperation(opId, `${label} cycle ${cycleNumber}`);
+        if (isManual) {
+            await getMiddlewareInstance().cliVoteManual();
+        } else {
+            await getMiddlewareInstance().cliVote();
         }
+        logger.withCategory('voting').endOperation(opId, `${label} cycle ${cycleNumber} completed`);
 
-        // Start manual voting operation
-        logger.withCategory('voting').startOperation(`manual-vote-cycle-${cycleNumber}`, `Manual voting cycle ${cycleNumber}`);
-        
-        // Run the manual voting process (bypasses all thresholds, always votes to 100%)
-        await getMiddlewareInstance().cliVoteManual();
-        
-        logger.withCategory('voting').endOperation(`manual-vote-cycle-${cycleNumber}`, `Manual voting cycle ${cycleNumber} completed`);
-        
         return true;
     } catch (error) {
-        logger.withCategory('voting').error(`Error during manual voting cycle ${cycleNumber}`, error);
-        logger.withCategory('voting').debug('Full manual voting cycle error details:', error);
+        const noun = isManual ? 'manual voting' : 'voting';
+        logger.withCategory('voting').error(`Error during ${noun} cycle ${cycleNumber}`, error);
+        logger.withCategory('voting').debug(`Full ${noun} cycle error details:`, error);
         return false;
     }
 };
@@ -815,7 +783,7 @@ const main = async () => {
             process.exit(0);
             break;
         case 'vote':
-            await runManualVotingCycle();
+            await runVotingCycle(1, {isManual: true});
             process.exit(0);
             break;
         case 'start':
