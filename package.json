@@ -1,6 +1,6 @@
 {
   "name": "gurushots-auto-vote",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)",
   "main": "src/js/index.js",
   "scripts": {
@@ -172,12 +172,22 @@
       "**/?(*.)+(spec|test).jsx"
     ],
     "transform": {
-      "\\.[jt]sx?$": ["@swc/jest", {
-        "jsc": {
-          "parser": { "syntax": "ecmascript", "jsx": true },
-          "transform": { "react": { "runtime": "automatic" } }
+      "\\.[jt]sx?$": [
+        "@swc/jest",
+        {
+          "jsc": {
+            "parser": {
+              "syntax": "ecmascript",
+              "jsx": true
+            },
+            "transform": {
+              "react": {
+                "runtime": "automatic"
+              }
+            }
+          }
         }
-      }]
+      ]
     },
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/js/react/$1"
