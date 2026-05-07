@@ -540,34 +540,10 @@ const getChallengeOverride = (settingKey, challengeId) => {
 };
 
 /**
- * Set per-challenge override value for a setting
- * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
- * @param {string} challengeId - The challenge ID
- * @param {any} value - The value to set
- * @returns {boolean} - True if successful, false otherwise
+ * Ensures the challengeSettings.perChallenge[challengeId] container
+ * exists on the given settings object and returns it.
  */
-const setChallengeOverride = (settingKey, challengeId, value) => {
-    if (!SETTINGS_SCHEMA[settingKey]) {
-        logger.withCategory('settings').error(`Invalid setting key: ${settingKey}`, null);
-        return false;
-    }
-
-    if (!SETTINGS_SCHEMA[settingKey].perChallenge) {
-        logger.withCategory('settings').error(`Setting ${settingKey} does not support per-challenge overrides`, null);
-        return false;
-    }
-
-    // Get current settings for context validation
-    const settings = loadSettings();
-    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
-    const existingOverrides = settings.challengeSettings?.perChallenge?.[challengeId] || {};
-    const contextSettings = {...globalDefaults, ...existingOverrides, [settingKey]: value};
-
-    if (!validateSetting(settingKey, value, contextSettings, challengeId)) {
-        logger.withCategory('settings').error(`Invalid value for setting ${settingKey}:`, value);
-        return false;
-    }
-
+const _ensureChallengeContainer = (settings, challengeId) => {
     if (!settings.challengeSettings) {
         settings.challengeSettings = getDefaultSettings().challengeSettings;
     }
@@ -577,94 +553,97 @@ const setChallengeOverride = (settingKey, challengeId, value) => {
     if (!settings.challengeSettings.perChallenge[challengeId]) {
         settings.challengeSettings.perChallenge[challengeId] = {};
     }
+    return settings.challengeSettings.perChallenge[challengeId];
+};
 
-    // Get the global default value for comparison
-    const globalDefault = getGlobalDefault(settingKey);
-
-    // Only save if the value is different from global default
-    if (value !== globalDefault) {
-        settings.challengeSettings.perChallenge[challengeId][settingKey] = value;
-    } else {
-        // If value matches global default, remove the override
-        delete settings.challengeSettings.perChallenge[challengeId][settingKey];
-
-        // If challenge has no more overrides, remove the challenge entry
-        if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
-            delete settings.challengeSettings.perChallenge[challengeId];
-        }
+/**
+ * Validates a per-challenge override and writes it onto the in-memory
+ * settings object. Returns one of: 'invalid' (rejected),
+ * 'set' (override stored), 'cleared' (override removed because it
+ * matched the global default).
+ */
+const _applyChallengeOverride = (settings, settingKey, challengeId, value, batchOverrides = null) => {
+    if (!SETTINGS_SCHEMA[settingKey]) {
+        logger.withCategory('settings').error(`Invalid setting key: ${settingKey}`, null);
+        return 'invalid';
+    }
+    if (!SETTINGS_SCHEMA[settingKey].perChallenge) {
+        logger.withCategory('settings').error(`Setting ${settingKey} does not support per-challenge overrides`, null);
+        return 'invalid';
     }
 
+    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const existingOverrides = settings.challengeSettings?.perChallenge?.[challengeId] || {};
+    const contextSettings = batchOverrides
+        ? {...globalDefaults, ...existingOverrides, ...batchOverrides}
+        : {...globalDefaults, ...existingOverrides, [settingKey]: value};
+
+    if (!validateSetting(settingKey, value, contextSettings, challengeId)) {
+        logger.withCategory('settings').error(`Invalid value for setting ${settingKey}:`, value);
+        return 'invalid';
+    }
+
+    const container = _ensureChallengeContainer(settings, challengeId);
+    if (value !== getGlobalDefault(settingKey)) {
+        container[settingKey] = value;
+        return 'set';
+    }
+    delete container[settingKey];
+    return 'cleared';
+};
+
+/**
+ * Set per-challenge override value for a setting.
+ * @param {string} settingKey
+ * @param {string} challengeId
+ * @param {any} value
+ * @returns {boolean}
+ */
+const setChallengeOverride = (settingKey, challengeId, value) => {
+    const settings = loadSettings();
+    const result = _applyChallengeOverride(settings, settingKey, challengeId, value);
+    if (result === 'invalid') return false;
+
+    // If the cleared override left the challenge container empty, drop it.
+    const container = settings.challengeSettings?.perChallenge?.[challengeId];
+    if (container && Object.keys(container).length === 0) {
+        delete settings.challengeSettings.perChallenge[challengeId];
+    }
     return saveSettings(settings);
 };
 
 /**
- * Set multiple per-challenge overrides efficiently, only saving values that differ from global defaults
- * @param {string} challengeId - The challenge ID
- * @param {Object} overrides - Object with settingKey -> value mappings
- * @returns {boolean} - True if successful, false otherwise
+ * Set multiple per-challenge overrides efficiently, only saving values
+ * that differ from global defaults.
+ * @param {string} challengeId
+ * @param {Object} overrides - { settingKey: value, ... }
+ * @returns {boolean}
  */
 const setChallengeOverrides = (challengeId, overrides) => {
     const settings = loadSettings();
-    if (!settings.challengeSettings) {
-        settings.challengeSettings = getDefaultSettings().challengeSettings;
-    }
-    if (!settings.challengeSettings.perChallenge) {
-        settings.challengeSettings.perChallenge = {};
-    }
-    if (!settings.challengeSettings.perChallenge[challengeId]) {
-        settings.challengeSettings.perChallenge[challengeId] = {};
-    }
+    _ensureChallengeContainer(settings, challengeId);
 
-    let hasChanges = false;
     const savedOverrides = [];
     const removedOverrides = [];
+    let hasChanges = false;
 
-    // Process each override
     for (const [settingKey, value] of Object.entries(overrides)) {
-        if (!SETTINGS_SCHEMA[settingKey]) {
-            logger.withCategory('settings').error(`Invalid setting key: ${settingKey}`, null);
-            continue;
-        }
-
-        if (!SETTINGS_SCHEMA[settingKey].perChallenge) {
-            logger.withCategory('settings').error(`Setting ${settingKey} does not support per-challenge overrides`, null);
-            continue;
-        }
-
-        // Create context with global defaults and current batch of overrides
-        const globalDefaults = settings.challengeSettings?.globalDefaults || {};
-        const existingOverrides = settings.challengeSettings?.perChallenge?.[challengeId] || {};
-        const contextSettings = {...globalDefaults, ...existingOverrides, ...overrides};
-
-        if (!validateSetting(settingKey, value, contextSettings, challengeId)) {
-            logger.withCategory('settings').error(`Invalid value for setting ${settingKey}:`, value);
-            continue;
-        }
-
-        // Get the global default value for comparison
-        const globalDefault = getGlobalDefault(settingKey);
-
-        // Only save if the value is different from global default
-        if (value !== globalDefault) {
-            settings.challengeSettings.perChallenge[challengeId][settingKey] = value;
+        const result = _applyChallengeOverride(settings, settingKey, challengeId, value, overrides);
+        if (result === 'set') {
             savedOverrides.push(`${settingKey}=${value}`);
             hasChanges = true;
-        } else {
-            // If value matches global default, remove the override
-            delete settings.challengeSettings.perChallenge[challengeId][settingKey];
+        } else if (result === 'cleared') {
             removedOverrides.push(settingKey);
             hasChanges = true;
         }
     }
 
-    // If challenge has no more overrides, remove the challenge entry
     if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
         delete settings.challengeSettings.perChallenge[challengeId];
         logger.withCategory('settings').debug(`🗑️ Removed empty challenge settings for challenge ${challengeId}`);
         hasChanges = true;
     }
 
-    // Log the changes for debugging
     if (savedOverrides.length > 0) {
         logger.withCategory('general').debug(`💾 Saved overrides for challenge ${challengeId}:`, savedOverrides.join(', '));
     }
