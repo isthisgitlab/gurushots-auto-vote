@@ -226,7 +226,7 @@
             voteOnlyInLastMinute: 'Vote Only in Last Minute',
             voteOnlyInLastMinuteDesc: 'Only auto-vote when within the last minute threshold, skip voting otherwise',
             lastMinuteCheckFrequency: 'Last Minute Check Frequency',
-            lastMinuteCheckFrequencyDesc: 'Check frequency in minutes when within last minute threshold (0-60, 0 = disabled)',
+            lastMinuteCheckFrequencyDesc: 'Check frequency in minutes when within last minute threshold (1-59)',
             lastHourExposure: 'Last Hour Exposure',
             lastHourExposureDesc: 'Exposure threshold for actions within the last hour of challenge (0-100)',
             useLastHourExposure: 'Use Last Hour Exposure',

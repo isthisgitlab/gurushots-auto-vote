@@ -226,7 +226,7 @@
             voteOnlyInLastMinute: 'Balsot tikai pēdējās minūtes laikā',
             voteOnlyInLastMinuteDesc: 'Balsot tikai tad, ja līdz izaicinājuma beigām ir mazāk laika, nekā norādīts pēdējās minūtes slieksnī.',
             lastMinuteCheckFrequency: 'Pēdējās minūtes pārbaudes biežums',
-            lastMinuteCheckFrequencyDesc: 'Pārbaudes biežums minūtēs, kad atrodas pēdējās minūtes slieksnī (0-60, 0 = izslēgts)',
+            lastMinuteCheckFrequencyDesc: 'Pārbaudes biežums minūtēs, kad atrodas pēdējās minūtes slieksnī (1-59)',
             lastHourExposure: 'Pēdējās stundas ekspozīcija',
             lastHourExposureDesc: 'Ekspozīcijas slieksnis darbībām pēdējās stundas laikā (0-100)',
             useLastHourExposure: 'Izmantot pēdējās stundas ekspozīciju',

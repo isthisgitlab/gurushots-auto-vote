@@ -257,28 +257,25 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         // Setup interval
         const settings = await window.api.getSettings();
         const lastMinuteCheckFrequency = await window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
-        const useLastThreshold = lastMinuteCheckFrequency > 0;
 
         let useLastThresholdInterval = false;
 
-        if (useLastThreshold) {
-            const result = await window.api.getActiveChallenges(settings.token);
-            const challenges = result?.challenges || [];
-            const now = Math.floor(Date.now() / 1000);
+        const result = await window.api.getActiveChallenges(settings.token);
+        const challenges = result?.challenges || [];
+        const now = Math.floor(Date.now() / 1000);
 
-            for (const challenge of challenges) {
-                if (challenge.type !== 'flash') {
-                    const effectiveLastMinuteThreshold = await window.api.getEffectiveSetting(
-                        'lastMinuteThreshold',
-                        challenge.id.toString(),
-                    );
-                    const timeUntilEnd = challenge.close_time - now;
-                    const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+        for (const challenge of challenges) {
+            if (challenge.type !== 'flash') {
+                const effectiveLastMinuteThreshold = await window.api.getEffectiveSetting(
+                    'lastMinuteThreshold',
+                    challenge.id.toString(),
+                );
+                const timeUntilEnd = challenge.close_time - now;
+                const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
 
-                    if (isWithinLastMinuteThreshold) {
-                        useLastThresholdInterval = true;
-                        break;
-                    }
+                if (isWithinLastMinuteThreshold) {
+                    useLastThresholdInterval = true;
+                    break;
                 }
             }
         }
