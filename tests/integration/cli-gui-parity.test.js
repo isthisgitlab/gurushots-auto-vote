@@ -5,11 +5,9 @@
  * in the CLI version, ensuring feature parity between the two interfaces.
  */
 
-const {getMiddleware} = require('../../src/js/apiFactory');
+const {getMiddleware, realApi, mockApi} = require('../../src/js/apiFactory');
 const settings = require('../../src/js/settings');
 const BaseMiddleware = require('../../src/js/services/BaseMiddleware');
-const RealApiStrategy = require('../../src/js/strategies/RealApiStrategy');
-const MockApiStrategy = require('../../src/js/strategies/MockApiStrategy');
 
 // Mock the API client for testing
 jest.mock('../../src/js/api/api-client', () => ({
@@ -52,10 +50,10 @@ describe('CLI-GUI Parity Tests', () => {
     beforeEach(() => {
         // Clear all mocks
         jest.clearAllMocks();
-        
-        // Create fresh strategy instances
-        realStrategy = new RealApiStrategy();
-        mockStrategy = new MockApiStrategy();
+
+        // Reuse the singleton api surfaces exposed by apiFactory
+        realStrategy = realApi;
+        mockStrategy = mockApi;
         realMiddleware = new BaseMiddleware(realStrategy);
         mockMiddleware = new BaseMiddleware(mockStrategy);
     });

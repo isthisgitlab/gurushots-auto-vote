@@ -185,7 +185,6 @@
       "src/js/api/challenges.js",
       "src/js/api/login.js",
       "src/js/api/voting.js",
-      "src/js/strategies/**/*.js",
       "src/js/apiFactory.js"
     ],
     "coverageDirectory": "coverage",
