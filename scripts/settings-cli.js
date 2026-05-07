@@ -21,6 +21,19 @@ const command = process.argv[2];
 const key = process.argv[3];
 const value = process.argv[4];
 
+// Parses a CLI string argument into the most-specific JS value
+// it can be: JSON literal first, then number, then boolean, else
+// the raw string.
+function parseSettingValue(raw) {
+    try {
+        return JSON.parse(raw);
+    } catch {
+        if (!isNaN(raw) && !isNaN(parseFloat(raw))) return parseFloat(raw);
+        if (raw === 'true' || raw === 'false') return raw === 'true';
+        return raw;
+    }
+}
+
 // Helper function to get nested property value
 function getNestedProperty(obj, path) {
     return path.split('.').reduce((current, key) => {
@@ -39,19 +52,7 @@ function setNestedProperty(obj, path, value) {
         return current[key];
     }, obj);
 
-    // Try to parse value as JSON first, then number, then boolean, then string
-    let parsedValue = value;
-    try {
-        parsedValue = JSON.parse(value);
-    } catch {
-        if (!isNaN(value) && !isNaN(parseFloat(value))) {
-            parsedValue = parseFloat(value);
-        } else if (value === 'true' || value === 'false') {
-            parsedValue = value === 'true';
-        }
-    }
-
-    target[lastKey] = parsedValue;
+    target[lastKey] = parseSettingValue(value);
     return obj;
 }
 
@@ -150,17 +151,7 @@ async function main() {
                 process.exit(1);
             }
 
-            // Try to parse value appropriately
-            let parsedValue = value;
-            try {
-                parsedValue = JSON.parse(value);
-            } catch {
-                if (!isNaN(value) && !isNaN(parseFloat(value))) {
-                    parsedValue = parseFloat(value);
-                } else if (value === 'true' || value === 'false') {
-                    parsedValue = value === 'true';
-                }
-            }
+            const parsedValue = parseSettingValue(value);
 
             // Handle nested keys for schema-based global defaults
             if (key.startsWith('challengeSettings.globalDefaults.')) {
@@ -305,17 +296,7 @@ async function main() {
                 process.exit(1);
             }
 
-            // Try to parse value appropriately
-            let parsedValue = value;
-            try {
-                parsedValue = JSON.parse(value);
-            } catch {
-                if (!isNaN(value) && !isNaN(parseFloat(value))) {
-                    parsedValue = parseFloat(value);
-                } else if (value === 'true' || value === 'false') {
-                    parsedValue = value === 'true';
-                }
-            }
+            const parsedValue = parseSettingValue(value);
 
             const schema = settings.SETTINGS_SCHEMA;
             if (!schema[key]) {
