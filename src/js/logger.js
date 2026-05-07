@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-// ANSI color codes for CLI output
+// ANSI color codes for CLI output (referenced via bracket notation in formatConsoleMessage)
 const colors = {
     reset: '\x1b[0m',
     bright: '\x1b[1m',
@@ -15,12 +15,6 @@ const colors = {
     cyan: '\x1b[36m',
     white: '\x1b[37m',
     gray: '\x1b[90m',
-    bgRed: '\x1b[41m',
-    bgGreen: '\x1b[42m',
-    bgYellow: '\x1b[43m',
-    bgBlue: '\x1b[44m',
-    bgMagenta: '\x1b[45m',
-    bgCyan: '\x1b[46m',
 };
 
 // Try to get Electron app (same logic as settings.js)
@@ -143,17 +137,13 @@ const getLogFilePaths = (date = getCurrentDate()) => {
     };
 };
 
-// Retention periods in days
-const ERROR_RETENTION_DAYS = 30;
-const GENERAL_RETENTION_DAYS = 7;
-const API_RETENTION_DAYS = 1; // Only keep API logs for 1 day in dev mode
-const SETTINGS_RETENTION_DAYS = 7; // Keep settings logs for 7 days
-
-// Maximum file sizes in MB
-const MAX_ERROR_LOG_SIZE = 10; // 10 MB
-const MAX_APP_LOG_SIZE = 50;   // 50 MB
-const MAX_API_LOG_SIZE = 20;   // 20 MB
-const MAX_SETTINGS_LOG_SIZE = 10; // 10 MB
+// Per-log-prefix retention rules: { days, maxMB }.
+const LOG_RETENTION = {
+    errors: {days: 30, maxMB: 10},
+    app: {days: 7, maxMB: 50},
+    api: {days: 1, maxMB: 20},
+    settings: {days: 7, maxMB: 10},
+};
 
 // Parse date from filename (e.g., "errors-2025-07-28.log" -> "2025-07-28")
 const parseDateFromFilename = (filename) => {
@@ -197,19 +187,12 @@ const cleanupOldLogs = () => {
                 const fileDate = parseDateFromFilename(file);
 
                 if (fileDate) {
-                    // Determine retention based on file type
-                    if (file.startsWith('errors-')) {
-                        shouldDelete = isDateOlderThan(fileDate, ERROR_RETENTION_DAYS) || fileSizeMB > MAX_ERROR_LOG_SIZE;
-                        reason = isDateOlderThan(fileDate, ERROR_RETENTION_DAYS) ? 'age' : 'size';
-                    } else if (file.startsWith('app-')) {
-                        shouldDelete = isDateOlderThan(fileDate, GENERAL_RETENTION_DAYS) || fileSizeMB > MAX_APP_LOG_SIZE;
-                        reason = isDateOlderThan(fileDate, GENERAL_RETENTION_DAYS) ? 'age' : 'size';
-                    } else if (file.startsWith('api-')) {
-                        shouldDelete = isDateOlderThan(fileDate, API_RETENTION_DAYS) || fileSizeMB > MAX_API_LOG_SIZE;
-                        reason = isDateOlderThan(fileDate, API_RETENTION_DAYS) ? 'age' : 'size';
-                    } else if (file.startsWith('settings-')) {
-                        shouldDelete = isDateOlderThan(fileDate, SETTINGS_RETENTION_DAYS) || fileSizeMB > MAX_SETTINGS_LOG_SIZE;
-                        reason = isDateOlderThan(fileDate, SETTINGS_RETENTION_DAYS) ? 'age' : 'size';
+                    const prefix = Object.keys(LOG_RETENTION).find((p) => file.startsWith(`${p}-`));
+                    if (prefix) {
+                        const {days, maxMB} = LOG_RETENTION[prefix];
+                        const tooOld = isDateOlderThan(fileDate, days);
+                        shouldDelete = tooOld || fileSizeMB > maxMB;
+                        reason = tooOld ? 'age' : 'size';
                     }
                 } else if (file.startsWith('api-debug-')) {
                     // Clean up old timestamped files
@@ -623,37 +606,6 @@ module.exports = {
         }
     },
     
-    // CLI-specific methods
-    cliInfo: (message, data, category) => {
-        if (isCliMode) {
-            writeToLogFile(currentLogFiles.app, 'INFO', message, data, getContext(), category);
-        }
-    },
-    
-    cliSuccess: (message, data, duration, category) => {
-        if (isCliMode) {
-            logSuccess(message, data, duration, category);
-        }
-    },
-    
-    cliError: (message, data, category) => {
-        if (isCliMode) {
-            writeToLogFile(currentLogFiles.error, 'ERROR', message, data, getContext(), category);
-        }
-    },
-    
-    cliDebug: (message, data, category) => {
-        if (isCliMode && isSourceCode()) {
-            writeToLogFile(currentLogFiles.app, 'DEBUG', message, data, getContext(), category);
-        }
-    },
-    
-    cliWarning: (message, data, category) => {
-        if (isCliMode) {
-            logWarning(message, data, category);
-        }
-    },
-
     // Utility methods
     getLogFile: () => currentLogFiles.app,
     getErrorLogFile: () => currentLogFiles.error,
