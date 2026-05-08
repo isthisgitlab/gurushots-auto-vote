@@ -10,12 +10,12 @@ const getUserDataPath = () => {
 
     // Use platform-specific paths
     switch (process.platform) {
-    case 'darwin': // macOS
-        return path.join(os.homedir(), 'Library', 'Application Support', appName);
-    case 'win32': // Windows
-        return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), appName);
-    default: // Linux and others
-        return path.join(os.homedir(), '.config', appName);
+        case 'darwin': // macOS
+            return path.join(os.homedir(), 'Library', 'Application Support', appName);
+        case 'win32': // Windows
+            return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), appName);
+        default: // Linux and others
+            return path.join(os.homedir(), '.config', appName);
     }
 };
 
@@ -34,7 +34,7 @@ try {
     let deletedCount = 0;
     let totalSize = 0;
 
-    files.forEach(file => {
+    files.forEach((file) => {
         // Clean up old timestamped files
         if (file.startsWith('api-debug-')) {
             const filePath = path.join(logsDir, file);
@@ -63,8 +63,7 @@ try {
     console.log('   • Runs on application startup');
     console.log('   • Runs every hour while application is running');
     console.log('   • Deletes files based on date and size limits');
-
 } catch (error) {
     console.error('❌ Error during cleanup:', error);
     process.exit(1);
-} 
+}

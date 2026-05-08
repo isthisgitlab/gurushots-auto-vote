@@ -58,14 +58,20 @@ describe('voting/cancellation', () => {
             // bring in so requiring them doesn't try to spin Electron.
             jest.doMock('../../src/js/logger', () => ({
                 withCategory: () => ({
-                    info: jest.fn(), debug: jest.fn(), warning: jest.fn(),
-                    error: jest.fn(), success: jest.fn(), api: jest.fn(),
-                    progress: jest.fn(), startOperation: jest.fn(), endOperation: jest.fn(),
+                    info: jest.fn(),
+                    debug: jest.fn(),
+                    warning: jest.fn(),
+                    error: jest.fn(),
+                    success: jest.fn(),
+                    api: jest.fn(),
+                    progress: jest.fn(),
+                    startOperation: jest.fn(),
+                    endOperation: jest.fn(),
                     challengeInfo: jest.fn(),
                 }),
                 isDevMode: () => false,
                 challengeInfo: jest.fn(),
-                CATEGORIES: {VOTING: 'voting'},
+                CATEGORIES: { VOTING: 'voting' },
             }));
 
             const mockApi = require('../../src/js/mock');

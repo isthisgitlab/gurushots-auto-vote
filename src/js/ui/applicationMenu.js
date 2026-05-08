@@ -26,113 +26,121 @@ function t(key) {
 function createApplicationMenu() {
     // Initialize translations
     initializeTranslations();
-    
+
     const isMac = process.platform === 'darwin';
-    
+
     const template = [
         // macOS app menu
-        ...(isMac ? [{
-            label: app.getName(),
-            submenu: [
-                { role: 'about' },
-                { type: 'separator' },
-                { role: 'services' },
-                { type: 'separator' },
-                { role: 'hide' },
-                { role: 'hideOthers' },
-                { role: 'unhide' },
-                { type: 'separator' },
-                { role: 'quit' },
-            ],
-        }] : []),
-        
+        ...(isMac
+            ? [
+                  {
+                      label: app.getName(),
+                      submenu: [
+                          { role: 'about' },
+                          { type: 'separator' },
+                          { role: 'services' },
+                          { type: 'separator' },
+                          { role: 'hide' },
+                          { role: 'hideOthers' },
+                          { role: 'unhide' },
+                          { type: 'separator' },
+                          { role: 'quit' },
+                      ],
+                  },
+              ]
+            : []),
+
         // Edit menu - essential for clipboard operations
         {
             label: t('menu.edit'),
             submenu: [
-                { 
+                {
                     label: t('menu.undo'),
-                    role: 'undo', 
+                    role: 'undo',
                 },
-                { 
+                {
                     label: t('menu.redo'),
-                    role: 'redo', 
+                    role: 'redo',
                 },
                 { type: 'separator' },
-                { 
+                {
                     label: t('menu.cut'),
-                    role: 'cut', 
+                    role: 'cut',
                 },
-                { 
+                {
                     label: t('menu.copy'),
-                    role: 'copy', 
+                    role: 'copy',
                 },
-                { 
+                {
                     label: t('menu.paste'),
-                    role: 'paste', 
+                    role: 'paste',
                 },
-                { 
+                {
                     label: t('menu.selectAll'),
-                    role: 'selectall', 
+                    role: 'selectall',
                 },
             ],
         },
-        
+
         // File menu - simplified for this app
-        ...(isMac ? [] : [{
-            label: t('menu.file'),
-            submenu: [
-                { role: 'quit' },
-            ],
-        }]),
-        
+        ...(isMac
+            ? []
+            : [
+                  {
+                      label: t('menu.file'),
+                      submenu: [{ role: 'quit' }],
+                  },
+              ]),
+
         // View menu - relevant items for this app
         {
             label: t('menu.view'),
             submenu: [
-                { 
+                {
                     label: t('menu.reload'),
                     role: 'reload',
                 },
-                { 
+                {
                     label: t('menu.toggleDevTools'),
                     role: 'toggleDevTools',
                 },
                 { type: 'separator' },
-                { 
+                {
                     label: t('menu.toggleFullscreen'),
                     role: 'togglefullscreen',
                 },
             ],
         },
-        
+
         // Window menu - simplified
         {
             label: t('menu.window'),
             submenu: [
-                { 
+                {
                     label: t('menu.minimize'),
                     role: 'minimize',
                 },
-                ...(isMac ? [
-                    { 
-                        label: t('menu.zoom'),
-                        role: 'zoom',
-                    },
-                    { type: 'separator' },
-                    { 
-                        label: t('menu.bringAllToFront'),
-                        role: 'front',
-                    },
-                ] : [
-                    { 
-                        label: t('menu.close'),
-                        role: 'close',
-                    },
-                ]),
+                ...(isMac
+                    ? [
+                          {
+                              label: t('menu.zoom'),
+                              role: 'zoom',
+                          },
+                          { type: 'separator' },
+                          {
+                              label: t('menu.bringAllToFront'),
+                              role: 'front',
+                          },
+                      ]
+                    : [
+                          {
+                              label: t('menu.close'),
+                              role: 'close',
+                          },
+                      ]),
             ],
         },
-        
+
         // Help menu
         {
             label: t('menu.help'),
@@ -154,7 +162,7 @@ function createApplicationMenu() {
             ],
         },
     ];
-    
+
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
 }
@@ -166,9 +174,7 @@ async function checkForUpdatesFromMenu() {
 
     try {
         // Get the main window to send events to
-        const mainWindow = BrowserWindow.getAllWindows().find(win =>
-            win.getTitle() !== 'Logs' && !win.isDestroyed(),
-        );
+        const mainWindow = BrowserWindow.getAllWindows().find((win) => win.getTitle() !== 'Logs' && !win.isDestroyed());
 
         const autoUpdater = new AutoUpdater(mainWindow);
         const updateInfo = await autoUpdater.checkForUpdates(true); // Force check
@@ -200,7 +206,7 @@ async function checkForUpdatesFromMenu() {
 // Show About dialog
 function showAbout() {
     const packageInfo = require('../../../package.json');
-    
+
     dialog.showMessageBox({
         type: 'info',
         title: t('menu.aboutTitle'),
@@ -221,14 +227,14 @@ function updateMenuTranslations() {
 // Open logs window
 function openLogsWindow() {
     const path = require('path');
-    
+
     // Check if logs window already exists
-    const existingWindow = BrowserWindow.getAllWindows().find(win => win.getTitle() === 'Logs');
+    const existingWindow = BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'Logs');
     if (existingWindow) {
         existingWindow.focus();
         return;
     }
-    
+
     const logsWindow = new BrowserWindow({
         width: 1000,
         height: 700,
@@ -240,13 +246,13 @@ function openLogsWindow() {
         },
         show: false,
     });
-    
+
     logsWindow.loadFile(path.join(__dirname, '../../html/logs.html'));
-    
+
     logsWindow.once('ready-to-show', () => {
         logsWindow.show();
     });
-    
+
     // Clean up when window is closed
     logsWindow.on('closed', () => {
         // Window will be garbage collected

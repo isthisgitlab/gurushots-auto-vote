@@ -1,8 +1,8 @@
-const {app, BrowserWindow, ipcMain, session} = require('electron');
+const { app, BrowserWindow, ipcMain, session } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const settings = require('./settings');
-const {initializeHeaders} = require('./api/randomizer');
+const { initializeHeaders } = require('./api/randomizer');
 const logger = require('./logger');
 const AutoUpdater = require('./services/AutoUpdater');
 const logIpc = require('./ipc/log.handlers');
@@ -11,7 +11,7 @@ const miscIpc = require('./ipc/misc.handlers');
 const settingsIpc = require('./ipc/settings.handlers');
 const votingIpc = require('./ipc/voting.handlers');
 const actionsIpc = require('./ipc/actions.handlers');
-const {ensureExit} = require('./windows/lifecycle');
+const { ensureExit } = require('./windows/lifecycle');
 const { createApplicationMenu } = require('./ui/applicationMenu');
 const { translationManager } = require('./translations/index');
 
@@ -44,7 +44,9 @@ let mainWindowCreatedTime = null;
 logIpc.register(ipcMain);
 updateIpc.register(ipcMain, {
     getAutoUpdater: () => autoUpdater,
-    setAutoUpdater: (v) => { autoUpdater = v; },
+    setAutoUpdater: (v) => {
+        autoUpdater = v;
+    },
     getMainWindow: () => mainWindow,
 });
 miscIpc.register(ipcMain, {
@@ -63,14 +65,14 @@ actionsIpc.register(ipcMain);
  */
 function compareSettings(oldSettings, newSettings) {
     const changes = [];
-    
+
     // Function to safely stringify values for comparison and logging
     const stringify = (value) => {
         if (value === null || value === undefined) return 'null';
         if (typeof value === 'object') return JSON.stringify(value);
         return String(value);
     };
-    
+
     // Recursive function to compare nested objects
     const compareRecursive = (oldObj, newObj, path = '') => {
         // Handle null/undefined cases
@@ -84,16 +86,21 @@ function compareSettings(oldSettings, newSettings) {
             }
             return;
         }
-        
+
         // If both are objects, recurse into them
-        if (typeof oldObj === 'object' && typeof newObj === 'object' && !Array.isArray(oldObj) && !Array.isArray(newObj)) {
+        if (
+            typeof oldObj === 'object' &&
+            typeof newObj === 'object' &&
+            !Array.isArray(oldObj) &&
+            !Array.isArray(newObj)
+        ) {
             const allKeys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
-            
+
             for (const key of allKeys) {
                 const newPath = path ? `${path}.${key}` : key;
                 const oldValue = oldObj[key];
                 const newValue = newObj[key];
-                
+
                 compareRecursive(oldValue, newValue, newPath);
             }
         } else {
@@ -107,10 +114,10 @@ function compareSettings(oldSettings, newSettings) {
             }
         }
     };
-    
+
     // Start recursive comparison
     compareRecursive(oldSettings, newSettings);
-    
+
     return changes;
 }
 
@@ -228,7 +235,7 @@ function createMainWindow() {
     // Watch settings file for changes and auto-reload with debouncing
     const settingsPath = path.join(settings.getUserDataPath(), 'settings.json');
     let previousSettings = null;
-    
+
     // Store initial settings state
     if (fs.existsSync(settingsPath)) {
         try {
@@ -236,7 +243,7 @@ function createMainWindow() {
         } catch (error) {
             logger.withCategory('settings').error('Failed to load initial settings for comparison:', error.message);
         }
-        
+
         settingsWatcher = fs.watch(settingsPath, (eventType) => {
             if (eventType === 'change') {
                 // Clear existing timeout to debounce rapid file changes
@@ -248,11 +255,14 @@ function createMainWindow() {
                 settingsReloadTimeout = setTimeout(() => {
                     // Prevent reload if main window was just created (during login)
                     const timeSinceCreation = Date.now() - mainWindowCreatedTime;
-                    if (timeSinceCreation < 2000) { // 2 second window
-                        logger.withCategory('settings').info('🔄 Settings file changed, but skipping reload (window recently created)');
+                    if (timeSinceCreation < 2000) {
+                        // 2 second window
+                        logger
+                            .withCategory('settings')
+                            .info('🔄 Settings file changed, but skipping reload (window recently created)');
                         return;
                     }
-                    
+
                     // Load new settings and compare with previous
                     let newSettings;
                     let shouldReload = false;
@@ -265,25 +275,35 @@ function createMainWindow() {
                             if (changes.length > 0) {
                                 hasChanges = true;
                                 // Check if any of the changed settings require reload
-                                const reloadRequiredChanges = changes.filter(change => {
+                                const reloadRequiredChanges = changes.filter((change) => {
                                     const settingKey = change.key.split('.')[0]; // Get main setting key
                                     return settings.isReloadRequired(settingKey);
                                 });
 
                                 if (reloadRequiredChanges.length > 0) {
-                                    logger.withCategory('settings').info('🔄 Reload-required settings changed, reloading main window...');
-                                    reloadRequiredChanges.forEach(change => {
-                                        logger.withCategory('settings').info(`  • ${change.key}: ${change.oldValue} → ${change.newValue} (reload required)`);
+                                    logger
+                                        .withCategory('settings')
+                                        .info('🔄 Reload-required settings changed, reloading main window...');
+                                    reloadRequiredChanges.forEach((change) => {
+                                        logger
+                                            .withCategory('settings')
+                                            .info(
+                                                `  • ${change.key}: ${change.oldValue} → ${change.newValue} (reload required)`,
+                                            );
                                     });
                                     shouldReload = true;
                                 } else {
                                     logger.withCategory('settings').info('🔄 Settings changed (no reload required):');
-                                    changes.forEach(change => {
-                                        logger.withCategory('settings').info(`  • ${change.key}: ${change.oldValue} → ${change.newValue}`);
+                                    changes.forEach((change) => {
+                                        logger
+                                            .withCategory('settings')
+                                            .info(`  • ${change.key}: ${change.oldValue} → ${change.newValue}`);
                                     });
                                 }
                             } else {
-                                logger.withCategory('settings').info('🔄 Settings file changed (no property differences detected)');
+                                logger
+                                    .withCategory('settings')
+                                    .info('🔄 Settings file changed (no property differences detected)');
                             }
                         } else {
                             logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
@@ -293,11 +313,13 @@ function createMainWindow() {
                         // Update previous settings for next comparison
                         previousSettings = newSettings;
                     } catch (error) {
-                        logger.withCategory('settings').error('Failed to load new settings for comparison:', error.message);
+                        logger
+                            .withCategory('settings')
+                            .error('Failed to load new settings for comparison:', error.message);
                         logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
                         shouldReload = true;
                     }
-                    
+
                     if (shouldReload && mainWindow && !mainWindow.isDestroyed()) {
                         mainWindow.reload();
                     } else if (hasChanges && newSettings) {
@@ -334,11 +356,11 @@ function checkAutoLogin() {
 app.whenReady().then(async () => {
     // Log userData path for verification
     logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
-    
+
     // Clear cache to prevent service worker database errors
     await session.defaultSession.clearCache();
     logger.withCategory('ui').info('[App] Browser cache cleared to prevent service worker database errors', null);
-    
+
     // Initialize API headers on app startup
     initializeHeaders();
 
@@ -481,11 +503,6 @@ ipcMain.on('logout', () => {
 // open-external-url, reload-window, refresh-menu live in ipc/misc.handlers.js.
 // authenticate, get-active-challenges, play-auto-turbo, apply-turbo-to-entry,
 // apply-boost-to-entry live in ipc/actions.handlers.js.
-
-
-
-
-
 
 // AutoUpdater IPC handlers live in ipc/update.handlers.js.
 

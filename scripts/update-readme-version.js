@@ -40,7 +40,7 @@ try {
 
     let totalChanges = 0;
 
-    filesToUpdate.forEach(fileInfo => {
+    filesToUpdate.forEach((fileInfo) => {
         if (!fs.existsSync(fileInfo.path)) {
             logger.withCategory('ui').warning(`⚠️  ${fileInfo.name} not found, skipping...`);
             return;
@@ -94,7 +94,7 @@ try {
         ];
 
         // Apply all replacements
-        filePatterns.forEach(({pattern, replacement}) => {
+        filePatterns.forEach(({ pattern, replacement }) => {
             if (pattern.test(content)) {
                 content = content.replace(pattern, replacement);
                 changesMade++;
@@ -104,42 +104,50 @@ try {
         // Update download URLs to use the current version
         const urlPatterns = [
             {
-                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x64\.exe/g,
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x64\.exe/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-x64.exe`,
             },
             {
-                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.dmg/g,
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.dmg/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.dmg`,
             },
             {
-                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.app\.zip/g,
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.app\.zip/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.app.zip`,
             },
             {
-                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x86_64\.AppImage/g,
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-x86_64\.AppImage/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-x86_64.AppImage`,
             },
             {
-                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.AppImage/g,
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.AppImage/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.AppImage`,
             },
             // CLI file URLs
             {
-                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-mac/g,
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-mac/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-mac`,
             },
             {
-                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux/g,
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-linux`,
             },
             {
-                pattern: /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux-arm/g,
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux-arm/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v${version}-linux-arm`,
             },
         ];
 
         // Apply all URL replacements
-        urlPatterns.forEach(({pattern, replacement}) => {
+        urlPatterns.forEach(({ pattern, replacement }) => {
             if (pattern.test(content)) {
                 content = content.replace(pattern, replacement);
                 changesMade++;
@@ -158,7 +166,7 @@ try {
             content = content.replace(runPattern, `./GuruShotsAutoVote-v${version}-*.AppImage`);
             changesMade++;
         }
-        
+
         // Update CLI command examples
         const cliCommandPatterns = [
             {
@@ -179,9 +187,9 @@ try {
                 replacement: `./gurucli-v${version}-[platform]`,
             },
         ];
-        
+
         // Apply CLI command replacements
-        cliCommandPatterns.forEach(({pattern, replacement}) => {
+        cliCommandPatterns.forEach(({ pattern, replacement }) => {
             if (pattern.test(content)) {
                 content = content.replace(pattern, replacement);
                 changesMade++;
@@ -192,7 +200,9 @@ try {
         fs.writeFileSync(fileInfo.path, content, 'utf8');
 
         if (changesMade > 0) {
-            logger.withCategory('ui').success(`✅ ${fileInfo.name} updated successfully with version ${version} (${changesMade} changes)`);
+            logger
+                .withCategory('ui')
+                .success(`✅ ${fileInfo.name} updated successfully with version ${version} (${changesMade} changes)`);
             totalChanges += changesMade;
         } else {
             logger.withCategory('ui').info(`ℹ️  ${fileInfo.name} is already up to date with version ${version}`);
@@ -208,8 +218,7 @@ try {
     } else {
         logger.withCategory('ui').info(`\nℹ️  All documentation is already up to date with version ${version}`);
     }
-
 } catch (error) {
     logger.withCategory('ui').error(`❌ Error updating documentation: ${error.message}`);
     process.exit(1);
-} 
+}

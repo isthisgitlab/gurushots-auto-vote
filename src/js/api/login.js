@@ -6,7 +6,7 @@
  */
 
 const axios = require('axios');
-const {createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
+const { createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
 const logger = require('../logger');
 
 /**
@@ -45,10 +45,10 @@ const authenticate = async (email, password) => {
     try {
         // Log the request
         logger.withCategory('api').apiRequest('POST', config.url);
-        
+
         // Send login request
         const response = await axios(config);
-        
+
         // Log successful response with full data
         logger.withCategory('api').api('API Response', {
             method: 'POST',
@@ -78,4 +78,4 @@ const authenticate = async (email, password) => {
 
 module.exports = {
     authenticate,
-}; 
+};

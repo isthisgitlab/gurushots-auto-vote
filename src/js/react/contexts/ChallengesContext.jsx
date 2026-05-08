@@ -52,11 +52,7 @@ export function ChallengesProvider({ children, autovoteRunning }) {
         refetch,
     };
 
-    return (
-        <ChallengesContext.Provider value={value}>
-            {children}
-        </ChallengesContext.Provider>
-    );
+    return <ChallengesContext.Provider value={value}>{children}</ChallengesContext.Provider>;
 }
 
 /**

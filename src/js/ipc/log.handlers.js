@@ -15,8 +15,8 @@ const logger = require('../logger');
 const logStreamWindows = new Set();
 
 const sendLogToGUI = (level, message, context, timestamp, category) => {
-    const logData = {level, message, context, timestamp, category};
-    logStreamWindows.forEach(webContents => {
+    const logData = { level, message, context, timestamp, category };
+    logStreamWindows.forEach((webContents) => {
         if (!webContents.isDestroyed()) {
             webContents.send('log-message', logData);
         }
@@ -28,21 +28,21 @@ const register = (ipcMain) => {
         logger.setContext('GUI');
         logger.withCategory('ui').debug(message, data);
         logger.clearContext();
-        return {success: true};
+        return { success: true };
     });
 
     ipcMain.handle('log-error', async (event, message, data) => {
         logger.setContext('GUI');
         logger.withCategory('ui').error(message, data);
         logger.clearContext();
-        return {success: true};
+        return { success: true };
     });
 
     ipcMain.handle('log-api', async (event, message, data) => {
         logger.setContext('GUI');
         logger.withCategory('api').api(message, data);
         logger.clearContext();
-        return {success: true};
+        return { success: true };
     });
 
     ipcMain.handle('get-log-file', async () => logger.getLogFile());
@@ -55,20 +55,20 @@ const register = (ipcMain) => {
             event.sender.on('destroyed', () => {
                 logStreamWindows.delete(event.sender);
             });
-            return {success: true};
+            return { success: true };
         } catch (error) {
             logger.withCategory('ui').error('Error starting log stream:', error);
-            return {success: false, error: error.message};
+            return { success: false, error: error.message };
         }
     });
 
     ipcMain.handle('stop-log-stream', async (event) => {
         try {
             logStreamWindows.delete(event.sender);
-            return {success: true};
+            return { success: true };
         } catch (error) {
             logger.withCategory('ui').error('Error stopping log stream:', error);
-            return {success: false, error: error.message};
+            return { success: false, error: error.message };
         }
     });
 
@@ -77,4 +77,4 @@ const register = (ipcMain) => {
     global.sendLogToGUI = sendLogToGUI;
 };
 
-module.exports = {register, sendLogToGUI};
+module.exports = { register, sendLogToGUI };

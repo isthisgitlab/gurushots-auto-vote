@@ -1,6 +1,6 @@
 /**
  * Test suite for useLastHourExposure setting functionality
- * 
+ *
  * This test verifies that the useLastHourExposure setting correctly controls
  * whether the last hour exposure logic is applied or not.
  */
@@ -14,7 +14,7 @@ jest.mock('../../src/js/settings');
 describe('useLastHourExposure setting', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        
+
         // Mock the getEffectiveSetting function
         settings.getEffectiveSetting = jest.fn();
     });
@@ -30,10 +30,10 @@ describe('useLastHourExposure setting', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 75 // Below lastHourExposure threshold
-                    }
-                }
-            }
+                        exposure_factor: 75, // Below lastHourExposure threshold
+                    },
+                },
+            },
         };
 
         const now = Math.floor(Date.now() / 1000);
@@ -41,13 +41,20 @@ describe('useLastHourExposure setting', () => {
         // Mock settings - useLastHourExposure is TRUE
         settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
             switch (key) {
-            case 'onlyBoost': return false;
-            case 'voteOnlyInLastMinute': return false;
-            case 'exposure': return 100;
-            case 'lastMinuteThreshold': return 10;
-            case 'lastHourExposure': return 80;
-            case 'useLastHourExposure': return true; // This is the key setting
-            default: return undefined;
+                case 'onlyBoost':
+                    return false;
+                case 'voteOnlyInLastMinute':
+                    return false;
+                case 'exposure':
+                    return 100;
+                case 'lastMinuteThreshold':
+                    return 10;
+                case 'lastHourExposure':
+                    return 80;
+                case 'useLastHourExposure':
+                    return true; // This is the key setting
+                default:
+                    return undefined;
             }
         });
 
@@ -72,10 +79,10 @@ describe('useLastHourExposure setting', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 75 // Below normal exposure threshold but above lastHourExposure
-                    }
-                }
-            }
+                        exposure_factor: 75, // Below normal exposure threshold but above lastHourExposure
+                    },
+                },
+            },
         };
 
         const now = Math.floor(Date.now() / 1000);
@@ -83,13 +90,20 @@ describe('useLastHourExposure setting', () => {
         // Mock settings - useLastHourExposure is FALSE
         settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
             switch (key) {
-            case 'onlyBoost': return false;
-            case 'voteOnlyInLastMinute': return false;
-            case 'exposure': return 100;
-            case 'lastMinuteThreshold': return 10;
-            case 'lastHourExposure': return 80;
-            case 'useLastHourExposure': return false; // This is the key setting
-            default: return undefined;
+                case 'onlyBoost':
+                    return false;
+                case 'voteOnlyInLastMinute':
+                    return false;
+                case 'exposure':
+                    return 100;
+                case 'lastMinuteThreshold':
+                    return 10;
+                case 'lastHourExposure':
+                    return 80;
+                case 'useLastHourExposure':
+                    return false; // This is the key setting
+                default:
+                    return undefined;
             }
         });
 
@@ -114,10 +128,10 @@ describe('useLastHourExposure setting', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 100 // At normal exposure threshold
-                    }
-                }
-            }
+                        exposure_factor: 100, // At normal exposure threshold
+                    },
+                },
+            },
         };
 
         const now = Math.floor(Date.now() / 1000);
@@ -125,13 +139,20 @@ describe('useLastHourExposure setting', () => {
         // Mock settings - useLastHourExposure is FALSE
         settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
             switch (key) {
-            case 'onlyBoost': return false;
-            case 'voteOnlyInLastMinute': return false;
-            case 'exposure': return 100;
-            case 'lastMinuteThreshold': return 10;
-            case 'lastHourExposure': return 80;
-            case 'useLastHourExposure': return false; // This is the key setting
-            default: return undefined;
+                case 'onlyBoost':
+                    return false;
+                case 'voteOnlyInLastMinute':
+                    return false;
+                case 'exposure':
+                    return 100;
+                case 'lastMinuteThreshold':
+                    return 10;
+                case 'lastHourExposure':
+                    return 80;
+                case 'useLastHourExposure':
+                    return false; // This is the key setting
+                default:
+                    return undefined;
             }
         });
 
@@ -155,10 +176,10 @@ describe('useLastHourExposure setting', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 85 // Above lastHourExposure but below normal
-                    }
-                }
-            }
+                        exposure_factor: 85, // Above lastHourExposure but below normal
+                    },
+                },
+            },
         };
 
         const now = Math.floor(Date.now() / 1000);
@@ -166,13 +187,20 @@ describe('useLastHourExposure setting', () => {
         // Mock settings - useLastHourExposure is TRUE but we're outside last hour
         settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
             switch (key) {
-            case 'onlyBoost': return false;
-            case 'voteOnlyInLastMinute': return false;
-            case 'exposure': return 100;
-            case 'lastMinuteThreshold': return 10;
-            case 'lastHourExposure': return 80;
-            case 'useLastHourExposure': return true; // This setting is true
-            default: return undefined;
+                case 'onlyBoost':
+                    return false;
+                case 'voteOnlyInLastMinute':
+                    return false;
+                case 'exposure':
+                    return 100;
+                case 'lastMinuteThreshold':
+                    return 10;
+                case 'lastHourExposure':
+                    return 80;
+                case 'useLastHourExposure':
+                    return true; // This setting is true
+                default:
+                    return undefined;
             }
         });
 
@@ -196,21 +224,28 @@ describe('useLastHourExposure setting', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 80 // currentExposure is AT or ABOVE configured ceiling (70)
-                    }
-                }
-            }
+                        exposure_factor: 80, // currentExposure is AT or ABOVE configured ceiling (70)
+                    },
+                },
+            },
         };
 
         settings.getEffectiveSetting.mockImplementation((key) => {
             switch (key) {
-            case 'onlyBoost': return false;
-            case 'voteOnlyInLastMinute': return false;
-            case 'exposure': return 70;
-            case 'lastMinuteThreshold': return 10;
-            case 'lastHourExposure': return 100;
-            case 'useLastHourExposure': return false;
-            default: return undefined;
+                case 'onlyBoost':
+                    return false;
+                case 'voteOnlyInLastMinute':
+                    return false;
+                case 'exposure':
+                    return 70;
+                case 'lastMinuteThreshold':
+                    return 10;
+                case 'lastHourExposure':
+                    return 100;
+                case 'useLastHourExposure':
+                    return false;
+                default:
+                    return undefined;
             }
         });
 
@@ -234,10 +269,10 @@ describe('useLastHourExposure setting', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 70 // Below lastHourExposure threshold
-                    }
-                }
-            }
+                        exposure_factor: 70, // Below lastHourExposure threshold
+                    },
+                },
+            },
         };
 
         const now = Math.floor(Date.now() / 1000);
@@ -245,13 +280,20 @@ describe('useLastHourExposure setting', () => {
         // Mock settings with per-challenge override
         settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
             switch (key) {
-            case 'onlyBoost': return false;
-            case 'voteOnlyInLastMinute': return false;
-            case 'exposure': return 100;
-            case 'lastMinuteThreshold': return 10;
-            case 'lastHourExposure': return 75; // Per-challenge override
-            case 'useLastHourExposure': return true; // Per-challenge override enabled
-            default: return undefined;
+                case 'onlyBoost':
+                    return false;
+                case 'voteOnlyInLastMinute':
+                    return false;
+                case 'exposure':
+                    return 100;
+                case 'lastMinuteThreshold':
+                    return 10;
+                case 'lastHourExposure':
+                    return 75; // Per-challenge override
+                case 'useLastHourExposure':
+                    return true; // Per-challenge override enabled
+                default:
+                    return undefined;
             }
         });
 

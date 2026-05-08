@@ -1,6 +1,6 @@
 # GuruShots Auto Voter
 
-[![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/workflows/Build%20and%20Release/badge.svg)](https://github.com/isthisgitlab/gurushots-auto-vote/actions) 
+[![Build Status](https://github.com/isthisgitlab/gurushots-auto-vote/workflows/Build%20and%20Release/badge.svg)](https://github.com/isthisgitlab/gurushots-auto-vote/actions)
 [![License](https://img.shields.io/badge/license-ISC-blue.svg)](LICENSE)
 
 An Electron application for automated voting on GuruShots challenges. Features both a graphical interface and
@@ -16,11 +16,13 @@ command-line tools for easy automation.
 - **Unpredictable Behavior**: Conflicts between instances
 
 **✅ Recommended Usage:**
+
 - Use **either** the GUI **or** CLI version, but not both at the same time
 - Close any existing instances before starting a new one
 - If you need to switch between GUI and CLI, stop the current instance first
 
 **🔧 If you encounter rate limit errors:**
+
 1. Stop all instances of the application
 2. Wait 5-10 minutes before trying again
 3. Ensure only one instance is running
@@ -66,17 +68,17 @@ If you find this tool helpful, consider supporting its development:
 #### **🖥️ GUI Applications (Recommended for most users)**
 
 | Platform          | Download                                                                                                                                                             | Size   | Type                |
-|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------- |
 | **Windows**       | [📥 GuruShotsAutoVote-v0.8.3-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.3-x64.exe)                 | ~50 MB | Portable Executable |
 | **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.8.3-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.3-arm64.dmg)             | ~50 MB | DMG Installer       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.8.3-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.3-arm64.app.zip)             | ~50 MB | App Bundle (ZIP)    |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.8.3-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.3-arm64.app.zip)     | ~50 MB | App Bundle (ZIP)    |
 | **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.8.3-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.3-x86_64.AppImage) | ~50 MB | AppImage            |
 | **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.8.3-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.3-arm64.AppImage)   | ~50 MB | AppImage            |
 
 #### **💻 CLI Applications (For advanced users)**
 
-| Platform              | Download                                                                                                                           | Size   | Type                |
-|-----------------------|------------------------------------------------------------------------------------------------------------------------------------|--------|---------------------|
+| Platform              | Download                                                                                                                             | Size   | Type                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------------------- |
 | **macOS CLI**         | [📥 gurucli-v0.8.3-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.8.3-mac)             | ~55 MB | Terminal Executable |
 | **Linux CLI (x64)**   | [📥 gurucli-v0.8.3-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.8.3-linux)         | ~50 MB | Terminal Executable |
 | **Linux CLI (ARM64)** | [📥 gurucli-v0.8.3-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.8.3-linux-arm) | ~47 MB | Terminal Executable |
@@ -95,12 +97,14 @@ If you find this tool helpful, consider supporting its development:
 #### **🍎 macOS Users**
 
 **Option 1: DMG Installer (Recommended)**
+
 1. **Download**: Click the macOS (DMG) link above to download the `.dmg` file
 2. **Open DMG**: Double-click the downloaded `.dmg` file
 3. **Install**: Drag the app icon to the Applications folder
 4. **Launch**: Open the app from your Applications folder
 
 **Option 2: App Bundle (Direct)**
+
 1. **Download**: Click the macOS (APP) link above to download the `.app.zip` file
 2. **Extract**: Double-click the zip file to extract the `.app` bundle
 3. **Move**: Move the extracted app to your Applications folder
@@ -139,10 +143,10 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 ### **🎯 Which Version Should I Download?**
 
-| User Type       | Recommended Download      | Why?                                |
-|-----------------|---------------------------|-------------------------------------|
-| **New Users**   | GUI App for your platform | Easiest to use, visual interface    |
-| **Power Users** | CLI App for your platform | More control, automation features   |
+| User Type       | Recommended Download      | Why?                              |
+| --------------- | ------------------------- | --------------------------------- |
+| **New Users**   | GUI App for your platform | Easiest to use, visual interface  |
+| **Power Users** | CLI App for your platform | More control, automation features |
 
 ### **🔗 Alternative: Browse All Releases**
 
@@ -178,16 +182,19 @@ Launch the application you downloaded and follow these steps:
 For CLI applications, use these commands after making the file executable:
 
 Login with your credentials:
+
 ```
 ./gurucli-v0.8.3-[platform] login
 ```
 
 Run a single voting cycle:
+
 ```
 ./gurucli-v0.8.3-[platform] vote
 ```
 
 Start continuous voting:
+
 ```
 ./gurucli-v0.8.3-[platform] start
 ```
@@ -209,42 +216,42 @@ The GUI provides a user-friendly interface for managing your GuruShots voting:
 #### **Main Interface**:
 
 - **Top Bar**:
-  - **App Title**: Shows "GuruShots Auto Vote" on the left side
-  - **Mock Status**: Indicates if the app is running in mock mode
-  - **Settings Button**: Access application settings
-  - **Logout**: Sign out of current session
+    - **App Title**: Shows "GuruShots Auto Vote" on the left side
+    - **Mock Status**: Indicates if the app is running in mock mode
+    - **Settings Button**: Access application settings
+    - **Logout**: Sign out of current session
 
 - **Auto-Vote Controls** (above the challenge list):
-  - **Start/Stop Auto-Vote**: Toggle button to start or stop the continuous voting loop
-  - **Status Badge**: Current loop state (running, waiting, idle, etc.)
-  - **Last Run**: Timestamp of the most recent voting cycle
-  - **Cycles**: Number of voting cycles completed in the current session
+    - **Start/Stop Auto-Vote**: Toggle button to start or stop the continuous voting loop
+    - **Status Badge**: Current loop state (running, waiting, idle, etc.)
+    - **Last Run**: Timestamp of the most recent voting cycle
+    - **Cycles**: Number of voting cycles completed in the current session
 
 - **Challenge List**:
-  - **Title**: Challenge name
-  - **End Time**: When the challenge will end
-  - **Exposure**: Your current exposure percentage
-  - **Status**: Voting status (Voted/Voting/Waiting)
-  - **Per-Challenge Settings (⚙️)**: Gear button on each card opens a per-challenge override modal (boost time, exposure, last-minute threshold, only-boost, vote-only-in-last-minute, last-hour exposure, turbo settings)
+    - **Title**: Challenge name
+    - **End Time**: When the challenge will end
+    - **Exposure**: Your current exposure percentage
+    - **Status**: Voting status (Voted/Voting/Waiting)
+    - **Per-Challenge Settings (⚙️)**: Gear button on each card opens a per-challenge override modal (boost time, exposure, last-minute threshold, only-boost, vote-only-in-last-minute, last-hour exposure, turbo settings)
 
 - **Challenge Details**:
-  - **Your Progress**: Current rank, exposure, and votes
-  - **Your Photos**: Your submitted photos in this challenge
-  - **Boost Status**: Whether boost is available and when it will be applied
-  - **Turbo Status**: Whether a turbo is held and ready to apply
+    - **Your Progress**: Current rank, exposure, and votes
+    - **Your Photos**: Your submitted photos in this challenge
+    - **Boost Status**: Whether boost is available and when it will be applied
+    - **Turbo Status**: Whether a turbo is held and ready to apply
 
 - **Per-Entry Actions** (on each photo badge):
-  - **🚀 Apply Boost**: Manually apply the available boost to this specific photo
-  - **⚡ Apply Turbo**: Manually apply the held turbo to this specific photo
-  - Boost and turbo are mutually exclusive per entry — once a photo is boosted or turboed, neither button shows for that photo
+    - **🚀 Apply Boost**: Manually apply the available boost to this specific photo
+    - **⚡ Apply Turbo**: Manually apply the held turbo to this specific photo
+    - Boost and turbo are mutually exclusive per entry — once a photo is boosted or turboed, neither button shows for that photo
 
 - **Play Auto-Turbo** (on each open challenge card, when no turbo is held):
-  - Triggers the in-app mini-game to earn turbo for that challenge
-  - Hidden once a turbo is held; runs automatically during auto-vote when `autoTurbo` is enabled
+    - Triggers the in-app mini-game to earn turbo for that challenge
+    - Hidden once a turbo is held; runs automatically during auto-vote when `autoTurbo` is enabled
 
 - **Update Dialog**:
-  - Appears when a new release is available
-  - States: available → downloading (with progress) → ready to install, or error
+    - Appears when a new release is available
+    - States: available → downloading (with progress) → ready to install, or error
 
 ### **CLI Commands**
 
@@ -253,26 +260,31 @@ The GUI provides a user-friendly interface for managing your GuruShots voting:
 For the CLI application, use these commands:
 
 Login with your credentials:
+
 ```
 ./gurucli-v0.8.3-[platform] login
 ```
 
 Run one manual voting cycle (votes to 100% on every active challenge regardless of threshold or exposure settings — useful for a one-shot top-up):
+
 ```
 ./gurucli-v0.8.3-[platform] vote
 ```
 
 Start continuous voting (respects all thresholds and per-challenge settings):
+
 ```
 ./gurucli-v0.8.3-[platform] start
 ```
 
 Check current status:
+
 ```
 ./gurucli-v0.8.3-[platform] status
 ```
 
 Show help:
+
 ```
 ./gurucli-v0.8.3-[platform] help
 ```
@@ -281,16 +293,16 @@ Show help:
 
 The CLI also exposes the full settings system. Settings are shared with the GUI, so changes made here apply to both.
 
-| Command | Purpose |
-|---|---|
-| `list-settings` | Show all settings, their current values, and which were modified by the user |
-| `get-setting <key>` | Print the current value of one setting |
-| `set-setting <key> <value>` | Set any setting directly (no schema validation — power-user) |
-| `set-global-default <key> <value>` | Set a global default with full schema validation |
-| `reset-setting <key>` | Reset one setting to its default |
-| `reset-all-settings` | Reset every setting to defaults (preserves token, mock flag, and API headers) |
-| `reset-windows` | Reset GUI window positions to defaults |
-| `help-settings` | Print detailed help for the settings system, including key names and value formats |
+| Command                            | Purpose                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------- |
+| `list-settings`                    | Show all settings, their current values, and which were modified by the user       |
+| `get-setting <key>`                | Print the current value of one setting                                             |
+| `set-setting <key> <value>`        | Set any setting directly (no schema validation — power-user)                       |
+| `set-global-default <key> <value>` | Set a global default with full schema validation                                   |
+| `reset-setting <key>`              | Reset one setting to its default                                                   |
+| `reset-all-settings`               | Reset every setting to defaults (preserves token, mock flag, and API headers)      |
+| `reset-windows`                    | Reset GUI window positions to defaults                                             |
+| `help-settings`                    | Print detailed help for the settings system, including key names and value formats |
 
 **Examples:**
 
@@ -328,41 +340,41 @@ The app automatically saves your preferences. Settings split into three groups: 
 
 #### **App Preferences**
 
-| Setting | Default | Notes |
-|---|---|---|
-| `theme` | `light` | Light or dark mode |
-| `language` | `en` | `en` or `lv` |
-| `stayLoggedIn` | `false` | Persist session across restarts |
-| `apiTimeout` | `30` seconds | API request timeout (1-120s recommended) |
+| Setting                                   | Default           | Notes                                                                                                 |
+| ----------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------- |
+| `theme`                                   | `light`           | Light or dark mode                                                                                    |
+| `language`                                | `en`              | `en` or `lv`                                                                                          |
+| `stayLoggedIn`                            | `false`           | Persist session across restarts                                                                       |
+| `apiTimeout`                              | `30` seconds      | API request timeout (1-120s recommended)                                                              |
 | `checkFrequencyMin` / `checkFrequencyMax` | `3` / `3` minutes | Voting cycle delay range; cycle picks random delay in `[min, max]`. Set both equal for fixed cadence. |
-| `windowBounds` | — | Remembers GUI window position and size |
+| `windowBounds`                            | —                 | Remembers GUI window position and size                                                                |
 
 #### **Global-Only Voting Settings**
 
-| Setting | Default | Range | Notes |
-|---|---|---|---|
-| `lastMinuteCheckFrequency` | `1` minute | 1-59 | Polling cadence when any challenge is within its last-minute threshold |
+| Setting                    | Default    | Range | Notes                                                                  |
+| -------------------------- | ---------- | ----- | ---------------------------------------------------------------------- |
+| `lastMinuteCheckFrequency` | `1` minute | 1-59  | Polling cadence when any challenge is within its last-minute threshold |
 
 #### **Per-Challenge Voting Settings**
 
 These can be set as global defaults and overridden per challenge:
 
-| Setting | Default | Range | Purpose |
-|---|---|---|---|
-| `exposure` | `100` | 1-100% | Target exposure ceiling for normal voting |
-| `lastMinuteThreshold` | `10` | 1-59 min | Window before challenge end to ignore exposure cap and vote to 100% |
-| `voteOnlyInLastMinute` | `false` | bool | Restrict normal voting to the last-minute window only |
-| `onlyBoost` | `false` | bool | Disable normal voting; only act when boost or turbo is available |
-| `useLastHourExposure` | `false` | bool | Enable a tighter exposure ceiling for the final hour |
-| `lastHourExposure` | `100` | 1-100%, ≤ `exposure` | The ceiling used during the final hour |
-| `boostTime` | `3600` seconds (1h) | ≥ 0 | How long before challenge end to apply boost |
-| `autoTurbo` | `true` | bool | Auto-play the mini-game to earn turbo when none is held |
-| `useTurbo` | `false` | bool | Auto-apply held turbo before challenge end |
-| `turboTime` | `7200` seconds (2h) | ≥ 0 | How long before challenge end to apply turbo |
-| `turboImageIndex` | `1` | integer ≥ 1 | Which entry slot receives the auto-applied turbo |
-| `turboApplyWhenBoostActive` | `false` | bool | Allow turbo auto-apply during a boost-active window |
-| `autoFill` | `false` | bool | Auto-submit photos to fill empty entry slots near the deadline |
-| `autoFillIntervalMinutes` | `10` | 1-60 min | Spacing between consecutive auto-fill submissions |
+| Setting                     | Default             | Range                | Purpose                                                             |
+| --------------------------- | ------------------- | -------------------- | ------------------------------------------------------------------- |
+| `exposure`                  | `100`               | 1-100%               | Target exposure ceiling for normal voting                           |
+| `lastMinuteThreshold`       | `10`                | 1-59 min             | Window before challenge end to ignore exposure cap and vote to 100% |
+| `voteOnlyInLastMinute`      | `false`             | bool                 | Restrict normal voting to the last-minute window only               |
+| `onlyBoost`                 | `false`             | bool                 | Disable normal voting; only act when boost or turbo is available    |
+| `useLastHourExposure`       | `false`             | bool                 | Enable a tighter exposure ceiling for the final hour                |
+| `lastHourExposure`          | `100`               | 1-100%, ≤ `exposure` | The ceiling used during the final hour                              |
+| `boostTime`                 | `3600` seconds (1h) | ≥ 0                  | How long before challenge end to apply boost                        |
+| `autoTurbo`                 | `true`              | bool                 | Auto-play the mini-game to earn turbo when none is held             |
+| `useTurbo`                  | `false`             | bool                 | Auto-apply held turbo before challenge end                          |
+| `turboTime`                 | `7200` seconds (2h) | ≥ 0                  | How long before challenge end to apply turbo                        |
+| `turboImageIndex`           | `1`                 | integer ≥ 1          | Which entry slot receives the auto-applied turbo                    |
+| `turboApplyWhenBoostActive` | `false`             | bool                 | Allow turbo auto-apply during a boost-active window                 |
+| `autoFill`                  | `false`             | bool                 | Auto-submit photos to fill empty entry slots near the deadline      |
+| `autoFillIntervalMinutes`   | `10`                | 1-60 min             | Spacing between consecutive auto-fill submissions                   |
 
 Settings are shared between GUI and CLI modes, so you can switch between them seamlessly. Use the CLI `list-settings` command to see every setting and which ones you've modified.
 
@@ -398,9 +410,9 @@ The Last Minutes Threshold feature allows the app to automatically vote on chall
 
 - **Default Threshold**: 10 minutes (configurable, range 1-59)
 - **Behavior**: When a challenge is within the last minutes threshold:
-  - The app ignores your normal exposure threshold
-  - It will vote if your exposure is below 100%
-  - This helps maximize your final ranking in time-sensitive situations
+    - The app ignores your normal exposure threshold
+    - It will vote if your exposure is below 100%
+    - This helps maximize your final ranking in time-sensitive situations
 
 ### **Configuration**
 
@@ -467,9 +479,9 @@ The Last Minute Check Frequency feature lets you tighten the polling cadence whe
 
 - **Default Setting**: 1 minute
 - **Dynamic Behavior**: The app automatically adjusts its check frequency based on challenge states:
-  - **Normal Operation**: Uses the standard voting interval (default: 3 minutes)
-  - **Within Last-Minute Threshold**: Uses the last-minute check frequency (default: 1 minute)
-  - **Automatic Detection**: Monitors all active challenges and switches to the tighter frequency if any are within their last-minute threshold
+    - **Normal Operation**: Uses the standard voting interval (default: 3 minutes)
+    - **Within Last-Minute Threshold**: Uses the last-minute check frequency (default: 1 minute)
+    - **Automatic Detection**: Monitors all active challenges and switches to the tighter frequency if any are within their last-minute threshold
 
 ### **Configuration**
 
@@ -509,9 +521,9 @@ Turbo is GuruShots' long-game booster: you earn it by playing the in-app mini-ga
 - **Default**: Disabled (`false`)
 - **Per-challenge override**: Yes
 - **Related settings**:
-  - `turboTime` — how long before challenge end to apply (default: 7200 seconds = 2 hours)
-  - `turboImageIndex` — which entry slot receives the turbo (default: 1, the first photo)
-  - `turboApplyWhenBoostActive` — if `false` (default), turbo auto-apply is suppressed during a boost-active window; if `true`, both can run
+    - `turboTime` — how long before challenge end to apply (default: 7200 seconds = 2 hours)
+    - `turboImageIndex` — which entry slot receives the turbo (default: 1, the first photo)
+    - `turboApplyWhenBoostActive` — if `false` (default), turbo auto-apply is suppressed during a boost-active window; if `true`, both can run
 
 ### **Per-Entry Manual Apply**
 
@@ -562,10 +574,10 @@ The achievements + votes layers prevent the failure mode where a recently-upload
 
 ### **Configuration**
 
-| Setting | Default | Range | Purpose |
-|---|---|---|---|
-| `autoFill` | `false` | bool | Enable staggered auto-fill for this challenge |
-| `autoFillIntervalMinutes` | `10` | 1-60 min | Spacing between consecutive submissions |
+| Setting                   | Default | Range    | Purpose                                       |
+| ------------------------- | ------- | -------- | --------------------------------------------- |
+| `autoFill`                | `false` | bool     | Enable staggered auto-fill for this challenge |
+| `autoFillIntervalMinutes` | `10`    | 1-60 min | Spacing between consecutive submissions       |
 
 The interval is intentionally tunable because the right gap depends on your check-frequency setting and how aggressive you want to be near the deadline.
 
@@ -616,20 +628,25 @@ You can change the application language through the settings interface. The lang
 ### **Common Issues**
 
 **"No authentication token found"**
+
 - Try logging in again through the login screen
 
 **"Network Error"**
+
 - Check your internet connection
 - Try again later
 
 **"Token expired"**
+
 - Log in again through the login screen
 
 **Windows open off-screen**
+
 - Restart the application
 - If using CLI, run the reset-windows command
 
 **"API Rate Limit Exceeded" or "Too Many Requests"**
+
 - **Stop all instances** of the application (GUI and CLI)
 - Wait 5-10 minutes before trying again
 - Ensure only **one instance** is running at a time
@@ -638,6 +655,7 @@ You can change the application language through the settings interface. The lang
 ### **Get Help**
 
 If you're having issues:
+
 1. Check the logs in the locations mentioned above
 2. Try restarting the application
 3. Open an issue on GitHub with details about your problem

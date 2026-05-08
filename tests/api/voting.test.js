@@ -4,13 +4,13 @@
  * Tests the vote images fetching and submission functionality.
  */
 
-const {getVoteImages, submitVotes} = require('../../src/js/api/voting');
+const { getVoteImages, submitVotes } = require('../../src/js/api/voting');
 
 // Mock the makePostRequest function
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
     FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded',
-    createCommonHeaders: jest.fn(() => ({'x-token': 'test-token'}))
+    createCommonHeaders: jest.fn(() => ({ 'x-token': 'test-token' })),
 }));
 
 // Create shared mock functions to track calls across categories
@@ -22,7 +22,7 @@ const mockErrorFn = jest.fn();
 // Mock the logger module
 jest.mock('../../src/js/logger', () => {
     const mockEndOperationFn = jest.fn();
-    
+
     return {
         info: jest.fn(),
         warning: jest.fn(),
@@ -52,7 +52,7 @@ jest.mock('../../src/js/metadata', () => ({
     updateChallengeVoteMetadata: jest.fn(() => true),
 }));
 
-const {makePostRequest, createCommonHeaders} = require('../../src/js/api/api-client');
+const { makePostRequest, createCommonHeaders } = require('../../src/js/api/api-client');
 const logger = require('../../src/js/logger');
 const { updateChallengeVoteMetadata } = require('../../src/js/metadata');
 
@@ -67,10 +67,13 @@ describe('voting', () => {
 
     describe('getVoteImages', () => {
         test('should fetch vote images successfully', async () => {
-            const mockChallenge = {title: 'Test Challenge', url: 'test-url'};
+            const mockChallenge = { title: 'Test Challenge', url: 'test-url' };
             const mockToken = 'test-token';
             const mockResponse = {
-                images: [{id: 'img1', ratio: 25}, {id: 'img2', ratio: 30}]
+                images: [
+                    { id: 'img1', ratio: 25 },
+                    { id: 'img2', ratio: 30 },
+                ],
             };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
@@ -80,17 +83,17 @@ describe('voting', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/get_vote_images',
                 expect.objectContaining({
-                    'content-type': 'application/x-www-form-urlencoded'
+                    'content-type': 'application/x-www-form-urlencoded',
                 }),
-                'limit=100&url=test-url'
+                'limit=100&url=test-url',
             );
             expect(result).toEqual(mockResponse);
         });
 
         test('should return null when no images', async () => {
-            const mockChallenge = {title: 'Test Challenge', url: 'test-url'};
+            const mockChallenge = { title: 'Test Challenge', url: 'test-url' };
             const mockToken = 'test-token';
-            const mockResponse = {images: []};
+            const mockResponse = { images: [] };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -103,16 +106,16 @@ describe('voting', () => {
     describe('submitVotes', () => {
         test('should submit votes successfully', async () => {
             const mockVoteImages = {
-                challenge: {id: '123', title: 'Test Challenge'},
-                voting: {exposure: {exposure_factor: 50}},
+                challenge: { id: '123', title: 'Test Challenge' },
+                voting: { exposure: { exposure_factor: 50 } },
                 images: [
-                    {id: 'img1', ratio: 25},
-                    {id: 'img2', ratio: 30},
-                    {id: 'img3', ratio: 20}
-                ]
+                    { id: 'img1', ratio: 25 },
+                    { id: 'img2', ratio: 30 },
+                    { id: 'img3', ratio: 20 },
+                ],
             };
             const mockToken = 'test-token';
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -121,18 +124,18 @@ describe('voting', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/submit_vote',
                 expect.objectContaining({
-                    'content-type': 'application/x-www-form-urlencoded'
+                    'content-type': 'application/x-www-form-urlencoded',
                 }),
-                expect.stringContaining('c_id=123')
+                expect.stringContaining('c_id=123'),
             );
             expect(result).toEqual(mockResponse);
         });
 
         test('should return undefined when no images', async () => {
             const mockVoteImages = {
-                challenge: {id: '123', title: 'Test Challenge'},
-                voting: {exposure: {exposure_factor: 50}},
-                images: []
+                challenge: { id: '123', title: 'Test Challenge' },
+                voting: { exposure: { exposure_factor: 50 } },
+                images: [],
             };
             const mockToken = 'test-token';
 
@@ -143,17 +146,17 @@ describe('voting', () => {
 
         test('should use custom exposure threshold instead of hardcoded 100', async () => {
             const mockVoteImages = {
-                challenge: {id: '123', title: 'Test Challenge'},
-                voting: {exposure: {exposure_factor: 50}},
+                challenge: { id: '123', title: 'Test Challenge' },
+                voting: { exposure: { exposure_factor: 50 } },
                 images: [
-                    {id: 'img1', ratio: 25},
-                    {id: 'img2', ratio: 30},
-                    {id: 'img3', ratio: 20}
-                ]
+                    { id: 'img1', ratio: 25 },
+                    { id: 'img2', ratio: 30 },
+                    { id: 'img3', ratio: 20 },
+                ],
             };
             const mockToken = 'test-token';
             const customThreshold = 75; // Custom threshold instead of 100
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -165,24 +168,24 @@ describe('voting', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/submit_vote',
                 expect.objectContaining({
-                    'content-type': 'application/x-www-form-urlencoded'
+                    'content-type': 'application/x-www-form-urlencoded',
                 }),
-                expect.stringContaining('c_id=123')
+                expect.stringContaining('c_id=123'),
             );
             expect(result).toEqual(mockResponse);
         });
 
         test('should handle exposure threshold function parameter', async () => {
             const mockVoteImages = {
-                challenge: {id: '123', title: 'Test Challenge'},
-                voting: {exposure: {exposure_factor: 50}},
+                challenge: { id: '123', title: 'Test Challenge' },
+                voting: { exposure: { exposure_factor: 50 } },
                 images: [
-                    {id: 'img1', ratio: 25},
-                    {id: 'img2', ratio: 30}
-                ]
+                    { id: 'img1', ratio: 25 },
+                    { id: 'img2', ratio: 30 },
+                ],
             };
             const mockToken = 'test-token';
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -196,23 +199,23 @@ describe('voting', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/submit_vote',
                 expect.objectContaining({
-                    'content-type': 'application/x-www-form-urlencoded'
+                    'content-type': 'application/x-www-form-urlencoded',
                 }),
-                expect.stringContaining('c_id=123')
+                expect.stringContaining('c_id=123'),
             );
             expect(result).toEqual(mockResponse);
         });
 
         test('should handle insufficient images for target exposure', async () => {
             const mockVoteImages = {
-                challenge: {id: '123', title: 'Test Challenge'},
-                voting: {exposure: {exposure_factor: 50}},
+                challenge: { id: '123', title: 'Test Challenge' },
+                voting: { exposure: { exposure_factor: 50 } },
                 images: [
-                    {id: 'img1', ratio: 10} // Only one small image available
-                ]
+                    { id: 'img1', ratio: 10 }, // Only one small image available
+                ],
             };
             const mockToken = 'test-token';
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
             const targetThreshold = 100; // High threshold that can't be reached
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
@@ -221,19 +224,19 @@ describe('voting', () => {
 
             // Should log warning about insufficient images
             expect(mockWarningFn).toHaveBeenCalledWith(
-                expect.stringContaining('Insufficient images to reach 100% exposure for Test Challenge (only 1 images available)'),
-                null
+                expect.stringContaining(
+                    'Insufficient images to reach 100% exposure for Test Challenge (only 1 images available)',
+                ),
+                null,
             );
             expect(result).toEqual(mockResponse);
         });
 
         test('should handle vote submission failure', async () => {
             const mockVoteImages = {
-                challenge: {id: '123', title: 'Test Challenge'},
-                voting: {exposure: {exposure_factor: 50}},
-                images: [
-                    {id: 'img1', ratio: 25}
-                ]
+                challenge: { id: '123', title: 'Test Challenge' },
+                voting: { exposure: { exposure_factor: 50 } },
+                images: [{ id: 'img1', ratio: 25 }],
             };
             const mockToken = 'test-token';
 
@@ -242,20 +245,22 @@ describe('voting', () => {
             const result = await submitVotes(mockVoteImages, mockToken);
 
             expect(logger.withCategory).toHaveBeenCalledWith('voting');
-            expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(expect.any(String), null, 'Vote submission failed');
+            expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(
+                expect.any(String),
+                null,
+                'Vote submission failed',
+            );
             expect(result).toBeUndefined();
         });
 
         test('should handle metadata update failure', async () => {
             const mockVoteImages = {
-                challenge: {id: '123', title: 'Test Challenge'},
-                voting: {exposure: {exposure_factor: 50}},
-                images: [
-                    {id: 'img1', ratio: 25}
-                ]
+                challenge: { id: '123', title: 'Test Challenge' },
+                voting: { exposure: { exposure_factor: 50 } },
+                images: [{ id: 'img1', ratio: 25 }],
             };
             const mockToken = 'test-token';
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
             updateChallengeVoteMetadata.mockReturnValueOnce(false); // Simulate metadata update failure
@@ -269,14 +274,12 @@ describe('voting', () => {
 
         test('should handle metadata update error exception', async () => {
             const mockVoteImages = {
-                challenge: {id: '123', title: 'Test Challenge'},
-                voting: {exposure: {exposure_factor: 50}},
-                images: [
-                    {id: 'img1', ratio: 25}
-                ]
+                challenge: { id: '123', title: 'Test Challenge' },
+                voting: { exposure: { exposure_factor: 50 } },
+                images: [{ id: 'img1', ratio: 25 }],
             };
             const mockToken = 'test-token';
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
             const mockError = new Error('Metadata update error');
 
             makePostRequest.mockResolvedValueOnce(mockResponse);

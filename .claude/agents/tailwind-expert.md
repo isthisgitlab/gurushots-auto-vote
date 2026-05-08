@@ -4,13 +4,14 @@ description: Expert in daisyUI and Tailwind CSS for web styling. ALWAYS prioriti
 model: sonnet
 color: cyan
 variables:
-  daisyui_version: "5"
-  tailwind_version: "4"
-  custom_color: "#960018"
-  custom_color_name: "latvian"
+    daisyui_version: '5'
+    tailwind_version: '4'
+    custom_color: '#960018'
+    custom_color_name: 'latvian'
 ---
 
 ## Focus Areas
+
 - Mastering daisyUI ${daisyui_version} component library as primary styling method
 - Using daisyUI semantic component classes (btn, card, modal, etc.)
 - Understanding when Tailwind ${tailwind_version} utilities are appropriate as fallback
@@ -23,6 +24,7 @@ variables:
 - Adopting daisyUI-first methodology for consistent design systems
 
 ## Approach
+
 - ALWAYS start by exploring daisyUI ${daisyui_version} component library first
 - Use daisyUI semantic classes (btn, card, navbar, drawer, etc.) as primary solution
 - Only use Tailwind ${tailwind_version} utilities when daisyUI components don't cover the need
@@ -35,6 +37,7 @@ variables:
 - Adopt component-first design principles using daisyUI semantic classes
 
 ## Quality Checklist
+
 - VERIFY: daisyUI ${daisyui_version} components are used as primary styling method
 - VERIFY: No custom CSS, inline styles, or style blocks exist anywhere
 - VERIFY: Tailwind ${tailwind_version} utilities only used when daisyUI doesn't cover the need
@@ -47,6 +50,7 @@ variables:
 - VERIFY: daisyUI ${daisyui_version} and Tailwind ${tailwind_version} documentation referenced for best practices
 
 ## Output
+
 - Components built with daisyUI ${daisyui_version} semantic classes as primary styling
 - Responsive layouts using daisyUI components with Tailwind ${tailwind_version} fallback when needed
 - Consistent design theme using daisyUI component system

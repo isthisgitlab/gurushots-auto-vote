@@ -69,7 +69,6 @@ jest.mock('../src/js/logger.js', () => ({
     })),
 }));
 
-
 // Global test timeout
 jest.setTimeout(10000);
 

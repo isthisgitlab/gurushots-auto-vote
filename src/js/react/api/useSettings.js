@@ -23,22 +23,28 @@ export function useSettings() {
         }
     }, []);
 
-    const updateSetting = useCallback(async (key, value) => {
-        try {
-            await window.api.setSetting(key, value);
-            // Optimistic update
-            setSettings(prev => prev ? { ...prev, [key]: value } : null);
-        } catch (err) {
-            setError(err);
-            // Refetch to get actual state on error
-            await refetch();
-            throw err;
-        }
-    }, [refetch]);
+    const updateSetting = useCallback(
+        async (key, value) => {
+            try {
+                await window.api.setSetting(key, value);
+                // Optimistic update
+                setSettings((prev) => (prev ? { ...prev, [key]: value } : null));
+            } catch (err) {
+                setError(err);
+                // Refetch to get actual state on error
+                await refetch();
+                throw err;
+            }
+        },
+        [refetch],
+    );
 
-    const getSetting = useCallback((key) => {
-        return settings ? settings[key] : undefined;
-    }, [settings]);
+    const getSetting = useCallback(
+        (key) => {
+            return settings ? settings[key] : undefined;
+        },
+        [settings],
+    );
 
     useEffect(() => {
         refetch();
@@ -46,7 +52,9 @@ export function useSettings() {
 
     useEffect(() => {
         if (!window.api?.onSettingsChanged) return undefined;
-        return window.api.onSettingsChanged(() => { refetch(); });
+        return window.api.onSettingsChanged(() => {
+            refetch();
+        });
     }, [refetch]);
 
     return {

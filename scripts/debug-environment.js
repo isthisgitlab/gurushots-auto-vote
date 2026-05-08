@@ -11,15 +11,15 @@ console.log('=== Testing GUI Environment Settings ===\n');
 
 // Test different environments
 const environments = [
-    {name: 'Development', vars: {NODE_ENV: 'development'}},
-    {name: 'Production', vars: {NODE_ENV: 'production'}},
-    {name: 'Test', vars: {NODE_ENV: 'test'}},
-    {name: 'Custom Dev', vars: {DEV: 'true'}},
-    {name: 'Custom Prod', vars: {PROD: 'true'}},
-    {name: 'Default', vars: {}},
+    { name: 'Development', vars: { NODE_ENV: 'development' } },
+    { name: 'Production', vars: { NODE_ENV: 'production' } },
+    { name: 'Test', vars: { NODE_ENV: 'test' } },
+    { name: 'Custom Dev', vars: { DEV: 'true' } },
+    { name: 'Custom Prod', vars: { PROD: 'true' } },
+    { name: 'Default', vars: {} },
 ];
 
-environments.forEach(env => {
+environments.forEach((env) => {
     console.log(`--- ${env.name} Environment ---`);
 
     // Set environment variables for this test
@@ -38,7 +38,7 @@ environments.forEach(env => {
     console.log(`   Mock Setting: ${defaultSettings.mock ? 'true' : 'false'}`);
 
     // Clear environment variables for next test
-    Object.keys(env.vars).forEach(key => {
+    Object.keys(env.vars).forEach((key) => {
         delete process.env[key];
     });
 
@@ -48,4 +48,4 @@ environments.forEach(env => {
 console.log('=== GUI Environment Test Complete ===');
 console.log('✅ Environment detection works correctly');
 console.log('✅ Mock setting defaults appropriately');
-console.log('✅ GUI will show correct environment indicators'); 
+console.log('✅ GUI will show correct environment indicators');

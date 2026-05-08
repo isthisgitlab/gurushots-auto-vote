@@ -8,7 +8,7 @@
  * via x-token works the same as the mobile flow.
  */
 
-const {makePostRequest, FORM_CONTENT_TYPE} = require('./api-client');
+const { makePostRequest, FORM_CONTENT_TYPE } = require('./api-client');
 
 const TURBO_SELECTION_DELAY_MS = 1200;
 const TURBO_BASE_URL = 'https://api.gurushots.com/rest';
@@ -21,8 +21,8 @@ const requireValue = (value, label) => {
 };
 
 const createWebHeaders = (token) => ({
-    'host': 'api.gurushots.com',
-    'accept': '*/*',
+    host: 'api.gurushots.com',
+    accept: '*/*',
     'content-type': FORM_CONTENT_TYPE,
     'x-api-version': '13',
     'x-env': 'WEB',
@@ -73,7 +73,7 @@ const submitTurboSelection = async (challengeId, imageId, token) => {
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
     const response = await makePostRequest(`${TURBO_BASE_URL}/submit_challenge_turbo_selection`, headers, data);
     if (!response) {
-        return {ok: false, success: false, state: null, scores: null, errorCode: null, raw: null};
+        return { ok: false, success: false, state: null, scores: null, errorCode: null, raw: null };
     }
     return {
         ok: response.success === true && response.is_successful_selection === true,
@@ -101,7 +101,7 @@ const applyTurbo = async (challengeId, imageId, token) => {
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
     const response = await makePostRequest(`${TURBO_BASE_URL}/set_challenge_turbo`, headers, data);
     if (!response) {
-        return {ok: false, raw: null};
+        return { ok: false, raw: null };
     }
     return {
         ok: response.success === true,

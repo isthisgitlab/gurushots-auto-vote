@@ -43,8 +43,11 @@ describe('CLI Threshold Scheduling', () => {
                         continue;
                     }
 
-                    const effectiveLastMinuteThreshold = mockGetEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-                    const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+                    const effectiveLastMinuteThreshold = mockGetEffectiveSetting(
+                        'lastMinuteThreshold',
+                        challenge.id.toString(),
+                    );
+                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
 
                     if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
                         earliestEntryTime = thresholdEntryTime;
@@ -89,7 +92,7 @@ describe('CLI Threshold Scheduling', () => {
                     }
 
                     const effectiveLastMinuteThreshold = 5; // Mock value
-                    const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
 
                     if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
                         earliestEntryTime = thresholdEntryTime;
@@ -131,7 +134,7 @@ describe('CLI Threshold Scheduling', () => {
                     }
 
                     const effectiveLastMinuteThreshold = 5; // Mock value
-                    const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
 
                     if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
                         earliestEntryTime = thresholdEntryTime;
@@ -158,10 +161,10 @@ describe('CLI Threshold Scheduling', () => {
             // Mock setTimeout and clearTimeout
             const originalSetTimeout = global.setTimeout;
             const originalClearTimeout = global.clearTimeout;
-            
+
             const mockSetTimeout = jest.fn();
             const mockClearTimeout = jest.fn();
-            
+
             global.setTimeout = mockSetTimeout;
             global.clearTimeout = mockClearTimeout;
 
@@ -204,8 +207,8 @@ describe('CLI Threshold Scheduling', () => {
         it('should create correct cron expressions for threshold frequency', () => {
             const lastMinuteCheckFrequency = 2; // 2 minutes
             const thresholdCronExpression = `*/${lastMinuteCheckFrequency} * * * *`;
-            
+
             expect(thresholdCronExpression).toBe('*/2 * * * *');
         });
     });
-}); 
+});

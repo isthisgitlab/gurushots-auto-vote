@@ -30,10 +30,7 @@ function LogsPageContent() {
                                     <LogsEmptyState text={t('logs.waiting')} />
                                 ) : (
                                     entries.map((entry, index) => (
-                                        <LogEntry
-                                            key={`${entry.timestamp}-${index}`}
-                                            entry={entry}
-                                        />
+                                        <LogEntry key={`${entry.timestamp}-${index}`} entry={entry} />
                                     ))
                                 )}
                             </div>

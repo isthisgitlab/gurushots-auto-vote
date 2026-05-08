@@ -1,223 +1,223 @@
 {
-  "name": "gurushots-auto-vote",
-  "version": "0.8.3",
-  "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)",
-  "main": "src/js/index.js",
-  "scripts": {
-    "build": "cross-env NODE_ENV=production electron-builder",
-    "build:all": "npm run build:prep && cross-env NODE_ENV=production electron-builder -mwl",
-    "build:cli:all": "node scripts/build-cli.js",
-    "build:cli:linux": "node scripts/build-cli.js gurucli-linux",
-    "build:cli:linux-arm": "node scripts/build-cli.js gurucli-linux-arm",
-    "build:cli:mac": "node scripts/build-cli.js gurucli-mac",
-    "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
-    "build:react": "node scripts/build-react.js",
-    "build:prep": "npm run build:css && npm run build:react",
-    "build:linux": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux",
-    "build:linux-arm": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux --arm64",
-    "build:mac": "npm run build:prep && cross-env NODE_ENV=production electron-builder --mac",
-    "build:win": "npm run build:prep && cross-env NODE_ENV=production electron-builder --win",
-    "bump": "npx npm-check-updates -u && npm i",
-    "cleanup:logs": "node scripts/cleanup-logs.js",
-    "cli:help": "node src/js/cli/cli.js help",
-    "cli:login": "node src/js/cli/cli.js login",
-    "cli:reset-windows": "node src/js/cli/cli.js reset-windows",
-    "cli:start": "node src/js/cli/cli.js start",
-    "cli:status": "node src/js/cli/cli.js status",
-    "cli:vote": "node src/js/cli/cli.js vote",
-    "vote": "node src/js/cli/cli.js vote",
-    "debug:environment": "node scripts/debug-environment.js",
-    "debug:window-bounds": "node scripts/debug-window-bounds.js",
-    "dev": "concurrently --kill-others \"npm run watch:css\" \"npm run watch:react\" \"node scripts/dev.js\"",
-    "dev:no-watch": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
-    "dev:once": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "gui:refresh": "node scripts/refresh-gui.js",
-    "lint": "npm run syntax:check && eslint src/ scripts/",
-    "lint:fix": "eslint src/ scripts/ --fix",
-    "syntax:check": "node scripts/syntax-check.js",
-    "prebuild": "npm run build:prep",
-    "settings:get": "node scripts/settings-cli.js get",
-    "settings:global-defaults": "node scripts/settings-cli.js global-defaults",
-    "settings:help": "node scripts/settings-cli.js help",
-    "settings:reset": "node scripts/settings-cli.js reset",
-    "settings:reset-all": "node scripts/settings-cli.js reset-all",
-    "settings:reset-global": "node scripts/settings-cli.js reset-global",
-    "settings:schema": "node scripts/settings-cli.js schema",
-    "settings:set": "node scripts/settings-cli.js set",
-    "settings:set-global": "node scripts/settings-cli.js set-global",
-    "start": "electron .",
-    "tag": "git tag v$(node -p \"require('./package.json').version\")",
-    "tag:push": "npm run tag && git push origin v$(node -p \"require('./package.json').version\")",
-    "test": "jest",
-    "test:coverage": "jest --coverage",
-    "test:watch": "jest --watch",
-    "update:readme": "node scripts/update-readme-version.js",
-    "verify:readme": "node scripts/verify-readme-version.js",
-    "watch:app": "nodemon --no-restart-on exit",
-    "watch:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --watch",
-    "watch:react": "node scripts/build-react.js --watch"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/isthisgitlab/gurushots-auto-vote.git"
-  },
-  "keywords": [],
-  "author": {
-    "name": "isthisgitlab",
-    "email": "isthisgitlab@isthisgitlab.com"
-  },
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/isthisgitlab/gurushots-auto-vote/issues"
-  },
-  "homepage": "https://github.com/isthisgitlab/gurushots-auto-vote#readme",
-  "engines": {
-    "node": ">=24.0.0",
-    "npm": ">=8.0.0"
-  },
-  "dependencies": {
-    "axios": "^1.16.0",
-    "electron-updater": "^6.8.3",
-    "node-cron": "^4.2.1",
-    "react": "^19.2.6",
-    "react-dom": "^19.2.6"
-  },
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@jest/globals": "^30.4.0",
-    "@swc/jest": "^0.2.39",
-    "@tailwindcss/cli": "^4.2.4",
-    "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
-    "concurrently": "^9.2.1",
-    "cross-env": "^10.1.0",
-    "daisyui": "^5.5.19",
-    "electron": "^42.0.0",
-    "electron-builder": "^26.8.1",
-    "esbuild": "^0.28.0",
-    "eslint": "^10.3.0",
-    "eslint-config-prettier": "^10.1.8",
-    "globals": "^17.6.0",
-    "jest": "^30.4.0",
-    "jest-environment-node": "^30.4.0",
-    "nodemon": "^3.1.14",
-    "prettier": "^3.8.3",
-    "tailwindcss": "^4.2.4"
-  },
-  "build": {
-    "appId": "com.gurushots.autovote",
-    "productName": "GuruShotsAutoVote",
-    "compression": "maximum",
-    "removePackageScripts": true,
-    "removePackageKeywords": true,
-    "files": [
-      "dist/**/*",
-      "src/html/**/*",
-      "src/js/**/*",
-      "src/assets/**/*",
-      "package.json"
-    ],
-    "directories": {
-      "output": "build"
+    "name": "gurushots-auto-vote",
+    "version": "0.8.3",
+    "description": "GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)",
+    "main": "src/js/index.js",
+    "scripts": {
+        "build": "cross-env NODE_ENV=production electron-builder",
+        "build:all": "npm run build:prep && cross-env NODE_ENV=production electron-builder -mwl",
+        "build:cli:all": "node scripts/build-cli.js",
+        "build:cli:linux": "node scripts/build-cli.js gurucli-linux",
+        "build:cli:linux-arm": "node scripts/build-cli.js gurucli-linux-arm",
+        "build:cli:mac": "node scripts/build-cli.js gurucli-mac",
+        "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
+        "build:react": "node scripts/build-react.js",
+        "build:prep": "npm run build:css && npm run build:react",
+        "build:linux": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux",
+        "build:linux-arm": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux --arm64",
+        "build:mac": "npm run build:prep && cross-env NODE_ENV=production electron-builder --mac",
+        "build:win": "npm run build:prep && cross-env NODE_ENV=production electron-builder --win",
+        "bump": "npx npm-check-updates -u && npm i",
+        "cleanup:logs": "node scripts/cleanup-logs.js",
+        "cli:help": "node src/js/cli/cli.js help",
+        "cli:login": "node src/js/cli/cli.js login",
+        "cli:reset-windows": "node src/js/cli/cli.js reset-windows",
+        "cli:start": "node src/js/cli/cli.js start",
+        "cli:status": "node src/js/cli/cli.js status",
+        "cli:vote": "node src/js/cli/cli.js vote",
+        "vote": "node src/js/cli/cli.js vote",
+        "debug:environment": "node scripts/debug-environment.js",
+        "debug:window-bounds": "node scripts/debug-window-bounds.js",
+        "dev": "concurrently --kill-others \"npm run watch:css\" \"npm run watch:react\" \"node scripts/dev.js\"",
+        "dev:no-watch": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
+        "dev:once": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "gui:refresh": "node scripts/refresh-gui.js",
+        "lint": "npm run syntax:check && eslint src/ scripts/",
+        "lint:fix": "eslint src/ scripts/ --fix",
+        "syntax:check": "node scripts/syntax-check.js",
+        "prebuild": "npm run build:prep",
+        "settings:get": "node scripts/settings-cli.js get",
+        "settings:global-defaults": "node scripts/settings-cli.js global-defaults",
+        "settings:help": "node scripts/settings-cli.js help",
+        "settings:reset": "node scripts/settings-cli.js reset",
+        "settings:reset-all": "node scripts/settings-cli.js reset-all",
+        "settings:reset-global": "node scripts/settings-cli.js reset-global",
+        "settings:schema": "node scripts/settings-cli.js schema",
+        "settings:set": "node scripts/settings-cli.js set",
+        "settings:set-global": "node scripts/settings-cli.js set-global",
+        "start": "electron .",
+        "tag": "git tag v$(node -p \"require('./package.json').version\")",
+        "tag:push": "npm run tag && git push origin v$(node -p \"require('./package.json').version\")",
+        "test": "jest",
+        "test:coverage": "jest --coverage",
+        "test:watch": "jest --watch",
+        "update:readme": "node scripts/update-readme-version.js",
+        "verify:readme": "node scripts/verify-readme-version.js",
+        "watch:app": "nodemon --no-restart-on exit",
+        "watch:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --watch",
+        "watch:react": "node scripts/build-react.js --watch"
     },
-    "mac": {
-      "category": "public.app-category.utilities",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/isthisgitlab/gurushots-auto-vote.git"
+    },
+    "keywords": [],
+    "author": {
+        "name": "isthisgitlab",
+        "email": "isthisgitlab@isthisgitlab.com"
+    },
+    "license": "ISC",
+    "type": "commonjs",
+    "bugs": {
+        "url": "https://github.com/isthisgitlab/gurushots-auto-vote/issues"
+    },
+    "homepage": "https://github.com/isthisgitlab/gurushots-auto-vote#readme",
+    "engines": {
+        "node": ">=24.0.0",
+        "npm": ">=8.0.0"
+    },
+    "dependencies": {
+        "axios": "^1.16.0",
+        "electron-updater": "^6.8.3",
+        "node-cron": "^4.2.1",
+        "react": "^19.2.6",
+        "react-dom": "^19.2.6"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@jest/globals": "^30.4.0",
+        "@swc/jest": "^0.2.39",
+        "@tailwindcss/cli": "^4.2.4",
+        "@testing-library/jest-dom": "^6.9.1",
+        "@testing-library/react": "^16.3.2",
+        "concurrently": "^9.2.1",
+        "cross-env": "^10.1.0",
+        "daisyui": "^5.5.19",
+        "electron": "^42.0.0",
+        "electron-builder": "^26.8.1",
+        "esbuild": "^0.28.0",
+        "eslint": "^10.3.0",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^17.6.0",
+        "jest": "^30.4.0",
+        "jest-environment-node": "^30.4.0",
+        "nodemon": "^3.1.14",
+        "prettier": "^3.8.3",
+        "tailwindcss": "^4.2.4"
+    },
+    "build": {
+        "appId": "com.gurushots.autovote",
+        "productName": "GuruShotsAutoVote",
+        "compression": "maximum",
+        "removePackageScripts": true,
+        "removePackageKeywords": true,
+        "files": [
+            "dist/**/*",
+            "src/html/**/*",
+            "src/js/**/*",
+            "src/assets/**/*",
+            "package.json"
+        ],
+        "directories": {
+            "output": "build"
         },
-        {
-          "target": "dir",
-          "arch": [
-            "arm64"
-          ]
+        "mac": {
+            "category": "public.app-category.utilities",
+            "target": [
+                {
+                    "target": "dmg",
+                    "arch": [
+                        "arm64"
+                    ]
+                },
+                {
+                    "target": "dir",
+                    "arch": [
+                        "arm64"
+                    ]
+                }
+            ],
+            "icon": "src/assets/logo.png",
+            "gatekeeperAssess": false,
+            "hardenedRuntime": false,
+            "artifactName": "GuruShotsAutoVote-v${version}-${arch}.${ext}"
+        },
+        "win": {
+            "target": "portable",
+            "icon": "src/assets/logo.png",
+            "artifactName": "GuruShotsAutoVote-v${version}-${arch}.exe"
+        },
+        "linux": {
+            "target": "AppImage",
+            "category": "Utility",
+            "icon": "src/assets/logo.png",
+            "maintainer": "isthisgitlab@isthisgitlab.com",
+            "artifactName": "GuruShotsAutoVote-v${version}-${arch}.AppImage"
+        },
+        "publish": {
+            "provider": "github",
+            "releaseType": "release"
         }
-      ],
-      "icon": "src/assets/logo.png",
-      "gatekeeperAssess": false,
-      "hardenedRuntime": false,
-      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.${ext}"
     },
-    "win": {
-      "target": "portable",
-      "icon": "src/assets/logo.png",
-      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.exe"
-    },
-    "linux": {
-      "target": "AppImage",
-      "category": "Utility",
-      "icon": "src/assets/logo.png",
-      "maintainer": "isthisgitlab@isthisgitlab.com",
-      "artifactName": "GuruShotsAutoVote-v${version}-${arch}.AppImage"
-    },
-    "publish": {
-      "provider": "github",
-      "releaseType": "release"
-    }
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "roots": [
-      "<rootDir>/src",
-      "<rootDir>/tests"
-    ],
-    "setupFilesAfterEnv": [
-      "<rootDir>/tests/setup.js"
-    ],
-    "testMatch": [
-      "**/__tests__/**/*.js",
-      "**/?(*.)+(spec|test).js",
-      "**/?(*.)+(spec|test).jsx"
-    ],
-    "transform": {
-      "\\.[jt]sx?$": [
-        "@swc/jest",
-        {
-          "jsc": {
-            "parser": {
-              "syntax": "ecmascript",
-              "jsx": true
-            },
-            "transform": {
-              "react": {
-                "runtime": "automatic"
-              }
+    "jest": {
+        "testEnvironment": "node",
+        "roots": [
+            "<rootDir>/src",
+            "<rootDir>/tests"
+        ],
+        "setupFilesAfterEnv": [
+            "<rootDir>/tests/setup.js"
+        ],
+        "testMatch": [
+            "**/__tests__/**/*.js",
+            "**/?(*.)+(spec|test).js",
+            "**/?(*.)+(spec|test).jsx"
+        ],
+        "transform": {
+            "\\.[jt]sx?$": [
+                "@swc/jest",
+                {
+                    "jsc": {
+                        "parser": {
+                            "syntax": "ecmascript",
+                            "jsx": true
+                        },
+                        "transform": {
+                            "react": {
+                                "runtime": "automatic"
+                            }
+                        }
+                    }
+                }
+            ]
+        },
+        "moduleNameMapper": {
+            "^@/(.*)$": "<rootDir>/src/js/react/$1"
+        },
+        "collectCoverage": false,
+        "collectCoverageFrom": [
+            "src/js/api/api-client.js",
+            "src/js/api/boost.js",
+            "src/js/api/challenges.js",
+            "src/js/api/login.js",
+            "src/js/api/voting.js",
+            "src/js/apiFactory.js"
+        ],
+        "coverageDirectory": "coverage",
+        "coverageReporters": [
+            "text",
+            "lcov",
+            "html"
+        ],
+        "coverageThreshold": {
+            "global": {
+                "branches": 90,
+                "functions": 100,
+                "lines": 95,
+                "statements": 95
             }
-          }
         }
-      ]
-    },
-    "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/src/js/react/$1"
-    },
-    "collectCoverage": false,
-    "collectCoverageFrom": [
-      "src/js/api/api-client.js",
-      "src/js/api/boost.js",
-      "src/js/api/challenges.js",
-      "src/js/api/login.js",
-      "src/js/api/voting.js",
-      "src/js/apiFactory.js"
-    ],
-    "coverageDirectory": "coverage",
-    "coverageReporters": [
-      "text",
-      "lcov",
-      "html"
-    ],
-    "coverageThreshold": {
-      "global": {
-        "branches": 90,
-        "functions": 100,
-        "lines": 95,
-        "statements": 95
-      }
     }
-  }
 }

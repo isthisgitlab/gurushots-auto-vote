@@ -26,4 +26,4 @@ This directory contains application documentation in different languages.
 
 ---
 
-**Note**: All files are automatically updated with the latest versions. 
+**Note**: All files are automatically updated with the latest versions.

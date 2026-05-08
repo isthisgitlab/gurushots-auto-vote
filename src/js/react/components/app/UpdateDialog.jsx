@@ -85,17 +85,13 @@ export function UpdateDialog() {
                 {/* Downloading State */}
                 {state === UPDATE_STATES.DOWNLOADING && progress && (
                     <div className="space-y-4">
-                        <progress
-                            className="progress progress-latvian w-full"
-                            value={progress.percent}
-                            max="100"
-                        />
+                        <progress className="progress progress-latvian w-full" value={progress.percent} max="100" />
                         <div className="flex justify-between text-sm">
                             <span>{progress.percent}%</span>
                             {progress.bytesPerSecond > 0 && (
                                 <span>
-                                    {formatBytes(progress.transferred)} / {formatBytes(progress.total)}
-                                    {' '}({formatBytes(progress.bytesPerSecond)}/s)
+                                    {formatBytes(progress.transferred)} / {formatBytes(progress.total)} (
+                                    {formatBytes(progress.bytesPerSecond)}/s)
                                 </span>
                             )}
                         </div>
@@ -106,7 +102,12 @@ export function UpdateDialog() {
                 {state === UPDATE_STATES.READY && (
                     <div className="alert alert-success">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
                         </svg>
                         <span>{t('app.updateReadyToInstall')}</span>
                     </div>
@@ -116,7 +117,12 @@ export function UpdateDialog() {
                 {state === UPDATE_STATES.ERROR && error && (
                     <div className="alert alert-error">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
                         </svg>
                         <span>{error.message}</span>
                     </div>

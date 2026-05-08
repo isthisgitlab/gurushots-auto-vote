@@ -14,18 +14,18 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 
 1. Fork the repository
 2. Clone your fork:
-   ```bash
-   git clone https://github.com/your-username/gurushots-auto-vote.git
-   cd gurushots-auto-vote
-   ```
+    ```bash
+    git clone https://github.com/your-username/gurushots-auto-vote.git
+    cd gurushots-auto-vote
+    ```
 3. Install dependencies:
-   ```bash
-   npm install
-   ```
+    ```bash
+    npm install
+    ```
 4. Start development:
-   ```bash
-   npm run dev
-   ```
+    ```bash
+    npm run dev
+    ```
 
 ## 🛠️ Development
 
@@ -104,23 +104,23 @@ This eliminates code duplication and provides clean separation between real and 
 ### Git Workflow
 
 1. Create a feature branch from `master`:
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
+    ```bash
+    git checkout -b feature/your-feature-name
+    ```
 2. Make your changes
 3. Run linting and tests:
-   ```bash
-   npm run lint
-   npm run test
-   ```
+    ```bash
+    npm run lint
+    npm run test
+    ```
 4. **Important**: If you changed the version in package.json, update the README:
-   ```bash
-   npm run update:readme
-   ```
+    ```bash
+    npm run update:readme
+    ```
 5. Commit with clear messages:
-   ```bash
-   git commit -m "feat: add new voting feature"
-   ```
+    ```bash
+    git commit -m "feat: add new voting feature"
+    ```
 6. Push and create a pull request
 
 ### README Maintenance
@@ -192,7 +192,7 @@ npm run verify:settings     # Test settings system
 npm run verify:challenges   # Test challenges loading
 npm run verify:login        # Test authentication
 
-# Debug utilities  
+# Debug utilities
 npm run debug:environment   # Check environment detection
 npm run debug:window-bounds # Test window positioning
 ```
@@ -225,7 +225,7 @@ npm run build
 
 ```bash
 npm run build:win    # Windows
-npm run build:mac    # macOS  
+npm run build:mac    # macOS
 npm run build:linux  # Linux
 ```
 

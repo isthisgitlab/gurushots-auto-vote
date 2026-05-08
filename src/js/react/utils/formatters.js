@@ -106,22 +106,22 @@ export const getTurboStatus = (turbo) => {
     }
 
     switch (turbo.state) {
-    case 'FREE':
-        return { text: 'Free', colorClass: 'text-blue-400' };
-    case 'TIMER':
-        return { text: 'Timer', colorClass: 'text-red-500' };
-    case 'IN_PROGRESS':
-        return { text: 'In Progress', colorClass: 'text-orange-500' };
-    case 'WON':
-        return { text: 'Won', colorClass: 'text-lime-800' };
-    case 'USED':
-        return { text: 'Used', colorClass: 'text-green-500' };
-    case 'UNAVAILABLE':
-        return { text: 'Unavailable', colorClass: 'text-red-500' };
-    case 'LOCKED':
-        return { text: 'Locked', colorClass: 'text-latvian' };
-    default:
-        return { text: turbo.state || 'Unknown', colorClass: 'text-purple-500' };
+        case 'FREE':
+            return { text: 'Free', colorClass: 'text-blue-400' };
+        case 'TIMER':
+            return { text: 'Timer', colorClass: 'text-red-500' };
+        case 'IN_PROGRESS':
+            return { text: 'In Progress', colorClass: 'text-orange-500' };
+        case 'WON':
+            return { text: 'Won', colorClass: 'text-lime-800' };
+        case 'USED':
+            return { text: 'Used', colorClass: 'text-green-500' };
+        case 'UNAVAILABLE':
+            return { text: 'Unavailable', colorClass: 'text-red-500' };
+        case 'LOCKED':
+            return { text: 'Locked', colorClass: 'text-latvian' };
+        default:
+            return { text: turbo.state || 'Unknown', colorClass: 'text-purple-500' };
     }
 };
 
@@ -137,18 +137,18 @@ export const getLevelStatus = (level, levelName) => {
     }
 
     switch (levelName.toUpperCase()) {
-    case 'POPULAR':
-        return { text: `${levelName} ${level}`, colorClass: 'badge-popular' };
-    case 'SKILLED':
-        return { text: `${levelName} ${level}`, colorClass: 'badge-skilled' };
-    case 'PREMIER':
-        return { text: `${levelName} ${level}`, colorClass: 'badge-premier' };
-    case 'ELITE':
-        return { text: `${levelName} ${level}`, colorClass: 'badge-elite' };
-    case 'ALL STAR':
-        return { text: `${levelName} ${level}`, colorClass: 'badge-allstar' };
-    default:
-        return { text: `${levelName} ${level}`, colorClass: 'badge-warning' };
+        case 'POPULAR':
+            return { text: `${levelName} ${level}`, colorClass: 'badge-popular' };
+        case 'SKILLED':
+            return { text: `${levelName} ${level}`, colorClass: 'badge-skilled' };
+        case 'PREMIER':
+            return { text: `${levelName} ${level}`, colorClass: 'badge-premier' };
+        case 'ELITE':
+            return { text: `${levelName} ${level}`, colorClass: 'badge-elite' };
+        case 'ALL STAR':
+            return { text: `${levelName} ${level}`, colorClass: 'badge-allstar' };
+        default:
+            return { text: `${levelName} ${level}`, colorClass: 'badge-warning' };
     }
 };
 

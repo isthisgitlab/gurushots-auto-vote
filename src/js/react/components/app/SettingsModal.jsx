@@ -93,11 +93,14 @@ export function SettingsModal({ isOpen, onClose }) {
         }
     }, []);
 
-    const handleResetGlobal = useCallback(async (key) => {
-        if (schema && schema[key]) {
-            setFormValues((prev) => ({ ...prev, [key]: schema[key].default }));
-        }
-    }, [schema]);
+    const handleResetGlobal = useCallback(
+        async (key) => {
+            if (schema && schema[key]) {
+                setFormValues((prev) => ({ ...prev, [key]: schema[key].default }));
+            }
+        },
+        [schema],
+    );
 
     const handleResetUi = useCallback((key) => {
         const defaultUiValues = {
@@ -239,7 +242,12 @@ export function SettingsModal({ isOpen, onClose }) {
                         </button>
                         <button className="btn btn-warning" onClick={handleResetAll}>
                             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                />
                             </svg>
                             {t('app.resetAll')}
                         </button>
@@ -270,12 +278,14 @@ export function SettingsModal({ isOpen, onClose }) {
                                         onChange={(e) => handleUiChange('theme', e.target.checked ? 'dark' : 'light')}
                                     />
                                     <span className="text-sm">{t('common.dark')}</span>
-                                    <button
-                                        className="btn btn-ghost btn-sm"
-                                        onClick={() => handleResetUi('theme')}
-                                    >
+                                    <button className="btn btn-ghost btn-sm" onClick={() => handleResetUi('theme')}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2"
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -297,12 +307,14 @@ export function SettingsModal({ isOpen, onClose }) {
                                         <option value="en">{t('app.english')}</option>
                                         <option value="lv">{t('app.latvian')}</option>
                                     </select>
-                                    <button
-                                        className="btn btn-ghost btn-sm"
-                                        onClick={() => handleResetUi('language')}
-                                    >
+                                    <button className="btn btn-ghost btn-sm" onClick={() => handleResetUi('language')}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2"
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -323,12 +335,14 @@ export function SettingsModal({ isOpen, onClose }) {
                                     >
                                         <option value="Europe/Riga">Europe/Riga</option>
                                         {(uiValues.customTimezones || []).map((tz) => (
-                                            <option key={tz} value={tz}>{tz}</option>
+                                            <option key={tz} value={tz}>
+                                                {tz}
+                                            </option>
                                         ))}
                                         {uiValues.timezone !== 'Europe/Riga' &&
                                             !(uiValues.customTimezones || []).includes(uiValues.timezone) && (
-                                            <option value={uiValues.timezone}>{uiValues.timezone}</option>
-                                        )}
+                                                <option value={uiValues.timezone}>{uiValues.timezone}</option>
+                                            )}
                                     </select>
                                     <button
                                         className="btn btn-ghost btn-sm"
@@ -337,18 +351,24 @@ export function SettingsModal({ isOpen, onClose }) {
                                             setTzInputVisible((v) => !v);
                                             setTzInputError(false);
                                         }}
-                                    >+</button>
+                                    >
+                                        +
+                                    </button>
                                     <button
                                         className={`btn btn-ghost btn-sm text-error ${uiValues.timezone !== 'Europe/Riga' ? '' : 'invisible'}`}
                                         title={t('app.removeCurrentTimezone')}
                                         onClick={handleTimezoneRemove}
-                                    >×</button>
-                                    <button
-                                        className="btn btn-ghost btn-sm"
-                                        onClick={() => handleResetUi('timezone')}
                                     >
+                                        ×
+                                    </button>
+                                    <button className="btn btn-ghost btn-sm" onClick={() => handleResetUi('timezone')}>
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2"
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -393,7 +413,9 @@ export function SettingsModal({ isOpen, onClose }) {
                                         min="1"
                                         max="60"
                                         value={uiValues.checkFrequencyMin}
-                                        onChange={(e) => handleUiChange('checkFrequencyMin', parseInt(e.target.value, 10) || 1)}
+                                        onChange={(e) =>
+                                            handleUiChange('checkFrequencyMin', parseInt(e.target.value, 10) || 1)
+                                        }
                                     />
                                     <span className="text-sm">{t('app.checkFrequencyMax')}</span>
                                     <input
@@ -402,7 +424,9 @@ export function SettingsModal({ isOpen, onClose }) {
                                         min="1"
                                         max="60"
                                         value={uiValues.checkFrequencyMax}
-                                        onChange={(e) => handleUiChange('checkFrequencyMax', parseInt(e.target.value, 10) || 1)}
+                                        onChange={(e) =>
+                                            handleUiChange('checkFrequencyMax', parseInt(e.target.value, 10) || 1)
+                                        }
                                         onBlur={(e) => {
                                             const v = parseInt(e.target.value, 10) || 1;
                                             if (v < uiValues.checkFrequencyMin) {
@@ -419,7 +443,12 @@ export function SettingsModal({ isOpen, onClose }) {
                                         }}
                                     >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2"
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                            />
                                         </svg>
                                     </button>
                                 </div>
@@ -433,22 +462,25 @@ export function SettingsModal({ isOpen, onClose }) {
                             {t('app.challengeDefaults')}
                         </h4>
                         <div className="space-y-4">
-                            {schema && Object.entries(schema).map(([key, config]) => (
-                                <div key={key} className="form-control">
-                                    <label className="label">
-                                        <span className="label-text font-medium">{t(config.label)}</span>
-                                        <span className="badge badge-ghost badge-xs ml-2">{t('app.globalDefault')}</span>
-                                    </label>
-                                    <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
-                                    <SettingInput
-                                        settingKey={key}
-                                        config={config}
-                                        value={formValues[key] ?? config.default}
-                                        onChange={handleFormChange}
-                                        onReset={handleResetGlobal}
-                                    />
-                                </div>
-                            ))}
+                            {schema &&
+                                Object.entries(schema).map(([key, config]) => (
+                                    <div key={key} className="form-control">
+                                        <label className="label">
+                                            <span className="label-text font-medium">{t(config.label)}</span>
+                                            <span className="badge badge-ghost badge-xs ml-2">
+                                                {t('app.globalDefault')}
+                                            </span>
+                                        </label>
+                                        <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+                                        <SettingInput
+                                            settingKey={key}
+                                            config={config}
+                                            value={formValues[key] ?? config.default}
+                                            onChange={handleFormChange}
+                                            onReset={handleResetGlobal}
+                                        />
+                                    </div>
+                                ))}
                         </div>
                     </div>
 
@@ -463,7 +495,12 @@ export function SettingsModal({ isOpen, onClose }) {
                         </button>
                         <button className="btn btn-warning" onClick={handleResetAll}>
                             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                />
                             </svg>
                             {t('app.resetAll')}
                         </button>

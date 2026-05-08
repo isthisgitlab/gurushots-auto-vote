@@ -40,7 +40,7 @@ describe('flash type challenge functionality', () => {
     describe('flash type voting logic', () => {
         test('should vote on flash type challenges when exposure is below 100%', () => {
             const now = Math.floor(Date.now() / 1000);
-            
+
             // Mock flash challenge with exposure below 100%
             const flashChallenge = {
                 id: 105755,
@@ -74,7 +74,7 @@ describe('flash type challenge functionality', () => {
 
         test('should not vote on flash type challenges when exposure is at 100%', () => {
             const now = Math.floor(Date.now() / 1000);
-            
+
             // Mock flash challenge with exposure at 100%
             const flashChallenge = {
                 id: 105755,
@@ -108,7 +108,7 @@ describe('flash type challenge functionality', () => {
 
         test('should ignore exposure threshold setting for flash type challenges', () => {
             const now = Math.floor(Date.now() / 1000);
-            
+
             // Mock flash challenge with exposure at 85% (above normal threshold but below 100%)
             const flashChallenge = {
                 id: 105755,
@@ -144,10 +144,10 @@ describe('flash type challenge functionality', () => {
             };
 
             const exposureThreshold = settings.getEffectiveSetting('exposure', flashChallenge.id.toString());
-            
+
             // Should vote because it's flash type and exposure is below 100%
             expect(shouldVote(flashChallenge, exposureThreshold)).toBe(true);
-            
+
             // Verify that the exposure threshold was ignored for flash type
             expect(flashChallenge.member.ranking.exposure.exposure_factor).toBe(85);
             expect(exposureThreshold).toBe(80);
@@ -156,7 +156,7 @@ describe('flash type challenge functionality', () => {
 
         test('should handle boost-only mode correctly for flash type challenges', () => {
             const now = Math.floor(Date.now() / 1000);
-            
+
             // Mock flash challenge
             const flashChallenge = {
                 id: 105755,
@@ -189,14 +189,14 @@ describe('flash type challenge functionality', () => {
 
             // Should not vote when boost-only mode is enabled
             expect(shouldVote(flashChallenge, true)).toBe(false);
-            
+
             // Should vote when boost-only mode is disabled and it's flash type
             expect(shouldVote(flashChallenge, false)).toBe(true);
         });
 
         test('should handle challenge not started correctly for flash type challenges', () => {
             const now = Math.floor(Date.now() / 1000);
-            
+
             // Mock flash challenge that hasn't started yet
             const flashChallenge = {
                 id: 105755,
@@ -235,7 +235,7 @@ describe('flash type challenge functionality', () => {
     describe('flash type vs other challenge types', () => {
         test('should differentiate between flash type and normal challenges', () => {
             const now = Math.floor(Date.now() / 1000);
-            
+
             // Mock flash challenge
             const flashChallenge = {
                 id: 105755,
@@ -286,9 +286,9 @@ describe('flash type challenge functionality', () => {
 
             // Flash challenge should vote (85 < 100)
             expect(shouldVote(flashChallenge, exposureThreshold)).toBe(true);
-            
+
             // Normal challenge should not vote (85 >= 80)
             expect(shouldVote(normalChallenge, exposureThreshold)).toBe(false);
         });
     });
-}); 
+});

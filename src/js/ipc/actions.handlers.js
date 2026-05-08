@@ -14,14 +14,17 @@ const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
 const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
-const {runTurboMiniGame} = require('../api/main');
+const { runTurboMiniGame } = require('../api/main');
 
 // In-process guard that prevents two simultaneous mini-game runs on
 // the same challenge — defends against double-click and against an
 // autovote cycle racing with a manual click.
 const turboMiniGameInFlight = new Set();
 
-const sanitizeForLog = (value) => String(value ?? '').replace(/[\r\n\t]/g, ' ').slice(0, 200);
+const sanitizeForLog = (value) =>
+    String(value ?? '')
+        .replace(/[\r\n\t]/g, ' ')
+        .slice(0, 200);
 
 const register = (ipcMain) => {
     ipcMain.handle('get-active-challenges', async (event, token) => {
@@ -37,13 +40,19 @@ const register = (ipcMain) => {
     });
 
     ipcMain.handle('authenticate', async (event, username, password, isMock) => {
-        logger.withCategory('general').info(`🔐 Authentication request received - Mock: ${isMock}, Username: ${username}`, null, logger.CATEGORIES.AUTHENTICATION);
+        logger
+            .withCategory('general')
+            .info(
+                `🔐 Authentication request received - Mock: ${isMock}, Username: ${username}`,
+                null,
+                logger.CATEGORIES.AUTHENTICATION,
+            );
         try {
             if (isMock) {
-                const {mockLoginSuccess, mockLoginFailure} = require('../mock/auth');
+                const { mockLoginSuccess, mockLoginFailure } = require('../mock/auth');
 
                 // Simulate network delay for realistic behavior
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise((resolve) => setTimeout(resolve, 500));
 
                 const isValidCredential = true;
 
@@ -71,11 +80,11 @@ const register = (ipcMain) => {
             }
 
             // Real authentication
-            const {authenticate: realAuthenticate} = require('../api/login');
+            const { authenticate: realAuthenticate } = require('../api/login');
             const response = await realAuthenticate(username, password);
 
             if (!response) {
-                return {success: false, message: 'Authentication failed - no response from server'};
+                return { success: false, message: 'Authentication failed - no response from server' };
             }
 
             logger.withCategory('authentication').info('🔐 Real authentication response:', response);
@@ -93,7 +102,8 @@ const register = (ipcMain) => {
                             id: response.member_id || response.user_id || response.id,
                             email: username,
                             username: response.user_name || response.username || response.name,
-                            display_name: response.user_name || response.username || response.name || response.display_name,
+                            display_name:
+                                response.user_name || response.username || response.name || response.display_name,
                         },
                     };
                     logger.withCategory('authentication').info('🔐 Real authentication successful:', result);
@@ -109,7 +119,7 @@ const register = (ipcMain) => {
             return result;
         } catch (error) {
             logger.withCategory('authentication').error('Error handling authenticate request:', error);
-            return {success: false, message: error.message || 'Authentication failed due to network error'};
+            return { success: false, message: error.message || 'Authentication failed due to network error' };
         }
     });
 
@@ -123,7 +133,7 @@ const register = (ipcMain) => {
             logger.withCategory('turbo').info(`▶️ Manual auto-turbo run requested for challenge ${safeId}`, null);
             const userSettings = settings.loadSettings();
             if (!userSettings.token) {
-                return {success: false, error: 'No authentication token found'};
+                return { success: false, error: 'No authentication token found' };
             }
 
             // Claim the in-flight slot synchronously, before any await, so a
@@ -131,7 +141,7 @@ const register = (ipcMain) => {
             // try/finally that owns the slot wraps the entire critical
             // section including the live-fetch + validation.
             if (turboMiniGameInFlight.has(safeId)) {
-                return {success: false, error: 'A turbo run is already in progress for this challenge'};
+                return { success: false, error: 'A turbo run is already in progress for this challenge' };
             }
             turboMiniGameInFlight.add(safeId);
             try {
@@ -139,25 +149,26 @@ const register = (ipcMain) => {
                 const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
                 const liveChallenge = challengesResponse?.challenges?.find((c) => String(c.id) === String(challengeId));
                 if (!liveChallenge) {
-                    return {success: false, error: 'Challenge no longer active'};
+                    return { success: false, error: 'Challenge no longer active' };
                 }
                 const now = Math.floor(Date.now() / 1000);
                 if (!votingLogic.shouldPlayAutoTurbo(liveChallenge, now)) {
                     // Bypass the autoTurbo setting check for the manual
                     // button — the user is explicitly opting in by clicking.
                     const turboState = liveChallenge.member?.turbo?.state;
-                    const cooldownPassed = turboState === 'TIMER'
-                        && typeof liveChallenge.member?.turbo?.time_to_open === 'number'
-                        && liveChallenge.member.turbo.time_to_open <= now;
+                    const cooldownPassed =
+                        turboState === 'TIMER' &&
+                        typeof liveChallenge.member?.turbo?.time_to_open === 'number' &&
+                        liveChallenge.member.turbo.time_to_open <= now;
                     const playable = turboState === 'FREE' || turboState === 'IN_PROGRESS' || cooldownPassed;
                     const closeTime = Number(liveChallenge.close_time);
                     if (!Number.isFinite(closeTime) || closeTime <= now || !playable) {
-                        return {success: false, error: `Turbo not playable (state=${turboState || 'unknown'})`};
+                        return { success: false, error: `Turbo not playable (state=${turboState || 'unknown'})` };
                     }
                 }
 
                 const result = await runTurboMiniGame(
-                    {id: liveChallenge.id, title: liveChallenge.title || safeTitle},
+                    { id: liveChallenge.id, title: liveChallenge.title || safeTitle },
                     userSettings.token,
                 );
                 // Whitelist the fields returned to the renderer so any
@@ -165,26 +176,26 @@ const register = (ipcMain) => {
                 // shape never accidentally leaks new data over IPC.
                 const safeResult = result
                     ? {
-                        played: result.played,
-                        correct: result.correct,
-                        flipped: result.flipped,
-                        doubleFailed: result.doubleFailed,
-                        won: result.won,
-                    }
+                          played: result.played,
+                          correct: result.correct,
+                          flipped: result.flipped,
+                          doubleFailed: result.doubleFailed,
+                          won: result.won,
+                      }
                     : null;
                 if (result?.played === 0) {
-                    return {success: false, error: 'No battles to play right now', result: safeResult};
+                    return { success: false, error: 'No battles to play right now', result: safeResult };
                 }
                 if (!result?.correct) {
-                    return {success: false, error: 'Turbo not earned — try again later', result: safeResult};
+                    return { success: false, error: 'Turbo not earned — try again later', result: safeResult };
                 }
-                return {success: true, result: safeResult};
+                return { success: true, result: safeResult };
             } finally {
                 turboMiniGameInFlight.delete(safeId);
             }
         } catch (error) {
             logger.withCategory('turbo').error('Error running manual auto-turbo:', error);
-            return {success: false, error: error.message || 'Failed to run turbo mini-game'};
+            return { success: false, error: error.message || 'Failed to run turbo mini-game' };
         }
     });
 
@@ -192,7 +203,9 @@ const register = (ipcMain) => {
         const safeChallengeId = sanitizeForLog(challengeId);
         const safeImageId = sanitizeForLog(imageId);
         try {
-            logger.withCategory('turbo').info(`⚡ Apply turbo to entry request: Challenge=${safeChallengeId}, Image=${safeImageId}`, null);
+            logger
+                .withCategory('turbo')
+                .info(`⚡ Apply turbo to entry request: Challenge=${safeChallengeId}, Image=${safeImageId}`, null);
             const guard = auth.requireAuthToken('turbo apply');
             if (!guard.ok) return guard.response;
             const strategy = apiFactory.getApiStrategy();
@@ -200,7 +213,7 @@ const register = (ipcMain) => {
 
             if (result?.ok) {
                 logger.withCategory('turbo').success('✅ Turbo applied successfully');
-                return {success: true, message: 'Turbo applied successfully'};
+                return { success: true, message: 'Turbo applied successfully' };
             }
             // Log only a small redacted summary of the raw response so any
             // session-identifying material the upstream might reflect back
@@ -208,13 +221,13 @@ const register = (ipcMain) => {
             // user-facing error string returned to the renderer.
             const safeMessage = sanitizeForLog(result?.raw?.message);
             const safeRaw = result?.raw
-                ? {success: result.raw.success, error_code: result.raw.error_code, message: safeMessage}
+                ? { success: result.raw.success, error_code: result.raw.error_code, message: safeMessage }
                 : null;
             logger.withCategory('turbo').warning('❌ Failed to apply turbo', safeRaw);
-            return {success: false, error: safeMessage || 'Failed to apply turbo'};
+            return { success: false, error: safeMessage || 'Failed to apply turbo' };
         } catch (error) {
             logger.withCategory('turbo').error('Error applying turbo to entry:', error);
-            return {success: false, error: error.message || 'Failed to apply turbo'};
+            return { success: false, error: error.message || 'Failed to apply turbo' };
         }
     });
 
@@ -226,32 +239,24 @@ const register = (ipcMain) => {
         const safeChallengeId = sanitizeForLog(challengeId);
         const safeMode = mode === 'all' ? 'all' : 'one';
         try {
-            logger.withCategory('autoFill').info(
-                `📝 Manual fill request: Challenge=${safeChallengeId}, Mode=${safeMode}`,
-                null,
-            );
+            logger
+                .withCategory('autoFill')
+                .info(`📝 Manual fill request: Challenge=${safeChallengeId}, Mode=${safeMode}`, null);
             const guard = auth.requireAuthToken('manual fill');
             if (!guard.ok) return guard.response;
 
             const strategy = apiFactory.getApiStrategy();
             const challengesResponse = await strategy.getActiveChallenges(guard.token);
-            const liveChallenge = challengesResponse?.challenges?.find(
-                (c) => String(c.id) === String(challengeId),
-            );
+            const liveChallenge = challengesResponse?.challenges?.find((c) => String(c.id) === String(challengeId));
             if (!liveChallenge) {
-                return {success: false, error: 'Challenge no longer active'};
+                return { success: false, error: 'Challenge no longer active' };
             }
 
-            const result = await autoFill.fillChallengeNow(
-                liveChallenge,
-                guard.token,
-                safeMode,
-                {
-                    logger,
-                    getEligiblePhotos: strategy.getEligiblePhotos,
-                    submitToChallenge: strategy.submitToChallenge,
-                },
-            );
+            const result = await autoFill.fillChallengeNow(liveChallenge, guard.token, safeMode, {
+                logger,
+                getEligiblePhotos: strategy.getEligiblePhotos,
+                submitToChallenge: strategy.submitToChallenge,
+            });
 
             return {
                 success: result.success === true,
@@ -264,33 +269,45 @@ const register = (ipcMain) => {
             };
         } catch (error) {
             logger.withCategory('autoFill').error('Error handling fill-challenge-now request:', error);
-            return {success: false, error: error.message || 'Failed to fill challenge'};
+            return { success: false, error: error.message || 'Failed to fill challenge' };
         }
     });
 
     ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
         try {
-            logger.withCategory('general').info(`🚀 Apply boost to entry request: Challenge=${challengeId}, Image=${imageId}`, null, logger.CATEGORIES.VOTING);
+            logger
+                .withCategory('general')
+                .info(
+                    `🚀 Apply boost to entry request: Challenge=${challengeId}, Image=${imageId}`,
+                    null,
+                    logger.CATEGORIES.VOTING,
+                );
 
             const guard = auth.requireAuthToken('boost');
             if (!guard.ok) return guard.response;
 
             const strategy = apiFactory.getApiStrategy();
 
-            logger.withCategory('general').info(`🚀 Applying boost to entry: Challenge=${challengeId}, Image=${imageId}`, null, logger.CATEGORIES.VOTING);
+            logger
+                .withCategory('general')
+                .info(
+                    `🚀 Applying boost to entry: Challenge=${challengeId}, Image=${imageId}`,
+                    null,
+                    logger.CATEGORIES.VOTING,
+                );
             const result = await strategy.applyBoostToEntry(challengeId, imageId, guard.token);
 
             if (result) {
                 logger.withCategory('voting').success('✅ Boost applied successfully');
-                return {success: true, message: 'Boost applied successfully'};
+                return { success: true, message: 'Boost applied successfully' };
             }
             logger.withCategory('voting').warning('❌ Failed to apply boost', null);
-            return {success: false, error: 'Failed to apply boost'};
+            return { success: false, error: 'Failed to apply boost' };
         } catch (error) {
             logger.withCategory('voting').error('Error applying boost to entry:', error);
-            return {success: false, error: error.message || 'Failed to apply boost'};
+            return { success: false, error: error.message || 'Failed to apply boost' };
         }
     });
 };
 
-module.exports = {register};
+module.exports = { register };

@@ -7,7 +7,7 @@
  * profile as the turbo flow (x-env: WEB, x-api-version: 13).
  */
 
-const {makePostRequest, FORM_CONTENT_TYPE} = require('./api-client');
+const { makePostRequest, FORM_CONTENT_TYPE } = require('./api-client');
 
 const SUBMISSIONS_BASE_URL = 'https://api.gurushots.com/rest';
 
@@ -19,8 +19,8 @@ const requireValue = (value, label) => {
 };
 
 const createWebHeaders = (token) => ({
-    'host': 'api.gurushots.com',
-    'accept': '*/*',
+    host: 'api.gurushots.com',
+    accept: '*/*',
     'content-type': FORM_CONTENT_TYPE,
     'x-api-version': '13',
     'x-env': 'WEB',
@@ -76,18 +76,14 @@ const submitToChallenge = async (challengeId, imageIds, token) => {
         throw new Error('submissions: imageIds must be a non-empty array');
     }
     const headers = createWebHeaders(token);
-    const params = [
-        `c_id=${encodeURIComponent(String(challengeId))}`,
-        'el=challenges',
-        'el_id=true',
-    ];
+    const params = [`c_id=${encodeURIComponent(String(challengeId))}`, 'el=challenges', 'el_id=true'];
     imageIds.forEach((id, index) => {
         params.push(`image_ids[${index}]=${encodeURIComponent(String(id))}`);
     });
     const data = params.join('&');
     const response = await makePostRequest(`${SUBMISSIONS_BASE_URL}/submit_to_challenge`, headers, data);
     if (!response) {
-        return {ok: false, raw: null};
+        return { ok: false, raw: null };
     }
     return {
         ok: response.success === true,

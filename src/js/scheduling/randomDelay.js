@@ -27,4 +27,4 @@ const getRandomCheckFrequencyMs = (settings) => {
     return Math.round(minutes * MS_PER_MINUTE);
 };
 
-module.exports = {getRandomCheckFrequencyMs, DEFAULT_MINUTES, MS_PER_MINUTE};
+module.exports = { getRandomCheckFrequencyMs, DEFAULT_MINUTES, MS_PER_MINUTE };

@@ -22,33 +22,146 @@
 
 const STOPWORDS = new Set([
     // Articles, prepositions, conjunctions, copulas
-    'in', 'of', 'the', 'a', 'an', 'and', 'or', 'with', 'on', 'for',
-    'to', 'at', 'from', 'by', 'about', 'as', 'if', 'so', 'no', 'not',
-    'is', 'it', 'this', 'that', 'these', 'those',
+    'in',
+    'of',
+    'the',
+    'a',
+    'an',
+    'and',
+    'or',
+    'with',
+    'on',
+    'for',
+    'to',
+    'at',
+    'from',
+    'by',
+    'about',
+    'as',
+    'if',
+    'so',
+    'no',
+    'not',
+    'is',
+    'it',
+    'this',
+    'that',
+    'these',
+    'those',
     // Pronouns
-    'my', 'me', 'mine', 'we', 'us', 'our', 'ours', 'you', 'your',
-    'yours', 'he', 'she', 'they', 'them', 'their',
+    'my',
+    'me',
+    'mine',
+    'we',
+    'us',
+    'our',
+    'ours',
+    'you',
+    'your',
+    'yours',
+    'he',
+    'she',
+    'they',
+    'them',
+    'their',
     // Auxiliary verbs
-    'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
-    'do', 'does', 'did', 'will', 'would', 'should', 'could', 'can',
+    'are',
+    'was',
+    'were',
+    'be',
+    'been',
+    'being',
+    'have',
+    'has',
+    'had',
+    'do',
+    'does',
+    'did',
+    'will',
+    'would',
+    'should',
+    'could',
+    'can',
     // Quantifiers
-    'all', 'any', 'some', 'more', 'most', 'less', 'few', 'many', 'much',
+    'all',
+    'any',
+    'some',
+    'more',
+    'most',
+    'less',
+    'few',
+    'many',
+    'much',
     // Photography / GuruShots vocabulary that doesn't help match labels
-    'shots', 'shot', 'photo', 'photos', 'photography', 'photographer',
-    'image', 'images', 'picture', 'pictures', 'pic', 'pics',
-    'gurushots', 'challenge', 'challenges', 'contest', 'contests',
+    'shots',
+    'shot',
+    'photo',
+    'photos',
+    'photography',
+    'photographer',
+    'image',
+    'images',
+    'picture',
+    'pictures',
+    'pic',
+    'pics',
+    'gurushots',
+    'challenge',
+    'challenges',
+    'contest',
+    'contests',
     // Reward / level copy from welcome messages
-    'reward', 'rewards', 'prize', 'prizes', 'win', 'wins', 'winner',
-    'winners', 'level', 'levels', 'badge', 'badges', 'point', 'points',
-    'coin', 'coins', 'allstar', 'elite', 'premier', 'popular',
-    'skilled', 'guru', 'gurus', 'earn', 'earns', 'earned', 'earning',
-    'participation', 'participate',
+    'reward',
+    'rewards',
+    'prize',
+    'prizes',
+    'win',
+    'wins',
+    'winner',
+    'winners',
+    'level',
+    'levels',
+    'badge',
+    'badges',
+    'point',
+    'points',
+    'coin',
+    'coins',
+    'allstar',
+    'elite',
+    'premier',
+    'popular',
+    'skilled',
+    'guru',
+    'gurus',
+    'earn',
+    'earns',
+    'earned',
+    'earning',
+    'participation',
+    'participate',
     // Welcome-message boilerplate verbs
-    'capture', 'captured', 'capturing', 'submit', 'submitted',
-    'submission', 'enter', 'entered', 'entering', 'entry', 'entries',
-    'join', 'joined', 'joining',
+    'capture',
+    'captured',
+    'capturing',
+    'submit',
+    'submitted',
+    'submission',
+    'enter',
+    'entered',
+    'entering',
+    'entry',
+    'entries',
+    'join',
+    'joined',
+    'joining',
     // Welcome-message boilerplate adjectives / fillers
-    'good', 'luck', 'great', 'best', 'better', 'nice',
+    'good',
+    'luck',
+    'great',
+    'best',
+    'better',
+    'nice',
 ]);
 
 const isPureDigit = (token) => /^\d+$/.test(token);
@@ -91,11 +204,8 @@ const buildChallengeKeywords = (challenge) => {
     return Array.from(new Set(all));
 };
 
-const matches = (labelStem, keywordStem) => (
-    labelStem === keywordStem
-    || labelStem.includes(keywordStem)
-    || keywordStem.includes(labelStem)
-);
+const matches = (labelStem, keywordStem) =>
+    labelStem === keywordStem || labelStem.includes(keywordStem) || keywordStem.includes(labelStem);
 
 const scorePhoto = (photo, keywords) => {
     if (keywords.length === 0) return 0;
@@ -114,17 +224,11 @@ const scorePhoto = (photo, keywords) => {
     return score;
 };
 
-const achievementCountOf = (photo) => (
-    Array.isArray(photo.achievements) ? photo.achievements.length : 0
-);
+const achievementCountOf = (photo) => (Array.isArray(photo.achievements) ? photo.achievements.length : 0);
 
-const votesOf = (photo) => (
-    Number.isFinite(photo.votes) ? photo.votes : 0
-);
+const votesOf = (photo) => (Number.isFinite(photo.votes) ? photo.votes : 0);
 
-const uploadDateOf = (photo) => (
-    Number.isFinite(photo.upload_date) ? photo.upload_date : 0
-);
+const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.upload_date : 0);
 
 /**
  * Picks photos to submit to a challenge.

@@ -37,10 +37,10 @@ describe('lastminute threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 75 // Below 100%
-                        }
-                    }
-                }
+                            exposure_factor: 75, // Below 100%
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -58,7 +58,7 @@ describe('lastminute threshold functionality', () => {
             // Test the logic
             const effectiveLastMinutes = mockSettings.getEffectiveSetting('lastMinutes', challenge.id.toString());
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinutes * 60 && timeUntilEnd > 0;
 
             // Should be within lastminute threshold (15 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
@@ -78,10 +78,10 @@ describe('lastminute threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 100 // At 100%
-                        }
-                    }
-                }
+                            exposure_factor: 100, // At 100%
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -99,7 +99,7 @@ describe('lastminute threshold functionality', () => {
             // Test the logic
             const effectiveLastMinutes = mockSettings.getEffectiveSetting('lastMinutes', challenge.id.toString());
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinutes * 60 && timeUntilEnd > 0;
 
             // Should be within lastminute threshold (15 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
@@ -119,10 +119,10 @@ describe('lastminute threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 80 // Below normal threshold
-                        }
-                    }
-                }
+                            exposure_factor: 80, // Below normal threshold
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -142,7 +142,7 @@ describe('lastminute threshold functionality', () => {
             // Test the logic
             const effectiveLastMinutes = mockSettings.getEffectiveSetting('lastMinutes', challenge.id.toString());
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinutes * 60 && timeUntilEnd > 0;
 
             // Should not be within lastminute threshold (60 minutes > 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(false);
@@ -163,10 +163,10 @@ describe('lastminute threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 95 // Above normal threshold
-                        }
-                    }
-                }
+                            exposure_factor: 95, // Above normal threshold
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -186,7 +186,7 @@ describe('lastminute threshold functionality', () => {
             // Test the logic
             const effectiveLastMinutes = mockSettings.getEffectiveSetting('lastMinutes', challenge.id.toString());
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinutes * 60 && timeUntilEnd > 0;
 
             // Should not be within lastminute threshold (60 minutes > 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(false);
@@ -207,10 +207,10 @@ describe('lastminute threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 75 // Below 100%
-                        }
-                    }
-                }
+                            exposure_factor: 75, // Below 100%
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -228,7 +228,7 @@ describe('lastminute threshold functionality', () => {
             // Test the logic
             const effectiveLastMinutes = mockSettings.getEffectiveSetting('lastMinutes', challenge.id.toString());
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinutes * 60 && timeUntilEnd > 0;
             const onlyBoost = mockSettings.getEffectiveSetting('onlyBoost', challenge.id.toString());
 
             // Should be within lastminute threshold (15 minutes <= 30 minutes)
@@ -248,10 +248,10 @@ describe('lastminute threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 75 // Below 100%
-                        }
-                    }
-                }
+                            exposure_factor: 75, // Below 100%
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -269,7 +269,7 @@ describe('lastminute threshold functionality', () => {
             // Test the logic
             const effectiveLastMinutes = mockSettings.getEffectiveSetting('lastMinutes', challenge.id.toString());
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinutes * 60 && timeUntilEnd > 0;
 
             // Should be within lastminute threshold (15 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
@@ -289,10 +289,10 @@ describe('lastminute threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 75 // Below 100%
-                        }
-                    }
-                }
+                            exposure_factor: 75, // Below 100%
+                        },
+                    },
+                },
             };
 
             // Mock settings with per-challenge override
@@ -310,7 +310,7 @@ describe('lastminute threshold functionality', () => {
             // Test the logic
             const effectiveLastMinutes = mockSettings.getEffectiveSetting('lastMinutes', challenge.id.toString());
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinutes * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinutes * 60 && timeUntilEnd > 0;
 
             // Should not be within lastminute threshold (30 minutes > 15 minutes)
             expect(isWithinLastMinuteThreshold).toBe(false);
@@ -319,4 +319,4 @@ describe('lastminute threshold functionality', () => {
             expect(mockSettings.getEffectiveSetting).toHaveBeenCalledWith('lastMinutes', '12345');
         });
     });
-}); 
+});

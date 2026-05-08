@@ -22,4 +22,4 @@ const ensureExit = (reason) => {
     }, 1000);
 };
 
-module.exports = {ensureExit};
+module.exports = { ensureExit };

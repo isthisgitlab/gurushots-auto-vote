@@ -35,7 +35,7 @@ const validateMetadataEntry = (entry) => {
     if (typeof entry !== 'object' || entry === null) {
         return { isValid: false, reason: 'Entry is not an object or is null' };
     }
-    
+
     // Check lastVoteTime
     if (entry.lastVoteTime && typeof entry.lastVoteTime !== 'string') {
         return { isValid: false, reason: `lastVoteTime is not a string (type: ${typeof entry.lastVoteTime})` };
@@ -46,17 +46,20 @@ const validateMetadataEntry = (entry) => {
             return { isValid: false, reason: `lastVoteTime "${entry.lastVoteTime}" is not a valid date format` };
         }
     }
-    
+
     // Check exposureBump (allow values > 100% as this can happen when insufficient images are available)
     if (entry.exposureBump !== undefined) {
         if (typeof entry.exposureBump !== 'number') {
-            return { isValid: false, reason: `exposureBump is not a number (type: ${typeof entry.exposureBump}, value: ${entry.exposureBump})` };
+            return {
+                isValid: false,
+                reason: `exposureBump is not a number (type: ${typeof entry.exposureBump}, value: ${entry.exposureBump})`,
+            };
         }
         if (entry.exposureBump < 0) {
             return { isValid: false, reason: `exposureBump is negative (${entry.exposureBump})` };
         }
     }
-    
+
     return { isValid: true, reason: null };
 };
 
@@ -73,37 +76,51 @@ const validateMetadata = (metadata) => {
     if (metadata.updateCheck) {
         const updateCheck = metadata.updateCheck;
         const validUpdateCheck = {};
-        
+
         // Validate lastCheck timestamp
         if (updateCheck.lastCheck !== null && updateCheck.lastCheck !== undefined) {
             if (typeof updateCheck.lastCheck === 'number' && updateCheck.lastCheck > 0) {
                 validUpdateCheck.lastCheck = updateCheck.lastCheck;
             } else {
                 const valueType = typeof updateCheck.lastCheck;
-                const valueDesc = valueType === 'number' ? `${updateCheck.lastCheck} (must be > 0)` : `${updateCheck.lastCheck} (type: ${valueType}, expected: number)`;
-                logger.withCategory('general').warning(`Invalid lastCheck timestamp in metadata: ${valueDesc}, removing`, null, logger.CATEGORIES.UPDATE);
+                const valueDesc =
+                    valueType === 'number'
+                        ? `${updateCheck.lastCheck} (must be > 0)`
+                        : `${updateCheck.lastCheck} (type: ${valueType}, expected: number)`;
+                logger
+                    .withCategory('general')
+                    .warning(
+                        `Invalid lastCheck timestamp in metadata: ${valueDesc}, removing`,
+                        null,
+                        logger.CATEGORIES.UPDATE,
+                    );
                 validUpdateCheck.lastCheck = null;
                 hasChanges = true;
             }
         } else {
             validUpdateCheck.lastCheck = null;
         }
-        
+
         // Validate skipVersion
         if (updateCheck.skipVersion !== null && updateCheck.skipVersion !== undefined) {
             if (typeof updateCheck.skipVersion === 'string' && updateCheck.skipVersion.length > 0) {
                 validUpdateCheck.skipVersion = updateCheck.skipVersion;
             } else {
                 const valueType = typeof updateCheck.skipVersion;
-                const valueDesc = valueType === 'string' ? `"${updateCheck.skipVersion}" (empty string)` : `${updateCheck.skipVersion} (type: ${valueType}, expected: non-empty string)`;
-                logger.withCategory('general').warning(`Invalid skipVersion in metadata: ${valueDesc}, removing`, null, logger.CATEGORIES.UPDATE);
+                const valueDesc =
+                    valueType === 'string'
+                        ? `"${updateCheck.skipVersion}" (empty string)`
+                        : `${updateCheck.skipVersion} (type: ${valueType}, expected: non-empty string)`;
+                logger
+                    .withCategory('general')
+                    .warning(`Invalid skipVersion in metadata: ${valueDesc}, removing`, null, logger.CATEGORIES.UPDATE);
                 validUpdateCheck.skipVersion = null;
                 hasChanges = true;
             }
         } else {
             validUpdateCheck.skipVersion = null;
         }
-        
+
         validatedMetadata.updateCheck = validUpdateCheck;
     } else {
         // Add missing updateCheck structure
@@ -119,17 +136,19 @@ const validateMetadata = (metadata) => {
     for (const [challengeId, entry] of Object.entries(metadata)) {
         // Skip updateCheck as we handled it above
         if (challengeId === 'updateCheck') continue;
-        
+
         const validation = validateMetadataEntry(entry);
         if (validation.isValid) {
             validatedMetadata[challengeId] = entry;
         } else {
-            logger.withCategory('challenges').warning(`Removing invalid metadata entry for challenge ${challengeId}: ${validation.reason}`);
+            logger
+                .withCategory('challenges')
+                .warning(`Removing invalid metadata entry for challenge ${challengeId}: ${validation.reason}`);
             removedEntries.push({ challengeId, reason: validation.reason });
             hasChanges = true;
         }
     }
-    
+
     // Log summary if multiple entries were removed
     if (removedEntries.length > 1) {
         logger.withCategory('api').warning(`Cleaned up ${removedEntries.length} invalid metadata entries total`, null);
@@ -220,7 +239,7 @@ const setChallengeMetadata = (challengeId, lastVoteTime, exposureBump) => {
     }
 
     const entry = {};
-    
+
     if (lastVoteTime) {
         // Validate timestamp
         const date = new Date(lastVoteTime);
@@ -241,7 +260,7 @@ const setChallengeMetadata = (challengeId, lastVoteTime, exposureBump) => {
     }
 
     const metadata = loadMetadata();
-    
+
     // Merge with existing entry or create new one
     if (metadata[challengeId]) {
         metadata[challengeId] = { ...metadata[challengeId], ...entry };
@@ -262,7 +281,7 @@ const updateLastVoteTime = (challengeId, timestamp = null) => {
     const voteTime = timestamp || new Date().toISOString();
     const existing = getChallengeMetadata(challengeId);
     const exposureBump = existing?.exposureBump;
-    
+
     return setChallengeMetadata(challengeId, voteTime, exposureBump);
 };
 
@@ -275,7 +294,7 @@ const updateLastVoteTime = (challengeId, timestamp = null) => {
 const updateExposureBump = (challengeId, exposure) => {
     const existing = getChallengeMetadata(challengeId);
     const lastVoteTime = existing?.lastVoteTime;
-    
+
     return setChallengeMetadata(challengeId, lastVoteTime, exposure);
 };
 
@@ -298,12 +317,12 @@ const updateChallengeVoteMetadata = (challengeId, exposure, timestamp = null) =>
  */
 const removeChallengeMetadata = (challengeId) => {
     const metadata = loadMetadata();
-    
+
     if (metadata[challengeId]) {
         delete metadata[challengeId];
         return saveMetadata(metadata);
     }
-    
+
     return true; // Nothing to remove
 };
 
@@ -315,30 +334,37 @@ const removeChallengeMetadata = (challengeId) => {
 const cleanupStaleMetadata = (activeChallengeIds) => {
     // Safety check: don't cleanup if we have no active challenges (likely an error state)
     if (!activeChallengeIds || activeChallengeIds.length === 0) {
-        logger.withCategory('api').debug('Skipping metadata cleanup: no active challenges provided (possibly loading error)', null);
+        logger
+            .withCategory('api')
+            .debug('Skipping metadata cleanup: no active challenges provided (possibly loading error)', null);
         return true;
     }
 
     const metadata = loadMetadata();
     const storedChallengeIds = Object.keys(metadata);
-    
+
     // Only cleanup challenges that are definitively stale
     // Be conservative: keep metadata if there's any doubt
-    const staleChallengeIds = storedChallengeIds.filter(id => {
+    const staleChallengeIds = storedChallengeIds.filter((id) => {
         const isStale = !activeChallengeIds.includes(id);
-        
+
         // Additional safety: check if metadata is very recent (within last hour)
         // This prevents cleanup of challenges that were just voted on
         if (isStale && metadata[id] && metadata[id].lastVoteTime) {
             const voteTime = new Date(metadata[id].lastVoteTime);
             const hourAgo = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
-            
+
             if (voteTime > hourAgo) {
-                logger.withCategory('voting').debug(`Preserving recent metadata for challenge ${id} (voted ${voteTime.toLocaleTimeString()})`, null);
+                logger
+                    .withCategory('voting')
+                    .debug(
+                        `Preserving recent metadata for challenge ${id} (voted ${voteTime.toLocaleTimeString()})`,
+                        null,
+                    );
                 return false; // Don't cleanup recent votes
             }
         }
-        
+
         return isStale;
     });
 
@@ -346,9 +372,11 @@ const cleanupStaleMetadata = (activeChallengeIds) => {
         return true; // Nothing to cleanup
     }
 
-    logger.withCategory('api').debug(`Cleaning up metadata for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
+    logger
+        .withCategory('api')
+        .debug(`Cleaning up metadata for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
 
-    staleChallengeIds.forEach(challengeId => {
+    staleChallengeIds.forEach((challengeId) => {
         delete metadata[challengeId];
     });
 
@@ -395,7 +423,7 @@ const setLastUpdateCheck = (timestamp) => {
     if (!metadata.updateCheck) {
         metadata.updateCheck = { lastCheck: null, skipVersion: null };
     }
-    
+
     metadata.updateCheck.lastCheck = timestamp;
     return saveMetadata(metadata);
 };
@@ -415,7 +443,7 @@ const setSkipUpdateVersion = (version) => {
     if (!metadata.updateCheck) {
         metadata.updateCheck = { lastCheck: null, skipVersion: null };
     }
-    
+
     metadata.updateCheck.skipVersion = version;
     return saveMetadata(metadata);
 };
@@ -429,7 +457,7 @@ const clearSkipUpdateVersion = () => {
     if (!metadata.updateCheck) {
         metadata.updateCheck = { lastCheck: null, skipVersion: null };
     }
-    
+
     metadata.updateCheck.skipVersion = null;
     return saveMetadata(metadata);
 };
@@ -440,20 +468,20 @@ module.exports = {
     saveMetadata,
     getChallengeMetadata,
     setChallengeMetadata,
-    
+
     // Convenience functions
     updateLastVoteTime,
     updateExposureBump,
     updateChallengeVoteMetadata,
     removeChallengeMetadata,
     cleanupStaleMetadata,
-    
+
     // Update check functions
     getUpdateCheckData,
     setLastUpdateCheck,
     setSkipUpdateVersion,
     clearSkipUpdateVersion,
-    
+
     // Utility functions
     getAllMetadata,
     resetAllMetadata,

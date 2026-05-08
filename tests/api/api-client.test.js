@@ -5,24 +5,24 @@
  */
 
 const axios = require('axios');
-const {makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE} = require('../../src/js/api/api-client');
+const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('../../src/js/api/api-client');
 
 // Mock the randomizer module
 jest.mock('../../src/js/api/randomizer', () => ({
     generateRandomHeaders: jest.fn((token) => ({
         'x-token': token || 'mock-token',
         'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
-        'accept': 'application/json',
+        accept: 'application/json',
         'accept-language': 'en-US',
-        'connection': 'keep-alive',
-    }))
+        connection: 'keep-alive',
+    })),
 }));
 
 // Mock the logger module
 jest.mock('../../src/js/logger', () => {
     const mockApiFn = jest.fn();
     const mockApiRequestFn = jest.fn();
-    
+
     return {
         api: jest.fn(),
         error: jest.fn(),
@@ -73,25 +73,29 @@ describe('api-client', () => {
         test('should create headers with token', () => {
             const headers = createCommonHeaders(mockToken);
 
-            expect(headers).toEqual(expect.objectContaining({
-                'x-token': mockToken,
-                'user-agent': expect.stringContaining('GuruShots'),
-                'accept': 'application/json',
-                'accept-language': 'en-US',
-                'connection': 'keep-alive',
-            }));
+            expect(headers).toEqual(
+                expect.objectContaining({
+                    'x-token': mockToken,
+                    'user-agent': expect.stringContaining('GuruShots'),
+                    accept: 'application/json',
+                    'accept-language': 'en-US',
+                    connection: 'keep-alive',
+                }),
+            );
         });
 
         test('should create headers without token', () => {
             const headers = createCommonHeaders();
 
-            expect(headers).toEqual(expect.objectContaining({
-                'x-token': 'mock-token',
-                'user-agent': expect.stringContaining('GuruShots'),
-                'accept': 'application/json',
-                'accept-language': 'en-US',
-                'connection': 'keep-alive',
-            }));
+            expect(headers).toEqual(
+                expect.objectContaining({
+                    'x-token': 'mock-token',
+                    'user-agent': expect.stringContaining('GuruShots'),
+                    accept: 'application/json',
+                    'accept-language': 'en-US',
+                    connection: 'keep-alive',
+                }),
+            );
         });
     });
 
@@ -99,8 +103,8 @@ describe('api-client', () => {
         test('should make successful POST request', async () => {
             const mockResponse = {
                 status: 200,
-                headers: {'content-type': 'application/json'},
-                data: {success: true, message: 'Request successful'}
+                headers: { 'content-type': 'application/json' },
+                data: { success: true, message: 'Request successful' },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
@@ -122,8 +126,8 @@ describe('api-client', () => {
         test('should handle request with empty data', async () => {
             const mockResponse = {
                 status: 200,
-                headers: {'content-type': 'application/json'},
-                data: {success: true}
+                headers: { 'content-type': 'application/json' },
+                data: { success: true },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
@@ -146,8 +150,8 @@ describe('api-client', () => {
             const mockError = new Error('Network error');
             mockError.response = {
                 status: 500,
-                data: {error: 'Internal server error'},
-                headers: {'content-type': 'application/json'}
+                data: { error: 'Internal server error' },
+                headers: { 'content-type': 'application/json' },
             };
 
             axios.mockRejectedValueOnce(mockError);
@@ -173,7 +177,7 @@ describe('api-client', () => {
             const mockResponse = {
                 status: 200,
                 headers: {},
-                data: {success: true}
+                data: { success: true },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
@@ -181,17 +185,19 @@ describe('api-client', () => {
             const headers = createCommonHeaders(mockToken);
             await makePostRequest(mockUrl, headers, mockData);
 
-            expect(axios).toHaveBeenCalledWith(expect.objectContaining({
-                timeout: 30000,
-            }));
+            expect(axios).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    timeout: 30000,
+                }),
+            );
         });
 
         test('should log API requests and responses', async () => {
             const logger = require('../../src/js/logger');
             const mockResponse = {
                 status: 200,
-                headers: {'content-type': 'application/json'},
-                data: {success: true}
+                headers: { 'content-type': 'application/json' },
+                data: { success: true },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
@@ -206,7 +212,7 @@ describe('api-client', () => {
                 url: mockUrl,
                 status: mockResponse.status,
                 duration: expect.any(Number),
-                responseData: mockResponse.data
+                responseData: mockResponse.data,
             });
         });
 
@@ -215,8 +221,8 @@ describe('api-client', () => {
             const mockError = new Error('API error');
             mockError.response = {
                 status: 400,
-                data: {error: 'Bad request'},
-                headers: {'content-type': 'application/json'}
+                data: { error: 'Bad request' },
+                headers: { 'content-type': 'application/json' },
             };
 
             axios.mockRejectedValueOnce(mockError);
@@ -231,7 +237,7 @@ describe('api-client', () => {
                 status: 400,
                 duration: expect.any(Number),
                 error: mockError.message,
-                responseData: {error: 'Bad request'},
+                responseData: { error: 'Bad request' },
                 timeout: false,
             });
         });
@@ -262,8 +268,8 @@ describe('api-client', () => {
 
             const mockResponse = {
                 status: 200,
-                headers: {'content-type': 'application/json'},
-                data: {success: true, message: 'Request successful'}
+                headers: { 'content-type': 'application/json' },
+                data: { success: true, message: 'Request successful' },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
@@ -277,7 +283,7 @@ describe('api-client', () => {
                 url: mockUrl,
                 status: mockResponse.status,
                 duration: expect.any(Number),
-                responseData: mockResponse.data
+                responseData: mockResponse.data,
             });
         });
     });

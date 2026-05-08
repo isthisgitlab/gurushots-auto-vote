@@ -21,7 +21,7 @@ export function useActiveChallenges() {
 
             // Cleanup stale settings and metadata unless skipped
             if (!skipCleanup && challenges.length > 0) {
-                const activeChallengeIds = challenges.map(c => c.id.toString());
+                const activeChallengeIds = challenges.map((c) => c.id.toString());
 
                 // Only cleanup when autovote is not running
                 if (!window.autovoteRunning) {

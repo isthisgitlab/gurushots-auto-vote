@@ -28,10 +28,10 @@ const requireAuthToken = (actionLabel) => {
         logger.withCategory('authentication').warning(`❌ No token found for ${actionLabel}`, null);
         return {
             ok: false,
-            response: {success: false, error: 'No authentication token found'},
+            response: { success: false, error: 'No authentication token found' },
         };
     }
-    return {ok: true, token: userSettings.token, settings: userSettings};
+    return { ok: true, token: userSettings.token, settings: userSettings };
 };
 
-module.exports = {requireAuthToken};
+module.exports = { requireAuthToken };

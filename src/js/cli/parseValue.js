@@ -22,4 +22,4 @@ function parseSettingValue(raw) {
     }
 }
 
-module.exports = {parseSettingValue};
+module.exports = { parseSettingValue };

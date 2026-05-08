@@ -112,10 +112,11 @@ class AutoUpdater {
             releaseNotes: this.parseReleaseNotes(info.releaseNotes),
             releaseDate: info.releaseDate,
             isPrerelease: info.version.includes('-'),
-            files: info.files?.map(f => ({
-                url: f.url,
-                size: f.size,
-            })) || [],
+            files:
+                info.files?.map((f) => ({
+                    url: f.url,
+                    size: f.size,
+                })) || [],
         };
     }
 
@@ -128,7 +129,7 @@ class AutoUpdater {
         if (!releaseNotes) return 'No release notes available';
         if (typeof releaseNotes === 'string') return releaseNotes;
         if (Array.isArray(releaseNotes)) {
-            return releaseNotes.map(note => note.note || note).join('\n');
+            return releaseNotes.map((note) => note.note || note).join('\n');
         }
         return 'No release notes available';
     }
@@ -149,7 +150,9 @@ class AutoUpdater {
             // electron-updater will fail on unsigned macOS apps
             // We detect this by checking if the app is signed
             // For now, assume unsigned and fall back to browser
-            logger.withCategory('update').info('macOS detected - auto-download may not work without code signing', null);
+            logger
+                .withCategory('update')
+                .info('macOS detected - auto-download may not work without code signing', null);
             // Still return true to attempt, but error handler will catch failures
             return true;
         }
@@ -183,7 +186,7 @@ class AutoUpdater {
                 const now = Date.now();
                 const oneDay = 24 * 60 * 60 * 1000;
 
-                if (lastCheck && (now - lastCheck) < oneDay) {
+                if (lastCheck && now - lastCheck < oneDay) {
                     logger.withCategory('update').info('Update check skipped - checked recently', null);
                     return null;
                 }

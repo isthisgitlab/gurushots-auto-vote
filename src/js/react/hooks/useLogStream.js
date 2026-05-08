@@ -29,13 +29,11 @@ export function useLogStream() {
                     // Listen for log messages
                     window.api.onLogMessage((logData) => {
                         if (mountedRef.current) {
-                            setEntries(prev => {
+                            setEntries((prev) => {
                                 // Add new entry at the beginning (newest first)
                                 const next = [logData, ...prev];
                                 // Limit to MAX_ENTRIES to prevent memory issues
-                                return next.length > MAX_ENTRIES
-                                    ? next.slice(0, MAX_ENTRIES)
-                                    : next;
+                                return next.length > MAX_ENTRIES ? next.slice(0, MAX_ENTRIES) : next;
                             });
                         }
                     });

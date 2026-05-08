@@ -15,7 +15,7 @@ const AutoUpdater = require('../services/AutoUpdater');
 const RELEASES_FALLBACK_URL = 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest';
 
 const register = (ipcMain, deps) => {
-    const {getAutoUpdater, setAutoUpdater, getMainWindow} = deps;
+    const { getAutoUpdater, setAutoUpdater, getMainWindow } = deps;
 
     ipcMain.handle('check-for-updates', async () => {
         try {
@@ -25,10 +25,10 @@ const register = (ipcMain, deps) => {
                 setAutoUpdater(autoUpdater);
             }
             const updateInfo = await autoUpdater.checkForUpdates(true);
-            return {success: true, updateInfo};
+            return { success: true, updateInfo };
         } catch (error) {
             logger.withCategory('update').error('Error checking for updates:', error);
-            return {success: false, error: error.message};
+            return { success: false, error: error.message };
         }
     });
 
@@ -36,10 +36,10 @@ const register = (ipcMain, deps) => {
         const autoUpdater = getAutoUpdater();
         try {
             if (!autoUpdater) {
-                return {success: false, error: 'AutoUpdater not initialized'};
+                return { success: false, error: 'AutoUpdater not initialized' };
             }
             await autoUpdater.downloadUpdate();
-            return {success: true};
+            return { success: true };
         } catch (error) {
             logger.withCategory('update').error('Error downloading update:', error);
             return {
@@ -54,13 +54,13 @@ const register = (ipcMain, deps) => {
         try {
             const autoUpdater = getAutoUpdater();
             if (!autoUpdater) {
-                return {success: false, error: 'AutoUpdater not initialized'};
+                return { success: false, error: 'AutoUpdater not initialized' };
             }
             autoUpdater.quitAndInstall();
-            return {success: true};
+            return { success: true };
         } catch (error) {
             logger.withCategory('update').error('Error installing update:', error);
-            return {success: false, error: error.message};
+            return { success: false, error: error.message };
         }
     });
 
@@ -68,17 +68,17 @@ const register = (ipcMain, deps) => {
         try {
             const autoUpdater = getAutoUpdater();
             if (!autoUpdater) {
-                return {success: false, error: 'AutoUpdater not initialized'};
+                return { success: false, error: 'AutoUpdater not initialized' };
             }
             const updateInfo = autoUpdater.getUpdateInfo();
             if (updateInfo) {
                 autoUpdater.skipVersion(updateInfo.latestVersion);
-                return {success: true};
+                return { success: true };
             }
-            return {success: false, error: 'No update info available'};
+            return { success: false, error: 'No update info available' };
         } catch (error) {
             logger.withCategory('update').error('Error skipping update version:', error);
-            return {success: false, error: error.message};
+            return { success: false, error: error.message };
         }
     });
 
@@ -90,28 +90,28 @@ const register = (ipcMain, deps) => {
                 setAutoUpdater(autoUpdater);
             }
             autoUpdater.clearSkipVersion();
-            return {success: true};
+            return { success: true };
         } catch (error) {
             logger.withCategory('update').error('Error clearing skip version:', error);
-            return {success: false, error: error.message};
+            return { success: false, error: error.message };
         }
     });
 
     ipcMain.handle('get-releases-url', () => {
         const autoUpdater = getAutoUpdater();
         if (autoUpdater) {
-            return {success: true, url: autoUpdater.getReleasesUrl()};
+            return { success: true, url: autoUpdater.getReleasesUrl() };
         }
-        return {success: true, url: RELEASES_FALLBACK_URL};
+        return { success: true, url: RELEASES_FALLBACK_URL };
     });
 
     ipcMain.handle('can-auto-update', () => {
         const autoUpdater = getAutoUpdater();
         if (autoUpdater) {
-            return {success: true, canAutoUpdate: autoUpdater.canAutoUpdate()};
+            return { success: true, canAutoUpdate: autoUpdater.canAutoUpdate() };
         }
-        return {success: false, canAutoUpdate: false};
+        return { success: false, canAutoUpdate: false };
     });
 };
 
-module.exports = {register};
+module.exports = { register };

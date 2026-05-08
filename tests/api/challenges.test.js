@@ -4,7 +4,7 @@
  * Tests the active challenges fetching functionality.
  */
 
-const {getActiveChallenges} = require('../../src/js/api/challenges');
+const { getActiveChallenges } = require('../../src/js/api/challenges');
 
 // Mock the api-client module
 jest.mock('../../src/js/api/api-client', () => ({
@@ -12,15 +12,15 @@ jest.mock('../../src/js/api/api-client', () => ({
     createCommonHeaders: jest.fn((token) => ({
         'x-token': token || 'mock-token',
         'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
-        'accept': 'application/json',
-    }))
+        accept: 'application/json',
+    })),
 }));
 
 // Mock the logger module
 jest.mock('../../src/js/logger', () => {
     const mockDebugFn = jest.fn();
     const mockEndOperationFn = jest.fn();
-    
+
     return {
         debug: jest.fn(),
         error: jest.fn(),
@@ -46,7 +46,7 @@ jest.mock('../../src/js/logger', () => {
 
 describe('challenges', () => {
     const mockToken = 'test-token-123';
-    const {makePostRequest, createCommonHeaders} = require('../../src/js/api/api-client');
+    const { makePostRequest, createCommonHeaders } = require('../../src/js/api/api-client');
     const logger = require('../../src/js/logger');
 
     beforeEach(() => {
@@ -63,10 +63,10 @@ describe('challenges', () => {
                         url: 'challenge-1-url',
                         member: {
                             ranking: {
-                                exposure: {exposure_factor: 75}
+                                exposure: { exposure_factor: 75 },
                             },
-                            boost: {state: 'AVAILABLE'}
-                        }
+                            boost: { state: 'AVAILABLE' },
+                        },
                     },
                     {
                         id: '67890',
@@ -74,12 +74,12 @@ describe('challenges', () => {
                         url: 'challenge-2-url',
                         member: {
                             ranking: {
-                                exposure: {exposure_factor: 100}
+                                exposure: { exposure_factor: 100 },
                             },
-                            boost: {state: 'USED'}
-                        }
-                    }
-                ]
+                            boost: { state: 'USED' },
+                        },
+                    },
+                ],
             };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
@@ -92,8 +92,8 @@ describe('challenges', () => {
                 expect.objectContaining({
                     'x-token': mockToken,
                     'user-agent': expect.stringContaining('GuruShots'),
-                    'accept': 'application/json',
-                })
+                    accept: 'application/json',
+                }),
             );
 
             expect(result).toEqual(mockResponse);
@@ -111,7 +111,7 @@ describe('challenges', () => {
 
         test('should handle short token with truncation format', async () => {
             const shortToken = 'short';
-            const mockResponse = {challenges: []};
+            const mockResponse = { challenges: [] };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -125,7 +125,7 @@ describe('challenges', () => {
         });
 
         test('should handle missing token', async () => {
-            const mockResponse = {challenges: []};
+            const mockResponse = { challenges: [] };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -144,17 +144,17 @@ describe('challenges', () => {
 
             const result = await getActiveChallenges(mockToken);
 
-            expect(result).toEqual({challenges: []});
+            expect(result).toEqual({ challenges: [] });
             // The logger module handles the error message, not console.error
         });
 
         test('should log response structure details', async () => {
             const mockResponse = {
                 challenges: [
-                    {id: '1', title: 'Challenge 1'},
-                    {id: '2', title: 'Challenge 2'}
+                    { id: '1', title: 'Challenge 1' },
+                    { id: '2', title: 'Challenge 2' },
                 ],
-                other_field: 'test'
+                other_field: 'test',
             };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
@@ -171,7 +171,7 @@ describe('challenges', () => {
 
         test('should handle response without challenges array', async () => {
             const mockResponse = {
-                other_field: 'test'
+                other_field: 'test',
             };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
@@ -191,7 +191,7 @@ describe('challenges', () => {
 
             const result = await getActiveChallenges(mockToken);
 
-            expect(result).toEqual({challenges: []});
+            expect(result).toEqual({ challenges: [] });
             // The logger module handles the error message, not console.error
         });
 
@@ -201,14 +201,14 @@ describe('challenges', () => {
 
             const result = await getActiveChallenges(mockToken);
 
-            expect(result).toEqual({challenges: []});
+            expect(result).toEqual({ challenges: [] });
             expect(logger.withCategory).toHaveBeenCalledWith('api');
             expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(expect.any(String), null, 'API request failed');
         });
 
         test('should truncate long tokens in logs', async () => {
             const longToken = 'very-long-token-that-should-be-truncated-for-security';
-            const mockResponse = {challenges: []};
+            const mockResponse = { challenges: [] };
 
             makePostRequest.mockResolvedValueOnce(mockResponse);
 

@@ -96,7 +96,7 @@ describe('AutoUpdater', () => {
         });
 
         it('should skip check if checked within 24 hours', async () => {
-            const recentCheck = Date.now() - (12 * 60 * 60 * 1000); // 12 hours ago
+            const recentCheck = Date.now() - 12 * 60 * 60 * 1000; // 12 hours ago
             mockMetadata.getUpdateCheckData.mockReturnValue({
                 lastCheck: recentCheck,
                 skipVersion: null,
@@ -109,7 +109,7 @@ describe('AutoUpdater', () => {
         });
 
         it('should force check when force=true', async () => {
-            const recentCheck = Date.now() - (12 * 60 * 60 * 1000); // 12 hours ago
+            const recentCheck = Date.now() - 12 * 60 * 60 * 1000; // 12 hours ago
             mockMetadata.getUpdateCheckData.mockReturnValue({
                 lastCheck: recentCheck,
                 skipVersion: null,

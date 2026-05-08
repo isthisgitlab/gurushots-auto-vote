@@ -75,11 +75,7 @@ function AppContent() {
         <div className="min-h-screen bg-base-200">
             <div className="container mx-auto px-4 py-4 max-w-4xl">
                 {/* Navbar */}
-                <Navbar
-                    isMock={isMock}
-                    onSettingsClick={handleSettingsClick}
-                    onLogout={handleLogout}
-                />
+                <Navbar isMock={isMock} onSettingsClick={handleSettingsClick} onLogout={handleLogout} />
 
                 {/* Autovote Controls */}
                 <AutoVoteControls
@@ -100,10 +96,7 @@ function AppContent() {
                 />
 
                 {/* Settings Modal */}
-                <SettingsModal
-                    isOpen={settingsModalOpen}
-                    onClose={() => setSettingsModalOpen(false)}
-                />
+                <SettingsModal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
 
                 {/* Challenge Settings Modal */}
                 <ChallengeSettingsModal

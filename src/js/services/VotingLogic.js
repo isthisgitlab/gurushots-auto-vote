@@ -1,6 +1,6 @@
 /**
  * Voting Logic Service
- * 
+ *
  * Centralized business logic for voting decisions.
  * This service contains all the voting rules and logic that was previously
  * duplicated across api/main.js, mock/index.js, and index.js
@@ -29,7 +29,7 @@ const isWithinLastHour = (closeTime, now) => {
 const isWithinLastMinuteThreshold = (closeTime, now, challengeId) => {
     const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
     const timeUntilEnd = closeTime - now;
-    return timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+    return timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 };
 
 /**
@@ -76,17 +76,31 @@ const _runVotingRules = (challenge, now, mode) => {
     const withinLastHour = isWithinLastHour(challenge.close_time, now);
     const currentExposure = challenge.member.ranking.exposure.exposure_factor;
 
-    const blocked = (skipReason) => ({eligible: false, atTarget: false, skipReason, targetExposure: 100, ruleLabel: null, thresholdInfo: null});
+    const blocked = (skipReason) => ({
+        eligible: false,
+        atTarget: false,
+        skipReason,
+        targetExposure: 100,
+        ruleLabel: null,
+        thresholdInfo: null,
+    });
     const decided = (ruleLabel, targetExposure, thresholdInfo) => {
         const atTarget = currentExposure >= targetExposure;
-        return {eligible: !atTarget, atTarget, skipReason: null, targetExposure, ruleLabel, thresholdInfo: {...thresholdInfo, currentExposure}};
+        return {
+            eligible: !atTarget,
+            atTarget,
+            skipReason: null,
+            targetExposure,
+            ruleLabel,
+            thresholdInfo: { ...thresholdInfo, currentExposure },
+        };
     };
 
     if (onlyBoost) return blocked('boost-only mode enabled');
     if (mode === 'auto' && challenge.start_time >= now) return blocked('challenge not started');
 
     if (challenge.type === 'flash') {
-        return decided('flash', 100, {effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure});
+        return decided('flash', 100, { effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure });
     }
 
     if (voteOnlyInLastMinute && !isWithinLastMinute) {
@@ -94,14 +108,26 @@ const _runVotingRules = (challenge, now, mode) => {
     }
 
     if (isWithinLastMinute) {
-        return decided('lastminute', 100, {effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure});
+        return decided('lastminute', 100, {
+            effectiveLastMinuteThreshold,
+            effectiveThreshold,
+            effectiveLastHourExposure,
+        });
     }
 
     if (withinLastHour && useLastHourExposure) {
-        return decided('last-hour', effectiveLastHourExposure, {effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure});
+        return decided('last-hour', effectiveLastHourExposure, {
+            effectiveLastMinuteThreshold,
+            effectiveThreshold,
+            effectiveLastHourExposure,
+        });
     }
 
-    return decided('normal', effectiveThreshold, {effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure});
+    return decided('normal', effectiveThreshold, {
+        effectiveLastMinuteThreshold,
+        effectiveThreshold,
+        effectiveLastHourExposure,
+    });
 };
 
 /**
@@ -109,13 +135,12 @@ const _runVotingRules = (challenge, now, mode) => {
  */
 const evaluateVotingDecision = (challenge, now) => {
     const r = _runVotingRules(challenge, now, 'auto');
-    if (r.skipReason) return {shouldVote: false, voteReason: r.skipReason, targetExposure: r.targetExposure};
+    if (r.skipReason) return { shouldVote: false, voteReason: r.skipReason, targetExposure: r.targetExposure };
 
-    const {currentExposure, effectiveThreshold, effectiveLastHourExposure, effectiveLastMinuteThreshold} = r.thresholdInfo;
+    const { currentExposure, effectiveThreshold, effectiveLastHourExposure, effectiveLastMinuteThreshold } =
+        r.thresholdInfo;
     const reasons = {
-        flash: r.atTarget
-            ? 'flash type: exposure already at 100%'
-            : `flash type: exposure ${currentExposure}% < 100%`,
+        flash: r.atTarget ? 'flash type: exposure already at 100%' : `flash type: exposure ${currentExposure}% < 100%`,
         lastminute: r.atTarget
             ? `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`
             : `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure ${currentExposure}% < 100%`,
@@ -126,7 +151,7 @@ const evaluateVotingDecision = (challenge, now) => {
             ? `normal threshold: exposure ${currentExposure}% < ${effectiveThreshold}%`
             : `normal threshold: exposure ${currentExposure}% >= ${effectiveThreshold}%`,
     };
-    return {shouldVote: r.eligible, voteReason: reasons[r.ruleLabel], targetExposure: r.targetExposure};
+    return { shouldVote: r.eligible, voteReason: reasons[r.ruleLabel], targetExposure: r.targetExposure };
 };
 
 /**
@@ -146,17 +171,17 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
     }
 
     if (r.atTarget) {
-        const {effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure} = r.thresholdInfo;
+        const { effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure } = r.thresholdInfo;
         const messages = {
             flash: `Challenge "${challengeTitle}" already has 100% exposure (flash type)`,
             lastminute: `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`,
             'last-hour': `Challenge "${challengeTitle}" already has ${effectiveLastHourExposure}% exposure (last hour threshold)`,
             normal: `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`,
         };
-        return {shouldAllowVoting: false, errorMessage: messages[r.ruleLabel], targetExposure: r.targetExposure};
+        return { shouldAllowVoting: false, errorMessage: messages[r.ruleLabel], targetExposure: r.targetExposure };
     }
 
-    return {shouldAllowVoting: true, errorMessage: '', targetExposure: r.targetExposure};
+    return { shouldAllowVoting: true, errorMessage: '', targetExposure: r.targetExposure };
 };
 
 /**
@@ -170,31 +195,31 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
 const evaluateManualVotingToHundred = (challenge, now, challengeTitle) => {
     // Get current exposure
     const currentExposure = challenge.member.ranking.exposure.exposure_factor;
-    
+
     // Simple logic: allow voting if exposure is below 100%
     let shouldAllowVoting = false;
     let errorMessage = '';
     const targetExposure = 100; // Always target 100% for manual voting
-    
+
     // Rule 1: Skip if challenge hasn't started yet
     if (challenge.start_time >= now) {
         errorMessage = `Challenge "${challengeTitle}" has not started yet`;
         return { shouldAllowVoting, errorMessage, targetExposure };
     }
-    
+
     // Rule 2: Skip if challenge has ended
     if (challenge.close_time <= now) {
         errorMessage = `Challenge "${challengeTitle}" has already ended`;
         return { shouldAllowVoting, errorMessage, targetExposure };
     }
-    
+
     // Rule 3: Allow voting if exposure is below 100%
     if (currentExposure < 100) {
         shouldAllowVoting = true;
     } else {
         errorMessage = `Challenge "${challengeTitle}" already has 100% exposure`;
     }
-    
+
     return { shouldAllowVoting, errorMessage, targetExposure };
 };
 
@@ -304,7 +329,7 @@ const shouldPlayAutoTurbo = (challenge, now) => {
  * @returns {{apply: boolean, imageId: string|null, reason: string}}
  */
 const shouldApplyTurbo = (challenge, now) => {
-    const noop = (reason) => ({apply: false, imageId: null, reason});
+    const noop = (reason) => ({ apply: false, imageId: null, reason });
     if (!challenge) return noop('no challenge');
     if (challenge.close_time <= now) return noop('challenge ended');
 
@@ -330,12 +355,11 @@ const shouldApplyTurbo = (challenge, now) => {
         return noop('no entries to apply turbo to');
     }
     const requestedIndex = settings.getEffectiveSetting('turboImageIndex', challengeId);
-    const safeIndex = requestedIndex === 0
-        ? entries.length - 1
-        : Math.max(0, Math.min(entries.length - 1, requestedIndex - 1));
+    const safeIndex =
+        requestedIndex === 0 ? entries.length - 1 : Math.max(0, Math.min(entries.length - 1, requestedIndex - 1));
     const imageId = entries[safeIndex]?.id;
     if (!imageId) return noop('selected entry has no id');
-    return {apply: true, imageId, reason: 'eligible'};
+    return { apply: true, imageId, reason: 'eligible' };
 };
 
 module.exports = {

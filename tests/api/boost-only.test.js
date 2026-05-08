@@ -75,12 +75,12 @@ describe('boost-only mode functionality', () => {
 
             // Simulate checking boost-only setting for multiple challenges
             const challenges = [
-                {id: challenge1Id, title: 'Challenge 1'},
-                {id: challenge2Id, title: 'Challenge 2'}
+                { id: challenge1Id, title: 'Challenge 1' },
+                { id: challenge2Id, title: 'Challenge 2' },
             ];
 
-            const boostOnlyResults = challenges.map(challenge =>
-                settings.getEffectiveSetting('onlyBoost', challenge.id)
+            const boostOnlyResults = challenges.map((challenge) =>
+                settings.getEffectiveSetting('onlyBoost', challenge.id),
             );
 
             // Verify that getEffectiveSetting was called for each challenge
@@ -96,8 +96,7 @@ describe('boost-only mode functionality', () => {
     describe('boost-only mode integration', () => {
         test('should integrate with existing boost logic', () => {
             // Mock settings for a challenge with boost available
-            settings.getEffectiveSetting
-                .mockReturnValueOnce(true); // onlyBoost: true
+            settings.getEffectiveSetting.mockReturnValueOnce(true); // onlyBoost: true
 
             const challengeId = '12345';
             const onlyBoost = settings.getEffectiveSetting('onlyBoost', challengeId);
@@ -116,4 +115,4 @@ describe('boost-only mode functionality', () => {
             expect(shouldVote).toBe(false);
         });
     });
-}); 
+});

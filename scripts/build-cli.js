@@ -15,7 +15,7 @@ const platforms = [
 
 async function buildCliForPlatform(target, outputName) {
     console.log(`🔨 Building CLI for ${target}...`);
-  
+
     try {
         const pkgCommand = `npx --yes @yao-pkg/pkg ${path.join(__dirname, '..', 'dist', 'cli-bundled.js')} --targets ${target} --output ${path.join(__dirname, '..', 'build', 'cli', outputName)}`;
         execSync(pkgCommand, { stdio: 'inherit' });
@@ -28,7 +28,7 @@ async function buildCliForPlatform(target, outputName) {
 
 async function buildCli(platform = null) {
     console.log('🔨 Building CLI with esbuild...');
-  
+
     // Create dist directory if it doesn't exist
     const distDir = path.join(__dirname, '..', 'dist');
     if (!fs.existsSync(distDir)) {
@@ -42,7 +42,7 @@ async function buildCli(platform = null) {
     }
 
     try {
-    // Bundle the CLI with esbuild (only once)
+        // Bundle the CLI with esbuild (only once)
         await build({
             entryPoints: [path.join(__dirname, '..', 'src', 'js', 'cli', 'cli.js')],
             bundle: true,
@@ -59,10 +59,10 @@ async function buildCli(platform = null) {
         });
 
         console.log('✅ CLI bundled successfully');
-    
+
         // Build for specific platform or all platforms
         if (platform) {
-            const targetPlatform = platforms.find(p => p.input === platform);
+            const targetPlatform = platforms.find((p) => p.input === platform);
             if (targetPlatform) {
                 await buildCliForPlatform(targetPlatform.target, targetPlatform.output);
             } else {
@@ -75,9 +75,8 @@ async function buildCli(platform = null) {
                 await buildCliForPlatform(p.target, p.output);
             }
         }
-    
+
         console.log('🎉 CLI build completed successfully!');
-    
     } catch (error) {
         console.error('❌ Build failed:', error);
         process.exit(1);
@@ -86,4 +85,4 @@ async function buildCli(platform = null) {
 
 // Get platform from command line argument
 const platform = process.argv[2];
-buildCli(platform); 
+buildCli(platform);

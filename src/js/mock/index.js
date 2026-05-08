@@ -106,7 +106,9 @@ const mockApiClient = {
      * Simulate authentication
      */
     authenticate: async (email, password) => {
-        logger.withCategory('authentication').debug(`Mock authentication with: ${email}, password: ${password ? '[hidden]' : 'no password'}`, null);
+        logger
+            .withCategory('authentication')
+            .debug(`Mock authentication with: ${email}, password: ${password ? '[hidden]' : 'no password'}`, null);
 
         // Accept any non-empty email and password for mock mode
         if (email && email.trim() !== '' && password && password.trim() !== '') {
@@ -132,14 +134,23 @@ const mockApiClient = {
             if (!sessionMockCache.challenges) {
                 if (challenges.generateMockChallenges) {
                     sessionMockCache.challenges = challenges.generateMockChallenges();
-                    logger.withCategory('challenges').info(`Generated session-stable mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
+                    logger
+                        .withCategory('challenges')
+                        .info(
+                            `Generated session-stable mock challenges: ${sessionMockCache.challenges.challenges.length}`,
+                            null,
+                        );
                 } else {
                     sessionMockCache.challenges = challenges.mockActiveChallenges;
-                    logger.withCategory('challenges').info(`Using static mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
+                    logger
+                        .withCategory('challenges')
+                        .info(`Using static mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
                 }
                 sessionMockCache.lastCacheTime = Date.now();
             } else {
-                logger.withCategory('challenges').info(`Using cached mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
+                logger
+                    .withCategory('challenges')
+                    .info(`Using cached mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
             }
             return simulateApiResponse(sessionMockCache.challenges, 800);
         } else {
@@ -160,22 +171,29 @@ const mockApiClient = {
         if (token) {
             const challengeUrl = challenge.url;
             const cacheKey = `${challengeUrl}-${challenge.id}`;
-            
+
             // Use cached vote images for session stability
             if (!sessionMockCache.voteImages.has(cacheKey)) {
                 if (voting.generateMockVoteImages) {
                     const voteImages = voting.generateMockVoteImages(challengeUrl, challenge);
                     sessionMockCache.voteImages.set(cacheKey, voteImages);
-                    logger.withCategory('voting').debug(`Generated session-stable vote images for ${challenge.title}: ${voteImages.images.length}`, null);
+                    logger
+                        .withCategory('voting')
+                        .debug(
+                            `Generated session-stable vote images for ${challenge.title}: ${voteImages.images.length}`,
+                            null,
+                        );
                 } else {
                     const voteImages = voting.mockVoteImagesByChallenge[challengeUrl] || voting.mockEmptyVoteImages;
                     sessionMockCache.voteImages.set(cacheKey, voteImages);
-                    logger.withCategory('voting').debug(`Using static vote images for ${challenge.title}: ${voteImages.images.length}`, null);
+                    logger
+                        .withCategory('voting')
+                        .debug(`Using static vote images for ${challenge.title}: ${voteImages.images.length}`, null);
                 }
             } else {
                 logger.withCategory('voting').debug(`Using cached vote images for ${challenge.title}`, null);
             }
-            
+
             const cachedVoteImages = sessionMockCache.voteImages.get(cacheKey);
             logger.withCategory('voting').debug(`Returning mock vote images: ${cachedVoteImages.images.length}`, null);
             return simulateApiResponse(cachedVoteImages, 1200);
@@ -190,7 +208,9 @@ const mockApiClient = {
      */
     submitVotes: async (voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
         logger.withCategory('api').api('Mock submitVotes', null);
-        logger.withCategory('voting').debug(`Vote images count: ${voteImages.images ? voteImages.images.length : 0}`, null);
+        logger
+            .withCategory('voting')
+            .debug(`Vote images count: ${voteImages.images ? voteImages.images.length : 0}`, null);
         logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
         logger.withCategory('voting').debug(`Exposure threshold: ${exposureThreshold}`, null);
 
@@ -198,29 +218,60 @@ const mockApiClient = {
         if (token) {
             if (voteImages.images && voteImages.images.length > 0) {
                 logger.withCategory('voting').info('Submitting mock votes successfully', null);
-                
+
                 // Update metadata after successful mock vote submission
                 try {
                     const { updateChallengeVoteMetadata } = require('../metadata');
                     if (voteImages.challenge && voteImages.challenge.id) {
                         // Use the ORIGINAL exposure factor from before voting (the "from what" value)
                         const originalExposure = voteImages.voting?.exposure?.exposure_factor || 50;
-                        
-                        logger.withCategory('voting').debug(`About to update mock metadata for challenge ${voteImages.challenge.id}, original exposure: ${Math.round(originalExposure)}%`, null);
-                        const success = updateChallengeVoteMetadata(voteImages.challenge.id.toString(), Math.round(originalExposure));
+
+                        logger
+                            .withCategory('voting')
+                            .debug(
+                                `About to update mock metadata for challenge ${voteImages.challenge.id}, original exposure: ${Math.round(originalExposure)}%`,
+                                null,
+                            );
+                        const success = updateChallengeVoteMetadata(
+                            voteImages.challenge.id.toString(),
+                            Math.round(originalExposure),
+                        );
                         if (success) {
-                            logger.withCategory('voting').debug(`Successfully updated mock metadata for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`, null);
-                            logger.withCategory('voting').success(`Mock metadata updated for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`, null, null);
+                            logger
+                                .withCategory('voting')
+                                .debug(
+                                    `Successfully updated mock metadata for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`,
+                                    null,
+                                );
+                            logger
+                                .withCategory('voting')
+                                .success(
+                                    `Mock metadata updated for challenge ${voteImages.challenge.id}: original exposure ${Math.round(originalExposure)}%`,
+                                    null,
+                                    null,
+                                );
                         } else {
-                            logger.withCategory('voting').debug(`Failed to update mock metadata for challenge ${voteImages.challenge.id}`, null);
-                            logger.withCategory('voting').warning(`Failed to update mock metadata for challenge ${voteImages.challenge.id}`, null);
+                            logger
+                                .withCategory('voting')
+                                .debug(`Failed to update mock metadata for challenge ${voteImages.challenge.id}`, null);
+                            logger
+                                .withCategory('voting')
+                                .warning(
+                                    `Failed to update mock metadata for challenge ${voteImages.challenge.id}`,
+                                    null,
+                                );
                         }
                     }
                 } catch (error) {
-                    logger.withCategory('voting').debug(`Error updating mock metadata for challenge ${voteImages.challenge.id}: ${error.message}`, null);
+                    logger
+                        .withCategory('voting')
+                        .debug(
+                            `Error updating mock metadata for challenge ${voteImages.challenge.id}: ${error.message}`,
+                            null,
+                        );
                     logger.withCategory('voting').error(`Error updating mock metadata: ${error.message}`, null);
                 }
-                
+
                 return simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
             } else {
                 logger.withCategory('voting').error('No vote images, returning error', null);
@@ -289,10 +340,10 @@ const mockApiClient = {
         logger.withCategory('voting').debug(`Image ID: ${imageId}`, null);
         if (!token) {
             logger.withCategory('authentication').error('No token provided, returning error', null);
-            return {ok: false, raw: null};
+            return { ok: false, raw: null };
         }
         await simulateApiResponse({}, 800);
-        return {ok: true, raw: {success: true}};
+        return { ok: true, raw: { success: true } };
     },
 
     /**
@@ -311,14 +362,62 @@ const mockApiClient = {
         }
         const now = Math.floor(Date.now() / 1000);
         const items = [
-            {id: 'photo_pink_flower_001', labels: ['Pink', 'Flower', 'Petal', 'Plant'], votes: 312, upload_date: now - 86400 * 2, permission: {allowed: true, message: null}},
-            {id: 'photo_nature_landscape_002', labels: ['Nature', 'Landscape', 'Tree', 'Sky'], votes: 178, upload_date: now - 86400 * 5, permission: {allowed: true, message: null}},
-            {id: 'photo_urban_003', labels: ['Architecture', 'Building', 'Urban'], votes: 89, upload_date: now - 86400 * 7, permission: {allowed: true, message: null}},
-            {id: 'photo_recent_004', labels: ['Portrait', 'Person'], votes: 24, upload_date: now - 3600, permission: {allowed: true, message: null}},
-            {id: 'photo_pink_petal_005', labels: ['Pink', 'Petal', 'Macro'], votes: 401, upload_date: now - 86400 * 4, permission: {allowed: true, message: null}},
-            {id: 'photo_animal_006', labels: ['Animal', 'Wildlife', 'Bird'], votes: 156, upload_date: now - 86400 * 10, permission: {allowed: true, message: null}},
-            {id: 'photo_blocked_007', labels: ['Pink', 'Flower'], votes: 999, upload_date: now - 86400 * 1, permission: {allowed: false, message: 'Already used in another challenge'}},
-            {id: 'photo_old_008', labels: ['Misc'], votes: 12, upload_date: now - 86400 * 30, permission: {allowed: true, message: null}},
+            {
+                id: 'photo_pink_flower_001',
+                labels: ['Pink', 'Flower', 'Petal', 'Plant'],
+                votes: 312,
+                upload_date: now - 86400 * 2,
+                permission: { allowed: true, message: null },
+            },
+            {
+                id: 'photo_nature_landscape_002',
+                labels: ['Nature', 'Landscape', 'Tree', 'Sky'],
+                votes: 178,
+                upload_date: now - 86400 * 5,
+                permission: { allowed: true, message: null },
+            },
+            {
+                id: 'photo_urban_003',
+                labels: ['Architecture', 'Building', 'Urban'],
+                votes: 89,
+                upload_date: now - 86400 * 7,
+                permission: { allowed: true, message: null },
+            },
+            {
+                id: 'photo_recent_004',
+                labels: ['Portrait', 'Person'],
+                votes: 24,
+                upload_date: now - 3600,
+                permission: { allowed: true, message: null },
+            },
+            {
+                id: 'photo_pink_petal_005',
+                labels: ['Pink', 'Petal', 'Macro'],
+                votes: 401,
+                upload_date: now - 86400 * 4,
+                permission: { allowed: true, message: null },
+            },
+            {
+                id: 'photo_animal_006',
+                labels: ['Animal', 'Wildlife', 'Bird'],
+                votes: 156,
+                upload_date: now - 86400 * 10,
+                permission: { allowed: true, message: null },
+            },
+            {
+                id: 'photo_blocked_007',
+                labels: ['Pink', 'Flower'],
+                votes: 999,
+                upload_date: now - 86400 * 1,
+                permission: { allowed: false, message: 'Already used in another challenge' },
+            },
+            {
+                id: 'photo_old_008',
+                labels: ['Misc'],
+                votes: 12,
+                upload_date: now - 86400 * 30,
+                permission: { allowed: true, message: null },
+            },
         ];
         await simulateApiResponse({}, 400);
         return items;
@@ -330,13 +429,18 @@ const mockApiClient = {
      */
     submitToChallenge: async (challengeId, imageIds, token) => {
         logger.withCategory('api').api('Mock submitToChallenge', null);
-        logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}, photos: ${Array.isArray(imageIds) ? imageIds.join(',') : 'invalid'}`, null);
+        logger
+            .withCategory('challenges')
+            .debug(
+                `Challenge ID: ${challengeId}, photos: ${Array.isArray(imageIds) ? imageIds.join(',') : 'invalid'}`,
+                null,
+            );
         if (!token) {
             logger.withCategory('authentication').error('No token provided, returning error', null);
-            return {ok: false, raw: null};
+            return { ok: false, raw: null };
         }
         if (!Array.isArray(imageIds) || imageIds.length === 0) {
-            return {ok: false, raw: {success: false, error: 'No image_ids provided'}};
+            return { ok: false, raw: { success: false, error: 'No image_ids provided' } };
         }
         await simulateApiResponse({}, 600);
         return {
@@ -363,31 +467,36 @@ const mockApiClient = {
         if (token) {
             // Simulate getting challenges
             const challengesResponse = await simulateApiResponse(challenges.mockActiveChallenges, 800);
-            logger.withCategory('challenges').info(`Found ${challengesResponse.challenges.length} active challenges`, null);
+            logger
+                .withCategory('challenges')
+                .info(`Found ${challengesResponse.challenges.length} active challenges`, null);
 
             // Simulate processing each challenge
             for (const challenge of challengesResponse.challenges) {
                 // Check for cancellation before processing each challenge
                 if (cancellation.isCancelled()) {
                     logger.withCategory('voting').info('Mock voting cancelled by user', null);
-                    return {success: false, message: 'Mock voting cancelled by user'};
+                    return { success: false, message: 'Mock voting cancelled by user' };
                 }
 
                 logger.withCategory('challenges').debug(`Processing challenge: ${challenge.title}`, null);
 
                 // Get the effective exposure threshold for this challenge
-                const effectiveThreshold = typeof exposureThreshold === 'function'
-                    ? exposureThreshold(challenge.id.toString())
-                    : exposureThreshold;
+                const effectiveThreshold =
+                    typeof exposureThreshold === 'function'
+                        ? exposureThreshold(challenge.id.toString())
+                        : exposureThreshold;
 
-                logger.withCategory('voting').debug(`Challenge ${challenge.id} exposure threshold: ${effectiveThreshold}`, null);
+                logger
+                    .withCategory('voting')
+                    .debug(`Challenge ${challenge.id} exposure threshold: ${effectiveThreshold}`, null);
 
                 // Simulate boost application if available
                 if (challenge.member.boost.state === 'AVAILABLE') {
                     // Check for cancellation before boost
                     if (cancellation.isCancelled()) {
                         logger.withCategory('voting').info('Mock voting cancelled by user before boost', null);
-                        return {success: false, message: 'Mock voting cancelled by user'};
+                        return { success: false, message: 'Mock voting cancelled by user' };
                     }
 
                     logger.withCategory('voting').debug(`Applying boost to challenge: ${challenge.title}`, null);
@@ -396,25 +505,30 @@ const mockApiClient = {
 
                 // Use the centralized voting logic service
                 const now = Math.floor(Date.now() / 1000);
-                const {shouldVote, voteReason} = votingLogic.evaluateVotingDecision(challenge, now);
+                const { shouldVote, voteReason } = votingLogic.evaluateVotingDecision(challenge, now);
 
                 // Simulate voting if conditions are met
                 if (shouldVote) {
                     // Check for cancellation before voting
                     if (cancellation.isCancelled()) {
                         logger.withCategory('voting').info('Mock voting cancelled by user before voting', null);
-                        return {success: false, message: 'Mock voting cancelled by user'};
+                        return { success: false, message: 'Mock voting cancelled by user' };
                     }
 
                     logger.withCategory('voting').debug(`Voting on challenge: ${challenge.title}`, null);
                     const challengeUrl = challenge.url;
                     if (voting.mockVoteImagesByChallenge[challengeUrl]) {
-                        const voteImages = await simulateApiResponse(voting.mockVoteImagesByChallenge[challengeUrl], 1200);
+                        const voteImages = await simulateApiResponse(
+                            voting.mockVoteImagesByChallenge[challengeUrl],
+                            1200,
+                        );
                         if (voteImages && voteImages.images && voteImages.images.length > 0) {
                             // Check for cancellation before vote submission
                             if (cancellation.isCancelled()) {
-                                logger.withCategory('voting').info('Mock voting cancelled by user before vote submission', null);
-                                return {success: false, message: 'Mock voting cancelled by user'};
+                                logger
+                                    .withCategory('voting')
+                                    .info('Mock voting cancelled by user before vote submission', null);
+                                return { success: false, message: 'Mock voting cancelled by user' };
                             }
 
                             await simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
@@ -422,21 +536,23 @@ const mockApiClient = {
                     }
                 } else {
                     // Log why voting was skipped
-                    logger.withCategory('voting').debug(`Skipping voting on challenge: ${challenge.title} - ${voteReason}`, null);
+                    logger
+                        .withCategory('voting')
+                        .debug(`Skipping voting on challenge: ${challenge.title} - ${voteReason}`, null);
                 }
 
                 // Check for cancellation before delay
                 if (cancellation.isCancelled()) {
                     logger.withCategory('voting').info('Mock voting cancelled by user before delay', null);
-                    return {success: false, message: 'Mock voting cancelled by user'};
+                    return { success: false, message: 'Mock voting cancelled by user' };
                 }
 
                 // Simulate delay between challenges
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise((resolve) => setTimeout(resolve, 500));
             }
 
             logger.withCategory('voting').info('Mock Voting Process Completed', null);
-            return {success: true, message: 'Mock voting process completed'};
+            return { success: true, message: 'Mock voting process completed' };
         } else {
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
         }
@@ -464,7 +580,7 @@ module.exports = {
 
     // Cancellation control
     setCancellationFlag,
-    
+
     // Session cache control
     clearSessionCache,
-}; 
+};

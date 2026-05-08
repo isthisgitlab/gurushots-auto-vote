@@ -15,19 +15,28 @@ export function SettingsToggles({
 }) {
     const { t } = useTranslation();
 
-    const handleThemeToggle = useCallback((e) => {
-        const isDark = e.target.checked;
-        const newTheme = isDark ? 'dark' : 'light';
-        onThemeChange(newTheme);
-    }, [onThemeChange]);
+    const handleThemeToggle = useCallback(
+        (e) => {
+            const isDark = e.target.checked;
+            const newTheme = isDark ? 'dark' : 'light';
+            onThemeChange(newTheme);
+        },
+        [onThemeChange],
+    );
 
-    const handleStayLoggedInToggle = useCallback((e) => {
-        onStayLoggedInChange(e.target.checked);
-    }, [onStayLoggedInChange]);
+    const handleStayLoggedInToggle = useCallback(
+        (e) => {
+            onStayLoggedInChange(e.target.checked);
+        },
+        [onStayLoggedInChange],
+    );
 
-    const handleMockModeToggle = useCallback((e) => {
-        onMockModeChange(e.target.checked);
-    }, [onMockModeChange]);
+    const handleMockModeToggle = useCallback(
+        (e) => {
+            onMockModeChange(e.target.checked);
+        },
+        [onMockModeChange],
+    );
 
     return (
         <>

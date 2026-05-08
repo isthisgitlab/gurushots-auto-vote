@@ -28,24 +28,24 @@ logger.withCategory('api').debug('Logger imported', null);
 // Import node-cron for scheduling
 const cron = require('node-cron');
 logger.withCategory('api').debug('cron imported', null);
-const {getRandomCheckFrequencyMs} = require('../scheduling/randomDelay');
+const { getRandomCheckFrequencyMs } = require('../scheduling/randomDelay');
 const readline = require('readline');
 logger.withCategory('api').debug('readline imported', null);
 
 // Import the API factory (CLI respects the mock setting from GUI)
 logger.withCategory('api').debug('About to import apiFactory', null);
-const {getMiddleware} = require('../apiFactory');
+const { getMiddleware } = require('../apiFactory');
 logger.withCategory('api').debug('apiFactory imported', null);
 const settings = require('../settings');
 logger.withCategory('settings').debug('settings imported');
-const {getDefaultSettings} = require('../settings');
-const {parseSettingValue} = require('./parseValue');
+const { getDefaultSettings } = require('../settings');
+const { parseSettingValue } = require('./parseValue');
 logger.withCategory('settings').debug('getDefaultSettings imported');
 
 // Get the middleware instance - but don't destructure methods at module level
 const getMiddlewareInstance = () => getMiddleware();
 logger.withCategory('api').debug('About to import randomizer', null);
-const {initializeHeaders} = require('../api/randomizer');
+const { initializeHeaders } = require('../api/randomizer');
 logger.withCategory('api').debug('randomizer imported', null);
 
 // Debug module loading
@@ -94,7 +94,7 @@ const askInput = async (question, rl) => {
 const showHelp = () => {
     const userSettings = settings.loadSettings();
     const isMockMode = userSettings.mock;
-    
+
     logger.withCategory('ui').info(`
 GuruShots Auto Voter - CLI ${isMockMode ? '(MOCK MODE)' : '(REAL MODE)'}
 
@@ -135,55 +135,54 @@ Note: You must login first before you can vote.
  */
 const handleLogin = async () => {
     const rl = createReadlineInterface();
-    
+
     try {
         logger.withCategory('ui').info('=== GuruShots Auto Voter - Login ===');
-        
+
         // Check current mock setting
         const userSettings = settings.loadSettings();
         const currentMockMode = userSettings.mock;
-        
+
         logger.withCategory('ui').info(`Current mode: ${currentMockMode ? 'MOCK' : 'REAL'}`);
-        
+
         // Ask if user wants to change the mode
         const changeMode = await askYesNo('Do you want to change the mode?', rl);
-        
+
         let useMockMode = currentMockMode;
-        
+
         if (changeMode) {
             logger.withCategory('ui').info('Mode options:');
             logger.withCategory('ui').info('  REAL  - Connect to actual GuruShots API (production)');
             logger.withCategory('ui').info('  MOCK  - Simulate API calls for testing (development)');
-            
+
             const useMock = await askYesNo('Use MOCK mode?', rl);
             useMockMode = useMock;
-            
+
             // Update the setting
             settings.setSetting('mock', useMockMode);
             logger.withCategory('settings').success(`Mode changed to: ${useMockMode ? 'MOCK' : 'REAL'}`);
         }
-        
+
         // Get credentials
         const email = await askInput('\nEnter your GuruShots email: ', rl);
         const password = await askInput('Enter your GuruShots password: ', rl);
-        
+
         logger.withCategory('auth').startOperation('login-auth', 'Authenticating with GuruShots');
-        
+
         // Get fresh middleware instance with updated settings
-        const {refreshApi} = require('../apiFactory');
+        const { refreshApi } = require('../apiFactory');
         refreshApi();
         const middleware = getMiddlewareInstance();
-        
+
         // Attempt login
         const loginResult = await middleware.cliLogin(email, password);
-        
+
         if (loginResult.success) {
             logger.withCategory('auth').endOperation('login-auth', 'Login successful');
             logger.withCategory('authentication').success(`Token saved for ${useMockMode ? 'MOCK' : 'REAL'} mode`);
         } else {
             logger.withCategory('auth').endOperation('login-auth', null, loginResult.error || 'Unknown error');
         }
-        
     } catch (error) {
         logger.withCategory('authentication').error('Login error', error);
     } finally {
@@ -195,14 +194,16 @@ const handleLogin = async () => {
  * Run a single voting cycle. Pass {isManual: true} to use the manual
  * vote path (votes to 100% regardless of threshold settings).
  */
-const runVotingCycle = async (cycleNumber = 1, {isManual = false} = {}) => {
+const runVotingCycle = async (cycleNumber = 1, { isManual = false } = {}) => {
     const label = isManual ? 'Manual Voting' : 'Voting';
     const opId = isManual ? `manual-vote-cycle-${cycleNumber}` : `vote-cycle-${cycleNumber}`;
     try {
         const userSettings = settings.loadSettings();
         const isMockMode = userSettings.mock;
 
-        logger.withCategory('voting').info(`--- ${label} Cycle ${cycleNumber} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
+        logger
+            .withCategory('voting')
+            .info(`--- ${label} Cycle ${cycleNumber} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
         logger.withCategory('voting').info(`Time: ${new Date().toLocaleString()}`);
         if (isManual) {
             logger.withCategory('voting').info('Mode: Manual (votes to 100% regardless of threshold settings)');
@@ -239,8 +240,10 @@ const startContinuousVoting = async () => {
     const userSettings = settings.loadSettings();
     logger.withCategory('settings').debug('startContinuousVoting: Settings loaded');
     const isMockMode = userSettings.mock;
-    
-    logger.withCategory('voting').info(`=== Starting Continuous Voting Mode (${isMockMode ? 'MOCK' : 'REAL'} MODE) ===`);
+
+    logger
+        .withCategory('voting')
+        .info(`=== Starting Continuous Voting Mode (${isMockMode ? 'MOCK' : 'REAL'} MODE) ===`);
 
     // Check if user is authenticated
     if (!getMiddlewareInstance().isAuthenticated()) {
@@ -299,8 +302,11 @@ const startContinuousVoting = async () => {
                 continue;
             }
 
-            const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-            const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+            const effectiveLastMinuteThreshold = settings.getEffectiveSetting(
+                'lastMinuteThreshold',
+                challenge.id.toString(),
+            );
+            const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
 
             // Only consider future entries
             if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
@@ -326,10 +332,16 @@ const startContinuousVoting = async () => {
         }
 
         // Check if we're already scheduling the same challenge
-        if (currentScheduledChallenge && 
+        if (
+            currentScheduledChallenge &&
             currentScheduledChallenge.challengeId === nextEntry.challengeId &&
-            currentScheduledChallenge.entryTime === nextEntry.entryTime) {
-            logger.withCategory('voting').debug(`⏰ Already scheduling threshold change for challenge "${nextEntry.challengeTitle}", skipping duplicate`);
+            currentScheduledChallenge.entryTime === nextEntry.entryTime
+        ) {
+            logger
+                .withCategory('voting')
+                .debug(
+                    `⏰ Already scheduling threshold change for challenge "${nextEntry.challengeTitle}", skipping duplicate`,
+                );
             return;
         }
 
@@ -338,11 +350,19 @@ const startContinuousVoting = async () => {
 
         // Only schedule if the entry time is in the future
         if (timeUntilEntry <= 0) {
-            logger.withCategory('voting').debug(`⏰ Threshold entry time for challenge "${nextEntry.challengeTitle}" has already passed, skipping`);
+            logger
+                .withCategory('voting')
+                .debug(
+                    `⏰ Threshold entry time for challenge "${nextEntry.challengeTitle}" has already passed, skipping`,
+                );
             return;
         }
 
-        logger.withCategory('voting').info(`⏰ Scheduling threshold cron change for challenge "${nextEntry.challengeTitle}" in ${Math.round(timeUntilEntry / 1000)} seconds`);
+        logger
+            .withCategory('voting')
+            .info(
+                `⏰ Scheduling threshold cron change for challenge "${nextEntry.challengeTitle}" in ${Math.round(timeUntilEntry / 1000)} seconds`,
+            );
 
         // Clear any existing scheduler
         if (thresholdScheduler) {
@@ -361,7 +381,11 @@ const startContinuousVoting = async () => {
         // Schedule the cron change
         thresholdScheduler = setTimeout(async () => {
             if (isRunning) {
-                logger.withCategory('voting').info(`⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`);
+                logger
+                    .withCategory('voting')
+                    .info(
+                        `⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`,
+                    );
 
                 // Stop normal-mode setTimeout chain (one-way transition into threshold cron)
                 if (normalScheduler) {
@@ -376,31 +400,39 @@ const startContinuousVoting = async () => {
                 const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
                 const thresholdCronExpression = `*/${lastMinuteCheckFrequency} * * * *`;
 
-                currentCronJob = cron.schedule(thresholdCronExpression, async () => {
-                    if (!isRunning) {
-                        currentCronJob.stop();
-                        return;
-                    }
+                currentCronJob = cron.schedule(
+                    thresholdCronExpression,
+                    async () => {
+                        if (!isRunning) {
+                            currentCronJob.stop();
+                            return;
+                        }
 
-                    try {
-                        await runVotingCycle(++cycleCount);
-                        
-                        // Update threshold scheduling after each voting cycle
-                        await updateThresholdScheduling();
-                    } catch (error) {
-                        logger.withCategory('voting').error('Error in scheduled voting cycle');
-                        logger.withCategory('voting').debug('Full threshold cron error details:', error);
-                    }
-                }, {
-                    scheduled: false,
-                });
+                        try {
+                            await runVotingCycle(++cycleCount);
+
+                            // Update threshold scheduling after each voting cycle
+                            await updateThresholdScheduling();
+                        } catch (error) {
+                            logger.withCategory('voting').error('Error in scheduled voting cycle');
+                            logger.withCategory('voting').debug('Full threshold cron error details:', error);
+                        }
+                    },
+                    {
+                        scheduled: false,
+                    },
+                );
 
                 currentCronJob.start();
-                logger.withCategory('voting').info(`⏰ Switched to last threshold cron: ${thresholdCronExpression} (every ${lastMinuteCheckFrequency} minutes)`);
-                
+                logger
+                    .withCategory('voting')
+                    .info(
+                        `⏰ Switched to last threshold cron: ${thresholdCronExpression} (every ${lastMinuteCheckFrequency} minutes)`,
+                    );
+
                 // Clear the scheduled challenge tracking
                 currentScheduledChallenge = null;
-                
+
                 // Update threshold scheduling for the next potential entry
                 await updateThresholdScheduling();
             }
@@ -421,27 +453,39 @@ const startContinuousVoting = async () => {
             logger.withCategory('challenges').debug('updateThresholdScheduling: About to get active challenges', null);
             // Get current challenges
             const challengesResponse = await getMiddlewareInstance().getActiveChallenges();
-            logger.withCategory('api').debug(`updateThresholdScheduling: Got response, type: ${typeof challengesResponse}`, null);
+            logger
+                .withCategory('api')
+                .debug(`updateThresholdScheduling: Got response, type: ${typeof challengesResponse}`, null);
             const challenges = challengesResponse?.challenges || [];
-            logger.withCategory('challenges').debug(`updateThresholdScheduling: Extracted challenges array, length: ${challenges.length}`, null);
+            logger
+                .withCategory('challenges')
+                .debug(`updateThresholdScheduling: Extracted challenges array, length: ${challenges.length}`, null);
             const now = Math.floor(Date.now() / 1000);
             logger.withCategory('voting').debug(`updateThresholdScheduling: Current timestamp: ${now}`, null);
 
             // Check if settings have changed (relevant settings for threshold scheduling)
             logger.withCategory('settings').debug('updateThresholdScheduling: About to get settings');
             const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
-            logger.withCategory('settings').debug(`updateThresholdScheduling: Got lastMinuteCheckFrequency: ${lastMinuteCheckFrequency}`, null);
+            logger
+                .withCategory('settings')
+                .debug(`updateThresholdScheduling: Got lastMinuteCheckFrequency: ${lastMinuteCheckFrequency}`, null);
             const lastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', 'global');
-            logger.withCategory('settings').debug(`updateThresholdScheduling: Got lastMinuteThreshold: ${lastMinuteThreshold}`, null);
-            
+            logger
+                .withCategory('settings')
+                .debug(`updateThresholdScheduling: Got lastMinuteThreshold: ${lastMinuteThreshold}`, null);
+
             const currentSettingsHash = JSON.stringify({
                 lastMinuteCheckFrequency,
                 lastMinuteThreshold,
             });
-            logger.withCategory('settings').debug(`updateThresholdScheduling: Created settings hash: ${currentSettingsHash.length} chars`);
-            logger.withCategory('settings').debug(`updateThresholdScheduling: lastSettingsHash is: ${lastSettingsHash}`);
+            logger
+                .withCategory('settings')
+                .debug(`updateThresholdScheduling: Created settings hash: ${currentSettingsHash.length} chars`);
+            logger
+                .withCategory('settings')
+                .debug(`updateThresholdScheduling: lastSettingsHash is: ${lastSettingsHash}`);
             logger.withCategory('settings').debug('updateThresholdScheduling: About to compare settings hashes');
-            
+
             if (lastSettingsHash !== null && lastSettingsHash !== currentSettingsHash) {
                 logger.withCategory('settings').info('⏰ Settings changed, clearing existing threshold scheduler');
                 if (thresholdScheduler) {
@@ -453,7 +497,7 @@ const startContinuousVoting = async () => {
             lastSettingsHash = currentSettingsHash;
 
             const nextEntry = await calculateNextLastThresholdEntry(challenges, now);
-            
+
             if (nextEntry) {
                 await scheduleThresholdCronChange(nextEntry);
             } else {
@@ -485,7 +529,11 @@ const startContinuousVoting = async () => {
         }
         const fresh = settings.loadSettings();
         const delayMs = getRandomCheckFrequencyMs(fresh);
-        logger.withCategory('voting').info(`Next normal cycle in ${(delayMs / 60_000).toFixed(2)} min (range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`);
+        logger
+            .withCategory('voting')
+            .info(
+                `Next normal cycle in ${(delayMs / 60_000).toFixed(2)} min (range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`,
+            );
 
         normalScheduler = setTimeout(async () => {
             if (!isRunning) {
@@ -505,7 +553,11 @@ const startContinuousVoting = async () => {
     };
 
     scheduleNextNormalCycle();
-    logger.withCategory('voting').success(`Continuous voting started with check frequency range ${settings.getSetting('checkFrequencyMin')}-${settings.getSetting('checkFrequencyMax')} min`);
+    logger
+        .withCategory('voting')
+        .success(
+            `Continuous voting started with check frequency range ${settings.getSetting('checkFrequencyMin')}-${settings.getSetting('checkFrequencyMax')} min`,
+        );
     logger.withCategory('ui').info('Press Ctrl+C to stop');
 
     // Set up proactive threshold scheduling
@@ -522,16 +574,18 @@ const showStatus = () => {
     const userSettings = settings.loadSettings();
     const isMockMode = userSettings.mock;
     const isAuthenticated = getMiddlewareInstance().isAuthenticated();
-    
+
     logger.withCategory('ui').info('=== GuruShots Auto Voter - Status ===');
-    
+
     logger.withCategory('ui').info(`Mode: ${isMockMode ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}`);
-    logger.withCategory('authentication').info(`Authentication: ${isAuthenticated ? '✅ Authenticated' : '❌ Not authenticated'}`);
-    
+    logger
+        .withCategory('authentication')
+        .info(`Authentication: ${isAuthenticated ? '✅ Authenticated' : '❌ Not authenticated'}`);
+
     if (isAuthenticated) {
         logger.withCategory('authentication').info(`Token: ${userSettings.token ? '✅ Present' : '❌ Missing'}`);
     }
-    
+
     logger.withCategory('settings').info('\nSettings:');
     logger.withCategory('settings').info(`  Theme: ${userSettings.theme}`);
     logger.withCategory('settings').info(`  Language: ${userSettings.language}`);
@@ -543,8 +597,12 @@ const showStatus = () => {
         const label = min === max ? `${min}min` : `${min}–${max}min (random per cycle)`;
         logger.withCategory('settings').info(`  Check Frequency: ${label}`);
     }
-    logger.withCategory('settings').info(`  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`);
-    
+    logger
+        .withCategory('settings')
+        .info(
+            `  Last Minute Check Frequency: ${settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global') || 1}min`,
+        );
+
     // Show challenge settings if any exist
     if (userSettings.challengeSettings && Object.keys(userSettings.challengeSettings).length > 0) {
         logger.withCategory('settings').info('\nChallenge Settings:');
@@ -555,7 +613,7 @@ const showStatus = () => {
             });
         });
     }
-    
+
     logger.withCategory('ui').info('\nTo change mode, run: login');
 };
 
@@ -600,7 +658,7 @@ const setGlobalDefault = (key, value) => {
         if (!schema[key]) {
             logger.withCategory('settings').error(`Unknown schema setting '${key}'`);
             logger.withCategory('settings').info('Available settings:');
-            Object.keys(schema).forEach(settingKey => {
+            Object.keys(schema).forEach((settingKey) => {
                 logger.withCategory('settings').info(`  ${settingKey}`);
             });
             return;
@@ -614,10 +672,12 @@ const setGlobalDefault = (key, value) => {
         } else {
             logger.withCategory('settings').error(`Failed to set global default '${key}' - validation failed`);
             logger.withCategory('settings').error(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
-            
+
             // Show setting info
             const config = schema[key];
-            logger.withCategory('settings').info(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
+            logger
+                .withCategory('settings')
+                .info(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
         }
     } catch (error) {
         logger.withCategory('settings').error(`Error setting global default '${key}'`, error);
@@ -631,23 +691,20 @@ const listSettings = () => {
     try {
         const userSettings = settings.loadSettings();
         const defaultSettings = getDefaultSettings();
-        
+
         logger.withCategory('settings').info('=== All Settings ===');
-        
+
         // Get all possible setting keys (user settings + defaults)
-        const allKeys = new Set([
-            ...Object.keys(userSettings),
-            ...Object.keys(defaultSettings),
-        ]);
-        
+        const allKeys = new Set([...Object.keys(userSettings), ...Object.keys(defaultSettings)]);
+
         // Sort keys for consistent output
         const sortedKeys = Array.from(allKeys).sort();
-        
-        sortedKeys.forEach(key => {
+
+        sortedKeys.forEach((key) => {
             const currentValue = userSettings[key];
             const defaultValue = defaultSettings[key];
             const isModified = JSON.stringify(currentValue) !== JSON.stringify(defaultValue);
-            
+
             logger.withCategory('settings').info(`${key}:`);
             logger.withCategory('settings').info(`  Current: ${JSON.stringify(currentValue)}`);
             logger.withCategory('settings').info(`  Default: ${JSON.stringify(defaultValue)}`);
@@ -658,7 +715,7 @@ const listSettings = () => {
             }
             logger.withCategory('settings').info('');
         });
-        
+
         logger.withCategory('ui').info('💡 Use "help-settings" for detailed information about each setting');
     } catch (error) {
         logger.withCategory('settings').error('Error listing settings', error);
@@ -672,12 +729,12 @@ const resetSetting = (key) => {
     try {
         const defaultSettings = getDefaultSettings();
         const defaultValue = defaultSettings[key];
-        
+
         if (defaultValue === undefined) {
             logger.withCategory('settings').error(`Setting '${key}' not found in defaults`);
             return;
         }
-        
+
         settings.setSetting(key, defaultValue);
         logger.withCategory('settings').success(`Reset ${key} to default: ${JSON.stringify(defaultValue)}`);
     } catch (error) {
@@ -691,12 +748,12 @@ const resetSetting = (key) => {
 const resetAllSettings = () => {
     try {
         const defaultSettings = getDefaultSettings();
-        
+
         // Reset all settings to defaults
-        Object.keys(defaultSettings).forEach(key => {
+        Object.keys(defaultSettings).forEach((key) => {
             settings.setSetting(key, defaultSettings[key]);
         });
-        
+
         logger.withCategory('settings').success('All settings reset to defaults');
         logger.withCategory('ui').info('💡 Run "list-settings" to see all current values');
     } catch (error) {
@@ -754,14 +811,14 @@ Examples:
 const resetWindows = () => {
     try {
         const userSettings = settings.loadSettings();
-        
+
         // Reset window bounds to default
         const defaultSettings = settings.getDefaultSettings();
         userSettings.windowBounds = defaultSettings.windowBounds;
-        
+
         // Save the updated settings
         settings.saveSettings(userSettings);
-        
+
         logger.withCategory('settings').success('Window positions reset to default');
     } catch (error) {
         logger.withCategory('settings').error('Error resetting window positions', error);
@@ -780,92 +837,92 @@ const main = async () => {
         logger.withCategory('api').debug('main: Command is:', command);
 
         switch (command) {
-        case 'login':
-            await handleLogin();
-            process.exit(0);
-            break;
-        case 'vote':
-            await runVotingCycle(1, {isManual: true});
-            process.exit(0);
-            break;
-        case 'start':
-            logger.withCategory('voting').debug('About to start continuous voting', null);
-            await startContinuousVoting();
-            logger.withCategory('voting').debug('startContinuousVoting completed', null);
-            // Don't exit for continuous mode - it keeps running
-            break;
-        case 'status':
-            showStatus();
-            process.exit(0);
-            break;
-        case 'get-setting':
-            if (!args[1]) {
-                logger.withCategory('ui').error('Please specify a setting key');
-                logger.withCategory('ui').info('Usage: get-setting <key>');
+            case 'login':
+                await handleLogin();
+                process.exit(0);
+                break;
+            case 'vote':
+                await runVotingCycle(1, { isManual: true });
+                process.exit(0);
+                break;
+            case 'start':
+                logger.withCategory('voting').debug('About to start continuous voting', null);
+                await startContinuousVoting();
+                logger.withCategory('voting').debug('startContinuousVoting completed', null);
+                // Don't exit for continuous mode - it keeps running
+                break;
+            case 'status':
+                showStatus();
+                process.exit(0);
+                break;
+            case 'get-setting':
+                if (!args[1]) {
+                    logger.withCategory('ui').error('Please specify a setting key');
+                    logger.withCategory('ui').info('Usage: get-setting <key>');
+                    process.exit(1);
+                }
+                getSetting(args[1]);
+                process.exit(0);
+                break;
+            case 'set-setting':
+                if (!args[1] || !args[2]) {
+                    logger.withCategory('ui').error('Please specify both key and value');
+                    logger.withCategory('ui').info('Usage: set-setting <key> <value>');
+                    process.exit(1);
+                }
+                setSetting(args[1], args[2]);
+                process.exit(0);
+                break;
+            case 'list-settings':
+                listSettings();
+                process.exit(0);
+                break;
+            case 'reset-setting':
+                if (!args[1]) {
+                    logger.withCategory('ui').error('Please specify a setting key');
+                    logger.withCategory('ui').info('Usage: reset-setting <key>');
+                    process.exit(1);
+                }
+                resetSetting(args[1]);
+                process.exit(0);
+                break;
+            case 'set-global-default':
+                if (!args[1] || !args[2]) {
+                    logger.withCategory('ui').error('Please specify both setting key and value');
+                    logger.withCategory('ui').info('Usage: set-global-default <key> <value>');
+                    logger.withCategory('ui').info('Example: set-global-default exposure 80');
+                    process.exit(1);
+                }
+                setGlobalDefault(args[1], args[2]);
+                process.exit(0);
+                break;
+            case 'reset-all-settings':
+                resetAllSettings();
+                process.exit(0);
+                break;
+            case 'help-settings':
+                helpSettings();
+                process.exit(0);
+                break;
+            case 'reset-windows':
+                resetWindows();
+                process.exit(0);
+                break;
+            case 'help':
+            case '--help':
+            case '-h':
+                showHelp();
+                process.exit(0);
+                break;
+            default:
+                if (!command) {
+                    logger.withCategory('ui').info('No command specified. Use "help" to see available commands');
+                } else {
+                    logger.withCategory('ui').error(`Unknown command: ${command}`);
+                    logger.withCategory('ui').info('Use "help" to see available commands');
+                }
                 process.exit(1);
-            }
-            getSetting(args[1]);
-            process.exit(0);
-            break;
-        case 'set-setting':
-            if (!args[1] || !args[2]) {
-                logger.withCategory('ui').error('Please specify both key and value');
-                logger.withCategory('ui').info('Usage: set-setting <key> <value>');
-                process.exit(1);
-            }
-            setSetting(args[1], args[2]);
-            process.exit(0);
-            break;
-        case 'list-settings':
-            listSettings();
-            process.exit(0);
-            break;
-        case 'reset-setting':
-            if (!args[1]) {
-                logger.withCategory('ui').error('Please specify a setting key');
-                logger.withCategory('ui').info('Usage: reset-setting <key>');
-                process.exit(1);
-            }
-            resetSetting(args[1]);
-            process.exit(0);
-            break;
-        case 'set-global-default':
-            if (!args[1] || !args[2]) {
-                logger.withCategory('ui').error('Please specify both setting key and value');
-                logger.withCategory('ui').info('Usage: set-global-default <key> <value>');
-                logger.withCategory('ui').info('Example: set-global-default exposure 80');
-                process.exit(1);
-            }
-            setGlobalDefault(args[1], args[2]);
-            process.exit(0);
-            break;
-        case 'reset-all-settings':
-            resetAllSettings();
-            process.exit(0);
-            break;
-        case 'help-settings':
-            helpSettings();
-            process.exit(0);
-            break;
-        case 'reset-windows':
-            resetWindows();
-            process.exit(0);
-            break;
-        case 'help':
-        case '--help':
-        case '-h':
-            showHelp();
-            process.exit(0);
-            break;
-        default:
-            if (!command) {
-                logger.withCategory('ui').info('No command specified. Use "help" to see available commands');
-            } else {
-                logger.withCategory('ui').error(`Unknown command: ${command}`);
-                logger.withCategory('ui').info('Use "help" to see available commands');
-            }
-            process.exit(1);
-            break;
+                break;
         }
     } catch (error) {
         logger.withCategory('api').error('Error');
@@ -892,7 +949,7 @@ process.on('uncaughtException', (error) => {
 
 // Run the main function
 logger.withCategory('api').debug('About to call main() function', null);
-main().catch(error => {
+main().catch((error) => {
     logger.withCategory('api').error('Error caught in main() call');
     logger.withCategory('error').debug('Main() call error details:', error);
     process.exit(1);

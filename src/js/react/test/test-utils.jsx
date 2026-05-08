@@ -5,11 +5,7 @@ import { TranslationProvider } from '@/contexts/TranslationContext';
  * Wrapper component that provides all necessary context providers
  */
 function AllProviders({ children }) {
-    return (
-        <TranslationProvider>
-            {children}
-        </TranslationProvider>
-    );
+    return <TranslationProvider>{children}</TranslationProvider>;
 }
 
 /**

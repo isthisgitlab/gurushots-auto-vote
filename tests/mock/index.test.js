@@ -8,35 +8,35 @@ const mockIndex = require('../../src/js/mock/index');
 
 // Mock the individual mock modules
 jest.mock('../../src/js/mock/auth', () => ({
-    mockLoginSuccess: {token: 'mock-auth-token', success: true},
-    mockLoginFailure: {error: 'Invalid credentials', success: false}
+    mockLoginSuccess: { token: 'mock-auth-token', success: true },
+    mockLoginFailure: { error: 'Invalid credentials', success: false },
 }));
 
 jest.mock('../../src/js/mock/challenges', () => ({
-    mockActiveChallenges: {challenges: [{id: '1', title: 'Test Challenge'}]},
-    generateMockChallenges: jest.fn(() => ({challenges: [{id: '2', title: 'Generated Challenge'}]}))
+    mockActiveChallenges: { challenges: [{ id: '1', title: 'Test Challenge' }] },
+    generateMockChallenges: jest.fn(() => ({ challenges: [{ id: '2', title: 'Generated Challenge' }] })),
 }));
 
 jest.mock('../../src/js/mock/voting', () => ({
     mockVoteImagesByChallenge: {
-        'challenge-1': {images: [{id: 'img1', ratio: 25}]}
+        'challenge-1': { images: [{ id: 'img1', ratio: 25 }] },
     },
-    mockEmptyVoteImages: {images: []},
-    mockVoteSubmissionSuccess: {success: true, votes: 5},
-    mockVoteSubmissionFailure: {error: 'Vote submission failed'},
-    generateMockVoteImages: jest.fn((url, challenge) => ({images: [{id: 'generated-img', ratio: 30}]}))
+    mockEmptyVoteImages: { images: [] },
+    mockVoteSubmissionSuccess: { success: true, votes: 5 },
+    mockVoteSubmissionFailure: { error: 'Vote submission failed' },
+    generateMockVoteImages: jest.fn((url, challenge) => ({ images: [{ id: 'generated-img', ratio: 30 }] })),
 }));
 
 jest.mock('../../src/js/mock/boost', () => ({
-    mockBoostSuccess: {success: true, boost_applied: true},
-    mockBoostFailure: {error: 'Boost failed'},
-    mockBoostAlreadyUsed: {error: 'Boost already used'}
+    mockBoostSuccess: { success: true, boost_applied: true },
+    mockBoostFailure: { error: 'Boost failed' },
+    mockBoostAlreadyUsed: { error: 'Boost already used' },
 }));
 
 jest.mock('../../src/js/mock/errors', () => ({
     mockAuthErrors: {
-        invalidToken: {error: 'Invalid token', code: 401}
-    }
+        invalidToken: { error: 'Invalid token', code: 401 },
+    },
 }));
 
 // Mock console methods
@@ -51,7 +51,7 @@ jest.mock('../../src/js/logger', () => {
     const mockSuccessFn = jest.fn();
     const mockErrorFn = jest.fn();
     const mockApiFn = jest.fn();
-    
+
     const mock = {
         debug: jest.fn(),
         info: jest.fn(),
@@ -70,7 +70,7 @@ jest.mock('../../src/js/logger', () => {
         __mockErrorFn: mockErrorFn,
         __mockApiFn: mockApiFn,
     };
-    
+
     mock.withCategory = jest.fn(() => ({
         info: mockInfoFn,
         error: mockErrorFn,
@@ -79,7 +79,7 @@ jest.mock('../../src/js/logger', () => {
         warning: jest.fn(),
         api: mockApiFn,
     }));
-    
+
     return mock;
 });
 
@@ -117,7 +117,7 @@ describe('mock/index', () => {
                 challenges,
                 voting,
                 boost,
-                errors
+                errors,
             });
         });
 
@@ -140,11 +140,11 @@ describe('mock/index', () => {
         });
 
         test('should return specific scenario data', () => {
-            auth.specificScenario = {test: 'data'};
+            auth.specificScenario = { test: 'data' };
 
             const scenarioData = mockIndex.getMockData('auth', 'specificScenario');
 
-            expect(scenarioData).toEqual({test: 'data'});
+            expect(scenarioData).toEqual({ test: 'data' });
         });
 
         test('should throw error for unknown type', () => {
@@ -152,14 +152,15 @@ describe('mock/index', () => {
         });
 
         test('should throw error for unknown scenario', () => {
-            expect(() => mockIndex.getMockData('auth', 'unknownScenario'))
-                .toThrow('Unknown scenario "unknownScenario" for type "auth"');
+            expect(() => mockIndex.getMockData('auth', 'unknownScenario')).toThrow(
+                'Unknown scenario "unknownScenario" for type "auth"',
+            );
         });
     });
 
     describe('simulateApiResponse', () => {
         test('should resolve with data after delay', async () => {
-            const testData = {test: 'response'};
+            const testData = { test: 'response' };
             const startTime = Date.now();
 
             const result = await mockIndex.simulateApiResponse(testData, 100);
@@ -170,7 +171,7 @@ describe('mock/index', () => {
         });
 
         test('should use default delay of 1000ms', async () => {
-            const testData = {test: 'response'};
+            const testData = { test: 'response' };
             const startTime = Date.now();
 
             const result = await mockIndex.simulateApiResponse(testData);
@@ -218,42 +219,62 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.authenticate('test@example.com', 'password');
 
                 expect(result).toEqual(auth.mockLoginSuccess);
-                expect(logger.__mockDebugFn).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: [hidden]', null);
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith(
+                    'Mock authentication with: test@example.com, password: [hidden]',
+                    null,
+                );
                 expect(logger.__mockSuccessFn).toHaveBeenCalledWith('Mock authentication successful', null, null);
             });
 
             test('should return failure for empty email', async () => {
-                await expect(mockIndex.mockApiClient.authenticate('', 'password'))
-                    .rejects.toEqual(auth.mockLoginFailure);
+                await expect(mockIndex.mockApiClient.authenticate('', 'password')).rejects.toEqual(
+                    auth.mockLoginFailure,
+                );
 
-                expect(logger.__mockErrorFn).toHaveBeenCalledWith('Mock authentication failed - empty credentials', null);
+                expect(logger.__mockErrorFn).toHaveBeenCalledWith(
+                    'Mock authentication failed - empty credentials',
+                    null,
+                );
             });
 
             test('should return failure for empty password', async () => {
-                await expect(mockIndex.mockApiClient.authenticate('test@example.com', ''))
-                    .rejects.toEqual(auth.mockLoginFailure);
+                await expect(mockIndex.mockApiClient.authenticate('test@example.com', '')).rejects.toEqual(
+                    auth.mockLoginFailure,
+                );
 
-                expect(logger.__mockErrorFn).toHaveBeenCalledWith('Mock authentication failed - empty credentials', null);
+                expect(logger.__mockErrorFn).toHaveBeenCalledWith(
+                    'Mock authentication failed - empty credentials',
+                    null,
+                );
             });
 
             test('should handle whitespace-only credentials', async () => {
-                await expect(mockIndex.mockApiClient.authenticate('   ', '   '))
-                    .rejects.toEqual(auth.mockLoginFailure);
+                await expect(mockIndex.mockApiClient.authenticate('   ', '   ')).rejects.toEqual(auth.mockLoginFailure);
 
-                expect(logger.__mockErrorFn).toHaveBeenCalledWith('Mock authentication failed - empty credentials', null);
+                expect(logger.__mockErrorFn).toHaveBeenCalledWith(
+                    'Mock authentication failed - empty credentials',
+                    null,
+                );
             });
 
             test('should log password as hidden when provided', async () => {
                 await mockIndex.mockApiClient.authenticate('test@example.com', 'mypassword');
 
-                expect(logger.__mockDebugFn).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: [hidden]', null);
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith(
+                    'Mock authentication with: test@example.com, password: [hidden]',
+                    null,
+                );
             });
 
             test('should log no password when not provided', async () => {
-                await expect(mockIndex.mockApiClient.authenticate('test@example.com', null))
-                    .rejects.toEqual(auth.mockLoginFailure);
+                await expect(mockIndex.mockApiClient.authenticate('test@example.com', null)).rejects.toEqual(
+                    auth.mockLoginFailure,
+                );
 
-                expect(logger.__mockDebugFn).toHaveBeenCalledWith('Mock authentication with: test@example.com, password: no password', null);
+                expect(logger.__mockDebugFn).toHaveBeenCalledWith(
+                    'Mock authentication with: test@example.com, password: no password',
+                    null,
+                );
             });
         });
 
@@ -261,31 +282,33 @@ describe('mock/index', () => {
             test('should return challenges for any token', async () => {
                 const result = await mockIndex.mockApiClient.getActiveChallenges('any-token');
 
-
-                expect(result).toEqual({challenges: [{id: '2', title: 'Generated Challenge'}]});
+                expect(result).toEqual({ challenges: [{ id: '2', title: 'Generated Challenge' }] });
                 expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock getActiveChallenges', null);
             });
 
             test('should generate fresh challenges if generator exists', async () => {
                 // Clear the session cache to ensure the generator is called
                 mockIndex.clearSessionCache();
-                
+
                 challenges.generateMockChallenges.mockReturnValueOnce({
-                    challenges: [{
-                        id: 'fresh',
-                        title: 'Fresh Challenge'
-                    }]
+                    challenges: [
+                        {
+                            id: 'fresh',
+                            title: 'Fresh Challenge',
+                        },
+                    ],
                 });
 
                 const result = await mockIndex.mockApiClient.getActiveChallenges('test-token');
 
                 expect(challenges.generateMockChallenges).toHaveBeenCalled();
-                expect(result).toEqual({challenges: [{id: 'fresh', title: 'Fresh Challenge'}]});
+                expect(result).toEqual({ challenges: [{ id: 'fresh', title: 'Fresh Challenge' }] });
             });
 
             test('should return error for missing token', async () => {
-                await expect(mockIndex.mockApiClient.getActiveChallenges(null))
-                    .rejects.toEqual(errors.mockAuthErrors.invalidToken);
+                await expect(mockIndex.mockApiClient.getActiveChallenges(null)).rejects.toEqual(
+                    errors.mockAuthErrors.invalidToken,
+                );
 
                 expect(logger.__mockErrorFn).toHaveBeenCalledWith('No token provided, returning error', null);
             });
@@ -300,28 +323,27 @@ describe('mock/index', () => {
 
         describe('getVoteImages', () => {
             test('should return vote images for challenge', async () => {
-                const challenge = {title: 'Test Challenge', url: 'challenge-1'};
+                const challenge = { title: 'Test Challenge', url: 'challenge-1' };
 
                 const result = await mockIndex.mockApiClient.getVoteImages(challenge, 'test-token');
 
-
-                expect(result).toEqual({images: [{id: 'generated-img', ratio: 30}]});
+                expect(result).toEqual({ images: [{ id: 'generated-img', ratio: 30 }] });
                 expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock getVoteImages', null);
                 expect(logger.__mockDebugFn).toHaveBeenCalledWith('Challenge: Test Challenge', null);
             });
 
             test('should generate fresh vote images if generator exists', async () => {
-                const challenge = {title: 'Test Challenge', url: 'test-url'};
-                voting.generateMockVoteImages.mockReturnValueOnce({images: [{id: 'fresh-img', ratio: 20}]});
+                const challenge = { title: 'Test Challenge', url: 'test-url' };
+                voting.generateMockVoteImages.mockReturnValueOnce({ images: [{ id: 'fresh-img', ratio: 20 }] });
 
                 const result = await mockIndex.mockApiClient.getVoteImages(challenge, 'test-token');
 
                 expect(voting.generateMockVoteImages).toHaveBeenCalledWith('test-url', challenge);
-                expect(result).toEqual({images: [{id: 'fresh-img', ratio: 20}]});
+                expect(result).toEqual({ images: [{ id: 'fresh-img', ratio: 20 }] });
             });
 
             test('should return empty images for unknown challenge', async () => {
-                const challenge = {title: 'Unknown Challenge', url: 'unknown-url'};
+                const challenge = { title: 'Unknown Challenge', url: 'unknown-url' };
 
                 // Mock generateMockVoteImages to return empty for this test
                 voting.generateMockVoteImages.mockReturnValueOnce(voting.mockEmptyVoteImages);
@@ -332,16 +354,17 @@ describe('mock/index', () => {
             });
 
             test('should return error for missing token', async () => {
-                const challenge = {title: 'Test Challenge', url: 'challenge-1'};
+                const challenge = { title: 'Test Challenge', url: 'challenge-1' };
 
-                await expect(mockIndex.mockApiClient.getVoteImages(challenge, null))
-                    .rejects.toEqual(errors.mockAuthErrors.invalidToken);
+                await expect(mockIndex.mockApiClient.getVoteImages(challenge, null)).rejects.toEqual(
+                    errors.mockAuthErrors.invalidToken,
+                );
             });
         });
 
         describe('submitVotes', () => {
             test('should submit votes successfully', async () => {
-                const voteImages = {images: [{id: 'img1', ratio: 25}]};
+                const voteImages = { images: [{ id: 'img1', ratio: 25 }] };
 
                 const result = await mockIndex.mockApiClient.submitVotes(voteImages, 'test-token');
 
@@ -351,19 +374,21 @@ describe('mock/index', () => {
             });
 
             test('should return error for empty images', async () => {
-                const voteImages = {images: []};
+                const voteImages = { images: [] };
 
-                await expect(mockIndex.mockApiClient.submitVotes(voteImages, 'test-token'))
-                    .rejects.toEqual(voting.mockVoteSubmissionFailure);
+                await expect(mockIndex.mockApiClient.submitVotes(voteImages, 'test-token')).rejects.toEqual(
+                    voting.mockVoteSubmissionFailure,
+                );
 
                 // Note: This error message was changed to use logger.error
             });
 
             test('should return error for missing token', async () => {
-                const voteImages = {images: [{id: 'img1', ratio: 25}]};
+                const voteImages = { images: [{ id: 'img1', ratio: 25 }] };
 
-                await expect(mockIndex.mockApiClient.submitVotes(voteImages, null))
-                    .rejects.toEqual(errors.mockAuthErrors.invalidToken);
+                await expect(mockIndex.mockApiClient.submitVotes(voteImages, null)).rejects.toEqual(
+                    errors.mockAuthErrors.invalidToken,
+                );
             });
         });
 
@@ -371,7 +396,7 @@ describe('mock/index', () => {
             test('should apply boost successfully when available', async () => {
                 const challenge = {
                     title: 'Test Challenge',
-                    member: {boost: {state: 'AVAILABLE'}}
+                    member: { boost: { state: 'AVAILABLE' } },
                 };
 
                 const result = await mockIndex.mockApiClient.applyBoost(challenge, 'test-token');
@@ -384,11 +409,12 @@ describe('mock/index', () => {
             test('should return error when boost already used', async () => {
                 const challenge = {
                     title: 'Test Challenge',
-                    member: {boost: {state: 'USED'}}
+                    member: { boost: { state: 'USED' } },
                 };
 
-                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token'))
-                    .rejects.toEqual(boost.mockBoostAlreadyUsed);
+                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).rejects.toEqual(
+                    boost.mockBoostAlreadyUsed,
+                );
 
                 // Note: 'Boost already used' message was not migrated to logger
             });
@@ -396,11 +422,12 @@ describe('mock/index', () => {
             test('should return error when boost not available', async () => {
                 const challenge = {
                     title: 'Test Challenge',
-                    member: {boost: {state: 'NOT_AVAILABLE'}}
+                    member: { boost: { state: 'NOT_AVAILABLE' } },
                 };
 
-                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token'))
-                    .rejects.toEqual(boost.mockBoostFailure);
+                await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).rejects.toEqual(
+                    boost.mockBoostFailure,
+                );
 
                 // Note: 'Boost not available' message was not migrated to logger
             });
@@ -416,8 +443,9 @@ describe('mock/index', () => {
             });
 
             test('should return error for missing token', async () => {
-                await expect(mockIndex.mockApiClient.applyBoostToEntry('123', 'img456', null))
-                    .rejects.toEqual(errors.mockAuthErrors.invalidToken);
+                await expect(mockIndex.mockApiClient.applyBoostToEntry('123', 'img456', null)).rejects.toEqual(
+                    errors.mockAuthErrors.invalidToken,
+                );
             });
         });
 
@@ -431,18 +459,18 @@ describe('mock/index', () => {
                             title: 'Test Challenge',
                             url: 'test-url',
                             member: {
-                                boost: {state: 'AVAILABLE'},
+                                boost: { state: 'AVAILABLE' },
                                 ranking: {
-                                    exposure: {exposure_factor: 50}
-                                }
-                            }
-                        }
-                    ]
+                                    exposure: { exposure_factor: 50 },
+                                },
+                            },
+                        },
+                    ],
                 };
 
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 
-                expect(result).toEqual({success: true, message: 'Mock voting process completed'});
+                expect(result).toEqual({ success: true, message: 'Mock voting process completed' });
                 expect(logger.__mockInfoFn).toHaveBeenCalledWith('Mock Voting Process Started', null);
                 expect(logger.__mockInfoFn).toHaveBeenCalledWith('Mock Voting Process Completed', null);
             });
@@ -452,13 +480,14 @@ describe('mock/index', () => {
 
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 
-                expect(result).toEqual({success: false, message: 'Mock voting cancelled by user'});
+                expect(result).toEqual({ success: false, message: 'Mock voting cancelled by user' });
                 // Note: Cancellation messages were not migrated to logger
             });
 
             test('should return error for missing token', async () => {
-                await expect(mockIndex.mockApiClient.fetchChallengesAndVote(null))
-                    .rejects.toEqual(errors.mockAuthErrors.invalidToken);
+                await expect(mockIndex.mockApiClient.fetchChallengesAndVote(null)).rejects.toEqual(
+                    errors.mockAuthErrors.invalidToken,
+                );
             });
         });
     });

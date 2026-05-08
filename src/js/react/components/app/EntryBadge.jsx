@@ -83,11 +83,7 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
                     disabled={boosting}
                     title={boostError || t('app.applyBoostToThisEntry')}
                 >
-                    {boosting ? (
-                        <span className="loading loading-spinner loading-xs" />
-                    ) : (
-                        '🚀'
-                    )}
+                    {boosting ? <span className="loading loading-spinner loading-xs" /> : '🚀'}
                 </button>
             )}
             {showTurboButton && (
@@ -97,11 +93,7 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
                     disabled={turboing}
                     title={turboError || t('app.applyTurboToThisEntry')}
                 >
-                    {turboing ? (
-                        <span className="loading loading-spinner loading-xs" />
-                    ) : (
-                        '⚡'
-                    )}
+                    {turboing ? <span className="loading loading-spinner loading-xs" /> : '⚡'}
                 </button>
             )}
         </div>

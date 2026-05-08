@@ -4,7 +4,7 @@
  * This module handles applying boosts to photos in challenges.
  */
 
-const {makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
+const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
 const logger = require('../logger');
 
 /**
@@ -18,7 +18,7 @@ const logger = require('../logger');
  * @returns {object|null} - API response or null if boost failed
  */
 const applyBoost = async (challenge, token) => {
-    const {id, member} = challenge;
+    const { id, member } = challenge;
 
     /**
      * Helper function to find the first non-turboed photo entry
@@ -38,7 +38,7 @@ const applyBoost = async (challenge, token) => {
     // Find a photo to boost
     const boostImageId = getFirstNonTurboKey(member.ranking.entries);
     if (!boostImageId) {
-        logger.withCategory('voting').error('No non-turboed entries found for boosting', {challengeId: id});
+        logger.withCategory('voting').error('No non-turboed entries found for boosting', { challengeId: id });
         return null;
     }
 
@@ -51,8 +51,10 @@ const applyBoost = async (challenge, token) => {
 
     // Send boost request to API
     const operationId = `apply-boost-${id}`;
-    logger.withCategory('boost').startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${id}`);
-    
+    logger
+        .withCategory('boost')
+        .startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${id}`);
+
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
     if (!response) {
         logger.withCategory('boost').endOperation(operationId, null, 'Boost application failed');
@@ -81,8 +83,10 @@ const applyBoostToEntry = async (challengeId, imageId, token) => {
 
     // Send boost request to API
     const operationId = `apply-boost-entry-${challengeId}-${imageId}`;
-    logger.withCategory('boost').startOperation(operationId, `Applying boost to specific entry ${imageId} in challenge ${challengeId}`);
-    
+    logger
+        .withCategory('boost')
+        .startOperation(operationId, `Applying boost to specific entry ${imageId} in challenge ${challengeId}`);
+
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
     if (!response) {
         logger.withCategory('boost').endOperation(operationId, null, 'Boost application to entry failed');
@@ -96,4 +100,4 @@ const applyBoostToEntry = async (challengeId, imageId, token) => {
 module.exports = {
     applyBoost,
     applyBoostToEntry,
-}; 
+};

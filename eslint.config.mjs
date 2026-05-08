@@ -20,12 +20,7 @@ export default [
     pluginJs.configs.recommended,
     // Override for renderer processes (browser environment)
     {
-        files: [
-            'src/js/app.js',
-            'src/js/login.js',
-            'src/js/translations.js',
-            'src/js/ui/**/*.js'
-        ],
+        files: ['src/js/app.js', 'src/js/login.js', 'src/js/translations.js', 'src/js/ui/**/*.js'],
         languageOptions: {
             globals: {
                 ...globals.browser,

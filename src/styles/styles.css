@@ -1,4 +1,4 @@
-@import "tailwindcss" source(none);
+@import 'tailwindcss' source(none);
 
 @source "../../src/html/**/*.html";
 @source "../../src/js/**/*.js";
@@ -16,7 +16,7 @@
 }
 
 :root {
-    scrollbar-color: color-mix(in oklch,currentColor 0%,var(--color-latvian))transparent;
+    scrollbar-color: color-mix(in oklch, currentColor 0%, var(--color-latvian)) transparent;
 }
 
 /* Latvian color utility classes */
@@ -84,9 +84,12 @@
     --badge-fg: var(--color-base-100);
 }
 
-
-[data-theme="dark"] {
-    .badge-allstar, .badge-elite, .badge-premier, .badge-skilled, .badge-popular {
+[data-theme='dark'] {
+    .badge-allstar,
+    .badge-elite,
+    .badge-premier,
+    .badge-skilled,
+    .badge-popular {
         --badge-fg: var(--color-base-content);
     }
 }

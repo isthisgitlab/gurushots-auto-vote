@@ -5,11 +5,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 /**
  * Login form component with validation
  */
-export function LoginForm({
-    onSubmit,
-    loading = false,
-    initialUsername = '',
-}) {
+export function LoginForm({ onSubmit, loading = false, initialUsername = '' }) {
     const { t } = useTranslation();
     const [username, setUsername] = useState(initialUsername);
     const [password, setPassword] = useState('');
@@ -37,30 +33,39 @@ export function LoginForm({
     /**
      * Handle form submission
      */
-    const handleSubmit = useCallback((e) => {
-        e.preventDefault();
+    const handleSubmit = useCallback(
+        (e) => {
+            e.preventDefault();
 
-        if (validateForm()) {
-            onSubmit(username.trim(), password);
-        }
-    }, [username, password, validateForm, onSubmit]);
+            if (validateForm()) {
+                onSubmit(username.trim(), password);
+            }
+        },
+        [username, password, validateForm, onSubmit],
+    );
 
     /**
      * Clear field error on change
      */
-    const handleUsernameChange = useCallback((e) => {
-        setUsername(e.target.value);
-        if (errors.username) {
-            setErrors(prev => ({ ...prev, username: null }));
-        }
-    }, [errors.username]);
+    const handleUsernameChange = useCallback(
+        (e) => {
+            setUsername(e.target.value);
+            if (errors.username) {
+                setErrors((prev) => ({ ...prev, username: null }));
+            }
+        },
+        [errors.username],
+    );
 
-    const handlePasswordChange = useCallback((e) => {
-        setPassword(e.target.value);
-        if (errors.password) {
-            setErrors(prev => ({ ...prev, password: null }));
-        }
-    }, [errors.password]);
+    const handlePasswordChange = useCallback(
+        (e) => {
+            setPassword(e.target.value);
+            if (errors.password) {
+                setErrors((prev) => ({ ...prev, password: null }));
+            }
+        },
+        [errors.password],
+    );
 
     return (
         <form className="space-y-4" onSubmit={handleSubmit} noValidate>
@@ -80,9 +85,7 @@ export function LoginForm({
                     autoComplete="username"
                 />
                 {errors.username && (
-                    <div className="label-text-alt text-latvian font-medium mt-1">
-                        {errors.username}
-                    </div>
+                    <div className="label-text-alt text-latvian font-medium mt-1">{errors.username}</div>
                 )}
             </div>
 
@@ -102,19 +105,13 @@ export function LoginForm({
                     autoComplete="current-password"
                 />
                 {errors.password && (
-                    <div className="label-text-alt text-latvian font-medium mt-1">
-                        {errors.password}
-                    </div>
+                    <div className="label-text-alt text-latvian font-medium mt-1">{errors.password}</div>
                 )}
             </div>
 
             {/* Submit button */}
             <div className="form-control w-full mt-6">
-                <button
-                    type="submit"
-                    className="btn bg-latvian text-white w-full"
-                    disabled={loading}
-                >
+                <button type="submit" className="btn bg-latvian text-white w-full" disabled={loading}>
                     {loading ? (
                         <>
                             <span>{t('login.loggingIn')}</span>

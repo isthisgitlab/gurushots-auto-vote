@@ -1,7 +1,4 @@
-const {
-    secondsToHoursMinutes,
-    hoursMinutesToSeconds,
-} = require('../../src/js/react/utils/timeFieldUnits');
+const { secondsToHoursMinutes, hoursMinutesToSeconds } = require('../../src/js/react/utils/timeFieldUnits');
 
 describe('timeFieldUnits', () => {
     describe('secondsToHoursMinutes', () => {
@@ -74,17 +71,12 @@ describe('timeFieldUnits', () => {
     });
 
     describe('round-trip', () => {
-        test.each([
-            [0],
-            [60],
-            [3600],
-            [7200],
-            [19800],
-            [86400],
-            [360000],
-        ])('seconds=%i survives round-trip', (seconds) => {
-            const { hours, minutes } = secondsToHoursMinutes(seconds);
-            expect(hoursMinutesToSeconds(hours, minutes)).toBe(seconds);
-        });
+        test.each([[0], [60], [3600], [7200], [19800], [86400], [360000]])(
+            'seconds=%i survives round-trip',
+            (seconds) => {
+                const { hours, minutes } = secondsToHoursMinutes(seconds);
+                expect(hoursMinutesToSeconds(hours, minutes)).toBe(seconds);
+            },
+        );
     });
 });

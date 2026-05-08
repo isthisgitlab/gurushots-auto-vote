@@ -55,7 +55,6 @@ const loginProd = async (username, password) => {
         // Use the IPC call to authenticate through the main process
         const result = await window.api.authenticate(username, password, false);
         return result;
-
     } catch (error) {
         logger.withCategory('authentication').error('Production login error:', error);
         return {
@@ -73,7 +72,6 @@ const loginMock = async (username, password) => {
         // Use the IPC call to authenticate through the main process with mock flag
         const result = await window.api.authenticate(username, password, true);
         return result;
-
     } catch (error) {
         logger.withCategory('authentication').error('Mock login error:', error);
         return {
@@ -82,9 +80,6 @@ const loginMock = async (username, password) => {
         };
     }
 };
-
-
-
 
 const validateForm = () => {
     const username = document.getElementById('username');
@@ -99,14 +94,17 @@ const validateForm = () => {
     passwordError.classList.add('hidden');
 
     // Reset input styling
-    username.className = 'input w-full border border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200';
-    password.className = 'input w-full border border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200';
+    username.className =
+        'input w-full border border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200';
+    password.className =
+        'input w-full border border-gray-300 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200';
 
     // Validate username
     if (username.value.trim() === '') {
         usernameError.textContent = translationManager.t('login.usernameRequired');
         usernameError.classList.remove('hidden');
-        username.className = 'input w-full border border-latvian focus:border-latvian focus:outline-none focus:ring-1 focus:ring-red-300 transition-all duration-200';
+        username.className =
+            'input w-full border border-latvian focus:border-latvian focus:outline-none focus:ring-1 focus:ring-red-300 transition-all duration-200';
         isValid = false;
     }
 
@@ -114,7 +112,8 @@ const validateForm = () => {
     if (password.value.trim() === '') {
         passwordError.textContent = translationManager.t('login.passwordRequired');
         passwordError.classList.remove('hidden');
-        password.className = 'input w-full border border-latvian focus:border-latvian focus:outline-none focus:ring-1 focus:ring-red-300 transition-all duration-200';
+        password.className =
+            'input w-full border border-latvian focus:border-latvian focus:outline-none focus:ring-1 focus:ring-red-300 transition-all duration-200';
         isValid = false;
     }
 
@@ -153,7 +152,7 @@ const updateBottomText = (isMock) => {
 // Function to update all translations on the page
 const updateTranslations = () => {
     // Update elements with data-translate attribute (except the bottom text which is dynamic)
-    document.querySelectorAll('[data-translate]').forEach(element => {
+    document.querySelectorAll('[data-translate]').forEach((element) => {
         const key = element.getAttribute('data-translate');
         // Skip the bottom text element as it's updated dynamically
         if (key !== 'login.loadingModeInfo') {
@@ -162,13 +161,13 @@ const updateTranslations = () => {
     });
 
     // Update elements with data-translate-placeholder attribute
-    document.querySelectorAll('[data-translate-placeholder]').forEach(element => {
+    document.querySelectorAll('[data-translate-placeholder]').forEach((element) => {
         const key = element.getAttribute('data-translate-placeholder');
         element.placeholder = translationManager.t(key);
     });
 
     // Update elements with data-translate-title attribute
-    document.querySelectorAll('[data-translate-title]').forEach(element => {
+    document.querySelectorAll('[data-translate-title]').forEach((element) => {
         const key = element.getAttribute('data-translate-title');
         element.title = translationManager.t(key);
     });
@@ -217,12 +216,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Wait for translation manager to be initialized
     while (!translationManager.initialized) {
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
     // Set language selector to current language
     const currentLang = translationManager.getCurrentLanguage();
-    currentLanguageSpan.textContent = translationManager.t(`common.language${currentLang === 'en' ? 'English' : 'Latvian'}`);
+    currentLanguageSpan.textContent = translationManager.t(
+        `common.language${currentLang === 'en' ? 'English' : 'Latvian'}`,
+    );
 
     // Apply initial translations
     updateTranslations();
@@ -255,23 +256,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // Handle language change
-    document.querySelectorAll('[data-lang]').forEach(item => {
+    document.querySelectorAll('[data-lang]').forEach((item) => {
         item.addEventListener('click', async (e) => {
             e.preventDefault();
             const newLanguage = e.target.getAttribute('data-lang');
             await translationManager.setLanguage(newLanguage);
 
             // Update the current language display
-            currentLanguageSpan.textContent = translationManager.t(`common.language${newLanguage === 'en' ? 'English' : 'Latvian'}`);
+            currentLanguageSpan.textContent = translationManager.t(
+                `common.language${newLanguage === 'en' ? 'English' : 'Latvian'}`,
+            );
 
             updateTranslations();
             updateBottomText(mockToggle.checked); // Update bottom text with new language
-            
+
             // Refresh menu to update language
             if (window.api && window.api.refreshMenu) {
                 await window.api.refreshMenu();
             }
-            
+
             // Close the dropdown by removing focus
             const dropdown = document.querySelector('.dropdown');
             if (dropdown) {
@@ -310,11 +313,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             // (ignore saved settings, use toggle value)
             const isMock = mockToggle.checked;
             logger.withCategory('authentication').info(`🔐 Login attempt with mock mode: ${isMock}`, null);
-            
-            const loginResult = isMock
-                ? await loginMock(username, password)
-                : await loginProd(username, password);
-                
+
+            const loginResult = isMock ? await loginMock(username, password) : await loginProd(username, password);
+
             logger.withCategory('authentication').info('🔐 Login result:', loginResult);
 
             // Check if login was successful
@@ -347,7 +348,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Call the login method exposed by the preload script immediately
             window.api.login();
-
         } catch (error) {
             logger.withCategory('authentication').error('Login error:', error);
             alert('An unexpected error occurred during login');

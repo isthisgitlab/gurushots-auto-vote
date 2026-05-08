@@ -32,45 +32,45 @@ const initialState = {
 // Reducer
 function updateReducer(state, action) {
     switch (action.type) {
-    case ACTIONS.SET_AVAILABLE:
-        return {
-            ...state,
-            state: UPDATE_STATES.AVAILABLE,
-            updateInfo: action.payload,
-            dialogVisible: true,
-            error: null,
-        };
-    case ACTIONS.SET_DOWNLOADING:
-        return {
-            ...state,
-            state: UPDATE_STATES.DOWNLOADING,
-            progress: { percent: 0, transferred: 0, total: 0, bytesPerSecond: 0 },
-        };
-    case ACTIONS.UPDATE_PROGRESS:
-        return {
-            ...state,
-            progress: action.payload,
-        };
-    case ACTIONS.SET_READY:
-        return {
-            ...state,
-            state: UPDATE_STATES.READY,
-        };
-    case ACTIONS.SET_ERROR:
-        return {
-            ...state,
-            state: UPDATE_STATES.ERROR,
-            error: action.payload,
-        };
-    case ACTIONS.RESET:
-        return initialState;
-    case ACTIONS.HIDE_DIALOG:
-        return {
-            ...state,
-            dialogVisible: false,
-        };
-    default:
-        return state;
+        case ACTIONS.SET_AVAILABLE:
+            return {
+                ...state,
+                state: UPDATE_STATES.AVAILABLE,
+                updateInfo: action.payload,
+                dialogVisible: true,
+                error: null,
+            };
+        case ACTIONS.SET_DOWNLOADING:
+            return {
+                ...state,
+                state: UPDATE_STATES.DOWNLOADING,
+                progress: { percent: 0, transferred: 0, total: 0, bytesPerSecond: 0 },
+            };
+        case ACTIONS.UPDATE_PROGRESS:
+            return {
+                ...state,
+                progress: action.payload,
+            };
+        case ACTIONS.SET_READY:
+            return {
+                ...state,
+                state: UPDATE_STATES.READY,
+            };
+        case ACTIONS.SET_ERROR:
+            return {
+                ...state,
+                state: UPDATE_STATES.ERROR,
+                error: action.payload,
+            };
+        case ACTIONS.RESET:
+            return initialState;
+        case ACTIONS.HIDE_DIALOG:
+            return {
+                ...state,
+                dialogVisible: false,
+            };
+        default:
+            return state;
     }
 }
 
@@ -202,11 +202,7 @@ export function UpdateProvider({ children }) {
         openBrowserDownload,
     };
 
-    return (
-        <UpdateContext.Provider value={value}>
-            {children}
-        </UpdateContext.Provider>
-    );
+    return <UpdateContext.Provider value={value}>{children}</UpdateContext.Provider>;
 }
 
 /**

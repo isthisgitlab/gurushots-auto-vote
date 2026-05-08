@@ -44,12 +44,11 @@ export function ChallengeCard({
     const userProgress = member.ranking.total;
 
     const turboState = member.turbo?.state;
-    const turboCooldownPassed = turboState === 'TIMER'
-        && typeof member.turbo?.time_to_open === 'number'
-        && member.turbo.time_to_open <= now;
+    const turboCooldownPassed =
+        turboState === 'TIMER' && typeof member.turbo?.time_to_open === 'number' && member.turbo.time_to_open <= now;
     const challengeStillOpen = challenge.close_time > now;
-    const canPlayAutoTurbo = challengeStillOpen
-        && (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
+    const canPlayAutoTurbo =
+        challengeStillOpen && (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
 
     useEffect(() => {
         if (!turboError) return undefined;
@@ -103,13 +102,19 @@ export function ChallengeCard({
     }, [challenge.id]);
 
     // Show vote button logic
-    const showVoteButton = (!autovoteRunning || (autovoteRunning && onlyBoost)) &&
+    const showVoteButton =
+        (!autovoteRunning || (autovoteRunning && onlyBoost)) &&
         challenge.start_time < Math.floor(Date.now() / 1000) &&
         exposureFactor < 100;
 
     // Next level info
     const getNextLevelInfo = () => {
-        if (challenge.ranking_levels && userProgress && userProgress.level !== undefined && challenge.type !== 'flash') {
+        if (
+            challenge.ranking_levels &&
+            userProgress &&
+            userProgress.level !== undefined &&
+            challenge.type !== 'flash'
+        ) {
             const currentLevel = userProgress.level;
             const nextLevel = currentLevel + 1;
             const nextLevelKey = `level_${nextLevel}`;
@@ -151,14 +156,10 @@ export function ChallengeCard({
                         {/* Challenge Type Badges */}
                         <div className="flex gap-1 mt-1">
                             {challenge.type && (
-                                <span className="badge badge-xs badge-warning">
-                                    {challenge.type.toUpperCase()}
-                                </span>
+                                <span className="badge badge-xs badge-warning">{challenge.type.toUpperCase()}</span>
                             )}
                             {!challenge.type && challenge.badge && (
-                                <span className="badge badge-xs badge-info">
-                                    {challenge.badge}
-                                </span>
+                                <span className="badge badge-xs badge-info">{challenge.badge}</span>
                             )}
                             {challenge.max_photo_submits > 1 && (
                                 <span className="badge badge-xs badge-warning">
@@ -203,8 +204,18 @@ export function ChallengeCard({
                                 title="Challenge Settings"
                             >
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                                    />
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
                                 </svg>
                             </button>
                         )}
@@ -236,13 +247,19 @@ export function ChallengeCard({
                     <div className="bg-base-200 rounded p-2">
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-xs font-medium">{t('app.yourProgress')}</span>
-                            <span className={`badge badge-xs ${getLevelStatus(userProgress.level, userProgress.level_name).colorClass}`}>
+                            <span
+                                className={`badge badge-xs ${getLevelStatus(userProgress.level, userProgress.level_name).colorClass}`}
+                            >
                                 {userProgress.level_name} {userProgress.level}
                             </span>
                         </div>
                         <div className="flex justify-between text-xs mb-1">
-                            <span>{t('app.rank')} {userProgress.rank} {t('app.of')} {challenge.players}</span>
-                            <span>{userProgress.votes} {t('app.votes')}</span>
+                            <span>
+                                {t('app.rank')} {userProgress.rank} {t('app.of')} {challenge.players}
+                            </span>
+                            <span>
+                                {userProgress.votes} {t('app.votes')}
+                            </span>
                         </div>
                         <progress className="progress progress-latvian w-full" value={userProgress.percent} max="100" />
                         {challenge.type !== 'flash' && (
@@ -250,7 +267,8 @@ export function ChallengeCard({
                         )}
                         {nextLevelInfo && (
                             <div className="text-xs text-base-content/60 mt-1">
-                                {t('app.next')}: {nextLevelInfo.levelName} ({nextLevelInfo.votesNeeded} {t('app.votesNeeded')})
+                                {t('app.next')}: {nextLevelInfo.levelName} ({nextLevelInfo.votesNeeded}{' '}
+                                {t('app.votesNeeded')})
                             </div>
                         )}
                     </div>
@@ -260,9 +278,7 @@ export function ChallengeCard({
                 <div className="grid grid-cols-6 gap-2 text-xs">
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.time')}</div>
-                        <div className={timeRemaining === 'Ended' ? 'text-error' : 'text-success'}>
-                            {timeRemaining}
-                        </div>
+                        <div className={timeRemaining === 'Ended' ? 'text-error' : 'text-success'}>{timeRemaining}</div>
                     </div>
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.ends')}</div>
@@ -284,8 +300,10 @@ export function ChallengeCard({
                                 className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
                                 onClick={handlePlayAutoTurbo}
                                 disabled={playingTurbo || autovoteRunning}
-                                title={turboError
-                                    || (autovoteRunning ? t('app.autoTurboRunsWithAutovote') : t('app.playAutoTurbo'))}
+                                title={
+                                    turboError ||
+                                    (autovoteRunning ? t('app.autoTurboRunsWithAutovote') : t('app.playAutoTurbo'))
+                                }
                             >
                                 {playingTurbo ? (
                                     <span className="loading loading-spinner loading-xs" />
@@ -297,7 +315,9 @@ export function ChallengeCard({
                     </div>
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.yourEntries')}</div>
-                        <div>{entries.length}/{challenge.max_photo_submits}</div>
+                        <div>
+                            {entries.length}/{challenge.max_photo_submits}
+                        </div>
                         {canFill && (
                             <div className="flex gap-1 mt-1 justify-center">
                                 <button
@@ -306,11 +326,7 @@ export function ChallengeCard({
                                     disabled={filling || autovoteRunning}
                                     title={fillError || t('app.addOnePhoto')}
                                 >
-                                    {filling ? (
-                                        <span className="loading loading-spinner loading-xs" />
-                                    ) : (
-                                        '+1'
-                                    )}
+                                    {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
                                 </button>
                                 {slotsRemaining > 1 && (
                                     <button
@@ -335,7 +351,9 @@ export function ChallengeCard({
                 {challenge.tags && challenge.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                         {challenge.tags.map((tag, index) => (
-                            <span key={index} className="badge badge-ghost badge-xs">{tag}</span>
+                            <span key={index} className="badge badge-ghost badge-xs">
+                                {tag}
+                            </span>
                         ))}
                     </div>
                 )}

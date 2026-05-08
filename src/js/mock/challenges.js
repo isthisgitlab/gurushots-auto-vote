@@ -10,18 +10,19 @@
  */
 const generateMockChallenges = () => {
     const now = Math.floor(Date.now() / 1000);
-    
+
     // Generate unique challenge IDs for this session
     // These will be different on each app restart but stable within the session
     const baseId = 100000 + Math.floor(Math.random() * 50000); // Random base between 100000-150000
-    const challengeIds = Array.from({length: 20}, (_, i) => baseId + i);
+    const challengeIds = Array.from({ length: 20 }, (_, i) => baseId + i);
 
     return {
         challenges: [
             {
                 id: challengeIds[0],
                 title: 'Ultimate Exposure',
-                welcome_message: 'Play this challenge for the Ultimate Exposure! This is the ultimate prize - a massive online exposure bundle for your photos!',
+                welcome_message:
+                    'Play this challenge for the Ultimate Exposure! This is the ultimate prize - a massive online exposure bundle for your photos!',
                 url: 'ultimate-exposure82',
                 start_time: now - 86400, // Started 1 day ago
                 close_time: now + 86400, // Ends in 1 day
@@ -1635,7 +1636,8 @@ const mockEmptyChallenges = {
 const mockChallengeDetails = {
     id: 105755, // This can stay static as it's for testing specific challenge details
     title: 'Ultimate Exposure',
-    description: 'Play this challenge for the Ultimate Exposure! This is the ultimate prize - a massive online exposure bundle for your photos!',
+    description:
+        'Play this challenge for the Ultimate Exposure! This is the ultimate prize - a massive online exposure bundle for your photos!',
     url: 'ultimate-exposure82',
     start_time: Math.floor(Date.now() / 1000) - 86400,
     end_time: Math.floor(Date.now() / 1000) + 86400,
@@ -1691,4 +1693,4 @@ module.exports = {
     mockEmptyChallenges,
     mockChallengeDetails,
     generateMockChallenges,
-}; 
+};

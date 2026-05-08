@@ -2,19 +2,15 @@
  * DaisyUI loading spinner component
  */
 export function LoadingSpinner({ size = 'md', className = '' }) {
-    const sizeClass = {
-        xs: 'loading-xs',
-        sm: 'loading-sm',
-        md: 'loading-md',
-        lg: 'loading-lg',
-    }[size] || 'loading-md';
+    const sizeClass =
+        {
+            xs: 'loading-xs',
+            sm: 'loading-sm',
+            md: 'loading-md',
+            lg: 'loading-lg',
+        }[size] || 'loading-md';
 
-    return (
-        <span
-            className={`loading loading-spinner ${sizeClass} ${className}`}
-            aria-label="Loading"
-        />
-    );
+    return <span className={`loading loading-spinner ${sizeClass} ${className}`} aria-label="Loading" />;
 }
 
 /**

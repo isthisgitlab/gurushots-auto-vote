@@ -24,8 +24,8 @@ logger.withCategory('ui').info('   Main window:', mainBounds);
 
 // Test 3: Save new window bounds
 logger.withCategory('ui').info('\n3. Saving New Window Bounds:');
-const newLoginBounds = {x: 100, y: 200, width: 900, height: 700};
-const newMainBounds = {x: 150, y: 250, width: 1000, height: 800};
+const newLoginBounds = { x: 100, y: 200, width: 900, height: 700 };
+const newMainBounds = { x: 150, y: 250, width: 1000, height: 800 };
 
 const saveLoginResult = settings.saveWindowBounds('login', newLoginBounds);
 const saveMainResult = settings.saveWindowBounds('main', newMainBounds);
@@ -64,4 +64,4 @@ logger.withCategory('ui').info('   Reset main window:', resetMainBounds);
 logger.withCategory('ui').info('\n=== Window Bounds Test Complete ===');
 logger.withCategory('ui').success('✅ Window bounds functionality works correctly');
 logger.withCategory('ui').success('✅ Bounds are saved and loaded properly');
-logger.withCategory('ui').success('✅ Default bounds are applied correctly'); 
+logger.withCategory('ui').success('✅ Default bounds are applied correctly');

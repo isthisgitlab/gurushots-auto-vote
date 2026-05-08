@@ -11,14 +11,14 @@ const settings = require('./settings');
 const BaseMiddleware = require('./services/BaseMiddleware');
 const logger = require('./logger');
 
-const {authenticate} = require('./api/login');
-const {fetchChallengesAndVote} = require('./api/main');
-const {getActiveChallenges} = require('./api/challenges');
-const {getVoteImages, submitVotes} = require('./api/voting');
-const {applyBoost, applyBoostToEntry} = require('./api/boost');
-const {applyTurbo} = require('./api/turbo');
-const {getEligiblePhotos, submitToChallenge} = require('./api/submissions');
-const {mockApiClient} = require('./mock');
+const { authenticate } = require('./api/login');
+const { fetchChallengesAndVote } = require('./api/main');
+const { getActiveChallenges } = require('./api/challenges');
+const { getVoteImages, submitVotes } = require('./api/voting');
+const { applyBoost, applyBoostToEntry } = require('./api/boost');
+const { applyTurbo } = require('./api/turbo');
+const { getEligiblePhotos, submitToChallenge } = require('./api/submissions');
+const { mockApiClient } = require('./mock');
 
 const realApi = {
     authenticate,
@@ -34,14 +34,19 @@ const realApi = {
     getStrategyType: () => 'RealAPI',
 };
 
-const withMockDebug = (label, fn) => async (...args) => {
-    logger.withCategory('api').debug(`🔧 Using mock ${label}`, null);
-    return fn(...args);
-};
+const withMockDebug =
+    (label, fn) =>
+    async (...args) => {
+        logger.withCategory('api').debug(`🔧 Using mock ${label}`, null);
+        return fn(...args);
+    };
 
 const mockApi = {
     authenticate: withMockDebug('authentication', mockApiClient.authenticate.bind(mockApiClient)),
-    fetchChallengesAndVote: withMockDebug('fetchChallengesAndVote', mockApiClient.fetchChallengesAndVote.bind(mockApiClient)),
+    fetchChallengesAndVote: withMockDebug(
+        'fetchChallengesAndVote',
+        mockApiClient.fetchChallengesAndVote.bind(mockApiClient),
+    ),
     getActiveChallenges: withMockDebug('getActiveChallenges', mockApiClient.getActiveChallenges.bind(mockApiClient)),
     getVoteImages: withMockDebug('getVoteImages', mockApiClient.getVoteImages.bind(mockApiClient)),
     submitVotes: withMockDebug('submitVotes', mockApiClient.submitVotes.bind(mockApiClient)),

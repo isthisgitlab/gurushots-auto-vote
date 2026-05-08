@@ -5,16 +5,16 @@
  */
 
 const axios = require('axios');
-const {authenticate} = require('../../src/js/api/login');
+const { authenticate } = require('../../src/js/api/login');
 
 // Mock the api-client module
 jest.mock('../../src/js/api/api-client', () => ({
     createCommonHeaders: jest.fn((token) => ({
         'x-token': token || 'mock-token',
         'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
-        'accept': 'application/json',
+        accept: 'application/json',
     })),
-    FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8'
+    FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
 // Create shared mock functions to track calls across categories
@@ -53,7 +53,7 @@ jest.mock('../../src/js/logger', () => ({
 describe('login', () => {
     const mockEmail = 'test@example.com';
     const mockPassword = 'testpassword123';
-    const {createCommonHeaders} = require('../../src/js/api/api-client');
+    const { createCommonHeaders } = require('../../src/js/api/api-client');
     const logger = require('../../src/js/logger');
 
     beforeEach(() => {
@@ -75,9 +75,9 @@ describe('login', () => {
                     user: {
                         id: '12345',
                         email: mockEmail,
-                        name: 'Test User'
-                    }
-                }
+                        name: 'Test User',
+                    },
+                },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
@@ -106,7 +106,7 @@ describe('login', () => {
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
                 duration: expect.any(Number),
-                responseData: mockResponse.data
+                responseData: mockResponse.data,
             });
             expect(mockSuccessFn).toHaveBeenCalledWith('Authentication successful', null, null);
         });
@@ -115,16 +115,18 @@ describe('login', () => {
             const emailWithSpecialChars = 'test+user@example.com';
             const mockResponse = {
                 status: 200,
-                data: {token: 'test-token'}
+                data: { token: 'test-token' },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
 
             await authenticate(emailWithSpecialChars, mockPassword);
 
-            expect(axios).toHaveBeenCalledWith(expect.objectContaining({
-                data: `login=${encodeURIComponent(emailWithSpecialChars)}&password=${mockPassword}`,
-            }));
+            expect(axios).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    data: `login=${encodeURIComponent(emailWithSpecialChars)}&password=${mockPassword}`,
+                }),
+            );
             expect(logger.withCategory).toHaveBeenCalledWith('api');
             expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
             expect(mockApiFn).toHaveBeenCalledWith('API Response', {
@@ -132,14 +134,14 @@ describe('login', () => {
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
                 duration: expect.any(Number),
-                responseData: {token: 'test-token'}
+                responseData: { token: 'test-token' },
             });
         });
 
         test('should include correct content-length header', async () => {
             const mockResponse = {
                 status: 200,
-                data: {token: 'test-token'}
+                data: { token: 'test-token' },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
@@ -147,11 +149,13 @@ describe('login', () => {
             await authenticate(mockEmail, mockPassword);
 
             const expectedData = `login=${encodeURIComponent(mockEmail)}&password=${mockPassword}`;
-            expect(axios).toHaveBeenCalledWith(expect.objectContaining({
-                headers: expect.objectContaining({
-                    'content-length': expectedData.length.toString(),
+            expect(axios).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    headers: expect.objectContaining({
+                        'content-length': expectedData.length.toString(),
+                    }),
                 }),
-            }));
+            );
             expect(logger.withCategory).toHaveBeenCalledWith('api');
             expect(mockApiRequestFn).toHaveBeenCalledWith('POST', 'https://api.gurushots.com/rest_mobile/signup');
             expect(mockApiFn).toHaveBeenCalledWith('API Response', {
@@ -159,38 +163,42 @@ describe('login', () => {
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
                 duration: expect.any(Number),
-                responseData: {token: 'test-token'}
+                responseData: { token: 'test-token' },
             });
         });
 
         test('should use 5 second timeout', async () => {
             const mockResponse = {
                 status: 200,
-                data: {token: 'test-token'}
+                data: { token: 'test-token' },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
 
             await authenticate(mockEmail, mockPassword);
 
-            expect(axios).toHaveBeenCalledWith(expect.objectContaining({
-                timeout: 5000,
-            }));
+            expect(axios).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    timeout: 5000,
+                }),
+            );
         });
 
         test('should use correct API endpoint', async () => {
             const mockResponse = {
                 status: 200,
-                data: {token: 'test-token'}
+                data: { token: 'test-token' },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
 
             await authenticate(mockEmail, mockPassword);
 
-            expect(axios).toHaveBeenCalledWith(expect.objectContaining({
-                url: 'https://api.gurushots.com/rest_mobile/signup',
-            }));
+            expect(axios).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    url: 'https://api.gurushots.com/rest_mobile/signup',
+                }),
+            );
         });
 
         test('should return null on authentication error', async () => {
@@ -208,7 +216,7 @@ describe('login', () => {
                 status: 'NO_RESPONSE',
                 duration: expect.any(Number),
                 error: 'Invalid credentials',
-                responseData: null
+                responseData: null,
             });
             expect(mockErrorFn).toHaveBeenCalledWith('Authentication error:', 'Invalid credentials');
         });
@@ -228,13 +236,13 @@ describe('login', () => {
                 status: 'NO_RESPONSE',
                 duration: expect.any(Number),
                 error: 'Network timeout',
-                responseData: null
+                responseData: null,
             });
             expect(mockErrorFn).toHaveBeenCalledWith('Authentication error:', 'Network timeout');
         });
 
         test('should handle error without message', async () => {
-            const mockError = {code: 'NETWORK_ERROR'};
+            const mockError = { code: 'NETWORK_ERROR' };
             axios.mockRejectedValueOnce(mockError);
 
             const result = await authenticate(mockEmail, mockPassword);
@@ -248,7 +256,7 @@ describe('login', () => {
                 status: 'NO_RESPONSE',
                 duration: expect.any(Number),
                 error: undefined,
-                responseData: null
+                responseData: null,
             });
             expect(mockErrorFn).toHaveBeenCalledWith('Authentication error:', mockError);
         });
@@ -257,7 +265,7 @@ describe('login', () => {
             const mockError = new Error('Request failed');
             mockError.response = {
                 status: 401,
-                data: {error: 'Unauthorized'}
+                data: { error: 'Unauthorized' },
             };
             axios.mockRejectedValueOnce(mockError);
 
@@ -272,7 +280,7 @@ describe('login', () => {
                 status: 401,
                 duration: expect.any(Number),
                 error: 'Request failed',
-                responseData: {error: 'Unauthorized'}
+                responseData: { error: 'Unauthorized' },
             });
             expect(mockErrorFn).toHaveBeenCalledWith('Authentication error:', 'Request failed');
         });
@@ -280,45 +288,49 @@ describe('login', () => {
         test('should remove x-token from headers for login request', async () => {
             const mockResponse = {
                 status: 200,
-                data: {token: 'test-token'}
+                data: { token: 'test-token' },
             };
 
             // Mock createCommonHeaders to return headers with x-token
             createCommonHeaders.mockReturnValueOnce({
                 'x-token': 'some-existing-token',
                 'user-agent': 'GuruShots/1.0',
-                'accept': 'application/json',
+                accept: 'application/json',
             });
 
             axios.mockResolvedValueOnce(mockResponse);
 
             await authenticate(mockEmail, mockPassword);
 
-            expect(axios).toHaveBeenCalledWith(expect.objectContaining({
-                headers: expect.objectContaining({
-                    'x-token': undefined,
+            expect(axios).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    headers: expect.objectContaining({
+                        'x-token': undefined,
+                    }),
                 }),
-            }));
+            );
         });
 
         test('should use POST method', async () => {
             const mockResponse = {
-                data: {token: 'test-token'}
+                data: { token: 'test-token' },
             };
 
             axios.mockResolvedValueOnce(mockResponse);
 
             await authenticate(mockEmail, mockPassword);
 
-            expect(axios).toHaveBeenCalledWith(expect.objectContaining({
-                method: 'post',
-            }));
+            expect(axios).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    method: 'post',
+                }),
+            );
         });
 
         test('should handle empty response data', async () => {
             const mockResponse = {
                 status: 200,
-                data: null
+                data: null,
             };
 
             axios.mockResolvedValueOnce(mockResponse);
@@ -333,14 +345,14 @@ describe('login', () => {
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
                 duration: expect.any(Number),
-                responseData: null
+                responseData: null,
             });
             expect(mockSuccessFn).toHaveBeenCalledWith('Authentication successful', null, null);
         });
 
         test('should handle response without data field', async () => {
             const mockResponse = {
-                status: 200
+                status: 200,
             };
 
             axios.mockResolvedValueOnce(mockResponse);
@@ -355,7 +367,7 @@ describe('login', () => {
                 url: 'https://api.gurushots.com/rest_mobile/signup',
                 status: 200,
                 duration: expect.any(Number),
-                responseData: undefined
+                responseData: undefined,
             });
             expect(mockSuccessFn).toHaveBeenCalledWith('Authentication successful', null, null);
         });

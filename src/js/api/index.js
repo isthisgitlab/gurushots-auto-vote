@@ -5,7 +5,7 @@
  * using the new factory pattern with strategies.
  */
 
-const {getMiddleware} = require('../apiFactory');
+const { getMiddleware } = require('../apiFactory');
 
 // Get the middleware instance
 const middleware = getMiddleware();

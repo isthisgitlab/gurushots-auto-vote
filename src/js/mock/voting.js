@@ -9,35 +9,95 @@
  */
 const generateMockVoteImages = (challengeUrl, originalChallenge = null) => {
     const photographers = [
-        'John Doe', 'Jane Smith', 'Mike Johnson', 'Sarah Wilson', 'David Brown',
-        'Lisa Davis', 'Tom Miller', 'Emma Taylor', 'Chris Anderson', 'Anna Garcia',
-        'Robert Chen', 'Maria Rodriguez', 'James Wilson', 'Sophie Martin', 'Alex Thompson',
+        'John Doe',
+        'Jane Smith',
+        'Mike Johnson',
+        'Sarah Wilson',
+        'David Brown',
+        'Lisa Davis',
+        'Tom Miller',
+        'Emma Taylor',
+        'Chris Anderson',
+        'Anna Garcia',
+        'Robert Chen',
+        'Maria Rodriguez',
+        'James Wilson',
+        'Sophie Martin',
+        'Alex Thompson',
     ];
 
     const titles = {
         'street-photography-2024': [
-            'Urban Life', 'City Lights', 'Street Market', 'Morning Commute', 'Street Art',
-            'Night Scene', 'Street Portrait', 'Urban Architecture', 'Street Food', 'City Reflection',
+            'Urban Life',
+            'City Lights',
+            'Street Market',
+            'Morning Commute',
+            'Street Art',
+            'Night Scene',
+            'Street Portrait',
+            'Urban Architecture',
+            'Street Food',
+            'City Reflection',
         ],
         'portrait-photography-2024': [
-            'Eyes of Wisdom', 'Smile of Joy', 'Contemplation', 'Laughing Child', 'Elderly Grace',
-            'Young Dreamer', 'Artist Portrait', 'Chef at Work', 'Musician Focus', 'Dancer Movement',
+            'Eyes of Wisdom',
+            'Smile of Joy',
+            'Contemplation',
+            'Laughing Child',
+            'Elderly Grace',
+            'Young Dreamer',
+            'Artist Portrait',
+            'Chef at Work',
+            'Musician Focus',
+            'Dancer Movement',
         ],
         'landscape-photography-2024': [
-            'Mountain Peak', 'Ocean Sunset', 'Forest Path', 'Desert Dunes', 'Alpine Lake',
-            'Coastal Cliffs', 'Valley Mist', 'River Bend', 'Snowy Summit', 'Golden Fields',
+            'Mountain Peak',
+            'Ocean Sunset',
+            'Forest Path',
+            'Desert Dunes',
+            'Alpine Lake',
+            'Coastal Cliffs',
+            'Valley Mist',
+            'River Bend',
+            'Snowy Summit',
+            'Golden Fields',
         ],
         'macro-photography-2024': [
-            'Dew Drop', 'Butterfly Wing', 'Flower Petals', 'Insect Eye', 'Water Droplet',
-            'Leaf Veins', 'Spider Web', 'Crystal Formation', 'Feather Detail', 'Bark Texture',
+            'Dew Drop',
+            'Butterfly Wing',
+            'Flower Petals',
+            'Insect Eye',
+            'Water Droplet',
+            'Leaf Veins',
+            'Spider Web',
+            'Crystal Formation',
+            'Feather Detail',
+            'Bark Texture',
         ],
         'wildlife-photography-2024': [
-            'Lion Pride', 'Eagle Flight', 'Elephant Family', 'Wolf Pack', 'Dolphin Jump',
-            'Tiger Stare', 'Gorilla Strength', 'Penguin Colony', 'Shark Hunt', 'Owl Wisdom',
+            'Lion Pride',
+            'Eagle Flight',
+            'Elephant Family',
+            'Wolf Pack',
+            'Dolphin Jump',
+            'Tiger Stare',
+            'Gorilla Strength',
+            'Penguin Colony',
+            'Shark Hunt',
+            'Owl Wisdom',
         ],
         'architecture-photography-2024': [
-            'Modern Skyscraper', 'Gothic Cathedral', 'Glass Facade', 'Stone Bridge', 'Steel Structure',
-            'Ancient Temple', 'Art Deco Building', 'Minimalist Design', 'Historic Castle', 'Contemporary Museum',
+            'Modern Skyscraper',
+            'Gothic Cathedral',
+            'Glass Facade',
+            'Stone Bridge',
+            'Steel Structure',
+            'Ancient Temple',
+            'Art Deco Building',
+            'Minimalist Design',
+            'Historic Castle',
+            'Contemporary Museum',
         ],
     };
 
@@ -50,7 +110,7 @@ const generateMockVoteImages = (challengeUrl, originalChallenge = null) => {
     for (let i = 0; i < numImages; i++) {
         const photographer = photographers[Math.floor(Math.random() * photographers.length)];
         const title = challengeTitles[Math.floor(Math.random() * challengeTitles.length)];
-        const ratio = (Math.random() * 3) + 3; // 3-6 ratio
+        const ratio = Math.random() * 3 + 3; // 3-6 ratio
         const votes = Math.floor(Math.random() * 50) + 10; // 10-60 votes
 
         images.push({
@@ -66,12 +126,19 @@ const generateMockVoteImages = (challengeUrl, originalChallenge = null) => {
     return {
         challenge: {
             id: originalChallenge ? originalChallenge.id : Math.floor(Math.random() * 9000) + 1000,
-            title: originalChallenge ? originalChallenge.title : challengeUrl.replace('-2024', '').replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            title: originalChallenge
+                ? originalChallenge.title
+                : challengeUrl
+                      .replace('-2024', '')
+                      .replace(/-/g, ' ')
+                      .replace(/\b\w/g, (l) => l.toUpperCase()),
             url: originalChallenge ? originalChallenge.url : challengeUrl,
         },
         voting: {
             exposure: {
-                exposure_factor: originalChallenge?.member?.ranking?.exposure?.exposure_factor || Math.floor(Math.random() * 30) + 20, // Use original challenge's exposure or random 20-50%
+                exposure_factor:
+                    originalChallenge?.member?.ranking?.exposure?.exposure_factor ||
+                    Math.floor(Math.random() * 30) + 20, // Use original challenge's exposure or random 20-50%
                 max_exposure: 100,
             },
         },
@@ -194,4 +261,4 @@ module.exports = {
     mockVoteSubmissionFailure,
     mockVoteImagesByChallenge,
     generateMockVoteImages,
-}; 
+};

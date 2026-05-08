@@ -7,7 +7,7 @@
 
 const axios = require('axios');
 const logger = require('../logger');
-const {generateRandomHeaders} = require('./randomizer');
+const { generateRandomHeaders } = require('./randomizer');
 const settings = require('../settings');
 
 // Common content type for form submissions
@@ -23,10 +23,10 @@ const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
  */
 const makePostRequest = async (url, headers, data = '') => {
     const startTime = Date.now();
-    
+
     // Log the request with enhanced context
     logger.withCategory('api').apiRequest('POST', url);
-    
+
     try {
         const response = await axios({
             method: 'post',
@@ -37,7 +37,7 @@ const makePostRequest = async (url, headers, data = '') => {
         });
 
         const duration = Date.now() - startTime;
-        
+
         // Log successful response with full data
         logger.withCategory('api').api('API Response', {
             method: 'POST',
@@ -51,7 +51,7 @@ const makePostRequest = async (url, headers, data = '') => {
     } catch (error) {
         const duration = Date.now() - startTime;
         const status = error.response?.status || 'NO_RESPONSE';
-        
+
         // Log failed response with full error details
         logger.withCategory('api').api('API Error Response', {
             method: 'POST',
@@ -62,7 +62,7 @@ const makePostRequest = async (url, headers, data = '') => {
             responseData: error.response?.data || null,
             timeout: error.code === 'ECONNABORTED',
         });
-        
+
         return null; // Return null instead of throwing to prevent crashing
     }
 };
@@ -84,4 +84,4 @@ module.exports = {
     makePostRequest,
     createCommonHeaders,
     FORM_CONTENT_TYPE,
-}; 
+};

@@ -121,46 +121,56 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                     {/* Info about overrides */}
                     <div className="alert alert-info text-sm">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
                         </svg>
                         <span>{t('app.challengeOverrideInfo')}</span>
                     </div>
 
                     {/* Settings List */}
-                    {schema && Object.entries(schema).map(([key, config]) => {
-                        // Only show settings that support per-challenge overrides
-                        if (!config.perChallenge) return null;
+                    {schema &&
+                        Object.entries(schema).map(([key, config]) => {
+                            // Only show settings that support per-challenge overrides
+                            if (!config.perChallenge) return null;
 
-                        const hasOverride = key in overrides;
-                        const globalDefault = defaults?.[key] ?? config.default;
-                        const currentValue = hasOverride ? overrides[key] : globalDefault;
+                            const hasOverride = key in overrides;
+                            const globalDefault = defaults?.[key] ?? config.default;
+                            const currentValue = hasOverride ? overrides[key] : globalDefault;
 
-                        return (
-                            <div key={key} className="form-control">
-                                <label className="label">
-                                    <span className="label-text font-medium">{t(config.label)}</span>
-                                    <div className="flex gap-1">
-                                        {hasOverride ? (
-                                            <span className="badge badge-accent badge-xs">{t('app.overridden')}</span>
-                                        ) : (
-                                            <span className="badge badge-ghost badge-xs">{t('app.usingGlobal')}</span>
-                                        )}
-                                    </div>
-                                </label>
-                                <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
-                                <SettingInput
-                                    settingKey={key}
-                                    config={config}
-                                    value={currentValue}
-                                    onChange={handleOverrideChange}
-                                    onReset={hasOverride ? handleClearOverride : null}
-                                />
-                                <p className="text-xs text-base-content/40 mt-1">
-                                    {t('app.globalDefault')}: {String(globalDefault)}
-                                </p>
-                            </div>
-                        );
-                    })}
+                            return (
+                                <div key={key} className="form-control">
+                                    <label className="label">
+                                        <span className="label-text font-medium">{t(config.label)}</span>
+                                        <div className="flex gap-1">
+                                            {hasOverride ? (
+                                                <span className="badge badge-accent badge-xs">
+                                                    {t('app.overridden')}
+                                                </span>
+                                            ) : (
+                                                <span className="badge badge-ghost badge-xs">
+                                                    {t('app.usingGlobal')}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </label>
+                                    <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+                                    <SettingInput
+                                        settingKey={key}
+                                        config={config}
+                                        value={currentValue}
+                                        onChange={handleOverrideChange}
+                                        onReset={hasOverride ? handleClearOverride : null}
+                                    />
+                                    <p className="text-xs text-base-content/40 mt-1">
+                                        {t('app.globalDefault')}: {String(globalDefault)}
+                                    </p>
+                                </div>
+                            );
+                        })}
 
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-2 pt-4 border-t border-base-300">
@@ -173,7 +183,12 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                         </button>
                         <button className="btn btn-warning" onClick={handleClearAll}>
                             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
                             </svg>
                             {t('app.clearAll')}
                         </button>

@@ -38,17 +38,17 @@ const isSourceCode = () => {
     if (electronApp && electronApp.isPackaged) {
         return false;
     }
-    
+
     // For CLI: check if we're running as a pkg binary
     if (process.pkg) {
         return false;
     }
-    
+
     // Check if __dirname contains .asar (Electron packaged but somehow not detected)
     if (__dirname.includes('.asar')) {
         return false;
     }
-    
+
     // If none of the above, assume we're running from source
     return true;
 };
@@ -81,14 +81,16 @@ const getUserDataPath = () => {
         // Ensure the directory exists
         if (!fs.existsSync(userDataPath)) {
             try {
-                fs.mkdirSync(userDataPath, {recursive: true});
+                fs.mkdirSync(userDataPath, { recursive: true });
             } catch (mkdirError) {
                 // logger module isn't ready here (we're inside its bootstrap),
                 // so console.warn is the only safe channel.
-                console.warn(`[logger] failed to create userData dir ${userDataPath} (${mkdirError.code || mkdirError.message}); falling back to cwd/userData`);
+                console.warn(
+                    `[logger] failed to create userData dir ${userDataPath} (${mkdirError.code || mkdirError.message}); falling back to cwd/userData`,
+                );
                 userDataPath = path.join(process.cwd(), 'userData');
                 if (!fs.existsSync(userDataPath)) {
-                    fs.mkdirSync(userDataPath, {recursive: true});
+                    fs.mkdirSync(userDataPath, { recursive: true });
                 }
             }
         }
@@ -100,7 +102,7 @@ const getUserDataPath = () => {
 // Create logs directory in the same location as settings
 const logsDir = path.join(getUserDataPath(), 'logs');
 if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, {recursive: true});
+    fs.mkdirSync(logsDir, { recursive: true });
 }
 
 // Check if we're in development mode (not mock)
@@ -128,10 +130,10 @@ const getLogFilePaths = (date = getCurrentDate()) => {
 
 // Per-log-prefix retention rules: { days, maxMB }.
 const LOG_RETENTION = {
-    errors: {days: 30, maxMB: 10},
-    app: {days: 7, maxMB: 50},
-    api: {days: 1, maxMB: 20},
-    settings: {days: 7, maxMB: 10},
+    errors: { days: 30, maxMB: 10 },
+    app: { days: 7, maxMB: 50 },
+    api: { days: 1, maxMB: 20 },
+    settings: { days: 7, maxMB: 10 },
 };
 
 // Parse date from filename (e.g., "errors-2025-07-28.log" -> "2025-07-28")
@@ -148,23 +150,22 @@ const isDateOlderThan = (dateString, days) => {
     return fileDate < cutoffDate;
 };
 
-
 const cleanupOldLogs = () => {
     try {
         // Check if fs and path modules are available (they might not be in test environments)
         if (typeof require !== 'undefined') {
             const fs = require('fs');
             const path = require('path');
-            
+
             // Check if logsDir exists and is accessible
             if (!fs.existsSync(logsDir)) {
                 return;
             }
-            
+
             const files = fs.readdirSync(logsDir);
             const now = new Date();
 
-            files.forEach(file => {
+            files.forEach((file) => {
                 const filePath = path.join(logsDir, file);
                 const stats = fs.statSync(filePath);
                 const fileSizeMB = stats.size / (1024 * 1024);
@@ -178,7 +179,7 @@ const cleanupOldLogs = () => {
                 if (fileDate) {
                     const prefix = Object.keys(LOG_RETENTION).find((p) => file.startsWith(`${p}-`));
                     if (prefix) {
-                        const {days, maxMB} = LOG_RETENTION[prefix];
+                        const { days, maxMB } = LOG_RETENTION[prefix];
                         const tooOld = isDateOlderThan(fileDate, days);
                         shouldDelete = tooOld || fileSizeMB > maxMB;
                         reason = tooOld ? 'age' : 'size';
@@ -186,7 +187,7 @@ const cleanupOldLogs = () => {
                 } else if (file.startsWith('api-debug-')) {
                     // Clean up old timestamped files
                     const fileAge = now.getTime() - stats.mtime.getTime();
-                    shouldDelete = fileAge > (7 * 24 * 60 * 60 * 1000); // 7 days
+                    shouldDelete = fileAge > 7 * 24 * 60 * 60 * 1000; // 7 days
                     reason = 'age';
                 }
 
@@ -229,17 +230,17 @@ const getContext = () => {
     if (contextOverride) {
         return contextOverride;
     }
-    
+
     // Check if we're in a pure CLI environment (no Electron at all)
     if (!isElectronApp) {
         return 'CLI';
     }
-    
+
     // If we're in Electron, check if we were started via CLI
     if (process.argv[1] && process.argv[1].includes('cli.js')) {
         return 'CLI';
     }
-    
+
     // Default for Electron main process is GUI
     return 'GUI';
 };
@@ -269,15 +270,22 @@ const colorize = (text, color, forConsole = false) => {
 /**
  * Format console output with context and colors
  */
-const formatConsoleMessage = (level, message, context = getContext(), timestamp = getTimeString(), forConsole = false, category = null) => {
+const formatConsoleMessage = (
+    level,
+    message,
+    context = getContext(),
+    timestamp = getTimeString(),
+    forConsole = false,
+    category = null,
+) => {
     const levelColors = {
-        'INFO': 'blue',
-        'SUCCESS': 'green',
-        'WARNING': 'yellow',
-        'ERROR': 'red',
-        'DEBUG': 'gray',
-        'API': 'cyan',
-        'PROGRESS': 'magenta',
+        INFO: 'blue',
+        SUCCESS: 'green',
+        WARNING: 'yellow',
+        ERROR: 'red',
+        DEBUG: 'gray',
+        API: 'cyan',
+        PROGRESS: 'magenta',
     };
 
     const color = levelColors[level] || 'white';
@@ -319,7 +327,7 @@ const writeToLogFile = (logFile, level, message, data = null, context = getConte
 
         // Also log to console with formatting (colors enabled for console)
         console.log(formatConsoleMessage(level, message, context, getTimeString(), true, category));
-        
+
         // Send to GUI if available and log stream is active (no colors for GUI)
         if (typeof global !== 'undefined' && global.sendLogToGUI) {
             const timeString = getTimeString();
@@ -335,21 +343,21 @@ const writeToLogFile = (logFile, level, message, data = null, context = getConte
  */
 const logWithOperation = (level, operation, message, data = null, duration = null) => {
     let baseMessage = message;
-    
+
     if (operation) {
         baseMessage = `${operation}: ${message}`;
     }
-    
+
     // Create clean message for GUI/file (without colors)
     let cleanMessage = baseMessage;
-    
+
     if (duration !== null) {
         cleanMessage += ` (${duration}ms)`;
     }
-    
-    const logFile = level === 'ERROR' ? currentLogFiles.error : 
-        level === 'API' ? currentLogFiles.api : currentLogFiles.app;
-    
+
+    const logFile =
+        level === 'ERROR' ? currentLogFiles.error : level === 'API' ? currentLogFiles.api : currentLogFiles.app;
+
     // Use the clean message for file/GUI logging
     writeToLogFile(logFile, level, cleanMessage, data);
 };
@@ -359,14 +367,13 @@ const logWithOperation = (level, operation, message, data = null, duration = nul
  */
 const logProgress = (message, current = null, total = null) => {
     let progressMessage = message;
-    
+
     if (current !== null && total !== null) {
         const percentage = Math.round((current / total) * 100);
-        const progressBar = '█'.repeat(Math.floor(percentage / 5)) + 
-                           '░'.repeat(20 - Math.floor(percentage / 5));
+        const progressBar = '█'.repeat(Math.floor(percentage / 5)) + '░'.repeat(20 - Math.floor(percentage / 5));
         progressMessage += ` [${progressBar}] ${percentage}% (${current}/${total})`;
     }
-    
+
     console.log(formatConsoleMessage('PROGRESS', progressMessage, getContext(), getTimeString(), true));
 };
 
@@ -397,20 +404,20 @@ const operations = new Map();
 const startOperation = (operationId, message) => {
     const startTime = Date.now();
     operations.set(operationId, { startTime, message });
-    
+
     const startMessage = `🔄 ${message}...`;
     writeToLogFile(currentLogFiles.app, 'INFO', startMessage);
-    
+
     return startTime;
 };
 
 const endOperation = (operationId, successMessage = null, errorMessage = null) => {
     const operation = operations.get(operationId);
     if (!operation) return;
-    
+
     const duration = Date.now() - operation.startTime;
     operations.delete(operationId);
-    
+
     if (errorMessage) {
         const failMessage = `❌ ${operation.message} failed: ${errorMessage}`;
         writeToLogFile(currentLogFiles.error, 'ERROR', failMessage);
@@ -418,7 +425,7 @@ const endOperation = (operationId, successMessage = null, errorMessage = null) =
         const completeMessage = successMessage || `${operation.message} completed`;
         logSuccess(completeMessage, null, duration);
     }
-    
+
     return duration;
 };
 
@@ -427,10 +434,12 @@ cleanupOldLogs();
 
 // Set up periodic cleanup (every hour) only in actual application contexts
 let cleanupInterval;
-if (typeof setInterval !== 'undefined' && (isElectronApp || (isCliMode && process.argv[1] && process.argv[1].includes('cli.js')))) {
+if (
+    typeof setInterval !== 'undefined' &&
+    (isElectronApp || (isCliMode && process.argv[1] && process.argv[1].includes('cli.js')))
+) {
     cleanupInterval = setInterval(cleanupOldLogs, 60 * 60 * 1000); // 1 hour
 }
-
 
 if (typeof process !== 'undefined') {
     process.on('exit', () => {
@@ -463,8 +472,10 @@ module.exports = {
     // Category constants
     CATEGORIES: LOG_CATEGORIES,
     // Basic logging methods (backward compatibility)
-    error: (message, data, category) => writeToLogFile(currentLogFiles.error, 'ERROR', message, data, getContext(), category),
-    info: (message, data, category) => writeToLogFile(currentLogFiles.app, 'INFO', message, data, getContext(), category),
+    error: (message, data, category) =>
+        writeToLogFile(currentLogFiles.error, 'ERROR', message, data, getContext(), category),
+    info: (message, data, category) =>
+        writeToLogFile(currentLogFiles.app, 'INFO', message, data, getContext(), category),
     debug: (message, data, category) => {
         // Only log debug messages in non-built app (source code)
         if (isSourceCode()) {
@@ -483,7 +494,7 @@ module.exports = {
     success: logSuccess,
     warning: logWarning,
     progress: logProgress,
-    
+
     // Category logging - creates a logger for any category
     withCategory: (category) => ({
         info: (message, data) => writeToLogFile(currentLogFiles.app, 'INFO', message, data, getContext(), category),
@@ -500,9 +511,7 @@ module.exports = {
             }
         },
         apiRequest: (method, url, duration = null) => {
-            const message = duration ? 
-                `${method} ${url} (${duration}ms)` : 
-                `${method} ${url}`;
+            const message = duration ? `${method} ${url} (${duration}ms)` : `${method} ${url}`;
             // Always log API requests to file in non-built app
             if (isSourceCode()) {
                 writeToLogFile(currentLogFiles.api, 'API', `🌐 REQUEST: ${message}`, null, getContext(), category);
@@ -512,32 +521,34 @@ module.exports = {
         warning: (message, data) => logWarning(message, data, category),
         progress: (message, current = null, total = null) => {
             let progressMessage = message;
-            
+
             if (current !== null && total !== null) {
                 const percentage = Math.round((current / total) * 100);
-                const progressBar = '█'.repeat(Math.floor(percentage / 5)) + 
-                                   '░'.repeat(20 - Math.floor(percentage / 5));
+                const progressBar =
+                    '█'.repeat(Math.floor(percentage / 5)) + '░'.repeat(20 - Math.floor(percentage / 5));
                 progressMessage += ` [${progressBar}] ${percentage}% (${current}/${total})`;
             }
-            
-            console.log(formatConsoleMessage('PROGRESS', progressMessage, getContext(), getTimeString(), true, category));
+
+            console.log(
+                formatConsoleMessage('PROGRESS', progressMessage, getContext(), getTimeString(), true, category),
+            );
         },
         startOperation: (operationId, message) => {
             const startTime = Date.now();
             operations.set(operationId, { startTime, message });
-            
+
             const startMessage = `🔄 ${message}...`;
             writeToLogFile(currentLogFiles.app, 'INFO', startMessage, null, getContext(), category);
-            
+
             return startTime;
         },
         endOperation: (operationId, successMessage = null, errorMessage = null) => {
             const operation = operations.get(operationId);
             if (!operation) return;
-            
+
             const duration = Date.now() - operation.startTime;
             operations.delete(operationId);
-            
+
             if (errorMessage) {
                 const failMessage = `❌ ${operation.message} failed: ${errorMessage}`;
                 writeToLogFile(currentLogFiles.error, 'ERROR', failMessage, null, getContext(), category);
@@ -545,56 +556,52 @@ module.exports = {
                 const completeMessage = successMessage || `${operation.message} completed`;
                 logSuccess(completeMessage, null, duration, category);
             }
-            
+
             return duration;
         },
     }),
-    
+
     // Operation tracking
     startOperation,
     endOperation,
-    
+
     // Enhanced logging with context
     logWithOperation,
-    
+
     // Challenge-specific logging
     challengeInfo: (challengeId, challengeTitle, message, data) => {
         const contextMessage = `[Challenge ${challengeId}: ${challengeTitle}] ${message}`;
         writeToLogFile(currentLogFiles.app, 'INFO', contextMessage, data);
     },
-    
+
     challengeSuccess: (challengeId, challengeTitle, message, data, duration) => {
         const contextMessage = `[Challenge ${challengeId}: ${challengeTitle}] ✅ ${message}`;
         logSuccess(contextMessage, data, duration);
     },
-    
+
     challengeError: (challengeId, challengeTitle, message, data) => {
         const contextMessage = `[Challenge ${challengeId}: ${challengeTitle}] ❌ ${message}`;
         writeToLogFile(currentLogFiles.error, 'ERROR', contextMessage, data);
     },
-    
+
     // API-specific logging with timing
     apiRequest: (method, url, duration = null) => {
-        const message = duration ? 
-            `${method} ${url} (${duration}ms)` : 
-            `${method} ${url}`;
+        const message = duration ? `${method} ${url} (${duration}ms)` : `${method} ${url}`;
         // Always log API requests to file in non-built app
         if (isSourceCode()) {
             writeToLogFile(currentLogFiles.api, 'API', `🌐 REQUEST: ${message}`);
         }
     },
-    
+
     apiResponse: (method, url, status, duration = null) => {
         const statusEmoji = status >= 200 && status < 300 ? '✅' : '❌';
-        const message = duration ? 
-            `${method} ${url} → ${status} (${duration}ms)` : 
-            `${method} ${url} → ${status}`;
+        const message = duration ? `${method} ${url} → ${status} (${duration}ms)` : `${method} ${url} → ${status}`;
         // Always log API responses to file in non-built app
         if (isSourceCode()) {
             writeToLogFile(currentLogFiles.api, 'API', `${statusEmoji} RESPONSE: ${message}`);
         }
     },
-    
+
     // Utility methods
     getLogFile: () => currentLogFiles.app,
     getErrorLogFile: () => currentLogFiles.error,
@@ -602,11 +609,11 @@ module.exports = {
     getSettingsLogFile: () => currentLogFiles.settings,
     getLogFileForDate: (date) => getLogFilePaths(date),
     cleanup: cleanupOldLogs,
-    
+
     // Context helpers
     getContext,
     setContext,
     clearContext,
     isCliMode: () => isCliMode,
     isDevMode: () => isDevMode,
-}; 
+};

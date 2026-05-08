@@ -1,30 +1,30 @@
 name: Test
 
 on:
-  push:
-    branches: [ master, develop, feature/* ]
-  pull_request:
-    branches: [ master, develop ]
+    push:
+        branches: [master, develop, feature/*]
+    pull_request:
+        branches: [master, develop]
 
 jobs:
-  test:
-    runs-on: ubuntu-slim
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+    test:
+        runs-on: ubuntu-slim
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          cache: 'npm'
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
 
-      - name: Install dependencies
-        run: npm ci
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: '24'
+                  cache: 'npm'
 
-      - name: Run linter
-        run: npm run lint
+            - name: Install dependencies
+              run: npm ci
 
-      - name: Run tests with coverage
-        run: npm run test:coverage
+            - name: Run linter
+              run: npm run lint
+
+            - name: Run tests with coverage
+              run: npm run test:coverage

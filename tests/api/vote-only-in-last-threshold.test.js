@@ -37,10 +37,10 @@ describe('vote-only-in-last-threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 75 // Below normal threshold
-                        }
-                    }
-                }
+                            exposure_factor: 75, // Below normal threshold
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -60,10 +60,16 @@ describe('vote-only-in-last-threshold functionality', () => {
             });
 
             // Test the logic
-            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
+            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting(
+                'lastMinuteThreshold',
+                challenge.id.toString(),
+            );
+            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting(
+                'voteOnlyInLastMinute',
+                challenge.id.toString(),
+            );
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
             // Should not be within lastminute threshold (60 minutes > 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(false);
@@ -83,10 +89,10 @@ describe('vote-only-in-last-threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 75 // Below 100%
-                        }
-                    }
-                }
+                            exposure_factor: 75, // Below 100%
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -104,10 +110,16 @@ describe('vote-only-in-last-threshold functionality', () => {
             });
 
             // Test the logic
-            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
+            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting(
+                'lastMinuteThreshold',
+                challenge.id.toString(),
+            );
+            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting(
+                'voteOnlyInLastMinute',
+                challenge.id.toString(),
+            );
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
             // Should be within lastminute threshold (15 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
@@ -131,10 +143,10 @@ describe('vote-only-in-last-threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 75 // Below normal threshold
-                        }
-                    }
-                }
+                            exposure_factor: 75, // Below normal threshold
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -154,10 +166,16 @@ describe('vote-only-in-last-threshold functionality', () => {
             });
 
             // Test the logic
-            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
+            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting(
+                'lastMinuteThreshold',
+                challenge.id.toString(),
+            );
+            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting(
+                'voteOnlyInLastMinute',
+                challenge.id.toString(),
+            );
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
             // Should not be within lastminute threshold (60 minutes > 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(false);
@@ -182,10 +200,10 @@ describe('vote-only-in-last-threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 75 // Below 100%
-                        }
-                    }
-                }
+                            exposure_factor: 75, // Below 100%
+                        },
+                    },
+                },
             };
 
             // Mock settings to return different values based on the setting key
@@ -203,11 +221,17 @@ describe('vote-only-in-last-threshold functionality', () => {
             });
 
             // Test the logic
-            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
+            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting(
+                'lastMinuteThreshold',
+                challenge.id.toString(),
+            );
+            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting(
+                'voteOnlyInLastMinute',
+                challenge.id.toString(),
+            );
             const onlyBoost = mockSettings.getEffectiveSetting('onlyBoost', challenge.id.toString());
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
             // Should be within lastminute threshold (15 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
@@ -226,10 +250,10 @@ describe('vote-only-in-last-threshold functionality', () => {
                 member: {
                     ranking: {
                         exposure: {
-                            exposure_factor: 75 // Below 100%
-                        }
-                    }
-                }
+                            exposure_factor: 75, // Below 100%
+                        },
+                    },
+                },
             };
 
             // Mock settings with per-challenge override
@@ -247,10 +271,16 @@ describe('vote-only-in-last-threshold functionality', () => {
             });
 
             // Test the logic
-            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
+            const effectiveLastMinuteThreshold = mockSettings.getEffectiveSetting(
+                'lastMinuteThreshold',
+                challenge.id.toString(),
+            );
+            const voteOnlyInLastMinute = mockSettings.getEffectiveSetting(
+                'voteOnlyInLastMinute',
+                challenge.id.toString(),
+            );
             const timeUntilEnd = challenge.close_time - now;
-            const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+            const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
             // Should be within lastminute threshold (30 minutes <= 30 minutes)
             expect(isWithinLastMinuteThreshold).toBe(true);
@@ -263,4 +293,4 @@ describe('vote-only-in-last-threshold functionality', () => {
             expect(mockSettings.getEffectiveSetting).toHaveBeenCalledWith('voteOnlyInLastMinute', '12345');
         });
     });
-}); 
+});

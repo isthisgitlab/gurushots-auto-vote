@@ -34,46 +34,46 @@ class BaseMiddleware {
         const response = await this.apiStrategy.authenticate(email, password);
         if (response && response.token) {
             settings.setSetting('token', response.token);
-            return {ok: true, response};
+            return { ok: true, response };
         }
-        return {ok: false, response};
+        return { ok: false, response };
     }
 
     async cliLogin(email, password) {
         logger.withCategory('authentication').info('=== GuruShots Auto Voter - CLI Login ===', null);
         logger.withCategory('auth').startOperation('cli-login', 'CLI Authentication');
         try {
-            const {ok, response} = await this._login(email, password);
+            const { ok, response } = await this._login(email, password);
             if (ok) {
                 logger.withCategory('auth').endOperation('cli-login', 'Authentication successful');
                 logger.withCategory('authentication').success('Token obtained and saved to settings');
-                return {success: true, token: response.token};
+                return { success: true, token: response.token };
             }
             logger.withCategory('auth').endOperation('cli-login', null, 'Invalid credentials');
-            return {success: false, error: 'Login failed. Please check your credentials.'};
+            return { success: false, error: 'Login failed. Please check your credentials.' };
         } catch (error) {
             logger.withCategory('auth').endOperation('cli-login', null, error.message || error);
-            return {success: false, error: error.message || error};
+            return { success: false, error: error.message || error };
         }
     }
 
     async guiLogin(email, password) {
         try {
-            const {ok, response} = await this._login(email, password);
-            if (ok) return {success: true, data: response};
-            return {success: false, error: 'Invalid credentials'};
+            const { ok, response } = await this._login(email, password);
+            if (ok) return { success: true, data: response };
+            return { success: false, error: 'Invalid credentials' };
         } catch (error) {
-            return {success: false, error: error.message || 'Authentication failed'};
+            return { success: false, error: error.message || 'Authentication failed' };
         }
     }
 
     async _runVote() {
         const token = settings.getSetting('token');
         if (!token) {
-            return {ok: false, error: 'No authentication token found. Please login first.'};
+            return { ok: false, error: 'No authentication token found. Please login first.' };
         }
         await this.apiStrategy.fetchChallengesAndVote(token, getExposureThresholdResolver());
-        return {ok: true};
+        return { ok: true };
     }
 
     async cliVote() {
@@ -95,8 +95,8 @@ class BaseMiddleware {
 
     async guiVote() {
         const result = await this._runVote();
-        if (!result.ok) return {success: false, error: result.error};
-        return {success: true, data: 'Voting process completed successfully!'};
+        if (!result.ok) return { success: false, error: result.error };
+        return { success: true, data: 'Voting process completed successfully!' };
     }
 
     isAuthenticated() {

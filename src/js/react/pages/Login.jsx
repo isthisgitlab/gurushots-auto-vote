@@ -50,48 +50,60 @@ function LoginPageContent() {
     }, [theme]);
 
     // Handle theme change
-    const handleThemeChange = useCallback(async (newTheme) => {
-        setTheme(newTheme);
-        document.documentElement.setAttribute('data-theme', newTheme);
-        await updateSetting('theme', newTheme);
-    }, [updateSetting]);
+    const handleThemeChange = useCallback(
+        async (newTheme) => {
+            setTheme(newTheme);
+            document.documentElement.setAttribute('data-theme', newTheme);
+            await updateSetting('theme', newTheme);
+        },
+        [updateSetting],
+    );
 
     // Handle stay logged in change
-    const handleStayLoggedInChange = useCallback(async (value) => {
-        setStayLoggedIn(value);
-        await updateSetting('stayLoggedIn', value);
+    const handleStayLoggedInChange = useCallback(
+        async (value) => {
+            setStayLoggedIn(value);
+            await updateSetting('stayLoggedIn', value);
 
-        // Clear saved username if toggling off
-        if (!value) {
-            await updateSetting('lastUsername', '');
-        }
-    }, [updateSetting]);
+            // Clear saved username if toggling off
+            if (!value) {
+                await updateSetting('lastUsername', '');
+            }
+        },
+        [updateSetting],
+    );
 
     // Handle mock mode change
-    const handleMockModeChange = useCallback(async (value) => {
-        setMockMode(value);
-        await updateSetting('mock', value);
-    }, [updateSetting]);
+    const handleMockModeChange = useCallback(
+        async (value) => {
+            setMockMode(value);
+            await updateSetting('mock', value);
+        },
+        [updateSetting],
+    );
 
     // Handle form submission
-    const handleSubmit = useCallback(async (username, password) => {
-        const result = await authenticate(username, password, mockMode);
+    const handleSubmit = useCallback(
+        async (username, password) => {
+            const result = await authenticate(username, password, mockMode);
 
-        if (result.success) {
-            await updateSetting('token', result.token);
+            if (result.success) {
+                await updateSetting('token', result.token);
 
-            // Save username if stay logged in is enabled
-            if (stayLoggedIn) {
-                await updateSetting('lastUsername', username);
+                // Save username if stay logged in is enabled
+                if (stayLoggedIn) {
+                    await updateSetting('lastUsername', username);
+                }
+
+                // Save mock mode setting
+                await updateSetting('mock', mockMode);
+
+                // Transition to main window
+                await login();
             }
-
-            // Save mock mode setting
-            await updateSetting('mock', mockMode);
-
-            // Transition to main window
-            await login();
-        }
-    }, [authenticate, login, mockMode, stayLoggedIn, updateSetting]);
+        },
+        [authenticate, login, mockMode, stayLoggedIn, updateSetting],
+    );
 
     // Show loading while initializing
     if (!ready || settingsLoading || envLoading) {
@@ -106,9 +118,7 @@ function LoginPageContent() {
                     <LanguageSwitcher />
 
                     {/* Title */}
-                    <h2 className="card-title text-2xl font-bold text-center mb-6">
-                        {t('login.heading')}
-                    </h2>
+                    <h2 className="card-title text-2xl font-bold text-center mb-6">{t('login.heading')}</h2>
 
                     {/* Auth Error */}
                     {authError && (
@@ -131,11 +141,7 @@ function LoginPageContent() {
                     )}
 
                     {/* Login Form */}
-                    <LoginForm
-                        onSubmit={handleSubmit}
-                        loading={authLoading}
-                        initialUsername={initialUsername}
-                    />
+                    <LoginForm onSubmit={handleSubmit} loading={authLoading} initialUsername={initialUsername} />
 
                     {/* Settings Toggles */}
                     <SettingsToggles

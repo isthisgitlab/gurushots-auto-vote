@@ -5,10 +5,10 @@ import { useAsyncIpcAction } from './useAsyncIpcAction';
  * Mirrors useTurbo: { fillNow, loading, error, clearError }.
  */
 export function useFillChallenge() {
-    const action = useAsyncIpcAction(
-        (challengeId, mode) => window.api.fillChallengeNow(challengeId, mode),
-        { failureMessage: 'Fill failed', errorMessage: 'Fill error' },
-    );
+    const action = useAsyncIpcAction((challengeId, mode) => window.api.fillChallengeNow(challengeId, mode), {
+        failureMessage: 'Fill failed',
+        errorMessage: 'Fill error',
+    });
 
     return {
         fillNow: action.run,

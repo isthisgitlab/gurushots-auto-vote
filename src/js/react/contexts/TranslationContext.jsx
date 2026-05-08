@@ -25,12 +25,15 @@ export function TranslationProvider({ children }) {
     }, []);
 
     // Translate function - delegates to window.translationManager
-    const t = useCallback((key) => {
-        if (window.translationManager) {
-            return window.translationManager.t(key);
-        }
-        return key;
-    }, [language]); // Re-bind when language changes to trigger re-renders
+    const t = useCallback(
+        (key) => {
+            if (window.translationManager) {
+                return window.translationManager.t(key);
+            }
+            return key;
+        },
+        [language],
+    ); // Re-bind when language changes to trigger re-renders
 
     // Change language function
     const setLanguage = useCallback(async (lang) => {
@@ -53,11 +56,7 @@ export function TranslationProvider({ children }) {
         ready,
     };
 
-    return (
-        <TranslationContext.Provider value={value}>
-            {children}
-        </TranslationContext.Provider>
-    );
+    return <TranslationContext.Provider value={value}>{children}</TranslationContext.Provider>;
 }
 
 /**

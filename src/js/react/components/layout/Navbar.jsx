@@ -9,21 +9,11 @@ export function Navbar({ isMock, onSettingsClick, onLogout }) {
     return (
         <div className="navbar bg-base-100 shadow-md mb-4">
             <div className="navbar-start">
-                <h1 className="text-xl font-bold">
-                    {t('app.title')}
-                </h1>
-                {isMock && (
-                    <span className="badge badge-warning ml-2">
-                        {t('app.mockMode')}
-                    </span>
-                )}
+                <h1 className="text-xl font-bold">{t('app.title')}</h1>
+                {isMock && <span className="badge badge-warning ml-2">{t('app.mockMode')}</span>}
             </div>
             <div className="navbar-end gap-2">
-                <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={onSettingsClick}
-                    title={t('app.settings')}
-                >
+                <button className="btn btn-ghost btn-sm" onClick={onSettingsClick} title={t('app.settings')}>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
                             strokeLinecap="round"
@@ -39,11 +29,7 @@ export function Navbar({ isMock, onSettingsClick, onLogout }) {
                         />
                     </svg>
                 </button>
-                <button
-                    className="btn btn-ghost btn-sm text-error"
-                    onClick={onLogout}
-                    title={t('app.logout')}
-                >
+                <button className="btn btn-ghost btn-sm text-error" onClick={onLogout} title={t('app.logout')}>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
                             strokeLinecap="round"

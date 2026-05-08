@@ -11,19 +11,19 @@ const mockSettings = {
     getEffectiveSetting: jest.fn(),
     SETTINGS_SCHEMA: {
         boostTime: {
-            default: 3600 // 1 hour default
+            default: 3600, // 1 hour default
         },
         exposure: {
-            default: 100 // exposure default
-        }
-    }
+            default: 100, // exposure default
+        },
+    },
 };
 
 jest.mock('../../src/js/settings', () => mockSettings);
 
 // Mock the challenges module
 const mockChallenges = {
-    getActiveChallenges: jest.fn()
+    getActiveChallenges: jest.fn(),
 };
 
 jest.mock('../../src/js/api/challenges', () => mockChallenges);
@@ -31,14 +31,14 @@ jest.mock('../../src/js/api/challenges', () => mockChallenges);
 // Mock the voting module
 const mockVoting = {
     getVoteImages: jest.fn(),
-    submitVotes: jest.fn()
+    submitVotes: jest.fn(),
 };
 
 jest.mock('../../src/js/api/voting', () => mockVoting);
 
 // Mock the boost module
 const mockBoost = {
-    applyBoost: jest.fn()
+    applyBoost: jest.fn(),
 };
 
 jest.mock('../../src/js/api/boost', () => mockBoost);
@@ -46,7 +46,7 @@ jest.mock('../../src/js/api/boost', () => mockBoost);
 // Mock the utils module
 const mockUtils = {
     sleep: jest.fn(),
-    getRandomDelay: jest.fn()
+    getRandomDelay: jest.fn(),
 };
 
 jest.mock('../../src/js/api/utils', () => mockUtils);
@@ -57,7 +57,7 @@ const mockVotingLogic = {
     getEffectiveBoostTime: jest.fn(),
     evaluateVotingDecision: jest.fn(),
     shouldPlayAutoTurbo: jest.fn(() => false),
-    shouldApplyTurbo: jest.fn(() => ({apply: false, imageId: null, reason: 'mocked'})),
+    shouldApplyTurbo: jest.fn(() => ({ apply: false, imageId: null, reason: 'mocked' })),
 };
 
 jest.mock('../../src/js/services/VotingLogic', () => mockVotingLogic);
@@ -72,7 +72,7 @@ jest.mock('../../src/js/api/turbo', () => ({
 
 // Mock the metadata module
 const mockMetadata = {
-    cleanupStaleMetadata: jest.fn()
+    cleanupStaleMetadata: jest.fn(),
 };
 
 jest.mock('../../src/js/metadata', () => mockMetadata);
@@ -125,23 +125,23 @@ describe('boost timing settings', () => {
 
         // Set up default mock responses
         mockChallenges.getActiveChallenges.mockResolvedValue({
-            challenges: []
+            challenges: [],
         });
 
         mockVoting.getVoteImages.mockResolvedValue([]);
         mockVoting.submitVotes.mockResolvedValue();
-        mockBoost.applyBoost.mockResolvedValue({success: true});
+        mockBoost.applyBoost.mockResolvedValue({ success: true });
         mockUtils.sleep.mockResolvedValue();
         mockUtils.getRandomDelay.mockReturnValue(3000);
         mockMetadata.cleanupStaleMetadata.mockReturnValue(true);
-        
+
         // Set up voting logic defaults
         mockVotingLogic.shouldApplyBoost.mockReturnValue(false);
         mockVotingLogic.getEffectiveBoostTime.mockReturnValue(3600); // 1 hour default
         mockVotingLogic.evaluateVotingDecision.mockReturnValue({
             shouldVote: false,
             voteReason: 'No voting needed',
-            targetExposure: 100
+            targetExposure: 100,
         });
     });
 
@@ -157,18 +157,18 @@ describe('boost timing settings', () => {
                 member: {
                     boost: {
                         state: 'AVAILABLE',
-                        timeout: now + 1200 // Available for 20 minutes
+                        timeout: now + 1200, // Available for 20 minutes
                     },
                     ranking: {
                         exposure: {
-                            exposure_factor: 50
-                        }
-                    }
-                }
+                            exposure_factor: 50,
+                        },
+                    },
+                },
             };
 
             mockChallenges.getActiveChallenges.mockResolvedValue({
-                challenges: [challengeWithBoost]
+                challenges: [challengeWithBoost],
             });
 
             // Mock voting logic to indicate boost should be applied
@@ -178,11 +178,11 @@ describe('boost timing settings', () => {
             mockVotingLogic.evaluateVotingDecision.mockReturnValue({
                 shouldVote: false,
                 voteReason: 'No voting needed',
-                targetExposure: 100
+                targetExposure: 100,
             });
 
             // Import the main module
-            const {fetchChallengesAndVote} = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/api/main');
 
             await fetchChallengesAndVote(mockToken);
 
@@ -198,11 +198,11 @@ describe('boost timing settings', () => {
             expect(logger.withCategory).toHaveBeenCalledWith('boost');
             expect(logger.__mockStartOperationFn).toHaveBeenCalledWith(
                 'boost-12345',
-                expect.stringContaining('Applying boost to challenge')
+                expect.stringContaining('Applying boost to challenge'),
             );
             expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(
                 'boost-12345',
-                expect.stringContaining('Boost applied successfully')
+                expect.stringContaining('Boost applied successfully'),
             );
         });
 
@@ -216,18 +216,18 @@ describe('boost timing settings', () => {
                 member: {
                     boost: {
                         state: 'AVAILABLE',
-                        timeout: now + 2400 // Available for 40 minutes
+                        timeout: now + 2400, // Available for 40 minutes
                     },
                     ranking: {
                         exposure: {
-                            exposure_factor: 50
-                        }
-                    }
-                }
+                            exposure_factor: 50,
+                        },
+                    },
+                },
             };
 
             mockChallenges.getActiveChallenges.mockResolvedValue({
-                challenges: [challengeWithBoost]
+                challenges: [challengeWithBoost],
             });
 
             // Mock voting logic to indicate boost should NOT be applied (deadline is outside threshold)
@@ -235,7 +235,7 @@ describe('boost timing settings', () => {
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800); // 30 minutes
 
             // Import the main module
-            const {fetchChallengesAndVote} = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/api/main');
 
             await fetchChallengesAndVote(mockToken);
 
@@ -260,18 +260,18 @@ describe('boost timing settings', () => {
                 member: {
                     boost: {
                         state: 'AVAILABLE',
-                        timeout: now + 1800 // Available for 30 minutes (within 1-hour default)
+                        timeout: now + 1800, // Available for 30 minutes (within 1-hour default)
                     },
                     ranking: {
                         exposure: {
-                            exposure_factor: 50
-                        }
-                    }
-                }
+                            exposure_factor: 50,
+                        },
+                    },
+                },
             };
 
             mockChallenges.getActiveChallenges.mockResolvedValue({
-                challenges: [challengeWithBoost]
+                challenges: [challengeWithBoost],
             });
 
             // Mock voting logic to indicate boost should be applied with default settings
@@ -279,7 +279,7 @@ describe('boost timing settings', () => {
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(3600); // 1 hour default
 
             // Import the main module
-            const {fetchChallengesAndVote} = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/api/main');
 
             await fetchChallengesAndVote(mockToken);
 
@@ -305,14 +305,14 @@ describe('boost timing settings', () => {
                     member: {
                         boost: {
                             state: 'AVAILABLE',
-                            timeout: now + 1200 // 20 minutes (within 30-minute setting)
+                            timeout: now + 1200, // 20 minutes (within 30-minute setting)
                         },
                         ranking: {
                             exposure: {
-                                exposure_factor: 50
-                            }
-                        }
-                    }
+                                exposure_factor: 50,
+                            },
+                        },
+                    },
                 },
                 {
                     id: '67890',
@@ -321,19 +321,19 @@ describe('boost timing settings', () => {
                     member: {
                         boost: {
                             state: 'AVAILABLE',
-                            timeout: now + 3600 // 1 hour (within 2-hour setting)
+                            timeout: now + 3600, // 1 hour (within 2-hour setting)
                         },
                         ranking: {
                             exposure: {
-                                exposure_factor: 50
-                            }
-                        }
-                    }
-                }
+                                exposure_factor: 50,
+                            },
+                        },
+                    },
+                },
             ];
 
             mockChallenges.getActiveChallenges.mockResolvedValue({
-                challenges: challenges
+                challenges: challenges,
             });
 
             // Mock voting logic to indicate boost should be applied for both challenges
@@ -343,7 +343,7 @@ describe('boost timing settings', () => {
                 .mockReturnValueOnce(7200); // 2 hours for second challenge
 
             // Import the main module
-            const {fetchChallengesAndVote} = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/api/main');
 
             await fetchChallengesAndVote(mockToken);
 
@@ -381,7 +381,11 @@ describe('boost timing settings', () => {
             // Voting logic decides to apply in this scenario
             mockVotingLogic.shouldApplyBoost.mockReturnValue(true);
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800);
-            mockVotingLogic.evaluateVotingDecision.mockReturnValue({ shouldVote: false, voteReason: 'No voting needed', targetExposure: 100 });
+            mockVotingLogic.evaluateVotingDecision.mockReturnValue({
+                shouldVote: false,
+                voteReason: 'No voting needed',
+                targetExposure: 100,
+            });
 
             const { fetchChallengesAndVote } = require('../../src/js/api/main');
 
@@ -415,7 +419,11 @@ describe('boost timing settings', () => {
             // Voting logic decides NOT to apply in this scenario
             mockVotingLogic.shouldApplyBoost.mockReturnValue(false);
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800);
-            mockVotingLogic.evaluateVotingDecision.mockReturnValue({ shouldVote: false, voteReason: 'No voting needed', targetExposure: 100 });
+            mockVotingLogic.evaluateVotingDecision.mockReturnValue({
+                shouldVote: false,
+                voteReason: 'No voting needed',
+                targetExposure: 100,
+            });
 
             const { fetchChallengesAndVote } = require('../../src/js/api/main');
 

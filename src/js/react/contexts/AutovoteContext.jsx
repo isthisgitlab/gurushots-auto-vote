@@ -24,46 +24,46 @@ const initialState = {
 // Reducer
 function autovoteReducer(state, action) {
     switch (action.type) {
-    case ACTIONS.START:
-        return {
-            ...state,
-            running: true,
-            status: 'Running',
-            statusClass: 'badge-success',
-            error: null,
-        };
-    case ACTIONS.STOP:
-        return {
-            ...state,
-            running: false,
-            status: 'Stopped',
-            statusClass: 'badge-neutral',
-        };
-    case ACTIONS.INCREMENT_CYCLE:
-        return {
-            ...state,
-            cycles: state.cycles + 1,
-        };
-    case ACTIONS.UPDATE_LAST_RUN:
-        return {
-            ...state,
-            lastRun: action.payload,
-        };
-    case ACTIONS.SET_STATUS:
-        return {
-            ...state,
-            status: action.payload.status,
-            statusClass: action.payload.statusClass,
-        };
-    case ACTIONS.SET_ERROR:
-        return {
-            ...state,
-            error: action.payload,
-            status: 'Error',
-            statusClass: 'badge-error',
-        };
-    default:
-        return state;
+        case ACTIONS.START:
+            return {
+                ...state,
+                running: true,
+                status: 'Running',
+                statusClass: 'badge-success',
+                error: null,
+            };
+        case ACTIONS.STOP:
+            return {
+                ...state,
+                running: false,
+                status: 'Stopped',
+                statusClass: 'badge-neutral',
+            };
+        case ACTIONS.INCREMENT_CYCLE:
+            return {
+                ...state,
+                cycles: state.cycles + 1,
+            };
+        case ACTIONS.UPDATE_LAST_RUN:
+            return {
+                ...state,
+                lastRun: action.payload,
+            };
+        case ACTIONS.SET_STATUS:
+            return {
+                ...state,
+                status: action.payload.status,
+                statusClass: action.payload.statusClass,
+            };
+        case ACTIONS.SET_ERROR:
+            return {
+                ...state,
+                error: action.payload,
+                status: 'Error',
+                statusClass: 'badge-error',
+            };
+        default:
+            return state;
     }
 }
 
@@ -156,7 +156,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                 'lastMinuteThreshold',
                 challenge.id.toString(),
             );
-            const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+            const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
 
             if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
                 earliestEntryTime = thresholdEntryTime;
@@ -188,8 +188,10 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
 
             if (nextEntry) {
                 // Check for duplicate scheduling
-                if (currentScheduledChallengeRef.current?.challengeId === nextEntry.challengeId &&
-                    currentScheduledChallengeRef.current?.entryTime === nextEntry.entryTime) {
+                if (
+                    currentScheduledChallengeRef.current?.challengeId === nextEntry.challengeId &&
+                    currentScheduledChallengeRef.current?.entryTime === nextEntry.entryTime
+                ) {
                     return;
                 }
 
@@ -271,7 +273,8 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                     challenge.id.toString(),
                 );
                 const timeUntilEnd = challenge.close_time - now;
-                const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+                const isWithinLastMinuteThreshold =
+                    timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
                 if (isWithinLastMinuteThreshold) {
                     useLastThresholdInterval = true;
@@ -370,11 +373,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         toggle,
     };
 
-    return (
-        <AutovoteContext.Provider value={value}>
-            {children}
-        </AutovoteContext.Provider>
-    );
+    return <AutovoteContext.Provider value={value}>{children}</AutovoteContext.Provider>;
 }
 
 /**

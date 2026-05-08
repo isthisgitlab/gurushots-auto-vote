@@ -48,9 +48,11 @@ describe('time-unit migration in loadSettings', () => {
     });
 
     test('inflates minute-encoded global defaults by 60', () => {
-        setSettingsFile(buildFixture({
-            globalDefaults: { turboTime: 180, boostTime: 60 },
-        }));
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { turboTime: 180, boostTime: 60 },
+            }),
+        );
 
         const loaded = settings.loadSettings();
 
@@ -60,9 +62,11 @@ describe('time-unit migration in loadSettings', () => {
     });
 
     test('leaves values >= 1440 untouched (already seconds)', () => {
-        setSettingsFile(buildFixture({
-            globalDefaults: { turboTime: 7200, boostTime: 3600 },
-        }));
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { turboTime: 7200, boostTime: 3600 },
+            }),
+        );
 
         const loaded = settings.loadSettings();
 
@@ -72,9 +76,11 @@ describe('time-unit migration in loadSettings', () => {
     });
 
     test('leaves zero untouched (means "disabled")', () => {
-        setSettingsFile(buildFixture({
-            globalDefaults: { turboTime: 0, boostTime: 0 },
-        }));
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { turboTime: 0, boostTime: 0 },
+            }),
+        );
 
         const loaded = settings.loadSettings();
 
@@ -83,13 +89,15 @@ describe('time-unit migration in loadSettings', () => {
     });
 
     test('migrates per-challenge overrides independently', () => {
-        setSettingsFile(buildFixture({
-            globalDefaults: { turboTime: 7200 },
-            perChallenge: {
-                42: { turboTime: 60 },
-                99: { boostTime: 1380, turboTime: 7200 },
-            },
-        }));
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { turboTime: 7200 },
+                perChallenge: {
+                    42: { turboTime: 60 },
+                    99: { boostTime: 1380, turboTime: 7200 },
+                },
+            }),
+        );
 
         const loaded = settings.loadSettings();
 
@@ -99,9 +107,11 @@ describe('time-unit migration in loadSettings', () => {
     });
 
     test('persists the migration result via writeFileSync', () => {
-        setSettingsFile(buildFixture({
-            globalDefaults: { turboTime: 180 },
-        }));
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { turboTime: 180 },
+            }),
+        );
 
         settings.loadSettings();
 
@@ -112,11 +122,13 @@ describe('time-unit migration in loadSettings', () => {
     });
 
     test('is idempotent: second load with flag set does not re-migrate', () => {
-        setSettingsFile(buildFixture({
-            globalDefaults: { turboTime: 180 },
-            // Flag already set: pretend migration already ran somehow
-            // (file is read fresh each time fs.readFileSync is called)
-        }));
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { turboTime: 180 },
+                // Flag already set: pretend migration already ran somehow
+                // (file is read fresh each time fs.readFileSync is called)
+            }),
+        );
         // First load: runs migration. Writes file with flag = true.
         settings.loadSettings();
         const firstWrites = fs.writeFileSync.mock.calls.length;
@@ -156,9 +168,11 @@ describe('time-unit migration in loadSettings', () => {
     test('upper bound: value of exactly 1440 is left alone', () => {
         // 1440 is outside the buggy GUI's writable range (max was 1439).
         // Anything >= 1440 must have come from elsewhere (e.g. raw JSON edit).
-        setSettingsFile(buildFixture({
-            globalDefaults: { turboTime: 1440 },
-        }));
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { turboTime: 1440 },
+            }),
+        );
 
         const loaded = settings.loadSettings();
 
@@ -166,9 +180,11 @@ describe('time-unit migration in loadSettings', () => {
     });
 
     test('lower bound: value of exactly 1 is migrated', () => {
-        setSettingsFile(buildFixture({
-            globalDefaults: { boostTime: 1 },
-        }));
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { boostTime: 1 },
+            }),
+        );
 
         const loaded = settings.loadSettings();
 

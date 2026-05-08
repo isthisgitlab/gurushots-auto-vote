@@ -8,15 +8,17 @@
 const path = require('path');
 const os = require('os');
 
-const isDevelopment = () => (
-    process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'dev'
-    || process.env.DEV === 'true' || process.env.DEV === '1'
-);
+const isDevelopment = () =>
+    process.env.NODE_ENV === 'development' ||
+    process.env.NODE_ENV === 'dev' ||
+    process.env.DEV === 'true' ||
+    process.env.DEV === '1';
 
-const isProduction = () => (
-    process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'prod'
-    || process.env.PROD === 'true' || process.env.PROD === '1'
-);
+const isProduction = () =>
+    process.env.NODE_ENV === 'production' ||
+    process.env.NODE_ENV === 'prod' ||
+    process.env.PROD === 'true' ||
+    process.env.PROD === '1';
 
 const isTest = () => process.env.NODE_ENV === 'test';
 
@@ -30,12 +32,12 @@ const getEnvSnapshot = () => ({
 // to the manual AppData path when APPDATA isn't set (some shells/CI).
 const getUserDataDir = (appName) => {
     switch (process.platform) {
-    case 'darwin':
-        return path.join(os.homedir(), 'Library', 'Application Support', appName);
-    case 'win32':
-        return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), appName);
-    default:
-        return path.join(os.homedir(), '.config', appName);
+        case 'darwin':
+            return path.join(os.homedir(), 'Library', 'Application Support', appName);
+        case 'win32':
+            return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), appName);
+        default:
+            return path.join(os.homedir(), '.config', appName);
     }
 };
 

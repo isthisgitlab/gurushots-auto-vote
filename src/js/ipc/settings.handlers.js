@@ -9,7 +9,7 @@
  * orchestration channels.
  */
 
-const {BrowserWindow} = require('electron');
+const { BrowserWindow } = require('electron');
 const settings = require('../settings');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
@@ -79,7 +79,7 @@ const register = (ipcMain) => {
 
             // Broadcast settings change so every renderer can react.
             if (result) {
-                BrowserWindow.getAllWindows().forEach(win => {
+                BrowserWindow.getAllWindows().forEach((win) => {
                     win.webContents.send('settings-changed', newSettings);
                 });
             }
@@ -111,10 +111,10 @@ const register = (ipcMain) => {
         try {
             logger.withCategory('settings').info('🔄 Refreshing API due to settings change');
             apiFactory.refreshApi();
-            return {success: true};
+            return { success: true };
         } catch (error) {
             logger.withCategory('api').error('Error handling refresh-api request:', error);
-            return {success: false, error: error.message};
+            return { success: false, error: error.message };
         }
     });
 
@@ -130,20 +130,20 @@ const register = (ipcMain) => {
     ipcMain.handle('set-boost-threshold', async (event, challengeId, threshold) => {
         try {
             settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
-            return {success: true};
+            return { success: true };
         } catch (error) {
             logger.withCategory('settings').error('Error setting boost threshold:', error);
-            return {success: false, error: error.message};
+            return { success: false, error: error.message };
         }
     });
 
     ipcMain.handle('set-default-boost-threshold', async (event, threshold) => {
         try {
             settings.setGlobalDefault('boostTime', threshold);
-            return {success: true};
+            return { success: true };
         } catch (error) {
             logger.withCategory('settings').error('Error setting default boost threshold:', error);
-            return {success: false, error: error.message};
+            return { success: false, error: error.message };
         }
     });
 
@@ -165,10 +165,10 @@ const register = (ipcMain) => {
                 };
                 defaults[key] = settings.getGlobalDefault(key);
             });
-            return {schema: serializableSchema, defaults};
+            return { schema: serializableSchema, defaults };
         } catch (error) {
             logger.withCategory('settings').error('Error getting settings schema:', error);
-            return {schema: {}, defaults: {}};
+            return { schema: {}, defaults: {} };
         }
     });
 
@@ -194,4 +194,4 @@ const register = (ipcMain) => {
     });
 };
 
-module.exports = {register};
+module.exports = { register };

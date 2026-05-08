@@ -5,7 +5,7 @@
  * in the CLI version, ensuring feature parity between the two interfaces.
  */
 
-const {getMiddleware, realApi, mockApi} = require('../../src/js/apiFactory');
+const { getMiddleware, realApi, mockApi } = require('../../src/js/apiFactory');
 const settings = require('../../src/js/settings');
 const BaseMiddleware = require('../../src/js/services/BaseMiddleware');
 
@@ -62,7 +62,7 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI and GUI use the same API factory', () => {
             // Test that the API factory works the same for both CLI and GUI
             const middleware = getMiddleware();
-            
+
             expect(middleware).toBeInstanceOf(BaseMiddleware);
             expect(middleware.apiStrategy).toBeDefined();
             expect(typeof middleware.apiStrategy.getStrategyType).toBe('function');
@@ -99,7 +99,7 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI can access all GUI settings', () => {
             // Test that CLI can access all the same settings as GUI
             const allSettings = settings.loadSettings();
-            
+
             // Verify all expected settings are present
             expect(allSettings).toHaveProperty('theme');
             expect(allSettings).toHaveProperty('stayLoggedIn');
@@ -118,13 +118,13 @@ describe('CLI-GUI Parity Tests', () => {
 
         test('CLI can handle settings schema', async () => {
             const schema = await settings.getSettingsSchema();
-            
+
             // Verify all expected settings are in the schema
             expect(schema).toHaveProperty('exposure');
             expect(schema).toHaveProperty('boostTime');
-                    expect(schema).toHaveProperty('lastMinuteThreshold');
-        expect(schema).toHaveProperty('onlyBoost');
-        expect(schema).toHaveProperty('voteOnlyInLastMinute');
+            expect(schema).toHaveProperty('lastMinuteThreshold');
+            expect(schema).toHaveProperty('onlyBoost');
+            expect(schema).toHaveProperty('voteOnlyInLastMinute');
 
             // Verify schema structure
             expect(schema.exposure).toHaveProperty('type');
@@ -136,12 +136,12 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI can handle global default settings functions', () => {
             // Test that CLI can use the same global default functions as GUI
             const settingKey = 'exposure';
-            
+
             // Test that the functions exist and work
             expect(typeof settings.getGlobalDefault).toBe('function');
             expect(typeof settings.setGlobalDefault).toBe('function');
             expect(typeof settings.resetGlobalDefault).toBe('function');
-            
+
             // Test that we can get a global default value
             const globalValue = settings.getGlobalDefault(settingKey);
             expect(typeof globalValue).toBe('number');
@@ -152,13 +152,13 @@ describe('CLI-GUI Parity Tests', () => {
             // Test that CLI can use the same per-challenge functions as GUI
             const challengeId = '12345';
             const settingKey = 'exposure';
-            
+
             // Test that the functions exist
             expect(typeof settings.getChallengeOverride).toBe('function');
             expect(typeof settings.setChallengeOverride).toBe('function');
             expect(typeof settings.removeChallengeOverride).toBe('function');
             expect(typeof settings.getEffectiveSetting).toBe('function');
-            
+
             // Test that we can get an effective setting
             const effectiveValue = settings.getEffectiveSetting(settingKey, challengeId);
             expect(typeof effectiveValue).toBe('number');
@@ -189,7 +189,7 @@ describe('CLI-GUI Parity Tests', () => {
             // Test logout function exists and works
             expect(typeof realMiddleware.logout).toBe('function');
             expect(typeof mockMiddleware.logout).toBe('function');
-            
+
             // Test that logout doesn't throw errors
             expect(() => realMiddleware.logout()).not.toThrow();
             expect(() => mockMiddleware.logout()).not.toThrow();
@@ -212,7 +212,7 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI can handle exposure threshold logic', () => {
             // Test that CLI can use the same exposure threshold logic as GUI
             const challengeId = '12345';
-            
+
             // Test that we can get effective settings for exposure
             const effectiveThreshold = settings.getEffectiveSetting('exposure', challengeId);
             expect(typeof effectiveThreshold).toBe('number');
@@ -222,7 +222,7 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI can handle boost time logic', () => {
             // Test that CLI can use the same boost time logic as GUI
             const challengeId = '12345';
-            
+
             // Test that we can get effective settings for boost time
             const effectiveBoostTime = settings.getEffectiveSetting('boostTime', challengeId);
             expect(typeof effectiveBoostTime).toBe('number');
@@ -232,11 +232,11 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI can handle last minutes logic', () => {
             // Test that CLI can use the same last minutes logic as GUI
             const challengeId = '12345';
-            
+
             // Test that we can get effective settings for last minutes
-                    const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
-        expect(typeof effectiveLastMinuteThreshold).toBe('number');
-        expect(effectiveLastMinuteThreshold).toBeGreaterThan(0);
+            const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
+            expect(typeof effectiveLastMinuteThreshold).toBe('number');
+            expect(effectiveLastMinuteThreshold).toBeGreaterThan(0);
         });
     });
 
@@ -252,7 +252,7 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI can handle boost-only mode', () => {
             // Test that CLI can use the same boost-only logic as GUI
             const challengeId = '12345';
-            
+
             // Test that we can get effective settings for boost-only mode
             const onlyBoost = settings.getEffectiveSetting('onlyBoost', challengeId);
             expect(typeof onlyBoost).toBe('boolean');
@@ -269,24 +269,24 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI can handle vote-only-in-last-threshold logic', () => {
             // Test that CLI can use the same vote-only-in-last-threshold logic as GUI
             const challengeId = '12345';
-            
+
             // Test that we can get effective settings for vote-only-in-last-threshold
-                    const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
-        expect(typeof voteOnlyInLastMinute).toBe('boolean');
+            const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
+            expect(typeof voteOnlyInLastMinute).toBe('boolean');
         });
     });
 
     describe('Settings Schema Compatibility', () => {
         test('CLI can handle all settings schema types', async () => {
             const schema = await settings.getSettingsSchema();
-            
+
             // Test that CLI can handle all setting types
             for (const [key, config] of Object.entries(schema)) {
                 expect(config).toHaveProperty('type');
                 expect(config).toHaveProperty('default');
                 expect(config).toHaveProperty('label');
                 expect(config).toHaveProperty('description');
-                
+
                 // Test that CLI can get effective settings for all types
                 const effectiveValue = settings.getEffectiveSetting(key, 'test-challenge');
                 expect(effectiveValue).toBeDefined();
@@ -295,7 +295,7 @@ describe('CLI-GUI Parity Tests', () => {
 
         test('CLI can handle boolean settings', () => {
             const challengeId = '12345';
-            
+
             // Test boolean setting
             const onlyBoost = settings.getEffectiveSetting('onlyBoost', challengeId);
             expect(typeof onlyBoost).toBe('boolean');
@@ -303,7 +303,7 @@ describe('CLI-GUI Parity Tests', () => {
 
         test('CLI can handle number settings', () => {
             const challengeId = '12345';
-            
+
             // Test number setting
             const exposure = settings.getEffectiveSetting('exposure', challengeId);
             expect(typeof exposure).toBe('number');
@@ -312,7 +312,7 @@ describe('CLI-GUI Parity Tests', () => {
 
         test('CLI can handle time settings', () => {
             const challengeId = '12345';
-            
+
             // Test time setting (in seconds)
             const boostTime = settings.getEffectiveSetting('boostTime', challengeId);
             expect(typeof boostTime).toBe('number');
@@ -324,7 +324,7 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI works in both development and production environments', () => {
             // Test that CLI can handle different environments like GUI
             const envInfo = settings.getEnvironmentInfo();
-            
+
             expect(envInfo).toHaveProperty('nodeEnv');
             expect(envInfo).toHaveProperty('defaultMock');
             expect(typeof envInfo.defaultMock).toBe('boolean');
@@ -333,7 +333,7 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI can handle mock mode switching', () => {
             // Test that CLI can switch between mock and real modes
             const originalMock = settings.getSetting('mock');
-            
+
             // Test that we can get the current mock setting
             expect(typeof originalMock).toBe('boolean');
         });
@@ -350,25 +350,25 @@ describe('CLI-GUI Parity Tests', () => {
         test('CLI can handle complex settings scenarios like GUI', () => {
             // Test a complex settings scenario that GUI might handle
             const challengeId = '12345';
-            
+
             // Test that we can get effective settings for all challenge settings
             const exposure = settings.getEffectiveSetting('exposure', challengeId);
             const boostTime = settings.getEffectiveSetting('boostTime', challengeId);
             const lastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
             const onlyBoost = settings.getEffectiveSetting('onlyBoost', challengeId);
             const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
-            
+
             // Verify all settings are of the correct types
             expect(typeof exposure).toBe('number');
             expect(typeof boostTime).toBe('number');
             expect(typeof lastMinuteThreshold).toBe('number');
             expect(typeof onlyBoost).toBe('boolean');
             expect(typeof voteOnlyInLastMinute).toBe('boolean');
-            
+
             // Verify numeric values are reasonable
             expect(exposure).toBeGreaterThan(0);
             expect(boostTime).toBeGreaterThanOrEqual(0);
             expect(lastMinuteThreshold).toBeGreaterThan(0);
         });
     });
-}); 
+});

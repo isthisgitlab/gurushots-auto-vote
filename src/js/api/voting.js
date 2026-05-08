@@ -5,7 +5,7 @@
  * to the GuruShots API.
  */
 
-const {makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE} = require('./api-client');
+const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
 const logger = require('../logger');
 const { updateChallengeVoteMetadata } = require('../metadata');
 
@@ -53,23 +53,25 @@ const getVoteImages = async (challenge, token) => {
  * @returns {object|undefined} - API response or undefined if submission failed
  */
 const submitVotes = async (voteImages, token, targetExposure = 100) => {
-    const {challenge, voting, images} = voteImages;
+    const { challenge, voting, images } = voteImages;
     const operationId = `submit-votes-${challenge.id}`;
-    
+
     // Validate we have images to vote on
     if (!images || images.length === 0) {
         logger.withCategory('voting').warning(`No images to vote on for challenge: ${challenge.title}`, null);
         return;
     }
-    
-    logger.withCategory('voting').startOperation(operationId, `Submitting votes for challenge ${challenge.title} (target: ${targetExposure}%)`);
+
+    logger
+        .withCategory('voting')
+        .startOperation(operationId, `Submitting votes for challenge ${challenge.title} (target: ${targetExposure}%)`);
 
     // Prepare data for vote submission
     let votedImages = '';
     // Track all images viewed during this session
-    const viewedImages = images.map(img => `&viewed_image_ids[]=${encodeURIComponent(img.id)}`).join('');
+    const viewedImages = images.map((img) => `&viewed_image_ids[]=${encodeURIComponent(img.id)}`).join('');
     // Get current exposure factor from the challenge data
-    let {exposure_factor} = voting.exposure;
+    let { exposure_factor } = voting.exposure;
     const originalExposureFactor = exposure_factor; // Store original exposure level for metadata
 
     // Track unique images to avoid voting for the same image twice
@@ -88,7 +90,12 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
 
         // Break if we've used all available images but still haven't reached target exposure
         if (uniqueImageIds.size === images.length) {
-            logger.withCategory('voting').warning(`Insufficient images to reach ${targetExposure}% exposure for ${challenge.title} (only ${uniqueImageIds.size} images available)`, null);
+            logger
+                .withCategory('voting')
+                .warning(
+                    `Insufficient images to reach ${targetExposure}% exposure for ${challenge.title} (only ${uniqueImageIds.size} images available)`,
+                    null,
+                );
             break;
         }
     }
@@ -109,13 +116,30 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
 
     // Update metadata after successful vote submission
     try {
-        logger.withCategory('voting').debug(`🔧 DEBUG: About to update metadata for challenge ${challenge.id}, original exposure: ${Math.round(originalExposureFactor)}%`, null);
+        logger
+            .withCategory('voting')
+            .debug(
+                `🔧 DEBUG: About to update metadata for challenge ${challenge.id}, original exposure: ${Math.round(originalExposureFactor)}%`,
+                null,
+            );
         const success = updateChallengeVoteMetadata(challenge.id, Math.round(originalExposureFactor));
         if (success) {
-            logger.withCategory('voting').debug(`🔧 DEBUG: Successfully updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`, null);
-            logger.withCategory('voting').info(`Updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`, null);
+            logger
+                .withCategory('voting')
+                .debug(
+                    `🔧 DEBUG: Successfully updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`,
+                    null,
+                );
+            logger
+                .withCategory('voting')
+                .info(
+                    `Updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`,
+                    null,
+                );
         } else {
-            logger.withCategory('voting').debug(`🔧 DEBUG: Failed to update metadata for challenge ${challenge.id}`, null);
+            logger
+                .withCategory('voting')
+                .debug(`🔧 DEBUG: Failed to update metadata for challenge ${challenge.id}`, null);
             logger.withCategory('voting').warning(`Failed to update metadata for challenge ${challenge.id}`, null);
         }
     } catch (error) {
@@ -123,11 +147,16 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
         logger.withCategory('voting').warning(`Error updating metadata for challenge ${challenge.id}:`, error);
     }
 
-    logger.withCategory('voting').endOperation(operationId, `Votes submitted successfully (${uniqueImageIds.size} images, ~${exposure_factor.toFixed(1)}% exposure)`);
+    logger
+        .withCategory('voting')
+        .endOperation(
+            operationId,
+            `Votes submitted successfully (${uniqueImageIds.size} images, ~${exposure_factor.toFixed(1)}% exposure)`,
+        );
     return response;
 };
 
 module.exports = {
     getVoteImages,
     submitVotes,
-}; 
+};

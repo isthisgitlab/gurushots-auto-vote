@@ -8,9 +8,9 @@
         // Browser globals
         root.englishTranslations = factory();
     }
-}(typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : this, function () {
+})(typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : this, function () {
     return {
-    // Common/shared translations
+        // Common/shared translations
         common: {
             dark: 'Dark',
             global: 'Global:',
@@ -60,7 +60,8 @@
             aboutAuthor: 'Author',
             aboutElectron: 'Electron',
             aboutNode: 'Node.js',
-            aboutDescription: 'GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)',
+            aboutDescription:
+                'GuruShots Auto Vote - An Electron application for automated voting on GuruShots challenges with unified GUI and CLI interfaces (supports both real and mock modes)',
             checkForUpdates: 'Check for Updates...',
             noUpdates: 'No Updates',
             noUpdatesMessage: 'You are using the latest version.',
@@ -111,16 +112,19 @@
             turboImageIndex: 'Turbo Entry',
             turboImageIndexDesc: 'Which of your entries (1-indexed) to apply Turbo to. Use 0 for the last entry.',
             turboApplyWhenBoostActive: 'Apply Turbo During Boost Window',
-            turboApplyWhenBoostActiveDesc: 'When off, skip Turbo apply if a Boost is currently available on the same challenge',
+            turboApplyWhenBoostActiveDesc:
+                'When off, skip Turbo apply if a Boost is currently available on the same challenge',
             playAutoTurbo: 'Play the Turbo mini-game now to earn Turbo',
             autoTurboRunsWithAutovote: 'Auto-vote already plays the Turbo mini-game on each cycle',
             earnTurbo: 'Earn Turbo',
             applyTurboToThisEntry: 'Apply your Turbo to this photo',
             applyBoostToThisEntry: 'Apply your Boost to this photo',
             autoFill: 'Auto-Fill Missing Entries',
-            autoFillDesc: 'Submit additional photos when a challenge nears its deadline and you have fewer entries than allowed. Fills one slot per check cycle, spaced by the interval below.',
+            autoFillDesc:
+                'Submit additional photos when a challenge nears its deadline and you have fewer entries than allowed. Fills one slot per check cycle, spaced by the interval below.',
             autoFillIntervalMinutes: 'Auto-Fill Interval (minutes)',
-            autoFillIntervalMinutesDesc: 'Minutes between each auto-fill submission. Two missing slots with a 10-minute interval submit at T-20m and T-10m. Wider gap = more time for each entry to gather votes.',
+            autoFillIntervalMinutesDesc:
+                'Minutes between each auto-fill submission. Two missing slots with a 10-minute interval submit at T-20m and T-10m. Wider gap = more time for each entry to gather votes.',
             autoFillBadge: 'auto-fill',
             addOnePhoto: 'Add one photo to fill an empty slot',
             fillAllPhotos: 'Fill all empty slots now (no spacing)',
@@ -129,7 +133,8 @@
             challengeName: 'Challenge',
             challengeOverrides: 'Challenge Overrides',
             challengeSettings: 'Challenge Settings',
-            challengeSettingsDesc: 'Configure settings specific to this challenge. Overrides will take precedence over global defaults.',
+            challengeSettingsDesc:
+                'Configure settings specific to this challenge. Overrides will take precedence over global defaults.',
             checkForUpdates: 'Check for Updates',
             checkForUpdatesDesc: 'Manually check for new versions of the application',
             configureBoost: 'Configure Boost for',
@@ -191,8 +196,10 @@
             resetAll: 'Reset All',
             resetAllConfirmTitle: 'Reset All Settings',
             resetAllConfirmMessage: 'Are you sure you want to reset ALL settings to their default values?',
-            resetAllConfirmDetails: 'This will reset:\\n• All UI settings (theme, language, timezone)\\n• All global challenge defaults\\n• Application preferences\\n• Window positions and sizes\\n• Custom timezones\\n• Username and login session preferences\\n\\nOnly your login token, last update check time, mock mode setting, and API headers will be preserved.\\n\\nThis action cannot be undone.',
-            resetAllSuccess: 'All settings have been reset to their default values. The page will reload to apply changes.',
+            resetAllConfirmDetails:
+                'This will reset:\\n• All UI settings (theme, language, timezone)\\n• All global challenge defaults\\n• Application preferences\\n• Window positions and sizes\\n• Custom timezones\\n• Username and login session preferences\\n\\nOnly your login token, last update check time, mock mode setting, and API headers will be preserved.\\n\\nThis action cannot be undone.',
+            resetAllSuccess:
+                'All settings have been reset to their default values. The page will reload to apply changes.',
             save: 'Save',
             seconds: 'seconds',
             settings: 'Settings',
@@ -220,7 +227,8 @@
             voting: 'Voting...',
             votingAll: 'Voting All...',
             checkFrequency: 'Check Frequency',
-            checkFrequencyDesc: 'Each cycle uses a random delay in this range. Set min and max equal for a fixed cadence.',
+            checkFrequencyDesc:
+                'Each cycle uses a random delay in this range. Set min and max equal for a fixed cadence.',
             checkFrequencyMin: 'Min',
             checkFrequencyMax: 'Max',
             voteOnlyInLastMinute: 'Vote Only in Last Minute',
@@ -233,7 +241,7 @@
             useLastHourExposureDesc: 'Enable special exposure logic for the last hour of challenge',
             validationInvalidValue: 'Invalid value',
             validationMustBeLessOrEqual: 'Must be ≤ {0} (currently {1})',
-            whatsNew: 'What\'s New:',
+            whatsNew: "What's New:",
             yourEntries: 'Your Entries',
             yourProgress: 'Your Progress',
             // Additional keys for React components
@@ -269,4 +277,4 @@
             disconnected: 'Disconnected',
         },
     };
-}));
+});

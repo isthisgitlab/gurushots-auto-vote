@@ -201,4 +201,4 @@ module.exports = {
     mockBoostErrors,
     mockServerErrors,
     createMockError,
-}; 
+};

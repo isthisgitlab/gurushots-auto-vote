@@ -7,12 +7,12 @@
  * It tries to connect to the running Electron app and trigger a window reload.
  */
 
-const {spawn} = require('child_process');
+const { spawn } = require('child_process');
 
 // Function to check if the Electron app is running
 function isElectronRunning() {
     return new Promise((resolve) => {
-        const process = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], {stdio: 'pipe'});
+        const process = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], { stdio: 'pipe' });
 
         process.on('close', (code) => {
             resolve(code === 0);
@@ -40,7 +40,6 @@ async function refreshGui() {
         console.log('   3. Or restart the GUI application');
         console.log('');
         console.log('💡 Tip: Changes to theme, language, and timezone require a GUI refresh to be visible.');
-
     } catch (error) {
         console.error('❌ Error checking GUI status:', error.message);
         console.log('ℹ️  If the GUI is running, refresh it manually (Ctrl+R / Cmd+R).');

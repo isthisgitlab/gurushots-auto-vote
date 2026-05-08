@@ -31,7 +31,9 @@ export function useSettingsSchema() {
 
     useEffect(() => {
         if (!window.api?.onSettingsChanged) return undefined;
-        return window.api.onSettingsChanged(() => { refetch(); });
+        return window.api.onSettingsChanged(() => {
+            refetch();
+        });
     }, [refetch]);
 
     return {

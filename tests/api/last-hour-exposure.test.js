@@ -1,6 +1,6 @@
 /**
  * Test suite for lastHourExposure setting functionality
- * 
+ *
  * This test verifies that the lastHourExposure setting is used correctly
  * when a challenge is within the last hour of its runtime.
  */
@@ -13,7 +13,7 @@ jest.mock('../../src/js/settings');
 describe('lastHourExposure', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        
+
         // Mock the getEffectiveSetting function
         settings.getEffectiveSetting = jest.fn();
     });
@@ -29,10 +29,10 @@ describe('lastHourExposure', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 75 // Below lastHourExposure threshold
-                    }
-                }
-            }
+                        exposure_factor: 75, // Below lastHourExposure threshold
+                    },
+                },
+            },
         };
 
         const now = Math.floor(Date.now() / 1000);
@@ -45,17 +45,20 @@ describe('lastHourExposure', () => {
         // Mock settings to return different values
         settings.getEffectiveSetting
             .mockReturnValueOnce(100) // exposure threshold
-            .mockReturnValueOnce(10)  // lastMinuteThreshold
+            .mockReturnValueOnce(10) // lastMinuteThreshold
             .mockReturnValueOnce(false) // voteOnlyInLastMinute
             .mockReturnValueOnce(80); // lastHourExposure threshold
 
         // Simulate the voting logic
         const effectiveExposure = settings.getEffectiveSetting('exposure', challenge.id.toString());
-        const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
+        const effectiveLastMinuteThreshold = settings.getEffectiveSetting(
+            'lastMinuteThreshold',
+            challenge.id.toString(),
+        );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
         const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
 
-        const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+        const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
         // Determine if we should vote
         let shouldVote = false;
@@ -102,10 +105,10 @@ describe('lastHourExposure', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 85 // Above lastHourExposure threshold
-                    }
-                }
-            }
+                        exposure_factor: 85, // Above lastHourExposure threshold
+                    },
+                },
+            },
         };
 
         const now = Math.floor(Date.now() / 1000);
@@ -118,17 +121,20 @@ describe('lastHourExposure', () => {
         // Mock settings
         settings.getEffectiveSetting
             .mockReturnValueOnce(100) // exposure threshold
-            .mockReturnValueOnce(10)  // lastMinuteThreshold
+            .mockReturnValueOnce(10) // lastMinuteThreshold
             .mockReturnValueOnce(false) // voteOnlyInLastMinute
             .mockReturnValueOnce(80); // lastHourExposure threshold
 
         // Simulate the voting logic
         const effectiveExposure = settings.getEffectiveSetting('exposure', challenge.id.toString());
-        const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
+        const effectiveLastMinuteThreshold = settings.getEffectiveSetting(
+            'lastMinuteThreshold',
+            challenge.id.toString(),
+        );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
         const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
 
-        const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+        const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
         // Determine if we should vote
         let shouldVote = false;
@@ -175,10 +181,10 @@ describe('lastHourExposure', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 75 // Below normal exposure threshold
-                    }
-                }
-            }
+                        exposure_factor: 75, // Below normal exposure threshold
+                    },
+                },
+            },
         };
 
         const now = Math.floor(Date.now() / 1000);
@@ -191,17 +197,20 @@ describe('lastHourExposure', () => {
         // Mock settings
         settings.getEffectiveSetting
             .mockReturnValueOnce(100) // exposure threshold
-            .mockReturnValueOnce(10)  // lastMinuteThreshold
+            .mockReturnValueOnce(10) // lastMinuteThreshold
             .mockReturnValueOnce(false) // voteOnlyInLastMinute
             .mockReturnValueOnce(80); // lastHourExposure threshold
 
         // Simulate the voting logic
         const effectiveExposure = settings.getEffectiveSetting('exposure', challenge.id.toString());
-        const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
+        const effectiveLastMinuteThreshold = settings.getEffectiveSetting(
+            'lastMinuteThreshold',
+            challenge.id.toString(),
+        );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
         const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
 
-        const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+        const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
         // Determine if we should vote
         let shouldVote = false;
@@ -242,10 +251,10 @@ describe('lastHourExposure', () => {
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 70 // Below per-challenge lastHourExposure threshold
-                    }
-                }
-            }
+                        exposure_factor: 70, // Below per-challenge lastHourExposure threshold
+                    },
+                },
+            },
         };
 
         const now = Math.floor(Date.now() / 1000);
@@ -258,17 +267,20 @@ describe('lastHourExposure', () => {
         // Mock settings with per-challenge override
         settings.getEffectiveSetting
             .mockReturnValueOnce(100) // exposure threshold
-            .mockReturnValueOnce(10)  // lastMinuteThreshold
+            .mockReturnValueOnce(10) // lastMinuteThreshold
             .mockReturnValueOnce(false) // voteOnlyInLastMinute
             .mockReturnValueOnce(75); // lastHourExposure threshold (per-challenge override)
 
         // Simulate the voting logic
         const effectiveExposure = settings.getEffectiveSetting('exposure', challenge.id.toString());
-        const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
+        const effectiveLastMinuteThreshold = settings.getEffectiveSetting(
+            'lastMinuteThreshold',
+            challenge.id.toString(),
+        );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
         const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
 
-        const isWithinLastMinuteThreshold = timeUntilEnd <= (effectiveLastMinuteThreshold * 60) && timeUntilEnd > 0;
+        const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
         // Determine if we should vote
         let shouldVote = false;
@@ -303,4 +315,4 @@ describe('lastHourExposure', () => {
         expect(shouldVote).toBe(true);
         expect(voteReason).toBe('last hour threshold: exposure 70% < 75%');
     });
-}); 
+});

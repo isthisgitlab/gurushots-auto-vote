@@ -14,7 +14,7 @@ const allowed = (id, labels, uploadDate = 1000, extras = {}) => ({
     id,
     labels,
     upload_date: uploadDate,
-    permission: {allowed: true, message: null},
+    permission: { allowed: true, message: null },
     ...extras,
 });
 
@@ -22,7 +22,7 @@ const blocked = (id, labels) => ({
     id,
     labels,
     upload_date: 9999,
-    permission: {allowed: false, message: 'blocked'},
+    permission: { allowed: false, message: 'blocked' },
 });
 
 describe('photoPicker', () => {
@@ -44,14 +44,11 @@ describe('photoPicker', () => {
         });
         test('strips reward / level boilerplate from welcome messages', () => {
             // None of these should survive: rewards, coins, elite, allstar, level
-            expect(tokenise('Earn rewards: 10 coins, Elite Level reward'))
-                .toEqual([]);
+            expect(tokenise('Earn rewards: 10 coins, Elite Level reward')).toEqual([]);
         });
         test('stems plurals, gerunds, and past tense', () => {
             // 'athletes' → 'athlet', 'runners' → 'runner', 'jumping' → 'jump'
-            expect(tokenise('athletes runners jumping caught')).toEqual([
-                'athlet', 'runner', 'jump', 'caught',
-            ]);
+            expect(tokenise('athletes runners jumping caught')).toEqual(['athlet', 'runner', 'jump', 'caught']);
         });
     });
 
@@ -83,7 +80,7 @@ describe('photoPicker', () => {
 
     describe('buildChallengeKeywords', () => {
         test('combines url and title tokens, dedup', () => {
-            const keys = buildChallengeKeywords({url: 'pink-in-nature23', title: 'Pink Showcase'});
+            const keys = buildChallengeKeywords({ url: 'pink-in-nature23', title: 'Pink Showcase' });
             expect(keys).toEqual(expect.arrayContaining(['pink', 'nature', 'showcase']));
             // 'pink' appears in both — should be deduplicated
             expect(keys.filter((k) => k === 'pink').length).toBe(1);
@@ -116,38 +113,38 @@ describe('photoPicker', () => {
 
     describe('scorePhoto', () => {
         test('counts label-keyword overlaps (substring both ways)', () => {
-            const photo = {labels: ['Pink', 'Flower', 'Petal']};
+            const photo = { labels: ['Pink', 'Flower', 'Petal'] };
             const keys = ['pink', 'nature'];
             expect(scorePhoto(photo, keys)).toBe(1);
         });
         test('substring match catches plurals via stemming', () => {
-            const photo = {labels: ['Flowers']};
+            const photo = { labels: ['Flowers'] };
             expect(scorePhoto(photo, ['flower'])).toBe(1);
         });
         test('matches Athlete (label) against athletes (keyword stem athlet)', () => {
-            const photo = {labels: ['Athlete', 'Sport']};
+            const photo = { labels: ['Athlete', 'Sport'] };
             // stem('athletes') = 'athlet'; label 'athlete' contains 'athlet'
             expect(scorePhoto(photo, ['athlet'])).toBe(1);
         });
         test('matches Running (label) against run (keyword)', () => {
             // stem('running') = 'runn'; substring match: 'runn'.includes('run')
-            const photo = {labels: ['Running']};
+            const photo = { labels: ['Running'] };
             expect(scorePhoto(photo, ['run'])).toBe(1);
         });
         test('returns 0 when keywords empty', () => {
-            expect(scorePhoto({labels: ['Anything']}, [])).toBe(0);
+            expect(scorePhoto({ labels: ['Anything'] }, [])).toBe(0);
         });
         test('returns 0 when labels missing', () => {
             expect(scorePhoto({}, ['pink'])).toBe(0);
         });
         test('skips empty labels without crashing', () => {
-            const photo = {labels: ['', 'Pink', '']};
+            const photo = { labels: ['', 'Pink', ''] };
             expect(scorePhoto(photo, ['pink'])).toBe(1);
         });
     });
 
     describe('pickPhotosForChallenge', () => {
-        const challenge = {url: 'pink-in-nature23', title: 'Show the color Pink'};
+        const challenge = { url: 'pink-in-nature23', title: 'Show the color Pink' };
 
         test('empty input → []', () => {
             expect(pickPhotosForChallenge(challenge, [], 2)).toEqual([]);
@@ -192,8 +189,8 @@ describe('photoPicker', () => {
             // Without quality fallback, "fresh" would win on upload_date.
             // With it, "winner" wins on achievements (3 > 0 > 0).
             const photos = [
-                allowed('winner', ['Misc'], 1000, {achievements: ['top_100', 'top_30', 'guru_pick']}),
-                allowed('fresh', ['Misc'], 9000, {achievements: []}),
+                allowed('winner', ['Misc'], 1000, { achievements: ['top_100', 'top_30', 'guru_pick'] }),
+                allowed('fresh', ['Misc'], 9000, { achievements: [] }),
                 allowed('avg', ['Misc'], 5000),
             ];
             const picked = pickPhotosForChallenge(challenge, photos, 1);
@@ -205,8 +202,8 @@ describe('photoPicker', () => {
             // photo with 0 votes should NOT outrank a proven photo with
             // hundreds of votes when neither matches the theme.
             const photos = [
-                allowed('proven', ['Misc'], 1000, {votes: 500}),
-                allowed('lastUpload', ['Misc'], 9999, {votes: 0}),
+                allowed('proven', ['Misc'], 1000, { votes: 500 }),
+                allowed('lastUpload', ['Misc'], 9999, { votes: 0 }),
             ];
             const picked = pickPhotosForChallenge(challenge, photos, 1);
             expect(picked).toEqual(['proven']);
@@ -215,22 +212,25 @@ describe('photoPicker', () => {
         test('quality fallback respects priority: score > achievements > votes > date', () => {
             const photos = [
                 // Theme match wins despite no quality signals
-                allowed('themeMatch', ['Pink'], 1000, {achievements: [], votes: 0}),
+                allowed('themeMatch', ['Pink'], 1000, { achievements: [], votes: 0 }),
                 // High achievements beats high votes
-                allowed('manyWins', ['Misc'], 1000, {achievements: ['a', 'b'], votes: 100}),
+                allowed('manyWins', ['Misc'], 1000, { achievements: ['a', 'b'], votes: 100 }),
                 // Higher votes than the next
-                allowed('highVotes', ['Misc'], 5000, {achievements: [], votes: 800}),
+                allowed('highVotes', ['Misc'], 5000, { achievements: [], votes: 800 }),
                 // Newest, no signals
-                allowed('newest', ['Misc'], 9000, {achievements: [], votes: 0}),
+                allowed('newest', ['Misc'], 9000, { achievements: [], votes: 0 }),
             ];
-            expect(pickPhotosForChallenge(challenge, photos, 4)).toEqual(
-                ['themeMatch', 'manyWins', 'highVotes', 'newest'],
-            );
+            expect(pickPhotosForChallenge(challenge, photos, 4)).toEqual([
+                'themeMatch',
+                'manyWins',
+                'highVotes',
+                'newest',
+            ]);
         });
 
         test('photo with no upload_date sorts to bottom, not crash', () => {
             const photos = [
-                {id: 'noDate', labels: ['Misc'], permission: {allowed: true}},
+                { id: 'noDate', labels: ['Misc'], permission: { allowed: true } },
                 allowed('hasDate', ['Misc'], 5000),
             ];
             // hasDate (5000) > noDate (treated as 0)
@@ -245,11 +245,11 @@ describe('photoPicker', () => {
             };
             const photos = [
                 // User's last upload — unrelated, no votes
-                allowed('lastUpload', ['Indoor', 'Furniture'], 9999, {votes: 0}),
+                allowed('lastUpload', ['Indoor', 'Furniture'], 9999, { votes: 0 }),
                 // Theme-aligned photo from earlier with some votes
-                allowed('actionPhoto', ['Athlete', 'Running'], 1000, {votes: 50}),
+                allowed('actionPhoto', ['Athlete', 'Running'], 1000, { votes: 50 }),
                 // Pretty but unrelated, with some votes
-                allowed('sunset', ['Sky', 'Nature'], 5000, {votes: 100}),
+                allowed('sunset', ['Sky', 'Nature'], 5000, { votes: 100 }),
             ];
             const picked = pickPhotosForChallenge(actionChallenge, photos, 1);
             // The action-themed photo should win on theme score, not the newest.
@@ -272,10 +272,7 @@ describe('photoPicker', () => {
         });
 
         test('drops blocked photos even if otherwise high-score', () => {
-            const photos = [
-                blocked('blocked-perfect', ['Pink', 'Nature']),
-                allowed('weak', ['Misc'], 1000),
-            ];
+            const photos = [blocked('blocked-perfect', ['Pink', 'Nature']), allowed('weak', ['Misc'], 1000)];
             expect(pickPhotosForChallenge(challenge, photos, 2)).toEqual(['weak']);
         });
     });

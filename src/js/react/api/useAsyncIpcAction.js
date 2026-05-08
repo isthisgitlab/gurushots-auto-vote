@@ -25,23 +25,26 @@ export function useAsyncIpcAction(ipcInvoker, labels = {}) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const run = useCallback(async (...args) => {
-        setLoading(true);
-        setError(null);
-        try {
-            const result = await ipcInvoker(...args);
-            if (!result?.success) {
-                setError(result?.error || failureMessage);
+    const run = useCallback(
+        async (...args) => {
+            setLoading(true);
+            setError(null);
+            try {
+                const result = await ipcInvoker(...args);
+                if (!result?.success) {
+                    setError(result?.error || failureMessage);
+                }
+                return result;
+            } catch (err) {
+                const message = err.message || errorMessage;
+                setError(message);
+                return { success: false, error: message };
+            } finally {
+                setLoading(false);
             }
-            return result;
-        } catch (err) {
-            const message = err.message || errorMessage;
-            setError(message);
-            return { success: false, error: message };
-        } finally {
-            setLoading(false);
-        }
-    }, [ipcInvoker, failureMessage, errorMessage]);
+        },
+        [ipcInvoker, failureMessage, errorMessage],
+    );
 
     const clearError = useCallback(() => setError(null), []);
 

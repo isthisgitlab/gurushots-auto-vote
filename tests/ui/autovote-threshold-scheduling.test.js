@@ -59,8 +59,11 @@ describe('Autovote Threshold Scheduling', () => {
                         continue;
                     }
 
-                    const effectiveLastMinuteThreshold = await mockApi.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-                    const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+                    const effectiveLastMinuteThreshold = await mockApi.getEffectiveSetting(
+                        'lastMinuteThreshold',
+                        challenge.id.toString(),
+                    );
+                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
 
                     if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
                         earliestEntryTime = thresholdEntryTime;
@@ -106,8 +109,11 @@ describe('Autovote Threshold Scheduling', () => {
                         continue;
                     }
 
-                    const effectiveLastMinuteThreshold = await mockApi.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-                    const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+                    const effectiveLastMinuteThreshold = await mockApi.getEffectiveSetting(
+                        'lastMinuteThreshold',
+                        challenge.id.toString(),
+                    );
+                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
 
                     if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
                         earliestEntryTime = thresholdEntryTime;
@@ -150,8 +156,11 @@ describe('Autovote Threshold Scheduling', () => {
                         continue;
                     }
 
-                    const effectiveLastMinuteThreshold = await mockApi.getEffectiveSetting('lastMinuteThreshold', challenge.id.toString());
-                    const thresholdEntryTime = challenge.close_time - (effectiveLastMinuteThreshold * 60);
+                    const effectiveLastMinuteThreshold = await mockApi.getEffectiveSetting(
+                        'lastMinuteThreshold',
+                        challenge.id.toString(),
+                    );
+                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
 
                     if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
                         earliestEntryTime = thresholdEntryTime;
@@ -178,10 +187,10 @@ describe('Autovote Threshold Scheduling', () => {
             // Mock setTimeout and clearTimeout
             const originalSetTimeout = global.setTimeout;
             const originalClearTimeout = global.clearTimeout;
-            
+
             const mockSetTimeout = jest.fn();
             const mockClearTimeout = jest.fn();
-            
+
             global.setTimeout = mockSetTimeout;
             global.clearTimeout = mockClearTimeout;
 
@@ -221,4 +230,4 @@ describe('Autovote Threshold Scheduling', () => {
             }
         });
     });
-}); 
+});

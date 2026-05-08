@@ -22,17 +22,17 @@ const isSourceCode = () => {
     if (electronApp && electronApp.isPackaged) {
         return false;
     }
-    
+
     // For CLI: check if we're running as a pkg binary
     if (process.pkg) {
         return false;
     }
-    
+
     // Check if __dirname contains .asar (Electron packaged but somehow not detected)
     if (__dirname.includes('.asar')) {
         return false;
     }
-    
+
     // If none of the above, assume we're running from source
     return true;
 };
@@ -67,14 +67,14 @@ const getSettingsPath = () => {
         // Ensure the directory exists
         if (!fs.existsSync(userDataPath)) {
             try {
-                fs.mkdirSync(userDataPath, {recursive: true});
+                fs.mkdirSync(userDataPath, { recursive: true });
                 logger.withCategory('ui').info(`Created userData directory: ${userDataPath}`, null);
             } catch (error) {
                 logger.withCategory('ui').error('Error creating userData directory:', error);
                 // Fallback to current directory if we can't create the proper path
                 userDataPath = path.join(process.cwd(), 'userData');
                 if (!fs.existsSync(userDataPath)) {
-                    fs.mkdirSync(userDataPath, {recursive: true});
+                    fs.mkdirSync(userDataPath, { recursive: true });
                 }
             }
         }
@@ -98,7 +98,7 @@ const getDefaultMockSetting = () => {
 const getDefaultSettings = () => {
     // Generate global defaults from schema
     const globalDefaults = {};
-    Object.keys(SETTINGS_SCHEMA).forEach(key => {
+    Object.keys(SETTINGS_SCHEMA).forEach((key) => {
         globalDefaults[key] = SETTINGS_SCHEMA[key].default;
     });
 
@@ -117,8 +117,8 @@ const getDefaultSettings = () => {
         checkFrequencyMax: 3, // Upper bound (minutes). Each cycle picks a random delay in [min, max].
         // Window position and size settings
         windowBounds: {
-            login: {x: undefined, y: undefined, width: 800, height: 960},
-            main: {x: undefined, y: undefined, width: 800, height: 960},
+            login: { x: undefined, y: undefined, width: 800, height: 960 },
+            main: { x: undefined, y: undefined, width: 800, height: 960 },
         },
         // Schema-based challenge settings
         challengeSettings: {
@@ -152,7 +152,6 @@ const validateSetting = (key, value, allSettings = null, challengeId = null) => 
     return true;
 };
 
-
 /**
  * Simple settings storage without caching
  *
@@ -183,7 +182,6 @@ const isAutovoteRunning = () => {
 
 // Load settings from the userData directory
 const loadSettings = () => {
-
     try {
         const settingsPath = getSettingsPath();
 
@@ -194,7 +192,7 @@ const loadSettings = () => {
             const settings = JSON.parse(settingsData);
 
             // Merge with default settings to ensure all properties exist
-            const mergedSettings = {...getDefaultSettings(), ...settings};
+            const mergedSettings = { ...getDefaultSettings(), ...settings };
 
             // Mock setting can be user-controlled, but default to environment if not set
             if (mergedSettings.mock === undefined) {
@@ -203,7 +201,7 @@ const loadSettings = () => {
 
             // Migration: Handle old setting names
             let migrationChanges = false;
-            
+
             // Migrate lastMinutes to lastMinuteThreshold
             if (mergedSettings.lastMinutes !== undefined && mergedSettings.lastMinuteThreshold === undefined) {
                 mergedSettings.lastMinuteThreshold = mergedSettings.lastMinutes;
@@ -211,23 +209,31 @@ const loadSettings = () => {
                 migrationChanges = true;
                 logger.withCategory('settings').info('Migrated lastMinutes to lastMinuteThreshold', null);
             }
-            
+
             // Migrate voteOnlyInLastThreshold to voteOnlyInLastMinute
-            if (mergedSettings.voteOnlyInLastThreshold !== undefined && mergedSettings.voteOnlyInLastMinute === undefined) {
+            if (
+                mergedSettings.voteOnlyInLastThreshold !== undefined &&
+                mergedSettings.voteOnlyInLastMinute === undefined
+            ) {
                 mergedSettings.voteOnlyInLastMinute = mergedSettings.voteOnlyInLastThreshold;
                 delete mergedSettings.voteOnlyInLastThreshold;
                 migrationChanges = true;
                 logger.withCategory('settings').info('Migrated voteOnlyInLastThreshold to voteOnlyInLastMinute', null);
             }
-            
+
             // Migrate lastThresholdCheckFrequency to lastMinuteCheckFrequency
-            if (mergedSettings.lastThresholdCheckFrequency !== undefined && mergedSettings.lastMinuteCheckFrequency === undefined) {
+            if (
+                mergedSettings.lastThresholdCheckFrequency !== undefined &&
+                mergedSettings.lastMinuteCheckFrequency === undefined
+            ) {
                 mergedSettings.lastMinuteCheckFrequency = mergedSettings.lastThresholdCheckFrequency;
                 delete mergedSettings.lastThresholdCheckFrequency;
                 migrationChanges = true;
-                logger.withCategory('settings').info('Migrated lastThresholdCheckFrequency to lastMinuteCheckFrequency', null);
+                logger
+                    .withCategory('settings')
+                    .info('Migrated lastThresholdCheckFrequency to lastMinuteCheckFrequency', null);
             }
-            
+
             // Migrate votingInterval to votingFrequency
             if (mergedSettings.votingInterval !== undefined && mergedSettings.votingFrequency === undefined) {
                 mergedSettings.votingFrequency = mergedSettings.votingInterval;
@@ -235,7 +241,7 @@ const loadSettings = () => {
                 migrationChanges = true;
                 logger.withCategory('settings').info('Migrated votingInterval to votingFrequency', null);
             }
-            
+
             // Migrate votingFrequency to voteFrequency
             if (mergedSettings.votingFrequency !== undefined && mergedSettings.voteFrequency === undefined) {
                 mergedSettings.voteFrequency = mergedSettings.votingFrequency;
@@ -243,7 +249,7 @@ const loadSettings = () => {
                 migrationChanges = true;
                 logger.withCategory('settings').info('Migrated votingFrequency to voteFrequency', null);
             }
-            
+
             // Migrate voteFrequency to checkFrequency (legacy → intermediate)
             if (mergedSettings.voteFrequency !== undefined && mergedSettings.checkFrequency === undefined) {
                 mergedSettings.checkFrequency = mergedSettings.voteFrequency;
@@ -253,9 +259,11 @@ const loadSettings = () => {
             }
 
             // Migrate checkFrequency to checkFrequencyMin/Max (single value → range)
-            if (mergedSettings.checkFrequency !== undefined &&
+            if (
+                mergedSettings.checkFrequency !== undefined &&
                 mergedSettings.checkFrequencyMin === undefined &&
-                mergedSettings.checkFrequencyMax === undefined) {
+                mergedSettings.checkFrequencyMax === undefined
+            ) {
                 mergedSettings.checkFrequencyMin = mergedSettings.checkFrequency;
                 mergedSettings.checkFrequencyMax = mergedSettings.checkFrequency;
                 delete mergedSettings.checkFrequency;
@@ -277,8 +285,7 @@ const loadSettings = () => {
             // band, so untouched defaults pass through unchanged.
             if (!mergedSettings._timeUnitMigratedV1) {
                 const TIME_KEYS = ['boostTime', 'turboTime'];
-                const looksMinuteEncoded = (v) =>
-                    typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1440;
+                const looksMinuteEncoded = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1440;
 
                 const globalDefaults = mergedSettings.challengeSettings?.globalDefaults || {};
                 for (const key of TIME_KEYS) {
@@ -286,10 +293,12 @@ const loadSettings = () => {
                         const before = globalDefaults[key];
                         globalDefaults[key] = before * 60;
                         migrationChanges = true;
-                        logger.withCategory('settings').info(
-                            `Migrated ${key} global default from minute-encoded ${before} to ${globalDefaults[key]}s`,
-                            null,
-                        );
+                        logger
+                            .withCategory('settings')
+                            .info(
+                                `Migrated ${key} global default from minute-encoded ${before} to ${globalDefaults[key]}s`,
+                                null,
+                            );
                     }
                 }
 
@@ -300,10 +309,12 @@ const loadSettings = () => {
                             const before = overrides[key];
                             overrides[key] = before * 60;
                             migrationChanges = true;
-                            logger.withCategory('settings').info(
-                                `Migrated ${key} override on challenge ${challengeId} from ${before} to ${overrides[key]}s`,
-                                null,
-                            );
+                            logger
+                                .withCategory('settings')
+                                .info(
+                                    `Migrated ${key} override on challenge ${challengeId} from ${before} to ${overrides[key]}s`,
+                                    null,
+                                );
                         }
                     }
                 }
@@ -327,7 +338,9 @@ const loadSettings = () => {
                         cleanupObsoleteSettings();
                         cleanupCompleted = true;
                     } else if (isAutovoteRunning()) {
-                        logger.withCategory('settings').debug('⏸️ Skipping obsolete settings cleanup - autovote is running');
+                        logger
+                            .withCategory('settings')
+                            .debug('⏸️ Skipping obsolete settings cleanup - autovote is running');
                     }
                 } catch (migrationError) {
                     logger.withCategory('settings').warning('Cleanup failed:', migrationError);
@@ -341,13 +354,19 @@ const loadSettings = () => {
 
         // If the file doesn't exist, return default settings
         const defaultSettings = getDefaultSettings();
-        logger.withCategory('settings').info(`No settings file found, loaded default settings with keys: ${Object.keys(defaultSettings).join(', ')}`);
+        logger
+            .withCategory('settings')
+            .info(
+                `No settings file found, loaded default settings with keys: ${Object.keys(defaultSettings).join(', ')}`,
+            );
         return defaultSettings;
     } catch (error) {
         logger.withCategory('settings').error('Error loading settings:', error);
         // Return default settings if there's an error
         const defaultSettings = getDefaultSettings();
-        logger.withCategory('settings').info(`Loaded default settings with keys: ${Object.keys(defaultSettings).join(', ')}`);
+        logger
+            .withCategory('settings')
+            .info(`Loaded default settings with keys: ${Object.keys(defaultSettings).join(', ')}`);
         return defaultSettings;
     }
 };
@@ -360,12 +379,12 @@ const saveSettings = (settings) => {
         // Ensure the directory exists
         const settingsDir = path.dirname(settingsPath);
         if (!fs.existsSync(settingsDir)) {
-            fs.mkdirSync(settingsDir, {recursive: true});
+            fs.mkdirSync(settingsDir, { recursive: true });
         }
 
         // Merge with existing settings
         const currentSettings = loadSettings();
-        const mergedSettings = {...currentSettings, ...settings};
+        const mergedSettings = { ...currentSettings, ...settings };
 
         // Write the settings to the file
         fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2), 'utf8');
@@ -403,10 +422,10 @@ const setSetting = (key, value) => {
 const isReloadRequired = (key) => {
     // Only these settings require a reload
     const reloadSettings = ['theme', 'language', 'timezone'];
-    
+
     // Check if it's a challenge-specific setting
     const isChallengeSetting = SETTINGS_SCHEMA[key] && SETTINGS_SCHEMA[key].perChallenge;
-    
+
     return reloadSettings.includes(key) || isChallengeSetting;
 };
 
@@ -438,7 +457,7 @@ const getWindowBounds = (windowType) => {
 const getEnvironmentInfo = () => {
     const isElectronPackaged = electronApp ? electronApp.isPackaged : false;
     const isBuiltApp = isElectronPackaged || !isSourceCode();
-    
+
     return {
         ...runtime.getEnvSnapshot(),
         defaultMock: getDefaultMockSetting(),
@@ -464,7 +483,10 @@ const getGlobalDefault = (settingKey) => {
     const settings = loadSettings();
     const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
 
-    if (challengeSettings.globalDefaults && Object.prototype.hasOwnProperty.call(challengeSettings.globalDefaults, settingKey)) {
+    if (
+        challengeSettings.globalDefaults &&
+        Object.prototype.hasOwnProperty.call(challengeSettings.globalDefaults, settingKey)
+    ) {
         return challengeSettings.globalDefaults[settingKey];
     }
 
@@ -519,8 +541,8 @@ const setGlobalDefault = (settingKey, value) => {
     // Get current global defaults for context validation
     const settings = loadSettings();
     const currentGlobalDefaults = settings.challengeSettings?.globalDefaults || {};
-    const contextSettings = {...currentGlobalDefaults, [settingKey]: value};
-    
+    const contextSettings = { ...currentGlobalDefaults, [settingKey]: value };
+
     // Get detailed validation error information
     const validationError = getValidationError(settingKey, value, contextSettings);
     if (validationError) {
@@ -550,9 +572,11 @@ const getChallengeOverride = (settingKey, challengeId) => {
     const settings = loadSettings();
     const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
 
-    if (challengeSettings.perChallenge &&
+    if (
+        challengeSettings.perChallenge &&
         challengeSettings.perChallenge[challengeId] &&
-        Object.prototype.hasOwnProperty.call(challengeSettings.perChallenge[challengeId], settingKey)) {
+        Object.prototype.hasOwnProperty.call(challengeSettings.perChallenge[challengeId], settingKey)
+    ) {
         return challengeSettings.perChallenge[challengeId][settingKey];
     }
 
@@ -595,8 +619,8 @@ const _applyChallengeOverride = (settings, settingKey, challengeId, value, batch
     const globalDefaults = settings.challengeSettings?.globalDefaults || {};
     const existingOverrides = settings.challengeSettings?.perChallenge?.[challengeId] || {};
     const contextSettings = batchOverrides
-        ? {...globalDefaults, ...existingOverrides, ...batchOverrides}
-        : {...globalDefaults, ...existingOverrides, [settingKey]: value};
+        ? { ...globalDefaults, ...existingOverrides, ...batchOverrides }
+        : { ...globalDefaults, ...existingOverrides, [settingKey]: value };
 
     if (!validateSetting(settingKey, value, contextSettings, challengeId)) {
         logger.withCategory('settings').error(`Invalid value for setting ${settingKey}:`, value);
@@ -665,10 +689,14 @@ const setChallengeOverrides = (challengeId, overrides) => {
     }
 
     if (savedOverrides.length > 0) {
-        logger.withCategory('general').debug(`💾 Saved overrides for challenge ${challengeId}:`, savedOverrides.join(', '));
+        logger
+            .withCategory('general')
+            .debug(`💾 Saved overrides for challenge ${challengeId}:`, savedOverrides.join(', '));
     }
     if (removedOverrides.length > 0) {
-        logger.withCategory('general').debug(`🗑️ Removed overrides for challenge ${challengeId}:`, removedOverrides.join(', '));
+        logger
+            .withCategory('general')
+            .debug(`🗑️ Removed overrides for challenge ${challengeId}:`, removedOverrides.join(', '));
     }
 
     return hasChanges ? saveSettings(settings) : true;
@@ -682,9 +710,11 @@ const setChallengeOverrides = (challengeId, overrides) => {
  */
 const removeChallengeOverride = (settingKey, challengeId) => {
     const settings = loadSettings();
-    if (!settings.challengeSettings ||
+    if (
+        !settings.challengeSettings ||
         !settings.challengeSettings.perChallenge ||
-        !settings.challengeSettings.perChallenge[challengeId]) {
+        !settings.challengeSettings.perChallenge[challengeId]
+    ) {
         return true; // Nothing to remove
     }
 
@@ -734,16 +764,17 @@ const cleanupStaleChallengeSetting = (activeChallengeIds) => {
     }
 
     const storedChallengeIds = Object.keys(settings.challengeSettings.perChallenge);
-    const staleChallengeIds = storedChallengeIds.filter(id => !activeChallengeIds.includes(id));
+    const staleChallengeIds = storedChallengeIds.filter((id) => !activeChallengeIds.includes(id));
 
     if (staleChallengeIds.length === 0) {
         return true; // Nothing to cleanup
     }
 
-    logger.withCategory('settings').debug(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
+    logger
+        .withCategory('settings')
+        .debug(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
 
-
-    staleChallengeIds.forEach(challengeId => {
+    staleChallengeIds.forEach((challengeId) => {
         delete settings.challengeSettings.perChallenge[challengeId];
     });
 
@@ -759,7 +790,6 @@ const cleanupObsoleteSettings = () => {
         const settings = loadSettings();
         let hasChanges = false;
 
-
         if (settings.boostConfig) {
             logger.withCategory('settings').debug('Removing legacy boostConfig', null);
             delete settings.boostConfig;
@@ -772,11 +802,13 @@ const cleanupObsoleteSettings = () => {
             if (settings.challengeSettings.globalDefaults) {
                 const validSchemaKeys = Object.keys(SETTINGS_SCHEMA);
                 const globalDefaultKeys = Object.keys(settings.challengeSettings.globalDefaults);
-                const invalidGlobalKeys = globalDefaultKeys.filter(key => !validSchemaKeys.includes(key));
+                const invalidGlobalKeys = globalDefaultKeys.filter((key) => !validSchemaKeys.includes(key));
 
                 if (invalidGlobalKeys.length > 0) {
-                    logger.withCategory('settings').debug(`Removing invalid global default keys: ${invalidGlobalKeys.join(', ')}`);
-                    invalidGlobalKeys.forEach(key => {
+                    logger
+                        .withCategory('settings')
+                        .debug(`Removing invalid global default keys: ${invalidGlobalKeys.join(', ')}`);
+                    invalidGlobalKeys.forEach((key) => {
                         delete settings.challengeSettings.globalDefaults[key];
                         hasChanges = true;
                     });
@@ -790,16 +822,17 @@ const cleanupObsoleteSettings = () => {
 
                 for (const challengeId of challengeIds) {
                     const challengeOverrides = settings.challengeSettings.perChallenge[challengeId];
-                    const invalidKeys = Object.keys(challengeOverrides).filter(key => !validSchemaKeys.includes(key));
+                    const invalidKeys = Object.keys(challengeOverrides).filter((key) => !validSchemaKeys.includes(key));
 
                     if (invalidKeys.length > 0) {
-                        logger.withCategory('settings').debug(`Removing invalid override keys for challenge ${challengeId}:`, invalidKeys);
-                        invalidKeys.forEach(key => {
+                        logger
+                            .withCategory('settings')
+                            .debug(`Removing invalid override keys for challenge ${challengeId}:`, invalidKeys);
+                        invalidKeys.forEach((key) => {
                             delete challengeOverrides[key];
                             hasChanges = true;
                         });
                     }
-
 
                     if (Object.keys(challengeOverrides).length === 0) {
                         delete settings.challengeSettings.perChallenge[challengeId];
@@ -814,7 +847,6 @@ const cleanupObsoleteSettings = () => {
             logger.withCategory('settings').debug('Settings cleanup completed - saving cleaned settings');
             saveSettings(settings);
         }
-
     } catch (error) {
         logger.withCategory('settings').error('Error during settings cleanup:', error);
     }
@@ -832,7 +864,7 @@ const cleanupObsoleteSettings = () => {
 const resetSetting = (key) => {
     try {
         const defaultSettings = getDefaultSettings();
-        
+
         if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
             logger.withCategory('settings').error(`Invalid setting key: ${key}`, null);
             return false;
@@ -874,7 +906,7 @@ const resetAllGlobalDefaults = () => {
 
         // Reset all global defaults to schema defaults
         const globalDefaults = {};
-        Object.keys(SETTINGS_SCHEMA).forEach(key => {
+        Object.keys(SETTINGS_SCHEMA).forEach((key) => {
             globalDefaults[key] = SETTINGS_SCHEMA[key].default;
         });
 
@@ -894,15 +926,15 @@ const resetAllSettings = () => {
     try {
         const currentSettings = loadSettings();
         const defaultSettings = getDefaultSettings();
-        
+
         // Settings to preserve (only essential user data that shouldn't be reset)
         const preserveKeys = ['token', 'mock', 'apiHeaders'];
-        
+
         // Start with defaults
-        const newSettings = {...defaultSettings};
-        
+        const newSettings = { ...defaultSettings };
+
         // Preserve specified user data
-        preserveKeys.forEach(key => {
+        preserveKeys.forEach((key) => {
             if (currentSettings[key] !== undefined) {
                 newSettings[key] = currentSettings[key];
             }
@@ -910,7 +942,7 @@ const resetAllSettings = () => {
 
         // Save the reset settings
         const saveResult = saveSettings(newSettings);
-        
+
         // Run cleanup to remove any obsolete settings
         if (saveResult) {
             cleanupObsoleteSettings();
@@ -932,14 +964,14 @@ const isSettingModified = (key) => {
     try {
         const currentSettings = loadSettings();
         const defaultSettings = getDefaultSettings();
-        
+
         if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
             return false;
         }
 
         const currentValue = currentSettings[key];
         const defaultValue = defaultSettings[key];
-        
+
         return JSON.stringify(currentValue) !== JSON.stringify(defaultValue);
     } catch (error) {
         logger.withCategory('settings').error(`Error checking if setting ${key} is modified:`, error);
@@ -960,7 +992,7 @@ const isGlobalDefaultModified = (settingKey) => {
 
         const currentValue = getGlobalDefault(settingKey);
         const schemaDefault = SETTINGS_SCHEMA[settingKey].default;
-        
+
         return JSON.stringify(currentValue) !== JSON.stringify(schemaDefault);
     } catch (error) {
         logger.withCategory('settings').error(`Error checking if global default ${settingKey} is modified:`, error);
@@ -1044,16 +1076,18 @@ const SETTINGS_SCHEMA = {
         contextValidation: (value, allSettings) => {
             const exposureValue = allSettings.exposure;
             // If exposure is not set or invalid, use the exposure default for comparison
-            const effectiveExposure = (typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100) 
-                ? exposureValue 
-                : getSchemaDefault('exposure');
+            const effectiveExposure =
+                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
+                    ? exposureValue
+                    : getSchemaDefault('exposure');
             return value <= effectiveExposure;
         },
         getContextError: (value, allSettings) => {
             const exposureValue = allSettings.exposure;
-            const effectiveExposure = (typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100) 
-                ? exposureValue 
-                : getSchemaDefault('exposure');
+            const effectiveExposure =
+                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
+                    ? exposureValue
+                    : getSchemaDefault('exposure');
             // Return a string that the UI will translate
             return `VALIDATION_LESS_OR_EQUAL|app.exposure|${effectiveExposure}`;
         },
@@ -1155,10 +1189,10 @@ module.exports = {
     getUserDataPath,
     saveWindowBounds,
     getWindowBounds,
-    
+
     // Environment detection functions
     getEnvironmentInfo,
-    
+
     // Challenge-specific settings
     getGlobalDefault,
     setGlobalDefault,
@@ -1167,25 +1201,25 @@ module.exports = {
     setChallengeOverrides,
     removeChallengeOverride,
     getEffectiveSetting,
-    
+
     // Cleanup functions
     cleanupStaleChallengeSetting,
     cleanupObsoleteSettings,
-    
+
     // Reset functions
     resetSetting,
     resetGlobalDefault,
     resetAllGlobalDefaults,
     resetAllSettings,
-    
+
     // Validation functions
     getValidationError,
-    
+
     // Utility functions
     getSettingsSchema,
     isSettingModified,
     isGlobalDefaultModified,
-    
+
     // Schema
     SETTINGS_SCHEMA,
 };

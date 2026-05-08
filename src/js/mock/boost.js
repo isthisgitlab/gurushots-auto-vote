@@ -215,4 +215,4 @@ module.exports = {
     mockBoostHistory,
     mockTurboData,
     mockTurboHistory,
-}; 
+};

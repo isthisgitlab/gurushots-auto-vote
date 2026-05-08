@@ -58,15 +58,7 @@ const LANGUAGE_PREFERENCES = [
 ];
 
 // Alamofire versions that can be randomized
-const ALAMOFIRE_VERSIONS = [
-    '5.10.2',
-    '5.10.1',
-    '5.10.0',
-    '5.9.1',
-    '5.9.0',
-    '5.8.1',
-    '5.8.0',
-];
+const ALAMOFIRE_VERSIONS = ['5.10.2', '5.10.1', '5.10.0', '5.9.1', '5.9.0', '5.8.1', '5.8.0'];
 
 /**
  * Gets a random item from an array
@@ -84,7 +76,8 @@ const initializeHeaders = () => {
     let savedHeaders = settings.getSetting('apiHeaders');
 
     // Check if headers are complete (should have at least 10 fields)
-    const isHeadersComplete = savedHeaders &&
+    const isHeadersComplete =
+        savedHeaders &&
         Object.keys(savedHeaders).length >= 10 &&
         savedHeaders.host &&
         savedHeaders['x-model'] &&
@@ -98,8 +91,8 @@ const initializeHeaders = () => {
         const alamofireVersion = getRandomItem(ALAMOFIRE_VERSIONS);
 
         savedHeaders = {
-            'host': 'api.gurushots.com',
-            'accept': '*/*',
+            host: 'api.gurushots.com',
+            accept: '*/*',
             'x-device': 'iPhone',
             'x-requested-with': 'XMLHttpRequest',
             'x-model': iphoneModel,
@@ -108,9 +101,9 @@ const initializeHeaders = () => {
             'x-env': 'IOS',
             'user-agent': `GuruShotsIOS/${CURRENT_APP_VERSION} (com.gurushots.app; build:${CURRENT_BUILD_NUMBER}; iOS ${iosVersion}) Alamofire/${alamofireVersion}`,
             'x-app-version': CURRENT_APP_VERSION,
-            'connection': 'keep-alive',
+            connection: 'keep-alive',
             'x-brand': 'Apple',
-            '_version': CURRENT_APP_VERSION, // Track version for updates
+            _version: CURRENT_APP_VERSION, // Track version for updates
         };
 
         // Save headers to settings
@@ -125,7 +118,7 @@ const initializeHeaders = () => {
             ...savedHeaders,
             'user-agent': `GuruShotsIOS/${CURRENT_APP_VERSION} (com.gurushots.app; build:${CURRENT_BUILD_NUMBER}; iOS ${iosVersion}) Alamofire/${alamofireVersion}`,
             'x-app-version': CURRENT_APP_VERSION,
-            '_version': CURRENT_APP_VERSION,
+            _version: CURRENT_APP_VERSION,
         };
 
         // Save updated headers
@@ -160,4 +153,4 @@ module.exports = {
     ALAMOFIRE_VERSIONS,
     CURRENT_APP_VERSION,
     CURRENT_BUILD_NUMBER,
-}; 
+};

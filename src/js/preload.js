@@ -4,9 +4,7 @@
     if (C?.prototype?.register) {
         Object.defineProperty(C.prototype, 'register', {
             value: function () {
-                return Promise.reject(
-                    new DOMException('Service workers disabled by Electron host', 'NotAllowedError'),
-                );
+                return Promise.reject(new DOMException('Service workers disabled by Electron host', 'NotAllowedError'));
             },
             writable: false,
             configurable: false,
@@ -14,124 +12,132 @@
     }
 })();
 
-const {contextBridge, ipcRenderer} = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
-contextBridge.exposeInMainWorld(
-    'api', {
-        // Send methods
-        login: () => ipcRenderer.send('login-success'),
-        logout: () => ipcRenderer.send('logout'),
+contextBridge.exposeInMainWorld('api', {
+    // Send methods
+    login: () => ipcRenderer.send('login-success'),
+    logout: () => ipcRenderer.send('logout'),
 
-        // Settings methods
-        getSettings: () => ipcRenderer.invoke('get-settings'),
-        getSetting: (key) => ipcRenderer.invoke('get-setting', key),
-        setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
-        saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
-        getEnvironmentInfo: () => ipcRenderer.invoke('get-environment-info'),
+    // Settings methods
+    getSettings: () => ipcRenderer.invoke('get-settings'),
+    getSetting: (key) => ipcRenderer.invoke('get-setting', key),
+    setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
+    saveSettings: (settings) => ipcRenderer.invoke('save-settings', settings),
+    getEnvironmentInfo: () => ipcRenderer.invoke('get-environment-info'),
 
-        // API methods
-        guiVote: () => ipcRenderer.invoke('gui-vote'),
-        getActiveChallenges: (token) => ipcRenderer.invoke('get-active-challenges', token),
-        authenticate: (username, password, isMock) => {
-            // Authentication call - logging handled by main process
-            return ipcRenderer.invoke('authenticate', username, password, isMock);
-        },
-        runVotingCycle: () => ipcRenderer.invoke('run-voting-cycle'),
-        voteOnChallenge: (challengeId, challengeTitle) => ipcRenderer.invoke('vote-on-challenge', challengeId, challengeTitle),
-        voteOnChallengeManual: (challengeId, challengeTitle) => ipcRenderer.invoke('vote-on-challenge-manual', challengeId, challengeTitle),
-        voteAllChallengesManual: () => ipcRenderer.invoke('vote-all-challenges-manual'),
-        refreshApi: () => ipcRenderer.invoke('refresh-api'),
-
-        // Logger methods
-        logDebug: (message, data) => ipcRenderer.invoke('log-debug', message, data),
-        logError: (message, data) => ipcRenderer.invoke('log-error', message, data),
-        logWarning: (message, data) => ipcRenderer.invoke('log-warning', message, data),
-        logSuccess: (message, data) => ipcRenderer.invoke('log-success', message, data),
-        logApi: (message, data) => ipcRenderer.invoke('log-api', message, data),
-        getLogFile: () => ipcRenderer.invoke('get-log-file'),
-        getErrorLogFile: () => ipcRenderer.invoke('get-error-log-file'),
-        getApiLogFile: () => ipcRenderer.invoke('get-api-log-file'),
-
-        // Boost configuration methods
-        getBoostThreshold: (challengeId) => ipcRenderer.invoke('get-boost-threshold', challengeId),
-        setBoostThreshold: (challengeId, threshold) => ipcRenderer.invoke('set-boost-threshold', challengeId, threshold),
-        setDefaultBoostThreshold: (threshold) => ipcRenderer.invoke('set-default-boost-threshold', threshold),
-
-        // New schema-based settings methods
-        getGlobalDefault: (settingKey) => ipcRenderer.invoke('get-global-default', settingKey),
-        setGlobalDefault: (settingKey, value) => ipcRenderer.invoke('set-global-default', settingKey, value),
-        getChallengeOverride: (settingKey, challengeId) => ipcRenderer.invoke('get-challenge-override', settingKey, challengeId),
-        setChallengeOverride: (settingKey, challengeId, value) => ipcRenderer.invoke('set-challenge-override', settingKey, challengeId, value),
-        setChallengeOverrides: (challengeId, overrides) => ipcRenderer.invoke('set-challenge-overrides', challengeId, overrides),
-        removeChallengeOverride: (settingKey, challengeId) => ipcRenderer.invoke('remove-challenge-override', settingKey, challengeId),
-        getEffectiveSetting: (settingKey, challengeId) => ipcRenderer.invoke('get-effective-setting', settingKey, challengeId),
-        cleanupStaleChallengeSetting: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-challenge-setting', activeChallengeIds),
-        cleanupStaleMetadata: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-metadata', activeChallengeIds),
-        cleanupObsoleteSettings: () => ipcRenderer.invoke('cleanup-obsolete-settings'),
-        getSettingsSchema: () => ipcRenderer.invoke('get-settings-schema'),
-        getValidationError: (settingKey, value, allSettings) => ipcRenderer.invoke('get-validation-error', settingKey, value, allSettings),
-
-        // Reset methods
-        resetSetting: (key) => ipcRenderer.invoke('reset-setting', key),
-        resetGlobalDefault: (settingKey) => ipcRenderer.invoke('reset-global-default', settingKey),
-        resetAllGlobalDefaults: () => ipcRenderer.invoke('reset-all-global-defaults'),
-        resetAllSettings: () => ipcRenderer.invoke('reset-all-settings'),
-        isSettingModified: (key) => ipcRenderer.invoke('is-setting-modified', key),
-        isGlobalDefaultModified: (settingKey) => ipcRenderer.invoke('is-global-default-modified', settingKey),
-
-        // External URL methods
-        openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
-
-        // Voting control methods
-        shouldCancelVoting: () => ipcRenderer.invoke('should-cancel-voting'),
-        setCancelVoting: (shouldCancel) => ipcRenderer.invoke('set-cancel-voting', shouldCancel),
-
-        // Boost methods
-        applyBoostToEntry: (challengeId, imageId) => ipcRenderer.invoke('apply-boost-to-entry', challengeId, imageId),
-        applyBoost: (challengeId, imageId) => ipcRenderer.invoke('apply-boost-to-entry', challengeId, imageId),
-
-        // Turbo methods
-        applyTurbo: (challengeId, imageId) => ipcRenderer.invoke('apply-turbo-to-entry', challengeId, imageId),
-        playAutoTurbo: (challengeId, challengeTitle) => ipcRenderer.invoke('play-auto-turbo', challengeId, challengeTitle),
-
-        // Auto-fill methods
-        fillChallengeNow: (challengeId, mode) => ipcRenderer.invoke('fill-challenge-now', challengeId, mode),
-
-        // Window methods
-        reloadWindow: () => ipcRenderer.invoke('reload-window'),
-
-        // AutoUpdater methods
-        checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-        downloadUpdate: () => ipcRenderer.invoke('download-update'),
-        installUpdate: () => ipcRenderer.invoke('install-update'),
-        skipUpdateVersion: () => ipcRenderer.invoke('skip-update-version'),
-        clearSkipVersion: () => ipcRenderer.invoke('clear-skip-version'),
-        getReleasesUrl: () => ipcRenderer.invoke('get-releases-url'),
-        canAutoUpdate: () => ipcRenderer.invoke('can-auto-update'),
-
-        // AutoUpdater event listeners
-        onUpdateChecking: (callback) => ipcRenderer.on('update-checking', () => callback()),
-        onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, updateInfo) => callback(updateInfo)),
-        onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', (event, info) => callback(info)),
-        onDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', (event, progress) => callback(progress)),
-        onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, updateInfo) => callback(updateInfo)),
-        onUpdateError: (callback) => ipcRenderer.on('update-error', (event, error) => callback(error)),
-
-        // Menu methods
-        refreshMenu: () => ipcRenderer.invoke('refresh-menu'),
-
-        // Log streaming methods
-        startLogStream: () => ipcRenderer.invoke('start-log-stream'),
-        stopLogStream: () => ipcRenderer.invoke('stop-log-stream'),
-        onLogMessage: (callback) => ipcRenderer.on('log-message', (event, logData) => callback(logData)),
-        
-        // Settings change events
-        onSettingsChanged: (callback) => {
-            const handler = (_event, settings) => callback(settings);
-            ipcRenderer.on('settings-changed', handler);
-            return () => ipcRenderer.removeListener('settings-changed', handler);
-        },
+    // API methods
+    guiVote: () => ipcRenderer.invoke('gui-vote'),
+    getActiveChallenges: (token) => ipcRenderer.invoke('get-active-challenges', token),
+    authenticate: (username, password, isMock) => {
+        // Authentication call - logging handled by main process
+        return ipcRenderer.invoke('authenticate', username, password, isMock);
     },
-);
+    runVotingCycle: () => ipcRenderer.invoke('run-voting-cycle'),
+    voteOnChallenge: (challengeId, challengeTitle) =>
+        ipcRenderer.invoke('vote-on-challenge', challengeId, challengeTitle),
+    voteOnChallengeManual: (challengeId, challengeTitle) =>
+        ipcRenderer.invoke('vote-on-challenge-manual', challengeId, challengeTitle),
+    voteAllChallengesManual: () => ipcRenderer.invoke('vote-all-challenges-manual'),
+    refreshApi: () => ipcRenderer.invoke('refresh-api'),
+
+    // Logger methods
+    logDebug: (message, data) => ipcRenderer.invoke('log-debug', message, data),
+    logError: (message, data) => ipcRenderer.invoke('log-error', message, data),
+    logWarning: (message, data) => ipcRenderer.invoke('log-warning', message, data),
+    logSuccess: (message, data) => ipcRenderer.invoke('log-success', message, data),
+    logApi: (message, data) => ipcRenderer.invoke('log-api', message, data),
+    getLogFile: () => ipcRenderer.invoke('get-log-file'),
+    getErrorLogFile: () => ipcRenderer.invoke('get-error-log-file'),
+    getApiLogFile: () => ipcRenderer.invoke('get-api-log-file'),
+
+    // Boost configuration methods
+    getBoostThreshold: (challengeId) => ipcRenderer.invoke('get-boost-threshold', challengeId),
+    setBoostThreshold: (challengeId, threshold) => ipcRenderer.invoke('set-boost-threshold', challengeId, threshold),
+    setDefaultBoostThreshold: (threshold) => ipcRenderer.invoke('set-default-boost-threshold', threshold),
+
+    // New schema-based settings methods
+    getGlobalDefault: (settingKey) => ipcRenderer.invoke('get-global-default', settingKey),
+    setGlobalDefault: (settingKey, value) => ipcRenderer.invoke('set-global-default', settingKey, value),
+    getChallengeOverride: (settingKey, challengeId) =>
+        ipcRenderer.invoke('get-challenge-override', settingKey, challengeId),
+    setChallengeOverride: (settingKey, challengeId, value) =>
+        ipcRenderer.invoke('set-challenge-override', settingKey, challengeId, value),
+    setChallengeOverrides: (challengeId, overrides) =>
+        ipcRenderer.invoke('set-challenge-overrides', challengeId, overrides),
+    removeChallengeOverride: (settingKey, challengeId) =>
+        ipcRenderer.invoke('remove-challenge-override', settingKey, challengeId),
+    getEffectiveSetting: (settingKey, challengeId) =>
+        ipcRenderer.invoke('get-effective-setting', settingKey, challengeId),
+    cleanupStaleChallengeSetting: (activeChallengeIds) =>
+        ipcRenderer.invoke('cleanup-stale-challenge-setting', activeChallengeIds),
+    cleanupStaleMetadata: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-metadata', activeChallengeIds),
+    cleanupObsoleteSettings: () => ipcRenderer.invoke('cleanup-obsolete-settings'),
+    getSettingsSchema: () => ipcRenderer.invoke('get-settings-schema'),
+    getValidationError: (settingKey, value, allSettings) =>
+        ipcRenderer.invoke('get-validation-error', settingKey, value, allSettings),
+
+    // Reset methods
+    resetSetting: (key) => ipcRenderer.invoke('reset-setting', key),
+    resetGlobalDefault: (settingKey) => ipcRenderer.invoke('reset-global-default', settingKey),
+    resetAllGlobalDefaults: () => ipcRenderer.invoke('reset-all-global-defaults'),
+    resetAllSettings: () => ipcRenderer.invoke('reset-all-settings'),
+    isSettingModified: (key) => ipcRenderer.invoke('is-setting-modified', key),
+    isGlobalDefaultModified: (settingKey) => ipcRenderer.invoke('is-global-default-modified', settingKey),
+
+    // External URL methods
+    openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
+
+    // Voting control methods
+    shouldCancelVoting: () => ipcRenderer.invoke('should-cancel-voting'),
+    setCancelVoting: (shouldCancel) => ipcRenderer.invoke('set-cancel-voting', shouldCancel),
+
+    // Boost methods
+    applyBoostToEntry: (challengeId, imageId) => ipcRenderer.invoke('apply-boost-to-entry', challengeId, imageId),
+    applyBoost: (challengeId, imageId) => ipcRenderer.invoke('apply-boost-to-entry', challengeId, imageId),
+
+    // Turbo methods
+    applyTurbo: (challengeId, imageId) => ipcRenderer.invoke('apply-turbo-to-entry', challengeId, imageId),
+    playAutoTurbo: (challengeId, challengeTitle) => ipcRenderer.invoke('play-auto-turbo', challengeId, challengeTitle),
+
+    // Auto-fill methods
+    fillChallengeNow: (challengeId, mode) => ipcRenderer.invoke('fill-challenge-now', challengeId, mode),
+
+    // Window methods
+    reloadWindow: () => ipcRenderer.invoke('reload-window'),
+
+    // AutoUpdater methods
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    downloadUpdate: () => ipcRenderer.invoke('download-update'),
+    installUpdate: () => ipcRenderer.invoke('install-update'),
+    skipUpdateVersion: () => ipcRenderer.invoke('skip-update-version'),
+    clearSkipVersion: () => ipcRenderer.invoke('clear-skip-version'),
+    getReleasesUrl: () => ipcRenderer.invoke('get-releases-url'),
+    canAutoUpdate: () => ipcRenderer.invoke('can-auto-update'),
+
+    // AutoUpdater event listeners
+    onUpdateChecking: (callback) => ipcRenderer.on('update-checking', () => callback()),
+    onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, updateInfo) => callback(updateInfo)),
+    onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', (event, info) => callback(info)),
+    onDownloadProgress: (callback) =>
+        ipcRenderer.on('update-download-progress', (event, progress) => callback(progress)),
+    onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, updateInfo) => callback(updateInfo)),
+    onUpdateError: (callback) => ipcRenderer.on('update-error', (event, error) => callback(error)),
+
+    // Menu methods
+    refreshMenu: () => ipcRenderer.invoke('refresh-menu'),
+
+    // Log streaming methods
+    startLogStream: () => ipcRenderer.invoke('start-log-stream'),
+    stopLogStream: () => ipcRenderer.invoke('stop-log-stream'),
+    onLogMessage: (callback) => ipcRenderer.on('log-message', (event, logData) => callback(logData)),
+
+    // Settings change events
+    onSettingsChanged: (callback) => {
+        const handler = (_event, settings) => callback(settings);
+        ipcRenderer.on('settings-changed', handler);
+        return () => ipcRenderer.removeListener('settings-changed', handler);
+    },
+});

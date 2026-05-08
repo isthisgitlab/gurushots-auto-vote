@@ -4,7 +4,7 @@
  * Tests the boost application functionality.
  */
 
-const {applyBoost, applyBoostToEntry} = require('../../src/js/api/boost');
+const { applyBoost, applyBoostToEntry } = require('../../src/js/api/boost');
 
 // Mock the api-client module
 jest.mock('../../src/js/api/api-client', () => ({
@@ -12,9 +12,9 @@ jest.mock('../../src/js/api/api-client', () => ({
     createCommonHeaders: jest.fn((token) => ({
         'x-token': token || 'mock-token',
         'user-agent': 'GuruShots/1.0 (iPhone; iOS 16.0; en_US)',
-        'accept': 'application/json',
+        accept: 'application/json',
     })),
-    FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8'
+    FORM_CONTENT_TYPE: 'application/x-www-form-urlencoded; charset=utf-8',
 }));
 
 // Mock the logger module
@@ -41,7 +41,7 @@ jest.spyOn(console, 'error').mockImplementation();
 
 describe('boost', () => {
     const mockToken = 'test-token-123';
-    const {makePostRequest, createCommonHeaders} = require('../../src/js/api/api-client');
+    const { makePostRequest, createCommonHeaders } = require('../../src/js/api/api-client');
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -54,16 +54,16 @@ describe('boost', () => {
             member: {
                 ranking: {
                     entries: [
-                        {id: 'entry1', turbo: true},
-                        {id: 'entry2', turbo: false},
-                        {id: 'entry3', turbo: false}
-                    ]
-                }
-            }
+                        { id: 'entry1', turbo: true },
+                        { id: 'entry2', turbo: false },
+                        { id: 'entry3', turbo: false },
+                    ],
+                },
+            },
         };
 
         test('should apply boost to first non-turboed entry successfully', async () => {
-            const mockResponse = {success: true, boosted_entry: 'entry2'};
+            const mockResponse = { success: true, boosted_entry: 'entry2' };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             const result = await applyBoost(mockChallenge, mockToken);
@@ -73,9 +73,9 @@ describe('boost', () => {
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.objectContaining({
                     'x-token': mockToken,
-                    'content-type': 'application/x-www-form-urlencoded; charset=utf-8'
+                    'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
                 }),
-                'c_id=12345&image_id=entry2'
+                'c_id=12345&image_id=entry2',
             );
 
             expect(result).toEqual(mockResponse);
@@ -88,12 +88,12 @@ describe('boost', () => {
                 member: {
                     ranking: {
                         entries: [
-                            {id: 'entry1', turbo: true},
-                            {id: 'entry2', turbo: true},
-                            {id: 'entry3', turbo: true}
-                        ]
-                    }
-                }
+                            { id: 'entry1', turbo: true },
+                            { id: 'entry2', turbo: true },
+                            { id: 'entry3', turbo: true },
+                        ],
+                    },
+                },
             };
 
             const result = await applyBoost(challengeAllTurboed, mockToken);
@@ -108,9 +108,9 @@ describe('boost', () => {
                 ...mockChallenge,
                 member: {
                     ranking: {
-                        entries: []
-                    }
-                }
+                        entries: [],
+                    },
+                },
             };
 
             const result = await applyBoost(challengeEmptyEntries, mockToken);
@@ -135,16 +135,16 @@ describe('boost', () => {
                 member: {
                     ranking: {
                         entries: [
-                            {id: 'entry1', turbo: true},
-                            {id: 'entry2', turbo: true},
-                            {id: 'entry3', turbo: false},
-                            {id: 'entry4', turbo: false}
-                        ]
-                    }
-                }
+                            { id: 'entry1', turbo: true },
+                            { id: 'entry2', turbo: true },
+                            { id: 'entry3', turbo: false },
+                            { id: 'entry4', turbo: false },
+                        ],
+                    },
+                },
             };
 
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             await applyBoost(challengeMixedEntries, mockToken);
@@ -152,7 +152,7 @@ describe('boost', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
-                'c_id=12345&image_id=entry3'
+                'c_id=12345&image_id=entry3',
             );
         });
 
@@ -161,14 +161,12 @@ describe('boost', () => {
                 ...mockChallenge,
                 member: {
                     ranking: {
-                        entries: [
-                            {id: 'entry1', turbo: false}
-                        ]
-                    }
-                }
+                        entries: [{ id: 'entry1', turbo: false }],
+                    },
+                },
             };
 
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             await applyBoost(challengeExplicitFalse, mockToken);
@@ -176,7 +174,7 @@ describe('boost', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
-                'c_id=12345&image_id=entry1'
+                'c_id=12345&image_id=entry1',
             );
         });
 
@@ -186,13 +184,13 @@ describe('boost', () => {
                 member: {
                     ranking: {
                         entries: [
-                            {id: 'entry1'} // No turbo property
-                        ]
-                    }
-                }
+                            { id: 'entry1' }, // No turbo property
+                        ],
+                    },
+                },
             };
 
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             await applyBoost(challengeNoTurboProperty, mockToken);
@@ -200,14 +198,14 @@ describe('boost', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
-                'c_id=12345&image_id=entry1'
+                'c_id=12345&image_id=entry1',
             );
         });
     });
 
     describe('applyBoostToEntry', () => {
         test('should apply boost to specific entry successfully', async () => {
-            const mockResponse = {success: true, boosted_entry: 'specific-image-123'};
+            const mockResponse = { success: true, boosted_entry: 'specific-image-123' };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             const result = await applyBoostToEntry('67890', 'specific-image-123', mockToken);
@@ -217,9 +215,9 @@ describe('boost', () => {
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.objectContaining({
                     'x-token': mockToken,
-                    'content-type': 'application/x-www-form-urlencoded; charset=utf-8'
+                    'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
                 }),
-                'c_id=67890&image_id=specific-image-123'
+                'c_id=67890&image_id=specific-image-123',
             );
 
             expect(result).toEqual(mockResponse);
@@ -236,7 +234,7 @@ describe('boost', () => {
         });
 
         test('should handle numeric challenge ID', async () => {
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             await applyBoostToEntry(12345, 'image-456', mockToken);
@@ -244,12 +242,12 @@ describe('boost', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
-                'c_id=12345&image_id=image-456'
+                'c_id=12345&image_id=image-456',
             );
         });
 
         test('should handle special characters in IDs', async () => {
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             await applyBoostToEntry('challenge&special', 'image=special', mockToken);
@@ -257,12 +255,12 @@ describe('boost', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
-                'c_id=challenge&special&image_id=image=special'
+                'c_id=challenge&special&image_id=image=special',
             );
         });
 
         test('should use same endpoint as applyBoost', async () => {
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             await applyBoostToEntry('test-challenge', 'test-image', mockToken);
@@ -270,12 +268,12 @@ describe('boost', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
-                expect.any(String)
+                expect.any(String),
             );
         });
 
         test('should include correct headers', async () => {
-            const mockResponse = {success: true};
+            const mockResponse = { success: true };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             await applyBoostToEntry('test-challenge', 'test-image', mockToken);
@@ -284,9 +282,9 @@ describe('boost', () => {
                 expect.any(String),
                 expect.objectContaining({
                     'x-token': mockToken,
-                    'content-type': 'application/x-www-form-urlencoded; charset=utf-8'
+                    'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
                 }),
-                expect.any(String)
+                expect.any(String),
             );
         });
     });

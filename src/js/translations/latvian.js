@@ -8,9 +8,9 @@
         // Browser globals
         root.latvianTranslations = factory();
     }
-}(typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : this, function () {
+})(typeof self !== 'undefined' ? self : typeof window !== 'undefined' ? window : this, function () {
     return {
-    // Common/shared translations
+        // Common/shared translations
         common: {
             dark: 'Tumšs',
             global: 'Globāls:',
@@ -60,7 +60,8 @@
             aboutAuthor: 'Autors',
             aboutElectron: 'Electron',
             aboutNode: 'Node.js',
-            aboutDescription: 'GuruShots Auto Vote - Electron lietojumprogramma automātiskai balsošanai GuruShots izaicinājumos ar apvienotu GUI un CLI saskarni (atbalsta gan īstos, gan testa režīmus)',
+            aboutDescription:
+                'GuruShots Auto Vote - Electron lietojumprogramma automātiskai balsošanai GuruShots izaicinājumos ar apvienotu GUI un CLI saskarni (atbalsta gan īstos, gan testa režīmus)',
             checkForUpdates: 'Pārbaudīt atjauninājumus...',
             noUpdates: 'Nav atjauninājumu',
             noUpdatesMessage: 'Jūs izmantojat jaunāko versiju.',
@@ -78,7 +79,8 @@
             password: 'Parole',
             passwordPlaceholder: 'Ievadiet savu paroli',
             passwordRequired: 'Parole ir obligāta',
-            productionModeInfo: 'Produkcijas režīms: Tiek izmantots īstais GuruShots API. Nepieciešami derīgi pieejas dati.',
+            productionModeInfo:
+                'Produkcijas režīms: Tiek izmantots īstais GuruShots API. Nepieciešami derīgi pieejas dati.',
             stayLoggedIn: 'Saglabāt pieteikšanos',
             title: 'Pieteikšanās - GuruShots Auto Vote',
             username: 'Lietotājvārds',
@@ -109,7 +111,8 @@
             turboTime: 'Turbo pielietošanas laiks',
             turboTimeDesc: 'Pielieto Turbo, kad līdz izaicinājuma beigām ir atlicis šis laiks',
             turboImageIndex: 'Turbo foto',
-            turboImageIndexDesc: 'Kuram no taviem foto (sākot no 1) pielietot Turbo. Izmanto 0, lai vienmēr lietotu pēdējo.',
+            turboImageIndexDesc:
+                'Kuram no taviem foto (sākot no 1) pielietot Turbo. Izmanto 0, lai vienmēr lietotu pēdējo.',
             turboApplyWhenBoostActive: 'Pielietot Turbo Boost laikā',
             turboApplyWhenBoostActiveDesc: 'Ja izslēgts, nepielieto Turbo, kamēr šim izaicinājumam ir pieejams Boost',
             playAutoTurbo: 'Spēlēt Turbo mini-spēli, lai iegūtu Turbo',
@@ -118,9 +121,11 @@
             applyTurboToThisEntry: 'Pielietot tavu Turbo šim foto',
             applyBoostToThisEntry: 'Pielietot tavu Boost šim foto',
             autoFill: 'Aizpildīt trūkstošos foto',
-            autoFillDesc: 'Iesniegt papildu foto, kad izaicinājuma termiņš tuvojas un tev ir mazāk foto nekā atļauts. Aizpilda vienu vietu katrā pārbaudes ciklā, ar zemāk norādīto intervālu starp tām.',
+            autoFillDesc:
+                'Iesniegt papildu foto, kad izaicinājuma termiņš tuvojas un tev ir mazāk foto nekā atļauts. Aizpilda vienu vietu katrā pārbaudes ciklā, ar zemāk norādīto intervālu starp tām.',
             autoFillIntervalMinutes: 'Auto-aizpildes intervāls (minūtes)',
-            autoFillIntervalMinutesDesc: 'Minūtes starp katru auto-aizpildes iesniegšanu. Divas trūkstošās vietas ar 10 minūšu intervālu tiek iesniegtas T-20m un T-10m. Plašāks intervāls = vairāk laika katram foto savākt balsis.',
+            autoFillIntervalMinutesDesc:
+                'Minūtes starp katru auto-aizpildes iesniegšanu. Divas trūkstošās vietas ar 10 minūšu intervālu tiek iesniegtas T-20m un T-10m. Plašāks intervāls = vairāk laika katram foto savākt balsis.',
             autoFillBadge: 'auto-aizpilde',
             addOnePhoto: 'Pievienot vienu foto, lai aizpildītu tukšu vietu',
             fillAllPhotos: 'Aizpildīt visas tukšās vietas tagad (bez intervāla)',
@@ -129,7 +134,8 @@
             challengeName: 'Izaicinājums',
             challengeOverrides: 'Specifiskie iestatījumi izaicinājumiem',
             challengeSettings: 'Izaicinājuma iestatījumi',
-            challengeSettingsDesc: 'Konfigurējiet iestatījumus, kas ir specifiski šim izaicinājumam. Pielāgotie iestatījumi būs prioritārāki par globālajiem noklusējumiem.',
+            challengeSettingsDesc:
+                'Konfigurējiet iestatījumus, kas ir specifiski šim izaicinājumam. Pielāgotie iestatījumi būs prioritārāki par globālajiem noklusējumiem.',
             checkForUpdates: 'Pārbaudīt atjauninājumus',
             checkForUpdatesDesc: 'Manuāli pārbaudīt, vai ir pieejama jauna lietotnes versija',
             configureBoost: 'Konfigurēt "Boost" izaicinājumam:',
@@ -187,11 +193,12 @@
             removeCurrentTimezone: 'Noņemt pašreizējo laika joslu',
             resetToGlobal: 'Atiestatīt uz globālajiem',
             resetToDefault: 'Atiestatīt uz noklusējumu',
-            resetToDefaultNotSaved: 'Atiestatīt uz noklusējumu (netiks saglabāts, kamēr nenospiedīsiet \'Saglabāt\')',
+            resetToDefaultNotSaved: "Atiestatīt uz noklusējumu (netiks saglabāts, kamēr nenospiedīsiet 'Saglabāt')",
             resetAll: 'Atiestatīt visu',
             resetAllConfirmTitle: 'Atiestatīt visus iestatījumus',
             resetAllConfirmMessage: 'Vai tiešām vēlaties atiestatīt VISUS iestatījumus uz to noklusējuma vērtībām?',
-            resetAllConfirmDetails: 'Šī darbība atiestatīs:\\n• Visus saskarnes iestatījumus (tēmu, valodu, laika joslu)\\n• Visus globālos noklusējuma iestatījumus izaicinājumiem\\n• Lietotnes preferences\\n• Logu pozīcijas un izmērus\\n• Pielāgotās laika joslas\\n• Lietotājvārda un pieteikšanās sesijas preferences\\n\\nTiks saglabāts tikai jūsu piekļuves marķieris (token), pēdējais atjauninājumu pārbaudes laiks, testa režīma iestatījums un API galvenes.\\n\\nŠo darbību nevar atsaukt.',
+            resetAllConfirmDetails:
+                'Šī darbība atiestatīs:\\n• Visus saskarnes iestatījumus (tēmu, valodu, laika joslu)\\n• Visus globālos noklusējuma iestatījumus izaicinājumiem\\n• Lietotnes preferences\\n• Logu pozīcijas un izmērus\\n• Pielāgotās laika joslas\\n• Lietotājvārda un pieteikšanās sesijas preferences\\n\\nTiks saglabāts tikai jūsu piekļuves marķieris (token), pēdējais atjauninājumu pārbaudes laiks, testa režīma iestatījums un API galvenes.\\n\\nŠo darbību nevar atsaukt.',
             resetAllSuccess: 'Visi iestatījumi ir atiestatīti. Lapa tiks pārlādēta, lai piemērotu izmaiņas.',
             save: 'Saglabāt',
             seconds: 'sekunde(s)',
@@ -220,11 +227,13 @@
             voting: 'Balso...',
             votingAll: 'Balso...',
             checkFrequency: 'Pārbaudes biežums',
-            checkFrequencyDesc: 'Katrs cikls izmanto nejaušu aizkavi šajā diapazonā. Vienāds min un max nozīmē fiksētu biežumu.',
+            checkFrequencyDesc:
+                'Katrs cikls izmanto nejaušu aizkavi šajā diapazonā. Vienāds min un max nozīmē fiksētu biežumu.',
             checkFrequencyMin: 'Min',
             checkFrequencyMax: 'Max',
             voteOnlyInLastMinute: 'Balsot tikai pēdējās minūtes laikā',
-            voteOnlyInLastMinuteDesc: 'Balsot tikai tad, ja līdz izaicinājuma beigām ir mazāk laika, nekā norādīts pēdējās minūtes slieksnī.',
+            voteOnlyInLastMinuteDesc:
+                'Balsot tikai tad, ja līdz izaicinājuma beigām ir mazāk laika, nekā norādīts pēdējās minūtes slieksnī.',
             lastMinuteCheckFrequency: 'Pēdējās minūtes pārbaudes biežums',
             lastMinuteCheckFrequencyDesc: 'Pārbaudes biežums minūtēs, kad atrodas pēdējās minūtes slieksnī (1-59)',
             lastHourExposure: 'Pēdējās stundas ekspozīcija',
@@ -238,7 +247,8 @@
             yourProgress: 'Jūsu progress',
             // Additional keys for React components
             refresh: 'Atjaunot',
-            challengeOverrideInfo: 'Šeit konfigurētie iestatījumi aizstās globālos noklusējumus tikai šim izaicinājumam.',
+            challengeOverrideInfo:
+                'Šeit konfigurētie iestatījumi aizstās globālos noklusējumus tikai šim izaicinājumam.',
             mockMode: 'Testa režīms',
             logout: 'Iziet',
             status: 'Statuss',
@@ -269,4 +279,4 @@
             disconnected: 'Nav savienots',
         },
     };
-}));
+});
