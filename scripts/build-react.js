@@ -14,6 +14,25 @@ const entryPoints = {
     logs: path.join(reactDir, 'pages', 'Logs.jsx'),
 };
 
+// Capacitor entry point. Capacitor copies dist/ wholesale into the
+// Android WebView's web assets and loads index.html at app start.
+// Electron loads its own src/html/*.html directly via loadFile() and
+// ignores this index.html, so emitting it does not affect desktop.
+const capacitorIndexHtml = `<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <title>GuruShots Auto Vote</title>
+        <link href="styles.css" rel="stylesheet" />
+        <script defer src="app-bundle.js"></script>
+    </head>
+    <body class="min-h-screen bg-base-200">
+        <div id="root"></div>
+    </body>
+</html>
+`;
+
 // Check if watch mode is enabled
 const isWatch = process.argv.includes('--watch');
 
@@ -24,6 +43,10 @@ async function buildReact() {
     if (!fs.existsSync(distDir)) {
         fs.mkdirSync(distDir, { recursive: true });
     }
+
+    // Emit the Capacitor entry point. Electron ignores it; the Android
+    // WebView treats it as the app's root document.
+    fs.writeFileSync(path.join(distDir, 'index.html'), capacitorIndexHtml);
 
     const commonOptions = {
         bundle: true,
