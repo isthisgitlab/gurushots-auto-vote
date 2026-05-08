@@ -19,6 +19,20 @@
     scrollbar-color: color-mix(in oklch, currentColor 0%, var(--color-latvian)) transparent;
 }
 
+/* Capacitor / mobile safe-area handling. The Android WebView paints
+ * underneath the status bar and gesture nav by default; without these
+ * insets the title overlaps the time/battery indicators at the top
+ * and the bottom edge gets cut off on phones with a gesture bar.
+ * env(safe-area-inset-*) returns 0 on desktop so this is harmless
+ * for Electron. */
+html, body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    box-sizing: border-box;
+}
+
 /* Latvian color utility classes */
 .btn-latvian {
     background-color: var(--color-latvian);

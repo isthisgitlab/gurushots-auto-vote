@@ -222,8 +222,8 @@ export function ChallengeCard({
                     </div>
                 </div>
 
-                {/* Challenge Statistics */}
-                <div className="grid grid-cols-4 gap-2 text-xs">
+                {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+ */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.entries')}</div>
                         <div>{challenge.entries.toLocaleString()}</div>
@@ -274,8 +274,8 @@ export function ChallengeCard({
                     </div>
                 )}
 
-                {/* Challenge Stats Row */}
-                <div className="grid grid-cols-6 gap-2 text-xs">
+                {/* Challenge Stats Row — stacks 2-up on phones, 3-up on small tablets, 6-up on desktop */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.time')}</div>
                         <div className={timeRemaining === 'Ended' ? 'text-error' : 'text-success'}>{timeRemaining}</div>

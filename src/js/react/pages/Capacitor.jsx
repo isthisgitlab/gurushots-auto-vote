@@ -51,7 +51,7 @@ if (latvian) globalThis.latvianTranslations = latvian;
 // (otherwise React's reconciler hits removeChild errors when its
 // expected DOM does not match).
 const mountForCurrentAuthState = () => {
-    let token = '';
+    let token;
     try {
         token = getSetting('token') || '';
     } catch {

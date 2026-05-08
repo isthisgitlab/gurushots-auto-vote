@@ -43,19 +43,19 @@ export function AutoVoteControls({ running, status, statusClass, lastRun, cycles
                     <div className="flex flex-wrap items-center gap-4">
                         {/* Status Badge */}
                         <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{t('app.status')}:</span>
+                            <span className="text-sm font-medium">{t('app.status')}</span>
                             <span className={`badge ${statusClass}`}>{status}</span>
                         </div>
 
                         {/* Last Run */}
                         <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{t('app.lastRun')}:</span>
+                            <span className="text-sm font-medium">{t('app.lastRun')}</span>
                             <span className="text-sm">{lastRun || '-'}</span>
                         </div>
 
                         {/* Cycle Count */}
                         <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{t('app.cycles')}:</span>
+                            <span className="text-sm font-medium">{t('app.cycles')}</span>
                             <span className="text-sm">{cycles}</span>
                         </div>
                     </div>

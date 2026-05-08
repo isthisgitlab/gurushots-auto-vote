@@ -25,7 +25,8 @@ const capacitorIndexHtml = `<!doctype html>
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+        <meta name="theme-color" content="#960018" />
         <title>GuruShots Auto Vote</title>
         <link href="styles.css" rel="stylesheet" />
         <script defer src="capacitor-bundle.js"></script>
