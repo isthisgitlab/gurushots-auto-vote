@@ -1,6 +1,7 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
 import { getRandomCheckFrequencyMs } from '../../scheduling/randomDelay';
 import * as foregroundService from '../../services/ForegroundServiceController';
+import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 
 // Action types
 const ACTIONS = {
@@ -270,10 +271,21 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
             /* ignore */
         }
 
-        // On Capacitor, spin up the persistent foreground notification
-        // so Android does not kill the WebView process while the phone
-        // is locked. No-op on Electron.
-        await foregroundService.start({ body: 'Auto-vote running — preparing first cycle' });
+        // On Capacitor, hand off scheduling to the native AutoVote
+        // plugin. It owns the foreground notification, AlarmManager
+        // schedule, and per-cycle HTTP work — voting continues even
+        // when the WebView is destroyed (app swiped from recents).
+        // The JS-side cycle below still runs while the app is open
+        // so the user gets immediate visual feedback (cycle counter,
+        // last-run timestamp) and the in-app boost / turbo / fill
+        // surfaces continue to work.
+        const native = await nativeAutovote.start();
+        if (!native.available) {
+            // Fall back to the foreground-notification-only plugin so
+            // there is still a visual indicator on Android builds
+            // where the native plugin is not available.
+            await foregroundService.start({ body: 'Auto-vote running — preparing first cycle' });
+        }
 
         // Run immediately
         await runVotingCycle();
@@ -365,8 +377,14 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
             /* ignore */
         }
 
-        // Tear down the Android foreground notification. No-op on Electron.
-        await foregroundService.stop();
+        // Stop the native background loop on Capacitor; the plugin
+        // tears down its own foreground notification. Fall back to
+        // the simple foreground-service controller if native is not
+        // available.
+        const native = await nativeAutovote.stop();
+        if (!native.available) {
+            await foregroundService.stop();
+        }
 
         // Clear interval
         if (autovoteIntervalRef.current) {

@@ -33,6 +33,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Native background voting service (custom Capacitor plugin) -->
+        <service
+            android:name=".AutoVoteService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <receiver
+            android:name=".AutoVoteAlarmReceiver"
+            android:exported="false" />
     </application>
 
     <!-- Network -->
