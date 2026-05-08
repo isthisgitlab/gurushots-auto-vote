@@ -35,7 +35,37 @@
         </provider>
     </application>
 
-    <!-- Permissions -->
-
+    <!-- Network -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Foreground service for the auto-vote scheduler. dataSync is the
+         Android 14+ service type that fits a periodic API client. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Notifications (the foreground service requires a persistent
+         notification; Android 13+ requires runtime POST_NOTIFICATIONS). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Exact alarms for last-minute mode 1-min cadence through Doze.
+         USE_EXACT_ALARM is auto-granted on Android 13+; SCHEDULE_EXACT_ALARM
+         is the older path that requires the user to grant it in Settings. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- In-app updater installs new APKs from GitHub Releases. The system
+         installer prompts the user for confirmation at install time. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Android 11+ package visibility: declare that we intend to launch
+         the system installer for our own downloaded APKs. Without this,
+         resolveActivity() returns null on API 30+. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+    </queries>
 </manifest>

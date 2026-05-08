@@ -9,9 +9,38 @@ const axios = require('axios');
 const logger = require('../logger');
 const { generateRandomHeaders } = require('./randomizer');
 const settings = require('../settings');
+const runtime = require('../runtime');
 
 // Common content type for form submissions
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
+
+// Capacitor adapter: routes axios requests through CapacitorHttp's native
+// OkHttp client (Android) so we can set headers that browser fetch can't
+// (host, user-agent, etc. — the iOS-spoof in randomizer.js depends on it).
+// Lazy-loaded so Electron / CLI builds never resolve @capacitor/core.
+let capacitorAdapter = null;
+const getCapacitorHttpAdapter = () => {
+    if (capacitorAdapter) return capacitorAdapter;
+    const { CapacitorHttp } = require('@capacitor/core');
+    capacitorAdapter = async (config) => {
+        const response = await CapacitorHttp.request({
+            method: (config.method || 'get').toUpperCase(),
+            url: config.url,
+            headers: config.headers,
+            data: config.data,
+            connectTimeout: config.timeout,
+            readTimeout: config.timeout,
+        });
+        return {
+            data: response.data,
+            status: response.status,
+            statusText: '',
+            headers: response.headers || {},
+            config,
+        };
+    };
+    return capacitorAdapter;
+};
 
 /**
  * Makes a POST request to the GuruShots API
@@ -28,13 +57,17 @@ const makePostRequest = async (url, headers, data = '') => {
     logger.withCategory('api').apiRequest('POST', url);
 
     try {
-        const response = await axios({
+        const requestConfig = {
             method: 'post',
             url,
             headers,
             data,
             timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
-        });
+        };
+        if (runtime.isCapacitor()) {
+            requestConfig.adapter = getCapacitorHttpAdapter();
+        }
+        const response = await axios(requestConfig);
 
         const duration = Date.now() - startTime;
 
