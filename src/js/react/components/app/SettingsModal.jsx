@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
@@ -44,13 +44,23 @@ export function SettingsModal({ isOpen, onClose }) {
         }
     }, [isOpen, refetchSettings, refetchSchema]);
 
-    // Initialize form values when modal opens
+    // Init form values exactly once per open session. Without the guard,
+    // each refetch produces a new defaults reference and re-runs this
+    // effect, clobbering in-progress user edits.
+    const formInitForOpenRef = useRef(false);
+    const uiInitForOpenRef = useRef(false);
     useEffect(() => {
-        if (isOpen && defaults) {
+        if (!isOpen) {
+            formInitForOpenRef.current = false;
+            uiInitForOpenRef.current = false;
+            return;
+        }
+        if (!formInitForOpenRef.current && defaults) {
             setFormValues({ ...defaults });
             setOriginalFormValues({ ...defaults });
+            formInitForOpenRef.current = true;
         }
-        if (isOpen && settings) {
+        if (!uiInitForOpenRef.current && settings) {
             const initialUiValues = {
                 theme: settings.theme || 'light',
                 language: settings.language || 'en',
@@ -66,6 +76,7 @@ export function SettingsModal({ isOpen, onClose }) {
             setTzInputVisible(false);
             setTzInputValue('');
             setTzInputError(false);
+            uiInitForOpenRef.current = true;
         }
     }, [isOpen, defaults, settings]);
 

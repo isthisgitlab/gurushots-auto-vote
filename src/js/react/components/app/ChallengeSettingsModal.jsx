@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { SettingInput } from './SettingInput';
@@ -25,11 +25,19 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         }
     }, [isOpen, refetchSchema]);
 
-    // Load existing overrides when modal opens
+    // Load existing overrides exactly once per open session. Without the guard,
+    // each schema refetch produces a new schema reference and re-runs this
+    // effect, clobbering in-progress user edits.
+    const overridesInitForOpenRef = useRef(false);
     useEffect(() => {
-        const loadOverrides = async () => {
-            if (!isOpen || !challengeId || !schema) return;
+        if (!isOpen) {
+            overridesInitForOpenRef.current = false;
+            return;
+        }
+        if (overridesInitForOpenRef.current) return;
+        if (!challengeId || !schema) return;
 
+        const loadOverrides = async () => {
             setLoading(true);
             const loadedOverrides = {};
 
@@ -43,6 +51,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                     }
                 }
                 setOverrides(loadedOverrides);
+                overridesInitForOpenRef.current = true;
             } catch (err) {
                 await window.api.logError(`Error loading challenge overrides: ${err.message || err}`);
             } finally {
