@@ -172,11 +172,20 @@ function LoginPage() {
     );
 }
 
-// Mount the React app
-const container = document.getElementById('root');
-if (container) {
-    const root = createRoot(container);
-    root.render(<LoginPage />);
+// Mount the React app at module load. The Capacitor entry sets
+// __capacitorBootstrap before importing this module so it can
+// conditionally mount Login vs App; everywhere else (Electron's
+// loginWindow) auto-mounts as before.
+export const mountLogin = () => {
+    const container = document.getElementById('root');
+    if (container) {
+        const root = createRoot(container);
+        root.render(<LoginPage />);
+    }
+};
+
+if (!globalThis.__capacitorBootstrap) {
+    mountLogin();
 }
 
 export default LoginPage;

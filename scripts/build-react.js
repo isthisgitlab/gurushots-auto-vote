@@ -89,23 +89,82 @@ async function buildReact() {
         'electron',
         'electron-updater',
         'node-cron',
-        // Capacitor plugins. Unreachable from app-bundle.js at runtime
-        // (Electron isCapacitor() returns false), but the import chain
-        // pulls them in. Externalizing keeps the bundle small and avoids
-        // resolution noise.
+    ];
+    // Capacitor plugin packages must be BUNDLED (not externalized) on
+    // the Capacitor entry: they are pure browser code that registers
+    // proxies onto the native bridge. Externalizing them returns the
+    // require shim's empty object, so .Preferences.set(...) etc.
+    // throws "X is not a function" at runtime — which is what was
+    // causing "Error saving settings" silent failures on Android.
+    // Electron entries can keep them externalized since Electron's
+    // isCapacitor() returns false and the require shim is never
+    // exercised in practice.
+    const CAPACITOR_EXTERNALS = [
         '@capacitor/core',
         '@capacitor/preferences',
         '@capacitor/filesystem',
         '@capacitor/local-notifications',
         '@capawesome-team/capacitor-android-foreground-service',
     ];
-    const REQUIRE_SHIM = {
-        js: 'var require = (typeof require !== "undefined") ? require : function(){ return {}; };',
-    };
+    // Two browser-shim banners. require() is faked because external
+    // imports leave runtime require() calls that the WebView cannot
+    // resolve. process is faked because logger.js / runtime.js read
+    // process.type / process.versions / process.platform at module
+    // load (before any isCapacitor() guard runs); without a stub the
+    // bundle ReferenceErrors before React mounts.
+    // Browser shims for Node globals that the bundled code touches at
+    // module load before any isCapacitor() guard can run. The require
+    // shim returns module-aware stubs (fs/path/os) with the small
+    // surface area logger.js / runtime.js / settings.js actually call —
+    // each method either no-ops or returns a sensible neutral value
+    // (false for existsSync, joined string for path.join, etc.) so
+    // module init does not throw. All real fs work lives behind
+    // runtime.isCapacitor() guards or try/catch wrappers, so these
+    // stub methods are never reached by the actual app code on
+    // Capacitor — they just keep module init green.
+    const SHIM_BANNER = [
+        'var __nodeModuleShims = {',
+        '  fs: {',
+        '    existsSync: function(){ return false; },',
+        '    readFileSync: function(){ return ""; },',
+        '    writeFileSync: function(){},',
+        '    appendFileSync: function(){},',
+        '    mkdirSync: function(){},',
+        '    readdirSync: function(){ return []; },',
+        '    statSync: function(){ return { size: 0, mtime: new Date() }; },',
+        '    unlinkSync: function(){},',
+        '    watch: function(){ return { close: function(){} }; }',
+        '  },',
+        '  path: {',
+        '    join: function(){ return Array.prototype.join.call(arguments, "/"); },',
+        '    resolve: function(){ return Array.prototype.join.call(arguments, "/"); },',
+        '    dirname: function(p){ return String(p).split("/").slice(0,-1).join("/") || "/"; },',
+        '    basename: function(p){ return String(p).split("/").pop(); },',
+        '    extname: function(p){ var b = String(p).split("/").pop(); var i = b.lastIndexOf("."); return i < 0 ? "" : b.slice(i); },',
+        '    sep: "/"',
+        '  },',
+        '  os: {',
+        '    homedir: function(){ return "/"; },',
+        '    platform: function(){ return "android"; },',
+        '    tmpdir: function(){ return "/tmp"; }',
+        '  }',
+        '};',
+        'var require = (typeof require !== "undefined") ? require : function(name){ return __nodeModuleShims[name] || {}; };',
+        'var process = (typeof process !== "undefined") ? process : { env: {}, versions: {}, platform: "browser", type: "browser", pkg: undefined, argv: [], cwd: function(){ return "/"; }, on: function(){}, stdout: { isTTY: false, write: function(){} }, stderr: { isTTY: false, write: function(){} } };',
+        'var __dirname = (typeof __dirname !== "undefined") ? __dirname : "/";',
+        'var __filename = (typeof __filename !== "undefined") ? __filename : "/index.html";',
+    ].join('');
+    const REQUIRE_SHIM = { js: SHIM_BANNER };
     const perEntryOptions = {
-        login: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
-        app: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
-        logs: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
+        // Electron entries: externalize Capacitor packages too. Their
+        // require shim returns an empty object that is never accessed
+        // because runtime.isCapacitor() returns false on Electron.
+        login: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
+        app: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
+        logs: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
+        // Capacitor entry: bundle the Capacitor plugin packages so the
+        // native bridge proxies (Preferences.set, Filesystem.writeFile,
+        // ForegroundService.startForegroundService, ...) actually work.
         capacitor: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
     };
 

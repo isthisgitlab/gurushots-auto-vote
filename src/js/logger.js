@@ -99,10 +99,23 @@ const getUserDataPath = () => {
     return userDataPath;
 };
 
-// Create logs directory in the same location as settings
-const logsDir = path.join(getUserDataPath(), 'logs');
-if (!fs.existsSync(logsDir)) {
-    fs.mkdirSync(logsDir, { recursive: true });
+// Create logs directory in the same location as settings.
+// Wrapped in try/catch so the Capacitor WebView (no fs) can load the
+// logger module without crashing — file writes downstream silently
+// no-op when logsDir is '' / fs is the bundler shim.
+let logsDir = '';
+try {
+    logsDir = path.join(getUserDataPath(), 'logs');
+    if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+    }
+} catch (err) {
+    // Browser / Capacitor context — fs is a require shim. Logger falls
+    // back to console output only; in-app log streaming uses sendLogToGUI.
+    if (typeof console !== 'undefined' && console.debug) {
+        console.debug('[logger] fs not available; skipping file-based logging:', err.message);
+    }
+    logsDir = '';
 }
 
 // Check if we're in development mode (not mock)
@@ -151,6 +164,8 @@ const isDateOlderThan = (dateString, days) => {
 };
 
 const cleanupOldLogs = () => {
+    // Browser / Capacitor context has no logsDir; nothing to clean up.
+    if (!logsDir) return;
     try {
         // Check if fs and path modules are available (they might not be in test environments)
         if (typeof require !== 'undefined') {
@@ -158,7 +173,7 @@ const cleanupOldLogs = () => {
             const path = require('path');
 
             // Check if logsDir exists and is accessible
-            if (!fs.existsSync(logsDir)) {
+            if (typeof fs.existsSync !== 'function' || !fs.existsSync(logsDir)) {
                 return;
             }
 
@@ -322,8 +337,16 @@ const writeToLogFile = (logFile, level, message, data = null, context = getConte
             targetLogFile = currentLogFiles.settings;
         }
 
-        // Write to file
-        fs.appendFileSync(targetLogFile, logEntry);
+        // Write to file. On Capacitor / browser, logsDir is empty and
+        // fs is the require-shim — skip silently and rely on the
+        // console.log below + sendLogToGUI for in-app log surfacing.
+        if (logsDir && typeof fs.appendFileSync === 'function') {
+            try {
+                fs.appendFileSync(targetLogFile, logEntry);
+            } catch {
+                // best-effort; never let a log write tear down the app.
+            }
+        }
 
         // Also log to console with formatting (colors enabled for console)
         console.log(formatConsoleMessage(level, message, context, getTimeString(), true, category));

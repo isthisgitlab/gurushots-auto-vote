@@ -69,7 +69,13 @@ const getEnvSnapshot = () => ({
 
 // Platform-native user data directory. The Windows branch falls back
 // to the manual AppData path when APPDATA isn't set (some shells/CI).
+// On Capacitor (Android WebView) there is no fs anyway — return a
+// stub path so callers do not crash on os.homedir() (which gets
+// shimmed to undefined when the bundler externalizes 'os'). Code
+// paths that try to actually mkdir/write at this returned path are
+// expected to be wrapped in try/catch so they fail-soft.
 const getUserDataDir = (appName) => {
+    if (isCapacitor()) return `/${appName}`;
     switch (process.platform) {
         case 'darwin':
             return path.join(os.homedir(), 'Library', 'Application Support', appName);
