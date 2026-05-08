@@ -1032,6 +1032,35 @@ const SETTINGS_SCHEMA = {
         label: 'app.exposure',
         description: 'app.exposureDesc',
     },
+    exposureTarget: {
+        type: 'number',
+        // 0 is a sentinel meaning "vote up to the exposure trigger value" (legacy behavior).
+        // Any 1-100 explicitly overrides the target so the loop keeps voting past the trigger.
+        default: 0,
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
+        contextValidation: (value, allSettings) => {
+            if (value === 0) return true; // sentinel — always ok
+            const exposureValue = allSettings.exposure;
+            const effectiveExposure =
+                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
+                    ? exposureValue
+                    : getSchemaDefault('exposure');
+            return value >= effectiveExposure;
+        },
+        getContextError: (value, allSettings) => {
+            const exposureValue = allSettings.exposure;
+            const effectiveExposure =
+                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
+                    ? exposureValue
+                    : getSchemaDefault('exposure');
+            return `VALIDATION_GREATER_OR_EQUAL|app.exposure|${effectiveExposure}`;
+        },
+        dependsOn: ['exposure'],
+        validationOrder: 2, // Validate after dependencies
+        label: 'app.exposureTarget',
+        description: 'app.exposureTargetDesc',
+    },
     lastMinuteThreshold: {
         type: 'number',
         default: 10,
@@ -1104,6 +1133,34 @@ const SETTINGS_SCHEMA = {
         validationOrder: 1, // Validate first (no dependencies)
         label: 'app.useLastHourExposure',
         description: 'app.useLastHourExposureDesc',
+    },
+    lastHourExposureTarget: {
+        type: 'number',
+        // 0 is a sentinel meaning "vote up to the lastHourExposure trigger value" (legacy behavior).
+        default: 0,
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
+        contextValidation: (value, allSettings) => {
+            if (value === 0) return true;
+            const triggerValue = allSettings.lastHourExposure;
+            const effectiveTrigger =
+                typeof triggerValue === 'number' && triggerValue >= 1 && triggerValue <= 100
+                    ? triggerValue
+                    : getSchemaDefault('lastHourExposure');
+            return value >= effectiveTrigger;
+        },
+        getContextError: (value, allSettings) => {
+            const triggerValue = allSettings.lastHourExposure;
+            const effectiveTrigger =
+                typeof triggerValue === 'number' && triggerValue >= 1 && triggerValue <= 100
+                    ? triggerValue
+                    : getSchemaDefault('lastHourExposure');
+            return `VALIDATION_GREATER_OR_EQUAL|app.lastHourExposure|${effectiveTrigger}`;
+        },
+        dependsOn: ['lastHourExposure'],
+        validationOrder: 2,
+        label: 'app.lastHourExposureTarget',
+        description: 'app.lastHourExposureTargetDesc',
     },
     autoTurbo: {
         type: 'boolean',

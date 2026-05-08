@@ -150,6 +150,9 @@
             errorLoadingUiSettings: 'Error loading UI settings',
             exposure: 'Exposure',
             exposureDesc: 'Exposure percentage threshold for actions',
+            exposureTarget: 'Exposure Target',
+            exposureTargetDesc:
+                'Vote up to this percentage when the normal exposure rule fires (0 = same as Exposure trigger)',
             fast: 'FAST',
             global: 'Global',
             globalDefault: 'Global Default',
@@ -237,6 +240,9 @@
             lastMinuteCheckFrequencyDesc: 'Check frequency in minutes when within last minute threshold (1-59)',
             lastHourExposure: 'Last Hour Exposure',
             lastHourExposureDesc: 'Exposure threshold for actions within the last hour of challenge (0-100)',
+            lastHourExposureTarget: 'Last Hour Exposure Target',
+            lastHourExposureTargetDesc:
+                'Vote up to this percentage when the last-hour rule fires (0 = same as Last Hour Exposure trigger)',
             useLastHourExposure: 'Use Last Hour Exposure',
             useLastHourExposureDesc: 'Enable special exposure logic for the last hour of challenge',
             validationInvalidValue: 'Invalid value',

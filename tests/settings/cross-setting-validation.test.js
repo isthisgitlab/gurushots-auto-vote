@@ -117,4 +117,72 @@ describe('Cross-Setting Validation System', () => {
             expect(hasExtensibleValidation).toBe(true);
         });
     });
+
+    describe('exposureTarget validation', () => {
+        test('schema entry has the expected shape', () => {
+            const schema = settings.SETTINGS_SCHEMA;
+            expect(schema.exposureTarget).toBeDefined();
+            expect(schema.exposureTarget.default).toBe(0);
+            expect(schema.exposureTarget.dependsOn).toEqual(['exposure']);
+            expect(schema.exposureTarget.validationOrder).toBe(2);
+            expect(schema.exposureTarget.validation(0)).toBe(true);
+            expect(schema.exposureTarget.validation(100)).toBe(true);
+            expect(schema.exposureTarget.validation(-1)).toBe(false);
+            expect(schema.exposureTarget.validation(101)).toBe(false);
+        });
+
+        test('sentinel 0 is always accepted regardless of exposure', () => {
+            const { contextValidation } = settings.SETTINGS_SCHEMA.exposureTarget;
+            expect(contextValidation(0, { exposure: 50 })).toBe(true);
+            expect(contextValidation(0, { exposure: 100 })).toBe(true);
+        });
+
+        test('non-zero target must be >= exposure trigger', () => {
+            const { contextValidation } = settings.SETTINGS_SCHEMA.exposureTarget;
+            expect(contextValidation(100, { exposure: 50 })).toBe(true);
+            expect(contextValidation(50, { exposure: 50 })).toBe(true);
+            expect(contextValidation(40, { exposure: 50 })).toBe(false);
+        });
+
+        test('falls back to exposure default when allSettings.exposure is invalid', () => {
+            const { contextValidation } = settings.SETTINGS_SCHEMA.exposureTarget;
+            // exposure default is 100, so target must be >= 100 (or 0)
+            expect(contextValidation(100, { exposure: 0 })).toBe(true);
+            expect(contextValidation(50, { exposure: 0 })).toBe(false);
+        });
+
+        test('getContextError emits the GREATER_OR_EQUAL sentinel', () => {
+            const { getContextError } = settings.SETTINGS_SCHEMA.exposureTarget;
+            expect(getContextError(40, { exposure: 70 })).toBe('VALIDATION_GREATER_OR_EQUAL|app.exposure|70');
+        });
+    });
+
+    describe('lastHourExposureTarget validation', () => {
+        test('schema entry has the expected shape', () => {
+            const schema = settings.SETTINGS_SCHEMA;
+            expect(schema.lastHourExposureTarget).toBeDefined();
+            expect(schema.lastHourExposureTarget.default).toBe(0);
+            expect(schema.lastHourExposureTarget.dependsOn).toEqual(['lastHourExposure']);
+            expect(schema.lastHourExposureTarget.validationOrder).toBe(2);
+        });
+
+        test('sentinel 0 is always accepted', () => {
+            const { contextValidation } = settings.SETTINGS_SCHEMA.lastHourExposureTarget;
+            expect(contextValidation(0, { lastHourExposure: 40 })).toBe(true);
+        });
+
+        test('non-zero target must be >= lastHourExposure trigger', () => {
+            const { contextValidation } = settings.SETTINGS_SCHEMA.lastHourExposureTarget;
+            expect(contextValidation(80, { lastHourExposure: 40 })).toBe(true);
+            expect(contextValidation(40, { lastHourExposure: 40 })).toBe(true);
+            expect(contextValidation(30, { lastHourExposure: 40 })).toBe(false);
+        });
+
+        test('getContextError emits the GREATER_OR_EQUAL sentinel', () => {
+            const { getContextError } = settings.SETTINGS_SCHEMA.lastHourExposureTarget;
+            expect(getContextError(20, { lastHourExposure: 60 })).toBe(
+                'VALIDATION_GREATER_OR_EQUAL|app.lastHourExposure|60',
+            );
+        });
+    });
 });

@@ -51,6 +51,30 @@ const getEffectiveLastHourExposureThreshold = (challengeId) => {
 };
 
 /**
+ * Resolve the effective normal-rule vote target. The schema sentinel `0` means
+ * "follow the exposure trigger" (legacy behavior — target == trigger).
+ * @param {string} challengeId - Challenge ID
+ * @returns {number} - Effective target percentage
+ */
+const getEffectiveExposureTarget = (challengeId) => {
+    const raw = settings.getEffectiveSetting('exposureTarget', challengeId);
+    // Treat the schema sentinel (0) and missing values (null/undefined from under-mocked
+    // callers) the same — both mean "follow the trigger".
+    return raw === 0 || raw == null ? getEffectiveExposureThreshold(challengeId) : raw;
+};
+
+/**
+ * Resolve the effective last-hour-rule vote target. Sentinel `0` means
+ * "follow the lastHourExposure trigger".
+ * @param {string} challengeId - Challenge ID
+ * @returns {number} - Effective target percentage
+ */
+const getEffectiveLastHourExposureTarget = (challengeId) => {
+    const raw = settings.getEffectiveSetting('lastHourExposureTarget', challengeId);
+    return raw === 0 || raw == null ? getEffectiveLastHourExposureThreshold(challengeId) : raw;
+};
+
+/**
  * Shared rule engine for the auto-vote and manual-vote evaluators.
  * Returns an intermediate result the per-mode wrappers map onto their
  * caller-facing shape:
@@ -71,6 +95,8 @@ const _runVotingRules = (challenge, now, mode) => {
     const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
     const effectiveLastHourExposure = getEffectiveLastHourExposureThreshold(challengeId);
     const useLastHourExposure = settings.getEffectiveSetting('useLastHourExposure', challengeId);
+    const effectiveExposureTarget = getEffectiveExposureTarget(challengeId);
+    const effectiveLastHourExposureTarget = getEffectiveLastHourExposureTarget(challengeId);
 
     const isWithinLastMinute = isWithinLastMinuteThreshold(challenge.close_time, now, challengeId);
     const withinLastHour = isWithinLastHour(challenge.close_time, now);
@@ -84,23 +110,33 @@ const _runVotingRules = (challenge, now, mode) => {
         ruleLabel: null,
         thresholdInfo: null,
     });
-    const decided = (ruleLabel, targetExposure, thresholdInfo) => {
-        const atTarget = currentExposure >= targetExposure;
+    // Eligibility uses the trigger ("vote if below"); the loop ceiling uses the target
+    // ("vote up to"). For flash and lastminute they are intentionally both 100.
+    const decided = (ruleLabel, trigger, target, thresholdInfo) => {
+        const atTarget = currentExposure >= trigger;
         return {
             eligible: !atTarget,
             atTarget,
             skipReason: null,
-            targetExposure,
+            targetExposure: target,
             ruleLabel,
             thresholdInfo: { ...thresholdInfo, currentExposure },
         };
+    };
+
+    const sharedThresholdInfo = {
+        effectiveLastMinuteThreshold,
+        effectiveThreshold,
+        effectiveLastHourExposure,
+        effectiveExposureTarget,
+        effectiveLastHourExposureTarget,
     };
 
     if (onlyBoost) return blocked('boost-only mode enabled');
     if (mode === 'auto' && challenge.start_time >= now) return blocked('challenge not started');
 
     if (challenge.type === 'flash') {
-        return decided('flash', 100, { effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure });
+        return decided('flash', 100, 100, sharedThresholdInfo);
     }
 
     if (voteOnlyInLastMinute && !isWithinLastMinute) {
@@ -108,26 +144,14 @@ const _runVotingRules = (challenge, now, mode) => {
     }
 
     if (isWithinLastMinute) {
-        return decided('lastminute', 100, {
-            effectiveLastMinuteThreshold,
-            effectiveThreshold,
-            effectiveLastHourExposure,
-        });
+        return decided('lastminute', 100, 100, sharedThresholdInfo);
     }
 
     if (withinLastHour && useLastHourExposure) {
-        return decided('last-hour', effectiveLastHourExposure, {
-            effectiveLastMinuteThreshold,
-            effectiveThreshold,
-            effectiveLastHourExposure,
-        });
+        return decided('last-hour', effectiveLastHourExposure, effectiveLastHourExposureTarget, sharedThresholdInfo);
     }
 
-    return decided('normal', effectiveThreshold, {
-        effectiveLastMinuteThreshold,
-        effectiveThreshold,
-        effectiveLastHourExposure,
-    });
+    return decided('normal', effectiveThreshold, effectiveExposureTarget, sharedThresholdInfo);
 };
 
 /**
@@ -137,18 +161,25 @@ const evaluateVotingDecision = (challenge, now) => {
     const r = _runVotingRules(challenge, now, 'auto');
     if (r.skipReason) return { shouldVote: false, voteReason: r.skipReason, targetExposure: r.targetExposure };
 
-    const { currentExposure, effectiveThreshold, effectiveLastHourExposure, effectiveLastMinuteThreshold } =
-        r.thresholdInfo;
+    const {
+        currentExposure,
+        effectiveThreshold,
+        effectiveLastHourExposure,
+        effectiveLastMinuteThreshold,
+        effectiveExposureTarget,
+        effectiveLastHourExposureTarget,
+    } = r.thresholdInfo;
+    const targetSuffix = (trigger, target) => (target !== trigger ? ` (vote up to ${target}%)` : '');
     const reasons = {
         flash: r.atTarget ? 'flash type: exposure already at 100%' : `flash type: exposure ${currentExposure}% < 100%`,
         lastminute: r.atTarget
             ? `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`
             : `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure ${currentExposure}% < 100%`,
         'last-hour': r.eligible
-            ? `last hour threshold: exposure ${currentExposure}% < ${effectiveLastHourExposure}%`
+            ? `last hour threshold: exposure ${currentExposure}% < ${effectiveLastHourExposure}%${targetSuffix(effectiveLastHourExposure, effectiveLastHourExposureTarget)}`
             : `last hour threshold: exposure ${currentExposure}% >= ${effectiveLastHourExposure}%`,
         normal: r.eligible
-            ? `normal threshold: exposure ${currentExposure}% < ${effectiveThreshold}%`
+            ? `normal threshold: exposure ${currentExposure}% < ${effectiveThreshold}%${targetSuffix(effectiveThreshold, effectiveExposureTarget)}`
             : `normal threshold: exposure ${currentExposure}% >= ${effectiveThreshold}%`,
     };
     return { shouldVote: r.eligible, voteReason: reasons[r.ruleLabel], targetExposure: r.targetExposure };
@@ -367,6 +398,8 @@ module.exports = {
     isWithinLastMinuteThreshold,
     getEffectiveExposureThreshold,
     getEffectiveLastHourExposureThreshold,
+    getEffectiveExposureTarget,
+    getEffectiveLastHourExposureTarget,
     evaluateVotingDecision,
     evaluateManualVotingDecision,
     evaluateManualVotingToHundred,

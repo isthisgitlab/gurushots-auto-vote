@@ -151,6 +151,9 @@
             errorLoadingUiSettings: 'Kļūda UI iestatījumu ielādē',
             exposure: 'Redzamība',
             exposureDesc: 'Redzamības procentu slieksnis darbībām',
+            exposureTarget: 'Redzamības mērķis',
+            exposureTargetDesc:
+                'Balsot līdz šim procentam, kad nostrādā parastais redzamības noteikums (0 = tāds pats kā redzamības slieksnis)',
             fast: 'ĀTRS',
             global: 'Globāls',
             globalDefault: 'Globālais noklusējums',
@@ -238,6 +241,9 @@
             lastMinuteCheckFrequencyDesc: 'Pārbaudes biežums minūtēs, kad atrodas pēdējās minūtes slieksnī (1-59)',
             lastHourExposure: 'Pēdējās stundas ekspozīcija',
             lastHourExposureDesc: 'Ekspozīcijas slieksnis darbībām pēdējās stundas laikā (0-100)',
+            lastHourExposureTarget: 'Pēdējās stundas ekspozīcijas mērķis',
+            lastHourExposureTargetDesc:
+                'Balsot līdz šim procentam, kad nostrādā pēdējās stundas noteikums (0 = tāds pats kā pēdējās stundas slieksnis)',
             useLastHourExposure: 'Izmantot pēdējās stundas ekspozīciju',
             useLastHourExposureDesc: 'Iespējot īpašu ekspozīcijas loģiku pēdējā stundā',
             validationInvalidValue: 'Nepareiza vērtība',
