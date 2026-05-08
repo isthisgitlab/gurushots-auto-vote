@@ -58,7 +58,7 @@ const applyBoost = async (challenge, token) => {
     const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
     if (!response) {
         logger.withCategory('boost').endOperation(operationId, null, 'Boost application failed');
-        return;
+        return null;
     }
 
     logger.withCategory('boost').endOperation(operationId, `Boost applied successfully to image ${boostImageId}`);

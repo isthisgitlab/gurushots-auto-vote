@@ -119,12 +119,6 @@ const fetchChallengesAndVote = async (token) => {
         // Cleanup stale metadata for challenges that no longer exist
         try {
             const activeChallengeIds = challenges.map((challenge) => challenge.id.toString());
-            logger
-                .withCategory('api')
-                .debug(
-                    `🔧 DEBUG: About to cleanup metadata, active challenge IDs: [${activeChallengeIds.join(', ')}]`,
-                    null,
-                );
             const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds);
             if (cleanupSuccess) {
                 logger.withCategory('api').debug('Successfully cleaned up stale metadata', null);
@@ -185,13 +179,17 @@ const fetchChallengesAndVote = async (token) => {
                     logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
 
                     try {
-                        await applyBoost(challenge, token);
-                        const successSuffix = isTimerBasedAvailable
-                            ? `${timeDisplay} remaining`
-                            : `${timeDisplay} until challenge ends`;
-                        logger
-                            .withCategory('boost')
-                            .endOperation(`boost-${challenge.id}`, `Boost applied successfully (${successSuffix})`);
+                        const boostResult = await applyBoost(challenge, token);
+                        if (boostResult) {
+                            const successSuffix = isTimerBasedAvailable
+                                ? `${timeDisplay} remaining`
+                                : `${timeDisplay} until challenge ends`;
+                            logger
+                                .withCategory('boost')
+                                .endOperation(`boost-${challenge.id}`, `Boost applied successfully (${successSuffix})`);
+                        }
+                        // On null/falsy result, applyBoost already logged endOperation with the failure
+                        // reason — no caller-side fallback log needed (mirrors the turbo handling shape).
                     } catch (error) {
                         logger
                             .withCategory('boost')
@@ -323,28 +321,10 @@ const fetchChallengesAndVote = async (token) => {
                         );
 
                         // Submit votes to target exposure (dynamic based on voting rules)
-                        logger
-                            .withCategory('voting')
-                            .debug(
-                                `🔧 DEBUG: About to submit votes for challenge ${challenge.id}: ${challenge.title} (target: ${targetExposure}%)`,
-                                null,
-                            );
                         await submitVotes(voteImages, token, targetExposure);
-                        logger
-                            .withCategory('voting')
-                            .debug(
-                                `🔧 DEBUG: Completed vote submission for challenge ${challenge.id}: ${challenge.title}`,
-                                null,
-                            );
 
                         // Check for cancellation before delay
                         if (cancellation.isCancelled()) {
-                            logger
-                                .withCategory('voting')
-                                .debug(
-                                    `🔧 DEBUG: Cancellation detected after vote submission for challenge ${challenge.id}: ${challenge.title}`,
-                                    null,
-                                );
                             logger
                                 .withCategory('voting')
                                 .warning('🛑 Voting cancelled by user after vote submission', null);

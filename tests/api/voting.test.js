@@ -267,7 +267,6 @@ describe('voting', () => {
 
             const result = await submitVotes(mockVoteImages, mockToken);
 
-            expect(mockDebugFn).toHaveBeenCalledWith('🔧 DEBUG: Failed to update metadata for challenge 123', null);
             expect(mockWarningFn).toHaveBeenCalledWith('Failed to update metadata for challenge 123', null);
             expect(result).toEqual(mockResponse);
         });
@@ -289,7 +288,6 @@ describe('voting', () => {
 
             const result = await submitVotes(mockVoteImages, mockToken);
 
-            expect(mockDebugFn).toHaveBeenCalledWith('🔧 DEBUG: Error updating metadata for challenge 123:', mockError);
             expect(mockWarningFn).toHaveBeenCalledWith('Error updating metadata for challenge 123:', mockError);
             expect(result).toEqual(mockResponse);
         });

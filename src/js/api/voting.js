@@ -116,20 +116,8 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
 
     // Update metadata after successful vote submission
     try {
-        logger
-            .withCategory('voting')
-            .debug(
-                `🔧 DEBUG: About to update metadata for challenge ${challenge.id}, original exposure: ${Math.round(originalExposureFactor)}%`,
-                null,
-            );
         const success = updateChallengeVoteMetadata(challenge.id, Math.round(originalExposureFactor));
         if (success) {
-            logger
-                .withCategory('voting')
-                .debug(
-                    `🔧 DEBUG: Successfully updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`,
-                    null,
-                );
             logger
                 .withCategory('voting')
                 .info(
@@ -137,13 +125,9 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
                     null,
                 );
         } else {
-            logger
-                .withCategory('voting')
-                .debug(`🔧 DEBUG: Failed to update metadata for challenge ${challenge.id}`, null);
             logger.withCategory('voting').warning(`Failed to update metadata for challenge ${challenge.id}`, null);
         }
     } catch (error) {
-        logger.withCategory('voting').debug(`🔧 DEBUG: Error updating metadata for challenge ${challenge.id}:`, error);
         logger.withCategory('voting').warning(`Error updating metadata for challenge ${challenge.id}:`, error);
     }
 

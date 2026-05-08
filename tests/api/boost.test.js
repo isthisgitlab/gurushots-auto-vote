@@ -120,12 +120,12 @@ describe('boost', () => {
             // The logger module handles the error message, not console.error
         });
 
-        test('should return undefined when request fails', async () => {
+        test('should return null when request fails', async () => {
             makePostRequest.mockResolvedValueOnce(null);
 
             const result = await applyBoost(mockChallenge, mockToken);
 
-            expect(result).toBeUndefined();
+            expect(result).toBeNull();
             // The logger module handles the error message, not console.error
         });
 
