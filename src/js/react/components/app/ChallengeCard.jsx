@@ -176,16 +176,19 @@ export function ChallengeCard({
     return (
         <div className="border rounded-lg p-3 mb-3 bg-base-100">
             <div className="space-y-2">
-                {/* Title and Description. min-w-0 lets flex shrink the
-                    title block so action buttons stay visible on narrow
-                    viewports — without it, long titles push gear /
-                    density / Vote off the right edge. */}
-                <div className="flex justify-between items-start gap-2">
-                    <div className="flex-1 min-w-0">
+                {/* Title row uses CSS Grid [1fr auto] so the title
+                    block gets exactly the remaining width and the
+                    action buttons get their natural width — no chance
+                    of buttons being pushed off the right edge by a
+                    long title or welcome-message text. min-w-0 on the
+                    title cell forces children to shrink rather than
+                    expand the cell. */}
+                <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
+                    <div className="min-w-0">
                         <h3 className="font-bold text-base truncate">{challenge.title}</h3>
-                        {/* Welcome message — hidden in compact mode to keep the card a tight widget. */}
+                        {/* Welcome message — hidden in compact mode to keep the card a tight widget. truncate prevents long welcome text from forcing the grid cell wider. */}
                         {!isCompact && <div
-                            className="text-xs text-base-content/60"
+                            className="text-xs text-base-content/60 truncate"
                             dangerouslySetInnerHTML={{ __html: challenge.welcome_message }}
                         />}
                         {/* Challenge Type Badges */}
