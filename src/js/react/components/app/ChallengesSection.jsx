@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useChallenges } from '@/contexts/ChallengesContext';
 import { useTimers } from '@/hooks/useTimers';
@@ -13,6 +13,44 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
     const { challenges, loading, refetch } = useChallenges();
     const times = useTimers(challenges);
     const [votingAll, setVotingAll] = useState(false);
+    const [globalCompact, setGlobalCompact] = useState(true);
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    // Read the global compactCards default + listen for settings-changed
+    // events so the toggle below stays in sync if it gets flipped
+    // elsewhere (e.g. via the Settings modal).
+    useEffect(() => {
+        const sync = async () => {
+            try {
+                const value = await window.api.getGlobalDefault('compactCards');
+                setGlobalCompact(value !== false);
+            } catch {
+                /* default to true */
+            }
+        };
+        sync();
+        const off = window.api.onSettingsChanged?.(() => {
+            sync();
+            // Bump refreshKey so each ChallengeCard re-fetches its
+            // effective setting (any per-challenge override + the new
+            // global default).
+            setRefreshKey((k) => k + 1);
+        });
+        return () => {
+            if (typeof off === 'function') off();
+        };
+    }, []);
+
+    const handleToggleGlobalCompact = useCallback(async () => {
+        const next = !globalCompact;
+        try {
+            await window.api.setGlobalDefault('compactCards', next);
+            setGlobalCompact(next);
+            setRefreshKey((k) => k + 1);
+        } catch {
+            /* leave UI as-is on failure */
+        }
+    }, [globalCompact]);
 
     const handleVoteAll = useCallback(async () => {
         setVotingAll(true);
@@ -98,13 +136,40 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                         </button>
                     </>
                 )}
+                {/* Global compact-mode toggle. Sets the default density
+                    for all cards; per-card overrides on individual
+                    challenges remain. */}
+                <button
+                    className="btn btn-ghost btn-sm ml-auto"
+                    onClick={handleToggleGlobalCompact}
+                    title={globalCompact ? 'Show full details' : 'Compact view'}
+                >
+                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {globalCompact ? (
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M4 6h16M4 12h16M4 18h7"
+                            />
+                        ) : (
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M4 6h16M4 10h16M4 14h16M4 18h16"
+                            />
+                        )}
+                    </svg>
+                    {globalCompact ? 'Compact' : 'Detailed'}
+                </button>
             </div>
 
             {/* Challenge Cards */}
             <div id="challenges-container">
                 {challenges.map((challenge) => (
                     <ChallengeCard
-                        key={challenge.id}
+                        key={`${challenge.id}-${refreshKey}`}
                         challenge={challenge}
                         timeRemaining={times[challenge.id] || 'Loading...'}
                         timezone={timezone}

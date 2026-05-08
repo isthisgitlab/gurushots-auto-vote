@@ -1113,6 +1113,15 @@ const SETTINGS_SCHEMA = {
         label: 'app.onlyBoost',
         description: 'app.onlyBoostDesc',
     },
+    compactCards: {
+        type: 'boolean',
+        default: true,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        label: 'app.compactCards',
+        description: 'app.compactCardsDesc',
+    },
     voteOnlyInLastMinute: {
         type: 'boolean',
         default: false,

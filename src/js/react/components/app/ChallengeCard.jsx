@@ -24,6 +24,8 @@ export function ChallengeCard({
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
     const [onlyBoost, setOnlyBoost] = useState(false);
     const [autoFillEnabled, setAutoFillEnabled] = useState(false);
+    const [isCompact, setIsCompact] = useState(true);
+    const [hasCompactOverride, setHasCompactOverride] = useState(false);
     const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
     const { fillNow, loading: filling, error: fillError, clearError: clearFillError } = useFillChallenge();
 
@@ -75,7 +77,9 @@ export function ChallengeCard({
     const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
     const canFill = challengeStillOpen && slotsRemaining > 0;
 
-    // Check for custom settings
+    // Check for custom settings + load card density (global default
+    // overridden by per-challenge override). React re-runs this whenever
+    // settings-changed fires (the parent ChallengesSection does that).
     useEffect(() => {
         const checkSettings = async () => {
             try {
@@ -94,12 +98,40 @@ export function ChallengeCard({
 
                 const fillOn = await window.api.getEffectiveSetting('autoFill', challenge.id.toString());
                 setAutoFillEnabled(fillOn === true);
+
+                const compact = await window.api.getEffectiveSetting('compactCards', challenge.id.toString());
+                setIsCompact(compact !== false);
+                const compactOverride = await window.api.getChallengeOverride(
+                    'compactCards',
+                    challenge.id.toString(),
+                );
+                setHasCompactOverride(compactOverride !== null);
             } catch {
                 // Ignore errors
             }
         };
         checkSettings();
     }, [challenge.id]);
+
+    // Toggle this card's density. First click sets a per-challenge
+    // override (opposite of current); second click on a card that
+    // already has an override removes it (returns to global default).
+    const handleToggleCompact = async () => {
+        const challengeId = challenge.id.toString();
+        try {
+            if (hasCompactOverride) {
+                await window.api.removeChallengeOverride('compactCards', challengeId);
+            } else {
+                await window.api.setChallengeOverride('compactCards', challengeId, !isCompact);
+            }
+            const next = await window.api.getEffectiveSetting('compactCards', challengeId);
+            setIsCompact(next !== false);
+            const override = await window.api.getChallengeOverride('compactCards', challengeId);
+            setHasCompactOverride(override !== null);
+        } catch {
+            // Ignore — leave UI as-is.
+        }
+    };
 
     // Show vote button logic
     const showVoteButton =
@@ -148,11 +180,11 @@ export function ChallengeCard({
                 <div className="flex justify-between items-start">
                     <div className="flex-1">
                         <h3 className="font-bold text-base">{challenge.title}</h3>
-                        {/* Welcome message from API - preserving existing behavior from vanilla JS */}
-                        <div
+                        {/* Welcome message — hidden in compact mode to keep the card a tight widget. */}
+                        {!isCompact && <div
                             className="text-xs text-base-content/60"
                             dangerouslySetInnerHTML={{ __html: challenge.welcome_message }}
-                        />
+                        />}
                         {/* Challenge Type Badges */}
                         <div className="flex gap-1 mt-1">
                             {challenge.type && (
@@ -177,8 +209,8 @@ export function ChallengeCard({
                                 </span>
                             )}
                         </div>
-                        {/* Challenge URL */}
-                        {challenge.url && (
+                        {/* Challenge URL — hidden in compact mode. */}
+                        {!isCompact && challenge.url && (
                             <div className="text-xs text-base-content/40 mt-1">
                                 <button
                                     onClick={handleOpenUrl}
@@ -197,6 +229,38 @@ export function ChallengeCard({
                                 onVoteComplete={onVoteComplete}
                             />
                         )}
+                        {/* Per-card density toggle. The icon is filled
+                            when this card has its own override so the
+                            user can see at-a-glance which cards diverge
+                            from the global default. */}
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={handleToggleCompact}
+                            title={isCompact ? 'Show details' : 'Compact'}
+                        >
+                            <svg
+                                className="w-3 h-3"
+                                fill={hasCompactOverride ? 'currentColor' : 'none'}
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                {isCompact ? (
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                                    />
+                                ) : (
+                                    <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                        d="M9 9V4M9 9H4M9 9L4 4m11 5h5m-5 0V4m0 5l5-5M9 15v5m0-5H4m5 0l-5 5m11-5h5m-5 0v5m0-5l5 5"
+                                    />
+                                )}
+                            </svg>
+                        </button>
                         {challenge.type !== 'flash' && (
                             <button
                                 className="btn btn-ghost btn-sm"
@@ -222,8 +286,8 @@ export function ChallengeCard({
                     </div>
                 </div>
 
-                {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+ */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. Hidden in compact mode. */}
+                {!isCompact && <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.entries')}</div>
                         <div>{challenge.entries.toLocaleString()}</div>
@@ -240,10 +304,10 @@ export function ChallengeCard({
                         <div className="font-medium">{t('app.prize')}</div>
                         <div>{challenge.prizes_worth}</div>
                     </div>
-                </div>
+                </div>}
 
-                {/* User Progress */}
-                {userProgress && userProgress.votes > 0 && (
+                {/* User Progress — full bar + level + next-level info; compact mode hides this. */}
+                {!isCompact && userProgress && userProgress.votes > 0 && (
                     <div className="bg-base-200 rounded p-2">
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-xs font-medium">{t('app.yourProgress')}</span>
@@ -347,8 +411,8 @@ export function ChallengeCard({
                     </div>
                 </div>
 
-                {/* Challenge Tags */}
-                {challenge.tags && challenge.tags.length > 0 && (
+                {/* Challenge Tags — hidden in compact mode. */}
+                {!isCompact && challenge.tags && challenge.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                         {challenge.tags.map((tag, index) => (
                             <span key={index} className="badge badge-ghost badge-xs">
@@ -358,10 +422,14 @@ export function ChallengeCard({
                     </div>
                 )}
 
-                {/* Entries */}
+                {/* Entry Details — entry-level boost / turbo badges.
+                    Kept in compact mode because the per-entry boost
+                    actions are part of the auto-voter's surface area. */}
                 {entries.length > 0 && (
                     <div>
-                        <div className="text-xs text-base-content/60 mb-1">{t('app.entryDetails')}:</div>
+                        {!isCompact && (
+                            <div className="text-xs text-base-content/60 mb-1">{t('app.entryDetails')}:</div>
+                        )}
                         <div className="flex flex-wrap gap-1">
                             {entries.map((entry) => (
                                 <EntryBadge
