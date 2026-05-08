@@ -26,8 +26,8 @@ const sanitizeForLog = (value) =>
         .replace(/[\r\n\t]/g, ' ')
         .slice(0, 200);
 
-const register = (ipcMain) => {
-    ipcMain.handle('get-active-challenges', async (event, token) => {
+const buildHandlers = () => ({
+    'get-active-challenges': async (event, token) => {
         try {
             logger.withCategory('api').debug('=== IPC get-active-challenges ===', null);
             logger.withCategory('api').debug(`Token received: ${!!token}`, null);
@@ -37,9 +37,9 @@ const register = (ipcMain) => {
             logger.withCategory('api').error('Error handling get-active-challenges request:', error);
             throw error;
         }
-    });
+    },
 
-    ipcMain.handle('authenticate', async (event, username, password, isMock) => {
+    'authenticate': async (event, username, password, isMock) => {
         logger
             .withCategory('general')
             .info(
@@ -121,12 +121,12 @@ const register = (ipcMain) => {
             logger.withCategory('authentication').error('Error handling authenticate request:', error);
             return { success: false, message: error.message || 'Authentication failed due to network error' };
         }
-    });
+    },
 
     // Manual run of the Turbo mini-game on a single challenge.
     // Independent of autovote — gives the user a way to earn a Turbo on
     // demand without enabling continuous voting.
-    ipcMain.handle('play-auto-turbo', async (event, challengeId, challengeTitle) => {
+    'play-auto-turbo': async (event, challengeId, challengeTitle) => {
         const safeId = sanitizeForLog(challengeId);
         const safeTitle = sanitizeForLog(challengeTitle) || `challenge ${safeId}`;
         try {
@@ -197,9 +197,9 @@ const register = (ipcMain) => {
             logger.withCategory('turbo').error('Error running manual auto-turbo:', error);
             return { success: false, error: error.message || 'Failed to run turbo mini-game' };
         }
-    });
+    },
 
-    ipcMain.handle('apply-turbo-to-entry', async (event, challengeId, imageId) => {
+    'apply-turbo-to-entry': async (event, challengeId, imageId) => {
         const safeChallengeId = sanitizeForLog(challengeId);
         const safeImageId = sanitizeForLog(imageId);
         try {
@@ -229,13 +229,13 @@ const register = (ipcMain) => {
             logger.withCategory('turbo').error('Error applying turbo to entry:', error);
             return { success: false, error: error.message || 'Failed to apply turbo' };
         }
-    });
+    },
 
     // Manual fill of empty challenge entries on demand. mode = 'one' fills
     // a single slot with the best-ranked eligible photo; mode = 'all' fills
     // every empty slot in one batch. Bypasses both the autoFill toggle and
     // the spacing math — manual click is explicit user intent.
-    ipcMain.handle('fill-challenge-now', async (event, challengeId, mode) => {
+    'fill-challenge-now': async (event, challengeId, mode) => {
         const safeChallengeId = sanitizeForLog(challengeId);
         const safeMode = mode === 'all' ? 'all' : 'one';
         try {
@@ -271,9 +271,9 @@ const register = (ipcMain) => {
             logger.withCategory('autoFill').error('Error handling fill-challenge-now request:', error);
             return { success: false, error: error.message || 'Failed to fill challenge' };
         }
-    });
+    },
 
-    ipcMain.handle('apply-boost-to-entry', async (event, challengeId, imageId) => {
+    'apply-boost-to-entry': async (event, challengeId, imageId) => {
         try {
             logger
                 .withCategory('general')
@@ -307,7 +307,14 @@ const register = (ipcMain) => {
             logger.withCategory('voting').error('Error applying boost to entry:', error);
             return { success: false, error: error.message || 'Failed to apply boost' };
         }
-    });
+    },
+});
+
+const register = (ipcMain) => {
+    const handlers = buildHandlers();
+    for (const [channel, impl] of Object.entries(handlers)) {
+        ipcMain.handle(channel, impl);
+    }
 };
 
-module.exports = { register };
+module.exports = { register, buildHandlers };

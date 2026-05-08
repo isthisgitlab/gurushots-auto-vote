@@ -17,8 +17,8 @@ const apiFactory = require('../apiFactory');
 const votingLogic = require('../services/VotingLogic');
 const cancellation = require('../voting/cancellation');
 
-const register = (ipcMain) => {
-    ipcMain.handle('gui-vote', async () => {
+const buildHandlers = () => ({
+    'gui-vote': async () => {
         try {
             const userSettings = settings.loadSettings();
             if (!userSettings.token) {
@@ -30,9 +30,9 @@ const register = (ipcMain) => {
             logger.withCategory('voting').error('Error handling gui-vote request:', error);
             return { success: false, error: error.message || 'Failed to load challenges' };
         }
-    });
+    },
 
-    ipcMain.handle('run-voting-cycle', async () => {
+    'run-voting-cycle': async () => {
         try {
             logger.withCategory('voting').info('🔄 Starting voting cycle...', null);
 
@@ -70,9 +70,9 @@ const register = (ipcMain) => {
             logger.withCategory('voting').error('Error handling run-voting-cycle request:', error);
             return { success: false, error: error.message || 'Failed to run voting cycle' };
         }
-    });
+    },
 
-    ipcMain.handle('vote-all-challenges-manual', async () => {
+    'vote-all-challenges-manual': async () => {
         try {
             logger.withCategory('voting').info('🔄 Starting manual vote all challenges (bypass thresholds)...', null);
 
@@ -155,16 +155,16 @@ const register = (ipcMain) => {
             logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
             return { success: false, error: error.message || 'Failed to vote on all challenges manually' };
         }
-    });
+    },
 
-    ipcMain.handle('should-cancel-voting', () => cancellation.isCancelled());
+    'should-cancel-voting': () => cancellation.isCancelled(),
 
-    ipcMain.handle('set-cancel-voting', (event, shouldCancel) => {
+    'set-cancel-voting': (event, shouldCancel) => {
         cancellation.setCancelled(shouldCancel);
         return cancellation.isCancelled();
-    });
+    },
 
-    ipcMain.handle('vote-on-challenge', async (event, challengeId, challengeTitle) => {
+    'vote-on-challenge': async (event, challengeId, challengeTitle) => {
         try {
             logger
                 .withCategory('general')
@@ -247,9 +247,9 @@ const register = (ipcMain) => {
             logger.withCategory('voting').error('Error handling vote-on-challenge request:', error);
             return { success: false, error: error.message || 'Failed to vote on challenge' };
         }
-    });
+    },
 
-    ipcMain.handle('vote-on-challenge-manual', async (event, challengeId, challengeTitle) => {
+    'vote-on-challenge-manual': async (event, challengeId, challengeTitle) => {
         try {
             logger
                 .withCategory('general')
@@ -332,7 +332,14 @@ const register = (ipcMain) => {
             logger.withCategory('voting').error('Error handling vote-on-challenge-manual request:', error);
             return { success: false, error: error.message || 'Failed to vote on challenge manually' };
         }
-    });
+    },
+});
+
+const register = (ipcMain) => {
+    const handlers = buildHandlers();
+    for (const [channel, impl] of Object.entries(handlers)) {
+        ipcMain.handle(channel, impl);
+    }
 };
 
-module.exports = { register };
+module.exports = { register, buildHandlers };

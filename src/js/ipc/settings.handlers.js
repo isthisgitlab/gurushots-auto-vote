@@ -35,163 +35,174 @@ const THIN_HANDLERS = [
     ['is-global-default-modified', 'isGlobalDefaultModified', false, 'checking if global default is modified'],
 ];
 
-const register = (ipcMain) => {
-    ipcMain.handle('get-settings', async () => {
-        try {
-            return settings.loadSettings();
-        } catch (error) {
-            logger.withCategory('settings').error('Error handling get-settings request:', error);
-            return settings.getDefaultSettings();
-        }
-    });
-
-    ipcMain.handle('get-setting', async (event, key) => {
-        try {
-            if (typeof key !== 'string') {
-                throw new Error('Invalid key type, expected string');
+const buildHandlers = ({ broadcastSettingsChange } = {}) => {
+    const handlers = {
+        'get-settings': async () => {
+            try {
+                return settings.loadSettings();
+            } catch (error) {
+                logger.withCategory('settings').error('Error handling get-settings request:', error);
+                return settings.getDefaultSettings();
             }
-            return settings.getSetting(key);
-        } catch (error) {
-            logger.withCategory('settings').error(`Error handling get-setting request for key "${key}":`, error);
-            const defaultSettings = settings.getDefaultSettings();
-            return defaultSettings[key] !== undefined ? defaultSettings[key] : null;
-        }
-    });
+        },
 
-    ipcMain.handle('set-setting', async (event, key, value) => {
-        try {
-            if (typeof key !== 'string') {
-                throw new Error('Invalid key type, expected string');
+        'get-setting': async (event, key) => {
+            try {
+                if (typeof key !== 'string') {
+                    throw new Error('Invalid key type, expected string');
+                }
+                return settings.getSetting(key);
+            } catch (error) {
+                logger.withCategory('settings').error(`Error handling get-setting request for key "${key}":`, error);
+                const defaultSettings = settings.getDefaultSettings();
+                return defaultSettings[key] !== undefined ? defaultSettings[key] : null;
             }
-            return settings.setSetting(key, value);
-        } catch (error) {
-            logger.withCategory('settings').error(`Error handling set-setting request for key "${key}":`, error);
-            return false;
-        }
-    });
+        },
 
-    ipcMain.handle('save-settings', async (event, newSettings) => {
-        try {
-            if (typeof newSettings !== 'object' || newSettings === null) {
-                throw new Error('Invalid settings type, expected object');
+        'set-setting': async (event, key, value) => {
+            try {
+                if (typeof key !== 'string') {
+                    throw new Error('Invalid key type, expected string');
+                }
+                return settings.setSetting(key, value);
+            } catch (error) {
+                logger.withCategory('settings').error(`Error handling set-setting request for key "${key}":`, error);
+                return false;
             }
-            const result = settings.saveSettings(newSettings);
+        },
 
-            // Broadcast settings change so every renderer can react.
-            if (result) {
-                BrowserWindow.getAllWindows().forEach((win) => {
-                    win.webContents.send('settings-changed', newSettings);
-                });
+        'save-settings': async (event, newSettings) => {
+            try {
+                if (typeof newSettings !== 'object' || newSettings === null) {
+                    throw new Error('Invalid settings type, expected object');
+                }
+                const result = settings.saveSettings(newSettings);
+                if (result && typeof broadcastSettingsChange === 'function') {
+                    broadcastSettingsChange(newSettings);
+                }
+                return result;
+            } catch (error) {
+                logger.withCategory('settings').error('Error handling save-settings request:', error);
+                return false;
             }
+        },
 
-            return result;
-        } catch (error) {
-            logger.withCategory('settings').error('Error handling save-settings request:', error);
-            return false;
-        }
-    });
-
-    ipcMain.handle('get-environment-info', async () => {
-        try {
-            return settings.getEnvironmentInfo();
-        } catch (error) {
-            logger.withCategory('api').error('Error handling get-environment-info request:', error);
-            return {
-                nodeEnv: 'unknown',
-                dev: undefined,
-                prod: undefined,
-                defaultMock: true,
-                platform: process.platform,
-                userDataPath: 'unknown',
-            };
-        }
-    });
-
-    ipcMain.handle('refresh-api', async () => {
-        try {
-            logger.withCategory('settings').info('🔄 Refreshing API due to settings change');
-            apiFactory.refreshApi();
-            return { success: true };
-        } catch (error) {
-            logger.withCategory('api').error('Error handling refresh-api request:', error);
-            return { success: false, error: error.message };
-        }
-    });
-
-    ipcMain.handle('get-boost-threshold', async (event, challengeId) => {
-        try {
-            return settings.getEffectiveSetting('boostTime', challengeId);
-        } catch (error) {
-            logger.withCategory('settings').error('Error getting boost threshold:', error);
-            return settings.SETTINGS_SCHEMA.boostTime.default;
-        }
-    });
-
-    ipcMain.handle('set-boost-threshold', async (event, challengeId, threshold) => {
-        try {
-            settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
-            return { success: true };
-        } catch (error) {
-            logger.withCategory('settings').error('Error setting boost threshold:', error);
-            return { success: false, error: error.message };
-        }
-    });
-
-    ipcMain.handle('set-default-boost-threshold', async (event, threshold) => {
-        try {
-            settings.setGlobalDefault('boostTime', threshold);
-            return { success: true };
-        } catch (error) {
-            logger.withCategory('settings').error('Error setting default boost threshold:', error);
-            return { success: false, error: error.message };
-        }
-    });
-
-    ipcMain.handle('get-settings-schema', async () => {
-        try {
-            const schema = settings.SETTINGS_SCHEMA;
-            const serializableSchema = {};
-            const defaults = {};
-            Object.keys(schema).forEach((key) => {
-                serializableSchema[key] = {
-                    type: schema[key].type,
-                    default: schema[key].default,
-                    perChallenge: schema[key].perChallenge,
-                    label: schema[key].label,
-                    description: schema[key].description,
-                    min: schema[key].min,
-                    max: schema[key].max,
-                    unit: schema[key].unit,
+        'get-environment-info': async () => {
+            try {
+                return settings.getEnvironmentInfo();
+            } catch (error) {
+                logger.withCategory('api').error('Error handling get-environment-info request:', error);
+                return {
+                    nodeEnv: 'unknown',
+                    dev: undefined,
+                    prod: undefined,
+                    defaultMock: true,
+                    platform: process.platform,
+                    userDataPath: 'unknown',
                 };
-                defaults[key] = settings.getGlobalDefault(key);
-            });
-            return { schema: serializableSchema, defaults };
-        } catch (error) {
-            logger.withCategory('settings').error('Error getting settings schema:', error);
-            return { schema: {}, defaults: {} };
-        }
-    });
+            }
+        },
+
+        'refresh-api': async () => {
+            try {
+                logger.withCategory('settings').info('🔄 Refreshing API due to settings change');
+                apiFactory.refreshApi();
+                return { success: true };
+            } catch (error) {
+                logger.withCategory('api').error('Error handling refresh-api request:', error);
+                return { success: false, error: error.message };
+            }
+        },
+
+        'get-boost-threshold': async (event, challengeId) => {
+            try {
+                return settings.getEffectiveSetting('boostTime', challengeId);
+            } catch (error) {
+                logger.withCategory('settings').error('Error getting boost threshold:', error);
+                return settings.SETTINGS_SCHEMA.boostTime.default;
+            }
+        },
+
+        'set-boost-threshold': async (event, challengeId, threshold) => {
+            try {
+                settings.setChallengeOverride('boostTime', challengeId.toString(), threshold);
+                return { success: true };
+            } catch (error) {
+                logger.withCategory('settings').error('Error setting boost threshold:', error);
+                return { success: false, error: error.message };
+            }
+        },
+
+        'set-default-boost-threshold': async (event, threshold) => {
+            try {
+                settings.setGlobalDefault('boostTime', threshold);
+                return { success: true };
+            } catch (error) {
+                logger.withCategory('settings').error('Error setting default boost threshold:', error);
+                return { success: false, error: error.message };
+            }
+        },
+
+        'get-settings-schema': async () => {
+            try {
+                const schema = settings.SETTINGS_SCHEMA;
+                const serializableSchema = {};
+                const defaults = {};
+                Object.keys(schema).forEach((key) => {
+                    serializableSchema[key] = {
+                        type: schema[key].type,
+                        default: schema[key].default,
+                        perChallenge: schema[key].perChallenge,
+                        label: schema[key].label,
+                        description: schema[key].description,
+                        min: schema[key].min,
+                        max: schema[key].max,
+                        unit: schema[key].unit,
+                    };
+                    defaults[key] = settings.getGlobalDefault(key);
+                });
+                return { schema: serializableSchema, defaults };
+            } catch (error) {
+                logger.withCategory('settings').error('Error getting settings schema:', error);
+                return { schema: {}, defaults: {} };
+            }
+        },
+
+        'cleanup-stale-metadata': async (event, activeChallengeIds) => {
+            try {
+                const metadata = require('../metadata');
+                return metadata.cleanupStaleMetadata(activeChallengeIds);
+            } catch (error) {
+                logger.withCategory('api').error('Error cleaning up stale metadata:', error);
+                return false;
+            }
+        },
+    };
 
     THIN_HANDLERS.forEach(([channel, method, fallback, verb]) => {
-        ipcMain.handle(channel, async (event, ...args) => {
+        handlers[channel] = async (event, ...args) => {
             try {
                 return settings[method](...args);
             } catch (error) {
                 logger.withCategory('settings').error(`Error ${verb}:`, error);
                 return fallback;
             }
-        });
+        };
     });
 
-    ipcMain.handle('cleanup-stale-metadata', async (event, activeChallengeIds) => {
-        try {
-            const metadata = require('../metadata');
-            return metadata.cleanupStaleMetadata(activeChallengeIds);
-        } catch (error) {
-            logger.withCategory('api').error('Error cleaning up stale metadata:', error);
-            return false;
-        }
-    });
+    return handlers;
 };
 
-module.exports = { register };
+const register = (ipcMain) => {
+    const broadcastSettingsChange = (newSettings) => {
+        BrowserWindow.getAllWindows().forEach((win) => {
+            win.webContents.send('settings-changed', newSettings);
+        });
+    };
+    const handlers = buildHandlers({ broadcastSettingsChange });
+    for (const [channel, impl] of Object.entries(handlers)) {
+        ipcMain.handle(channel, impl);
+    }
+};
+
+module.exports = { register, buildHandlers };
