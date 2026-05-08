@@ -12,12 +12,15 @@ const entryPoints = {
     login: path.join(reactDir, 'pages', 'Login.jsx'),
     app: path.join(reactDir, 'pages', 'App.jsx'),
     logs: path.join(reactDir, 'pages', 'Logs.jsx'),
+    capacitor: path.join(reactDir, 'pages', 'Capacitor.jsx'),
 };
 
 // Capacitor entry point. Capacitor copies dist/ wholesale into the
 // Android WebView's web assets and loads index.html at app start.
 // Electron loads its own src/html/*.html directly via loadFile() and
 // ignores this index.html, so emitting it does not affect desktop.
+// The bundle loaded here is capacitor-bundle.js, NOT app-bundle.js,
+// so the bridge can install before React mounts.
 const capacitorIndexHtml = `<!doctype html>
 <html lang="en">
     <head>
@@ -25,7 +28,7 @@ const capacitorIndexHtml = `<!doctype html>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <title>GuruShots Auto Vote</title>
         <link href="styles.css" rel="stylesheet" />
-        <script defer src="app-bundle.js"></script>
+        <script defer src="capacitor-bundle.js"></script>
     </head>
     <body class="min-h-screen bg-base-200">
         <div id="root"></div>
@@ -68,6 +71,26 @@ async function buildReact() {
         },
     };
 
+    // Per-entry option overrides. The Capacitor entry transitively
+    // includes settings.js / logger.js which lazy-require Node built-ins
+    // and electron — code paths the Capacitor branch never reaches at
+    // runtime, but esbuild still tries to resolve at bundle time.
+    // Marking them external + IIFE-emitting an empty `require` shim in
+    // the bundle keeps the build green; the runtime-unreachable
+    // require()s become benign no-ops in the WebView.
+    const NODE_BUILTINS = [
+        'fs', 'path', 'os', 'crypto', 'stream', 'events', 'child_process',
+        'http', 'https', 'url', 'zlib', 'util', 'buffer', 'assert', 'net',
+        'tls', 'dns', 'querystring', 'string_decoder', 'tty', 'readline',
+    ];
+    const perEntryOptions = {
+        capacitor: {
+            external: [...NODE_BUILTINS, 'electron', 'electron-updater', 'node-cron'],
+            // Stub `require` so unreachable lazy requires don't ReferenceError in WebView.
+            banner: { js: 'var require = (typeof require !== "undefined") ? require : function(){ return {}; };' },
+        },
+    };
+
     try {
         if (isWatch) {
             // Watch mode - create contexts for each entry point
@@ -82,6 +105,7 @@ async function buildReact() {
 
                 const ctx = await context({
                     ...commonOptions,
+                    ...(perEntryOptions[name] || {}),
                     entryPoints: [entry],
                     outfile: path.join(distDir, `${name}-bundle.js`),
                 });
@@ -123,6 +147,7 @@ async function buildReact() {
 
                 await build({
                     ...commonOptions,
+                    ...(perEntryOptions[name] || {}),
                     entryPoints: [entry],
                     outfile: path.join(distDir, `${name}-bundle.js`),
                 });

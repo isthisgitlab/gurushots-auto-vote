@@ -18,12 +18,16 @@
  * never reached on Electron, where preload.js does the wiring.
  */
 
+// Bridge consumes only the IPC handler modules whose impls are
+// platform-agnostic. misc.handlers (uses Electron shell/BrowserWindow)
+// and update.handlers (uses electron-updater) supply Electron-specific
+// behavior that this bridge replaces with Capacitor-native equivalents
+// further down (openExternalUrl via Capacitor.Browser, update channels
+// stubbed pending the AndroidUpdateInstaller).
 const settingsHandlers = require('../ipc/settings.handlers');
 const votingHandlers = require('../ipc/voting.handlers');
 const logHandlers = require('../ipc/log.handlers');
 const actionsHandlers = require('../ipc/actions.handlers');
-const miscHandlers = require('../ipc/misc.handlers');
-const updateHandlers = require('../ipc/update.handlers');
 
 const settings = require('../settings');
 
@@ -55,25 +59,30 @@ const kebabToCamel = (channel) => channel.replace(/-([a-z])/g, (_, c) => c.toUpp
 const wrap = (impl) => (...args) => Promise.resolve(impl(null, ...args));
 
 const buildAllHandlers = () => {
-    // Electron-specific deps that the bridge stubs out for Capacitor.
-    // - Update lifecycle is handled by AndroidUpdateInstaller (separate module);
-    //   we stub the legacy electron-updater accessors so the IPC handlers
-    //   that depend on them return safe defaults rather than crashing.
-    // - getMainWindow / getLoginWindow are Electron BrowserWindows and
-    //   simply do not exist here.
-    const updateDeps = {
-        getAutoUpdater: () => null,
-        setAutoUpdater: () => {},
-        getMainWindow: () => null,
-    };
-    const miscDeps = {
-        getMainWindow: () => null,
-        getLoginWindow: () => null,
-    };
     // The Capacitor save-settings broadcaster routes through the local
     // pub/sub so React's onSettingsChanged subscribers fire.
     const settingsDeps = {
         broadcastSettingsChange: (newSettings) => emit('settings-changed', newSettings),
+    };
+
+    // Update channels are stubbed here pending AndroidUpdateInstaller.
+    // The shape mirrors update.handlers.js so React's UpdateContext sees
+    // the same { success, ... } objects it would on Electron.
+    const updateStubs = {
+        'check-for-updates': async () => ({ success: false, error: 'Update check not yet implemented on Android' }),
+        'download-update': async () => ({
+            success: false,
+            error: 'Mobile updater pending',
+            fallbackUrl: 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest',
+        }),
+        'install-update': async () => ({ success: false, error: 'Mobile updater pending' }),
+        'skip-update-version': async () => ({ success: false, error: 'Mobile updater pending' }),
+        'clear-skip-version': async () => ({ success: true }),
+        'get-releases-url': async () => ({
+            success: true,
+            url: 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest',
+        }),
+        'can-auto-update': async () => ({ success: true, canAutoUpdate: false }),
     };
 
     return {
@@ -81,8 +90,7 @@ const buildAllHandlers = () => {
         ...votingHandlers.buildHandlers(),
         ...logHandlers.buildHandlers(),
         ...actionsHandlers.buildHandlers(),
-        ...miscHandlers.buildHandlers(miscDeps),
-        ...updateHandlers.buildHandlers(updateDeps),
+        ...updateStubs,
     };
 };
 

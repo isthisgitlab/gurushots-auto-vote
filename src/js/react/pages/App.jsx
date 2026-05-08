@@ -166,11 +166,20 @@ function App() {
     );
 }
 
-// Mount the React app
-const container = document.getElementById('root');
-if (container) {
-    const root = createRoot(container);
-    root.render(<App />);
+// Mount the React app at module load. The Capacitor entry sets
+// __capacitorBootstrap before importing this module so it can defer
+// mounting until after the bridge is installed and settings are
+// hydrated; everywhere else (Electron) auto-mounts.
+export const mountApp = () => {
+    const container = document.getElementById('root');
+    if (container) {
+        const root = createRoot(container);
+        root.render(<App />);
+    }
+};
+
+if (!globalThis.__capacitorBootstrap) {
+    mountApp();
 }
 
 export default App;

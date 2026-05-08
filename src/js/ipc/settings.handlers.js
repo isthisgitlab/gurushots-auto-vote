@@ -9,7 +9,15 @@
  * orchestration channels.
  */
 
-const { BrowserWindow } = require('electron');
+// BrowserWindow is only used by the Electron register() path. Lazy-
+// require so this module can be bundled into the Capacitor renderer
+// without esbuild trying to resolve electron.
+let BrowserWindow = null;
+try {
+    BrowserWindow = require('electron').BrowserWindow;
+} catch {
+    // Capacitor / CLI: register() in this module is never reached.
+}
 const settings = require('../settings');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
