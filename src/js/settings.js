@@ -1115,7 +1115,7 @@ const SETTINGS_SCHEMA = {
     },
     compactCards: {
         type: 'boolean',
-        default: true,
+        default: false,
         perChallenge: true,
         validation: (value) => typeof value === 'boolean',
         validationOrder: 1,

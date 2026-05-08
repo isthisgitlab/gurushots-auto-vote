@@ -25,7 +25,7 @@ export function ChallengeCard({
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
     const [onlyBoost, setOnlyBoost] = useState(false);
     const [autoFillEnabled, setAutoFillEnabled] = useState(false);
-    const [isCompact, setIsCompact] = useState(true);
+    const [isCompact, setIsCompact] = useState(false);
     const [hasCompactOverride, setHasCompactOverride] = useState(false);
     const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
     const { fillNow, loading: filling, error: fillError, clearError: clearFillError } = useFillChallenge();
@@ -101,7 +101,7 @@ export function ChallengeCard({
                 setAutoFillEnabled(fillOn === true);
 
                 const compact = await window.api.getEffectiveSetting('compactCards', challenge.id.toString());
-                setIsCompact(compact !== false);
+                setIsCompact(compact === true);
                 const compactOverride = await window.api.getChallengeOverride(
                     'compactCards',
                     challenge.id.toString(),
@@ -126,7 +126,7 @@ export function ChallengeCard({
                 await window.api.setChallengeOverride('compactCards', challengeId, !isCompact);
             }
             const next = await window.api.getEffectiveSetting('compactCards', challengeId);
-            setIsCompact(next !== false);
+            setIsCompact(next === true);
             const override = await window.api.getChallengeOverride('compactCards', challengeId);
             setHasCompactOverride(override !== null);
         } catch {

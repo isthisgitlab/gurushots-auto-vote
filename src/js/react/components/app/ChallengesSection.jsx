@@ -14,7 +14,7 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
     const times = useTimers(challenges);
     const [votingAll, setVotingAll] = useState(false);
     const [runningCycle, setRunningCycle] = useState(false);
-    const [globalCompact, setGlobalCompact] = useState(true);
+    const [globalCompact, setGlobalCompact] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
 
     // Read the global compactCards default + listen for settings-changed
@@ -24,9 +24,9 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
         const sync = async () => {
             try {
                 const value = await window.api.getGlobalDefault('compactCards');
-                setGlobalCompact(value !== false);
+                setGlobalCompact(value === true);
             } catch {
-                /* default to true */
+                /* default to false (cards open in detailed view) */
             }
         };
         sync();
