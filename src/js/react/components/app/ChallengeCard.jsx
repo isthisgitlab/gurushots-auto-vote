@@ -224,7 +224,7 @@ export function ChallengeCard({
                             </div>
                         )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-1 shrink-0">
                         {showVoteButton && (
                             <VoteButton
                                 challengeId={challenge.id}
@@ -237,7 +237,7 @@ export function ChallengeCard({
                             user can see at-a-glance which cards diverge
                             from the global default. */}
                         <button
-                            className="btn btn-ghost btn-sm"
+                            className="btn btn-ghost btn-xs px-1"
                             onClick={handleToggleCompact}
                             title={isCompact ? 'Show details' : 'Compact'}
                         >
@@ -266,7 +266,7 @@ export function ChallengeCard({
                         </button>
                         {challenge.type !== 'flash' && (
                             <button
-                                className="btn btn-ghost btn-sm"
+                                className="btn btn-ghost btn-xs px-1"
                                 onClick={() => onSettingsClick(challenge.id, challenge.title)}
                                 title="Challenge Settings"
                             >
