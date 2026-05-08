@@ -77,9 +77,8 @@ const buildHandlers = () => ({
         }
     },
 
-    'run-voting-cycle-for-challenge': async (_event, payload = {}) => {
+    'run-voting-cycle-for-challenge': async (_event, challengeId) => {
         try {
-            const challengeId = payload?.challengeId;
             if (challengeId == null || challengeId === '') {
                 return { success: false, error: 'challengeId is required' };
             }
