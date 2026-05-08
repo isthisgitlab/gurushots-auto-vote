@@ -1,12 +1,51 @@
 /**
- * Runtime mode and OS-path resolution. The single allowed reader of
- * process.env so the rest of the codebase isn't sprinkled with env
- * lookups. Pure Node — no Electron, no logger import — so it can be
- * required from anywhere including bootstrap paths.
+ * Runtime mode, platform detection, and OS-path resolution. The single
+ * allowed reader of process.env so the rest of the codebase isn't
+ * sprinkled with env lookups. Pure Node — no Electron, no logger
+ * import — so it can be required from anywhere including bootstrap
+ * paths. Electron is touched only via a guarded require() inside
+ * isPackaged() and only when isElectron() is already true.
  */
 
 const path = require('path');
 const os = require('os');
+
+const hasNode = typeof process !== 'undefined' && process.versions != null;
+const getCapacitor = () => globalThis.Capacitor;
+
+const isElectron = () => hasNode && process.versions.electron != null;
+
+const isCapacitor = () => {
+    const cap = getCapacitor();
+    return cap != null && typeof cap.isNativePlatform === 'function';
+};
+
+const isCli = () => hasNode && !isElectron();
+
+const getPlatform = () => {
+    if (isElectron()) return 'electron';
+    if (isCapacitor()) return 'capacitor';
+    if (isCli()) return 'cli';
+    return 'unknown';
+};
+
+const isPackaged = () => {
+    if (isElectron()) {
+        try {
+            return require('electron').app.isPackaged;
+        } catch {
+            return false;
+        }
+    }
+    if (isCapacitor()) return getCapacitor().isNativePlatform();
+    return false;
+};
+
+const getOs = () => {
+    if (isCapacitor()) return getCapacitor().getPlatform();
+    if (hasNode) return process.platform;
+    return 'unknown';
+};
 
 const isDevelopment = () =>
     process.env.NODE_ENV === 'development' ||
@@ -42,6 +81,12 @@ const getUserDataDir = (appName) => {
 };
 
 module.exports = {
+    isElectron,
+    isCapacitor,
+    isCli,
+    getPlatform,
+    isPackaged,
+    getOs,
     isDevelopment,
     isProduction,
     isTest,

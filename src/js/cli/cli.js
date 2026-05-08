@@ -25,10 +25,8 @@
 const logger = require('../logger');
 logger.withCategory('api').debug('Logger imported', null);
 
-// Import node-cron for scheduling
-const cron = require('node-cron');
-logger.withCategory('api').debug('cron imported', null);
-const { getRandomCheckFrequencyMs } = require('../scheduling/randomDelay');
+const { createScheduler } = require('../scheduling/runScheduler');
+logger.withCategory('api').debug('runScheduler imported', null);
 const readline = require('readline');
 logger.withCategory('api').debug('readline imported', null);
 
@@ -233,335 +231,40 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false } = {}) => {
 };
 
 /**
- * Start continuous voting with dynamic interval scheduling
+ * Start continuous voting with dynamic interval scheduling.
+ * Delegates the scheduling engine to runScheduler; the CLI host
+ * owns signal handling and process keep-alive.
  */
 const startContinuousVoting = async () => {
-    logger.withCategory('voting').debug('startContinuousVoting: Function entered', null);
     const userSettings = settings.loadSettings();
-    logger.withCategory('settings').debug('startContinuousVoting: Settings loaded');
     const isMockMode = userSettings.mock;
 
     logger
         .withCategory('voting')
         .info(`=== Starting Continuous Voting Mode (${isMockMode ? 'MOCK' : 'REAL'} MODE) ===`);
 
-    // Check if user is authenticated
     if (!getMiddlewareInstance().isAuthenticated()) {
         logger.withCategory('authentication').error('No authentication token found. Please login first');
         logger.withCategory('ui').info('Run: login');
         return;
     }
 
-    let cycleCount = 0;
-    let isRunning = true;
-    let thresholdScheduler = null; // For scheduling threshold cron changes
-    let currentScheduledChallenge = null; // Track currently scheduled challenge to prevent duplicates
-    let lastSettingsHash = null; // Track settings changes
-    let currentCronJob = null; // Threshold-mode cron job (last-minute cadence). null while normal mode is active.
-    let normalScheduler = null; // Normal-mode setTimeout handle. null once we switch into threshold mode.
+    const scheduler = createScheduler({
+        runVotingCycle: (cycleNumber) => runVotingCycle(cycleNumber),
+        getActiveChallenges: () => getMiddlewareInstance().getActiveChallenges(),
+    });
 
-    // Function to handle graceful shutdown
     const handleShutdown = () => {
         logger.withCategory('voting').info('🛑 Shutting down continuous voting...');
-        isRunning = false;
-
-        // Clear threshold scheduler
-        if (thresholdScheduler) {
-            clearTimeout(thresholdScheduler);
-            thresholdScheduler = null;
-        }
-
-        // Clear normal-mode setTimeout
-        if (normalScheduler) {
-            clearTimeout(normalScheduler);
-            normalScheduler = null;
-        }
-
-        // Stop cron job
-        if (currentCronJob) {
-            currentCronJob.stop();
-        }
-
+        scheduler.stop();
         process.exit(0);
     };
 
-    // Set up signal handlers for graceful shutdown
     process.on('SIGINT', handleShutdown);
     process.on('SIGTERM', handleShutdown);
 
-    /**
-     * Calculate when the next challenge will enter the last threshold period
-     */
-    const calculateNextLastThresholdEntry = async (challenges, now) => {
-        let nextEntry = null;
-        let earliestEntryTime = Infinity;
-
-        for (const challenge of challenges) {
-            // Skip flash challenges and ended challenges
-            if (challenge.type === 'flash' || challenge.close_time <= now) {
-                continue;
-            }
-
-            const effectiveLastMinuteThreshold = settings.getEffectiveSetting(
-                'lastMinuteThreshold',
-                challenge.id.toString(),
-            );
-            const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
-
-            // Only consider future entries
-            if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
-                earliestEntryTime = thresholdEntryTime;
-                nextEntry = {
-                    challengeId: challenge.id,
-                    challengeTitle: challenge.title,
-                    entryTime: thresholdEntryTime,
-                    lastMinuteThreshold: effectiveLastMinuteThreshold,
-                };
-            }
-        }
-
-        return nextEntry;
-    };
-
-    /**
-     * Schedule a cron change when a challenge enters the last threshold period
-     */
-    const scheduleThresholdCronChange = async (nextEntry) => {
-        if (!nextEntry || !isRunning) {
-            return;
-        }
-
-        // Check if we're already scheduling the same challenge
-        if (
-            currentScheduledChallenge &&
-            currentScheduledChallenge.challengeId === nextEntry.challengeId &&
-            currentScheduledChallenge.entryTime === nextEntry.entryTime
-        ) {
-            logger
-                .withCategory('voting')
-                .debug(
-                    `⏰ Already scheduling threshold change for challenge "${nextEntry.challengeTitle}", skipping duplicate`,
-                );
-            return;
-        }
-
-        const now = Math.floor(Date.now() / 1000);
-        const timeUntilEntry = (nextEntry.entryTime - now) * 1000; // Convert to milliseconds
-
-        // Only schedule if the entry time is in the future
-        if (timeUntilEntry <= 0) {
-            logger
-                .withCategory('voting')
-                .debug(
-                    `⏰ Threshold entry time for challenge "${nextEntry.challengeTitle}" has already passed, skipping`,
-                );
-            return;
-        }
-
-        logger
-            .withCategory('voting')
-            .info(
-                `⏰ Scheduling threshold cron change for challenge "${nextEntry.challengeTitle}" in ${Math.round(timeUntilEntry / 1000)} seconds`,
-            );
-
-        // Clear any existing scheduler
-        if (thresholdScheduler) {
-            clearTimeout(thresholdScheduler);
-            thresholdScheduler = null;
-        }
-
-        // Track the currently scheduled challenge
-        currentScheduledChallenge = {
-            challengeId: nextEntry.challengeId,
-            challengeTitle: nextEntry.challengeTitle,
-            entryTime: nextEntry.entryTime,
-            lastMinuteThreshold: nextEntry.lastMinuteThreshold,
-        };
-
-        // Schedule the cron change
-        thresholdScheduler = setTimeout(async () => {
-            if (isRunning) {
-                logger
-                    .withCategory('voting')
-                    .info(
-                        `⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`,
-                    );
-
-                // Stop normal-mode setTimeout chain (one-way transition into threshold cron)
-                if (normalScheduler) {
-                    clearTimeout(normalScheduler);
-                    normalScheduler = null;
-                }
-                if (currentCronJob) {
-                    currentCronJob.stop();
-                }
-
-                // Create new cron job with last threshold frequency
-                const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
-                const thresholdCronExpression = `*/${lastMinuteCheckFrequency} * * * *`;
-
-                currentCronJob = cron.schedule(
-                    thresholdCronExpression,
-                    async () => {
-                        if (!isRunning) {
-                            currentCronJob.stop();
-                            return;
-                        }
-
-                        try {
-                            await runVotingCycle(++cycleCount);
-
-                            // Update threshold scheduling after each voting cycle
-                            await updateThresholdScheduling();
-                        } catch (error) {
-                            logger.withCategory('voting').error('Error in scheduled voting cycle');
-                            logger.withCategory('voting').debug('Full threshold cron error details:', error);
-                        }
-                    },
-                    {
-                        scheduled: false,
-                    },
-                );
-
-                currentCronJob.start();
-                logger
-                    .withCategory('voting')
-                    .info(
-                        `⏰ Switched to last threshold cron: ${thresholdCronExpression} (every ${lastMinuteCheckFrequency} minutes)`,
-                    );
-
-                // Clear the scheduled challenge tracking
-                currentScheduledChallenge = null;
-
-                // Update threshold scheduling for the next potential entry
-                await updateThresholdScheduling();
-            }
-        }, timeUntilEntry);
-    };
-
-    /**
-     * Update threshold scheduling based on current challenges
-     */
-    const updateThresholdScheduling = async () => {
-        logger.withCategory('voting').debug('updateThresholdScheduling: Function entered', null);
-        if (!isRunning) {
-            logger.withCategory('voting').debug('updateThresholdScheduling: Not running, returning', null);
-            return;
-        }
-
-        try {
-            logger.withCategory('challenges').debug('updateThresholdScheduling: About to get active challenges', null);
-            // Get current challenges
-            const challengesResponse = await getMiddlewareInstance().getActiveChallenges();
-            logger
-                .withCategory('api')
-                .debug(`updateThresholdScheduling: Got response, type: ${typeof challengesResponse}`, null);
-            const challenges = challengesResponse?.challenges || [];
-            logger
-                .withCategory('challenges')
-                .debug(`updateThresholdScheduling: Extracted challenges array, length: ${challenges.length}`, null);
-            const now = Math.floor(Date.now() / 1000);
-            logger.withCategory('voting').debug(`updateThresholdScheduling: Current timestamp: ${now}`, null);
-
-            // Check if settings have changed (relevant settings for threshold scheduling)
-            logger.withCategory('settings').debug('updateThresholdScheduling: About to get settings');
-            const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
-            logger
-                .withCategory('settings')
-                .debug(`updateThresholdScheduling: Got lastMinuteCheckFrequency: ${lastMinuteCheckFrequency}`, null);
-            const lastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', 'global');
-            logger
-                .withCategory('settings')
-                .debug(`updateThresholdScheduling: Got lastMinuteThreshold: ${lastMinuteThreshold}`, null);
-
-            const currentSettingsHash = JSON.stringify({
-                lastMinuteCheckFrequency,
-                lastMinuteThreshold,
-            });
-            logger
-                .withCategory('settings')
-                .debug(`updateThresholdScheduling: Created settings hash: ${currentSettingsHash.length} chars`);
-            logger
-                .withCategory('settings')
-                .debug(`updateThresholdScheduling: lastSettingsHash is: ${lastSettingsHash}`);
-            logger.withCategory('settings').debug('updateThresholdScheduling: About to compare settings hashes');
-
-            if (lastSettingsHash !== null && lastSettingsHash !== currentSettingsHash) {
-                logger.withCategory('settings').info('⏰ Settings changed, clearing existing threshold scheduler');
-                if (thresholdScheduler) {
-                    clearTimeout(thresholdScheduler);
-                    thresholdScheduler = null;
-                }
-                currentScheduledChallenge = null;
-            }
-            lastSettingsHash = currentSettingsHash;
-
-            const nextEntry = await calculateNextLastThresholdEntry(challenges, now);
-
-            if (nextEntry) {
-                await scheduleThresholdCronChange(nextEntry);
-            } else {
-                // Clear any existing scheduler if no upcoming entries
-                if (thresholdScheduler) {
-                    clearTimeout(thresholdScheduler);
-                    thresholdScheduler = null;
-                    currentScheduledChallenge = null;
-                    logger.withCategory('voting').info('⏰ No upcoming threshold entries, cleared threshold scheduler');
-                }
-            }
-        } catch (error) {
-            logger.withCategory('voting').warning('Error updating threshold scheduling:');
-            logger.withCategory('voting').debug('updateThresholdScheduling error details:', error);
-        }
-    };
-
-    // Run initial cycle
-    logger.withCategory('voting').info('🚀 Running initial voting cycle...');
-    await runVotingCycle(++cycleCount);
-
-    // Normal mode uses a recursive setTimeout chain so each cycle re-rolls a random delay
-    // in [checkFrequencyMin, checkFrequencyMax]. Re-loading settings each tick lets a live
-    // `set-setting checkFrequencyMax 25` apply to the next cycle without restart.
-    const scheduleNextNormalCycle = () => {
-        if (!isRunning) {
-            normalScheduler = null;
-            return;
-        }
-        const fresh = settings.loadSettings();
-        const delayMs = getRandomCheckFrequencyMs(fresh);
-        logger
-            .withCategory('voting')
-            .info(
-                `Next normal cycle in ${(delayMs / 60_000).toFixed(2)} min (range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`,
-            );
-
-        normalScheduler = setTimeout(async () => {
-            if (!isRunning) {
-                normalScheduler = null;
-                return;
-            }
-            try {
-                await runVotingCycle(++cycleCount);
-                await updateThresholdScheduling();
-            } catch (error) {
-                logger.withCategory('voting').error('Error in scheduled voting cycle');
-                logger.withCategory('voting').debug('Full normal cycle error details:', error);
-            } finally {
-                scheduleNextNormalCycle();
-            }
-        }, delayMs);
-    };
-
-    scheduleNextNormalCycle();
-    logger
-        .withCategory('voting')
-        .success(
-            `Continuous voting started with check frequency range ${settings.getSetting('checkFrequencyMin')}-${settings.getSetting('checkFrequencyMax')} min`,
-        );
+    await scheduler.start();
     logger.withCategory('ui').info('Press Ctrl+C to stop');
-
-    // Set up proactive threshold scheduling
-    await updateThresholdScheduling();
 
     // Keep the process running
     process.stdin.resume();

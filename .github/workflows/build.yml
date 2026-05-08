@@ -17,14 +17,8 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v6
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v6
-              with:
-                  node-version: '24'
-                  cache: 'npm'
-
-            - name: Install dependencies
-              run: npm ci
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
 
             - name: Run tests
               run: npm test
@@ -43,10 +37,10 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v6
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v6
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
               with:
-                  node-version: '24'
+                  install: 'false'
 
             - name: Determine if beta
               id: is_beta
@@ -124,20 +118,10 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v6
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v6
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
               with:
-                  node-version: '24'
-                  cache: 'npm'
-
-            - name: Download bumped package.json
-              uses: actions/download-artifact@v8
-              with:
-                  name: bumped-package
-                  path: .
-
-            - name: Install dependencies
-              run: npm ci
+                  download-bumped: 'true'
 
             - name: Run linter
               run: npm run lint
@@ -199,8 +183,103 @@ jobs:
                       ${{ matrix.platform != 'win' && 'build/cli/' || '' }}
                   retention-days: 1
 
+    build-android:
+        runs-on: ubuntu-slim
+        needs: [version-bump]
+        if: github.event_name == 'push'
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
+              with:
+                  download-bumped: 'true'
+
+            - name: Setup Java (JDK 17 for Gradle)
+              uses: actions/setup-java@v4
+              with:
+                  distribution: 'temurin'
+                  java-version: '17'
+
+            - name: Setup Android SDK
+              uses: android-actions/setup-android@v3
+
+            - name: Skip if Capacitor not yet wired
+              id: cap_check
+              shell: bash
+              run: |
+                  if [ -d "android" ] && [ -f "capacitor.config.json" ]; then
+                    echo "READY=true" >> $GITHUB_OUTPUT
+                  else
+                    echo "READY=false" >> $GITHUB_OUTPUT
+                    echo "::notice::Capacitor scaffolding not present yet (no android/ or capacitor.config.json). Skipping Android build."
+                  fi
+
+            - name: Build renderer
+              if: steps.cap_check.outputs.READY == 'true'
+              run: npm run build:prep
+
+            - name: Sync Capacitor
+              if: steps.cap_check.outputs.READY == 'true'
+              run: npx cap sync android
+
+            - name: Decode keystore
+              if: steps.cap_check.outputs.READY == 'true'
+              env:
+                  KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+              shell: bash
+              run: |
+                  if [ -z "$KEYSTORE_B64" ]; then
+                    echo "::error::ANDROID_KEYSTORE_BASE64 secret not set. See plan: pre-flight keystore setup."
+                    exit 1
+                  fi
+                  echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
+
+            - name: Set Android version
+              if: steps.cap_check.outputs.READY == 'true'
+              shell: bash
+              env:
+                  RUN_NUMBER: ${{ github.run_number }}
+              run: |
+                  VERSION=$(node -p "require('./package.json').version")
+                  sed -i "s/versionName \".*\"/versionName \"$VERSION\"/" android/app/build.gradle
+                  sed -i "s/versionCode [0-9]*/versionCode $RUN_NUMBER/" android/app/build.gradle
+
+            - name: Build signed APK
+              if: steps.cap_check.outputs.READY == 'true'
+              env:
+                  KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+                  KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+                  KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+              shell: bash
+              run: |
+                  cd android
+                  ./gradlew assembleRelease \
+                    -Pandroid.injected.signing.store.file=$(pwd)/app/release.jks \
+                    -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
+                    -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
+                    -Pandroid.injected.signing.key.password=$KEY_PASSWORD
+
+            - name: Rename APK with version
+              if: steps.cap_check.outputs.READY == 'true'
+              shell: bash
+              run: |
+                  VERSION=$(node -p "require('./package.json').version")
+                  mkdir -p build
+                  mv android/app/build/outputs/apk/release/app-release.apk \
+                     build/GuruShotsAutoVote-v${VERSION}.apk
+
+            - name: Upload Android artifact
+              if: steps.cap_check.outputs.READY == 'true'
+              uses: actions/upload-artifact@v7
+              with:
+                  name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-android-builds' || 'android-builds' }}
+                  path: build/GuruShotsAutoVote-v*.apk
+                  retention-days: 1
+
     create-release:
-        needs: [build, version-bump]
+        needs: [build, build-android, version-bump]
         runs-on: ubuntu-slim
         if: github.event_name == 'push'
 
@@ -210,16 +289,11 @@ jobs:
               with:
                   ref: ${{ github.ref_name }}
 
-            - name: Setup Node.js
-              uses: actions/setup-node@v6
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
               with:
-                  node-version: '24'
-
-            - name: Download bumped package.json
-              uses: actions/download-artifact@v8
-              with:
-                  name: bumped-package
-                  path: .
+                  download-bumped: 'true'
+                  install: 'false'
 
             - name: Get version from package.json
               id: get_version
@@ -283,6 +357,9 @@ jobs:
                       - **macOS**: Native CLI executable (x64)
                       - **Linux**: Native CLI executables (x64 + ARM64)
 
+                      ### 📱 Mobile Application
+                      - **Android**: APK (sideload — no Play Store). Enable "Install unknown apps" for your file manager / browser, then download and tap to install.
+
                       ### 🔗 Build Info
                       - Commit: ${{ github.sha }}
                       - Version: ${{ steps.get_version.outputs.VERSION }}
@@ -301,6 +378,7 @@ jobs:
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux-arm
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}android-builds/GuruShotsAutoVote-v*.apk
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

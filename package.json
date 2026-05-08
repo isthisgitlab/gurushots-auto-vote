@@ -13,6 +13,8 @@
         "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
         "build:react": "node scripts/build-react.js",
         "build:prep": "npm run build:css && npm run build:react",
+        "build:android": "npm run build:prep && npx cap sync android && cd android && ./gradlew assembleRelease",
+        "android:open": "npx cap open android",
         "build:linux": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux",
         "build:linux-arm": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux --arm64",
         "build:mac": "npm run build:prep && cross-env NODE_ENV=production electron-builder --mac",
@@ -79,6 +81,12 @@
         "npm": ">=8.0.0"
     },
     "dependencies": {
+        "@capacitor/android": "^6.2.0",
+        "@capacitor/core": "^6.2.0",
+        "@capacitor/filesystem": "^6.0.3",
+        "@capacitor/local-notifications": "^6.2.0",
+        "@capacitor/preferences": "^6.0.3",
+        "@capawesome-team/capacitor-android-foreground-service": "^6.0.0",
         "axios": "^1.16.0",
         "electron-updater": "^6.8.3",
         "node-cron": "^4.2.1",
@@ -86,6 +94,7 @@
         "react-dom": "^19.2.6"
     },
     "devDependencies": {
+        "@capacitor/cli": "^6.2.0",
         "@eslint/js": "^10.0.1",
         "@jest/globals": "^30.4.1",
         "@swc/jest": "^0.2.39",

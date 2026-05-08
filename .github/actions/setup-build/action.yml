@@ -1,0 +1,30 @@
+name: Setup Build Environment
+description: Repeated setup shared by test, build matrix, build-android, and create-release. Sets up Node 24 with npm cache, optionally pulls the bumped package.json artifact, and installs dependencies.
+
+inputs:
+    download-bumped:
+        description: When 'true', download the bumped-package artifact uploaded by the version-bump job before installing.
+        required: false
+        default: 'false'
+    install:
+        description: When 'true' (default), run npm ci. Set 'false' for jobs that want to install differently.
+        required: false
+        default: 'true'
+
+runs:
+    using: composite
+    steps:
+        - uses: actions/setup-node@v6
+          with:
+              node-version: '24'
+              cache: 'npm'
+
+        - if: inputs.download-bumped == 'true'
+          uses: actions/download-artifact@v8
+          with:
+              name: bumped-package
+              path: .
+
+        - if: inputs.install == 'true'
+          shell: bash
+          run: npm ci
