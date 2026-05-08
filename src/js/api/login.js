@@ -5,8 +5,7 @@
  * It's designed to work with both CLI and GUI interfaces.
  */
 
-const axios = require('axios');
-const { createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
+const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
 const logger = require('../logger');
 
 /**
@@ -23,57 +22,30 @@ const logger = require('../logger');
  */
 const authenticate = async (email, password) => {
     logger.withCategory('authentication').info('Starting authentication...', null);
-    const startTime = Date.now();
 
-    // Prepare login data
     const data = `login=${encodeURIComponent(email)}&password=${password}`;
-
-    // Prepare request configuration
-    const config = {
-        method: 'post',
-        url: 'https://api.gurushots.com/rest_mobile/signup', // API endpoint for login
-        headers: {
-            ...createCommonHeaders(undefined), // No token for login request
-            'content-type': FORM_CONTENT_TYPE,
-            'content-length': data.length.toString(),
-            'x-token': undefined,
-        },
-        data: data,
-        timeout: 5000, // 5 second timeout
+    const headers = {
+        ...createCommonHeaders(undefined),
+        'content-type': FORM_CONTENT_TYPE,
+        'content-length': data.length.toString(),
+        'x-token': undefined,
     };
 
-    try {
-        // Log the request
-        logger.withCategory('api').apiRequest('POST', config.url);
+    // Routed through makePostRequest so the CapacitorHttp adapter applies on
+    // Android — the iOS-spoof headers in randomizer.js (host, user-agent) are
+    // forbidden in browser fetch and only survive via native OkHttp.
+    const responseData = await makePostRequest(
+        'https://api.gurushots.com/rest_mobile/signup',
+        headers,
+        data,
+    );
 
-        // Send login request
-        const response = await axios(config);
-
-        // Log successful response with full data
-        logger.withCategory('api').api('API Response', {
-            method: 'POST',
-            url: config.url,
-            status: response.status,
-            duration: Date.now() - startTime,
-            responseData: response.data,
-        });
+    if (responseData) {
         logger.withCategory('authentication').success('Authentication successful', null, null);
-
-        return response.data;
-    } catch (error) {
-        // Log failed response with error details
-        const status = error.response?.status || 'NO_RESPONSE';
-        logger.withCategory('api').api('API Error Response', {
-            method: 'POST',
-            url: config.url,
-            status: status,
-            duration: Date.now() - startTime,
-            error: error.message,
-            responseData: error.response?.data || null,
-        });
-        logger.withCategory('authentication').error('Authentication error:', error.message || error);
-        return null;
+    } else {
+        logger.withCategory('authentication').error('Authentication failed', null);
     }
+    return responseData;
 };
 
 module.exports = {

@@ -178,8 +178,14 @@ export const mountApp = () => {
     }
 };
 
-if (!globalThis.__capacitorBootstrap) {
-    mountApp();
-}
+// Deferred via queueMicrotask: ESM hoists Capacitor.jsx's static
+// imports above its `globalThis.__capacitorBootstrap = true;` assignment,
+// so a synchronous check at module load would see the flag undefined
+// and double-mount on top of Login.jsx, breaking React's reconciler.
+queueMicrotask(() => {
+    if (!globalThis.__capacitorBootstrap) {
+        mountApp();
+    }
+});
 
 export default App;

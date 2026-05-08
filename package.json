@@ -13,7 +13,7 @@
         "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
         "build:react": "node scripts/build-react.js",
         "build:prep": "npm run build:css && npm run build:react",
-        "build:android": "npm run build:prep && npx cap sync android && cd android && ./gradlew assembleRelease",
+        "build:android": "cross-env NODE_ENV=production npm run build:prep && npx cap sync android && cd android && ./gradlew assembleRelease",
         "android:open": "npx cap open android",
         "build:linux": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux",
         "build:linux-arm": "npm run build:prep && cross-env NODE_ENV=production electron-builder --linux --arm64",

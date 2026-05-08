@@ -184,8 +184,13 @@ export const mountLogin = () => {
     }
 };
 
-if (!globalThis.__capacitorBootstrap) {
-    mountLogin();
-}
+// Deferred via queueMicrotask: see App.jsx for the full reasoning —
+// ESM import hoisting moves Capacitor.jsx's bootstrap-flag assignment
+// after its imports, so the check has to wait a microtask to see it.
+queueMicrotask(() => {
+    if (!globalThis.__capacitorBootstrap) {
+        mountLogin();
+    }
+});
 
 export default LoginPage;

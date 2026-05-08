@@ -206,6 +206,8 @@ jobs:
               uses: android-actions/setup-android@v3
 
             - name: Build renderer
+              env:
+                  NODE_ENV: production
               run: npm run build:prep
 
             - name: Sync Capacitor
