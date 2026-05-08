@@ -18,6 +18,30 @@ jest.mock('../../src/js/api/randomizer', () => ({
     })),
 }));
 
+// Mock the runtime module so we can flip isCapacitor() per-test.
+jest.mock('../../src/js/runtime', () => ({
+    isCapacitor: jest.fn(() => false),
+    isElectron: jest.fn(() => false),
+    isCli: jest.fn(() => true),
+    getPlatform: jest.fn(() => 'cli'),
+    isPackaged: jest.fn(() => false),
+    getOs: jest.fn(() => 'darwin'),
+    isDevelopment: jest.fn(() => false),
+    isProduction: jest.fn(() => true),
+    isTest: jest.fn(() => true),
+    getEnvSnapshot: jest.fn(() => ({})),
+    getUserDataDir: jest.fn((appName) => `/tmp/${appName}`),
+}));
+
+// Mock @capacitor/core for the CapacitorHttp adapter test.
+jest.mock(
+    '@capacitor/core',
+    () => ({
+        CapacitorHttp: { request: jest.fn() },
+    }),
+    { virtual: true },
+);
+
 // Mock the logger module
 jest.mock('../../src/js/logger', () => {
     const mockApiFn = jest.fn();
@@ -261,6 +285,100 @@ describe('api-client', () => {
                 responseData: null,
                 timeout: false,
             });
+        });
+
+        test('should attach CapacitorHttp adapter when running on Capacitor', async () => {
+            const runtime = require('../../src/js/runtime');
+            runtime.isCapacitor.mockReturnValue(true);
+
+            const mockResponse = {
+                status: 200,
+                headers: {},
+                data: { ok: true },
+            };
+            axios.mockResolvedValueOnce(mockResponse);
+
+            const headers = createCommonHeaders(mockToken);
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            // Verify axios was called with an adapter function (the CapacitorHttp wrapper).
+            const callArgs = axios.mock.calls[axios.mock.calls.length - 1][0];
+            expect(typeof callArgs.adapter).toBe('function');
+            expect(result).toEqual(mockResponse.data);
+
+            runtime.isCapacitor.mockReturnValue(false);
+        });
+
+        test('CapacitorHttp adapter forwards the request to native and reshapes the response', async () => {
+            const runtime = require('../../src/js/runtime');
+            runtime.isCapacitor.mockReturnValue(true);
+
+            // Capture the adapter axios receives, then invoke it directly to
+            // exercise the wrapping logic (method-uppercase, timeout fan-out,
+            // axios-shaped response build).
+            let capturedAdapter;
+            axios.mockImplementationOnce(async (config) => {
+                capturedAdapter = config.adapter;
+                return { status: 200, headers: {}, data: { triggered: true } };
+            });
+            await makePostRequest(mockUrl, createCommonHeaders(mockToken), mockData);
+
+            expect(capturedAdapter).toBeDefined();
+
+            const { CapacitorHttp } = require('@capacitor/core');
+            CapacitorHttp.request.mockResolvedValueOnce({
+                data: { hello: 'native' },
+                status: 201,
+                headers: { 'x-from-native': '1' },
+            });
+
+            const adapterResult = await capturedAdapter({
+                method: 'post',
+                url: 'https://api.gurushots.com/native-test',
+                headers: { foo: 'bar' },
+                data: 'payload',
+                timeout: 12345,
+            });
+
+            expect(CapacitorHttp.request).toHaveBeenCalledWith({
+                method: 'POST',
+                url: 'https://api.gurushots.com/native-test',
+                headers: { foo: 'bar' },
+                data: 'payload',
+                connectTimeout: 12345,
+                readTimeout: 12345,
+            });
+            expect(adapterResult.data).toEqual({ hello: 'native' });
+            expect(adapterResult.status).toBe(201);
+            expect(adapterResult.headers).toEqual({ 'x-from-native': '1' });
+
+            runtime.isCapacitor.mockReturnValue(false);
+        });
+
+        test('CapacitorHttp adapter defaults method to GET when config.method is missing', async () => {
+            const runtime = require('../../src/js/runtime');
+            runtime.isCapacitor.mockReturnValue(true);
+
+            let capturedAdapter;
+            axios.mockImplementationOnce(async (config) => {
+                capturedAdapter = config.adapter;
+                return { status: 200, headers: {}, data: {} };
+            });
+            await makePostRequest(mockUrl, createCommonHeaders(mockToken), mockData);
+
+            const { CapacitorHttp } = require('@capacitor/core');
+            CapacitorHttp.request.mockResolvedValueOnce({ data: null, status: 204, headers: undefined });
+
+            const adapterResult = await capturedAdapter({ url: '/x' });
+
+            // GET method when config.method is not provided.
+            expect(CapacitorHttp.request).toHaveBeenCalledWith(
+                expect.objectContaining({ method: 'GET' }),
+            );
+            // headers default to {} when CapacitorHttp returns undefined.
+            expect(adapterResult.headers).toEqual({});
+
+            runtime.isCapacitor.mockReturnValue(false);
         });
 
         test('should log API response with full data', async () => {
