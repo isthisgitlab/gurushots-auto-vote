@@ -1,0 +1,11 @@
+# Revisions listed here are skipped by `git blame` so authorship of
+# each line is attributed to the commit that last touched it semantically,
+# not the bulk-formatting commit.
+#
+# Per-developer opt-in (one-time):
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# GitHub's web blame UI honors this file automatically.
+
+# style: format codebase with prettier
+3654790e2a194f373408835cd31afd685dd8e544
