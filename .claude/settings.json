@@ -1,4 +1,5 @@
 {
+    "enabledPlugins": {},
     "extraKnownMarketplaces": {
         "anthropic-plugins": {
             "source": {
@@ -12,11 +13,6 @@
                 "repo": "MadAppGang/claude-code"
             }
         }
-    },
-    "enabledPlugins": {
-        "explanatory-output-style@anthropic-plugins": true,
-        "feature-dev@anthropic-plugins": true,
-        "frontend-design@anthropic-plugins": true
     },
     "installedPluginVersions": {
         "explanatory-output-style@anthropic-plugins": "1.0.0",
