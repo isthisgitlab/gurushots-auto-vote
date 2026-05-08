@@ -44,6 +44,9 @@ jest.mock('../src/js/logger.js', () => ({
     cliDebug: jest.fn(),
     cliWarning: jest.fn(),
     isDevMode: jest.fn(() => false),
+    // Runtime detection helpers (canonical source) — settings.js destructures these from logger.
+    isSourceCode: jest.fn(() => true),
+    getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
     CATEGORIES: {
         SETTINGS: 'settings',
         AUTHENTICATION: 'authentication',

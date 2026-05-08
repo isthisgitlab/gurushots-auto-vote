@@ -31,6 +31,8 @@ jest.mock('../../src/js/logger', () => ({
     apiRequest: jest.fn(),
     apiResponse: jest.fn(),
     isDevMode: jest.fn(() => false),
+    isSourceCode: jest.fn(() => true),
+    getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
     withCategory: jest.fn(() => ({
         info: jest.fn(),
         error: jest.fn(),

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
+const { isSourceCode, getAppName } = logger;
 const runtime = require('./runtime');
 
 // Try to import electron, but don't fail if it's not available (CLI context)
@@ -12,39 +13,6 @@ try {
     // Electron not available (CLI context), we'll use fallback
     logger.withCategory('ui').info('Running in CLI context - using fallback userData path:', error.message);
 }
-
-/**
- * Detect if we're running from source code vs built app
- * @returns {boolean} - True if running from source, false if built
- */
-const isSourceCode = () => {
-    // If we're in Electron and it's packaged, we're definitely built
-    if (electronApp && electronApp.isPackaged) {
-        return false;
-    }
-
-    // For CLI: check if we're running as a pkg binary
-    if (process.pkg) {
-        return false;
-    }
-
-    // Check if __dirname contains .asar (Electron packaged but somehow not detected)
-    if (__dirname.includes('.asar')) {
-        return false;
-    }
-
-    // If none of the above, assume we're running from source
-    return true;
-};
-
-/**
- * Get the app name with environment suffix if needed
- * @returns {string} - App name with -dev suffix for source code
- */
-const getAppName = () => {
-    const baseAppName = 'gurushots-auto-vote';
-    return isSourceCode() ? `${baseAppName}-dev` : baseAppName;
-};
 
 // Define the settings file path in the userData directory
 const getSettingsPath = () => {

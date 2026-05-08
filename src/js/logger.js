@@ -616,4 +616,8 @@ module.exports = {
     clearContext,
     isCliMode: () => isCliMode,
     isDevMode: () => isDevMode,
+
+    // Runtime detection (canonical home — settings.js re-exports these)
+    isSourceCode,
+    getAppName,
 };
