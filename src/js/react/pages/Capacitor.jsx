@@ -18,6 +18,18 @@ import { initializeAsync as initSettings } from '../../settings';
 import { isCapacitor } from '../../runtime';
 import { mountApp } from './App';
 
+// Translations are loaded as a separate <script> tag in src/html/app.html
+// for Electron, which puts window.translationManager in scope before
+// app-bundle.js runs. Capacitor's index.html only loads
+// capacitor-bundle.js, so we import the UMD module here for its return
+// value and assign the globals manually before React mounts.
+import * as translationsModule from '../../translations';
+const translations = translationsModule.default || translationsModule;
+if (translations?.translationManager) {
+    globalThis.translationManager = translations.translationManager;
+    globalThis.translations = translations.translations;
+}
+
 const bootstrap = async () => {
     if (isCapacitor()) {
         installBridge();

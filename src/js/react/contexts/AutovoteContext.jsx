@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
 import { getRandomCheckFrequencyMs } from '../../scheduling/randomDelay';
+import * as foregroundService from '../../services/ForegroundServiceController';
 
 // Action types
 const ACTIONS = {
@@ -122,7 +123,13 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
 
             if (result?.success) {
                 dispatch({ type: ACTIONS.INCREMENT_CYCLE });
-                dispatch({ type: ACTIONS.UPDATE_LAST_RUN, payload: new Date().toLocaleTimeString('lv-LV') });
+                const lastRunStr = new Date().toLocaleTimeString('lv-LV');
+                dispatch({ type: ACTIONS.UPDATE_LAST_RUN, payload: lastRunStr });
+
+                // Refresh the persistent notification text on Capacitor
+                // so the user can see at a glance when the last cycle
+                // ran without opening the app. No-op on Electron.
+                foregroundService.update({ body: `Last cycle: ${lastRunStr}` });
 
                 // Trigger challenges refresh
                 if (onChallengesRefresh) {
@@ -253,6 +260,11 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         dispatch({ type: ACTIONS.START });
         await window.api.setCancelVoting(false);
 
+        // On Capacitor, spin up the persistent foreground notification
+        // so Android does not kill the WebView process while the phone
+        // is locked. No-op on Electron.
+        await foregroundService.start({ body: 'Auto-vote running — preparing first cycle' });
+
         // Run immediately
         await runVotingCycle();
 
@@ -334,6 +346,9 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
 
         dispatch({ type: ACTIONS.STOP });
         await window.api.setCancelVoting(true);
+
+        // Tear down the Android foreground notification. No-op on Electron.
+        await foregroundService.stop();
 
         // Clear interval
         if (autovoteIntervalRef.current) {

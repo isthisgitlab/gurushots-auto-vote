@@ -71,24 +71,42 @@ async function buildReact() {
         },
     };
 
-    // Per-entry option overrides. The Capacitor entry transitively
-    // includes settings.js / logger.js which lazy-require Node built-ins
-    // and electron — code paths the Capacitor branch never reaches at
-    // runtime, but esbuild still tries to resolve at bundle time.
-    // Marking them external + IIFE-emitting an empty `require` shim in
-    // the bundle keeps the build green; the runtime-unreachable
-    // require()s become benign no-ops in the WebView.
+    // All renderer bundles run in a browser-context (Electron WebView
+    // or Capacitor WebView). They reach shared modules (runtime.js,
+    // settings.js, ForegroundServiceController, etc.) that lazy-require
+    // Node built-ins and electron — code paths the renderer never
+    // reaches at runtime (it goes through window.api / Capacitor.Plugins),
+    // but esbuild still tries to resolve at bundle time. Marking them
+    // external + emitting an inert require shim keeps every bundle
+    // green; the unreachable lazy requires become benign no-ops.
     const NODE_BUILTINS = [
         'fs', 'path', 'os', 'crypto', 'stream', 'events', 'child_process',
         'http', 'https', 'url', 'zlib', 'util', 'buffer', 'assert', 'net',
         'tls', 'dns', 'querystring', 'string_decoder', 'tty', 'readline',
     ];
+    const RENDERER_EXTERNALS = [
+        ...NODE_BUILTINS,
+        'electron',
+        'electron-updater',
+        'node-cron',
+        // Capacitor plugins. Unreachable from app-bundle.js at runtime
+        // (Electron isCapacitor() returns false), but the import chain
+        // pulls them in. Externalizing keeps the bundle small and avoids
+        // resolution noise.
+        '@capacitor/core',
+        '@capacitor/preferences',
+        '@capacitor/filesystem',
+        '@capacitor/local-notifications',
+        '@capawesome-team/capacitor-android-foreground-service',
+    ];
+    const REQUIRE_SHIM = {
+        js: 'var require = (typeof require !== "undefined") ? require : function(){ return {}; };',
+    };
     const perEntryOptions = {
-        capacitor: {
-            external: [...NODE_BUILTINS, 'electron', 'electron-updater', 'node-cron'],
-            // Stub `require` so unreachable lazy requires don't ReferenceError in WebView.
-            banner: { js: 'var require = (typeof require !== "undefined") ? require : function(){ return {}; };' },
-        },
+        login: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
+        app: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
+        logs: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
+        capacitor: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
     };
 
     try {
