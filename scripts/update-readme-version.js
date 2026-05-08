@@ -78,6 +78,11 @@ try {
                 pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.AppImage/g,
                 replacement: `GuruShotsAutoVote-v${version}-arm64.AppImage`,
             },
+            // Android APK
+            {
+                pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?\.apk/g,
+                replacement: `GuruShotsAutoVote-v${version}.apk`,
+            },
             // CLI files with version
             {
                 pattern: /gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-mac/g,
@@ -127,6 +132,12 @@ try {
                 pattern:
                     /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.AppImage/g,
                 replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}-arm64.AppImage`,
+            },
+            // Android APK URL
+            {
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?\.apk/g,
+                replacement: `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v${version}.apk`,
             },
             // CLI file URLs
             {

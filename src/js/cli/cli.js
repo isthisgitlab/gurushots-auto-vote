@@ -101,6 +101,8 @@ Usage: <command>
 Commands:
   login    - Authenticate with GuruShots and save token
   vote     - Run one manual voting cycle (votes to 100% regardless of settings)
+  run      - Run one full auto-strategy cycle (boost / turbo / auto-fill / threshold-aware vote).
+             Add --challenge=<id> to scope to a single challenge.
   start    - Start continuous voting with cron scheduling
   stop     - Stop continuous voting (if running)
   status   - Show current status and settings
@@ -117,6 +119,8 @@ Commands:
 Examples:
   login
   vote
+  run
+  run --challenge=12345
   start
   reset-windows
 
@@ -190,9 +194,12 @@ const handleLogin = async () => {
 
 /**
  * Run a single voting cycle. Pass {isManual: true} to use the manual
- * vote path (votes to 100% regardless of threshold settings).
+ * vote path (votes to 100% regardless of threshold settings). Pass
+ * {challengeId} to scope a strategy cycle to a single challenge —
+ * ignored when isManual is true.
  */
-const runVotingCycle = async (cycleNumber = 1, { isManual = false } = {}) => {
+const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId = null } = {}) => {
+    const scopeSuffix = !isManual && challengeId != null ? ` (challenge ${challengeId})` : '';
     const label = isManual ? 'Manual Voting' : 'Voting';
     const opId = isManual ? `manual-vote-cycle-${cycleNumber}` : `vote-cycle-${cycleNumber}`;
     try {
@@ -201,7 +208,7 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false } = {}) => {
 
         logger
             .withCategory('voting')
-            .info(`--- ${label} Cycle ${cycleNumber} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
+            .info(`--- ${label} Cycle ${cycleNumber}${scopeSuffix} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
         logger.withCategory('voting').info(`Time: ${new Date().toLocaleString()}`);
         if (isManual) {
             logger.withCategory('voting').info('Mode: Manual (votes to 100% regardless of threshold settings)');
@@ -213,11 +220,11 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false } = {}) => {
             return false;
         }
 
-        logger.withCategory('voting').startOperation(opId, `${label} cycle ${cycleNumber}`);
+        logger.withCategory('voting').startOperation(opId, `${label} cycle ${cycleNumber}${scopeSuffix}`);
         if (isManual) {
             await getMiddlewareInstance().cliVoteManual();
         } else {
-            await getMiddlewareInstance().cliVote();
+            await getMiddlewareInstance().cliVote(challengeId);
         }
         logger.withCategory('voting').endOperation(opId, `${label} cycle ${cycleNumber} completed`);
 
@@ -228,6 +235,23 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false } = {}) => {
         logger.withCategory('voting').debug(`Full ${noun} cycle error details:`, error);
         return false;
     }
+};
+
+/**
+ * Pull a `--challenge=<id>` or `--challenge <id>` flag value from
+ * the remaining argv tail. Returns null when absent.
+ */
+const parseChallengeFlag = (argv) => {
+    for (let i = 0; i < argv.length; i++) {
+        const a = argv[i];
+        if (a === '--challenge') {
+            return argv[i + 1] ?? null;
+        }
+        if (a.startsWith('--challenge=')) {
+            return a.slice('--challenge='.length) || null;
+        }
+    }
+    return null;
 };
 
 /**
@@ -548,6 +572,12 @@ const main = async () => {
                 await runVotingCycle(1, { isManual: true });
                 process.exit(0);
                 break;
+            case 'run': {
+                const challengeId = parseChallengeFlag(args.slice(1));
+                await runVotingCycle(1, { isManual: false, challengeId });
+                process.exit(0);
+                break;
+            }
             case 'start':
                 logger.withCategory('voting').debug('About to start continuous voting', null);
                 await startContinuousVoting();

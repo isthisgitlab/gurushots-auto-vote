@@ -87,6 +87,11 @@ try {
                 type: 'GuruShotsAutoVote-arm64.AppImage',
                 required: true,
             },
+            {
+                pattern: /GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?\.apk/g,
+                type: 'GuruShotsAutoVote.apk (Android)',
+                required: true,
+            },
             // CLI files - only required if CLI section exists
             { pattern: /gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-mac/g, type: 'gurucli-mac', required: hasCLISection },
             { pattern: /gurucli-v[\d.]+(?:-[a-zA-Z0-9.]+)?-linux/g, type: 'gurucli-linux', required: hasCLISection },
@@ -144,6 +149,12 @@ try {
                 pattern:
                     /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?-arm64\.AppImage/g,
                 type: 'GuruShotsAutoVote-arm64.AppImage URL',
+                required: true,
+            },
+            {
+                pattern:
+                    /https:\/\/github\.com\/isthisgitlab\/gurushots-auto-vote\/releases\/latest\/download\/GuruShotsAutoVote-v[\d.]+(?:-[a-zA-Z0-9.]+)?\.apk/g,
+                type: 'GuruShotsAutoVote.apk URL (Android)',
                 required: true,
             },
             // CLI URLs - only required if CLI section exists

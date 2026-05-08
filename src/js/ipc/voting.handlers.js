@@ -3,6 +3,7 @@
  * uses to drive a voting pass:
  *   - gui-vote: middleware vote, used by the GUI's main vote button
  *   - run-voting-cycle: full per-challenge cycle (autovote core)
+ *   - run-voting-cycle-for-challenge: same strategy, scoped to one challenge
  *   - vote-all-challenges-manual: bypass all thresholds
  *   - vote-on-challenge / vote-on-challenge-manual: target one
  *     challenge; the two channels carry slightly different log wording
@@ -16,6 +17,40 @@ const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 const votingLogic = require('../services/VotingLogic');
 const cancellation = require('../voting/cancellation');
+
+// Shared per-challenge exposure-threshold resolver. Schema default is the
+// last-resort fallback so a corrupt override doesn't stall a whole cycle.
+const getExposureThreshold = (challengeId) => {
+    try {
+        return settings.getEffectiveSetting('exposure', challengeId);
+    } catch (error) {
+        logger
+            .withCategory('settings')
+            .warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
+        return settings.SETTINGS_SCHEMA.exposure.default;
+    }
+};
+
+// Run one full strategy pass — global when challengeId is null, scoped
+// to a single card otherwise. Centralised so both IPC handlers share
+// auth-check, cancellation-reset, and error envelope shape.
+const runStrategyOnce = async (challengeId = null) => {
+    const userSettings = settings.loadSettings();
+    if (!userSettings.token) {
+        logger.withCategory('authentication').warning('❌ No token found for voting cycle', null);
+        return { success: false, error: 'No authentication token found' };
+    }
+
+    const strategy = apiFactory.getApiStrategy();
+    cancellation.reset();
+
+    const result = await strategy.fetchChallengesAndVote(userSettings.token, getExposureThreshold, challengeId);
+
+    if (result && result.success) {
+        return { success: true, message: result.message || 'Voting cycle completed successfully' };
+    }
+    return { success: false, error: result?.error || 'Voting cycle failed' };
+};
 
 const buildHandlers = () => ({
     'gui-vote': async () => {
@@ -35,39 +70,23 @@ const buildHandlers = () => ({
     'run-voting-cycle': async () => {
         try {
             logger.withCategory('voting').info('🔄 Starting voting cycle...', null);
-
-            const userSettings = settings.loadSettings();
-            if (!userSettings.token) {
-                logger.withCategory('authentication').warning('❌ No token found for voting cycle', null);
-                return { success: false, error: 'No authentication token found' };
-            }
-
-            const strategy = apiFactory.getApiStrategy();
-
-            // Per-challenge override resolver. Schema default is the
-            // last-resort fallback so a corrupt override doesn't stall
-            // a whole cycle.
-            const getExposureThreshold = (challengeId) => {
-                try {
-                    return settings.getEffectiveSetting('exposure', challengeId);
-                } catch (error) {
-                    logger
-                        .withCategory('settings')
-                        .warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
-                    return settings.SETTINGS_SCHEMA.exposure.default;
-                }
-            };
-
-            cancellation.reset();
-
-            const result = await strategy.fetchChallengesAndVote(userSettings.token, getExposureThreshold);
-
-            if (result && result.success) {
-                return { success: true, message: result.message || 'Voting cycle completed successfully' };
-            }
-            return { success: false, error: result?.error || 'Voting cycle failed' };
+            return await runStrategyOnce(null);
         } catch (error) {
             logger.withCategory('voting').error('Error handling run-voting-cycle request:', error);
+            return { success: false, error: error.message || 'Failed to run voting cycle' };
+        }
+    },
+
+    'run-voting-cycle-for-challenge': async (_event, payload = {}) => {
+        try {
+            const challengeId = payload?.challengeId;
+            if (challengeId == null || challengeId === '') {
+                return { success: false, error: 'challengeId is required' };
+            }
+            logger.withCategory('voting').info(`🔄 Starting single-challenge cycle: ${challengeId}`, null);
+            return await runStrategyOnce(challengeId);
+        } catch (error) {
+            logger.withCategory('voting').error('Error handling run-voting-cycle-for-challenge request:', error);
             return { success: false, error: error.message || 'Failed to run voting cycle' };
         }
     },

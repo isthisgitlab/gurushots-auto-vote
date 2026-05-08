@@ -220,6 +220,8 @@
             timezonePlaceholder: 'Enter timezone',
             uiSetting: 'UI Setting',
             updateAvailable: 'Update available!',
+            run: 'Run',
+            running: 'Running...',
             vote: 'Vote',
             voteAll: 'Vote All',
             voteToNextLevel: 'vote to next level',

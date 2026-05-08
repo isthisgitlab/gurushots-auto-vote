@@ -13,6 +13,7 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
     const { challenges, loading, refetch } = useChallenges();
     const times = useTimers(challenges);
     const [votingAll, setVotingAll] = useState(false);
+    const [runningCycle, setRunningCycle] = useState(false);
     const [globalCompact, setGlobalCompact] = useState(true);
     const [refreshKey, setRefreshKey] = useState(0);
 
@@ -68,6 +69,22 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
         }
     }, [refetch]);
 
+    const handleRun = useCallback(async () => {
+        setRunningCycle(true);
+        try {
+            const result = await window.api.runVotingCycle();
+            if (result?.success) {
+                await refetch(true);
+            } else {
+                await window.api.logError(`Run failed: ${result?.error || 'Unknown error'}`);
+            }
+        } catch (err) {
+            await window.api.logError(`Error during Run: ${err.message || err}`);
+        } finally {
+            setRunningCycle(false);
+        }
+    }, [refetch]);
+
     const handleRefresh = useCallback(() => {
         refetch();
     }, [refetch]);
@@ -118,6 +135,26 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                                         />
                                     </svg>
                                     {t('app.voteAll')}
+                                </>
+                            )}
+                        </button>
+                        <button className="btn btn-latvian btn-sm" onClick={handleRun} disabled={runningCycle}>
+                            {runningCycle ? (
+                                <>
+                                    <span className="loading loading-spinner loading-xs" />
+                                    {t('app.running')}
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            strokeWidth="2"
+                                            d="M13 10V3L4 14h7v7l9-11h-7z"
+                                        />
+                                    </svg>
+                                    {t('app.run')}
                                 </>
                             )}
                         </button>

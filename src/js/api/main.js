@@ -95,30 +95,34 @@ const setCancellationFlag = (cancel) => {
  *    - Votes on images if exposure factor is less than the exposure threshold
  *
  * @param {string} token - Authentication token
- * @param {number|function} exposureThreshold - Exposure threshold (default: schema default) or function to get threshold per challenge
+ * @param {number|function} [getExposureThreshold] - Optional exposure-threshold resolver kept for caller backward-compat; unused internally (the voting-logic service reads settings directly).
+ * @param {string|number} [challengeIdFilter] - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
  * @returns {void}
  */
-const fetchChallengesAndVote = async (token) => {
+// eslint-disable-next-line no-unused-vars
+const fetchChallengesAndVote = async (token, getExposureThreshold = null, challengeIdFilter = null) => {
     logger.withCategory('voting').startOperation('voting-process', 'Voting process');
 
     try {
         // Get all active challenges
         logger.withCategory('challenges').info('🔄 Loading active challenges', null);
-        const { challenges } = await getActiveChallenges(token);
+        const { challenges: allChallenges } = await getActiveChallenges(token);
         // Current timestamp in seconds (Unix epoch time)
         const now = Math.floor(Date.now() / 1000);
 
-        logger.withCategory('challenges').info(`📋 Found ${challenges.length} active challenges`, null);
+        logger.withCategory('challenges').info(`📋 Found ${allChallenges.length} active challenges`, null);
 
-        if (challenges.length === 0) {
+        if (allChallenges.length === 0) {
             logger.withCategory('challenges').warning('No active challenges found', null);
             logger.withCategory('voting').endOperation('voting-process', 'No challenges to process');
             return { success: true, message: 'No active challenges found' };
         }
 
-        // Cleanup stale metadata for challenges that no longer exist
+        // Cleanup stale metadata against the full active list — must
+        // run before any per-challenge filter so we don't drop metadata
+        // for challenges the user is simply not running this pass.
         try {
-            const activeChallengeIds = challenges.map((challenge) => challenge.id.toString());
+            const activeChallengeIds = allChallenges.map((challenge) => challenge.id.toString());
             const cleanupSuccess = cleanupStaleMetadata(activeChallengeIds);
             if (cleanupSuccess) {
                 logger.withCategory('api').debug('Successfully cleaned up stale metadata', null);
@@ -127,6 +131,21 @@ const fetchChallengesAndVote = async (token) => {
             }
         } catch (error) {
             logger.withCategory('api').warning('Error during metadata cleanup:', error);
+        }
+
+        let challenges = allChallenges;
+        if (challengeIdFilter != null) {
+            const idStr = String(challengeIdFilter);
+            challenges = allChallenges.filter((c) => String(c.id) === idStr);
+            if (challenges.length === 0) {
+                const msg = `Challenge ${idStr} is not active`;
+                logger.withCategory('challenges').warning(msg, null);
+                logger.withCategory('voting').endOperation('voting-process', null, msg);
+                return { success: false, error: msg };
+            }
+            logger
+                .withCategory('voting')
+                .info(`🎯 Run scoped to single challenge: ${challenges[0].title} (${idStr})`, null);
         }
 
         // Process each challenge

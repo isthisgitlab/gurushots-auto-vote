@@ -196,48 +196,33 @@ jobs:
               with:
                   download-bumped: 'true'
 
-            - name: Setup Java (JDK 17 for Gradle)
+            - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
               uses: actions/setup-java@v4
               with:
                   distribution: 'temurin'
-                  java-version: '17'
+                  java-version: '21'
 
             - name: Setup Android SDK
               uses: android-actions/setup-android@v3
 
-            - name: Skip if Capacitor not yet wired
-              id: cap_check
-              shell: bash
-              run: |
-                  if [ -d "android" ] && [ -f "capacitor.config.json" ]; then
-                    echo "READY=true" >> $GITHUB_OUTPUT
-                  else
-                    echo "READY=false" >> $GITHUB_OUTPUT
-                    echo "::notice::Capacitor scaffolding not present yet (no android/ or capacitor.config.json). Skipping Android build."
-                  fi
-
             - name: Build renderer
-              if: steps.cap_check.outputs.READY == 'true'
               run: npm run build:prep
 
             - name: Sync Capacitor
-              if: steps.cap_check.outputs.READY == 'true'
               run: npx cap sync android
 
             - name: Decode keystore
-              if: steps.cap_check.outputs.READY == 'true'
               env:
                   KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
               shell: bash
               run: |
                   if [ -z "$KEYSTORE_B64" ]; then
-                    echo "::error::ANDROID_KEYSTORE_BASE64 secret not set. See plan: pre-flight keystore setup."
+                    echo "::error::ANDROID_KEYSTORE_BASE64 secret not set. Generate a release keystore locally and add the four ANDROID_* secrets — see README's Android section."
                     exit 1
                   fi
                   echo "$KEYSTORE_B64" | base64 -d > android/app/release.jks
 
             - name: Set Android version
-              if: steps.cap_check.outputs.READY == 'true'
               shell: bash
               env:
                   RUN_NUMBER: ${{ github.run_number }}
@@ -247,7 +232,6 @@ jobs:
                   sed -i "s/versionCode [0-9]*/versionCode $RUN_NUMBER/" android/app/build.gradle
 
             - name: Build signed APK
-              if: steps.cap_check.outputs.READY == 'true'
               env:
                   KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
                   KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -262,7 +246,6 @@ jobs:
                     -Pandroid.injected.signing.key.password=$KEY_PASSWORD
 
             - name: Rename APK with version
-              if: steps.cap_check.outputs.READY == 'true'
               shell: bash
               run: |
                   VERSION=$(node -p "require('./package.json').version")
@@ -271,7 +254,6 @@ jobs:
                      build/GuruShotsAutoVote-v${VERSION}.apk
 
             - name: Upload Android artifact
-              if: steps.cap_check.outputs.READY == 'true'
               uses: actions/upload-artifact@v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-android-builds' || 'android-builds' }}

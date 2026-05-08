@@ -75,6 +75,14 @@ If you find this tool helpful, consider supporting its development:
 | **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.8.5-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.5-x86_64.AppImage) | ~50 MB | AppImage            |
 | **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.8.5-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.5-arm64.AppImage)   | ~50 MB | AppImage            |
 
+#### **📱 Mobile (Android sideload — no Play Store)**
+
+| Platform                      | Download                                                                                                                                                | Size    | Type             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------- |
+| **Android (8.0+, sideload)**  | [📥 GuruShotsAutoVote-v0.8.5.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.5.apk)            | ~10 MB  | Signed APK       |
+
+The Android build is a Capacitor wrapper around the same React UI plus a custom Kotlin plugin that runs voting cycles natively in the background via `AlarmManager` + a foreground service. Voting continues with the phone locked and the app swiped from recents.
+
 #### **💻 CLI Applications (For advanced users)**
 
 | Platform              | Download                                                                                                                             | Size   | Type                |
@@ -141,12 +149,32 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 3. Make executable: `chmod +x gurucli-v0.8.5-linux`
 4. Run: `./gurucli-v0.8.5-linux`
 
+#### **📱 Android Users (Sideload)**
+
+The Android build is **not on Google Play** — install via direct APK download.
+
+1. **On the phone**, open the [latest release page](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) and tap `GuruShotsAutoVote-v0.8.5.apk`
+2. Chrome will warn before downloading an APK — tap **Download anyway**
+3. Tap the downloaded file from the notification shade
+4. Android will prompt **Install unknown apps** — grant the permission for whichever app you used to download (Chrome / Files / etc.) and tap **Install**
+5. On first launch, the app will ask for two things you should grant:
+    - **Notifications**: required for the persistent foreground notification that keeps voting alive while the app is closed
+    - **Disable battery optimization** (Settings → Apps → GuruShots Auto Vote → Battery → Unrestricted): vendor-specific battery savers (Samsung, Xiaomi, OnePlus) will otherwise kill the service
+6. Log in, tap **Start Auto Vote**. The persistent notification appears showing the last cycle time. You can swipe the app from recents — voting continues.
+
+**Auto-update**: the app checks GitHub Releases on launch and prompts when a newer APK is available. Tap the prompt and Chrome handles the download → tap the downloaded APK → system installer takes over.
+
+**Background voting limitations**:
+- Vendor battery managers may kill the service. If voting stops, whitelist the app per-vendor (link in Settings).
+- 1-min last-minute cadence requires `SCHEDULE_EXACT_ALARM` permission (auto-granted on Android 13+, manual on Android 12).
+
 ### **🎯 Which Version Should I Download?**
 
-| User Type       | Recommended Download      | Why?                              |
-| --------------- | ------------------------- | --------------------------------- |
-| **New Users**   | GUI App for your platform | Easiest to use, visual interface  |
-| **Power Users** | CLI App for your platform | More control, automation features |
+| User Type             | Recommended Download         | Why?                                                       |
+| --------------------- | ---------------------------- | ---------------------------------------------------------- |
+| **New Users**         | GUI App for your platform    | Easiest to use, visual interface                           |
+| **Mobile Users**      | Android APK (sideload)       | Voting runs in the background while you use other apps     |
+| **Power Users**       | CLI App for your platform    | More control, automation features                          |
 
 ### **🔗 Alternative: Browse All Releases**
 

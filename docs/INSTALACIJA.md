@@ -16,6 +16,14 @@
 | **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.8.5-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.5-x86_64.AppImage) | ~50 MB | AppImage              |
 | **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.8.5-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.5-arm64.AppImage)   | ~50 MB | AppImage              |
 
+#### **📱 Mobilā lietotne (Android, sānielāde — bez Play Store)**
+
+| Platforma                        | Lejupielāde                                                                                                                                  | Izmērs | Tips             |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------------- |
+| **Android (8.0+, sānielāde)**    | [📥 GuruShotsAutoVote-v0.8.5.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.8.5.apk) | ~10 MB | Parakstīts APK   |
+
+Android versija ir Capacitor apvalks ap to pašu React saskarni plus pielāgots Kotlin spraudnis, kas balsošanas ciklus izpilda native līmenī fonā ar `AlarmManager` + foreground servisu. Balsošana turpinās, kad telefons ir bloķēts un lietotne aizvilkta no nesenajiem.
+
 ### **📋 Detalizētas instalācijas instrukcijas**
 
 #### **🪟 Windows lietotājiem**
@@ -89,6 +97,25 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
     ```
 2. Aizstājiet `/pilns/ceļš/uz/` ar faktisko ceļu, kur saglabājāt AppImage failu
 3. Pēc izvēles pievienojiet ikonu, lejupielādējot to no projekta repozitorija
+
+#### **📱 Android lietotājiem (sānielāde)**
+
+Android versija **nav pieejama Google Play** — instalācija notiek caur tiešu APK lejupielādi.
+
+1. **Telefonā** atveriet [jaunākā izlaiduma lapu](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) un piesitiet `GuruShotsAutoVote-v0.8.5.apk`
+2. Chrome brīdinās pirms APK lejupielādes — piesitiet **Tomēr lejupielādēt**
+3. Piesitiet lejupielādēto failu no paziņojumu joslas
+4. Android pieprasīs **Atļaut nezināmu lietotņu instalēšanu** — piešķiriet atļauju lejupielādes lietotnei (Chrome / Files / utt.) un piesitiet **Instalēt**
+5. Pirmajā palaišanā lietotne lūgs divas atļaujas, kuras vajadzētu piešķirt:
+    - **Paziņojumi**: nepieciešami pastāvīgajam foreground paziņojumam, kas tur balsošanu dzīvu, kad lietotne ir aizvērta
+    - **Atspējot baterijas optimizāciju** (Iestatījumi → Lietotnes → GuruShots Auto Vote → Baterija → Neierobežots): ražotāja baterijas taupītāji (Samsung, Xiaomi, OnePlus) citādi nogalinās servisu
+6. Pieslēdzieties, piesitiet **Sākt automātisko balsošanu**. Pastāvīgais paziņojums parādīsies, rādot pēdējā cikla laiku. Varat aizvilkt lietotni no nesenajiem — balsošana turpinās.
+
+**Automātiska atjaunināšana**: lietotne pārbauda GitHub Releases palaižoties un piedāvā jaunāku APK, kad pieejams. Piesitiet uzaicinājumam — Chrome lejupielādē → piesitiet lejupielādēto APK → sistēmas instalētājs pārņem.
+
+**Fonā balsošanas ierobežojumi**:
+- Ražotāja baterijas pārvaldnieki var nogalināt servisu. Ja balsošana apstājas, baltā saraksta lietotni katram ražotājam (saite atrodama Iestatījumos).
+- 1-min pēdējās minūtes kadence prasa `SCHEDULE_EXACT_ALARM` atļauju (automātiski piešķirta Android 13+, manuāla Android 12).
 
 ### **🎯 Kuru versiju lejupielādēt?**
 

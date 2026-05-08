@@ -4,6 +4,7 @@ import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus } from '@
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { VoteButton } from './VoteButton';
+import { RunButton } from './RunButton';
 import { EntryBadge } from './EntryBadge';
 
 const TURBO_ERROR_DISPLAY_MS = 5000;
@@ -139,6 +140,11 @@ export function ChallengeCard({
         challenge.start_time < Math.floor(Date.now() / 1000) &&
         exposureFactor < 100;
 
+    // Run button: fires one full auto-strategy cycle for this card.
+    // Hidden while the scheduled autovote loop is active to avoid
+    // racing concurrent strategy passes for the same challenge.
+    const showRunButton = !autovoteRunning && challenge.start_time < Math.floor(Date.now() / 1000);
+
     // Next level info
     const getNextLevelInfo = () => {
         if (
@@ -234,6 +240,9 @@ export function ChallengeCard({
                                 challengeTitle={challenge.title}
                                 onVoteComplete={onVoteComplete}
                             />
+                        )}
+                        {showRunButton && (
+                            <RunButton challengeId={challenge.id} onVoteComplete={onVoteComplete} />
                         )}
                         {/* Per-card density toggle. The icon is filled
                             when this card has its own override so the

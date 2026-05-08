@@ -76,17 +76,18 @@ class BaseMiddleware {
         return { ok: true };
     }
 
-    async cliVote() {
-        logger.withCategory('voting').info('=== GuruShots Auto Voter - CLI Voting ===', null);
+    async cliVote(challengeId = null) {
+        const scopeLabel = challengeId == null ? '' : ` (challenge ${challengeId})`;
+        logger.withCategory('voting').info(`=== GuruShots Auto Voter - CLI Voting${scopeLabel} ===`, null);
         const token = settings.getSetting('token');
         if (!token) {
             logger.withCategory('authentication').error('No authentication token found. Please login first', null);
             logger.withCategory('authentication').info('Run the login command to authenticate', null);
             return;
         }
-        logger.withCategory('voting').startOperation('cli-vote', 'CLI Voting Process');
+        logger.withCategory('voting').startOperation('cli-vote', `CLI Voting Process${scopeLabel}`);
         try {
-            await this.apiStrategy.fetchChallengesAndVote(token, getExposureThresholdResolver());
+            await this.apiStrategy.fetchChallengesAndVote(token, getExposureThresholdResolver(), challengeId);
             logger.withCategory('voting').endOperation('cli-vote', 'Voting process completed successfully');
         } catch (error) {
             logger.withCategory('voting').endOperation('cli-vote', null, error.message || error);

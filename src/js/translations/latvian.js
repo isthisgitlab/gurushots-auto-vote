@@ -220,6 +220,8 @@
             timezonePlaceholder: 'Ievadiet laika joslu',
             uiSetting: 'Saskarnes iestatījums',
             updateAvailable: 'Pieejams atjauninājums!',
+            run: 'Palaist',
+            running: 'Darbojas...',
             vote: 'Balsot',
             voteAll: 'Balsot visus',
             voteToNextLevel: 'balsis līdz nākamajam līmenim',

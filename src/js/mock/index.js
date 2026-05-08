@@ -458,7 +458,11 @@ const mockApiClient = {
     /**
      * Simulate the main voting process (fetchChallengesAndVote)
      */
-    fetchChallengesAndVote: async (token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
+    fetchChallengesAndVote: async (
+        token,
+        exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default,
+        challengeIdFilter = null,
+    ) => {
         logger.withCategory('voting').info('Mock Voting Process Started', null);
         logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
         logger.withCategory('voting').debug(`Exposure threshold type: ${typeof exposureThreshold}`, null);
@@ -467,12 +471,18 @@ const mockApiClient = {
         if (token) {
             // Simulate getting challenges
             const challengesResponse = await simulateApiResponse(challenges.mockActiveChallenges, 800);
-            logger
-                .withCategory('challenges')
-                .info(`Found ${challengesResponse.challenges.length} active challenges`, null);
+            let challengeList = challengesResponse.challenges;
+            if (challengeIdFilter != null) {
+                const idStr = String(challengeIdFilter);
+                challengeList = challengeList.filter((c) => String(c.id) === idStr);
+                if (challengeList.length === 0) {
+                    return { success: false, error: `Challenge ${idStr} is not active` };
+                }
+            }
+            logger.withCategory('challenges').info(`Found ${challengeList.length} active challenges`, null);
 
             // Simulate processing each challenge
-            for (const challenge of challengesResponse.challenges) {
+            for (const challenge of challengeList) {
                 // Check for cancellation before processing each challenge
                 if (cancellation.isCancelled()) {
                     logger.withCategory('voting').info('Mock voting cancelled by user', null);
