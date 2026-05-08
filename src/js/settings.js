@@ -14,6 +14,80 @@ try {
     logger.withCategory('ui').info('Running in CLI context - using fallback userData path:', error.message);
 }
 
+// Persistence transport. On Electron/CLI, settings live in a JSON file
+// read/written synchronously through fs. On Capacitor, the WebView has
+// no fs; @capacitor/preferences is async-only, so we hydrate an
+// in-memory cache once at app boot (initializeAsync) and let all sync
+// reads hit the cache. setSetting / saveSettings still mutate the cache
+// synchronously so consumers see the new value immediately, then fire
+// an async write-behind so the next launch sees the change.
+//
+// The Capacitor branch never resolves on Electron/CLI builds because
+// @capacitor/core is lazy-required only inside isCapacitor() guards.
+
+const SETTINGS_KEY = 'gurushots-settings';
+
+let capacitorInitialized = false;
+let cachedSettingsJson = null;
+let capacitorPreferences = null;
+
+const getCapacitorPreferences = () => {
+    if (capacitorPreferences) return capacitorPreferences;
+    capacitorPreferences = require('@capacitor/preferences').Preferences;
+    return capacitorPreferences;
+};
+
+const storage = {
+    /** Returns the raw settings JSON string, or null if not yet written. */
+    readRaw: () => {
+        if (runtime.isCapacitor()) {
+            return cachedSettingsJson;
+        }
+        const settingsPath = getSettingsPath();
+        if (!fs.existsSync(settingsPath)) return null;
+        return fs.readFileSync(settingsPath, 'utf8');
+    },
+    /** Writes the raw settings JSON string. Sync on Electron/CLI; cache + async write-behind on Capacitor. */
+    writeRaw: (data) => {
+        if (runtime.isCapacitor()) {
+            cachedSettingsJson = data;
+            capacitorInitialized = true;
+            getCapacitorPreferences()
+                .set({ key: SETTINGS_KEY, value: data })
+                .catch((err) => {
+                    logger.withCategory('settings').error('Capacitor preferences write failed:', err);
+                });
+            return;
+        }
+        const settingsPath = getSettingsPath();
+        const settingsDir = path.dirname(settingsPath);
+        if (!fs.existsSync(settingsDir)) {
+            fs.mkdirSync(settingsDir, { recursive: true });
+        }
+        fs.writeFileSync(settingsPath, data, 'utf8');
+    },
+};
+
+/**
+ * Async initialization for Capacitor builds. The React entry on Android
+ * must `await initializeAsync()` before mounting so the synchronous
+ * loadSettings/getSetting API returns hydrated data. No-op on
+ * Electron/CLI where the fs path serves reads directly.
+ */
+const initializeAsync = async () => {
+    if (!runtime.isCapacitor() || capacitorInitialized) return;
+    try {
+        const prefs = getCapacitorPreferences();
+        const { value } = await prefs.get({ key: SETTINGS_KEY });
+        cachedSettingsJson = value; // null if no preferences entry exists
+    } catch (err) {
+        logger.withCategory('settings').error('Capacitor preferences read failed:', err);
+        cachedSettingsJson = null;
+    } finally {
+        capacitorInitialized = true;
+    }
+};
+
 // Define the settings file path in the userData directory
 const getSettingsPath = () => {
     let userDataPath;
@@ -151,12 +225,12 @@ const isAutovoteRunning = () => {
 // Load settings from the userData directory
 const loadSettings = () => {
     try {
-        const settingsPath = getSettingsPath();
+        // Read raw settings via the storage adapter so the Capacitor cache
+        // path is exercised on Android. Electron/CLI hit fs synchronously.
+        const settingsData = storage.readRaw();
 
-        // Check if the settings file exists
-        if (fs.existsSync(settingsPath)) {
-            // Read and parse the settings file
-            const settingsData = fs.readFileSync(settingsPath, 'utf8');
+        // Check if the settings exist
+        if (settingsData) {
             const settings = JSON.parse(settingsData);
 
             // Merge with default settings to ensure all properties exist
@@ -293,7 +367,7 @@ const loadSettings = () => {
 
             // If migration made changes, save the updated settings
             if (migrationChanges) {
-                fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2), 'utf8');
+                storage.writeRaw(JSON.stringify(mergedSettings, null, 2));
             }
 
             // Run obsolete-settings cleanup once per process. The
@@ -342,20 +416,12 @@ const loadSettings = () => {
 // Save settings to the userData directory
 const saveSettings = (settings) => {
     try {
-        const settingsPath = getSettingsPath();
-
-        // Ensure the directory exists
-        const settingsDir = path.dirname(settingsPath);
-        if (!fs.existsSync(settingsDir)) {
-            fs.mkdirSync(settingsDir, { recursive: true });
-        }
-
         // Merge with existing settings
         const currentSettings = loadSettings();
         const mergedSettings = { ...currentSettings, ...settings };
 
-        // Write the settings to the file
-        fs.writeFileSync(settingsPath, JSON.stringify(mergedSettings, null, 2), 'utf8');
+        // Write via storage adapter (sync fs on Electron/CLI; cache + async write-behind on Capacitor)
+        storage.writeRaw(JSON.stringify(mergedSettings, null, 2));
 
         return true;
     } catch (error) {
@@ -1205,6 +1271,7 @@ const getSettingsSchema = async () => {
 };
 
 module.exports = {
+    initializeAsync,
     loadSettings,
     saveSettings,
     getSetting,
