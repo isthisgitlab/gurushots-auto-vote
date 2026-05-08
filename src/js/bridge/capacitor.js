@@ -30,6 +30,8 @@ const logHandlers = require('../ipc/log.handlers');
 const actionsHandlers = require('../ipc/actions.handlers');
 
 const settings = require('../settings');
+const updateChecker = require('../services/UpdateChecker');
+const pkg = require('../../../package.json');
 
 // Tiny in-process pub/sub. Replaces webContents.send broadcasts.
 const listeners = new Map();
@@ -65,23 +67,49 @@ const buildAllHandlers = () => {
         broadcastSettingsChange: (newSettings) => emit('settings-changed', newSettings),
     };
 
-    // Update channels are stubbed here pending AndroidUpdateInstaller.
-    // The shape mirrors update.handlers.js so React's UpdateContext sees
-    // the same { success, ... } objects it would on Electron.
+    // Update channels: check-for-updates uses the shared UpdateChecker
+    // to read GitHub Releases. Download / install remain stubbed pending
+    // an Android-specific installer (APK download + Intent.ACTION_VIEW)
+    // which needs a Capacitor plugin or a small Java helper. Until then
+    // the bridge surfaces "update available" via the standard event so
+    // the React UpdateDialog renders correctly; users tap through to
+    // the GitHub release page to install manually.
     const updateStubs = {
-        'check-for-updates': async () => ({ success: false, error: 'Update check not yet implemented on Android' }),
+        'check-for-updates': async () => {
+            try {
+                const result = await updateChecker.checkForUpdates({
+                    currentVersion: pkg.version,
+                    isBetaChannel: pkg.version.includes('-'),
+                    assetSuffix: '.apk',
+                });
+                if (result.updateAvailable) {
+                    const updateInfo = {
+                        currentVersion: pkg.version,
+                        latestVersion: result.version,
+                        releaseNotes: result.releaseNotes,
+                        releaseDate: result.releaseDate,
+                        isPrerelease: result.isPrerelease,
+                        downloadUrl: result.downloadUrl,
+                    };
+                    emit('update-available', updateInfo);
+                    return { success: true, updateInfo };
+                }
+                emit('update-not-available', { version: result.version || pkg.version });
+                return { success: true, updateInfo: null };
+            } catch (error) {
+                emit('update-error', { message: error.message, canFallbackToBrowser: true });
+                return { success: false, error: error.message };
+            }
+        },
         'download-update': async () => ({
             success: false,
-            error: 'Mobile updater pending',
-            fallbackUrl: 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest',
+            error: 'In-app APK install is pending; tap "View Release" to download manually.',
+            fallbackUrl: updateChecker.getReleasesUrl(),
         }),
-        'install-update': async () => ({ success: false, error: 'Mobile updater pending' }),
-        'skip-update-version': async () => ({ success: false, error: 'Mobile updater pending' }),
+        'install-update': async () => ({ success: false, error: 'In-app APK install pending' }),
+        'skip-update-version': async () => ({ success: false, error: 'Skip not yet wired on mobile' }),
         'clear-skip-version': async () => ({ success: true }),
-        'get-releases-url': async () => ({
-            success: true,
-            url: 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest',
-        }),
+        'get-releases-url': async () => ({ success: true, url: updateChecker.getReleasesUrl() }),
         'can-auto-update': async () => ({ success: true, canAutoUpdate: false }),
     };
 
