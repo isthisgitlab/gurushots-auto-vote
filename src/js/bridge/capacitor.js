@@ -31,7 +31,12 @@ const actionsHandlers = require('../ipc/actions.handlers');
 
 const settings = require('../settings');
 const updateChecker = require('../services/UpdateChecker');
+const androidUpdateInstaller = require('../services/AndroidUpdateInstaller');
 const pkg = require('../../../package.json');
+
+// Cached result of the most recent check-for-updates call. download-update
+// reads this so the React UI does not need to thread the URL through.
+let lastUpdateInfo = null;
 
 // Tiny in-process pub/sub. Replaces webContents.send broadcasts.
 const listeners = new Map();
@@ -91,9 +96,11 @@ const buildAllHandlers = () => {
                         isPrerelease: result.isPrerelease,
                         downloadUrl: result.downloadUrl,
                     };
+                    lastUpdateInfo = updateInfo;
                     emit('update-available', updateInfo);
                     return { success: true, updateInfo };
                 }
+                lastUpdateInfo = null;
                 emit('update-not-available', { version: result.version || pkg.version });
                 return { success: true, updateInfo: null };
             } catch (error) {
@@ -101,16 +108,32 @@ const buildAllHandlers = () => {
                 return { success: false, error: error.message };
             }
         },
-        'download-update': async () => ({
-            success: false,
-            error: 'In-app APK install is pending; tap "View Release" to download manually.',
-            fallbackUrl: updateChecker.getReleasesUrl(),
-        }),
-        'install-update': async () => ({ success: false, error: 'In-app APK install pending' }),
+        'download-update': async () => {
+            if (!lastUpdateInfo?.downloadUrl) {
+                return { success: false, error: 'No update info — run check-for-updates first', fallbackUrl: updateChecker.getReleasesUrl() };
+            }
+            const result = await androidUpdateInstaller.downloadAndInstall({
+                downloadUrl: lastUpdateInfo.downloadUrl,
+                version: lastUpdateInfo.latestVersion,
+            });
+            if (result.success) {
+                // The browser is now downloading. The user finishes
+                // install via the system "tap APK -> install" flow.
+                // We surface a downloaded event so any progress-bar UI
+                // settles to a "see system notification" state.
+                emit('update-downloaded', lastUpdateInfo);
+            } else {
+                emit('update-error', { message: result.error, canFallbackToBrowser: true });
+            }
+            return { ...result, fallbackUrl: updateChecker.getReleasesUrl() };
+        },
+        // The system installer drives install once the user taps the
+        // downloaded APK. Nothing for the bridge to do here.
+        'install-update': async () => ({ success: true, info: 'Tap the downloaded APK in your notifications to install.' }),
         'skip-update-version': async () => ({ success: false, error: 'Skip not yet wired on mobile' }),
         'clear-skip-version': async () => ({ success: true }),
         'get-releases-url': async () => ({ success: true, url: updateChecker.getReleasesUrl() }),
-        'can-auto-update': async () => ({ success: true, canAutoUpdate: false }),
+        'can-auto-update': async () => ({ success: true, canAutoUpdate: true }),
     };
 
     return {
