@@ -176,10 +176,13 @@ export function ChallengeCard({
     return (
         <div className="border rounded-lg p-3 mb-3 bg-base-100">
             <div className="space-y-2">
-                {/* Title and Description */}
-                <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                        <h3 className="font-bold text-base">{challenge.title}</h3>
+                {/* Title and Description. min-w-0 lets flex shrink the
+                    title block so action buttons stay visible on narrow
+                    viewports — without it, long titles push gear /
+                    density / Vote off the right edge. */}
+                <div className="flex justify-between items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-base truncate">{challenge.title}</h3>
                         {/* Welcome message — hidden in compact mode to keep the card a tight widget. */}
                         {!isCompact && <div
                             className="text-xs text-base-content/60"
@@ -338,8 +341,43 @@ export function ChallengeCard({
                     </div>
                 )}
 
-                {/* Challenge Stats Row — stacks 2-up on phones, 3-up on small tablets, 6-up on desktop */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                {/* Compact mode: single-line widget summary instead of the 6-cell grid. */}
+                {isCompact && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/80">
+                        <span className={timeRemaining === 'Ended' ? 'text-error font-medium' : 'text-success font-medium'}>
+                            ⏱ {timeRemaining}
+                        </span>
+                        <span>📊 {exposureFactor}%</span>
+                        <span className={boostStatus.colorClass}>🚀 {boostStatus.text}</span>
+                        <span className={turboStatus.colorClass}>⚡ {turboStatus.text}</span>
+                        <span>
+                            🖼 {entries.length}/{challenge.max_photo_submits}
+                        </span>
+                        {canPlayAutoTurbo && (
+                            <button
+                                className={`btn btn-xs ${turboError ? 'btn-error' : 'btn-info'}`}
+                                onClick={handlePlayAutoTurbo}
+                                disabled={playingTurbo}
+                                title={turboError || t('app.earnTurbo')}
+                            >
+                                {playingTurbo ? <span className="loading loading-spinner loading-xs" /> : `🎯 ${t('app.earnTurbo')}`}
+                            </button>
+                        )}
+                        {canFill && (
+                            <button
+                                className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
+                                onClick={() => handleFill('one')}
+                                disabled={filling || autovoteRunning}
+                                title={fillError || t('app.addOnePhoto')}
+                            >
+                                {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* Detailed mode: 6-cell stats grid — stacks 2-up on phones, 3-up on small tablets, 6-up on desktop */}
+                {!isCompact && <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.time')}</div>
                         <div className={timeRemaining === 'Ended' ? 'text-error' : 'text-success'}>{timeRemaining}</div>
@@ -409,7 +447,7 @@ export function ChallengeCard({
                             </div>
                         )}
                     </div>
-                </div>
+                </div>}
 
                 {/* Challenge Tags — hidden in compact mode. */}
                 {!isCompact && challenge.tags && challenge.tags.length > 0 && (

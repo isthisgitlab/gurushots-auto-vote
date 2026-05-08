@@ -95,8 +95,10 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
 
     return (
         <div>
-            {/* Action Buttons */}
-            <div className="flex gap-2 mb-4">
+            {/* Action Buttons — flex-wrap so the Compact toggle wraps
+                to a second row on narrow viewports instead of clipping
+                off the right edge. */}
+            <div className="flex flex-wrap gap-2 mb-4 items-center">
                 {!autovoteRunning && (
                     <>
                         <button className="btn btn-latvian btn-sm" onClick={handleVoteAll} disabled={votingAll}>
@@ -140,7 +142,7 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                     for all cards; per-card overrides on individual
                     challenges remain. */}
                 <button
-                    className="btn btn-ghost btn-sm ml-auto"
+                    className="btn btn-ghost btn-sm sm:ml-auto"
                     onClick={handleToggleGlobalCompact}
                     title={globalCompact ? 'Show full details' : 'Compact view'}
                 >

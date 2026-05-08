@@ -260,6 +260,16 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         dispatch({ type: ACTIONS.START });
         await window.api.setCancelVoting(false);
 
+        // Persist the running flag so a remount of the app (Capacitor
+        // re-launch, Electron window reopen) can resume voting without
+        // the user tapping Start again. Best-effort; failure here just
+        // means the resume on next launch won't kick in.
+        try {
+            await window.api.setSetting('autovoteRunning', true);
+        } catch {
+            /* ignore */
+        }
+
         // On Capacitor, spin up the persistent foreground notification
         // so Android does not kill the WebView process while the phone
         // is locked. No-op on Electron.
@@ -347,6 +357,14 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         dispatch({ type: ACTIONS.STOP });
         await window.api.setCancelVoting(true);
 
+        // Clear the persisted running flag so a relaunch does not
+        // auto-resume an explicitly stopped session.
+        try {
+            await window.api.setSetting('autovoteRunning', false);
+        } catch {
+            /* ignore */
+        }
+
         // Tear down the Android foreground notification. No-op on Electron.
         await foregroundService.stop();
 
@@ -369,6 +387,33 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
             onChallengesRefresh();
         }
     }, [onChallengesRefresh]);
+
+    // Auto-resume on mount if a previous session left autovoteRunning
+    // persisted as true (user toggled Start, then closed the app or
+    // restarted the device). Runs once on mount; the runningRef guard
+    // inside start() prevents double-starts. Skips when there is no
+    // token, otherwise the loop would error every cycle until the user
+    // logs in.
+    const autoResumeRef = useRef(false);
+    useEffect(() => {
+        if (autoResumeRef.current) return;
+        autoResumeRef.current = true;
+        const maybeResume = async () => {
+            try {
+                const wasRunning = await window.api.getSetting('autovoteRunning');
+                if (!wasRunning) return;
+                const settings = await window.api.getSettings();
+                if (!settings?.token) return;
+                await start();
+            } catch {
+                /* ignore — leave UI in stopped state on failure */
+            }
+        };
+        maybeResume();
+        // start is intentionally not in deps — we want a single
+        // mount-time check, not a re-trigger when start identity
+        // changes due to its own dep (runVotingCycle / threshold scheduling).
+    }, []); // eslint-disable-line
 
     /**
      * Toggle autovote

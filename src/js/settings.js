@@ -1122,6 +1122,19 @@ const SETTINGS_SCHEMA = {
         label: 'app.compactCards',
         description: 'app.compactCardsDesc',
     },
+    // Persisted autovote-running flag. Written on Start / Stop so a
+    // relaunch of the app (Capacitor WebView destroyed + recreated,
+    // Electron window reopen) can resume voting without the user
+    // tapping Start again.
+    autovoteRunning: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        label: 'app.autovoteRunning',
+        description: 'app.autovoteRunningDesc',
+    },
     voteOnlyInLastMinute: {
         type: 'boolean',
         default: false,
