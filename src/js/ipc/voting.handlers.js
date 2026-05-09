@@ -18,38 +18,120 @@ const apiFactory = require('../apiFactory');
 const votingLogic = require('../services/VotingLogic');
 const cancellation = require('../voting/cancellation');
 
-// Shared per-challenge exposure-threshold resolver. Schema default is the
-// last-resort fallback so a corrupt override doesn't stall a whole cycle.
-const getExposureThreshold = (challengeId) => {
-    try {
-        return settings.getEffectiveSetting('exposure', challengeId);
-    } catch (error) {
-        logger
-            .withCategory('settings')
-            .warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
-        return settings.SETTINGS_SCHEMA.exposure.default;
+// Run one full strategy pass — global when challengeId is null, scoped
+// to a single card otherwise. Delegates to BaseMiddleware so the
+// auth-check, cancellation-reset, and IPC-envelope shape live in one
+// place that the gui-vote handler also reaches via guiVote().
+const runStrategyOnceViaMiddleware = (challengeId = null) => apiFactory.getMiddleware().runVotingCycle(challengeId);
+
+// Per-challenge vote mechanic shared by the single-target handlers and
+// the vote-all loop. Returns the outcome so each caller can log/count
+// in its own wording without re-implementing eligibility + image fetch
+// + submit.
+const submitVotesForChallenge = async (challenge, strategy, token, now) => {
+    const { shouldAllowVoting, errorMessage, targetExposure } = votingLogic.evaluateManualVotingToHundred(
+        challenge,
+        now,
+        challenge.title,
+    );
+    if (!shouldAllowVoting) {
+        return { outcome: 'not-eligible', errorMessage };
     }
+
+    const voteImages = await strategy.getVoteImages(challenge, token);
+    if (!voteImages || !voteImages.images || voteImages.images.length === 0) {
+        return { outcome: 'no-images', targetExposure };
+    }
+
+    await strategy.submitVotes(voteImages, token, targetExposure);
+    return { outcome: 'voted', targetExposure, imageCount: voteImages.images.length };
 };
 
-// Run one full strategy pass — global when challengeId is null, scoped
-// to a single card otherwise. Centralised so both IPC handlers share
-// auth-check, cancellation-reset, and error envelope shape.
-const runStrategyOnce = async (challengeId = null) => {
+// Single-target vote entry shared by vote-on-challenge and
+// vote-on-challenge-manual. The two channels carried slightly different
+// log wording but exercised the same code path; the `manual` flag now
+// flips just those wording bits.
+const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) => {
+    const requestPrefix = manual ? '🔄 Manual vote on challenge request' : '🔄 Vote on challenge request';
+    logger
+        .withCategory('general')
+        .info(`${requestPrefix}: ID=${challengeId}, Title="${challengeTitle}"`, null, logger.CATEGORIES.VOTING);
+
     const userSettings = settings.loadSettings();
     if (!userSettings.token) {
-        logger.withCategory('authentication').warning('❌ No token found for voting cycle', null);
+        const noTokenMsg = manual ? '❌ No token found for manual voting' : '❌ No token found for voting';
+        logger.withCategory('authentication').warning(noTokenMsg, null);
         return { success: false, error: 'No authentication token found' };
     }
 
     const strategy = apiFactory.getApiStrategy();
-    cancellation.reset();
+    const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
 
-    const result = await strategy.fetchChallengesAndVote(userSettings.token, getExposureThreshold, challengeId);
-
-    if (result && result.success) {
-        return { success: true, message: result.message || 'Voting cycle completed successfully' };
+    if (!challengesResponse || !challengesResponse.challenges) {
+        const fetchMsg = manual
+            ? '❌ Failed to fetch challenges for manual voting'
+            : '❌ Failed to fetch challenges for voting';
+        logger.withCategory('challenges').warning(fetchMsg, null);
+        return { success: false, error: 'Failed to fetch challenges' };
     }
-    return { success: false, error: result?.error || 'Voting cycle failed' };
+
+    logger
+        .withCategory('challenges')
+        .debug(`📋 Found challenges: [${challengesResponse.challenges.map((c) => `${c.id}:"${c.title}"`).join(', ')}]`);
+    logger.withCategory('challenges').debug('🔍 Looking for challenge ID:', challengeId);
+
+    const challenge = challengesResponse.challenges.find((c) => c.id === parseInt(challengeId));
+    logger
+        .withCategory('general')
+        .debug(
+            `🎯 Challenge found: ${challenge ? `ID=${challenge.id}, Title="${challenge.title}"` : 'NOT FOUND'}`,
+            null,
+            logger.CATEGORIES.CHALLENGES,
+        );
+
+    if (!challenge) {
+        logger
+            .withCategory('general')
+            .warning('❌ Challenge not found:', { challengeId, challengeTitle }, logger.CATEGORIES.CHALLENGES);
+        return { success: false, error: `Challenge "${challengeTitle}" not found` };
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    if (challenge.start_time >= now) {
+        return { success: false, error: `Challenge "${challengeTitle}" has not started yet` };
+    }
+
+    const startMsg = manual
+        ? '🗳️ Starting manual voting process for challenge:'
+        : '🗳️ Starting voting process for challenge:';
+    logger.withCategory('voting').info(startMsg, challenge.title);
+
+    const result = await submitVotesForChallenge(challenge, strategy, userSettings.token, now);
+    if (result.outcome === 'not-eligible') {
+        return { success: false, error: result.errorMessage };
+    }
+
+    logger
+        .withCategory('voting')
+        .debug(
+            `📸 Vote images received: ${result.outcome === 'no-images' ? 'No vote images' : `Count=${result.imageCount}`}`,
+            null,
+        );
+
+    if (result.outcome === 'no-images') {
+        const noImagesMsg = manual ? '⚠️ No vote images available for manual voting' : '⚠️ No vote images available';
+        logger.withCategory('voting').warning(noImagesMsg, null);
+    } else {
+        const submittingMsg = manual ? '✅ Submitting manual votes...' : '✅ Submitting votes...';
+        logger.withCategory('voting').info(submittingMsg, null);
+        const successMsg = manual ? '✅ Manual votes submitted successfully' : '✅ Votes submitted successfully';
+        logger.withCategory('voting').success(successMsg);
+    }
+
+    const successReturnMsg = manual
+        ? `Successfully voted on challenge "${challengeTitle}" manually`
+        : `Successfully voted on challenge "${challengeTitle}"`;
+    return { success: true, message: successReturnMsg };
 };
 
 const buildHandlers = () => ({
@@ -70,7 +152,7 @@ const buildHandlers = () => ({
     'run-voting-cycle': async () => {
         try {
             logger.withCategory('voting').info('🔄 Starting voting cycle...', null);
-            return await runStrategyOnce(null);
+            return await runStrategyOnceViaMiddleware(null);
         } catch (error) {
             logger.withCategory('voting').error('Error handling run-voting-cycle request:', error);
             return { success: false, error: error.message || 'Failed to run voting cycle' };
@@ -83,7 +165,7 @@ const buildHandlers = () => ({
                 return { success: false, error: 'challengeId is required' };
             }
             logger.withCategory('voting').info(`🔄 Starting single-challenge cycle: ${challengeId}`, null);
-            return await runStrategyOnce(challengeId);
+            return await runStrategyOnceViaMiddleware(challengeId);
         } catch (error) {
             logger.withCategory('voting').error('Error handling run-voting-cycle-for-challenge request:', error);
             return { success: false, error: error.message || 'Failed to run voting cycle' };
@@ -126,37 +208,30 @@ const buildHandlers = () => ({
                         challenges.length,
                     );
 
-                const { shouldAllowVoting, errorMessage, targetExposure } = votingLogic.evaluateManualVotingToHundred(
-                    challenge,
-                    now,
-                    challenge.title,
-                );
-
-                if (shouldAllowVoting) {
-                    try {
+                try {
+                    const result = await submitVotesForChallenge(challenge, strategy, userSettings.token, now);
+                    if (result.outcome === 'voted') {
+                        votedCount++;
                         logger
                             .withCategory('voting')
-                            .info(`🗳️ Voting on challenge: ${challenge.title} (target: ${targetExposure}%)`, null);
-                        const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
-                        if (voteImages && voteImages.images && voteImages.images.length > 0) {
-                            await strategy.submitVotes(voteImages, userSettings.token, targetExposure);
-                            votedCount++;
-                            logger.withCategory('voting').success(`✅ Voted on challenge: ${challenge.title}`, null);
-                            await new Promise((resolve) => setTimeout(resolve, 1000));
-                        } else {
-                            logger
-                                .withCategory('voting')
-                                .warning(`⚠️ No vote images available for: ${challenge.title}`, null);
-                            skippedCount++;
-                        }
-                    } catch (error) {
-                        logger.withCategory('voting').error(`❌ Error voting on challenge ${challenge.title}:`, error);
+                            .success(
+                                `✅ Voted on challenge: ${challenge.title} (target: ${result.targetExposure}%)`,
+                                null,
+                            );
+                        await new Promise((resolve) => setTimeout(resolve, 1000));
+                    } else if (result.outcome === 'no-images') {
+                        logger
+                            .withCategory('voting')
+                            .warning(`⚠️ No vote images available for: ${challenge.title}`, null);
+                        skippedCount++;
+                    } else {
+                        logger
+                            .withCategory('voting')
+                            .info(`⏭️ Skipping challenge: ${challenge.title} - ${result.errorMessage}`, null);
                         skippedCount++;
                     }
-                } else {
-                    logger
-                        .withCategory('voting')
-                        .info(`⏭️ Skipping challenge: ${challenge.title} - ${errorMessage}`, null);
+                } catch (error) {
+                    logger.withCategory('voting').error(`❌ Error voting on challenge ${challenge.title}:`, error);
                     skippedCount++;
                 }
             }
@@ -184,83 +259,7 @@ const buildHandlers = () => ({
 
     'vote-on-challenge': async (event, challengeId, challengeTitle) => {
         try {
-            logger
-                .withCategory('general')
-                .info(
-                    `🔄 Vote on challenge request: ID=${challengeId}, Title="${challengeTitle}"`,
-                    null,
-                    logger.CATEGORIES.VOTING,
-                );
-
-            const userSettings = settings.loadSettings();
-            if (!userSettings.token) {
-                logger.withCategory('authentication').warning('❌ No token found for voting', null);
-                return { success: false, error: 'No authentication token found' };
-            }
-
-            const strategy = apiFactory.getApiStrategy();
-            const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
-
-            if (!challengesResponse || !challengesResponse.challenges) {
-                logger.withCategory('challenges').warning('❌ Failed to fetch challenges for voting', null);
-                return { success: false, error: 'Failed to fetch challenges' };
-            }
-
-            logger
-                .withCategory('challenges')
-                .debug(
-                    `📋 Found challenges: [${challengesResponse.challenges.map((c) => `${c.id}:"${c.title}"`).join(', ')}]`,
-                );
-            logger.withCategory('challenges').debug('🔍 Looking for challenge ID:', challengeId);
-
-            const challenge = challengesResponse.challenges.find((c) => c.id === parseInt(challengeId));
-            logger
-                .withCategory('general')
-                .debug(
-                    `🎯 Challenge found: ${challenge ? `ID=${challenge.id}, Title="${challenge.title}"` : 'NOT FOUND'}`,
-                    null,
-                    logger.CATEGORIES.CHALLENGES,
-                );
-
-            if (!challenge) {
-                logger
-                    .withCategory('general')
-                    .warning('❌ Challenge not found:', { challengeId, challengeTitle }, logger.CATEGORIES.CHALLENGES);
-                return { success: false, error: `Challenge "${challengeTitle}" not found` };
-            }
-
-            const now = Math.floor(Date.now() / 1000);
-            if (challenge.start_time >= now) {
-                return { success: false, error: `Challenge "${challengeTitle}" has not started yet` };
-            }
-
-            const { shouldAllowVoting, errorMessage, targetExposure } = votingLogic.evaluateManualVotingToHundred(
-                challenge,
-                now,
-                challengeTitle,
-            );
-            if (!shouldAllowVoting) {
-                return { success: false, error: errorMessage };
-            }
-
-            logger.withCategory('voting').info('🗳️ Starting voting process for challenge:', challenge.title);
-            const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
-            logger
-                .withCategory('voting')
-                .debug(
-                    `📸 Vote images received: ${voteImages ? `Count=${voteImages.images?.length}` : 'No vote images'}`,
-                    null,
-                );
-
-            if (voteImages && voteImages.images && voteImages.images.length > 0) {
-                logger.withCategory('voting').info('✅ Submitting votes...', null);
-                await strategy.submitVotes(voteImages, userSettings.token, targetExposure);
-                logger.withCategory('voting').success('✅ Votes submitted successfully');
-            } else {
-                logger.withCategory('voting').warning('⚠️ No vote images available', null);
-            }
-
-            return { success: true, message: `Successfully voted on challenge "${challengeTitle}"` };
+            return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: false });
         } catch (error) {
             logger.withCategory('voting').error('Error handling vote-on-challenge request:', error);
             return { success: false, error: error.message || 'Failed to vote on challenge' };
@@ -269,83 +268,7 @@ const buildHandlers = () => ({
 
     'vote-on-challenge-manual': async (event, challengeId, challengeTitle) => {
         try {
-            logger
-                .withCategory('general')
-                .info(
-                    `🔄 Manual vote on challenge request: ID=${challengeId}, Title="${challengeTitle}"`,
-                    null,
-                    logger.CATEGORIES.VOTING,
-                );
-
-            const userSettings = settings.loadSettings();
-            if (!userSettings.token) {
-                logger.withCategory('authentication').warning('❌ No token found for manual voting', null);
-                return { success: false, error: 'No authentication token found' };
-            }
-
-            const strategy = apiFactory.getApiStrategy();
-            const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
-
-            if (!challengesResponse || !challengesResponse.challenges) {
-                logger.withCategory('challenges').warning('❌ Failed to fetch challenges for manual voting', null);
-                return { success: false, error: 'Failed to fetch challenges' };
-            }
-
-            logger
-                .withCategory('challenges')
-                .debug(
-                    `📋 Found challenges: [${challengesResponse.challenges.map((c) => `${c.id}:"${c.title}"`).join(', ')}]`,
-                );
-            logger.withCategory('challenges').debug('🔍 Looking for challenge ID:', challengeId);
-
-            const challenge = challengesResponse.challenges.find((c) => c.id === parseInt(challengeId));
-            logger
-                .withCategory('general')
-                .debug(
-                    `🎯 Challenge found: ${challenge ? `ID=${challenge.id}, Title="${challenge.title}"` : 'NOT FOUND'}`,
-                    null,
-                    logger.CATEGORIES.CHALLENGES,
-                );
-
-            if (!challenge) {
-                logger
-                    .withCategory('general')
-                    .warning('❌ Challenge not found:', { challengeId, challengeTitle }, logger.CATEGORIES.CHALLENGES);
-                return { success: false, error: `Challenge "${challengeTitle}" not found` };
-            }
-
-            const now = Math.floor(Date.now() / 1000);
-            if (challenge.start_time >= now) {
-                return { success: false, error: `Challenge "${challengeTitle}" has not started yet` };
-            }
-
-            const { shouldAllowVoting, errorMessage, targetExposure } = votingLogic.evaluateManualVotingToHundred(
-                challenge,
-                now,
-                challengeTitle,
-            );
-            if (!shouldAllowVoting) {
-                return { success: false, error: errorMessage };
-            }
-
-            logger.withCategory('voting').info('🗳️ Starting manual voting process for challenge:', challenge.title);
-            const voteImages = await strategy.getVoteImages(challenge, userSettings.token);
-            logger
-                .withCategory('voting')
-                .debug(
-                    `📸 Vote images received: ${voteImages ? `Count=${voteImages.images?.length}` : 'No vote images'}`,
-                    null,
-                );
-
-            if (voteImages && voteImages.images && voteImages.images.length > 0) {
-                logger.withCategory('voting').info('✅ Submitting manual votes...', null);
-                await strategy.submitVotes(voteImages, userSettings.token, targetExposure);
-                logger.withCategory('voting').success('✅ Manual votes submitted successfully');
-            } else {
-                logger.withCategory('voting').warning('⚠️ No vote images available for manual voting', null);
-            }
-
-            return { success: true, message: `Successfully voted on challenge "${challengeTitle}" manually` };
+            return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: true });
         } catch (error) {
             logger.withCategory('voting').error('Error handling vote-on-challenge-manual request:', error);
             return { success: false, error: error.message || 'Failed to vote on challenge manually' };

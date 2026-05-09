@@ -10,9 +10,7 @@ const logger = require('../logger');
 const { generateRandomHeaders } = require('./randomizer');
 const settings = require('../settings');
 const runtime = require('../runtime');
-
-// Common content type for form submissions
-const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';
+const { FORM_CONTENT_TYPE } = require('./constants');
 
 // Capacitor adapter: routes axios requests through CapacitorHttp's native
 // OkHttp client (Android) so we can set headers that browser fetch can't

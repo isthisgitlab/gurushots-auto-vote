@@ -763,6 +763,22 @@ const removeChallengeOverride = (settingKey, challengeId) => {
 };
 
 /**
+ * Returns a per-challenge exposure-threshold resolver. Falls back to the
+ * schema default if a corrupt override would otherwise stall the cycle.
+ * Single source so the IPC handlers and middleware agree.
+ *
+ * @returns {(challengeId: string|number) => number}
+ */
+const getExposureResolver = () => (challengeId) => {
+    try {
+        return getEffectiveSetting('exposure', challengeId);
+    } catch (error) {
+        logger.withCategory('settings').warning(`Error getting exposure setting for challenge ${challengeId}:`, error);
+        return SETTINGS_SCHEMA.exposure.default;
+    }
+};
+
+/**
  * Get the effective value for a setting (per-challenge override or global default)
  * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
  * @param {string} challengeId - The challenge ID (optional for global-only settings)
@@ -1315,6 +1331,7 @@ module.exports = {
     setChallengeOverrides,
     removeChallengeOverride,
     getEffectiveSetting,
+    getExposureResolver,
 
     // Cleanup functions
     cleanupStaleChallengeSetting,

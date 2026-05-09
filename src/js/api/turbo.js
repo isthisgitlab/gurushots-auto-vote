@@ -9,9 +9,9 @@
  */
 
 const { makePostRequest, FORM_CONTENT_TYPE } = require('./api-client');
+const { ENDPOINTS } = require('./constants');
 
 const TURBO_SELECTION_DELAY_MS = 1200;
-const TURBO_BASE_URL = 'https://api.gurushots.com/rest';
 
 const requireValue = (value, label) => {
     if (value === null || value === undefined || value === '') {
@@ -42,7 +42,7 @@ const getChallengeTurbo = async (challengeId, token) => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}`;
-    const response = await makePostRequest(`${TURBO_BASE_URL}/get_challenge_turbo`, headers, data);
+    const response = await makePostRequest(ENDPOINTS.challengeTurbo, headers, data);
     if (!response || !Array.isArray(response.images)) {
         return null;
     }
@@ -71,7 +71,7 @@ const submitTurboSelection = async (challengeId, imageId, token) => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
-    const response = await makePostRequest(`${TURBO_BASE_URL}/submit_challenge_turbo_selection`, headers, data);
+    const response = await makePostRequest(ENDPOINTS.submitTurboSelection, headers, data);
     if (!response) {
         return { ok: false, success: false, state: null, scores: null, errorCode: null, raw: null };
     }
@@ -99,7 +99,7 @@ const applyTurbo = async (challengeId, imageId, token) => {
     requireValue(token, 'token');
     const headers = createWebHeaders(token);
     const data = `challenge_id=${encodeURIComponent(String(challengeId))}&image_id=${encodeURIComponent(String(imageId))}`;
-    const response = await makePostRequest(`${TURBO_BASE_URL}/set_challenge_turbo`, headers, data);
+    const response = await makePostRequest(ENDPOINTS.setTurbo, headers, data);
     if (!response) {
         return { ok: false, raw: null };
     }

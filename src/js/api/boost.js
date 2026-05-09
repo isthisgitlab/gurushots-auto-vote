@@ -5,6 +5,7 @@
  */
 
 const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
+const { ENDPOINTS } = require('./constants');
 const logger = require('../logger');
 
 /**
@@ -55,7 +56,7 @@ const applyBoost = async (challenge, token) => {
         .withCategory('boost')
         .startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${id}`);
 
-    const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
+    const response = await makePostRequest(ENDPOINTS.boostPhoto, headers, data);
     if (!response) {
         logger.withCategory('boost').endOperation(operationId, null, 'Boost application failed');
         return null;
@@ -87,7 +88,7 @@ const applyBoostToEntry = async (challengeId, imageId, token) => {
         .withCategory('boost')
         .startOperation(operationId, `Applying boost to specific entry ${imageId} in challenge ${challengeId}`);
 
-    const response = await makePostRequest('https://api.gurushots.com/rest_mobile/boost_photo', headers, data);
+    const response = await makePostRequest(ENDPOINTS.boostPhoto, headers, data);
     if (!response) {
         logger.withCategory('boost').endOperation(operationId, null, 'Boost application to entry failed');
         return null;

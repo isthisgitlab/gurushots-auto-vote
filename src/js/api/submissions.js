@@ -8,8 +8,7 @@
  */
 
 const { makePostRequest, FORM_CONTENT_TYPE } = require('./api-client');
-
-const SUBMISSIONS_BASE_URL = 'https://api.gurushots.com/rest';
+const { ENDPOINTS } = require('./constants');
 
 const requireValue = (value, label) => {
     if (value === null || value === undefined || value === '') {
@@ -54,7 +53,7 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
         'usage=submit',
     ];
     const data = params.join('&');
-    const response = await makePostRequest(`${SUBMISSIONS_BASE_URL}/get_photos_private`, headers, data);
+    const response = await makePostRequest(ENDPOINTS.photosPrivate, headers, data);
     if (!response || !Array.isArray(response.items)) {
         return [];
     }
@@ -81,7 +80,7 @@ const submitToChallenge = async (challengeId, imageIds, token) => {
         params.push(`image_ids[${index}]=${encodeURIComponent(String(id))}`);
     });
     const data = params.join('&');
-    const response = await makePostRequest(`${SUBMISSIONS_BASE_URL}/submit_to_challenge`, headers, data);
+    const response = await makePostRequest(ENDPOINTS.submitToChallenge, headers, data);
     if (!response) {
         return { ok: false, raw: null };
     }

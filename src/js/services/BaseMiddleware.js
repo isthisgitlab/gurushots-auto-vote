@@ -9,20 +9,12 @@
 
 const settings = require('../settings');
 const logger = require('../logger');
+const cancellation = require('../voting/cancellation');
 
 const requireToken = () => {
     const token = settings.getSetting('token');
     if (!token) throw new Error('No authentication token found');
     return token;
-};
-
-const getExposureThresholdResolver = () => (challengeId) => {
-    try {
-        return settings.getEffectiveSetting('exposure', challengeId);
-    } catch (error) {
-        logger.withCategory('settings').warning(`Error getting exposure setting for challenge ${challengeId}`, error);
-        return settings.SETTINGS_SCHEMA.exposure.default;
-    }
 };
 
 class BaseMiddleware {
@@ -67,13 +59,36 @@ class BaseMiddleware {
         }
     }
 
-    async _runVote() {
+    async _runVote(challengeId = null) {
         const token = settings.getSetting('token');
         if (!token) {
             return { ok: false, error: 'No authentication token found. Please login first.' };
         }
-        await this.apiStrategy.fetchChallengesAndVote(token, getExposureThresholdResolver());
-        return { ok: true };
+        const result = await this.apiStrategy.fetchChallengesAndVote(
+            token,
+            settings.getExposureResolver(),
+            challengeId,
+        );
+        return { ok: true, result };
+    }
+
+    /**
+     * IPC-shaped voting cycle entry. Resets cancellation state, runs the
+     * strategy, and returns `{ success, message } | { success: false, error }`
+     * matching what the renderer expects. `challengeId` is optional; null/undefined
+     * means run the full active set.
+     */
+    async runVotingCycle(challengeId = null) {
+        cancellation.reset();
+        const { ok, error, result } = await this._runVote(challengeId);
+        if (!ok) {
+            logger.withCategory('authentication').warning(`❌ ${error}`, null);
+            return { success: false, error };
+        }
+        if (result && result.success) {
+            return { success: true, message: result.message || 'Voting cycle completed successfully' };
+        }
+        return { success: false, error: result?.error || 'Voting cycle failed' };
     }
 
     async cliVote(challengeId = null) {
@@ -87,7 +102,7 @@ class BaseMiddleware {
         }
         logger.withCategory('voting').startOperation('cli-vote', `CLI Voting Process${scopeLabel}`);
         try {
-            await this.apiStrategy.fetchChallengesAndVote(token, getExposureThresholdResolver(), challengeId);
+            await this.apiStrategy.fetchChallengesAndVote(token, settings.getExposureResolver(), challengeId);
             logger.withCategory('voting').endOperation('cli-vote', 'Voting process completed successfully');
         } catch (error) {
             logger.withCategory('voting').endOperation('cli-vote', null, error.message || error);

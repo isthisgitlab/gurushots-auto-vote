@@ -6,6 +6,7 @@
  */
 
 const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
+const { ENDPOINTS } = require('./constants');
 const logger = require('../logger');
 const { updateChallengeVoteMetadata } = require('../metadata');
 
@@ -27,7 +28,7 @@ const getVoteImages = async (challenge, token) => {
         'content-type': FORM_CONTENT_TYPE,
     };
 
-    const response = await makePostRequest('https://api.gurushots.com/rest_mobile/get_vote_images', headers, data);
+    const response = await makePostRequest(ENDPOINTS.voteImages, headers, data);
 
     // Validate response contains images
     if (!response || !response.images || response.images.length === 0) {
@@ -108,7 +109,7 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
     };
 
     // Submit votes to API
-    const response = await makePostRequest('https://api.gurushots.com/rest_mobile/submit_vote', headers, data);
+    const response = await makePostRequest(ENDPOINTS.submitVote, headers, data);
     if (!response) {
         logger.withCategory('voting').endOperation(operationId, null, 'Vote submission failed');
         return;

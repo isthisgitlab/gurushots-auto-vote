@@ -6,6 +6,7 @@
  */
 
 const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
+const { ENDPOINTS } = require('./constants');
 const logger = require('../logger');
 
 /**
@@ -34,11 +35,7 @@ const authenticate = async (email, password) => {
     // Routed through makePostRequest so the CapacitorHttp adapter applies on
     // Android — the iOS-spoof headers in randomizer.js (host, user-agent) are
     // forbidden in browser fetch and only survive via native OkHttp.
-    const responseData = await makePostRequest(
-        'https://api.gurushots.com/rest_mobile/signup',
-        headers,
-        data,
-    );
+    const responseData = await makePostRequest(ENDPOINTS.signup, headers, data);
 
     if (responseData) {
         logger.withCategory('authentication').success('Authentication successful', null, null);

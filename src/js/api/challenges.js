@@ -5,6 +5,7 @@
  */
 
 const { makePostRequest, createCommonHeaders } = require('./api-client');
+const { ENDPOINTS } = require('./constants');
 const logger = require('../logger');
 
 /**
@@ -24,7 +25,7 @@ const getActiveChallenges = async (token) => {
     });
 
     const headers = createCommonHeaders(token);
-    const response = await makePostRequest('https://api.gurushots.com/rest_mobile/get_my_active_challenges', headers);
+    const response = await makePostRequest(ENDPOINTS.activeChallenges, headers);
 
     // Handle failed requests gracefully
     if (!response) {
