@@ -97,6 +97,9 @@
             appSetting: 'Lietotnes iestatījums',
             applicationSettings: 'Lietotnes iestatījumi',
             autoVote: 'Automātiskā balsošana',
+            autovoteRunning: 'Automātiskā balsošana darbojas',
+            autovoteRunningDesc:
+                'Iekšējs karogs — saglabā automātiskās balsošanas stāvokli starp lietotnes restartiem, lai balsošana varētu atsākties automātiski',
             available: 'Pieejams',
             used: 'Izmantots',
             unavailable: 'Nav pieejams',
@@ -138,6 +141,8 @@
                 'Konfigurējiet iestatījumus, kas ir specifiski šim izaicinājumam. Pielāgotie iestatījumi būs prioritārāki par globālajiem noklusējumiem.',
             checkForUpdates: 'Pārbaudīt atjauninājumus',
             checkForUpdatesDesc: 'Manuāli pārbaudīt, vai ir pieejama jauna lietotnes versija',
+            compactCards: 'Kompaktas kartes',
+            compactCardsDesc: 'Attēlot izaicinājumus kompaktā kartes izkārtojumā',
             configureBoost: 'Konfigurēt "Boost" izaicinājumam:',
             currentVersion: 'Pašreizējā versija',
             cycles: 'Cikli:',

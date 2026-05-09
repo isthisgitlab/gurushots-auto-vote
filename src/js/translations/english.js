@@ -96,6 +96,9 @@
             appSetting: 'App Setting',
             applicationSettings: 'Application Settings',
             autoVote: 'Auto Vote',
+            autovoteRunning: 'Auto-Vote Running',
+            autovoteRunningDesc:
+                'Internal flag — persists auto-vote state across app restarts so voting can resume automatically',
             available: 'Available',
             used: 'Used',
             unavailable: 'Unavailable',
@@ -137,6 +140,8 @@
                 'Configure settings specific to this challenge. Overrides will take precedence over global defaults.',
             checkForUpdates: 'Check for Updates',
             checkForUpdatesDesc: 'Manually check for new versions of the application',
+            compactCards: 'Compact Cards',
+            compactCardsDesc: 'Display challenges in a compact card layout',
             configureBoost: 'Configure Boost for',
             currentVersion: 'Current version',
             cycles: 'Cycles:',
