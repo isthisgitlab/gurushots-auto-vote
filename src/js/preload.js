@@ -36,8 +36,7 @@ contextBridge.exposeInMainWorld('api', {
         return ipcRenderer.invoke('authenticate', username, password, isMock);
     },
     runVotingCycle: () => ipcRenderer.invoke('run-voting-cycle'),
-    runVotingCycleForChallenge: (challengeId) =>
-        ipcRenderer.invoke('run-voting-cycle-for-challenge', challengeId),
+    runVotingCycleForChallenge: (challengeId) => ipcRenderer.invoke('run-voting-cycle-for-challenge', challengeId),
     voteOnChallenge: (challengeId, challengeTitle) =>
         ipcRenderer.invoke('vote-on-challenge', challengeId, challengeTitle),
     voteOnChallengeManual: (challengeId, challengeTitle) =>

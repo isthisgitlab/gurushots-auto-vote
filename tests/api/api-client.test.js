@@ -372,9 +372,7 @@ describe('api-client', () => {
             const adapterResult = await capturedAdapter({ url: '/x' });
 
             // GET method when config.method is not provided.
-            expect(CapacitorHttp.request).toHaveBeenCalledWith(
-                expect.objectContaining({ method: 'GET' }),
-            );
+            expect(CapacitorHttp.request).toHaveBeenCalledWith(expect.objectContaining({ method: 'GET' }));
             // headers default to {} when CapacitorHttp returns undefined.
             expect(adapterResult.headers).toEqual({});
 

@@ -25,7 +25,8 @@
  * and the bottom edge gets cut off on phones with a gesture bar.
  * env(safe-area-inset-*) returns 0 on desktop so this is harmless
  * for Electron. */
-html, body {
+html,
+body {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);

@@ -102,10 +102,7 @@ export function ChallengeCard({
 
                 const compact = await window.api.getEffectiveSetting('compactCards', challenge.id.toString());
                 setIsCompact(compact === true);
-                const compactOverride = await window.api.getChallengeOverride(
-                    'compactCards',
-                    challenge.id.toString(),
-                );
+                const compactOverride = await window.api.getChallengeOverride('compactCards', challenge.id.toString());
                 setHasCompactOverride(compactOverride !== null);
             } catch {
                 // Ignore errors
@@ -193,10 +190,12 @@ export function ChallengeCard({
                     <div className="min-w-0">
                         <h3 className="font-bold text-base truncate">{challenge.title}</h3>
                         {/* Welcome message — hidden in compact mode to keep the card a tight widget. truncate prevents long welcome text from forcing the grid cell wider. */}
-                        {!isCompact && <div
-                            className="text-xs text-base-content/60 truncate"
-                            dangerouslySetInnerHTML={{ __html: challenge.welcome_message }}
-                        />}
+                        {!isCompact && (
+                            <div
+                                className="text-xs text-base-content/60 truncate"
+                                dangerouslySetInnerHTML={{ __html: challenge.welcome_message }}
+                            />
+                        )}
                         {/* Challenge Type Badges */}
                         <div className="flex gap-1 mt-1">
                             {challenge.type && (
@@ -241,9 +240,7 @@ export function ChallengeCard({
                                 onVoteComplete={onVoteComplete}
                             />
                         )}
-                        {showRunButton && (
-                            <RunButton challengeId={challenge.id} onVoteComplete={onVoteComplete} />
-                        )}
+                        {showRunButton && <RunButton challengeId={challenge.id} onVoteComplete={onVoteComplete} />}
                         {/* Per-card density toggle. The icon is filled
                             when this card has its own override so the
                             user can see at-a-glance which cards diverge
@@ -302,24 +299,26 @@ export function ChallengeCard({
                 </div>
 
                 {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. Hidden in compact mode. */}
-                {!isCompact && <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.entries')}</div>
-                        <div>{challenge.entries.toLocaleString()}</div>
+                {!isCompact && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.entries')}</div>
+                            <div>{challenge.entries.toLocaleString()}</div>
+                        </div>
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.players')}</div>
+                            <div>{challenge.players.toLocaleString()}</div>
+                        </div>
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.votes')}</div>
+                            <div>{challenge.votes.toLocaleString()}</div>
+                        </div>
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.prize')}</div>
+                            <div>{challenge.prizes_worth}</div>
+                        </div>
                     </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.players')}</div>
-                        <div>{challenge.players.toLocaleString()}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.votes')}</div>
-                        <div>{challenge.votes.toLocaleString()}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.prize')}</div>
-                        <div>{challenge.prizes_worth}</div>
-                    </div>
-                </div>}
+                )}
 
                 {/* User Progress — full bar + level + next-level info; compact mode hides this. */}
                 {!isCompact && userProgress && userProgress.votes > 0 && (
@@ -356,7 +355,11 @@ export function ChallengeCard({
                 {/* Compact mode: single-line widget summary instead of the 6-cell grid. */}
                 {isCompact && (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/80">
-                        <span className={timeRemaining === 'Ended' ? 'text-error font-medium' : 'text-success font-medium'}>
+                        <span
+                            className={
+                                timeRemaining === 'Ended' ? 'text-error font-medium' : 'text-success font-medium'
+                            }
+                        >
                             ⏱ {timeRemaining}
                         </span>
                         <span>📊 {exposureFactor}%</span>
@@ -372,7 +375,11 @@ export function ChallengeCard({
                                 disabled={playingTurbo}
                                 title={turboError || t('app.earnTurbo')}
                             >
-                                {playingTurbo ? <span className="loading loading-spinner loading-xs" /> : `🎯 ${t('app.earnTurbo')}`}
+                                {playingTurbo ? (
+                                    <span className="loading loading-spinner loading-xs" />
+                                ) : (
+                                    `🎯 ${t('app.earnTurbo')}`
+                                )}
                             </button>
                         )}
                         {canFill && (
@@ -389,77 +396,81 @@ export function ChallengeCard({
                 )}
 
                 {/* Detailed mode: 6-cell stats grid — stacks 2-up on phones, 3-up on small tablets, 6-up on desktop */}
-                {!isCompact && <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.time')}</div>
-                        <div className={timeRemaining === 'Ended' ? 'text-error' : 'text-success'}>{timeRemaining}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.ends')}</div>
-                        <div className="text-xs">{endTime}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.exposure')}</div>
-                        <div>{exposureFactor}%</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.boost')}</div>
-                        <div className={boostStatus.colorClass}>{boostStatus.text}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.turbo')}</div>
-                        <div className={turboStatus.colorClass}>{turboStatus.text}</div>
-                        {canPlayAutoTurbo && (
-                            <button
-                                className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
-                                onClick={handlePlayAutoTurbo}
-                                disabled={playingTurbo || autovoteRunning}
-                                title={
-                                    turboError ||
-                                    (autovoteRunning ? t('app.autoTurboRunsWithAutovote') : t('app.playAutoTurbo'))
-                                }
-                            >
-                                {playingTurbo ? (
-                                    <span className="loading loading-spinner loading-xs" />
-                                ) : (
-                                    <>🎯 {t('app.earnTurbo')}</>
-                                )}
-                            </button>
-                        )}
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.yourEntries')}</div>
-                        <div>
-                            {entries.length}/{challenge.max_photo_submits}
-                        </div>
-                        {canFill && (
-                            <div className="flex gap-1 mt-1 justify-center">
-                                <button
-                                    className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
-                                    onClick={() => handleFill('one')}
-                                    disabled={filling || autovoteRunning}
-                                    title={fillError || t('app.addOnePhoto')}
-                                >
-                                    {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
-                                </button>
-                                {slotsRemaining > 1 && (
-                                    <button
-                                        className="btn btn-xs btn-warning"
-                                        onClick={() => handleFill('all')}
-                                        disabled={filling || autovoteRunning}
-                                        title={t('app.fillAllPhotos')}
-                                    >
-                                        {filling ? (
-                                            <span className="loading loading-spinner loading-xs" />
-                                        ) : (
-                                            `+${slotsRemaining}`
-                                        )}
-                                    </button>
-                                )}
+                {!isCompact && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.time')}</div>
+                            <div className={timeRemaining === 'Ended' ? 'text-error' : 'text-success'}>
+                                {timeRemaining}
                             </div>
-                        )}
+                        </div>
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.ends')}</div>
+                            <div className="text-xs">{endTime}</div>
+                        </div>
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.exposure')}</div>
+                            <div>{exposureFactor}%</div>
+                        </div>
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.boost')}</div>
+                            <div className={boostStatus.colorClass}>{boostStatus.text}</div>
+                        </div>
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.turbo')}</div>
+                            <div className={turboStatus.colorClass}>{turboStatus.text}</div>
+                            {canPlayAutoTurbo && (
+                                <button
+                                    className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
+                                    onClick={handlePlayAutoTurbo}
+                                    disabled={playingTurbo || autovoteRunning}
+                                    title={
+                                        turboError ||
+                                        (autovoteRunning ? t('app.autoTurboRunsWithAutovote') : t('app.playAutoTurbo'))
+                                    }
+                                >
+                                    {playingTurbo ? (
+                                        <span className="loading loading-spinner loading-xs" />
+                                    ) : (
+                                        <>🎯 {t('app.earnTurbo')}</>
+                                    )}
+                                </button>
+                            )}
+                        </div>
+                        <div className="text-center p-2 bg-base-200 rounded">
+                            <div className="font-medium">{t('app.yourEntries')}</div>
+                            <div>
+                                {entries.length}/{challenge.max_photo_submits}
+                            </div>
+                            {canFill && (
+                                <div className="flex gap-1 mt-1 justify-center">
+                                    <button
+                                        className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
+                                        onClick={() => handleFill('one')}
+                                        disabled={filling || autovoteRunning}
+                                        title={fillError || t('app.addOnePhoto')}
+                                    >
+                                        {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
+                                    </button>
+                                    {slotsRemaining > 1 && (
+                                        <button
+                                            className="btn btn-xs btn-warning"
+                                            onClick={() => handleFill('all')}
+                                            disabled={filling || autovoteRunning}
+                                            title={t('app.fillAllPhotos')}
+                                        >
+                                            {filling ? (
+                                                <span className="loading loading-spinner loading-xs" />
+                                            ) : (
+                                                `+${slotsRemaining}`
+                                            )}
+                                        </button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                     </div>
-                </div>}
+                )}
 
                 {/* Challenge Tags — hidden in compact mode. */}
                 {!isCompact && challenge.tags && challenge.tags.length > 0 && (

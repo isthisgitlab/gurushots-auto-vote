@@ -39,7 +39,7 @@ const buildHandlers = () => ({
         }
     },
 
-    'authenticate': async (event, username, password, isMock) => {
+    authenticate: async (event, username, password, isMock) => {
         logger
             .withCategory('general')
             .info(

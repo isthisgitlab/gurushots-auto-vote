@@ -63,7 +63,10 @@ const kebabToCamel = (channel) => channel.replace(/-([a-z])/g, (_, c) => c.toUpp
 // Wrap a handler that originally received (event, ...args) so the
 // renderer can call it as (...args). The first parameter (event) is
 // passed as null since there is no IPC event on Capacitor.
-const wrap = (impl) => (...args) => Promise.resolve(impl(null, ...args));
+const wrap =
+    (impl) =>
+    (...args) =>
+        Promise.resolve(impl(null, ...args));
 
 const buildAllHandlers = () => {
     // The Capacitor save-settings broadcaster routes through the local
@@ -110,7 +113,11 @@ const buildAllHandlers = () => {
         },
         'download-update': async () => {
             if (!lastUpdateInfo?.downloadUrl) {
-                return { success: false, error: 'No update info — run check-for-updates first', fallbackUrl: updateChecker.getReleasesUrl() };
+                return {
+                    success: false,
+                    error: 'No update info — run check-for-updates first',
+                    fallbackUrl: updateChecker.getReleasesUrl(),
+                };
             }
             const result = await androidUpdateInstaller.downloadAndInstall({
                 downloadUrl: lastUpdateInfo.downloadUrl,
@@ -129,7 +136,10 @@ const buildAllHandlers = () => {
         },
         // The system installer drives install once the user taps the
         // downloaded APK. Nothing for the bridge to do here.
-        'install-update': async () => ({ success: true, info: 'Tap the downloaded APK in your notifications to install.' }),
+        'install-update': async () => ({
+            success: true,
+            info: 'Tap the downloaded APK in your notifications to install.',
+        }),
         'skip-update-version': async () => ({ success: false, error: 'Skip not yet wired on mobile' }),
         'clear-skip-version': async () => ({ success: true }),
         'get-releases-url': async () => ({ success: true, url: updateChecker.getReleasesUrl() }),

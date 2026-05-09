@@ -81,16 +81,29 @@ async function buildReact() {
     // external + emitting an inert require shim keeps every bundle
     // green; the unreachable lazy requires become benign no-ops.
     const NODE_BUILTINS = [
-        'fs', 'path', 'os', 'crypto', 'stream', 'events', 'child_process',
-        'http', 'https', 'url', 'zlib', 'util', 'buffer', 'assert', 'net',
-        'tls', 'dns', 'querystring', 'string_decoder', 'tty', 'readline',
+        'fs',
+        'path',
+        'os',
+        'crypto',
+        'stream',
+        'events',
+        'child_process',
+        'http',
+        'https',
+        'url',
+        'zlib',
+        'util',
+        'buffer',
+        'assert',
+        'net',
+        'tls',
+        'dns',
+        'querystring',
+        'string_decoder',
+        'tty',
+        'readline',
     ];
-    const RENDERER_EXTERNALS = [
-        ...NODE_BUILTINS,
-        'electron',
-        'electron-updater',
-        'node-cron',
-    ];
+    const RENDERER_EXTERNALS = [...NODE_BUILTINS, 'electron', 'electron-updater', 'node-cron'];
     // Capacitor plugin packages must be BUNDLED (not externalized) on
     // the Capacitor entry: they are pure browser code that registers
     // proxies onto the native bridge. Externalizing them returns the

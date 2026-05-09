@@ -10,9 +10,7 @@ export function Navbar({ isMock, onSettingsClick, onLogout }) {
         <div className="navbar bg-base-100 shadow-md mb-4">
             <div className="navbar-start">
                 <h1 className="text-xl font-bold">{t('app.title')}</h1>
-                {isMock && (
-                    <span className="badge badge-warning ml-2 whitespace-nowrap">{t('app.mockMode')}</span>
-                )}
+                {isMock && <span className="badge badge-warning ml-2 whitespace-nowrap">{t('app.mockMode')}</span>}
             </div>
             <div className="navbar-end gap-2">
                 <button className="btn btn-ghost btn-sm" onClick={onSettingsClick} title={t('app.settings')}>
