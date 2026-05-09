@@ -11,6 +11,7 @@
  */
 
 const runtime = require('../runtime');
+const logger = require('../logger');
 
 let pluginInstance = null;
 const getPlugin = () => {
@@ -20,11 +21,11 @@ const getPlugin = () => {
         const cap = globalThis.Capacitor;
         pluginInstance = cap?.Plugins?.AutoVoteBackground || null;
         if (!pluginInstance) {
-            console.warn('AutoVoteBackground plugin not registered on this build');
+            logger.withCategory('voting').warning('AutoVoteBackground plugin not registered on this build');
         }
         return pluginInstance;
     } catch (err) {
-        console.warn('NativeAutovoteBridge.getPlugin failed:', err.message);
+        logger.withCategory('voting').warning('NativeAutovoteBridge.getPlugin failed', err.message);
         return null;
     }
 };
@@ -36,7 +37,7 @@ const start = async () => {
         const result = await plugin.start();
         return { ...result, available: true };
     } catch (err) {
-        console.error('AutoVoteBackground.start failed:', err);
+        logger.withCategory('voting').error('AutoVoteBackground.start failed', err);
         return { running: false, available: true, error: err.message };
     }
 };
@@ -48,7 +49,7 @@ const stop = async () => {
         const result = await plugin.stop();
         return { ...result, available: true };
     } catch (err) {
-        console.error('AutoVoteBackground.stop failed:', err);
+        logger.withCategory('voting').error('AutoVoteBackground.stop failed', err);
         return { running: false, available: true, error: err.message };
     }
 };

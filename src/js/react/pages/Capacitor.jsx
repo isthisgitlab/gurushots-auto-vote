@@ -16,6 +16,7 @@ globalThis.__capacitorBootstrap = true;
 import { installBridge, subscribe } from '../../bridge/capacitor';
 import { initializeAsync as initSettings, getSetting } from '../../settings';
 import { isCapacitor } from '../../runtime';
+import { withCategory } from '../../logger';
 import { mountApp } from './App';
 import { mountLogin } from './Login';
 
@@ -61,7 +62,6 @@ const mountForCurrentAuthState = () => {
     if (container) {
         while (container.firstChild) container.removeChild(container.firstChild);
     }
-    console.log('[capacitor-entry] mounting', token ? 'App' : 'Login', '— token present:', !!token);
     if (token) {
         mountApp();
     } else {
@@ -85,7 +85,7 @@ const bootstrap = async () => {
         try {
             await globalThis.translationManager.loadLanguageFromSettings();
         } catch (err) {
-            console.error('Translation load failed:', err);
+            withCategory('translation').error('Translation load failed', err);
         }
     }
 
@@ -99,7 +99,7 @@ const bootstrap = async () => {
 };
 
 bootstrap().catch((err) => {
-    console.error('Capacitor bootstrap failed:', err);
+    withCategory('general').error('Capacitor bootstrap failed', err);
     // Still attempt to mount so the user sees a useful error rather
     // than a blank screen. The React tree will surface the failure
     // through normal error boundaries / settings-loading state.

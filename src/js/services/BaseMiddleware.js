@@ -10,6 +10,9 @@
 const settings = require('../settings');
 const logger = require('../logger');
 const cancellation = require('../voting/cancellation');
+const { submitVotesForChallenge } = require('./manualVote');
+
+const STAGGER_MS = 1000;
 
 const requireToken = () => {
     const token = settings.getSetting('token');
@@ -106,6 +109,69 @@ class BaseMiddleware {
             logger.withCategory('voting').endOperation('cli-vote', 'Voting process completed successfully');
         } catch (error) {
             logger.withCategory('voting').endOperation('cli-vote', null, error.message || error);
+        }
+    }
+
+    /**
+     * Manual voting cycle for the CLI: vote every active challenge to 100%
+     * regardless of threshold settings. Mirrors the IPC handler's
+     * `vote-all-challenges-manual` mechanic — both routes share
+     * `submitVotesForChallenge` so eligibility + image fetch + submit lives
+     * in one place. Successful votes are spaced by `STAGGER_MS` to honor
+     * the per-cycle stagger contract (don't batch submissions).
+     */
+    async cliVoteManual() {
+        logger.withCategory('voting').info('=== GuruShots Auto Voter - CLI Manual Voting (vote-to-100%) ===', null);
+        const token = settings.getSetting('token');
+        if (!token) {
+            logger.withCategory('authentication').error('No authentication token found. Please login first', null);
+            logger.withCategory('authentication').info('Run the login command to authenticate', null);
+            return;
+        }
+        logger.withCategory('voting').startOperation('cli-vote-manual', 'CLI Manual Voting Process');
+        try {
+            const challengesResponse = await this.apiStrategy.getActiveChallenges(token);
+            if (!challengesResponse || !challengesResponse.challenges) {
+                logger.withCategory('challenges').warning('Failed to fetch challenges for manual voting', null);
+                logger.withCategory('voting').endOperation('cli-vote-manual', null, 'failed to fetch challenges');
+                return;
+            }
+            const challenges = challengesResponse.challenges;
+            const now = Math.floor(Date.now() / 1000);
+            let voted = 0;
+            let skipped = 0;
+            for (const challenge of challenges) {
+                try {
+                    const result = await submitVotesForChallenge(challenge, this.apiStrategy, token, now);
+                    if (result.outcome === 'voted') {
+                        voted++;
+                        logger
+                            .withCategory('voting')
+                            .success(
+                                `Voted on challenge: ${challenge.title} (target: ${result.targetExposure}%)`,
+                                null,
+                            );
+                        await new Promise((resolve) => setTimeout(resolve, STAGGER_MS));
+                    } else if (result.outcome === 'no-images') {
+                        skipped++;
+                        logger
+                            .withCategory('voting')
+                            .warning(`No vote images available for: ${challenge.title}`, null);
+                    } else {
+                        skipped++;
+                        logger
+                            .withCategory('voting')
+                            .info(`Skipping ${challenge.title} - ${result.errorMessage}`, null);
+                    }
+                } catch (error) {
+                    skipped++;
+                    logger.withCategory('voting').error(`Error voting on challenge ${challenge.title}:`, error);
+                }
+            }
+            const summary = `Manual vote: ${voted} voted, ${skipped} skipped of ${challenges.length}`;
+            logger.withCategory('voting').endOperation('cli-vote-manual', summary);
+        } catch (error) {
+            logger.withCategory('voting').endOperation('cli-vote-manual', null, error.message || error);
         }
     }
 

@@ -312,6 +312,35 @@ const formatConsoleMessage = (
     return `${categoryString}${coloredContext} ${coloredLevel} ${coloredTime} ${message}`;
 };
 
+// Keys whose values must never reach disk in plaintext. Match is case-
+// insensitive so callers can drop a settings/auth object straight into a
+// logger call without first picking it apart. Bounded recursion depth +
+// a seen-set prevent pathological inputs (deep trees, cycles).
+const SENSITIVE_KEY_RE = /^(token|authToken|password|apiKey|secret|cookie|authorization)$/i;
+const REDACTED = '[REDACTED]';
+const MAX_SANITIZE_DEPTH = 6;
+
+const sanitizeForLog = (value, depth = 0, seen = new WeakSet()) => {
+    if (value === null || typeof value !== 'object') return value;
+    if (depth >= MAX_SANITIZE_DEPTH) return '[Object]';
+    if (seen.has(value)) return '[Circular]';
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+        return value.map((item) => sanitizeForLog(item, depth + 1, seen));
+    }
+
+    const out = {};
+    for (const key of Object.keys(value)) {
+        if (SENSITIVE_KEY_RE.test(key)) {
+            out[key] = REDACTED;
+        } else {
+            out[key] = sanitizeForLog(value[key], depth + 1, seen);
+        }
+    }
+    return out;
+};
+
 /**
  * Write to log file with enhanced formatting
  */
@@ -323,7 +352,7 @@ const writeToLogFile = (logFile, level, message, data = null, context = getConte
 
         if (data) {
             if (typeof data === 'object') {
-                logEntry += '\n' + JSON.stringify(data, null, 2);
+                logEntry += '\n' + JSON.stringify(sanitizeForLog(data), null, 2);
             } else {
                 logEntry += '\n' + data;
             }
@@ -643,4 +672,8 @@ module.exports = {
     // Runtime detection (canonical home — settings.js re-exports these)
     isSourceCode,
     getAppName,
+
+    // Test seam: redacts sensitive keys before disk write. Exported so the
+    // contract is unit-testable; production callers don't need to call it.
+    sanitizeForLog,
 };

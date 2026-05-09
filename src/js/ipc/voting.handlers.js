@@ -15,37 +15,14 @@
 const settings = require('../settings');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
-const votingLogic = require('../services/VotingLogic');
 const cancellation = require('../voting/cancellation');
+const { submitVotesForChallenge } = require('../services/manualVote');
 
 // Run one full strategy pass — global when challengeId is null, scoped
 // to a single card otherwise. Delegates to BaseMiddleware so the
 // auth-check, cancellation-reset, and IPC-envelope shape live in one
 // place that the gui-vote handler also reaches via guiVote().
 const runStrategyOnceViaMiddleware = (challengeId = null) => apiFactory.getMiddleware().runVotingCycle(challengeId);
-
-// Per-challenge vote mechanic shared by the single-target handlers and
-// the vote-all loop. Returns the outcome so each caller can log/count
-// in its own wording without re-implementing eligibility + image fetch
-// + submit.
-const submitVotesForChallenge = async (challenge, strategy, token, now) => {
-    const { shouldAllowVoting, errorMessage, targetExposure } = votingLogic.evaluateManualVotingToHundred(
-        challenge,
-        now,
-        challenge.title,
-    );
-    if (!shouldAllowVoting) {
-        return { outcome: 'not-eligible', errorMessage };
-    }
-
-    const voteImages = await strategy.getVoteImages(challenge, token);
-    if (!voteImages || !voteImages.images || voteImages.images.length === 0) {
-        return { outcome: 'no-images', targetExposure };
-    }
-
-    await strategy.submitVotes(voteImages, token, targetExposure);
-    return { outcome: 'voted', targetExposure, imageCount: voteImages.images.length };
-};
 
 // Single-target vote entry shared by vote-on-challenge and
 // vote-on-challenge-manual. The two channels carried slightly different

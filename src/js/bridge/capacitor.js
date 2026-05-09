@@ -30,6 +30,7 @@ const logHandlers = require('../ipc/log.handlers');
 const actionsHandlers = require('../ipc/actions.handlers');
 
 const settings = require('../settings');
+const logger = require('../logger');
 const updateChecker = require('../services/UpdateChecker');
 const androidUpdateInstaller = require('../services/AndroidUpdateInstaller');
 const pkg = require('../../../package.json');
@@ -52,7 +53,7 @@ const emit = (channel, payload) => {
         try {
             fn(payload);
         } catch (err) {
-            console.error(`Capacitor bridge listener for ${channel} threw:`, err);
+            logger.withCategory('general').error(`Capacitor bridge listener for ${channel} threw`, err);
         }
     }
 };
@@ -180,7 +181,7 @@ const installBridge = () => {
         try {
             settings.setSetting('token', '');
         } catch (err) {
-            console.error('Logout failed to clear token:', err);
+            logger.withCategory('authentication').error('Logout failed to clear token', err);
         }
         emit('logout');
     };

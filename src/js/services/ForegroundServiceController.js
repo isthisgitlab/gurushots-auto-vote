@@ -22,6 +22,7 @@
  */
 
 const runtime = require('../runtime');
+const logger = require('../logger');
 
 let plugin = null;
 const NOTIFICATION_ID = 27782; // arbitrary stable id
@@ -34,7 +35,7 @@ const getPlugin = () => {
         plugin = require('@capawesome-team/capacitor-android-foreground-service').ForegroundService;
         return plugin;
     } catch (err) {
-        console.warn('ForegroundService plugin unavailable:', err.message);
+        logger.withCategory('voting').warning('ForegroundService plugin unavailable', err.message);
         return null;
     }
 };
@@ -47,7 +48,7 @@ const requestPermissions = async () => {
         if (status?.display === 'granted') return status;
         return await fs.requestPermissions();
     } catch (err) {
-        console.warn('ForegroundService permission check failed:', err.message);
+        logger.withCategory('voting').warning('ForegroundService permission check failed', err.message);
         return { display: 'denied' };
     }
 };
@@ -71,7 +72,7 @@ const start = async ({ title = APP_NAME, body = 'Auto-vote running' } = {}) => {
         });
         return true;
     } catch (err) {
-        console.error('startForegroundService failed:', err.message);
+        logger.withCategory('voting').error('startForegroundService failed', err.message);
         return false;
     }
 };
@@ -92,8 +93,7 @@ const update = async ({ title = APP_NAME, body }) => {
         });
     } catch (err) {
         // updateForegroundService throws if the service isn't running yet — ignore.
-
-        console.debug('updateForegroundService skipped:', err.message);
+        logger.withCategory('voting').debug('updateForegroundService skipped', err.message);
     }
 };
 
@@ -106,7 +106,7 @@ const stop = async () => {
     try {
         await fs.stopForegroundService();
     } catch (err) {
-        console.error('stopForegroundService failed:', err.message);
+        logger.withCategory('voting').error('stopForegroundService failed', err.message);
     }
 };
 
