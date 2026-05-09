@@ -269,9 +269,12 @@ const validateSetting = (key, value, allSettings = null, challengeId = null) => 
 
 /**
  * Get detailed validation error information for a setting. Returns null
- * when the value is valid.
+ * when the value is valid. Mirrors `validateSetting`'s call signature
+ * (challengeId is forwarded to contextValidation) so a future schema
+ * entry that depends on per-challenge context behaves identically
+ * across both validation paths.
  */
-const getValidationError = (settingKey, value, allSettings = null) => {
+const getValidationError = (settingKey, value, allSettings = null, challengeId = null) => {
     const schemaConfig = SETTINGS_SCHEMA[settingKey];
     if (!schemaConfig) {
         return null; // No schema config, assume valid
@@ -282,9 +285,9 @@ const getValidationError = (settingKey, value, allSettings = null) => {
     }
 
     if (schemaConfig.contextValidation && allSettings) {
-        if (!schemaConfig.contextValidation(value, allSettings)) {
+        if (!schemaConfig.contextValidation(value, allSettings, challengeId)) {
             if (schemaConfig.getContextError) {
-                return schemaConfig.getContextError(value, allSettings);
+                return schemaConfig.getContextError(value, allSettings, challengeId);
             }
             return 'Invalid value in current context';
         }

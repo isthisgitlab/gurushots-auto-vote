@@ -29,6 +29,16 @@ const runStrategyOnceViaMiddleware = (challengeId = null) => apiFactory.getMiddl
 // log wording but exercised the same code path; the `manual` flag now
 // flips just those wording bits.
 const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) => {
+    // IPC boundary — validate inputs from the renderer. Without these
+    // checks, parseInt(undefined) below returns NaN and the find() call
+    // produces a misleading "Challenge not found" error.
+    if (challengeId == null || challengeId === '' || Number.isNaN(Number(challengeId))) {
+        return { success: false, error: 'Invalid challenge ID' };
+    }
+    if (typeof challengeTitle !== 'string' || challengeTitle.length === 0) {
+        return { success: false, error: 'Challenge title is required' };
+    }
+
     const requestPrefix = manual ? '🔄 Manual vote on challenge request' : '🔄 Vote on challenge request';
     logger
         .withCategory('general')
@@ -57,7 +67,7 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
         .debug(`📋 Found challenges: [${challengesResponse.challenges.map((c) => `${c.id}:"${c.title}"`).join(', ')}]`);
     logger.withCategory('challenges').debug('🔍 Looking for challenge ID:', challengeId);
 
-    const challenge = challengesResponse.challenges.find((c) => c.id === parseInt(challengeId));
+    const challenge = challengesResponse.challenges.find((c) => c.id === parseInt(challengeId, 10));
     logger
         .withCategory('general')
         .debug(

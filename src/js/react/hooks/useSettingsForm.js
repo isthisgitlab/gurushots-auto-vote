@@ -78,8 +78,11 @@ export function useSettingsForm({
                 language: settings.language || 'en',
                 timezone: settings.timezone || 'Europe/Riga',
                 customTimezones: Array.isArray(settings.customTimezones) ? settings.customTimezones : [],
-                stayLoggedIn: settings.stayLoggedIn || false,
-                apiTimeout: settings.apiTimeout || 30,
+                // Use ?? for numeric / boolean fields so an explicit
+                // 0 / false from settings is preserved rather than
+                // silently replaced by the default.
+                stayLoggedIn: settings.stayLoggedIn ?? false,
+                apiTimeout: settings.apiTimeout ?? 30,
                 checkFrequencyMin: settings.checkFrequencyMin ?? 3,
                 checkFrequencyMax: settings.checkFrequencyMax ?? 3,
             };

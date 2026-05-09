@@ -16,18 +16,21 @@
  * @returns {{challengeId, challengeTitle, entryTime, lastMinuteThreshold}|null}
  */
 export async function calculateNextThresholdEntry(challenges, now) {
+    // Filter first so flash / closed challenges don't waste IPC calls,
+    // then fetch all per-challenge thresholds in parallel — sequential
+    // awaits become N × IPC roundtrip on user accounts with many active
+    // challenges, which slows scheduler responsiveness noticeably.
+    const eligible = challenges.filter((c) => c.type !== 'flash' && c.close_time > now);
+    const thresholds = await Promise.all(
+        eligible.map((c) => window.api.getEffectiveSetting('lastMinuteThreshold', c.id.toString())),
+    );
+
     let nextEntry = null;
     let earliestEntryTime = Infinity;
 
-    for (const challenge of challenges) {
-        if (challenge.type === 'flash' || challenge.close_time <= now) {
-            continue;
-        }
-
-        const effectiveLastMinuteThreshold = await window.api.getEffectiveSetting(
-            'lastMinuteThreshold',
-            challenge.id.toString(),
-        );
+    for (let i = 0; i < eligible.length; i++) {
+        const challenge = eligible[i];
+        const effectiveLastMinuteThreshold = thresholds[i];
         const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
 
         if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {

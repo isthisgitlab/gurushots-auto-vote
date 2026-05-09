@@ -23,43 +23,45 @@ export function useChallengeSettings(challengeId) {
     const [isCompact, setIsCompact] = useState(false);
     const [hasCompactOverride, setHasCompactOverride] = useState(false);
 
-    useEffect(() => {
+    // Walks the schema and sets the five state slots from current overrides.
+    // Used by both the mount effect and toggleCompact so the
+    // hasCustomSettings flag stays in sync after a per-challenge write.
+    const reload = useCallback(async () => {
         const id = challengeId.toString();
-        const load = async () => {
-            try {
-                const schema = await window.api.getSettingsSchema();
-                let foundOverride = false;
-                for (const [key, config] of Object.entries(schema)) {
-                    if (!config.perChallenge) continue;
-                    const override = await window.api.getChallengeOverride(key, id);
-                    if (override !== null) {
-                        foundOverride = true;
-                        break;
-                    }
-                }
-                setHasCustomSettings(foundOverride);
+        try {
+            const schema = await window.api.getSettingsSchema();
+            const perChallengeKeys = Object.entries(schema)
+                .filter(([, config]) => config.perChallenge)
+                .map(([key]) => key);
+            const overrideResults = await Promise.all(
+                perChallengeKeys.map((key) => window.api.getChallengeOverride(key, id)),
+            );
+            setHasCustomSettings(overrideResults.some((o) => o !== null));
 
-                const [boostOnly, fillOn, compact, compactOverride] = await Promise.all([
-                    window.api.getEffectiveSetting('onlyBoost', id),
-                    window.api.getEffectiveSetting('autoFill', id),
-                    window.api.getEffectiveSetting('compactCards', id),
-                    window.api.getChallengeOverride('compactCards', id),
-                ]);
-                setOnlyBoost(boostOnly);
-                setAutoFillEnabled(fillOn === true);
-                setIsCompact(compact === true);
-                setHasCompactOverride(compactOverride !== null);
-            } catch {
-                // Leave the previous values in place; the parent context
-                // re-runs this effect when settings-changed fires.
-            }
-        };
-        load();
+            const [boostOnly, fillOn, compact, compactOverride] = await Promise.all([
+                window.api.getEffectiveSetting('onlyBoost', id),
+                window.api.getEffectiveSetting('autoFill', id),
+                window.api.getEffectiveSetting('compactCards', id),
+                window.api.getChallengeOverride('compactCards', id),
+            ]);
+            setOnlyBoost(boostOnly);
+            setAutoFillEnabled(fillOn === true);
+            setIsCompact(compact === true);
+            setHasCompactOverride(compactOverride !== null);
+        } catch {
+            // Leave the previous values in place; the parent context
+            // re-runs this effect when settings-changed fires.
+        }
     }, [challengeId]);
+
+    useEffect(() => {
+        reload();
+    }, [reload]);
 
     // First click sets a per-challenge override (opposite of current);
     // a second click on a card that already has an override removes it
-    // (returns to global default).
+    // (returns to global default). Reloads at the end so hasCustomSettings
+    // tracks the new override-set membership.
     const toggleCompact = useCallback(async () => {
         const id = challengeId.toString();
         try {
@@ -68,16 +70,11 @@ export function useChallengeSettings(challengeId) {
             } else {
                 await window.api.setChallengeOverride('compactCards', id, !isCompact);
             }
-            const [next, override] = await Promise.all([
-                window.api.getEffectiveSetting('compactCards', id),
-                window.api.getChallengeOverride('compactCards', id),
-            ]);
-            setIsCompact(next === true);
-            setHasCompactOverride(override !== null);
+            await reload();
         } catch {
             // Leave UI as-is.
         }
-    }, [challengeId, isCompact, hasCompactOverride]);
+    }, [challengeId, isCompact, hasCompactOverride, reload]);
 
     return {
         hasCustomSettings,

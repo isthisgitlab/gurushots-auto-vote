@@ -40,11 +40,7 @@ describe('submitVotesForChallenge', () => {
         expect(result.targetExposure).toBe(100);
         expect(result.imageCount).toBe(2);
         expect(strategy.getVoteImages).toHaveBeenCalledWith(challenge, 'tok');
-        expect(strategy.submitVotes).toHaveBeenCalledWith(
-            { images: [{ id: 'i1' }, { id: 'i2' }] },
-            'tok',
-            100,
-        );
+        expect(strategy.submitVotes).toHaveBeenCalledWith({ images: [{ id: 'i1' }, { id: 'i2' }] }, 'tok', 100);
     });
 
     test('returns no-images outcome and skips submitVotes when image list is empty', async () => {

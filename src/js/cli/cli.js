@@ -184,9 +184,11 @@ const handleLogin = async () => {
     // `echo password | node cli.js login` does not get a false sense of
     // protection (the password would echo through the unmuted path).
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
-        logger.withCategory('ui').error(
-            'Interactive login requires a terminal. Run `node src/js/cli/cli.js login` directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
-        );
+        logger
+            .withCategory('ui')
+            .error(
+                'Interactive login requires a terminal. Run `node src/js/cli/cli.js login` directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
+            );
         return;
     }
 
@@ -237,7 +239,9 @@ const handleLogin = async () => {
             logger.withCategory('authentication').endOperation('login-auth', 'Login successful');
             logger.withCategory('authentication').success(`Token saved for ${useMockMode ? 'MOCK' : 'REAL'} mode`);
         } else {
-            logger.withCategory('authentication').endOperation('login-auth', null, loginResult.error || 'Unknown error');
+            logger
+                .withCategory('authentication')
+                .endOperation('login-auth', null, loginResult.error || 'Unknown error');
         }
     } catch (error) {
         logger.withCategory('authentication').error('Login error', error);

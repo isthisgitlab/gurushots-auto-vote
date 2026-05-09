@@ -8,12 +8,7 @@
  */
 
 const logger = require('./logger');
-const {
-    SETTINGS_SCHEMA,
-    validateSetting,
-    getValidationError,
-    getSettingsSchema,
-} = require('./settings/schema');
+const { SETTINGS_SCHEMA, validateSetting, getValidationError, getSettingsSchema } = require('./settings/schema');
 const {
     storage,
     initializeAsync,

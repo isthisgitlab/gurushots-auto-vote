@@ -157,7 +157,6 @@ jobs:
               uses: actions/setup-node@v6
               with:
                   node-version: '24'
-                  cache: 'npm'
 
             - name: Build CLI app (macOS/Linux only)
               if: matrix.platform != 'win'

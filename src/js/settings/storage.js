@@ -55,8 +55,14 @@ const storage = {
     /** Writes the raw settings JSON string. Sync on Electron/CLI; cache + async write-behind on Capacitor. */
     writeRaw: (data) => {
         if (runtime.isCapacitor()) {
+            // Update the cache so synchronous reads see the new value
+            // immediately, then fire async write-behind to Preferences.
+            // Do NOT flip capacitorInitialized here — only initializeAsync
+            // owns that flag. If a write happens before initializeAsync
+            // resolves and we flipped the flag, initializeAsync would
+            // skip its hydration and previously-persisted settings would
+            // be lost on the next read of an unwritten key.
             cachedSettingsJson = data;
-            capacitorInitialized = true;
             getCapacitorPreferences()
                 .set({ key: SETTINGS_KEY, value: data })
                 .catch((err) => {
