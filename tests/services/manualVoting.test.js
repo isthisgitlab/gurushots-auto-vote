@@ -76,4 +76,36 @@ describe('evaluateManualVotingToHundred', () => {
         const result = VotingLogic.evaluateManualVotingToHundred(challenge, NOW(), 'Sunset over Riga');
         expect(result.errorMessage).toContain('Sunset over Riga');
     });
+
+    test('handles absent ranking node defensively (treats as 0% exposure)', () => {
+        // Partial API response — challenge.member exists but no ranking
+        // tree yet. Pre-fix this would throw; post-fix it treats exposure
+        // as 0% and allows the vote.
+        const now = Math.floor(Date.now() / 1000);
+        const challenge = {
+            id: '222',
+            title: 'No Ranking Yet',
+            type: 'regular',
+            start_time: now - 3600,
+            close_time: now + 7200,
+            member: {}, // ranking absent
+        };
+        const result = VotingLogic.evaluateManualVotingToHundred(challenge, now, challenge.title);
+        expect(result.shouldAllowVoting).toBe(true);
+        expect(result.targetExposure).toBe(100);
+    });
+
+    test('handles entirely missing member node defensively', () => {
+        const now = Math.floor(Date.now() / 1000);
+        const challenge = {
+            id: '333',
+            title: 'No Member Either',
+            type: 'regular',
+            start_time: now - 3600,
+            close_time: now + 7200,
+            // member entirely absent
+        };
+        const result = VotingLogic.evaluateManualVotingToHundred(challenge, now, challenge.title);
+        expect(result.shouldAllowVoting).toBe(true);
+    });
 });

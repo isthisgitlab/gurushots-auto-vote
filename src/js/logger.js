@@ -523,7 +523,9 @@ const LOG_CATEGORIES = {
     BOOST: 'boost',
     TURBO: 'turbo',
     // Catch-all for events that don't belong to a domain category —
-    // bridge plumbing failures, bootstrap errors, etc.
+    // bridge plumbing failures, bootstrap errors, etc. Routes to the
+    // shared app-YYYY-MM-DD.log alongside other non-settings categories;
+    // there is no dedicated general.log file.
     GENERAL: 'general',
 };
 

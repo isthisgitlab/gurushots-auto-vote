@@ -6,7 +6,7 @@ minutes) but the implementations are unrelated, intentionally so. Future
 contributors should understand the split before reaching for "let's
 unify these."
 
-## CLI — recursive setTimeout + node-cron via runScheduler
+## CLI — runScheduler (two-mode: setTimeout chain, swaps to node-cron)
 
 - **Owner**: `src/js/scheduling/runScheduler.js`
 - **Started by**: `src/js/cli/cli.js` `start` command

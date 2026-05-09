@@ -226,9 +226,15 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
 const evaluateManualVotingToHundred = (challenge, now, challengeTitle) => {
     // Defensive read — partial API responses (new challenge types, flash
     // variants, server hiccups) can arrive without a ranking node, and
-    // being thrown here would dump the whole vote-all loop into the
-    // generic per-challenge catch with no useful diagnostic. Match the
-    // ?. style shouldApplyBoost / shouldApplyTurbo use on the same tree.
+    // throwing here would dump the whole vote-all loop into the per-
+    // challenge catch with no useful diagnostic. Match the ?. style
+    // shouldApplyBoost / shouldApplyTurbo use on the same tree.
+    //
+    // Behavioral note: `?? 0` deliberately treats absent ranking as 0%
+    // exposure, which lets shouldAllowVoting fire for a brand-new entry
+    // that hasn't accumulated any exposure data. The previous (throw)
+    // path silently skipped such challenges; the new path attempts the
+    // vote, which is more useful for the manual vote-to-100% flow.
     const currentExposure = challenge.member?.ranking?.exposure?.exposure_factor ?? 0;
 
     let shouldAllowVoting = false;

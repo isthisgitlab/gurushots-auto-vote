@@ -88,33 +88,43 @@ const askInput = async (question, rl) => {
 
 /**
  * Ask for a secret. Mutes terminal echo while the user types so the
- * password is not visible on screen / scrollback / shoulder-surf. Uses
- * readline's _writeToOutput hook (the standard mute pattern). Restores
- * the prompt prefix in stdout before muting so the user still sees
- * which question they're answering.
+ * password is not visible on screen / scrollback / shoulder-surf.
+ *
+ * The mute uses readline's `_writeToOutput` hook (the standard pattern).
+ * It only works on an interactive TTY — `_writeToOutput` is a no-op when
+ * readline runs in non-terminal mode (piped stdin, CI). Callers must
+ * gate on `process.stdin.isTTY` and refuse non-interactive invocation
+ * for any prompt that handles credentials.
+ *
+ * Known limitation: while muted, backspace ANSI redraw sequences are
+ * also suppressed, so a user correcting a typo sees the prompt blank
+ * out. The submitted password is unaffected; correcting + re-typing
+ * still produces the right value. Acceptable trade for "no echo at all"
+ * vs. the more complex stty-style raw-mode path.
  */
 const askSecret = async (question, rl) => {
     return new Promise((resolve) => {
-        const promise = rl.question(question, (answer) => {
+        const originalWriteToOutput = rl._writeToOutput;
+        rl.question(question, (answer) => {
             // Move past the muted line so the next prompt starts clean.
             rl.output.write('\n');
             rl.stdoutMuted = false;
+            // Restore the original hook so subsequent prompts on the
+            // same readline render normally.
+            rl._writeToOutput = originalWriteToOutput;
             resolve(answer.trim());
         });
-        // Activate mute for everything written *after* the prompt prefix.
+        // Activate mute for everything written after the prompt prefix.
         rl.stdoutMuted = true;
         rl._writeToOutput = (s) => {
             if (rl.stdoutMuted) {
-                // Allow the question prefix and newlines through; suppress
-                // the keystroke echo. readline writes the question once
-                // when mute is off (the question call above), then echoes
-                // each character — those echoes are what we suppress.
                 if (s.includes('\n') || s.includes('\r')) rl.output.write(s);
+            } else if (originalWriteToOutput) {
+                originalWriteToOutput.call(rl, s);
             } else {
                 rl.output.write(s);
             }
         };
-        return promise;
     });
 };
 
@@ -168,6 +178,18 @@ Note: You must login first before you can vote.
  * Handle login with mock mode option
  */
 const handleLogin = async () => {
+    // askSecret's mute only works on a real terminal — _writeToOutput is
+    // bypassed when stdin is piped or when readline runs in non-terminal
+    // mode. Refuse interactive login in that case so a user piping
+    // `echo password | node cli.js login` does not get a false sense of
+    // protection (the password would echo through the unmuted path).
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        logger.withCategory('ui').error(
+            'Interactive login requires a terminal. Run `node src/js/cli/cli.js login` directly in a terminal session — piped or redirected stdin is not supported because the password prompt cannot mute echo.',
+        );
+        return;
+    }
+
     const rl = createReadlineInterface();
 
     try {
@@ -377,6 +399,17 @@ const showStatus = () => {
 };
 
 /**
+ * Format a settings value for log output, redacting sensitive keys via
+ * the same regex the on-disk sanitizer uses. Keys like `token` would
+ * otherwise reach the log file embedded in the message string (which
+ * the sanitizer does not see), defeating the Tier 1 protection.
+ */
+const formatSettingForLog = (key, value) => {
+    const masked = logger.sanitizeForLog({ [key]: value });
+    return masked[key] === '[REDACTED]' ? '[REDACTED]' : JSON.stringify(value);
+};
+
+/**
  * Get a setting value
  */
 const getSetting = (key) => {
@@ -386,7 +419,7 @@ const getSetting = (key) => {
             logger.withCategory('settings').error(`Setting '${key}' not found`);
             return;
         }
-        logger.withCategory('settings').info(`${key}: ${JSON.stringify(value)}`);
+        logger.withCategory('settings').info(`${key}: ${formatSettingForLog(key, value)}`);
     } catch (error) {
         logger.withCategory('settings').error(`Error getting setting '${key}'`, error);
     }
@@ -465,8 +498,8 @@ const listSettings = () => {
             const isModified = JSON.stringify(currentValue) !== JSON.stringify(defaultValue);
 
             logger.withCategory('settings').info(`${key}:`);
-            logger.withCategory('settings').info(`  Current: ${JSON.stringify(currentValue)}`);
-            logger.withCategory('settings').info(`  Default: ${JSON.stringify(defaultValue)}`);
+            logger.withCategory('settings').info(`  Current: ${formatSettingForLog(key, currentValue)}`);
+            logger.withCategory('settings').info(`  Default: ${formatSettingForLog(key, defaultValue)}`);
             if (isModified) {
                 logger.withCategory('settings').info('  Status:  Modified ✏️');
             } else {
