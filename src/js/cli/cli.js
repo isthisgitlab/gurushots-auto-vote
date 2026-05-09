@@ -87,6 +87,38 @@ const askInput = async (question, rl) => {
 };
 
 /**
+ * Ask for a secret. Mutes terminal echo while the user types so the
+ * password is not visible on screen / scrollback / shoulder-surf. Uses
+ * readline's _writeToOutput hook (the standard mute pattern). Restores
+ * the prompt prefix in stdout before muting so the user still sees
+ * which question they're answering.
+ */
+const askSecret = async (question, rl) => {
+    return new Promise((resolve) => {
+        const promise = rl.question(question, (answer) => {
+            // Move past the muted line so the next prompt starts clean.
+            rl.output.write('\n');
+            rl.stdoutMuted = false;
+            resolve(answer.trim());
+        });
+        // Activate mute for everything written *after* the prompt prefix.
+        rl.stdoutMuted = true;
+        rl._writeToOutput = (s) => {
+            if (rl.stdoutMuted) {
+                // Allow the question prefix and newlines through; suppress
+                // the keystroke echo. readline writes the question once
+                // when mute is off (the question call above), then echoes
+                // each character — those echoes are what we suppress.
+                if (s.includes('\n') || s.includes('\r')) rl.output.write(s);
+            } else {
+                rl.output.write(s);
+            }
+        };
+        return promise;
+    });
+};
+
+/**
  * Display help information
  */
 const showHelp = () => {
@@ -167,7 +199,7 @@ const handleLogin = async () => {
 
         // Get credentials
         const email = await askInput('\nEnter your GuruShots email: ', rl);
-        const password = await askInput('Enter your GuruShots password: ', rl);
+        const password = await askSecret('Enter your GuruShots password: ', rl);
 
         logger.withCategory('authentication').startOperation('login-auth', 'Authenticating with GuruShots');
 

@@ -11,7 +11,11 @@ export const DEFAULT_UI_VALUES = {
     timezone: 'Europe/Riga',
     customTimezones: [],
     stayLoggedIn: false,
-    apiTimeout: 30000,
+    // Stored as seconds — settings.js sets default 30 and api-client.js
+    // multiplies by 1000 before handing to axios. The pre-refactor modal
+    // used 30000 here, which silently corrupted the stored timeout to
+    // ~8h on the first Save. Aligned with the storage layer.
+    apiTimeout: 30,
     checkFrequencyMin: 3,
     checkFrequencyMax: 3,
 };
@@ -31,6 +35,11 @@ export function useSettingsForm({
     refetchSettings,
     refetchSchema,
     updateSetting,
+    // Optional: caller can override the persistence channel for global
+    // defaults (default goes through window.api.setGlobalDefault). Tests
+    // and alt-modal callers can pass a wrapper here without monkey-
+    // patching window.api.
+    setGlobalDefault = (key, value) => window.api.setGlobalDefault(key, value),
 }) {
     const [formValues, setFormValues] = useState({});
     const [uiValues, setUiValues] = useState(DEFAULT_UI_VALUES);
@@ -70,7 +79,7 @@ export function useSettingsForm({
                 timezone: settings.timezone || 'Europe/Riga',
                 customTimezones: Array.isArray(settings.customTimezones) ? settings.customTimezones : [],
                 stayLoggedIn: settings.stayLoggedIn || false,
-                apiTimeout: settings.apiTimeout || 30000,
+                apiTimeout: settings.apiTimeout || 30,
                 checkFrequencyMin: settings.checkFrequencyMin ?? 3,
                 checkFrequencyMax: settings.checkFrequencyMax ?? 3,
             };
@@ -130,12 +139,16 @@ export function useSettingsForm({
                 await updateSetting(key, value);
             }
             for (const [key, value] of Object.entries(formValues)) {
-                await window.api.setGlobalDefault(key, value);
+                await setGlobalDefault(key, value);
             }
         } finally {
             setSaving(false);
         }
-    }, [formValues, uiValues, updateSetting]);
+        // Note: not atomic — a mid-loop throw leaves earlier writes
+        // persisted. revert() rolls in-memory React state only; an
+        // IPC-level transaction would need broader settings layer
+        // changes (out of scope for this hook).
+    }, [formValues, uiValues, updateSetting, setGlobalDefault]);
 
     // Roll in-memory state back to whatever the modal opened with. Theme
     // DOM revert is up to the caller — it owns the close sequence and may

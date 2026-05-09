@@ -10,9 +10,7 @@
 const settings = require('../settings');
 const logger = require('../logger');
 const cancellation = require('../voting/cancellation');
-const { submitVotesForChallenge } = require('./manualVote');
-
-const STAGGER_MS = 1000;
+const { submitVotesForChallenge, STAGGER_MS } = require('./manualVote');
 
 const requireToken = () => {
     const token = settings.getSetting('token');

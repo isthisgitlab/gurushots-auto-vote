@@ -224,10 +224,13 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
  * @returns {Object} - Decision with shouldAllowVoting boolean, errorMessage string, and targetExposure number
  */
 const evaluateManualVotingToHundred = (challenge, now, challengeTitle) => {
-    // Get current exposure
-    const currentExposure = challenge.member.ranking.exposure.exposure_factor;
+    // Defensive read — partial API responses (new challenge types, flash
+    // variants, server hiccups) can arrive without a ranking node, and
+    // being thrown here would dump the whole vote-all loop into the
+    // generic per-challenge catch with no useful diagnostic. Match the
+    // ?. style shouldApplyBoost / shouldApplyTurbo use on the same tree.
+    const currentExposure = challenge.member?.ranking?.exposure?.exposure_factor ?? 0;
 
-    // Simple logic: allow voting if exposure is below 100%
     let shouldAllowVoting = false;
     let errorMessage = '';
     const targetExposure = 100; // Always target 100% for manual voting

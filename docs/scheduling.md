@@ -6,14 +6,18 @@ minutes) but the implementations are unrelated, intentionally so. Future
 contributors should understand the split before reaching for "let's
 unify these."
 
-## CLI — node-cron via runScheduler
+## CLI — recursive setTimeout + node-cron via runScheduler
 
 - **Owner**: `src/js/scheduling/runScheduler.js`
 - **Started by**: `src/js/cli/cli.js` `start` command
-- **Cadence**: dynamic. Picks `checkFrequencyMin..checkFrequencyMax`
-  (random delay) under normal conditions; switches to a fixed
-  `lastMinuteCheckFrequency` cadence when any active challenge enters
-  its `lastMinuteThreshold` window.
+- **Cadence**: dynamic, two modes:
+  - **Normal mode**: recursive `setTimeout` chain that re-rolls a random
+    delay in `[checkFrequencyMin, checkFrequencyMax]` after each cycle.
+    No cron — the random jitter would not survive a cron expression.
+  - **Threshold mode**: `node-cron` schedule at fixed
+    `lastMinuteCheckFrequency` cadence, entered when any active challenge
+    crosses its `lastMinuteThreshold` window. One-way transition from
+    normal mode for the rest of the cycle's life.
 - **Lifecycle**: lives as long as the node process. The CLI host owns
   signal handling and process keep-alive; the scheduler is just the
   cadence engine.

@@ -16,7 +16,7 @@ const settings = require('../settings');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 const cancellation = require('../voting/cancellation');
-const { submitVotesForChallenge } = require('../services/manualVote');
+const { submitVotesForChallenge, STAGGER_MS } = require('../services/manualVote');
 
 // Run one full strategy pass — global when challengeId is null, scoped
 // to a single card otherwise. Delegates to BaseMiddleware so the
@@ -195,7 +195,7 @@ const buildHandlers = () => ({
                                 `✅ Voted on challenge: ${challenge.title} (target: ${result.targetExposure}%)`,
                                 null,
                             );
-                        await new Promise((resolve) => setTimeout(resolve, 1000));
+                        await new Promise((resolve) => setTimeout(resolve, STAGGER_MS));
                     } else if (result.outcome === 'no-images') {
                         logger
                             .withCategory('voting')

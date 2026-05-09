@@ -46,6 +46,26 @@ describe('sanitizeForLog', () => {
         }
     });
 
+    test('redacts OAuth-style underscored names returned by the GuruShots auth API', () => {
+        // actions.handlers.js:90 logs the raw response which can carry
+        // access_token / auth_token / refresh_token alongside `token`.
+        // Cover the underscored, dashed, and case-varied shapes.
+        const input = {
+            access_token: 'a',
+            auth_token: 'b',
+            refresh_token: 'c',
+            'access-token': 'd',
+            ACCESS_TOKEN: 'e',
+            bearer: 'f',
+            api_key: 'g',
+            'x-auth-token': 'h',
+        };
+        const out = sanitizeForLog(input);
+        for (const key of Object.keys(input)) {
+            expect(out[key]).toBe('[REDACTED]');
+        }
+    });
+
     test('does not redact keys that merely contain a sensitive substring', () => {
         const input = { tokenizer: 'safe', userPassword: 'hunter2', authTokenList: [] };
         const out = sanitizeForLog(input);

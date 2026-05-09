@@ -313,10 +313,12 @@ const formatConsoleMessage = (
 };
 
 // Keys whose values must never reach disk in plaintext. Match is case-
-// insensitive so callers can drop a settings/auth object straight into a
-// logger call without first picking it apart. Bounded recursion depth +
-// a seen-set prevent pathological inputs (deep trees, cycles).
-const SENSITIVE_KEY_RE = /^(token|authToken|password|apiKey|secret|cookie|authorization)$/i;
+// insensitive and covers the OAuth-style underscored names the GuruShots
+// auth response actually uses (access_token, auth_token, refresh_token)
+// alongside the camelCase + standard HTTP credential header names.
+// Bounded recursion depth + a seen-set prevent pathological inputs.
+const SENSITIVE_KEY_RE =
+    /^(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]auth[_-]token)$/i;
 const REDACTED = '[REDACTED]';
 const MAX_SANITIZE_DEPTH = 6;
 
@@ -504,7 +506,10 @@ if (typeof process !== 'undefined') {
 // Get current log file paths
 const currentLogFiles = getLogFilePaths();
 
-// Log categories for consistent usage across the application
+// Log categories for consistent usage across the application. The
+// logger accepts free-form category strings, but listing the well-known
+// values here keeps grep / log-routing predictable and gives developers
+// a single source of truth for category names.
 const LOG_CATEGORIES = {
     SETTINGS: 'settings',
     AUTHENTICATION: 'authentication',
@@ -517,6 +522,9 @@ const LOG_CATEGORIES = {
     UPDATE: 'update',
     BOOST: 'boost',
     TURBO: 'turbo',
+    // Catch-all for events that don't belong to a domain category —
+    // bridge plumbing failures, bootstrap errors, etc.
+    GENERAL: 'general',
 };
 
 // Export logger functions

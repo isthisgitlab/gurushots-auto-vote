@@ -10,6 +10,14 @@
 const votingLogic = require('./VotingLogic');
 
 /**
+ * Spacing between successful manual votes within a single cycle. Both
+ * the CLI loop (BaseMiddleware.cliVoteManual) and the IPC vote-all
+ * handler import this so the cadence stays in sync if it's ever tuned.
+ * Honors the project's "stagger over batch" rule.
+ */
+const STAGGER_MS = 1000;
+
+/**
  * Run the manual (vote-to-100%) mechanic for one challenge.
  *
  * Returns one of three outcomes the caller can format:
@@ -36,4 +44,4 @@ const submitVotesForChallenge = async (challenge, strategy, token, now) => {
     return { outcome: 'voted', targetExposure, imageCount: voteImages.images.length };
 };
 
-module.exports = { submitVotesForChallenge };
+module.exports = { submitVotesForChallenge, STAGGER_MS };
