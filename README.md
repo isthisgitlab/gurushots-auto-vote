@@ -77,9 +77,9 @@ If you find this tool helpful, consider supporting its development:
 
 #### **📱 Mobile (Android sideload — no Play Store)**
 
-| Platform                      | Download                                                                                                                                                | Size    | Type             |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------- |
-| **Android (8.0+, sideload)**  | [📥 GuruShotsAutoVote-v0.9.1.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1.apk)            | ~10 MB  | Signed APK       |
+| Platform                     | Download                                                                                                                                     | Size   | Type       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
+| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v0.9.1.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1.apk) | ~10 MB | Signed APK |
 
 The Android build is a Capacitor wrapper around the same React UI plus a custom Kotlin plugin that runs voting cycles natively in the background via `AlarmManager` + a foreground service. Voting continues with the phone locked and the app swiped from recents.
 
@@ -165,16 +165,17 @@ The Android build is **not on Google Play** — install via direct APK download.
 **Auto-update**: the app checks GitHub Releases on launch and prompts when a newer APK is available. Tap the prompt and Chrome handles the download → tap the downloaded APK → system installer takes over.
 
 **Background voting limitations**:
+
 - Vendor battery managers may kill the service. If voting stops, whitelist the app per-vendor (link in Settings).
 - 1-min last-minute cadence requires `SCHEDULE_EXACT_ALARM` permission (auto-granted on Android 13+, manual on Android 12).
 
 ### **🎯 Which Version Should I Download?**
 
-| User Type             | Recommended Download         | Why?                                                       |
-| --------------------- | ---------------------------- | ---------------------------------------------------------- |
-| **New Users**         | GUI App for your platform    | Easiest to use, visual interface                           |
-| **Mobile Users**      | Android APK (sideload)       | Voting runs in the background while you use other apps     |
-| **Power Users**       | CLI App for your platform    | More control, automation features                          |
+| User Type        | Recommended Download      | Why?                                                   |
+| ---------------- | ------------------------- | ------------------------------------------------------ |
+| **New Users**    | GUI App for your platform | Easiest to use, visual interface                       |
+| **Mobile Users** | Android APK (sideload)    | Voting runs in the background while you use other apps |
+| **Power Users**  | CLI App for your platform | More control, automation features                      |
 
 ### **🔗 Alternative: Browse All Releases**
 

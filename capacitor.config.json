@@ -1,5 +1,5 @@
 {
-  "appId": "com.isthisgitlab.gurushotsautovote",
-  "appName": "GuruShots Auto Vote",
-  "webDir": "dist"
+    "appId": "com.isthisgitlab.gurushotsautovote",
+    "appName": "GuruShots Auto Vote",
+    "webDir": "dist"
 }

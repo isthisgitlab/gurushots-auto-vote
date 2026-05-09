@@ -18,9 +18,9 @@
 
 #### **📱 Mobilā lietotne (Android, sānielāde — bez Play Store)**
 
-| Platforma                        | Lejupielāde                                                                                                                                  | Izmērs | Tips             |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------------- |
-| **Android (8.0+, sānielāde)**    | [📥 GuruShotsAutoVote-v0.9.1.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1.apk) | ~10 MB | Parakstīts APK   |
+| Platforma                     | Lejupielāde                                                                                                                                  | Izmērs | Tips           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------- |
+| **Android (8.0+, sānielāde)** | [📥 GuruShotsAutoVote-v0.9.1.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1.apk) | ~10 MB | Parakstīts APK |
 
 Android versija ir Capacitor apvalks ap to pašu React saskarni plus pielāgots Kotlin spraudnis, kas balsošanas ciklus izpilda native līmenī fonā ar `AlarmManager` + foreground servisu. Balsošana turpinās, kad telefons ir bloķēts un lietotne aizvilkta no nesenajiem.
 
@@ -114,6 +114,7 @@ Android versija **nav pieejama Google Play** — instalācija notiek caur tiešu
 **Automātiska atjaunināšana**: lietotne pārbauda GitHub Releases palaižoties un piedāvā jaunāku APK, kad pieejams. Piesitiet uzaicinājumam — Chrome lejupielādē → piesitiet lejupielādēto APK → sistēmas instalētājs pārņem.
 
 **Fonā balsošanas ierobežojumi**:
+
 - Ražotāja baterijas pārvaldnieki var nogalināt servisu. Ja balsošana apstājas, baltā saraksta lietotni katram ražotājam (saite atrodama Iestatījumos).
 - 1-min pēdējās minūtes kadence prasa `SCHEDULE_EXACT_ALARM` atļauju (automātiski piešķirta Android 13+, manuāla Android 12).
 
