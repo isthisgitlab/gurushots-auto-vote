@@ -169,7 +169,7 @@ const handleLogin = async () => {
         const email = await askInput('\nEnter your GuruShots email: ', rl);
         const password = await askInput('Enter your GuruShots password: ', rl);
 
-        logger.withCategory('auth').startOperation('login-auth', 'Authenticating with GuruShots');
+        logger.withCategory('authentication').startOperation('login-auth', 'Authenticating with GuruShots');
 
         // Get fresh middleware instance with updated settings
         const { refreshApi } = require('../apiFactory');
@@ -180,10 +180,10 @@ const handleLogin = async () => {
         const loginResult = await middleware.cliLogin(email, password);
 
         if (loginResult.success) {
-            logger.withCategory('auth').endOperation('login-auth', 'Login successful');
+            logger.withCategory('authentication').endOperation('login-auth', 'Login successful');
             logger.withCategory('authentication').success(`Token saved for ${useMockMode ? 'MOCK' : 'REAL'} mode`);
         } else {
-            logger.withCategory('auth').endOperation('login-auth', null, loginResult.error || 'Unknown error');
+            logger.withCategory('authentication').endOperation('login-auth', null, loginResult.error || 'Unknown error');
         }
     } catch (error) {
         logger.withCategory('authentication').error('Login error', error);

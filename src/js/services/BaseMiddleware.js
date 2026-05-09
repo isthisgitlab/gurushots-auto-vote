@@ -36,18 +36,18 @@ class BaseMiddleware {
 
     async cliLogin(email, password) {
         logger.withCategory('authentication').info('=== GuruShots Auto Voter - CLI Login ===', null);
-        logger.withCategory('auth').startOperation('cli-login', 'CLI Authentication');
+        logger.withCategory('authentication').startOperation('cli-login', 'CLI Authentication');
         try {
             const { ok, response } = await this._login(email, password);
             if (ok) {
-                logger.withCategory('auth').endOperation('cli-login', 'Authentication successful');
+                logger.withCategory('authentication').endOperation('cli-login', 'Authentication successful');
                 logger.withCategory('authentication').success('Token obtained and saved to settings');
                 return { success: true, token: response.token };
             }
-            logger.withCategory('auth').endOperation('cli-login', null, 'Invalid credentials');
+            logger.withCategory('authentication').endOperation('cli-login', null, 'Invalid credentials');
             return { success: false, error: 'Login failed. Please check your credentials.' };
         } catch (error) {
-            logger.withCategory('auth').endOperation('cli-login', null, error.message || error);
+            logger.withCategory('authentication').endOperation('cli-login', null, error.message || error);
             return { success: false, error: error.message || error };
         }
     }
@@ -94,15 +94,26 @@ class BaseMiddleware {
         return { success: false, error: result?.error || 'Voting cycle failed' };
     }
 
-    async cliVote(challengeId = null) {
-        const scopeLabel = challengeId == null ? '' : ` (challenge ${challengeId})`;
-        logger.withCategory('voting').info(`=== GuruShots Auto Voter - CLI Voting${scopeLabel} ===`, null);
+    /**
+     * Token-or-null helper for CLI voting paths. Logs the standard
+     * "please login first" pair under authentication when missing so
+     * cliVote and cliVoteManual share one error surface.
+     */
+    _requireCliToken() {
         const token = settings.getSetting('token');
         if (!token) {
             logger.withCategory('authentication').error('No authentication token found. Please login first', null);
             logger.withCategory('authentication').info('Run the login command to authenticate', null);
-            return;
+            return null;
         }
+        return token;
+    }
+
+    async cliVote(challengeId = null) {
+        const scopeLabel = challengeId == null ? '' : ` (challenge ${challengeId})`;
+        logger.withCategory('voting').info(`=== GuruShots Auto Voter - CLI Voting${scopeLabel} ===`, null);
+        const token = this._requireCliToken();
+        if (!token) return;
         logger.withCategory('voting').startOperation('cli-vote', `CLI Voting Process${scopeLabel}`);
         try {
             await this.apiStrategy.fetchChallengesAndVote(token, settings.getExposureResolver(), challengeId);
@@ -122,12 +133,8 @@ class BaseMiddleware {
      */
     async cliVoteManual() {
         logger.withCategory('voting').info('=== GuruShots Auto Voter - CLI Manual Voting (vote-to-100%) ===', null);
-        const token = settings.getSetting('token');
-        if (!token) {
-            logger.withCategory('authentication').error('No authentication token found. Please login first', null);
-            logger.withCategory('authentication').info('Run the login command to authenticate', null);
-            return;
-        }
+        const token = this._requireCliToken();
+        if (!token) return;
         logger.withCategory('voting').startOperation('cli-vote-manual', 'CLI Manual Voting Process');
         try {
             const challengesResponse = await this.apiStrategy.getActiveChallenges(token);
