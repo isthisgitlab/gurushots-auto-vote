@@ -81,8 +81,8 @@
         "npm": ">=8.0.0"
     },
     "dependencies": {
-        "@capacitor/android": "^8.3.2",
-        "@capacitor/core": "^8.3.2",
+        "@capacitor/android": "^8.3.3",
+        "@capacitor/core": "^8.3.3",
         "@capacitor/filesystem": "^8.1.2",
         "@capacitor/local-notifications": "^8.1.0",
         "@capacitor/preferences": "^8.0.1",
@@ -94,27 +94,27 @@
         "react-dom": "^19.2.6"
     },
     "devDependencies": {
-        "@capacitor/cli": "^8.3.2",
+        "@capacitor/cli": "^8.3.3",
         "@eslint/js": "^10.0.1",
         "@jest/globals": "^30.4.1",
         "@swc/jest": "^0.2.39",
-        "@tailwindcss/cli": "^4.2.4",
+        "@tailwindcss/cli": "^4.3.0",
         "@testing-library/jest-dom": "^6.9.1",
         "@testing-library/react": "^16.3.2",
         "concurrently": "^9.2.1",
         "cross-env": "^10.1.0",
         "daisyui": "^5.5.19",
-        "electron": "^42.0.0",
+        "electron": "^42.0.1",
         "electron-builder": "^26.8.1",
         "esbuild": "^0.28.0",
         "eslint": "^10.3.0",
         "eslint-config-prettier": "^10.1.8",
         "globals": "^17.6.0",
-        "jest": "^30.4.1",
+        "jest": "^30.4.2",
         "jest-environment-node": "^30.4.1",
         "nodemon": "^3.1.14",
         "prettier": "^3.8.3",
-        "tailwindcss": "^4.2.4"
+        "tailwindcss": "^4.3.0"
     },
     "build": {
         "appId": "com.gurushots.autovote",
