@@ -63,23 +63,23 @@ If you find this tool helpful, consider supporting its development:
 
 ### **🚀 Quick Download Links**
 
-**Latest Version: v0.9.1**
+**Latest Version: v0.10.0**
 
 #### **🖥️ GUI Applications (Recommended for most users)**
 
 | Platform          | Download                                                                                                                                                             | Size   | Type                |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------- |
-| **Windows**       | [📥 GuruShotsAutoVote-v0.9.1-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1-x64.exe)                 | ~50 MB | Portable Executable |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.9.1-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1-arm64.dmg)             | ~50 MB | DMG Installer       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.9.1-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1-arm64.app.zip)     | ~50 MB | App Bundle (ZIP)    |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.9.1-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1-x86_64.AppImage) | ~50 MB | AppImage            |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.9.1-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1-arm64.AppImage)   | ~50 MB | AppImage            |
+| **Windows**       | [📥 GuruShotsAutoVote-v0.10.0-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.0-x64.exe)                 | ~50 MB | Portable Executable |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.10.0-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.0-arm64.dmg)             | ~50 MB | DMG Installer       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.10.0-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.0-arm64.app.zip)     | ~50 MB | App Bundle (ZIP)    |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v0.10.0-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.0-x86_64.AppImage) | ~50 MB | AppImage            |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v0.10.0-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.0-arm64.AppImage)   | ~50 MB | AppImage            |
 
 #### **📱 Mobile (Android sideload — no Play Store)**
 
 | Platform                     | Download                                                                                                                                     | Size   | Type       |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
-| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v0.9.1.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.9.1.apk) | ~10 MB | Signed APK |
+| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v0.10.0.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.0.apk) | ~10 MB | Signed APK |
 
 The Android build is a Capacitor wrapper around the same React UI plus a custom Kotlin plugin that runs voting cycles natively in the background via `AlarmManager` + a foreground service. Voting continues with the phone locked and the app swiped from recents.
 
@@ -87,9 +87,9 @@ The Android build is a Capacitor wrapper around the same React UI plus a custom 
 
 | Platform              | Download                                                                                                                             | Size   | Type                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------------------- |
-| **macOS CLI**         | [📥 gurucli-v0.9.1-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.9.1-mac)             | ~55 MB | Terminal Executable |
-| **Linux CLI (x64)**   | [📥 gurucli-v0.9.1-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.9.1-linux)         | ~50 MB | Terminal Executable |
-| **Linux CLI (ARM64)** | [📥 gurucli-v0.9.1-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.9.1-linux-arm) | ~47 MB | Terminal Executable |
+| **macOS CLI**         | [📥 gurucli-v0.10.0-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.10.0-mac)             | ~55 MB | Terminal Executable |
+| **Linux CLI (x64)**   | [📥 gurucli-v0.10.0-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.10.0-linux)         | ~50 MB | Terminal Executable |
+| **Linux CLI (ARM64)** | [📥 gurucli-v0.10.0-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.10.0-linux-arm) | ~47 MB | Terminal Executable |
 
 ### **📋 Installation Instructions**
 
@@ -127,11 +127,11 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 **💻 For CLI users on macOS:**
 
-1. Download the `gurucli-v0.9.1-mac` file
+1. Download the `gurucli-v0.10.0-mac` file
 2. Open Terminal
 3. Navigate to the download folder: `cd ~/Downloads`
-4. Make executable: `chmod +x gurucli-v0.9.1-mac`
-5. Run: `./gurucli-v0.9.1-mac`
+4. Make executable: `chmod +x gurucli-v0.10.0-mac`
+5. Run: `./gurucli-v0.10.0-mac`
 
 #### **🐧 Linux Users**
 
@@ -139,21 +139,21 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 
 1. **Download**: Click the appropriate Linux link above
 2. **Make Executable**: Right-click the file → Properties → Permissions → Check "Allow executing file as program"
-    - Or use terminal: `chmod +x GuruShotsAutoVote-v0.9.1-*.AppImage`
-3. **Run**: Double-click the file or run from terminal: `./GuruShotsAutoVote-v0.9.1-*.AppImage`
+    - Or use terminal: `chmod +x GuruShotsAutoVote-v0.10.0-*.AppImage`
+3. **Run**: Double-click the file or run from terminal: `./GuruShotsAutoVote-v0.10.0-*.AppImage`
 
 **CLI App:**
 
-1. Download the appropriate `gurucli-v0.9.1-linux` file
+1. Download the appropriate `gurucli-v0.10.0-linux` file
 2. Open terminal and navigate to download folder: `cd ~/Downloads`
-3. Make executable: `chmod +x gurucli-v0.9.1-linux`
-4. Run: `./gurucli-v0.9.1-linux`
+3. Make executable: `chmod +x gurucli-v0.10.0-linux`
+4. Run: `./gurucli-v0.10.0-linux`
 
 #### **📱 Android Users (Sideload)**
 
 The Android build is **not on Google Play** — install via direct APK download.
 
-1. **On the phone**, open the [latest release page](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) and tap `GuruShotsAutoVote-v0.9.1.apk`
+1. **On the phone**, open the [latest release page](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest) and tap `GuruShotsAutoVote-v0.10.0.apk`
 2. Chrome will warn before downloading an APK — tap **Download anyway**
 3. Tap the downloaded file from the notification shade
 4. Android will prompt **Install unknown apps** — grant the permission for whichever app you used to download (Chrome / Files / etc.) and tap **Install**
@@ -213,19 +213,19 @@ For CLI applications, use these commands after making the file executable:
 Login with your credentials:
 
 ```
-./gurucli-v0.9.1-[platform] login
+./gurucli-v0.10.0-[platform] login
 ```
 
 Run a single voting cycle:
 
 ```
-./gurucli-v0.9.1-[platform] vote
+./gurucli-v0.10.0-[platform] vote
 ```
 
 Start continuous voting:
 
 ```
-./gurucli-v0.9.1-[platform] start
+./gurucli-v0.10.0-[platform] start
 ```
 
 ## 🔧 Usage
@@ -291,31 +291,31 @@ For the CLI application, use these commands:
 Login with your credentials:
 
 ```
-./gurucli-v0.9.1-[platform] login
+./gurucli-v0.10.0-[platform] login
 ```
 
 Run one manual voting cycle (votes to 100% on every active challenge regardless of threshold or exposure settings — useful for a one-shot top-up):
 
 ```
-./gurucli-v0.9.1-[platform] vote
+./gurucli-v0.10.0-[platform] vote
 ```
 
 Start continuous voting (respects all thresholds and per-challenge settings):
 
 ```
-./gurucli-v0.9.1-[platform] start
+./gurucli-v0.10.0-[platform] start
 ```
 
 Check current status:
 
 ```
-./gurucli-v0.9.1-[platform] status
+./gurucli-v0.10.0-[platform] status
 ```
 
 Show help:
 
 ```
-./gurucli-v0.9.1-[platform] help
+./gurucli-v0.10.0-[platform] help
 ```
 
 #### **Settings Management Commands**
@@ -336,10 +336,10 @@ The CLI also exposes the full settings system. Settings are shared with the GUI,
 **Examples:**
 
 ```
-./gurucli-v0.9.1-[platform] set-global-default exposure 80
-./gurucli-v0.9.1-[platform] set-global-default autoTurbo true
-./gurucli-v0.9.1-[platform] list-settings
-./gurucli-v0.9.1-[platform] reset-setting lastMinuteThreshold
+./gurucli-v0.10.0-[platform] set-global-default exposure 80
+./gurucli-v0.10.0-[platform] set-global-default autoTurbo true
+./gurucli-v0.10.0-[platform] list-settings
+./gurucli-v0.10.0-[platform] reset-setting lastMinuteThreshold
 ```
 
 ### **Continuous Voting**
