@@ -1,140 +1,27 @@
-const fs = require('fs');
-const path = require('path');
+/**
+ * Settings facade. The schema lives in ./settings/schema and the
+ * persistence transport / runtime detection in ./settings/storage; this
+ * file owns the load/save mechanics, migrations, schema-based accessors,
+ * cleanup, and reset helpers. It also re-exports the schema + storage
+ * surface so existing call sites keep importing from `./settings` without
+ * needing to know the internal split.
+ */
+
 const logger = require('./logger');
-const { isSourceCode, getAppName } = logger;
-const runtime = require('./runtime');
-
-// Try to import electron, but don't fail if it's not available (CLI context)
-let electronApp = null;
-try {
-    const electron = require('electron');
-    electronApp = electron.app;
-} catch (error) {
-    // Electron not available (CLI context), we'll use fallback
-    logger.withCategory('ui').info('Running in CLI context - using fallback userData path:', error.message);
-}
-
-// Persistence transport. On Electron/CLI, settings live in a JSON file
-// read/written synchronously through fs. On Capacitor, the WebView has
-// no fs; @capacitor/preferences is async-only, so we hydrate an
-// in-memory cache once at app boot (initializeAsync) and let all sync
-// reads hit the cache. setSetting / saveSettings still mutate the cache
-// synchronously so consumers see the new value immediately, then fire
-// an async write-behind so the next launch sees the change.
-//
-// The Capacitor branch never resolves on Electron/CLI builds because
-// @capacitor/core is lazy-required only inside isCapacitor() guards.
-
-const SETTINGS_KEY = 'gurushots-settings';
-
-let capacitorInitialized = false;
-let cachedSettingsJson = null;
-let capacitorPreferences = null;
-
-const getCapacitorPreferences = () => {
-    if (capacitorPreferences) return capacitorPreferences;
-    capacitorPreferences = require('@capacitor/preferences').Preferences;
-    return capacitorPreferences;
-};
-
-const storage = {
-    /** Returns the raw settings JSON string, or null if not yet written. */
-    readRaw: () => {
-        if (runtime.isCapacitor()) {
-            return cachedSettingsJson;
-        }
-        const settingsPath = getSettingsPath();
-        if (!fs.existsSync(settingsPath)) return null;
-        return fs.readFileSync(settingsPath, 'utf8');
-    },
-    /** Writes the raw settings JSON string. Sync on Electron/CLI; cache + async write-behind on Capacitor. */
-    writeRaw: (data) => {
-        if (runtime.isCapacitor()) {
-            cachedSettingsJson = data;
-            capacitorInitialized = true;
-            getCapacitorPreferences()
-                .set({ key: SETTINGS_KEY, value: data })
-                .catch((err) => {
-                    logger.withCategory('settings').error('Capacitor preferences write failed:', err);
-                });
-            return;
-        }
-        const settingsPath = getSettingsPath();
-        const settingsDir = path.dirname(settingsPath);
-        if (!fs.existsSync(settingsDir)) {
-            fs.mkdirSync(settingsDir, { recursive: true });
-        }
-        fs.writeFileSync(settingsPath, data, 'utf8');
-    },
-};
-
-/**
- * Async initialization for Capacitor builds. The React entry on Android
- * must `await initializeAsync()` before mounting so the synchronous
- * loadSettings/getSetting API returns hydrated data. No-op on
- * Electron/CLI where the fs path serves reads directly.
- */
-const initializeAsync = async () => {
-    if (!runtime.isCapacitor() || capacitorInitialized) return;
-    try {
-        const prefs = getCapacitorPreferences();
-        const { value } = await prefs.get({ key: SETTINGS_KEY });
-        cachedSettingsJson = value; // null if no preferences entry exists
-    } catch (err) {
-        logger.withCategory('settings').error('Capacitor preferences read failed:', err);
-        cachedSettingsJson = null;
-    } finally {
-        capacitorInitialized = true;
-    }
-};
-
-// Define the settings file path in the userData directory
-const getSettingsPath = () => {
-    let userDataPath;
-
-    if (electronApp && electronApp.getPath) {
-        // Electron context - need to construct proper path based on source/built status
-        if (isSourceCode()) {
-            // Running from source code - use dev-specific directory
-            const basePath = path.dirname(electronApp.getPath('userData'));
-            userDataPath = path.join(basePath, 'gurushots-auto-vote-dev');
-        } else {
-            // Built app - use normal userData path
-            userDataPath = electronApp.getPath('userData');
-        }
-    } else {
-        // CLI context - create fallback userData path
-        userDataPath = runtime.getUserDataDir(getAppName());
-
-        // Ensure the directory exists
-        if (!fs.existsSync(userDataPath)) {
-            try {
-                fs.mkdirSync(userDataPath, { recursive: true });
-                logger.withCategory('ui').info(`Created userData directory: ${userDataPath}`, null);
-            } catch (error) {
-                logger.withCategory('ui').error('Error creating userData directory:', error);
-                // Fallback to current directory if we can't create the proper path
-                userDataPath = path.join(process.cwd(), 'userData');
-                if (!fs.existsSync(userDataPath)) {
-                    fs.mkdirSync(userDataPath, { recursive: true });
-                }
-            }
-        }
-    }
-
-    return path.join(userDataPath, 'settings.json');
-};
-
-/**
- * Determine the default mock setting based on environment.
- * Dev wins over prod when both signals are set; default is prod (mock disabled).
- *
- * @returns {boolean} - True for development, false for production
- */
-const getDefaultMockSetting = () => {
-    if (runtime.isDevelopment()) return true;
-    return false;
-};
+const {
+    SETTINGS_SCHEMA,
+    validateSetting,
+    getValidationError,
+    getSettingsSchema,
+} = require('./settings/schema');
+const {
+    storage,
+    initializeAsync,
+    isAutovoteRunning,
+    getDefaultMockSetting,
+    getUserDataPath,
+    getEnvironmentInfo,
+} = require('./settings/storage');
 
 // Default settings with environment-aware mock setting
 const getDefaultSettings = () => {
@@ -169,58 +56,13 @@ const getDefaultSettings = () => {
         },
         // API headers for randomization (random per user installation)
         apiHeaders: {},
-        // Add any other default settings as needed
     };
 };
-
-/**
- * Validates a single setting value against SETTINGS_SCHEMA. Keys that
- * are not in the schema are treated as valid because the schema is
- * the only source of validation rules for per-challenge tunables.
- *
- * @param {string} key
- * @param {any} value
- * @param {Object} [allSettings] - Other settings for context-aware validation.
- * @param {string} [challengeId]
- * @returns {boolean}
- */
-const validateSetting = (key, value, allSettings = null, challengeId = null) => {
-    const schemaConfig = SETTINGS_SCHEMA[key];
-    if (!schemaConfig) return true;
-    if (schemaConfig.validation && !schemaConfig.validation(value)) return false;
-    if (schemaConfig.contextValidation && allSettings) {
-        if (!schemaConfig.contextValidation(value, allSettings, challengeId)) return false;
-    }
-    return true;
-};
-
-/**
- * Simple settings storage without caching
- *
- * Settings are always read fresh from disk to ensure consistency
- * between CLI and GUI, especially for edit operations.
- */
 
 // Module-local guards so cleanupObsoleteSettings (which itself calls
 // loadSettings) doesn't recurse and doesn't re-run on every read.
 let migrationInProgress = false;
 let cleanupCompleted = false;
-
-// Detects whether autovote is currently running. The flag is set by
-// the autovote orchestration code, possibly on different global
-// surfaces depending on whether we're in Electron main, renderer, or
-// the CLI.
-const isAutovoteRunning = () => {
-    if (typeof global !== 'undefined' && global.autovoteRunning) return true;
-    if (typeof globalThis !== 'undefined' && globalThis.autovoteRunning) return true;
-    try {
-        // eslint-disable-next-line no-undef
-        if (typeof window !== 'undefined' && window.autovoteRunning) return true;
-    } catch {
-        // window not available outside the renderer; ignore
-    }
-    return false;
-};
 
 // Load settings from the userData directory
 const loadSettings = () => {
@@ -450,8 +292,6 @@ const setSetting = (key, value) => {
 
 /**
  * Check if a setting requires app reload when changed
- * @param {string} key - The setting key to check
- * @returns {boolean} - True if reload is required, false otherwise
  */
 const isReloadRequired = (key) => {
     // Only these settings require a reload
@@ -461,11 +301,6 @@ const isReloadRequired = (key) => {
     const isChallengeSetting = SETTINGS_SCHEMA[key] && SETTINGS_SCHEMA[key].perChallenge;
 
     return reloadSettings.includes(key) || isChallengeSetting;
-};
-
-// Get the userData directory path (useful for debugging)
-const getUserDataPath = () => {
-    return path.dirname(getSettingsPath());
 };
 
 // Save window bounds for a specific window type
@@ -487,31 +322,12 @@ const getWindowBounds = (windowType) => {
     return settings.windowBounds[windowType];
 };
 
-// Get current environment information
-const getEnvironmentInfo = () => {
-    const isElectronPackaged = electronApp ? electronApp.isPackaged : false;
-    const isBuiltApp = isElectronPackaged || !isSourceCode();
-
-    return {
-        ...runtime.getEnvSnapshot(),
-        defaultMock: getDefaultMockSetting(),
-        platform: process.platform,
-        userDataPath: getUserDataPath(),
-        isSourceCode: isSourceCode(),
-        isElectronPackaged: isElectronPackaged,
-        isBuiltApp: isBuiltApp,
-        appName: getAppName(),
-    };
-};
-
 /**
  * Schema-based Settings Helper Functions
  */
 
 /**
  * Get global default value for a setting
- * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
- * @returns {any} - The global default value
  */
 const getGlobalDefault = (settingKey) => {
     const settings = loadSettings();
@@ -529,42 +345,7 @@ const getGlobalDefault = (settingKey) => {
 };
 
 /**
- * Get detailed validation error information for a setting
- * @param {string} settingKey - The setting key
- * @param {*} value - The value to validate
- * @param {object} allSettings - All settings for context validation
- * @returns {string|null} - Error message if validation fails, null if valid
- */
-const getValidationError = (settingKey, value, allSettings = null) => {
-    const schemaConfig = SETTINGS_SCHEMA[settingKey];
-    if (!schemaConfig) {
-        return null; // No schema config, assume valid
-    }
-
-    // Check basic validation first
-    if (schemaConfig.validation && !schemaConfig.validation(value)) {
-        return 'Invalid value';
-    }
-
-    // Check context validation only if basic validation passes
-    if (schemaConfig.contextValidation && allSettings) {
-        if (!schemaConfig.contextValidation(value, allSettings)) {
-            // Return context-specific error if available
-            if (schemaConfig.getContextError) {
-                return schemaConfig.getContextError(value, allSettings);
-            }
-            return 'Invalid value in current context';
-        }
-    }
-
-    return null; // Valid
-};
-
-/**
  * Set global default value for a setting
- * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
- * @param {any} value - The value to set
- * @returns {boolean} - True if successful, false otherwise
  */
 const setGlobalDefault = (settingKey, value) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
@@ -598,9 +379,6 @@ const setGlobalDefault = (settingKey, value) => {
 
 /**
  * Get per-challenge override value for a setting
- * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
- * @param {string} challengeId - The challenge ID
- * @returns {any|null} - The override value, or null if no override exists
  */
 const getChallengeOverride = (settingKey, challengeId) => {
     const settings = loadSettings();
@@ -672,10 +450,6 @@ const _applyChallengeOverride = (settings, settingKey, challengeId, value, batch
 
 /**
  * Set per-challenge override value for a setting.
- * @param {string} settingKey
- * @param {string} challengeId
- * @param {any} value
- * @returns {boolean}
  */
 const setChallengeOverride = (settingKey, challengeId, value) => {
     const settings = loadSettings();
@@ -693,9 +467,6 @@ const setChallengeOverride = (settingKey, challengeId, value) => {
 /**
  * Set multiple per-challenge overrides efficiently, only saving values
  * that differ from global defaults.
- * @param {string} challengeId
- * @param {Object} overrides - { settingKey: value, ... }
- * @returns {boolean}
  */
 const setChallengeOverrides = (challengeId, overrides) => {
     const settings = loadSettings();
@@ -738,9 +509,6 @@ const setChallengeOverrides = (challengeId, overrides) => {
 
 /**
  * Remove per-challenge override for a setting
- * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
- * @param {string} challengeId - The challenge ID
- * @returns {boolean} - True if successful, false otherwise
  */
 const removeChallengeOverride = (settingKey, challengeId) => {
     const settings = loadSettings();
@@ -766,8 +534,6 @@ const removeChallengeOverride = (settingKey, challengeId) => {
  * Returns a per-challenge exposure-threshold resolver. Falls back to the
  * schema default if a corrupt override would otherwise stall the cycle.
  * Single source so the IPC handlers and middleware agree.
- *
- * @returns {(challengeId: string|number) => number}
  */
 const getExposureResolver = () => (challengeId) => {
     try {
@@ -780,9 +546,6 @@ const getExposureResolver = () => (challengeId) => {
 
 /**
  * Get the effective value for a setting (per-challenge override or global default)
- * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
- * @param {string} challengeId - The challenge ID (optional for global-only settings)
- * @returns {any} - The effective value to use
  */
 const getEffectiveSetting = (settingKey, challengeId = null) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
@@ -804,8 +567,6 @@ const getEffectiveSetting = (settingKey, challengeId = null) => {
 
 /**
  * Cleanup stale challenge settings for challenges that no longer exist
- * @param {string[]} activeChallengeIds - Array of currently active challenge IDs
- * @returns {boolean} - True if cleanup was successful, false otherwise
  */
 const cleanupStaleChallengeSetting = (activeChallengeIds) => {
     const settings = loadSettings();
@@ -833,7 +594,6 @@ const cleanupStaleChallengeSetting = (activeChallengeIds) => {
 
 /**
  * Clean up obsolete settings that are no longer used
- * This function removes deprecated settings to keep the settings file clean
  */
 const cleanupObsoleteSettings = () => {
     try {
@@ -908,8 +668,6 @@ const cleanupObsoleteSettings = () => {
 
 /**
  * Reset a single setting to its default value
- * @param {string} key - The setting key to reset
- * @returns {boolean} - True if successful, false otherwise
  */
 const resetSetting = (key) => {
     try {
@@ -930,8 +688,6 @@ const resetSetting = (key) => {
 
 /**
  * Reset global default for a schema-based setting
- * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
- * @returns {boolean} - True if successful, false otherwise
  */
 const resetGlobalDefault = (settingKey) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
@@ -945,7 +701,6 @@ const resetGlobalDefault = (settingKey) => {
 
 /**
  * Reset all global defaults for schema-based settings
- * @returns {boolean} - True if successful, false otherwise
  */
 const resetAllGlobalDefaults = () => {
     try {
@@ -970,7 +725,6 @@ const resetAllGlobalDefaults = () => {
 
 /**
  * Reset all settings to their default values (preserves only essential user data)
- * @returns {boolean} - True if successful, false otherwise
  */
 const resetAllSettings = () => {
     try {
@@ -1007,8 +761,6 @@ const resetAllSettings = () => {
 
 /**
  * Check if a setting has been modified from its default value
- * @param {string} key - The setting key to check
- * @returns {boolean} - True if modified from default, false if at default value
  */
 const isSettingModified = (key) => {
     try {
@@ -1031,8 +783,6 @@ const isSettingModified = (key) => {
 
 /**
  * Check if a global default has been modified from its schema default
- * @param {string} settingKey - The setting key from SETTINGS_SCHEMA
- * @returns {boolean} - True if modified from schema default, false if at schema default
  */
 const isGlobalDefaultModified = (settingKey) => {
     try {
@@ -1048,264 +798,6 @@ const isGlobalDefaultModified = (settingKey) => {
         logger.withCategory('settings').error(`Error checking if global default ${settingKey} is modified:`, error);
         return false;
     }
-};
-
-/**
- * Helper to get schema default at runtime (avoids circular reference during schema construction)
- * @param {string} key - The schema key
- * @returns {any} - The default value for the key
- */
-const getSchemaDefault = (key) => SETTINGS_SCHEMA[key]?.default;
-
-/**
- * Centralized Settings Schema
- *
- * Single source of truth for all configurable settings.
- * Each setting defines its type, default value, validation, and whether it supports per-challenge overrides.
- */
-const SETTINGS_SCHEMA = {
-    boostTime: {
-        type: 'time', // Special type for hours/minutes input
-        default: 3600, // 1 hour in seconds
-        perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0,
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.boostTime',
-        description: 'app.boostTimeDesc',
-    },
-    exposure: {
-        type: 'number',
-        default: 100,
-        perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 100,
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.exposure',
-        description: 'app.exposureDesc',
-    },
-    exposureTarget: {
-        type: 'number',
-        // 0 is a sentinel meaning "vote up to the exposure trigger value" (legacy behavior).
-        // Any 1-100 explicitly overrides the target so the loop keeps voting past the trigger.
-        default: 0,
-        perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
-        contextValidation: (value, allSettings) => {
-            if (value === 0) return true; // sentinel — always ok
-            const exposureValue = allSettings.exposure;
-            const effectiveExposure =
-                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
-                    ? exposureValue
-                    : getSchemaDefault('exposure');
-            return value >= effectiveExposure;
-        },
-        getContextError: (value, allSettings) => {
-            const exposureValue = allSettings.exposure;
-            const effectiveExposure =
-                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
-                    ? exposureValue
-                    : getSchemaDefault('exposure');
-            return `VALIDATION_GREATER_OR_EQUAL|app.exposure|${effectiveExposure}`;
-        },
-        dependsOn: ['exposure'],
-        validationOrder: 2, // Validate after dependencies
-        label: 'app.exposureTarget',
-        description: 'app.exposureTargetDesc',
-    },
-    lastMinuteThreshold: {
-        type: 'number',
-        default: 10,
-        perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.lastMinuteThreshold',
-        description: 'app.lastMinuteThresholdDesc',
-    },
-    onlyBoost: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.onlyBoost',
-        description: 'app.onlyBoostDesc',
-    },
-    compactCards: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.compactCards',
-        description: 'app.compactCardsDesc',
-    },
-    // Persisted autovote-running flag. Written on Start / Stop so a
-    // relaunch of the app (Capacitor WebView destroyed + recreated,
-    // Electron window reopen) can resume voting without the user
-    // tapping Start again.
-    autovoteRunning: {
-        type: 'boolean',
-        default: false,
-        perChallenge: false,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.autovoteRunning',
-        description: 'app.autovoteRunningDesc',
-    },
-    voteOnlyInLastMinute: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.voteOnlyInLastMinute',
-        description: 'app.voteOnlyInLastMinuteDesc',
-    },
-    lastMinuteCheckFrequency: {
-        type: 'number',
-        default: 1,
-        perChallenge: false,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.lastMinuteCheckFrequency',
-        description: 'app.lastMinuteCheckFrequencyDesc',
-    },
-    lastHourExposure: {
-        type: 'number',
-        default: 100,
-        perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 100,
-        contextValidation: (value, allSettings) => {
-            const exposureValue = allSettings.exposure;
-            // If exposure is not set or invalid, use the exposure default for comparison
-            const effectiveExposure =
-                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
-                    ? exposureValue
-                    : getSchemaDefault('exposure');
-            return value <= effectiveExposure;
-        },
-        getContextError: (value, allSettings) => {
-            const exposureValue = allSettings.exposure;
-            const effectiveExposure =
-                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
-                    ? exposureValue
-                    : getSchemaDefault('exposure');
-            // Return a string that the UI will translate
-            return `VALIDATION_LESS_OR_EQUAL|app.exposure|${effectiveExposure}`;
-        },
-        dependsOn: ['exposure'],
-        validationOrder: 2, // Validate after dependencies
-        label: 'app.lastHourExposure',
-        description: 'app.lastHourExposureDesc',
-    },
-    useLastHourExposure: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.useLastHourExposure',
-        description: 'app.useLastHourExposureDesc',
-    },
-    lastHourExposureTarget: {
-        type: 'number',
-        // 0 is a sentinel meaning "vote up to the lastHourExposure trigger value" (legacy behavior).
-        default: 0,
-        perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
-        contextValidation: (value, allSettings) => {
-            if (value === 0) return true;
-            const triggerValue = allSettings.lastHourExposure;
-            const effectiveTrigger =
-                typeof triggerValue === 'number' && triggerValue >= 1 && triggerValue <= 100
-                    ? triggerValue
-                    : getSchemaDefault('lastHourExposure');
-            return value >= effectiveTrigger;
-        },
-        getContextError: (value, allSettings) => {
-            const triggerValue = allSettings.lastHourExposure;
-            const effectiveTrigger =
-                typeof triggerValue === 'number' && triggerValue >= 1 && triggerValue <= 100
-                    ? triggerValue
-                    : getSchemaDefault('lastHourExposure');
-            return `VALIDATION_GREATER_OR_EQUAL|app.lastHourExposure|${effectiveTrigger}`;
-        },
-        dependsOn: ['lastHourExposure'],
-        validationOrder: 2,
-        label: 'app.lastHourExposureTarget',
-        description: 'app.lastHourExposureTargetDesc',
-    },
-    autoTurbo: {
-        type: 'boolean',
-        default: true,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.autoTurbo',
-        description: 'app.autoTurboDesc',
-    },
-    useTurbo: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.useTurbo',
-        description: 'app.useTurboDesc',
-    },
-    turboTime: {
-        type: 'time',
-        default: 7200, // 2 hours in seconds
-        perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0,
-        validationOrder: 1,
-        label: 'app.turboTime',
-        description: 'app.turboTimeDesc',
-    },
-    turboImageIndex: {
-        type: 'number',
-        default: 1,
-        perChallenge: true,
-        validation: (value) => Number.isInteger(value) && value >= 0,
-        validationOrder: 1,
-        label: 'app.turboImageIndex',
-        description: 'app.turboImageIndexDesc',
-    },
-    turboApplyWhenBoostActive: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.turboApplyWhenBoostActive',
-        description: 'app.turboApplyWhenBoostActiveDesc',
-    },
-    autoFill: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.autoFill',
-        description: 'app.autoFillDesc',
-    },
-    autoFillIntervalMinutes: {
-        type: 'number',
-        default: 10,
-        perChallenge: true,
-        validation: (value) => Number.isInteger(value) && value >= 1 && value <= 60,
-        validationOrder: 1,
-        label: 'app.autoFillIntervalMinutes',
-        description: 'app.autoFillIntervalMinutesDesc',
-    },
-};
-
-/**
- * Get the settings schema
- *
- * @returns {Promise<object>} - Settings schema
- */
-const getSettingsSchema = async () => {
-    return SETTINGS_SCHEMA;
 };
 
 module.exports = {
