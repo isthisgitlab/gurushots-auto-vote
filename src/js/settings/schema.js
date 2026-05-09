@@ -26,6 +26,15 @@ const SETTINGS_SCHEMA = {
         label: 'app.boostTime',
         description: 'app.boostTimeDesc',
     },
+    autoBoost: {
+        type: 'boolean',
+        default: true,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        label: 'app.autoBoost',
+        description: 'app.autoBoostDesc',
+    },
     exposure: {
         type: 'number',
         default: 100,

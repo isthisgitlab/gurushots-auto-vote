@@ -105,6 +105,8 @@
             boost: 'Boost',
             boostTime: 'Boost Time',
             boostTimeDesc: 'When to automatically apply boost (time remaining)',
+            autoBoost: 'Auto-Apply Boost',
+            autoBoostDesc: 'Automatically apply boost on this challenge when the boost timer is running out',
             turbo: 'Turbo',
             autoTurbo: 'Auto-Earn Turbo',
             autoTurboDesc: 'Play the Turbo mini-game automatically to earn the bonus',

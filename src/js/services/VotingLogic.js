@@ -289,6 +289,7 @@ const shouldApplyBoost = (challenge, now) => {
     if (challenge.close_time <= now) return false;
 
     const challengeId = challenge.id?.toString?.() || '';
+    if (!settings.getEffectiveSetting('autoBoost', challengeId)) return false;
     const effectiveBoostTime = getEffectiveBoostTime(challengeId); // seconds
 
     const boost = challenge.member?.boost || {};

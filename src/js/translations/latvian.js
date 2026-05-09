@@ -106,6 +106,8 @@
             boost: 'Boost',
             boostTime: 'Boost laiks',
             boostTimeDesc: 'Kad automātiski pielietot "Boost" (pēc atlikušā laika)',
+            autoBoost: 'Auto-pielietot Boost',
+            autoBoostDesc: 'Automātiski pielieto Boost šim izaicinājumam, kad Boost taimeris beidzas',
             turbo: 'Turbo',
             autoTurbo: 'Auto-iegūt Turbo',
             autoTurboDesc: 'Automātiski spēlē Turbo mini-spēli, lai iegūtu bonusu',
