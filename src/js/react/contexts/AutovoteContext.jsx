@@ -431,7 +431,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         // start is intentionally not in deps — we want a single
         // mount-time check, not a re-trigger when start identity
         // changes due to its own dep (runVotingCycle / threshold scheduling).
-    }, []); // eslint-disable-line
+    }, []);
 
     /**
      * Toggle autovote
