@@ -3,6 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus } from '@/utils/formatters';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
+import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { VoteButton } from './VoteButton';
 import { RunButton } from './RunButton';
 import { EntryBadge } from './EntryBadge';
@@ -22,11 +23,8 @@ export function ChallengeCard({
     onSettingsClick,
 }) {
     const { t } = useTranslation();
-    const [hasCustomSettings, setHasCustomSettings] = useState(false);
-    const [onlyBoost, setOnlyBoost] = useState(false);
-    const [autoFillEnabled, setAutoFillEnabled] = useState(false);
-    const [isCompact, setIsCompact] = useState(false);
-    const [hasCompactOverride, setHasCompactOverride] = useState(false);
+    const { hasCustomSettings, onlyBoost, autoFillEnabled, isCompact, hasCompactOverride, toggleCompact } =
+        useChallengeSettings(challenge.id);
     const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
     const { fillNow, loading: filling, error: fillError, clearError: clearFillError } = useFillChallenge();
 
@@ -77,59 +75,6 @@ export function ChallengeCard({
 
     const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
     const canFill = challengeStillOpen && slotsRemaining > 0;
-
-    // Check for custom settings + load card density (global default
-    // overridden by per-challenge override). React re-runs this whenever
-    // settings-changed fires (the parent ChallengesSection does that).
-    useEffect(() => {
-        const checkSettings = async () => {
-            try {
-                const schema = await window.api.getSettingsSchema();
-                for (const [key, config] of Object.entries(schema)) {
-                    if (!config.perChallenge) continue;
-                    const override = await window.api.getChallengeOverride(key, challenge.id.toString());
-                    if (override !== null) {
-                        setHasCustomSettings(true);
-                        break;
-                    }
-                }
-
-                const boostOnly = await window.api.getEffectiveSetting('onlyBoost', challenge.id.toString());
-                setOnlyBoost(boostOnly);
-
-                const fillOn = await window.api.getEffectiveSetting('autoFill', challenge.id.toString());
-                setAutoFillEnabled(fillOn === true);
-
-                const compact = await window.api.getEffectiveSetting('compactCards', challenge.id.toString());
-                setIsCompact(compact === true);
-                const compactOverride = await window.api.getChallengeOverride('compactCards', challenge.id.toString());
-                setHasCompactOverride(compactOverride !== null);
-            } catch {
-                // Ignore errors
-            }
-        };
-        checkSettings();
-    }, [challenge.id]);
-
-    // Toggle this card's density. First click sets a per-challenge
-    // override (opposite of current); second click on a card that
-    // already has an override removes it (returns to global default).
-    const handleToggleCompact = async () => {
-        const challengeId = challenge.id.toString();
-        try {
-            if (hasCompactOverride) {
-                await window.api.removeChallengeOverride('compactCards', challengeId);
-            } else {
-                await window.api.setChallengeOverride('compactCards', challengeId, !isCompact);
-            }
-            const next = await window.api.getEffectiveSetting('compactCards', challengeId);
-            setIsCompact(next === true);
-            const override = await window.api.getChallengeOverride('compactCards', challengeId);
-            setHasCompactOverride(override !== null);
-        } catch {
-            // Ignore — leave UI as-is.
-        }
-    };
 
     // Show vote button logic
     const showVoteButton =
@@ -247,7 +192,7 @@ export function ChallengeCard({
                             from the global default. */}
                         <button
                             className="btn btn-ghost btn-xs px-1"
-                            onClick={handleToggleCompact}
+                            onClick={toggleCompact}
                             title={isCompact ? 'Show details' : 'Compact'}
                         >
                             <svg

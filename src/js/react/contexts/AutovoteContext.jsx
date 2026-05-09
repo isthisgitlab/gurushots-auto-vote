@@ -2,72 +2,8 @@ import { createContext, useContext, useReducer, useCallback, useEffect, useRef }
 import { getRandomCheckFrequencyMs } from '../../scheduling/randomDelay';
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
-
-// Action types
-const ACTIONS = {
-    START: 'START',
-    STOP: 'STOP',
-    INCREMENT_CYCLE: 'INCREMENT_CYCLE',
-    UPDATE_LAST_RUN: 'UPDATE_LAST_RUN',
-    SET_STATUS: 'SET_STATUS',
-    SET_ERROR: 'SET_ERROR',
-};
-
-// Initial state
-const initialState = {
-    running: false,
-    cycles: 0,
-    lastRun: null,
-    status: 'Stopped',
-    statusClass: 'badge-neutral',
-    error: null,
-};
-
-// Reducer
-function autovoteReducer(state, action) {
-    switch (action.type) {
-        case ACTIONS.START:
-            return {
-                ...state,
-                running: true,
-                status: 'Running',
-                statusClass: 'badge-success',
-                error: null,
-            };
-        case ACTIONS.STOP:
-            return {
-                ...state,
-                running: false,
-                status: 'Stopped',
-                statusClass: 'badge-neutral',
-            };
-        case ACTIONS.INCREMENT_CYCLE:
-            return {
-                ...state,
-                cycles: state.cycles + 1,
-            };
-        case ACTIONS.UPDATE_LAST_RUN:
-            return {
-                ...state,
-                lastRun: action.payload,
-            };
-        case ACTIONS.SET_STATUS:
-            return {
-                ...state,
-                status: action.payload.status,
-                statusClass: action.payload.statusClass,
-            };
-        case ACTIONS.SET_ERROR:
-            return {
-                ...state,
-                error: action.payload,
-                status: 'Error',
-                statusClass: 'badge-error',
-            };
-        default:
-            return state;
-    }
-}
+import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
+import { calculateNextThresholdEntry } from './autovoteScheduler';
 
 const AutovoteContext = createContext(null);
 
@@ -149,38 +85,6 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     }, [onChallengesRefresh]);
 
     /**
-     * Calculate next threshold entry time
-     */
-    const calculateNextThresholdEntry = useCallback(async (challenges, now) => {
-        let nextEntry = null;
-        let earliestEntryTime = Infinity;
-
-        for (const challenge of challenges) {
-            if (challenge.type === 'flash' || challenge.close_time <= now) {
-                continue;
-            }
-
-            const effectiveLastMinuteThreshold = await window.api.getEffectiveSetting(
-                'lastMinuteThreshold',
-                challenge.id.toString(),
-            );
-            const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
-
-            if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
-                earliestEntryTime = thresholdEntryTime;
-                nextEntry = {
-                    challengeId: challenge.id,
-                    challengeTitle: challenge.title,
-                    entryTime: thresholdEntryTime,
-                    lastMinuteThreshold: effectiveLastMinuteThreshold,
-                };
-            }
-        }
-
-        return nextEntry;
-    }, []);
-
-    /**
      * Update threshold scheduling
      */
     const updateThresholdScheduling = useCallback(async () => {
@@ -250,7 +154,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         } catch (err) {
             await window.api.logWarning(`Error updating threshold scheduling: ${err.message || err}`);
         }
-    }, [calculateNextThresholdEntry, runVotingCycle]);
+    }, [runVotingCycle]);
 
     /**
      * Start autovote

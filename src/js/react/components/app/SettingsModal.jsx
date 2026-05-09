@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
+import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { SettingInput } from './SettingInput';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -14,135 +15,43 @@ export function SettingsModal({ isOpen, onClose }) {
     const { settings, updateSetting, refetch: refetchSettings } = useSettings();
     const { schema, defaults, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
-    // Local state for form values
-    const [formValues, setFormValues] = useState({});
-    const [uiValues, setUiValues] = useState({
-        theme: 'light',
-        language: 'en',
-        timezone: 'Europe/Riga',
-        customTimezones: [],
-        stayLoggedIn: false,
-        apiTimeout: 30000,
-        checkFrequencyMin: 3,
-        checkFrequencyMax: 3,
+    const {
+        formValues,
+        uiValues,
+        saving,
+        originalUiValues,
+        handleFormChange,
+        handleUiChange,
+        handleResetGlobal,
+        handleResetUi,
+        handleResetAll,
+        commit,
+        revert,
+    } = useSettingsForm({
+        isOpen,
+        schema,
+        defaults,
+        settings,
+        refetchSettings,
+        refetchSchema,
+        updateSetting,
     });
-    const [saving, setSaving] = useState(false);
-    // Timezone "+" toggle — local UI state, never persisted.
+
+    // Timezone "+" toggle — local UI state, never persisted, so it stays
+    // out of the form hook.
     const [tzInputVisible, setTzInputVisible] = useState(false);
     const [tzInputValue, setTzInputValue] = useState('');
     const [tzInputError, setTzInputError] = useState(false);
-    // Store original values to revert on cancel
-    const [originalUiValues, setOriginalUiValues] = useState(null);
-    const [originalFormValues, setOriginalFormValues] = useState(null);
 
-    // Refetch from disk every time the modal opens so we never display
-    // a value that another writer (CLI, another window) has since changed.
+    // Reset the timezone input on every open so a stale "+" panel from a
+    // previous session doesn't carry over.
     useEffect(() => {
         if (isOpen) {
-            refetchSettings();
-            refetchSchema();
-        }
-    }, [isOpen, refetchSettings, refetchSchema]);
-
-    // Init form values exactly once per open session. Without the guard,
-    // each refetch produces a new defaults reference and re-runs this
-    // effect, clobbering in-progress user edits.
-    const formInitForOpenRef = useRef(false);
-    const uiInitForOpenRef = useRef(false);
-    useEffect(() => {
-        if (!isOpen) {
-            formInitForOpenRef.current = false;
-            uiInitForOpenRef.current = false;
-            return;
-        }
-        if (!formInitForOpenRef.current && defaults) {
-            setFormValues({ ...defaults });
-            setOriginalFormValues({ ...defaults });
-            formInitForOpenRef.current = true;
-        }
-        if (!uiInitForOpenRef.current && settings) {
-            const initialUiValues = {
-                theme: settings.theme || 'light',
-                language: settings.language || 'en',
-                timezone: settings.timezone || 'Europe/Riga',
-                customTimezones: Array.isArray(settings.customTimezones) ? settings.customTimezones : [],
-                stayLoggedIn: settings.stayLoggedIn || false,
-                apiTimeout: settings.apiTimeout || 30000,
-                checkFrequencyMin: settings.checkFrequencyMin ?? 3,
-                checkFrequencyMax: settings.checkFrequencyMax ?? 3,
-            };
-            setUiValues(initialUiValues);
-            setOriginalUiValues(initialUiValues);
             setTzInputVisible(false);
             setTzInputValue('');
             setTzInputError(false);
-            uiInitForOpenRef.current = true;
         }
-    }, [isOpen, defaults, settings]);
-
-    const handleFormChange = useCallback((key, value) => {
-        setFormValues((prev) => ({ ...prev, [key]: value }));
-    }, []);
-
-    const handleUiChange = useCallback((key, value) => {
-        setUiValues((prev) => ({ ...prev, [key]: value }));
-
-        // Immediately apply theme change
-        if (key === 'theme') {
-            document.documentElement.setAttribute('data-theme', value);
-        }
-    }, []);
-
-    const handleResetGlobal = useCallback(
-        async (key) => {
-            if (schema && schema[key]) {
-                setFormValues((prev) => ({ ...prev, [key]: schema[key].default }));
-            }
-        },
-        [schema],
-    );
-
-    const handleResetUi = useCallback((key) => {
-        const defaultUiValues = {
-            theme: 'light',
-            language: 'en',
-            timezone: 'Europe/Riga',
-            customTimezones: [],
-            stayLoggedIn: false,
-            apiTimeout: 30000,
-            checkFrequencyMin: 3,
-            checkFrequencyMax: 3,
-        };
-        setUiValues((prev) => ({ ...prev, [key]: defaultUiValues[key] }));
-
-        if (key === 'theme') {
-            document.documentElement.setAttribute('data-theme', defaultUiValues.theme);
-        }
-    }, []);
-
-    const handleResetAll = useCallback(async () => {
-        // Reset all global defaults to schema defaults
-        if (schema) {
-            const newFormValues = {};
-            for (const [key, config] of Object.entries(schema)) {
-                newFormValues[key] = config.default;
-            }
-            setFormValues(newFormValues);
-        }
-
-        // Reset UI settings
-        setUiValues({
-            theme: 'light',
-            language: 'en',
-            timezone: 'Europe/Riga',
-            customTimezones: [],
-            stayLoggedIn: false,
-            apiTimeout: 30000,
-            checkFrequencyMin: 3,
-            checkFrequencyMax: 3,
-        });
-        document.documentElement.setAttribute('data-theme', 'light');
-    }, [schema]);
+    }, [isOpen]);
 
     const isValidTimezone = (tz) => {
         try {
@@ -159,69 +68,44 @@ export function SettingsModal({ isOpen, onClose }) {
             setTzInputError(true);
             return;
         }
-        setUiValues((prev) => {
-            const list = prev.customTimezones || [];
-            const nextList = list.includes(value) ? list : [...list, value];
-            return { ...prev, customTimezones: nextList, timezone: value };
-        });
+        const list = uiValues.customTimezones || [];
+        const nextList = list.includes(value) ? list : [...list, value];
+        handleUiChange('customTimezones', nextList);
+        handleUiChange('timezone', value);
         setTzInputValue('');
         setTzInputError(false);
         setTzInputVisible(false);
-    }, [tzInputValue]);
+    }, [tzInputValue, uiValues.customTimezones, handleUiChange]);
 
     const handleTimezoneRemove = useCallback(() => {
-        setUiValues((prev) => ({
-            ...prev,
-            customTimezones: (prev.customTimezones || []).filter((tz) => tz !== prev.timezone),
-            timezone: 'Europe/Riga',
-        }));
-    }, []);
+        const filtered = (uiValues.customTimezones || []).filter((tz) => tz !== uiValues.timezone);
+        handleUiChange('customTimezones', filtered);
+        handleUiChange('timezone', 'Europe/Riga');
+    }, [uiValues.customTimezones, uiValues.timezone, handleUiChange]);
 
     const handleCancel = useCallback(() => {
-        // Revert theme to original if it was changed
+        // Revert theme DOM if the user changed it during this open session.
         if (originalUiValues && originalUiValues.theme !== uiValues.theme) {
             document.documentElement.setAttribute('data-theme', originalUiValues.theme);
         }
-        // Reset state to original values
-        if (originalUiValues) {
-            setUiValues(originalUiValues);
-        }
-        if (originalFormValues) {
-            setFormValues(originalFormValues);
-        }
+        revert();
         onClose();
-    }, [originalUiValues, originalFormValues, uiValues.theme, onClose]);
+    }, [originalUiValues, uiValues.theme, revert, onClose]);
 
     const handleSave = useCallback(async () => {
-        setSaving(true);
         try {
-            // Save UI settings
-            for (const [key, value] of Object.entries(uiValues)) {
-                await updateSetting(key, value);
-            }
-
-            // Save global defaults
-            for (const [key, value] of Object.entries(formValues)) {
-                await window.api.setGlobalDefault(key, value);
-            }
-
-            // Update language if changed
+            await commit();
             if (uiValues.language !== language) {
                 setLanguage(uiValues.language);
             }
-
-            // Notify threshold scheduling update
             if (window.handleThresholdSettingsChange) {
                 await window.handleThresholdSettingsChange();
             }
-
             onClose();
         } catch (err) {
             await window.api.logError(`Error saving settings: ${err.message || err}`);
-        } finally {
-            setSaving(false);
         }
-    }, [formValues, uiValues, updateSetting, onClose, language, setLanguage]);
+    }, [commit, uiValues.language, language, setLanguage, onClose]);
 
     if (!isOpen) return null;
 
