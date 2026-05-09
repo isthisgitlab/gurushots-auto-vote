@@ -67,8 +67,8 @@ If you find this tool helpful, consider supporting its development:
 
 #### **🖥️ GUI Applications (Recommended for most users)**
 
-| Platform          | Download                                                                                                                                                             | Size   | Type                |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------- |
+| Platform          | Download                                                                                                                                                               | Size   | Type                |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------- |
 | **Windows**       | [📥 GuruShotsAutoVote-v0.10.1-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.1-x64.exe)                 | ~50 MB | Portable Executable |
 | **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.10.1-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.1-arm64.dmg)             | ~50 MB | DMG Installer       |
 | **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.10.1-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.1-arm64.app.zip)     | ~50 MB | App Bundle (ZIP)    |
@@ -77,16 +77,16 @@ If you find this tool helpful, consider supporting its development:
 
 #### **📱 Mobile (Android sideload — no Play Store)**
 
-| Platform                     | Download                                                                                                                                     | Size   | Type       |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
+| Platform                     | Download                                                                                                                                       | Size   | Type       |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
 | **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v0.10.1.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.1.apk) | ~10 MB | Signed APK |
 
 The Android build is a Capacitor wrapper around the same React UI plus a custom Kotlin plugin that runs voting cycles natively in the background via `AlarmManager` + a foreground service. Voting continues with the phone locked and the app swiped from recents.
 
 #### **💻 CLI Applications (For advanced users)**
 
-| Platform              | Download                                                                                                                             | Size   | Type                |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------------------- |
+| Platform              | Download                                                                                                                               | Size   | Type                |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------- |
 | **macOS CLI**         | [📥 gurucli-v0.10.1-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.10.1-mac)             | ~55 MB | Terminal Executable |
 | **Linux CLI (x64)**   | [📥 gurucli-v0.10.1-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.10.1-linux)         | ~50 MB | Terminal Executable |
 | **Linux CLI (ARM64)** | [📥 gurucli-v0.10.1-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v0.10.1-linux-arm) | ~47 MB | Terminal Executable |

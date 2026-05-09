@@ -8,8 +8,8 @@
 
 #### **🖥️ Grafiskā lietotne (Ieteicams lielākajai daļai lietotāju)**
 
-| Platforma         | Lejupielāde                                                                                                                                                          | Izmērs | Tips                  |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------- |
+| Platforma         | Lejupielāde                                                                                                                                                            | Izmērs | Tips                  |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------- |
 | **Windows**       | [📥 GuruShotsAutoVote-v0.10.1-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.1-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
 | **macOS (DMG)**   | [📥 GuruShotsAutoVote-v0.10.1-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.1-arm64.dmg)             | ~50 MB | DMG instalētājs       |
 | **macOS (APP)**   | [📥 GuruShotsAutoVote-v0.10.1-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.1-arm64.app.zip)     | ~50 MB | App komplekts (ZIP)   |
@@ -18,8 +18,8 @@
 
 #### **📱 Mobilā lietotne (Android, sānielāde — bez Play Store)**
 
-| Platforma                     | Lejupielāde                                                                                                                                  | Izmērs | Tips           |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------- |
+| Platforma                     | Lejupielāde                                                                                                                                    | Izmērs | Tips           |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------- |
 | **Android (8.0+, sānielāde)** | [📥 GuruShotsAutoVote-v0.10.1.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v0.10.1.apk) | ~10 MB | Parakstīts APK |
 
 Android versija ir Capacitor apvalks ap to pašu React saskarni plus pielāgots Kotlin spraudnis, kas balsošanas ciklus izpilda native līmenī fonā ar `AlarmManager` + foreground servisu. Balsošana turpinās, kad telefons ir bloķēts un lietotne aizvilkta no nesenajiem.
