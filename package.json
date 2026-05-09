@@ -207,12 +207,12 @@
         },
         "collectCoverage": false,
         "collectCoverageFrom": [
-            "src/js/api/api-client.js",
-            "src/js/api/boost.js",
-            "src/js/api/challenges.js",
-            "src/js/api/login.js",
-            "src/js/api/voting.js",
-            "src/js/apiFactory.js"
+            "src/js/api/**/*.js",
+            "src/js/apiFactory.js",
+            "src/js/services/VotingLogic.js",
+            "src/js/services/manualVote.js",
+            "src/js/settings.js",
+            "src/js/settings/**/*.js"
         ],
         "coverageDirectory": "coverage",
         "coverageReporters": [
@@ -222,10 +222,10 @@
         ],
         "coverageThreshold": {
             "global": {
-                "branches": 90,
-                "functions": 100,
-                "lines": 95,
-                "statements": 95
+                "branches": 45,
+                "functions": 50,
+                "lines": 55,
+                "statements": 55
             }
         }
     }

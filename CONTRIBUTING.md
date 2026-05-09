@@ -6,9 +6,8 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 
 ### Prerequisites
 
-- Node.js 18+ (required for CLI builds)
-- Node.js 23+ (recommended for main development)
-- npm (comes with Node.js)
+- Node.js 24+ (matches `package.json` `engines.node` and `.nvmrc`; CI builds also pin to 24)
+- npm 8+ (comes with Node.js)
 
 ### Setup
 
