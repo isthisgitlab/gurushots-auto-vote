@@ -78,90 +78,15 @@ const loadSettings = () => {
                 mergedSettings.mock = getDefaultMockSetting();
             }
 
-            // Migration: Handle old setting names
             let migrationChanges = false;
 
-            // Migrate lastMinutes to lastMinuteThreshold
-            if (mergedSettings.lastMinutes !== undefined && mergedSettings.lastMinuteThreshold === undefined) {
-                mergedSettings.lastMinuteThreshold = mergedSettings.lastMinutes;
-                delete mergedSettings.lastMinutes;
-                migrationChanges = true;
-                logger.withCategory('settings').info('Migrated lastMinutes to lastMinuteThreshold', null);
-            }
-
-            // Migrate voteOnlyInLastThreshold to voteOnlyInLastMinute
-            if (
-                mergedSettings.voteOnlyInLastThreshold !== undefined &&
-                mergedSettings.voteOnlyInLastMinute === undefined
-            ) {
-                mergedSettings.voteOnlyInLastMinute = mergedSettings.voteOnlyInLastThreshold;
-                delete mergedSettings.voteOnlyInLastThreshold;
-                migrationChanges = true;
-                logger.withCategory('settings').info('Migrated voteOnlyInLastThreshold to voteOnlyInLastMinute', null);
-            }
-
-            // Migrate lastThresholdCheckFrequency to lastMinuteCheckFrequency
-            if (
-                mergedSettings.lastThresholdCheckFrequency !== undefined &&
-                mergedSettings.lastMinuteCheckFrequency === undefined
-            ) {
-                mergedSettings.lastMinuteCheckFrequency = mergedSettings.lastThresholdCheckFrequency;
-                delete mergedSettings.lastThresholdCheckFrequency;
-                migrationChanges = true;
-                logger
-                    .withCategory('settings')
-                    .info('Migrated lastThresholdCheckFrequency to lastMinuteCheckFrequency', null);
-            }
-
-            // Migrate votingInterval to votingFrequency
-            if (mergedSettings.votingInterval !== undefined && mergedSettings.votingFrequency === undefined) {
-                mergedSettings.votingFrequency = mergedSettings.votingInterval;
-                delete mergedSettings.votingInterval;
-                migrationChanges = true;
-                logger.withCategory('settings').info('Migrated votingInterval to votingFrequency', null);
-            }
-
-            // Migrate votingFrequency to voteFrequency
-            if (mergedSettings.votingFrequency !== undefined && mergedSettings.voteFrequency === undefined) {
-                mergedSettings.voteFrequency = mergedSettings.votingFrequency;
-                delete mergedSettings.votingFrequency;
-                migrationChanges = true;
-                logger.withCategory('settings').info('Migrated votingFrequency to voteFrequency', null);
-            }
-
-            // Migrate voteFrequency to checkFrequency (legacy → intermediate)
-            if (mergedSettings.voteFrequency !== undefined && mergedSettings.checkFrequency === undefined) {
-                mergedSettings.checkFrequency = mergedSettings.voteFrequency;
-                delete mergedSettings.voteFrequency;
-                migrationChanges = true;
-                logger.withCategory('settings').info('Migrated voteFrequency to checkFrequency', null);
-            }
-
-            // Migrate checkFrequency to checkFrequencyMin/Max (single value → range)
-            if (
-                mergedSettings.checkFrequency !== undefined &&
-                mergedSettings.checkFrequencyMin === undefined &&
-                mergedSettings.checkFrequencyMax === undefined
-            ) {
-                mergedSettings.checkFrequencyMin = mergedSettings.checkFrequency;
-                mergedSettings.checkFrequencyMax = mergedSettings.checkFrequency;
-                delete mergedSettings.checkFrequency;
-                migrationChanges = true;
-                logger.withCategory('settings').info('Migrated checkFrequency to checkFrequencyMin/Max', null);
-            }
-
-            // Drop the orphaned cliCronExpression — the new CLI scheduler uses checkFrequencyMin/Max directly.
-            if (mergedSettings.cliCronExpression !== undefined) {
-                delete mergedSettings.cliCronExpression;
-                migrationChanges = true;
-                logger.withCategory('settings').info('Removed obsolete cliCronExpression', null);
-            }
-
-            // Migrate buggy-GUI-encoded time values. Pre-fix, SettingInput stored
-            // boostTime/turboTime as minutes (h*60+m) while the runtime treated
-            // them as seconds. The buggy GUI could only write values in [0, 1439]
-            // (max was 23h*60+59); schema defaults (3600, 7200) are above that
-            // band, so untouched defaults pass through unchanged.
+            // Migrate buggy-GUI-encoded time values. Pre-fix (versions
+            // v0.7.0 through v0.8.2), SettingInput stored boostTime /
+            // turboTime as minutes (h*60+m) while the runtime treated
+            // them as seconds. The buggy GUI could only write values in
+            // [0, 1439] (max was 23h*60+59); schema defaults (3600, 7200)
+            // are above that band, so untouched defaults pass through
+            // unchanged.
             if (!mergedSettings._timeUnitMigratedV1) {
                 const TIME_KEYS = ['boostTime', 'turboTime'];
                 const looksMinuteEncoded = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1440;
