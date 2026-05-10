@@ -29,15 +29,31 @@ const mockApi = {
 
     // Voting
     runVotingCycle: jest.fn().mockResolvedValue({ success: true }),
+    runVotingCycleForChallenge: jest.fn().mockResolvedValue({ success: true }),
     voteOnChallenge: jest.fn().mockResolvedValue({ success: true }),
     voteOnChallengeManual: jest.fn().mockResolvedValue({ success: true }),
     voteAllChallengesManual: jest.fn().mockResolvedValue({ success: true }),
     shouldCancelVoting: jest.fn().mockResolvedValue(false),
     setCancelVoting: jest.fn().mockResolvedValue(undefined),
 
-    // Boost
+    // Boost — preload exposes both names; hooks call applyBoost.
+    applyBoost: jest.fn().mockResolvedValue({ success: true }),
     applyBoostToEntry: jest.fn().mockResolvedValue({ success: true }),
     getBoostThreshold: jest.fn().mockResolvedValue(30),
+
+    // Turbo
+    applyTurbo: jest.fn().mockResolvedValue({ success: true }),
+    playAutoTurbo: jest.fn().mockResolvedValue({ success: true }),
+
+    // Auto-fill
+    fillChallengeNow: jest.fn().mockResolvedValue({ success: true, submitted: 0, skipped: 0 }),
+
+    // Per-challenge overrides
+    getChallengeOverride: jest.fn().mockResolvedValue(null),
+    setChallengeOverride: jest.fn().mockResolvedValue(true),
+    removeChallengeOverride: jest.fn().mockResolvedValue(true),
+    cleanupStaleChallengeSetting: jest.fn().mockResolvedValue(true),
+    cleanupStaleMetadata: jest.fn().mockResolvedValue(true),
 
     // Logging
     logDebug: jest.fn().mockResolvedValue(undefined),

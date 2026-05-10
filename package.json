@@ -111,6 +111,7 @@
         "eslint-config-prettier": "^10.1.8",
         "globals": "^17.6.0",
         "jest": "^30.4.2",
+        "jest-environment-jsdom": "^30.4.1",
         "jest-environment-node": "^30.4.1",
         "nodemon": "^3.1.14",
         "prettier": "^3.8.3",
@@ -171,44 +172,85 @@
         }
     },
     "jest": {
-        "testEnvironment": "node",
-        "roots": [
-            "<rootDir>/src",
-            "<rootDir>/tests"
-        ],
-        "setupFilesAfterEnv": [
-            "<rootDir>/tests/setup.js"
-        ],
-        "testMatch": [
-            "**/__tests__/**/*.js",
-            "**/?(*.)+(spec|test).js",
-            "**/?(*.)+(spec|test).jsx"
-        ],
-        "transform": {
-            "\\.[jt]sx?$": [
-                "@swc/jest",
-                {
-                    "jsc": {
-                        "parser": {
-                            "syntax": "ecmascript",
-                            "jsx": true
-                        },
-                        "transform": {
-                            "react": {
-                                "runtime": "automatic"
+        "projects": [
+            {
+                "displayName": "node",
+                "testEnvironment": "node",
+                "roots": [
+                    "<rootDir>/src",
+                    "<rootDir>/tests"
+                ],
+                "setupFilesAfterEnv": [
+                    "<rootDir>/tests/setup.js"
+                ],
+                "testMatch": [
+                    "**/__tests__/**/*.js",
+                    "**/?(*.)+(spec|test).js"
+                ],
+                "transform": {
+                    "\\.[jt]sx?$": [
+                        "@swc/jest",
+                        {
+                            "jsc": {
+                                "parser": {
+                                    "syntax": "ecmascript",
+                                    "jsx": true
+                                },
+                                "transform": {
+                                    "react": {
+                                        "runtime": "automatic"
+                                    }
+                                }
                             }
                         }
-                    }
+                    ]
+                },
+                "moduleNameMapper": {
+                    "^@/(.*)$": "<rootDir>/src/js/react/$1"
                 }
-            ]
-        },
-        "moduleNameMapper": {
-            "^@/(.*)$": "<rootDir>/src/js/react/$1"
-        },
+            },
+            {
+                "displayName": "jsdom",
+                "testEnvironment": "jsdom",
+                "roots": [
+                    "<rootDir>/tests/react"
+                ],
+                "setupFilesAfterEnv": [
+                    "<rootDir>/tests/setup.js",
+                    "<rootDir>/src/js/react/test/setup.js"
+                ],
+                "testMatch": [
+                    "**/?(*.)+(spec|test).jsx"
+                ],
+                "transform": {
+                    "\\.[jt]sx?$": [
+                        "@swc/jest",
+                        {
+                            "jsc": {
+                                "parser": {
+                                    "syntax": "ecmascript",
+                                    "jsx": true
+                                },
+                                "transform": {
+                                    "react": {
+                                        "runtime": "automatic"
+                                    }
+                                }
+                            }
+                        }
+                    ]
+                },
+                "moduleNameMapper": {
+                    "^@/(.*)$": "<rootDir>/src/js/react/$1"
+                }
+            }
+        ],
         "collectCoverage": false,
         "collectCoverageFrom": [
             "src/js/api/**/*.js",
             "src/js/apiFactory.js",
+            "src/js/ipc/**/*.js",
+            "src/js/metadata.js",
             "src/js/services/VotingLogic.js",
             "src/js/services/manualVote.js",
             "src/js/settings.js",
@@ -222,10 +264,10 @@
         ],
         "coverageThreshold": {
             "global": {
-                "branches": 45,
-                "functions": 50,
-                "lines": 55,
-                "statements": 55
+                "branches": 56,
+                "functions": 52,
+                "lines": 59,
+                "statements": 59
             }
         }
     }
