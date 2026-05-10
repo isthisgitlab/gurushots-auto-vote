@@ -341,7 +341,10 @@ const cleanupStaleMetadata = (activeChallengeIds) => {
     }
 
     const metadata = loadMetadata();
-    const storedChallengeIds = Object.keys(metadata);
+    // Object.keys(metadata) includes the 'updateCheck' bookkeeping
+    // entry; exclude it so cleanup only considers real challenge IDs
+    // and doesn't gratuitously rewrite the file on every call.
+    const storedChallengeIds = Object.keys(metadata).filter((id) => id !== 'updateCheck');
 
     // Only cleanup challenges that are definitively stale
     // Be conservative: keep metadata if there's any doubt
