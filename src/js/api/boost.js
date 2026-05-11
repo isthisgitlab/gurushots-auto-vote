@@ -7,6 +7,8 @@
 const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
 const { ENDPOINTS } = require('./constants');
 const logger = require('../logger');
+const settings = require('../settings');
+const { pickEntryAvoidingConflict } = require('../services/VotingLogic');
 
 /**
  * POST the GuruShots boost-photo endpoint. Concentrates the form-encoded
@@ -14,9 +16,16 @@ const logger = require('../logger');
  * if the upstream API ever changes shape. Note: turbo's endpoint uses
  * `challenge_id` not `c_id` (verified API contract difference), so the
  * helper is local to boost only — not shared with turbo.
+ *
+ * Uses URLSearchParams for RFC-compliant application/x-www-form-urlencoded
+ * encoding (space → `+`, reserved chars percent-encoded). Callers must pass
+ * already-normalized string values; non-string inputs are stringified.
  */
 const _postBoost = async (challengeId, imageId, token) => {
-    const data = `c_id=${challengeId}&image_id=${imageId}`;
+    const data = new URLSearchParams({
+        c_id: String(challengeId ?? ''),
+        image_id: String(imageId ?? ''),
+    }).toString();
     const headers = {
         ...createCommonHeaders(token),
         'content-type': FORM_CONTENT_TYPE,
@@ -25,24 +34,21 @@ const _postBoost = async (challengeId, imageId, token) => {
 };
 
 /**
- * Find the first non-turboed photo entry. Per-entry boost/turbo are
- * mutually exclusive in the GuruShots API, so a turboed entry can't
- * accept a boost.
+ * Pick the entry to boost based on `boostImageIndex` (1-indexed, 0 = last),
+ * avoiding any entry that already has turbo applied. Symmetric to the
+ * shouldApplyTurbo picker which avoids boosted entries.
  */
-const _getFirstNonTurboKey = (entries) => {
-    for (let i = 0; i < entries.length; i++) {
-        if (!entries[i].turbo) {
-            return entries[i].id;
-        }
-    }
-    return null;
+const _pickBoostEntry = (entries, challengeId) => {
+    const requestedIndex = settings.getEffectiveSetting('boostImageIndex', challengeId);
+    return pickEntryAvoidingConflict(entries, requestedIndex, 'turbo');
 };
 
 /**
  * Applies a boost to a photo in a challenge
  *
  * Boosts increase the visibility of your photo in a challenge.
- * This function finds the first non-turboed photo entry and applies a boost to it.
+ * Picks the entry via `boostImageIndex`, walking backward past any
+ * turboed entry until a non-turboed one is found.
  *
  * @param {object} challenge - Challenge object containing id and member data
  * @param {string} token - Authentication token
@@ -50,18 +56,33 @@ const _getFirstNonTurboKey = (entries) => {
  */
 const applyBoost = async (challenge, token) => {
     const { id, member } = challenge;
-    const boostImageId = _getFirstNonTurboKey(member.ranking.entries);
+    const challengeId = id?.toString?.() || '';
+    const entries = member?.ranking?.entries;
+    if (!Array.isArray(entries) || entries.length === 0) {
+        logger.withCategory('voting').error('No entries available for boosting', { challengeId });
+        return null;
+    }
+    const picked = _pickBoostEntry(entries, challengeId);
+    if (!picked) {
+        logger
+            .withCategory('voting')
+            .error("Couldn't apply Boost — your only entry already has Turbo (Boost and Turbo can't share an entry)", {
+                challengeId,
+            });
+        return null;
+    }
+    const boostImageId = picked.id;
     if (!boostImageId) {
-        logger.withCategory('voting').error('No non-turboed entries found for boosting', { challengeId: id });
+        logger.withCategory('voting').error('Selected boost entry has no id', { challengeId });
         return null;
     }
 
-    const operationId = `apply-boost-${id}`;
+    const operationId = `apply-boost-${challengeId}`;
     logger
         .withCategory('boost')
-        .startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${id}`);
+        .startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${challengeId}`);
 
-    const response = await _postBoost(id, boostImageId, token);
+    const response = await _postBoost(challengeId, boostImageId, token);
     if (!response) {
         logger.withCategory('boost').endOperation(operationId, null, 'Boost application failed');
         return null;
@@ -80,18 +101,20 @@ const applyBoost = async (challenge, token) => {
  * @returns {object|null} - API response or null if boost failed
  */
 const applyBoostToEntry = async (challengeId, imageId, token) => {
-    const operationId = `apply-boost-entry-${challengeId}-${imageId}`;
+    const cid = String(challengeId ?? '');
+    const iid = String(imageId ?? '');
+    const operationId = `apply-boost-entry-${cid}-${iid}`;
     logger
         .withCategory('boost')
-        .startOperation(operationId, `Applying boost to specific entry ${imageId} in challenge ${challengeId}`);
+        .startOperation(operationId, `Applying boost to specific entry ${iid} in challenge ${cid}`);
 
-    const response = await _postBoost(challengeId, imageId, token);
+    const response = await _postBoost(cid, iid, token);
     if (!response) {
         logger.withCategory('boost').endOperation(operationId, null, 'Boost application to entry failed');
         return null;
     }
 
-    logger.withCategory('boost').endOperation(operationId, `Boost applied successfully to entry ${imageId}`);
+    logger.withCategory('boost').endOperation(operationId, `Boost applied successfully to entry ${iid}`);
     return response;
 };
 

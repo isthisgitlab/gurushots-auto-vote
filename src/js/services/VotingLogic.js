@@ -342,6 +342,45 @@ const getEffectiveTurboTime = (challengeId) => {
 };
 
 /**
+ * Resolve a 1-indexed entry-index setting (turboImageIndex / boostImageIndex)
+ * to the actual entries[] array slot. Returns null ONLY for empty/non-array
+ * input; on any non-empty array, always returns a valid integer slot in
+ * [0, entries.length - 1].
+ *   - empty / non-array entries → null
+ *   - non-integer or negative requestedIndex (corrupt settings, undefined reads)
+ *     → slot 0 (first entry) rather than propagating NaN
+ *   - 0 → last entry slot (sentinel)
+ *   - positives → clamped to [0, entries.length - 1]
+ */
+const resolveEntryIndex = (entries, requestedIndex) => {
+    if (!Array.isArray(entries) || entries.length === 0) return null;
+    if (!Number.isInteger(requestedIndex) || requestedIndex < 0) return 0;
+    if (requestedIndex === 0) return entries.length - 1;
+    return Math.min(entries.length - 1, requestedIndex - 1);
+};
+
+/**
+ * Pick the entry at the configured 1-indexed slot, falling back to the
+ * entry one position earlier (wrapping past slot 0 to the last entry)
+ * if the configured entry already has the conflicting action applied.
+ *
+ * GuruShots permits at most one turbo and one boost per challenge, on
+ * different entries. So when boost is picking an entry it must avoid the
+ * turboed one (conflictField='turbo'); when turbo is picking it must avoid
+ * the boosted one (conflictField='boosted'). A single-step backward fallback
+ * is always sufficient — unless the challenge has only one entry and that
+ * one is already in the conflicting state, in which case returns null.
+ */
+const pickEntryAvoidingConflict = (entries, requestedIndex, conflictField) => {
+    if (!Array.isArray(entries) || entries.length === 0) return null;
+    let slot = resolveEntryIndex(entries, requestedIndex);
+    if (entries[slot]?.[conflictField]) {
+        slot = (slot - 1 + entries.length) % entries.length;
+    }
+    return entries[slot]?.[conflictField] ? null : entries[slot];
+};
+
+/**
  * Decides whether to play the Turbo mini-game on a challenge.
  * @param {Object} challenge
  * @param {number} now - Unix timestamp in seconds
@@ -396,9 +435,13 @@ const shouldApplyTurbo = (challenge, now) => {
         return noop('no entries to apply turbo to');
     }
     const requestedIndex = settings.getEffectiveSetting('turboImageIndex', challengeId);
-    const safeIndex =
-        requestedIndex === 0 ? entries.length - 1 : Math.max(0, Math.min(entries.length - 1, requestedIndex - 1));
-    const imageId = entries[safeIndex]?.id;
+    const picked = pickEntryAvoidingConflict(entries, requestedIndex, 'boosted');
+    if (!picked) {
+        // The invariant (≤1 boost per challenge) means picker-null is only
+        // reachable when entries.length === 1 and that entry has Boost.
+        return noop('only entry already has Boost applied');
+    }
+    const imageId = picked.id;
     if (!imageId) return noop('selected entry has no id');
     return { apply: true, imageId, reason: 'eligible' };
 };
@@ -419,4 +462,6 @@ module.exports = {
     getEffectiveTurboTime,
     shouldPlayAutoTurbo,
     shouldApplyTurbo,
+    resolveEntryIndex,
+    pickEntryAvoidingConflict,
 };

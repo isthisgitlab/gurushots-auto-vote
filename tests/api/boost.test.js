@@ -6,6 +6,16 @@
 
 const { applyBoost, applyBoostToEntry } = require('../../src/js/api/boost');
 
+// Mock settings: default boostImageIndex=1 so the picker targets entries[0]
+// and falls back backward (with wrap) past any turboed primary. Other
+// settings methods default to undefined so a future settings read added to
+// boost.js will surface as `undefined` consistently rather than throwing.
+jest.mock('../../src/js/settings', () => ({
+    getEffectiveSetting: jest.fn((key) => (key === 'boostImageIndex' ? 1 : undefined)),
+    getSetting: jest.fn(() => undefined),
+    setSetting: jest.fn(),
+}));
+
 // Mock the api-client module
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
@@ -62,8 +72,8 @@ describe('boost', () => {
             },
         };
 
-        test('should apply boost to first non-turboed entry successfully', async () => {
-            const mockResponse = { success: true, boosted_entry: 'entry2' };
+        test('walks backward past turboed primary entry (default index 1, primary turboed → wrap to last)', async () => {
+            const mockResponse = { success: true, boosted_entry: 'entry3' };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
             const result = await applyBoost(mockChallenge, mockToken);
@@ -75,32 +85,26 @@ describe('boost', () => {
                     'x-token': mockToken,
                     'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
                 }),
-                'c_id=12345&image_id=entry2',
+                'c_id=12345&image_id=entry3',
             );
 
             expect(result).toEqual(mockResponse);
-            // The logger module handles the success message, not console.log
         });
 
-        test('should return null when no non-turboed entries found', async () => {
-            const challengeAllTurboed = {
+        test('1-entry challenge with the only entry turboed: boost cannot apply, returns null', async () => {
+            const challengeSingleTurboed = {
                 ...mockChallenge,
                 member: {
                     ranking: {
-                        entries: [
-                            { id: 'entry1', turbo: true },
-                            { id: 'entry2', turbo: true },
-                            { id: 'entry3', turbo: true },
-                        ],
+                        entries: [{ id: 'entry1', turbo: true }],
                     },
                 },
             };
 
-            const result = await applyBoost(challengeAllTurboed, mockToken);
+            const result = await applyBoost(challengeSingleTurboed, mockToken);
 
             expect(result).toBeNull();
             expect(makePostRequest).not.toHaveBeenCalled();
-            // The logger module handles the error message, not console.error
         });
 
         test('should return null when entries array is empty', async () => {
@@ -129,14 +133,14 @@ describe('boost', () => {
             // The logger module handles the error message, not console.error
         });
 
-        test('should find first non-turboed entry when some are turboed', async () => {
+        test('default index 1 with turboed first entry wraps to the last entry on a 4-entry challenge', async () => {
             const challengeMixedEntries = {
                 ...mockChallenge,
                 member: {
                     ranking: {
                         entries: [
                             { id: 'entry1', turbo: true },
-                            { id: 'entry2', turbo: true },
+                            { id: 'entry2', turbo: false },
                             { id: 'entry3', turbo: false },
                             { id: 'entry4', turbo: false },
                         ],
@@ -152,7 +156,7 @@ describe('boost', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
-                'c_id=12345&image_id=entry3',
+                'c_id=12345&image_id=entry4',
             );
         });
 
@@ -246,7 +250,7 @@ describe('boost', () => {
             );
         });
 
-        test('should handle special characters in IDs', async () => {
+        test('encodes special characters in challenge and image IDs', async () => {
             const mockResponse = { success: true };
             makePostRequest.mockResolvedValueOnce(mockResponse);
 
@@ -255,7 +259,7 @@ describe('boost', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 'https://api.gurushots.com/rest_mobile/boost_photo',
                 expect.anything(),
-                'c_id=challenge&special&image_id=image=special',
+                'c_id=challenge%26special&image_id=image%3Dspecial',
             );
         });
 

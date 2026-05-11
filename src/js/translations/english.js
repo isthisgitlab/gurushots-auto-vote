@@ -115,7 +115,11 @@
             turboTime: 'Turbo Apply Time',
             turboTimeDesc: 'Apply Turbo when this much time remains before the challenge closes',
             turboImageIndex: 'Turbo Entry',
-            turboImageIndexDesc: 'Which of your entries (1-indexed) to apply Turbo to. Use 0 for the last entry.',
+            turboImageIndexDesc:
+                'Which entry gets Turbo: 1 = first, 2 = second, etc. Use 0 for the last entry. If Boost is already on that entry, Turbo moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry.',
+            boostImageIndex: 'Boost Entry',
+            boostImageIndexDesc:
+                'Which entry gets Boost: 1 = first, 2 = second, etc. Use 0 for the last entry. If Turbo is already on that entry, Boost moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry.',
             turboApplyWhenBoostActive: 'Apply Turbo During Boost Window',
             turboApplyWhenBoostActiveDesc:
                 'When off, skip Turbo apply if a Boost is currently available on the same challenge',

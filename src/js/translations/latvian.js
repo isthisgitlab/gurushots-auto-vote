@@ -117,7 +117,10 @@
             turboTimeDesc: 'Pielieto Turbo, kad līdz izaicinājuma beigām ir atlicis šis laiks',
             turboImageIndex: 'Turbo foto',
             turboImageIndexDesc:
-                'Kuram no taviem foto (sākot no 1) pielietot Turbo. Izmanto 0, lai vienmēr lietotu pēdējo.',
+                'Kuram foto pielietot Turbo: 1 = pirmais, 2 = otrais utt. Izmanto 0 priekš pēdējā foto. Ja Boost jau ir uz šī foto, Turbo pāriet uz iepriekšējo bildi (no 1 pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusētā vērtība ir 1, tāpēc, ja abi auto-režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto.',
+            boostImageIndex: 'Boost foto',
+            boostImageIndexDesc:
+                'Kuram foto pielietot Boost: 1 = pirmais, 2 = otrais utt. Izmanto 0 priekš pēdējā foto. Ja Turbo jau ir uz šī foto, Boost pāriet uz iepriekšējo bildi (no 1 pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusētā vērtība ir 1, tāpēc, ja abi auto-režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto.',
             turboApplyWhenBoostActive: 'Pielietot Turbo Boost laikā',
             turboApplyWhenBoostActiveDesc: 'Ja izslēgts, nepielieto Turbo, kamēr šim izaicinājumam ir pieejams Boost',
             playAutoTurbo: 'Spēlēt Turbo mini-spēli, lai iegūtu Turbo',

@@ -84,4 +84,52 @@ describe('shouldApplyTurbo entry selection', () => {
         expect(result.apply).toBe(true);
         expect(result.imageId).toBe('e');
     });
+
+    test('primary index 1 with boosted first entry wraps to last entry', () => {
+        mockSettings(1);
+        const challenge = buildChallenge([{ id: 'e1', boosted: true }, { id: 'e2' }, { id: 'e3' }]);
+        const result = VotingLogic.shouldApplyTurbo(challenge, now);
+        expect(result.apply).toBe(true);
+        expect(result.imageId).toBe('e3');
+    });
+
+    test('primary index 2 with boosted second entry walks back to entry 1', () => {
+        mockSettings(2);
+        const challenge = buildChallenge([{ id: 'e1' }, { id: 'e2', boosted: true }, { id: 'e3' }]);
+        const result = VotingLogic.shouldApplyTurbo(challenge, now);
+        expect(result.apply).toBe(true);
+        expect(result.imageId).toBe('e1');
+    });
+
+    test('sentinel 0 with last entry boosted walks back to second-to-last', () => {
+        mockSettings(0);
+        const challenge = buildChallenge([{ id: 'e1' }, { id: 'e2' }, { id: 'e3', boosted: true }]);
+        const result = VotingLogic.shouldApplyTurbo(challenge, now);
+        expect(result.apply).toBe(true);
+        expect(result.imageId).toBe('e2');
+    });
+
+    test('1-entry challenge with that entry boosted: turbo cannot apply', () => {
+        mockSettings(1);
+        const challenge = buildChallenge([{ id: 'e1', boosted: true }]);
+        const result = VotingLogic.shouldApplyTurbo(challenge, now);
+        expect(result.apply).toBe(false);
+        expect(result.reason).toBe('only entry already has Boost applied');
+    });
+
+    test('2-entry challenge with primary boosted wraps to entry 2 (the only other entry)', () => {
+        mockSettings(1);
+        const challenge = buildChallenge([{ id: 'e1', boosted: true }, { id: 'e2' }]);
+        const result = VotingLogic.shouldApplyTurbo(challenge, now);
+        expect(result.apply).toBe(true);
+        expect(result.imageId).toBe('e2');
+    });
+
+    test('picked entry without id: turbo cannot apply, returns no-id reason', () => {
+        mockSettings(1);
+        const challenge = buildChallenge([{ boosted: false }]);
+        const result = VotingLogic.shouldApplyTurbo(challenge, now);
+        expect(result.apply).toBe(false);
+        expect(result.reason).toBe('selected entry has no id');
+    });
 });

@@ -232,6 +232,15 @@ const SETTINGS_SCHEMA = {
         label: 'app.turboImageIndex',
         description: 'app.turboImageIndexDesc',
     },
+    boostImageIndex: {
+        type: 'number',
+        default: 1,
+        perChallenge: true,
+        validation: (value) => Number.isInteger(value) && value >= 0,
+        validationOrder: 1,
+        label: 'app.boostImageIndex',
+        description: 'app.boostImageIndexDesc',
+    },
     turboApplyWhenBoostActive: {
         type: 'boolean',
         default: false,
