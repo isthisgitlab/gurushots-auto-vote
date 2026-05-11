@@ -251,10 +251,7 @@ describe('vote-all-challenges-manual', () => {
 
     test('continues processing remaining challenges after one throws', async () => {
         setToken('tok');
-        stubStrategy([
-            buildChallenge({ id: 1, title: 'A' }),
-            buildChallenge({ id: 2, title: 'B' }),
-        ]);
+        stubStrategy([buildChallenge({ id: 1, title: 'A' }), buildChallenge({ id: 2, title: 'B' })]);
         manualVote.submitVotesForChallenge
             .mockRejectedValueOnce(new Error('boom'))
             .mockResolvedValueOnce({ outcome: 'voted', targetExposure: 100, imageCount: 1 });

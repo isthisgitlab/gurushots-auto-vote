@@ -64,27 +64,13 @@ beforeEach(() => {
 
 describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('shows boost button when boostAvailable and entry not actioned', () => {
-        render(
-            <EntryBadge
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={false}
-            />,
-        );
+        render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={true} turboAvailable={false} />);
         // Boost button rendered with rocket icon (not spinner).
         expect(screen.getByRole('button', { name: '🚀' })).toBeTruthy();
     });
 
     test('shows turbo button when turboAvailable and entry not actioned', () => {
-        render(
-            <EntryBadge
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={false}
-                turboAvailable={true}
-            />,
-        );
+        render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={false} turboAvailable={true} />);
         expect(screen.getByRole('button', { name: '⚡' })).toBeTruthy();
     });
 
@@ -134,14 +120,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
 describe('EntryBadge — loading state', () => {
     test('boost button is disabled and shows spinner when loading', () => {
         mockBoostState.loading = true;
-        render(
-            <EntryBadge
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={false}
-            />,
-        );
+        render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={true} turboAvailable={false} />);
         // Button found by its container; the icon is replaced by a
         // spinner so we can't query by icon name. Query by role instead.
         const buttons = screen.getAllByRole('button');
@@ -152,14 +131,7 @@ describe('EntryBadge — loading state', () => {
 
     test('turbo button is disabled and shows spinner when loading', () => {
         mockTurboState.loading = true;
-        render(
-            <EntryBadge
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={false}
-                turboAvailable={true}
-            />,
-        );
+        render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={false} turboAvailable={true} />);
         const buttons = screen.getAllByRole('button');
         expect(buttons).toHaveLength(1);
         expect(buttons[0].disabled).toBe(true);
@@ -178,14 +150,7 @@ describe('EntryBadge — error auto-clear (5s timer)', () => {
 
     test('boost error triggers clearBoostError after 5 seconds', () => {
         mockBoostState.error = 'Boost failed';
-        render(
-            <EntryBadge
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={false}
-            />,
-        );
+        render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={true} turboAvailable={false} />);
         expect(mockBoostState.clearError).not.toHaveBeenCalled();
 
         act(() => {
@@ -201,14 +166,7 @@ describe('EntryBadge — error auto-clear (5s timer)', () => {
 
     test('turbo error triggers clearTurboError after 5 seconds', () => {
         mockTurboState.error = 'Turbo failed';
-        render(
-            <EntryBadge
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={false}
-                turboAvailable={true}
-            />,
-        );
+        render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={false} turboAvailable={true} />);
         act(() => {
             jest.advanceTimersByTime(5000);
         });
@@ -218,14 +176,7 @@ describe('EntryBadge — error auto-clear (5s timer)', () => {
     test('no timer scheduled when there is no error', () => {
         // No error → useEffect early-returns; nothing should happen even
         // after a long advance.
-        render(
-            <EntryBadge
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={true}
-            />,
-        );
+        render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={true} turboAvailable={true} />);
         act(() => {
             jest.advanceTimersByTime(10_000);
         });
@@ -237,28 +188,14 @@ describe('EntryBadge — error auto-clear (5s timer)', () => {
 describe('EntryBadge — error styling on button', () => {
     test('boost button gets btn-error class when there is a boost error', () => {
         mockBoostState.error = 'Boost failed';
-        render(
-            <EntryBadge
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={false}
-            />,
-        );
+        render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={true} turboAvailable={false} />);
         const button = screen.getByRole('button');
         expect(button.className).toMatch(/btn-error/);
         expect(button.className).not.toMatch(/btn-success/);
     });
 
     test('boost button gets btn-success class when there is no error', () => {
-        render(
-            <EntryBadge
-                entry={baseEntry()}
-                challengeId={777}
-                boostAvailable={true}
-                turboAvailable={false}
-            />,
-        );
+        render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={true} turboAvailable={false} />);
         const button = screen.getByRole('button');
         expect(button.className).toMatch(/btn-success/);
         expect(button.className).not.toMatch(/btn-error/);

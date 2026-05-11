@@ -20,12 +20,7 @@ logger.withCategory('api').debug('CLI module loaded, starting initialization', n
 const settings = require('../settings');
 const { initializeHeaders } = require('../api/randomizer');
 const { handleLogin } = require('./commands/auth');
-const {
-    runVotingCycle,
-    parseChallengeFlag,
-    startContinuousVoting,
-    showStatus,
-} = require('./commands/voting');
+const { runVotingCycle, parseChallengeFlag, startContinuousVoting, showStatus } = require('./commands/voting');
 const {
     getSetting,
     setSetting,

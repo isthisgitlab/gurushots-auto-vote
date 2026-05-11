@@ -159,7 +159,7 @@ export function ChallengeCard({
                                     ⚙️
                                 </span>
                             )}
-                            {autoFillEnabled && (
+                            {autoFillEnabled && slotsRemaining > 0 && (
                                 <span className="badge badge-xs badge-accent" title={t('app.autoFill')}>
                                     📥 {t('app.autoFillBadge')}
                                 </span>

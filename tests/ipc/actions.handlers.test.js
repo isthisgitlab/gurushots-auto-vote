@@ -157,18 +157,16 @@ describe('play-auto-turbo', () => {
         setToken('tok');
         const now = NOW();
         stubStrategy({
-            getActiveChallenges: jest
-                .fn()
-                .mockResolvedValue({
-                    challenges: [
-                        {
-                            id: 123,
-                            title: 'C',
-                            close_time: now + 3600,
-                            member: { turbo: { state: 'WON' } },
-                        },
-                    ],
-                }),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 123,
+                        title: 'C',
+                        close_time: now + 3600,
+                        member: { turbo: { state: 'WON' } },
+                    },
+                ],
+            }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         const handlers = buildHandlers();
@@ -184,18 +182,16 @@ describe('play-auto-turbo', () => {
         setToken('tok');
         const now = NOW();
         stubStrategy({
-            getActiveChallenges: jest
-                .fn()
-                .mockResolvedValue({
-                    challenges: [
-                        {
-                            id: 123,
-                            title: 'C',
-                            close_time: now + 3600,
-                            member: { turbo: { state: 'FREE' } },
-                        },
-                    ],
-                }),
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [
+                    {
+                        id: 123,
+                        title: 'C',
+                        close_time: now + 3600,
+                        member: { turbo: { state: 'FREE' } },
+                    },
+                ],
+            }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
         apiMain.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true, flipped: 0, doubleFailed: 0 });

@@ -53,7 +53,7 @@ describe('loadMetadata', () => {
     test('returns valid stored metadata as-is', () => {
         setStoredMetadata({
             updateCheck: { lastCheck: 123456, skipVersion: '1.2.3' },
-            '777': { lastVoteTime: '2026-05-09T12:00:00Z', exposureBump: 75 },
+            777: { lastVoteTime: '2026-05-09T12:00:00Z', exposureBump: 75 },
         });
         const result = metadata.loadMetadata();
         expect(result.updateCheck).toEqual({ lastCheck: 123456, skipVersion: '1.2.3' });
@@ -63,8 +63,8 @@ describe('loadMetadata', () => {
     test('drops invalid challenge entry and rewrites file', () => {
         setStoredMetadata({
             updateCheck: { lastCheck: null, skipVersion: null },
-            '777': { lastVoteTime: 'not a real date', exposureBump: 75 },
-            '888': { lastVoteTime: '2026-05-09T12:00:00Z', exposureBump: 50 },
+            777: { lastVoteTime: 'not a real date', exposureBump: 75 },
+            888: { lastVoteTime: '2026-05-09T12:00:00Z', exposureBump: 50 },
         });
         const writes = captureWrites();
         const result = metadata.loadMetadata();
@@ -79,8 +79,8 @@ describe('loadMetadata', () => {
     test('drops negative exposureBump but keeps oversized values (>100% is legitimate)', () => {
         setStoredMetadata({
             updateCheck: { lastCheck: null, skipVersion: null },
-            '777': { exposureBump: -5 },
-            '888': { exposureBump: 150 }, // legitimate when fewer images than expected
+            777: { exposureBump: -5 },
+            888: { exposureBump: 150 }, // legitimate when fewer images than expected
         });
         captureWrites();
         const result = metadata.loadMetadata();
@@ -180,7 +180,7 @@ describe('cleanupStaleMetadata', () => {
     test('returns true without writing when nothing real is stale', () => {
         setStoredMetadata({
             updateCheck: { lastCheck: null, skipVersion: null },
-            '777': { exposureBump: 50 },
+            777: { exposureBump: 50 },
         });
         const writes = captureWrites();
         metadata.cleanupStaleMetadata(['777']);
@@ -209,7 +209,7 @@ describe('challenge metadata mutators', () => {
     test('updateLastVoteTime preserves prior exposureBump', () => {
         setStoredMetadata({
             updateCheck: { lastCheck: null, skipVersion: null },
-            '777': { lastVoteTime: '2020-01-01T00:00:00Z', exposureBump: 80 },
+            777: { lastVoteTime: '2020-01-01T00:00:00Z', exposureBump: 80 },
         });
         const writes = captureWrites();
         metadata.updateLastVoteTime('777', '2026-05-09T12:00:00Z');
