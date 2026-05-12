@@ -15,7 +15,7 @@
  * updateCheck gets defaulted.
  */
 
-const fs = require('fs');
+const fs = require('node:fs');
 
 jest.mock('../src/js/settings', () => ({
     getUserDataPath: jest.fn(() => '/fake/userdata'),

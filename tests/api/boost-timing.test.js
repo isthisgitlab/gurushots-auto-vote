@@ -4,7 +4,7 @@
  * Tests that the boost timing logic respects user settings instead of hardcoded values.
  */
 
-const fs = require('fs');
+const fs = require('node:fs');
 
 // Mock the settings module
 const mockSettings = {

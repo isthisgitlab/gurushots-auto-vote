@@ -6,8 +6,8 @@
  * and download links matching the current package.json version.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 try {
     // Get version from package.json

@@ -6,8 +6,8 @@
  * to match the current package.json version.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const logger = require('../src/js/logger');
 
 try {

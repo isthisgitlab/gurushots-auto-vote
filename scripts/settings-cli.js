@@ -2,7 +2,7 @@
 
 const settings = require('../src/js/settings');
 const { parseSettingValue } = require('../src/js/cli/parseValue');
-const { spawn } = require('child_process');
+const { spawn } = require('node:child_process');
 
 /**
  * CLI Settings Management Script

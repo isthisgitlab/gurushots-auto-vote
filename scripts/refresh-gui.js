@@ -7,7 +7,7 @@
  * It tries to connect to the running Electron app and trigger a window reload.
  */
 
-const { spawn } = require('child_process');
+const { spawn } = require('node:child_process');
 
 // Function to check if the Electron app is running
 function isElectronRunning() {

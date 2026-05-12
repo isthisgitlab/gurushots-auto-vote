@@ -7,8 +7,8 @@
  * isPackaged() and only when isElectron() is already true.
  */
 
-const path = require('path');
-const os = require('os');
+const path = require('node:path');
+const os = require('node:os');
 
 const hasNode = typeof process !== 'undefined' && process.versions != null;
 const getCapacitor = () => globalThis.Capacitor;

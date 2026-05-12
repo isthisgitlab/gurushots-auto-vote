@@ -8,7 +8,7 @@
  * `_writeToOutput` hook and is documented inline.
  */
 
-const readline = require('readline');
+const readline = require('node:readline');
 
 const createReadlineInterface = () =>
     readline.createInterface({

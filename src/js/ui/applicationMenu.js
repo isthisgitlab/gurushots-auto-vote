@@ -226,7 +226,7 @@ function updateMenuTranslations() {
 
 // Open logs window
 function openLogsWindow() {
-    const path = require('path');
+    const path = require('node:path');
 
     // Check if logs window already exists
     const existingWindow = BrowserWindow.getAllWindows().find((win) => win.getTitle() === 'Logs');

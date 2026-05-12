@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn } = require('node:child_process');
 const logger = require('../src/js/logger');
 
 // Start nodemon
@@ -10,7 +10,7 @@ const nodemon = spawn('npx', ['nodemon'], {
 // Function to check if Electron process is running
 function isElectronRunning() {
     return new Promise((resolve) => {
-        const { exec } = require('child_process');
+        const { exec } = require('node:child_process');
         if (process.platform === 'win32') {
             exec('tasklist /fi "imagename eq electron.exe"', (error, stdout) => {
                 resolve(!error && stdout.includes('electron.exe'));

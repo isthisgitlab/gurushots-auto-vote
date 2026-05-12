@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, session } = require('electron');
-const path = require('path');
-const fs = require('fs');
+const path = require('node:path');
+const fs = require('node:fs');
 const settings = require('./settings');
 const { initializeHeaders } = require('./api/randomizer');
 const logger = require('./logger');

@@ -14,8 +14,8 @@
  * guards so non-Capacitor bundles never resolve it.
  */
 
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const logger = require('../logger');
 const { isSourceCode, getAppName } = logger;
 const runtime = require('../runtime');

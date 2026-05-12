@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 // Import path utilities from settings to maintain consistency
 const { getUserDataPath } = require('./settings');

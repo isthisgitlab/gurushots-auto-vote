@@ -6,7 +6,7 @@
  * don't depend on mock vs real.
  */
 
-const { spawnSync } = require('child_process');
+const { spawnSync } = require('node:child_process');
 // tests/setup.js mocks path with stubs that return undefined, which
 // breaks path.resolve. Reach through to the real module.
 const path = jest.requireActual('path');

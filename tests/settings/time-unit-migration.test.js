@@ -43,7 +43,7 @@ describe('time-unit migration in loadSettings', () => {
         if (typeof globalThis !== 'undefined') delete globalThis.autovoteRunning;
         // Re-require fs *after* resetModules so we share the fresh mock
         // instance that settings.js will see.
-        fs = require('fs');
+        fs = require('node:fs');
         settings = require('../../src/js/settings');
     });
 
