@@ -88,10 +88,10 @@
         "@capacitor/preferences": "^8.0.1",
         "@capawesome-team/capacitor-android-foreground-service": "^8.1.0",
         "axios": "^1.16.0",
-        "electron-updater": "^6.8.3",
+        "electron-updater": "^6.8.5",
         "node-cron": "^4.2.1",
-        "react": "^19.2.6",
-        "react-dom": "^19.2.6"
+        "react": "next",
+        "react-dom": "next"
     },
     "devDependencies": {
         "@capacitor/cli": "^8.3.3",
@@ -105,7 +105,7 @@
         "cross-env": "^10.1.0",
         "daisyui": "^5.5.19",
         "electron": "^42.0.1",
-        "electron-builder": "^26.8.1",
+        "electron-builder": "^26.10.0",
         "esbuild": "^0.28.0",
         "eslint": "^10.3.0",
         "eslint-config-prettier": "^10.1.8",
@@ -115,7 +115,7 @@
         "jest-environment-node": "^30.4.1",
         "nodemon": "^3.1.14",
         "postject": "^1.0.0-alpha.6",
-        "prettier": "^3.8.3",
+        "prettier": "^4.0.0-alpha.13",
         "tailwindcss": "^4.3.0"
     },
     "build": {
