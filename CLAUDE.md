@@ -1,9 +1,13 @@
 # Development Guidelines
 
+> `AGENTS.md` and `CLAUDE.md` are hardlinked — editing either updates both. Use a single editor session per change; don't try to keep two divergent copies.
+
 ## Code Architecture
 
 - **MCP Integration**: Always utilize MCP (Model Context Protocol) tools and resources first before implementing custom logic. Check available MCP servers for existing solutions.
-- **Cross-Platform Consistency**: The application supports both Electron (GUI) and CLI interfaces. All core business logic must be shared and consistent between both implementations.
+- **Cross-Platform Consistency**: The application targets three platforms — Electron (GUI), CLI, and Android (Capacitor). All core business logic in `src/js/` must be shared; only the platform shell (entry points, transport, storage adapter) is platform-specific.
+- **Entry points**: Electron `src/js/index.js` · CLI `src/js/cli/cli.js` · Electron preload `src/js/preload.js` · Capacitor bridge `src/js/bridge/capacitor.js`. The same React renderer (`src/js/react/`) runs under both Electron and Capacitor.
+- **API surface swap**: `src/js/apiFactory.js` selects real vs mock implementations at runtime based on `settings.mock`. All callers go through the factory — do not import `src/js/api/*` or `src/js/mock/*` directly from business logic.
 
 ## File Management
 
@@ -28,9 +32,19 @@
 
 ## Configuration Management
 
-- **Settings Architecture**: The project uses a dedicated settings system for configuration management
+- **Settings Architecture**: Settings facade lives at `src/js/settings.js`. Schema (keys + defaults + validation) is in `src/js/settings/schema.js`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/js/settings/storage.js`. Always go through the facade.
 - **Environment Variables**: Do not use environment variables (.env files) for application configuration - use the established settings logic instead
 - **Configuration Consistency**: Ensure settings are accessible and consistent between GUI and CLI interfaces
+
+## Key Commands
+
+- **Dev (GUI + watchers)**: `npm run dev` — runs CSS, React, and Electron watchers concurrently
+- **CLI**: `npm run cli:start` · `cli:vote` · `cli:status` · `cli:login` · `cli:help`
+- **Build**: `npm run build:mac` · `build:win` · `build:linux` · `build:android` · `build:cli:all`
+- **Settings (dev)**: `npm run settings:get` · `settings:set <key> <value>` · `settings:schema` · `settings:reset`
+- **Tests**: `npm test` (full suite) · `npm run test:watch` · `npm run test:coverage` — Jest has two projects (`node` and `jsdom`); React tests are `.test.jsx` under `tests/react/`, everything else is `.test.js`
+- **Lint/format**: `npm run lint` · `lint:fix` · `format` (Prettier)
+- **README version sync**: `npm run verify:readme` ensures README version strings match `package.json`. `npm run update:readme` rewrites them. The release workflow enforces this — drift will fail CI.
 
 ## Git Operations
 
@@ -45,4 +59,4 @@
 - **Linting**: Run `npm run lint` after code changes (JavaScript project - no TypeScript)
 - **Testing**: Use proper Jest test commands as defined in package.json
 - **Testing Completion**: All tests must pass regardless of code changes (even if they are not related to the code being changed)
-- **CONSOLE LOG**: DO NOT use `console.log` in code, use deicated logger functions instead. Only use `console.log` where logger does not work and cant be used.
+- **Logger**: Use `require('./logger')` (from `src/js/logger.js`). Prefer category-scoped logging: `logger.withCategory('voting').info(msg, data)`. Never use `console.log` — fallback to `console.*` only in bootstrap code where the logger module is genuinely unavailable.
