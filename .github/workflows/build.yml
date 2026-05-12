@@ -152,11 +152,11 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   NODE_ENV: production
 
-            - name: Setup Node.js 24 for CLI builds
+            - name: Setup Node.js 26 for CLI builds
               if: matrix.platform != 'win'
               uses: actions/setup-node@v6
               with:
-                  node-version: '24'
+                  node-version: '26'
 
             - name: Build CLI app (macOS/Linux only)
               if: matrix.platform != 'win'

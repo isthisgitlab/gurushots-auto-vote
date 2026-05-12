@@ -77,7 +77,7 @@
     },
     "homepage": "https://github.com/isthisgitlab/gurushots-auto-vote#readme",
     "engines": {
-        "node": ">=24.0.0",
+        "node": ">=26.0.0",
         "npm": ">=8.0.0"
     },
     "dependencies": {
@@ -114,6 +114,7 @@
         "jest-environment-jsdom": "^30.4.1",
         "jest-environment-node": "^30.4.1",
         "nodemon": "^3.1.14",
+        "postject": "^1.0.0-alpha.6",
         "prettier": "^3.8.3",
         "tailwindcss": "^4.3.0"
     },

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 const { build, context } = require('esbuild');
-const path = require('path');
-const fs = require('fs');
+const path = require('node:path');
+const fs = require('node:fs');
 
 const reactDir = path.join(__dirname, '..', 'src', 'js', 'react');
 const distDir = path.join(__dirname, '..', 'dist');
@@ -80,7 +80,7 @@ async function buildReact() {
     // but esbuild still tries to resolve at bundle time. Marking them
     // external + emitting an inert require shim keeps every bundle
     // green; the unreachable lazy requires become benign no-ops.
-    const NODE_BUILTINS = [
+    const NODE_BUILTINS_BARE = [
         'fs',
         'path',
         'os',
@@ -103,6 +103,10 @@ async function buildReact() {
         'tty',
         'readline',
     ];
+    // Externalize both bare and node:-prefixed forms — shared modules use the
+    // node: prefix (preferred since Node 22) but esbuild matches externals on
+    // exact specifier, so both spellings must be enumerated.
+    const NODE_BUILTINS = [...NODE_BUILTINS_BARE, ...NODE_BUILTINS_BARE.map((m) => `node:${m}`)];
     const RENDERER_EXTERNALS = [...NODE_BUILTINS, 'electron', 'electron-updater', 'node-cron'];
     // Capacitor plugin packages must be BUNDLED (not externalized) on
     // the Capacitor entry: they are pure browser code that registers
@@ -163,7 +167,7 @@ async function buildReact() {
         '    tmpdir: function(){ return "/tmp"; }',
         '  }',
         '};',
-        'var require = (typeof require !== "undefined") ? require : function(name){ return __nodeModuleShims[name] || {}; };',
+        'var require = (typeof require !== "undefined") ? require : function(name){ return __nodeModuleShims[name.replace(/^node:/, "")] || {}; };',
         'var process = (typeof process !== "undefined") ? process : { env: {}, versions: {}, platform: "browser", type: "browser", pkg: undefined, argv: [], cwd: function(){ return "/"; }, on: function(){}, stdout: { isTTY: false, write: function(){} }, stderr: { isTTY: false, write: function(){} } };',
         'var __dirname = (typeof __dirname !== "undefined") ? __dirname : "/";',
         'var __filename = (typeof __filename !== "undefined") ? __filename : "/index.html";',

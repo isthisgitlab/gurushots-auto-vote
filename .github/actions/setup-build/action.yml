@@ -1,5 +1,5 @@
 name: Setup Build Environment
-description: Repeated setup shared by test, build matrix, build-android, and create-release. Sets up Node 24 with npm cache, optionally pulls the bumped package.json artifact, and installs dependencies.
+description: Repeated setup shared by test, build matrix, build-android, and create-release. Sets up Node 26 with npm cache, optionally pulls the bumped package.json artifact, and installs dependencies.
 
 inputs:
     download-bumped:
@@ -16,7 +16,7 @@ runs:
     steps:
         - uses: actions/setup-node@v6
           with:
-              node-version: '24'
+              node-version: '26'
               cache: 'npm'
 
         - if: inputs.download-bumped == 'true'

@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 const runtime = require('./runtime');
 
 // ANSI color codes for CLI output (referenced via bracket notation in formatConsoleMessage)
@@ -39,9 +39,13 @@ const isSourceCode = () => {
         return false;
     }
 
-    // For CLI: check if we're running as a pkg binary
-    if (process.pkg) {
-        return false;
+    // For CLI: check if we're running inside a Node Single Executable App
+    try {
+        if (require('node:sea').isSea()) {
+            return false;
+        }
+    } catch {
+        // node:sea unavailable — fall through to other detection
     }
 
     // Check if __dirname contains .asar (Electron packaged but somehow not detected)
@@ -169,8 +173,8 @@ const cleanupOldLogs = () => {
     try {
         // Check if fs and path modules are available (they might not be in test environments)
         if (typeof require !== 'undefined') {
-            const fs = require('fs');
-            const path = require('path');
+            const fs = require('node:fs');
+            const path = require('node:path');
 
             // Check if logsDir exists and is accessible
             if (typeof fs.existsSync !== 'function' || !fs.existsSync(logsDir)) {
