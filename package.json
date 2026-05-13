@@ -27,15 +27,11 @@
         "cli:start": "node src/js/cli/cli.js start",
         "cli:status": "node src/js/cli/cli.js status",
         "cli:vote": "node src/js/cli/cli.js vote",
-        "vote": "node src/js/cli/cli.js vote",
-        "debug:environment": "node scripts/debug-environment.js",
-        "debug:window-bounds": "node scripts/debug-window-bounds.js",
-        "dev": "concurrently --kill-others \"npm run watch:css\" \"npm run watch:react\" \"node scripts/dev.js\"",
+        "dev": "concurrently --kill-others-on-fail \"npm run watch:css\" \"npm run watch:react\" \"electronmon .\"",
         "dev:no-watch": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
-        "dev:once": "concurrently --kill-others \"npm run watch:css\" \"npm run start\"",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
-        "gui:refresh": "node scripts/refresh-gui.js",
+        "gui:refresh": "echo 'If the GUI is running, refresh it manually (Cmd+R / Ctrl+R) to apply CLI settings changes.'",
         "lint": "npm run syntax:check && eslint src/ scripts/",
         "lint:fix": "eslint src/ scripts/ --fix",
         "syntax:check": "node scripts/syntax-check.js",
@@ -55,9 +51,8 @@
         "test": "jest",
         "test:coverage": "jest --coverage",
         "test:watch": "jest --watch",
-        "update:readme": "node scripts/update-readme-version.js",
-        "verify:readme": "node scripts/verify-readme-version.js",
-        "watch:app": "nodemon --no-restart-on exit",
+        "update:readme": "node scripts/readme-version.js",
+        "verify:readme": "node scripts/readme-version.js --check",
         "watch:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --watch",
         "watch:react": "node scripts/build-react.js --watch"
     },
@@ -81,8 +76,8 @@
         "npm": ">=8.0.0"
     },
     "dependencies": {
-        "@capacitor/android": "^8.3.3",
-        "@capacitor/core": "^8.3.3",
+        "@capacitor/android": "^8.3.4",
+        "@capacitor/core": "^8.3.4",
         "@capacitor/filesystem": "^8.1.2",
         "@capacitor/local-notifications": "^8.1.0",
         "@capacitor/preferences": "^8.0.1",
@@ -94,7 +89,7 @@
         "react-dom": "next"
     },
     "devDependencies": {
-        "@capacitor/cli": "^8.3.3",
+        "@capacitor/cli": "^8.3.4",
         "@eslint/js": "^10.0.1",
         "@jest/globals": "^30.4.1",
         "@swc/jest": "^0.2.39",
@@ -106,6 +101,7 @@
         "daisyui": "^5.5.19",
         "electron": "^42.0.1",
         "electron-builder": "^26.10.0",
+        "electronmon": "^2.0.4",
         "esbuild": "^0.28.0",
         "eslint": "^10.3.0",
         "eslint-config-prettier": "^10.1.8",
@@ -113,10 +109,24 @@
         "jest": "^30.4.2",
         "jest-environment-jsdom": "^30.4.1",
         "jest-environment-node": "^30.4.1",
-        "nodemon": "^3.1.14",
         "postject": "^1.0.0-alpha.6",
         "prettier": "^4.0.0-alpha.13",
         "tailwindcss": "^4.3.0"
+    },
+    "electronmon": {
+        "patterns": [
+            "!dist/**",
+            "!build/**",
+            "!coverage/**",
+            "!.cache/**",
+            "!tests/**",
+            "!docs/**",
+            "!android/**",
+            "!logs/**",
+            "!scripts/**",
+            "!**/*.test.js",
+            "!**/*.test.jsx"
+        ]
     },
     "build": {
         "appId": "com.gurushots.autovote",
