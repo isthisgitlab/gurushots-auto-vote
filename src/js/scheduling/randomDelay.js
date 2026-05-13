@@ -12,6 +12,10 @@
 
 const DEFAULT_MINUTES = 3;
 const MS_PER_MINUTE = 60_000;
+// Floor for the wait between cycle starts when a previous cycle has overrun
+// the rolled delay. Without this, an overrun would re-fire immediately and
+// hammer the API; with a small pause we recover quickly without busy-looping.
+const MIN_CYCLE_GAP_MS = 5_000;
 
 const coerceMinutes = (raw, fallback) => {
     const n = Number(raw);
@@ -27,4 +31,4 @@ const getRandomCheckFrequencyMs = (settings) => {
     return Math.round(minutes * MS_PER_MINUTE);
 };
 
-module.exports = { getRandomCheckFrequencyMs, DEFAULT_MINUTES, MS_PER_MINUTE };
+module.exports = { getRandomCheckFrequencyMs, DEFAULT_MINUTES, MS_PER_MINUTE, MIN_CYCLE_GAP_MS };

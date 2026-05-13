@@ -13,7 +13,7 @@
 const cron = require('node-cron');
 const logger = require('../logger');
 const settings = require('../settings');
-const { getRandomCheckFrequencyMs } = require('./randomDelay');
+const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } = require('./randomDelay');
 
 /**
  * Create a continuous voting scheduler.
@@ -199,17 +199,31 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
     // Normal mode uses a recursive setTimeout chain so each cycle re-rolls a random delay
     // in [checkFrequencyMin, checkFrequencyMax]. Re-loading settings each tick lets a live
     // `set-setting checkFrequencyMax 25` apply to the next cycle without restart.
-    const scheduleNextNormalCycle = () => {
+    //
+    // The wait is anchored to the *start* of the previous cycle, not its end — so the gap
+    // between cycle starts ≈ delayMs regardless of how long the cycle took. When a cycle
+    // overruns the rolled delay we still pause MIN_CYCLE_GAP_MS before firing again.
+    const scheduleNextNormalCycle = (previousCycleStartMs) => {
         if (!isRunning) {
             normalScheduler = null;
             return;
         }
         const fresh = settings.loadSettings();
         const delayMs = getRandomCheckFrequencyMs(fresh);
+        const anchorMs = previousCycleStartMs ?? Date.now();
+        const remainingMs = anchorMs + delayMs - Date.now();
+        // Clamp into [MIN_CYCLE_GAP_MS, delayMs]: floor handles overrun (cycle
+        // took longer than delayMs); ceiling handles wall-clock jump backward
+        // (Date.now() shifted earlier than anchor), which would otherwise
+        // produce a wait longer than the user configured.
+        const waitMs = Math.min(delayMs, Math.max(MIN_CYCLE_GAP_MS, remainingMs));
+        const overran = remainingMs < MIN_CYCLE_GAP_MS;
         logger
             .withCategory('voting')
             .info(
-                `Next normal cycle in ${(delayMs / 60_000).toFixed(2)} min (range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`,
+                overran
+                    ? `Next normal cycle in ${(waitMs / 60_000).toFixed(2)} min — previous cycle overran ${(delayMs / 60_000).toFixed(2)} min target, applying ${(MIN_CYCLE_GAP_MS / 1000).toFixed(0)}s floor (range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`
+                    : `Next normal cycle in ${(waitMs / 60_000).toFixed(2)} min (target ${(delayMs / 60_000).toFixed(2)} min between starts, range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`,
             );
 
         normalScheduler = setTimeout(async () => {
@@ -217,6 +231,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 normalScheduler = null;
                 return;
             }
+            const cycleStartMs = Date.now();
             try {
                 await runVotingCycle(++cycleCount);
                 await updateThresholdScheduling();
@@ -224,9 +239,9 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 logger.withCategory('voting').error('Error in scheduled voting cycle');
                 logger.withCategory('voting').debug('Full normal cycle error details:', error);
             } finally {
-                scheduleNextNormalCycle();
+                scheduleNextNormalCycle(cycleStartMs);
             }
-        }, delayMs);
+        }, waitMs);
     };
 
     const start = async () => {
@@ -234,9 +249,10 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
         isRunning = true;
 
         logger.withCategory('voting').info('🚀 Running initial voting cycle...');
+        const initialCycleStartMs = Date.now();
         await runVotingCycle(++cycleCount);
 
-        scheduleNextNormalCycle();
+        scheduleNextNormalCycle(initialCycleStartMs);
         logger
             .withCategory('voting')
             .success(

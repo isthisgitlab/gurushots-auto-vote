@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
-import { getRandomCheckFrequencyMs } from '../../scheduling/randomDelay';
+import { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } from '../../scheduling/randomDelay';
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
@@ -192,6 +192,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         }
 
         // Run immediately
+        const initialCycleStartMs = Date.now();
         await runVotingCycle();
 
         // Setup interval
@@ -242,22 +243,41 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
             // pattern looks less like a metronome to anti-bot heuristics. The threshold path
             // (updateThresholdScheduling) may swap the ref out for a fixed-cadence setInterval
             // while we're mid-await — the captured timeoutId guard below stops us from clobbering it.
-            const scheduleNext = (currentSettings) => {
+            //
+            // The wait is anchored to the *start* of the previous cycle so the gap between
+            // cycle starts ≈ delayMs regardless of how long the cycle took. Overruns pause
+            // MIN_CYCLE_GAP_MS before firing again instead of immediately.
+            const scheduleNext = (currentSettings, previousCycleStartMs = null) => {
                 if (!runningRef.current) {
                     autovoteIntervalRef.current = null;
                     return;
                 }
                 const delayMs = getRandomCheckFrequencyMs(currentSettings);
+                const anchorMs = previousCycleStartMs ?? Date.now();
+                // Clamp into [MIN_CYCLE_GAP_MS, delayMs]: floor protects against
+                // overruns; ceiling protects against wall-clock backward jumps
+                // (suspend/resume, NTP) that would otherwise inflate the wait.
+                const waitMs = Math.min(delayMs, Math.max(MIN_CYCLE_GAP_MS, anchorMs + delayMs - Date.now()));
                 const timeoutId = setTimeout(async () => {
                     if (!runningRef.current) return;
-                    await runVotingCycle();
-                    if (autovoteIntervalRef.current !== timeoutId) return; // threshold path took over
-                    const fresh = await window.api.getSettings();
-                    scheduleNext(fresh);
-                }, delayMs);
+                    const cycleStartMs = Date.now();
+                    try {
+                        await runVotingCycle();
+                        if (autovoteIntervalRef.current !== timeoutId) return; // threshold path took over
+                        const fresh = await window.api.getSettings();
+                        scheduleNext(fresh, cycleStartMs);
+                    } catch {
+                        // Don't let an unexpected IPC / settings-fetch error
+                        // kill the loop. Reschedule with the last-known
+                        // settings; the next cycle will re-read on success.
+                        if (autovoteIntervalRef.current === timeoutId) {
+                            scheduleNext(currentSettings, cycleStartMs);
+                        }
+                    }
+                }, waitMs);
                 autovoteIntervalRef.current = timeoutId;
             };
-            scheduleNext(settings);
+            scheduleNext(settings, initialCycleStartMs);
         }
 
         // Setup threshold scheduling

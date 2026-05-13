@@ -82,7 +82,7 @@
         "@capacitor/local-notifications": "^8.1.0",
         "@capacitor/preferences": "^8.0.1",
         "@capawesome-team/capacitor-android-foreground-service": "^8.1.0",
-        "axios": "^1.16.0",
+        "axios": "^1.16.1",
         "electron-updater": "^6.8.5",
         "node-cron": "^4.2.1",
         "react": "next",
