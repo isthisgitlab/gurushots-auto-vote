@@ -6,7 +6,7 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 
 ### Prerequisites
 
-- Node.js 24+ (matches `package.json` `engines.node` and `.nvmrc`; CI builds also pin to 24)
+- Node.js 26+ (matches `package.json` `engines.node` and `.nvmrc`; CI builds also pin to 26)
 - npm 8+ (comes with Node.js)
 
 ### Setup
@@ -25,6 +25,7 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
     ```bash
     npm run dev
     ```
+    `npm run dev` runs Tailwind, esbuild, and `electronmon` together. Stop the session with `Ctrl+C` in the terminal — closing the Electron window restarts the app rather than ending the session.
 
 ## 🛠️ Development
 
@@ -34,9 +35,6 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 - `npm run dev` - Development mode with hot reload
 - `npm run lint` - Check code style
 - `npm run lint:fix` - Fix code style issues
-- `npm run verify:settings` - Verify settings functionality
-- `npm run verify:challenges` - Test challenges loading
-- `npm run debug:environment` - Debug environment detection
 - `npm run update:readme` - Update README.md with current version from package.json
 - `npm run verify:readme` - Verify README.md matches package.json version
 
@@ -45,43 +43,48 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 ```
 src/
 ├── js/
-│   ├── api/          # Real API modules for GuruShots integration
-│   ├── cli/          # Command-line interface (cli.js, mock-cli.js)
-│   ├── mock/         # Mock API for testing
-│   ├── services/     # Base services (middleware, etc.)
-│   ├── strategies/   # API strategy implementations (real/mock)
-│   ├── interfaces/   # Abstract interfaces for strategies
-│   ├── apiFactory.js # Factory for switching between real/mock APIs
-│   ├── app.js        # Main renderer process
-│   ├── index.js      # Main electron process
-│   └── preload.js    # Preload script for security
+│   ├── api/          # Real GuruShots API client modules
+│   ├── bridge/       # Capacitor bridge (Android shell)
+│   ├── cli/          # CLI entry point and per-command modules
+│   ├── ipc/          # Electron IPC handlers
+│   ├── mock/         # Mock API counterparts to src/js/api/*
+│   ├── react/        # React renderer (shared by Electron and Capacitor)
+│   ├── scheduling/   # Cron / interval scheduling
+│   ├── services/     # Shared voting & middleware logic
+│   ├── settings/     # Schema, validation, and storage transport
+│   ├── translations/ # i18n strings (en, lv)
+│   ├── ui/           # UI helpers used by the renderer
+│   ├── voting/       # Vote orchestration entry
+│   ├── windows/      # Electron window lifecycle
+│   ├── apiFactory.js # Selects real vs mock at runtime (settings.mock)
+│   ├── index.js      # Electron main process entry
+│   ├── login.js      # Auth flow shared by GUI/CLI
+│   ├── logger.js     # Category-scoped logger
+│   ├── metadata.js   # App metadata helpers
+│   ├── preload.js    # Electron preload (context isolation)
+│   ├── runtime.js    # Platform detection helpers
+│   └── settings.js   # Settings facade (use this, not the transport directly)
 ├── html/             # HTML templates
-├── styles/           # CSS styles (Tailwind)
+├── styles/           # CSS styles (Tailwind + DaisyUI)
 └── assets/           # Images and other assets
 
 scripts/              # Development and build utilities
-├── verify-settings.js    # Verify settings functionality
-├── verify-challenges.js  # Test challenges loading
-├── verify-login.js       # Test authentication
-├── debug-environment.js  # Debug environment detection
-├── debug-window-bounds.js # Test window positioning
-├── cleanup-logs.js       # Log cleanup utility
-├── update-readme-version.js # Update README with current version
-├── verify-readme-version.js # Verify README version matches package.json
-└── dev.js               # Development server
+├── build-cli.js          # Bundle CLI and inject into Node SEA binary
+├── build-react.js        # esbuild orchestration for the React renderer
+├── cleanup-logs.js       # Delete legacy api-debug-* log files
+├── readme-version.js     # Sync (or verify with --check) README/INSTALACIJA version strings
+├── settings-cli.js       # Settings facade CLI used by the settings:* npm scripts
+└── syntax-check.js       # Lightweight node-context syntax check (used by `npm run lint`)
 ```
 
 ### Architecture
 
-The application uses a **Strategy Pattern** for API handling:
+The same core business logic in `src/js/` runs under three shells: **Electron (GUI)**, **CLI**, and **Capacitor (Android)**. Only the entry points, transport, and storage adapter are platform-specific.
 
-- **`apiFactory.js`** - Factory that switches between real and mock APIs based on settings
-- **`interfaces/ApiStrategy.js`** - Abstract interface that all API strategies must implement
-- **`strategies/RealApiStrategy.js`** - Real API implementation using actual GuruShots endpoints
-- **`strategies/MockApiStrategy.js`** - Mock API implementation for testing without real API calls
-- **`services/BaseMiddleware.js`** - Common middleware logic shared between real and mock implementations
-
-This eliminates code duplication and provides clean separation between real and mock functionality.
+- **Entry points**: Electron `src/js/index.js` · CLI `src/js/cli/cli.js` · Electron preload `src/js/preload.js` · Capacitor bridge `src/js/bridge/capacitor.js`
+- **React renderer** (`src/js/react/`) is shared between Electron and Capacitor
+- **`apiFactory.js`** selects real vs mock API implementations at runtime based on `settings.mock`. All business logic goes through the factory — do not import from `src/js/api/*` or `src/js/mock/*` directly
+- **Settings facade** lives at `src/js/settings.js`. Schema + defaults + validation are in `src/js/settings/schema.js`; persistence transport (fs on Electron/CLI, `@capacitor/preferences` on Android) is in `src/js/settings/storage.js`
 
 ## 📝 Code Guidelines
 
@@ -128,7 +131,7 @@ The README.md file contains download links and version information that must sta
 
 - **Before committing**: Run `npm run verify:readme` to check if README is up to date
 - **After version changes**: Run `npm run update:readme` to update all version references
-- **CI/CD**: The build process automatically verifies and updates the README
+- **CI/CD**: The release workflow runs `update:readme` then `verify:readme` before tagging — it does NOT run on every build, so don't rely on it to catch local drift
 - **Manual updates**: If you manually edit download links, ensure they match the current version
 
 ### Commit Messages
@@ -181,28 +184,9 @@ Before suggesting new features:
 
 ## 🧪 Development Utilities
 
-### Verification Scripts
-
-Test specific functionality without the full app:
-
-```bash
-# Verify core functionality
-npm run verify:settings     # Test settings system
-npm run verify:challenges   # Test challenges loading
-npm run verify:login        # Test authentication
-
-# Debug utilities
-npm run debug:environment   # Check environment detection
-npm run debug:window-bounds # Test window positioning
-```
-
 ### Mock Mode Testing
 
-Test your changes without real API calls:
-
-```bash
-npm run mock:start
-```
+Mock mode is selected via the in-app setting (`mock: true`) and routes all API traffic through `src/js/mock/*`. See `src/js/apiFactory.js` for the swap point. Start the app normally (`npm run dev` or `npm run cli:start`) with mock mode enabled in settings to exercise it.
 
 ### Manual Testing
 
