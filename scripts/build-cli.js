@@ -111,8 +111,18 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
 
     // Linux nodejs.org tarballs ship unstripped (~25-30 MB of reclaimable debug info).
     // macOS strip wants -u -r to tolerate indirect references / universal slices.
-    const stripArgs = plat === 'darwin' ? ['-u', '-r', outputBinary] : [outputBinary];
-    execFileSync('strip', stripArgs, { stdio: 'inherit' });
+    // Cross-arch strip: GNU strip on x64 hosts can't read aarch64 ELF — use the matching
+    // cross-binutils binary when host arch ≠ target arch. CI installs binutils-aarch64-linux-gnu.
+    let stripBinary = 'strip';
+    let stripArgs = [outputBinary];
+    if (plat === 'darwin') {
+        stripArgs = ['-u', '-r', outputBinary];
+    } else if (plat === 'linux' && arch === 'arm64' && process.arch !== 'arm64') {
+        stripBinary = 'aarch64-linux-gnu-strip';
+    } else if (plat === 'linux' && arch === 'x64' && process.arch !== 'x64') {
+        stripBinary = 'x86_64-linux-gnu-strip';
+    }
+    execFileSync(stripBinary, stripArgs, { stdio: 'inherit' });
 
     const macFlag = plat === 'darwin' ? `--macho-segment-name NODE_SEA` : '';
     const postjectCmd = [

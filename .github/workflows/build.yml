@@ -158,6 +158,10 @@ jobs:
               with:
                   node-version: '26'
 
+            - name: Install aarch64 cross-binutils (Linux runner builds arm64 too)
+              if: matrix.platform == 'linux'
+              run: sudo apt-get update && sudo apt-get install -y binutils-aarch64-linux-gnu
+
             - name: Build CLI app (macOS/Linux only)
               if: matrix.platform != 'win'
               run: npm run build:cli:${{ matrix.platform }}
