@@ -128,9 +128,9 @@ xattr -rd com.apple.quarantine /Applications/GuruShotsAutoVote.app
 **💻 For CLI users on macOS:**
 
 1. Download the `gurucli-v0.11.4-mac` file
-2. Open Terminal
-3. Navigate to the download folder: `cd ~/Downloads`
-4. Make executable: `chmod +x gurucli-v0.11.4-mac`
+2. Open Terminal and navigate to the download folder: `cd ~/Downloads`
+3. Make executable: `chmod +x gurucli-v0.11.4-mac`
+4. (If downloaded via a browser) clear the Gatekeeper quarantine flag: `xattr -d com.apple.quarantine ./gurucli-v0.11.4-mac`
 5. Run: `./gurucli-v0.11.4-mac`
 
 #### **🐧 Linux Users**

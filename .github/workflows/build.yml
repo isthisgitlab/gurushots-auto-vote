@@ -158,6 +158,10 @@ jobs:
               with:
                   node-version: '26'
 
+            - name: Install UPX (Linux only — macOS UPX skipped by build script, AMFI rejects packed Mach-O)
+              if: matrix.platform == 'linux'
+              run: sudo apt-get update && sudo apt-get install -y upx-ucl
+
             - name: Build CLI app (macOS/Linux only)
               if: matrix.platform != 'win'
               run: npm run build:cli:${{ matrix.platform }}

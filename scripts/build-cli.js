@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { build } = require('esbuild');
-const { execSync } = require('node:child_process');
+const { execSync, execFileSync } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
 const packageJson = require('../package.json');
@@ -109,11 +109,10 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
     fs.copyFileSync(sourceBinary, outputBinary);
     fs.chmodSync(outputBinary, 0o755);
 
-    // Strip the existing signature on macOS before patching; postject's injection
-    // invalidates it and the OS refuses to run unsigned-but-marked-signed binaries.
-    if (plat === 'darwin') {
-        execSync(`codesign --remove-signature "${outputBinary}"`, { stdio: 'inherit' });
-    }
+    // Linux nodejs.org tarballs ship unstripped (~25-30 MB of reclaimable debug info).
+    // macOS strip wants -u -r to tolerate indirect references / universal slices.
+    const stripArgs = plat === 'darwin' ? ['-u', '-r', outputBinary] : [outputBinary];
+    execFileSync('strip', stripArgs, { stdio: 'inherit' });
 
     const macFlag = plat === 'darwin' ? `--macho-segment-name NODE_SEA` : '';
     const postjectCmd = [
@@ -132,10 +131,17 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
         .join(' ');
     execSync(postjectCmd, { stdio: 'inherit' });
 
-    // Ad-hoc re-sign on macOS. Matches the existing Electron build config
-    // (hardenedRuntime: false, no Developer ID) — fine for sideloaded distribution.
     if (plat === 'darwin') {
-        execSync(`codesign --sign - "${outputBinary}"`, { stdio: 'inherit' });
+        // Apple Silicon AMFI rejects unsigned binaries. strip + postject invalidated the
+        // nodejs.org signature; -f lets codesign overwrite the broken state with ad-hoc.
+        // No Developer ID / notarization — users still see the Gatekeeper prompt on
+        // browser-downloaded binaries and bypass via xattr or right-click → Open.
+        execFileSync('codesign', ['-f', '--sign', '-', outputBinary], { stdio: 'inherit' });
+    } else {
+        // UPX on Linux. macOS is skipped because UPX 5.1.x's --force-macos packs the binary
+        // but the resulting Apple Silicon executable fails AMFI even after re-signing
+        // (tested on macOS 26 / Node v26 arm64).
+        execFileSync('upx', ['--best', '--lzma', outputBinary], { stdio: 'inherit' });
     }
 
     console.log(`✅ Built ${output}`);
