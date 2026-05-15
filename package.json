@@ -85,8 +85,7 @@
         "axios": "^1.16.1",
         "electron-updater": "^6.8.5",
         "node-cron": "^4.2.1",
-        "react": "next",
-        "react-dom": "next"
+        "preact": "^10.29.1"
     },
     "devDependencies": {
         "@capacitor/cli": "^8.3.4",
@@ -95,7 +94,7 @@
         "@swc/jest": "^0.2.39",
         "@tailwindcss/cli": "^4.3.0",
         "@testing-library/jest-dom": "^6.9.1",
-        "@testing-library/react": "^16.3.2",
+        "@testing-library/preact": "^3.2.4",
         "concurrently": "^9.2.1",
         "cross-env": "^10.1.0",
         "daisyui": "^5.5.19",
@@ -209,7 +208,8 @@
                                 },
                                 "transform": {
                                     "react": {
-                                        "runtime": "automatic"
+                                        "runtime": "automatic",
+                                        "importSource": "preact"
                                     }
                                 }
                             }
@@ -217,12 +217,22 @@
                     ]
                 },
                 "moduleNameMapper": {
-                    "^@/(.*)$": "<rootDir>/src/js/react/$1"
+                    "^@/(.*)$": "<rootDir>/src/js/react/$1",
+                    "^react$": "preact/compat",
+                    "^react-dom$": "preact/compat",
+                    "^react-dom/client$": "preact/compat/client",
+                    "^react/jsx-runtime$": "preact/jsx-runtime",
+                    "^react/jsx-dev-runtime$": "preact/jsx-dev-runtime"
                 }
             },
             {
                 "displayName": "jsdom",
                 "testEnvironment": "jsdom",
+                "testEnvironmentOptions": {
+                    "customExportConditions": [
+                        "node"
+                    ]
+                },
                 "roots": [
                     "<rootDir>/tests/react"
                 ],
@@ -244,7 +254,8 @@
                                 },
                                 "transform": {
                                     "react": {
-                                        "runtime": "automatic"
+                                        "runtime": "automatic",
+                                        "importSource": "preact"
                                     }
                                 }
                             }
@@ -252,7 +263,12 @@
                     ]
                 },
                 "moduleNameMapper": {
-                    "^@/(.*)$": "<rootDir>/src/js/react/$1"
+                    "^@/(.*)$": "<rootDir>/src/js/react/$1",
+                    "^react$": "preact/compat",
+                    "^react-dom$": "preact/compat",
+                    "^react-dom/client$": "preact/compat/client",
+                    "^react/jsx-runtime$": "preact/jsx-runtime",
+                    "^react/jsx-dev-runtime$": "preact/jsx-dev-runtime"
                 }
             }
         ],

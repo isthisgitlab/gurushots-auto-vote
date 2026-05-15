@@ -58,6 +58,7 @@ async function buildReact() {
         format: 'iife',
         target: 'es2020',
         jsx: 'automatic',
+        jsxImportSource: 'preact',
         minify: process.env.NODE_ENV === 'production',
         sourcemap: process.env.NODE_ENV !== 'production',
         loader: {
@@ -66,6 +67,11 @@ async function buildReact() {
         },
         alias: {
             '@': reactDir,
+            react: 'preact/compat',
+            'react-dom': 'preact/compat',
+            'react-dom/client': 'preact/compat/client',
+            'react/jsx-runtime': 'preact/jsx-runtime',
+            'react/jsx-dev-runtime': 'preact/jsx-dev-runtime',
         },
         define: {
             'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
