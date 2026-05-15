@@ -361,10 +361,7 @@ const cleanupStaleMetadata = (activeChallengeIds) => {
             if (voteTime > hourAgo) {
                 logger
                     .withCategory('voting')
-                    .debug(
-                        `Preserving recent metadata for challenge ${id} (voted ${formatTimeHMS(voteTime)})`,
-                        null,
-                    );
+                    .debug(`Preserving recent metadata for challenge ${id} (voted ${formatTimeHMS(voteTime)})`, null);
                 return false; // Don't cleanup recent votes
             }
         }

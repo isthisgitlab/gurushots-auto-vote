@@ -158,19 +158,9 @@ jobs:
               with:
                   node-version: '26'
 
-            - name: Install aarch64 cross-binutils (Linux runner builds arm64 too)
-              if: matrix.platform == 'linux'
-              run: sudo apt-get update && sudo apt-get install -y binutils-aarch64-linux-gnu
-
             - name: Build CLI app (macOS/Linux only)
               if: matrix.platform != 'win'
               run: npm run build:cli:${{ matrix.platform }}
-              env:
-                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-            - name: Build CLI Linux ARM app
-              if: matrix.platform == 'linux'
-              run: npm run build:cli:linux-arm
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -185,6 +175,37 @@ jobs:
                       build/*.AppImage
                       build/latest*.yml
                       ${{ matrix.platform != 'win' && 'build/cli/' || '' }}
+                  retention-days: 1
+
+    build-cli-arm:
+        runs-on: ubuntu-24.04-arm
+        needs: [version-bump]
+        if: github.event_name == 'push'
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
+              with:
+                  download-bumped: 'true'
+
+            - name: Setup Node.js 26 for CLI build
+              uses: actions/setup-node@v6
+              with:
+                  node-version: '26'
+
+            - name: Build CLI Linux ARM app (native arm64 runner)
+              run: npm run build:cli:linux-arm
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Upload Linux ARM CLI artifact
+              uses: actions/upload-artifact@v7
+              with:
+                  name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-linux-arm-builds' || 'linux-arm-builds' }}
+                  path: build/cli/gurucli-v*-linux-arm
                   retention-days: 1
 
     build-android:
@@ -267,7 +288,7 @@ jobs:
                   retention-days: 1
 
     create-release:
-        needs: [build, build-android, version-bump]
+        needs: [build, build-cli-arm, build-android, version-bump]
         runs-on: ubuntu-latest
         if: github.event_name == 'push'
 
@@ -365,7 +386,7 @@ jobs:
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/latest.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux
-                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux-arm
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}android-builds/GuruShotsAutoVote-v*.apk
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
