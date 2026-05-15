@@ -137,12 +137,16 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
         // No Developer ID / notarization — users still see the Gatekeeper prompt on
         // browser-downloaded binaries and bypass via xattr or right-click → Open.
         execFileSync('codesign', ['-f', '--sign', '-', outputBinary], { stdio: 'inherit' });
-    } else {
-        // UPX on Linux. macOS is skipped because UPX 5.1.x's --force-macos packs the binary
-        // but the resulting Apple Silicon executable fails AMFI even after re-signing
-        // (tested on macOS 26 / Node v26 arm64).
-        execFileSync('upx', ['--best', '--lzma', outputBinary], { stdio: 'inherit' });
     }
+    // UPX is intentionally skipped on all targets:
+    //   - macOS arm64: UPX 5.1.x requires --force-macos for Mach-O, but the packed binary
+    //     fails Apple Silicon AMFI even after ad-hoc resigning (Killed: 9).
+    //   - Linux ELF: postject's section injection moves the program-header offset to a
+    //     non-trivial location, which trips UPX's structural `bad e_phoff` check. The
+    //     `-f` flag does NOT bypass this — it's a hard refusal, not a warning. Reproduced
+    //     on UPX 5.1.1 with Node 26 darwin-arm64 and linux-arm64 binaries.
+    // Revisit when postject ships an option for in-place section injection OR UPX adds
+    // tolerance for moved program headers.
 
     console.log(`✅ Built ${output}`);
 }

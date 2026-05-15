@@ -41,7 +41,7 @@
 - **Dev (GUI + watchers)**: `npm run dev` — runs CSS, React, and Electron watchers concurrently
 - **CLI**: `npm run cli:start` · `cli:vote` · `cli:status` · `cli:login` · `cli:help`
 - **Build**: `npm run build:mac` · `build:win` · `build:linux` · `build:android` · `build:cli:all`
-- **CLI build prereq**: Linux `build:cli:linux` / `build:cli:linux-arm` requires `upx` on PATH (`apt install upx-ucl`). macOS `build:cli:mac` only needs `strip` + `codesign` (both preinstalled in Xcode CLT); UPX is skipped on darwin because Apple Silicon AMFI rejects packed Mach-O. Mac CLI binary is ad-hoc signed by the build — no Developer ID / notarization, so browser-downloaded copies still hit Gatekeeper and need `xattr -d com.apple.quarantine`.
+- **CLI build prereq**: needs `strip` (preinstalled on Linux + Xcode CLT) and, on macOS, `codesign` (Xcode CLT). UPX is intentionally NOT used — macOS AMFI rejects packed Mach-O, and postject's ELF section injection trips UPX's `bad e_phoff` structural check on Linux. Mac CLI binary is ad-hoc signed by the build — no Developer ID / notarization, so browser-downloaded copies still hit Gatekeeper and need `xattr -d com.apple.quarantine`.
 - **Settings (dev)**: `npm run settings:get` · `settings:set <key> <value>` · `settings:schema` · `settings:reset`
 - **Tests**: `npm test` (full suite) · `npm run test:watch` · `npm run test:coverage` — Jest has two projects (`node` and `jsdom`); React tests are `.test.jsx` under `tests/react/`, everything else is `.test.js`
 - **Lint/format**: `npm run lint` · `lint:fix` · `format` (Prettier)
