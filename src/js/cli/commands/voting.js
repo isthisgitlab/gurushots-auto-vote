@@ -10,6 +10,7 @@ const logger = require('../../logger');
 const settings = require('../../settings');
 const { getMiddleware } = require('../../apiFactory');
 const { createScheduler } = require('../../scheduling/runScheduler');
+const { formatDateTime } = require('../../dateFormat');
 
 /**
  * Run a single voting cycle. Pass {isManual: true} to use the manual
@@ -28,7 +29,7 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
         logger
             .withCategory('voting')
             .info(`--- ${label} Cycle ${cycleNumber}${scopeSuffix} (${isMockMode ? 'MOCK' : 'REAL'} MODE) ---`);
-        logger.withCategory('voting').info(`Time: ${new Date().toLocaleString()}`);
+        logger.withCategory('voting').info(`Time: ${formatDateTime()}`);
         if (isManual) {
             logger.withCategory('voting').info('Mode: Manual (votes to 100% regardless of threshold settings)');
         }

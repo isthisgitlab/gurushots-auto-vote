@@ -4,6 +4,7 @@ const path = require('node:path');
 // Import path utilities from settings to maintain consistency
 const { getUserDataPath } = require('./settings');
 const logger = require('./logger');
+const { formatTimeHMS } = require('./dateFormat');
 
 /**
  * Get the metadata file path
@@ -361,7 +362,7 @@ const cleanupStaleMetadata = (activeChallengeIds) => {
                 logger
                     .withCategory('voting')
                     .debug(
-                        `Preserving recent metadata for challenge ${id} (voted ${voteTime.toLocaleTimeString()})`,
+                        `Preserving recent metadata for challenge ${id} (voted ${formatTimeHMS(voteTime)})`,
                         null,
                     );
                 return false; // Don't cleanup recent votes

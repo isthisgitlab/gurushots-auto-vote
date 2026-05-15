@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const runtime = require('./runtime');
+const { formatTimeHMS } = require('./dateFormat');
 
 // ANSI color codes for CLI output (referenced via bracket notation in formatConsoleMessage)
 const colors = {
@@ -264,12 +265,7 @@ const getContext = () => {
     return 'GUI';
 };
 
-/**
- * Get timestamp in HH:MM:SS format
- */
-const getTimeString = () => {
-    return new Date().toLocaleTimeString('en-GB', { hour12: false });
-};
+const getTimeString = () => formatTimeHMS();
 
 /**
  * Apply color to text (only in CLI mode and when not sending to GUI)
