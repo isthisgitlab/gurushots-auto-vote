@@ -133,17 +133,18 @@ function AppWithAutovote() {
  * App with Challenges provider
  */
 function AppWithChallenges() {
-    const [autovoteRunning, setAutovoteRunning] = useState(false);
+    const [autovoteRunning, setAutovoteRunning] = useState(() => !!globalThis.window?.autovoteRunning);
 
-    // Sync with window.autovoteRunning
+    // AutovoteProvider dispatches 'autovote:running-changed' whenever its
+    // state.running toggles, so we don't need to poll. After attaching
+    // the listener, re-read window.autovoteRunning once to absorb any
+    // event that may have fired between this component's render and
+    // commit (the auto-resume path on launch is the realistic case).
     useEffect(() => {
-        const checkAutovoteStatus = () => {
-            setAutovoteRunning(window.autovoteRunning || false);
-        };
-
-        // Check periodically
-        const interval = setInterval(checkAutovoteStatus, 1000);
-        return () => clearInterval(interval);
+        const handler = (e) => setAutovoteRunning(!!e.detail);
+        window.addEventListener('autovote:running-changed', handler);
+        setAutovoteRunning(!!window.autovoteRunning);
+        return () => window.removeEventListener('autovote:running-changed', handler);
     }, []);
 
     return (

@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 
 const ChallengesContext = createContext(null);
@@ -34,23 +34,15 @@ export function ChallengesProvider({ children, autovoteRunning }) {
         };
     }, [autovoteRunning, refetch]);
 
-    // Sort challenges by ending time (shortest time remaining first)
-    const sortedChallenges = useCallback(() => {
+    // Memoize so consumers don't re-render every time the provider re-renders;
+    // useActiveChallenges already dedups identical payloads, so `data` only
+    // changes when the underlying challenge content changes.
+    const challenges = useMemo(() => {
         if (!data || data.length === 0) return [];
-        const now = Math.floor(Date.now() / 1000);
-        return [...data].sort((a, b) => {
-            const timeA = a.close_time - now;
-            const timeB = b.close_time - now;
-            return timeA - timeB;
-        });
+        return [...data].sort((a, b) => a.close_time - b.close_time);
     }, [data]);
 
-    const value = {
-        challenges: sortedChallenges(),
-        loading,
-        error,
-        refetch,
-    };
+    const value = useMemo(() => ({ challenges, loading, error, refetch }), [challenges, loading, error, refetch]);
 
     return <ChallengesContext.Provider value={value}>{children}</ChallengesContext.Provider>;
 }

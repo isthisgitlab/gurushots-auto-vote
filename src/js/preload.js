@@ -118,14 +118,39 @@ contextBridge.exposeInMainWorld('api', {
     getReleasesUrl: () => ipcRenderer.invoke('get-releases-url'),
     canAutoUpdate: () => ipcRenderer.invoke('can-auto-update'),
 
-    // AutoUpdater event listeners
-    onUpdateChecking: (callback) => ipcRenderer.on('update-checking', () => callback()),
-    onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (event, updateInfo) => callback(updateInfo)),
-    onUpdateNotAvailable: (callback) => ipcRenderer.on('update-not-available', (event, info) => callback(info)),
-    onDownloadProgress: (callback) =>
-        ipcRenderer.on('update-download-progress', (event, progress) => callback(progress)),
-    onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', (event, updateInfo) => callback(updateInfo)),
-    onUpdateError: (callback) => ipcRenderer.on('update-error', (event, error) => callback(error)),
+    // AutoUpdater event listeners. Each returns an unsubscribe so
+    // React effects (UpdateContext) can drop the handler on unmount;
+    // without it, every remount stacks another ipcRenderer listener.
+    onUpdateChecking: (callback) => {
+        const handler = () => callback();
+        ipcRenderer.on('update-checking', handler);
+        return () => ipcRenderer.removeListener('update-checking', handler);
+    },
+    onUpdateAvailable: (callback) => {
+        const handler = (_event, updateInfo) => callback(updateInfo);
+        ipcRenderer.on('update-available', handler);
+        return () => ipcRenderer.removeListener('update-available', handler);
+    },
+    onUpdateNotAvailable: (callback) => {
+        const handler = (_event, info) => callback(info);
+        ipcRenderer.on('update-not-available', handler);
+        return () => ipcRenderer.removeListener('update-not-available', handler);
+    },
+    onDownloadProgress: (callback) => {
+        const handler = (_event, progress) => callback(progress);
+        ipcRenderer.on('update-download-progress', handler);
+        return () => ipcRenderer.removeListener('update-download-progress', handler);
+    },
+    onUpdateDownloaded: (callback) => {
+        const handler = (_event, updateInfo) => callback(updateInfo);
+        ipcRenderer.on('update-downloaded', handler);
+        return () => ipcRenderer.removeListener('update-downloaded', handler);
+    },
+    onUpdateError: (callback) => {
+        const handler = (_event, error) => callback(error);
+        ipcRenderer.on('update-error', handler);
+        return () => ipcRenderer.removeListener('update-error', handler);
+    },
 
     // Menu methods
     refreshMenu: () => ipcRenderer.invoke('refresh-menu'),
@@ -133,7 +158,11 @@ contextBridge.exposeInMainWorld('api', {
     // Log streaming methods
     startLogStream: () => ipcRenderer.invoke('start-log-stream'),
     stopLogStream: () => ipcRenderer.invoke('stop-log-stream'),
-    onLogMessage: (callback) => ipcRenderer.on('log-message', (event, logData) => callback(logData)),
+    onLogMessage: (callback) => {
+        const handler = (_event, logData) => callback(logData);
+        ipcRenderer.on('log-message', handler);
+        return () => ipcRenderer.removeListener('log-message', handler);
+    },
 
     // Settings change events
     onSettingsChanged: (callback) => {

@@ -10,6 +10,7 @@ export function useLogStream() {
     const [entries, setEntries] = useState([]);
     const [connected, setConnected] = useState(false);
     const mountedRef = useRef(true);
+    const unsubscribeRef = useRef(null);
 
     // Clear all log entries
     const clear = useCallback(() => {
@@ -26,8 +27,10 @@ export function useLogStream() {
                 if (result?.success && mountedRef.current) {
                     setConnected(true);
 
-                    // Listen for log messages
-                    window.api.onLogMessage((logData) => {
+                    // Listen for log messages. Capture the unsubscribe so
+                    // the IPC handler is removed on unmount; otherwise
+                    // each remount stacks another listener.
+                    const unsubscribe = window.api.onLogMessage((logData) => {
                         if (mountedRef.current) {
                             setEntries((prev) => {
                                 // Add new entry at the beginning (newest first)
@@ -37,6 +40,9 @@ export function useLogStream() {
                             });
                         }
                     });
+                    if (typeof unsubscribe === 'function') {
+                        unsubscribeRef.current = unsubscribe;
+                    }
                 }
             } catch {
                 if (mountedRef.current) {
@@ -50,6 +56,10 @@ export function useLogStream() {
         // Cleanup on unmount
         return () => {
             mountedRef.current = false;
+            if (typeof unsubscribeRef.current === 'function') {
+                unsubscribeRef.current();
+                unsubscribeRef.current = null;
+            }
             if (window.api.stopLogStream) {
                 window.api.stopLogStream();
             }
