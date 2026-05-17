@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 const { build } = require('esbuild');
-const { execSync, execFileSync } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
 const packageJson = require('../package.json');
@@ -58,7 +58,7 @@ function generateSeaBlob() {
         disableExperimentalSEAWarning: true,
     };
     fs.writeFileSync(seaConfigPath, JSON.stringify(seaConfig, null, 2));
-    execSync(`node --experimental-sea-config "${seaConfigPath}"`, { stdio: 'inherit' });
+    execFileSync(process.execPath, ['--experimental-sea-config', seaConfigPath], { stdio: 'inherit' });
     console.log('✅ SEA blob generated');
     return seaBlobPath;
 }
@@ -93,7 +93,7 @@ async function getOfficialNodeBinary(plat, arch) {
 
     console.log(`📂 Extracting ${tarName}...`);
     const flag = ext === 'tar.gz' ? '-xzf' : '-xJf';
-    execSync(`tar ${flag} "${tarPath}" -C "${NODE_CACHE_DIR}"`, { stdio: 'inherit' });
+    execFileSync('tar', [flag, tarPath, '-C', NODE_CACHE_DIR], { stdio: 'inherit' });
 
     if (!fs.existsSync(binaryPath)) {
         throw new Error(`Extracted Node binary not found at ${binaryPath}`);
@@ -117,22 +117,15 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
     const stripArgs = plat === 'darwin' ? ['-u', '-r', outputBinary] : [outputBinary];
     execFileSync('strip', stripArgs, { stdio: 'inherit' });
 
-    const macFlag = plat === 'darwin' ? `--macho-segment-name NODE_SEA` : '';
-    const postjectCmd = [
-        'npx',
-        '--no-install',
-        'postject',
-        `"${outputBinary}"`,
-        'NODE_SEA_BLOB',
-        `"${seaBlobPath}"`,
-        '--sentinel-fuse',
-        SEA_FUSE,
-        macFlag,
-        '--overwrite',
-    ]
-        .filter(Boolean)
-        .join(' ');
-    execSync(postjectCmd, { stdio: 'inherit' });
+    // Invoke postject's local binary directly to avoid a runtime dependency on `pnpm` being
+    // on PATH (the CLI build is called via `node scripts/build-cli.js`, which may not inherit
+    // a pnpm-augmented PATH in every environment).
+    const postjectBin = path.join(ROOT, 'node_modules', '.bin', 'postject');
+    const postjectArgs = [outputBinary, 'NODE_SEA_BLOB', seaBlobPath, '--sentinel-fuse', SEA_FUSE, '--overwrite'];
+    if (plat === 'darwin') {
+        postjectArgs.push('--macho-segment-name', 'NODE_SEA');
+    }
+    execFileSync(postjectBin, postjectArgs, { stdio: 'inherit' });
 
     if (plat === 'darwin') {
         // Apple Silicon AMFI rejects unsigned binaries. strip + postject invalidated the

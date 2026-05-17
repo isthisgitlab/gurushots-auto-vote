@@ -1,0 +1,14 @@
+# pnpm 11 requires explicit approval for postinstall/install scripts.
+# Each entry below is a package whose lifecycle script we permit to execute.
+# Keep this list minimal — every entry is an arbitrary-code-execution opportunity.
+allowBuilds:
+    # esbuild bundler (build:react + build-cli SEA bundling) — postinstall sets up native binary.
+    esbuild: true
+    # @swc/jest's underlying compiler — postinstall installs the native bindings used by Jest.
+    '@swc/core': true
+    # File watcher pulled in transitively by electronmon — install script builds/downloads native watcher.
+    '@parcel/watcher': true
+    # electron-builder dependency — install script picks the right 7-Zip binary per arch.
+    electron-winstaller: true
+    # Native resolver pulled in transitively by ESLint v10 — napi-postinstall verifies prebuilds.
+    unrs-resolver: true

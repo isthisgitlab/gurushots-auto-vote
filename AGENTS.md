@@ -1,6 +1,6 @@
 # Development Guidelines
 
-> `AGENTS.md` and `CLAUDE.md` are hardlinked — editing either updates both. Use a single editor session per change; don't try to keep two divergent copies.
+> `AGENTS.md` and `CLAUDE.md` carry the same content. If you change one, mirror the change in the other.
 
 ## Code Architecture
 
@@ -38,14 +38,16 @@
 
 ## Key Commands
 
-- **Dev (GUI + watchers)**: `npm run dev` — runs CSS, React, and Electron watchers concurrently
-- **CLI**: `npm run cli:start` · `cli:vote` · `cli:status` · `cli:login` · `cli:help`
-- **Build**: `npm run build:mac` · `build:win` · `build:linux` · `build:android` · `build:cli:all`
+> Package manager: **pnpm 11+** (pinned via `packageManager` in `package.json`, bootstrap with `corepack enable`). Use `pnpm <script>` everywhere — the `npm` CLI is not supported.
+
+- **Dev (GUI + watchers)**: `pnpm dev` — runs CSS, React, and Electron watchers concurrently
+- **CLI**: `pnpm cli:start` · `cli:vote` · `cli:status` · `cli:login` · `cli:help`
+- **Build**: `pnpm build:mac` · `build:win` · `build:linux` · `build:android` · `build:cli:all`
 - **CLI build prereq**: needs `strip` (preinstalled on Linux + Xcode CLT) and, on macOS, `codesign` (Xcode CLT). Each CLI target is built on its native-arch runner — mac on `macos-26`, linux x64 on `ubuntu-latest`, linux arm64 on `ubuntu-24.04-arm` (separate `build-cli-arm` job). Local cross-arch builds (e.g. `build:cli:linux-arm` from an x64 host) aren't supported by the script — run on matching hardware or let CI handle it. UPX is intentionally NOT used — macOS AMFI rejects packed Mach-O, and postject's ELF section injection trips UPX's `bad e_phoff` structural check on Linux. Mac CLI binary is ad-hoc signed by the build — no Developer ID / notarization, so browser-downloaded copies still hit Gatekeeper and need `xattr -d com.apple.quarantine`.
-- **Settings (dev)**: `npm run settings:get` · `settings:set <key> <value>` · `settings:schema` · `settings:reset`
-- **Tests**: `npm test` (full suite) · `npm run test:watch` · `npm run test:coverage` — Jest has two projects (`node` and `jsdom`); React tests are `.test.jsx` under `tests/react/`, everything else is `.test.js`
-- **Lint/format**: `npm run lint` · `lint:fix` · `format` (Prettier)
-- **README version sync**: `npm run verify:readme` ensures README version strings match `package.json`. `npm run update:readme` rewrites them. The release workflow enforces this — drift will fail CI.
+- **Settings (dev)**: `pnpm settings:get` · `settings:set <key> <value>` · `settings:schema` · `settings:reset`
+- **Tests**: `pnpm test` (full suite) · `pnpm test:watch` · `pnpm test:coverage` — Jest has two projects (`node` and `jsdom`); React tests are `.test.jsx` under `tests/react/`, everything else is `.test.js`
+- **Lint/format**: `pnpm lint` · `lint:fix` · `format` (Prettier)
+- **README version sync**: `pnpm verify:readme` ensures README version strings match `package.json`. `pnpm update:readme` rewrites them. The release workflow enforces this — drift will fail CI.
 
 ## Git Operations
 
@@ -57,7 +59,7 @@
 
 ## Development Commands
 
-- **Linting**: Run `npm run lint` after code changes (JavaScript project - no TypeScript)
+- **Linting**: Run `pnpm lint` after code changes (JavaScript project - no TypeScript)
 - **Testing**: Use proper Jest test commands as defined in package.json
 - **Testing Completion**: All tests must pass regardless of code changes (even if they are not related to the code being changed)
 - **Logger**: Use `require('./logger')` (from `src/js/logger.js`). Prefer category-scoped logging: `logger.withCategory('voting').info(msg, data)`. Never use `console.log` — fallback to `console.*` only in bootstrap code where the logger module is genuinely unavailable.

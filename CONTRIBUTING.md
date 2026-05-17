@@ -7,7 +7,7 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 ### Prerequisites
 
 - Node.js 26+ (matches `package.json` `engines.node` and `.nvmrc`; CI builds also pin to 26)
-- npm 8+ (comes with Node.js)
+- pnpm 11+ (installed automatically via `corepack enable` — Node ships with corepack)
 
 ### Setup
 
@@ -19,24 +19,24 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
     ```
 3. Install dependencies:
     ```bash
-    npm install
+    pnpm install
     ```
 4. Start development:
     ```bash
-    npm run dev
+    pnpm dev
     ```
-    `npm run dev` runs Tailwind, esbuild, and `electronmon` together. Stop the session with `Ctrl+C` in the terminal — closing the Electron window restarts the app rather than ending the session.
+    `pnpm dev` runs Tailwind, esbuild, and `electronmon` together. Stop the session with `Ctrl+C` in the terminal — closing the Electron window restarts the app rather than ending the session.
 
 ## 🛠️ Development
 
 ### Available Scripts
 
-- `npm start` - Run the Electron app
-- `npm run dev` - Development mode with hot reload
-- `npm run lint` - Check code style
-- `npm run lint:fix` - Fix code style issues
-- `npm run update:readme` - Update README.md with current version from package.json
-- `npm run verify:readme` - Verify README.md matches package.json version
+- `pnpm start` - Run the Electron app
+- `pnpm dev` - Development mode with hot reload
+- `pnpm lint` - Check code style
+- `pnpm lint:fix` - Fix code style issues
+- `pnpm update:readme` - Update README.md with current version from package.json
+- `pnpm verify:readme` - Verify README.md matches package.json version
 
 ### Project Structure
 
@@ -73,8 +73,8 @@ scripts/              # Development and build utilities
 ├── build-react.js        # esbuild orchestration for the React renderer
 ├── cleanup-logs.js       # Delete legacy api-debug-* log files
 ├── readme-version.js     # Sync (or verify with --check) README/INSTALACIJA version strings
-├── settings-cli.js       # Settings facade CLI used by the settings:* npm scripts
-└── syntax-check.js       # Lightweight node-context syntax check (used by `npm run lint`)
+├── settings-cli.js       # Settings facade CLI used by the settings:* pnpm scripts
+└── syntax-check.js       # Lightweight node-context syntax check (used by `pnpm lint`)
 ```
 
 ### Architecture
@@ -94,7 +94,7 @@ The same core business logic in `src/js/` runs under three shells: **Electron (G
 - 4-space indentation
 - Single quotes for strings
 - Semicolons are required
-- Always run `npm run lint` before committing
+- Always run `pnpm lint` before committing
 
 ### Security
 
@@ -112,12 +112,12 @@ The same core business logic in `src/js/` runs under three shells: **Electron (G
 2. Make your changes
 3. Run linting and tests:
     ```bash
-    npm run lint
-    npm run test
+    pnpm lint
+    pnpm test
     ```
 4. **Important**: If you changed the version in package.json, update the README:
     ```bash
-    npm run update:readme
+    pnpm update:readme
     ```
 5. Commit with clear messages:
     ```bash
@@ -129,8 +129,8 @@ The same core business logic in `src/js/` runs under three shells: **Electron (G
 
 The README.md file contains download links and version information that must stay in sync with the package.json version:
 
-- **Before committing**: Run `npm run verify:readme` to check if README is up to date
-- **After version changes**: Run `npm run update:readme` to update all version references
+- **Before committing**: Run `pnpm verify:readme` to check if README is up to date
+- **After version changes**: Run `pnpm update:readme` to update all version references
 - **CI/CD**: The release workflow runs `update:readme` then `verify:readme` before tagging — it does NOT run on every build, so don't rely on it to catch local drift
 - **Manual updates**: If you manually edit download links, ensure they match the current version
 
@@ -186,7 +186,7 @@ Before suggesting new features:
 
 ### Mock Mode Testing
 
-Mock mode is selected via the in-app setting (`mock: true`) and routes all API traffic through `src/js/mock/*`. See `src/js/apiFactory.js` for the swap point. Start the app normally (`npm run dev` or `npm run cli:start`) with mock mode enabled in settings to exercise it.
+Mock mode is selected via the in-app setting (`mock: true`) and routes all API traffic through `src/js/mock/*`. See `src/js/apiFactory.js` for the swap point. Start the app normally (`pnpm dev` or `pnpm cli:start`) with mock mode enabled in settings to exercise it.
 
 ### Manual Testing
 
@@ -201,15 +201,15 @@ Mock mode is selected via the in-app setting (`mock: true`) and routes all API t
 ### Local Build
 
 ```bash
-npm run build
+pnpm build
 ```
 
 ### Platform-Specific Builds
 
 ```bash
-npm run build:win    # Windows
-npm run build:mac    # macOS
-npm run build:linux  # Linux
+pnpm build:win    # Windows
+pnpm build:mac    # macOS
+pnpm build:linux  # Linux
 ```
 
 ## 🤝 Code of Conduct

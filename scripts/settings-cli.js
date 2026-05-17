@@ -8,14 +8,14 @@ const { spawn } = require('node:child_process');
  * CLI Settings Management Script
  *
  * Usage:
- *   npm run settings:get [key]     - Get setting value (or all if no key provided)
- *   npm run settings:set key value - Set setting value
+ *   pnpm settings:get [key]     - Get setting value (or all if no key provided)
+ *   pnpm settings:set key value - Set setting value
  *
  * Examples:
- *   npm run settings:get            # Get all settings
- *   npm run settings:get theme      # Get theme setting
- *   npm run settings:set theme dark # Set theme to dark
- *   npm run settings:set challengeSettings.globalDefaults.boostTime 7200
+ *   pnpm settings:get            # Get all settings
+ *   pnpm settings:get theme      # Get theme setting
+ *   pnpm settings:set theme dark # Set theme to dark
+ *   pnpm settings:set challengeSettings.globalDefaults.boostTime 7200
  */
 
 const command = process.argv[2];
@@ -134,8 +134,8 @@ async function main() {
 
             case 'set': {
                 if (!key || value === undefined) {
-                    console.error('Usage: npm run settings:set <key> <value>');
-                    console.error('Example: npm run settings:set theme dark');
+                    console.error('Usage: pnpm settings:set <key> <value>');
+                    console.error('Example: pnpm settings:set theme dark');
                     process.exit(1);
                 }
 
@@ -160,7 +160,7 @@ async function main() {
                         }
                     } else {
                         console.error(`❌ Unknown schema setting '${settingKey}'`);
-                        console.error('   Run "npm run settings:schema" to see available settings');
+                        console.error('   Run "pnpm settings:schema" to see available settings');
                         process.exit(1);
                     }
                 } else if (key.includes('.')) {
@@ -239,8 +239,8 @@ async function main() {
 
             case 'reset': {
                 if (!key) {
-                    console.error('Usage: npm run settings:reset <key>');
-                    console.error('Example: npm run settings:reset theme');
+                    console.error('Usage: pnpm settings:reset <key>');
+                    console.error('Example: pnpm settings:reset theme');
                     process.exit(1);
                 }
 
@@ -263,8 +263,8 @@ async function main() {
 
             case 'reset-global': {
                 if (!key) {
-                    console.error('Usage: npm run settings:reset-global <settingKey>');
-                    console.error('Example: npm run settings:reset-global boostTime');
+                    console.error('Usage: pnpm settings:reset-global <settingKey>');
+                    console.error('Example: pnpm settings:reset-global boostTime');
                     process.exit(1);
                 }
 
@@ -283,9 +283,9 @@ async function main() {
 
             case 'set-global': {
                 if (!key || value === undefined) {
-                    console.error('Usage: npm run settings:set-global <settingKey> <value>');
-                    console.error('Example: npm run settings:set-global exposure 80');
-                    console.error('Example: npm run settings:set-global lastHourExposure 70');
+                    console.error('Usage: pnpm settings:set-global <settingKey> <value>');
+                    console.error('Example: pnpm settings:set-global exposure 80');
+                    console.error('Example: pnpm settings:set-global lastHourExposure 70');
                     process.exit(1);
                 }
 
@@ -294,7 +294,7 @@ async function main() {
                 const schema = settings.SETTINGS_SCHEMA;
                 if (!schema[key]) {
                     console.error(`❌ Unknown schema setting '${key}'`);
-                    console.error('   Run "npm run settings:schema" to see available settings');
+                    console.error('   Run "pnpm settings:schema" to see available settings');
                     process.exit(1);
                 }
 
@@ -324,9 +324,9 @@ async function main() {
 
                 console.log(confirmMessage);
 
-                // In a real CLI, we'd use readline, but for npm scripts this is a simple confirmation
+                // In a real CLI, we'd use readline, but for pnpm scripts this is a simple confirmation
                 if (process.argv[3] !== 'yes') {
-                    console.log('Reset cancelled. To confirm, run: npm run settings:reset-all yes');
+                    console.log('Reset cancelled. To confirm, run: pnpm settings:reset-all yes');
                     process.exit(0);
                 }
 
@@ -349,28 +349,28 @@ async function main() {
                 console.log('================');
                 console.log('');
                 console.log('Available commands:');
-                console.log('  npm run settings:get [key]             - Get setting value (all if no key)');
-                console.log('  npm run settings:set <key> <value>     - Set setting value');
-                console.log('  npm run settings:set-global <key> <val> - Set global default (with validation)');
-                console.log('  npm run settings:reset <key>           - Reset setting to default value');
-                console.log('  npm run settings:reset-global <key>    - Reset global default to schema default');
-                console.log('  npm run settings:reset-all yes         - Reset all settings to defaults');
-                console.log('  npm run settings:schema                - Show settings schema');
-                console.log('  npm run settings:global-defaults       - Show global defaults');
-                console.log('  npm run settings:help                  - Show this help');
-                console.log('  npm run gui:refresh                 - Get info about refreshing GUI');
+                console.log('  pnpm settings:get [key]             - Get setting value (all if no key)');
+                console.log('  pnpm settings:set <key> <value>     - Set setting value');
+                console.log('  pnpm settings:set-global <key> <val> - Set global default (with validation)');
+                console.log('  pnpm settings:reset <key>           - Reset setting to default value');
+                console.log('  pnpm settings:reset-global <key>    - Reset global default to schema default');
+                console.log('  pnpm settings:reset-all yes         - Reset all settings to defaults');
+                console.log('  pnpm settings:schema                - Show settings schema');
+                console.log('  pnpm settings:global-defaults       - Show global defaults');
+                console.log('  pnpm settings:help                  - Show this help');
+                console.log('  pnpm gui:refresh                 - Get info about refreshing GUI');
                 console.log('');
                 console.log('Examples:');
-                console.log('  npm run settings:get');
-                console.log('  npm run settings:get theme');
-                console.log('  npm run settings:set theme dark');
-                console.log('  npm run settings:set stayLoggedIn true');
-                console.log('  npm run settings:set-global exposure 80');
-                console.log('  npm run settings:set-global lastHourExposure 70');
-                console.log('  npm run settings:set challengeSettings.globalDefaults.boostTime 7200');
-                console.log('  npm run settings:reset theme');
-                console.log('  npm run settings:reset-global boostTime');
-                console.log('  npm run settings:reset-all yes');
+                console.log('  pnpm settings:get');
+                console.log('  pnpm settings:get theme');
+                console.log('  pnpm settings:set theme dark');
+                console.log('  pnpm settings:set stayLoggedIn true');
+                console.log('  pnpm settings:set-global exposure 80');
+                console.log('  pnpm settings:set-global lastHourExposure 70');
+                console.log('  pnpm settings:set challengeSettings.globalDefaults.boostTime 7200');
+                console.log('  pnpm settings:reset theme');
+                console.log('  pnpm settings:reset-global boostTime');
+                console.log('  pnpm settings:reset-all yes');
                 console.log('');
                 console.log('Notes:');
                 console.log('  - Values are automatically parsed (JSON, numbers, booleans)');

@@ -111,7 +111,7 @@ for (const file of files) {
 }
 
 if (check && anyFailure) {
-    console.error(`\nRun \`npm run update:readme\` to fix.`);
+    console.error(`\nRun \`pnpm run update:readme\` to fix.`);
     process.exit(1);
 }
 if (!check) {

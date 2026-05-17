@@ -1,5 +1,5 @@
 name: Setup Build Environment
-description: Repeated setup shared by test, build matrix, build-android, and create-release. Sets up Node 26 with npm cache, optionally pulls the bumped package.json artifact, and installs dependencies.
+description: Repeated setup shared by test, build matrix, build-android, and create-release. Activates pnpm via corepack (pinned by the packageManager field), sets up Node 26 with pnpm cache, optionally pulls the bumped package.json artifact, and installs dependencies.
 
 inputs:
     download-bumped:
@@ -7,17 +7,19 @@ inputs:
         required: false
         default: 'false'
     install:
-        description: When 'true' (default), run npm ci. Set 'false' for jobs that want to install differently.
+        description: When 'true' (default), run `pnpm install --frozen-lockfile`. Set 'false' for jobs that want to install differently.
         required: false
         default: 'true'
 
 runs:
     using: composite
     steps:
+        - uses: pnpm/action-setup@v6
+
         - uses: actions/setup-node@v6
           with:
               node-version: '26'
-              cache: 'npm'
+              cache: 'pnpm'
 
         - if: inputs.download-bumped == 'true'
           uses: actions/download-artifact@v8
@@ -27,4 +29,4 @@ runs:
 
         - if: inputs.install == 'true'
           shell: bash
-          run: npm ci
+          run: pnpm install --frozen-lockfile

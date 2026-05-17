@@ -21,7 +21,7 @@ jobs:
               uses: ./.github/actions/setup-build
 
             - name: Run tests
-              run: npm test
+              run: pnpm test
               continue-on-error: true
 
     version-bump:
@@ -78,15 +78,15 @@ jobs:
                   if [[ "$IS_BETA" == "true" ]]; then
                     # For beta releases, use the appropriate prerelease command
                     if [[ "$BUMP_TYPE" == "major" ]]; then
-                      npm version premajor --preid=beta --no-git-tag-version
+                      pnpm version premajor --preid=beta --no-git-tag-version
                     elif [[ "$BUMP_TYPE" == "minor" ]]; then
-                      npm version preminor --preid=beta --no-git-tag-version
+                      pnpm version preminor --preid=beta --no-git-tag-version
                     else
                       # For patch, just increment the beta number
-                      npm version prerelease --preid=beta --no-git-tag-version
+                      pnpm version prerelease --preid=beta --no-git-tag-version
                     fi
                   else
-                    npm version $BUMP_TYPE --no-git-tag-version
+                    pnpm version $BUMP_TYPE --no-git-tag-version
                   fi
 
                   NEW_VERSION=$(node -p "require('./package.json').version")
@@ -124,13 +124,13 @@ jobs:
                   download-bumped: 'true'
 
             - name: Run linter
-              run: npm run lint
+              run: pnpm lint
 
             - name: Build CSS
-              run: npm run build:css
+              run: pnpm build:css
 
             - name: Build Electron app
-              run: npm run build:${{ matrix.platform }}
+              run: pnpm build:${{ matrix.platform }}
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   NODE_ENV: production
@@ -147,7 +147,7 @@ jobs:
 
             - name: Build Linux ARM app
               if: matrix.platform == 'linux'
-              run: npm run build:linux-arm
+              run: pnpm build:linux-arm
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   NODE_ENV: production
@@ -157,10 +157,11 @@ jobs:
               uses: actions/setup-node@v6
               with:
                   node-version: '26'
+                  cache: 'pnpm'
 
             - name: Build CLI app (macOS/Linux only)
               if: matrix.platform != 'win'
-              run: npm run build:cli:${{ matrix.platform }}
+              run: pnpm build:cli:${{ matrix.platform }}
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -195,9 +196,10 @@ jobs:
               uses: actions/setup-node@v6
               with:
                   node-version: '26'
+                  cache: 'pnpm'
 
             - name: Build CLI Linux ARM app (native arm64 runner)
-              run: npm run build:cli:linux-arm
+              run: pnpm build:cli:linux-arm
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -222,21 +224,21 @@ jobs:
                   download-bumped: 'true'
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
-              uses: actions/setup-java@v4
+              uses: actions/setup-java@v5
               with:
                   distribution: 'temurin'
                   java-version: '21'
 
             - name: Setup Android SDK
-              uses: android-actions/setup-android@v3
+              uses: android-actions/setup-android@v4
 
             - name: Build renderer
               env:
                   NODE_ENV: production
-              run: npm run build:prep
+              run: pnpm build:prep
 
             - name: Sync Capacitor
-              run: npx cap sync android
+              run: pnpm exec cap sync android
 
             - name: Decode keystore
               env:
@@ -309,10 +311,10 @@ jobs:
               run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
             - name: Update README with current version
-              run: npm run update:readme
+              run: pnpm update:readme
 
             - name: Verify README version
-              run: npm run verify:readme
+              run: pnpm verify:readme
 
             - name: Generate release name
               id: release_name
