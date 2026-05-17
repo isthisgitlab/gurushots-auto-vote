@@ -75,18 +75,20 @@ jobs:
                   BUMP_TYPE="${{ steps.version_bump_type.outputs.BUMP_TYPE }}"
                   IS_BETA="${{ steps.is_beta.outputs.IS_BETA }}"
 
+                  # `--no-git-checks` skips pnpm's working-tree-dirty check; the bump only
+                  # rewrites package.json and we never tag/commit from this step (`--no-git-tag-version`).
                   if [[ "$IS_BETA" == "true" ]]; then
                     # For beta releases, use the appropriate prerelease command
                     if [[ "$BUMP_TYPE" == "major" ]]; then
-                      pnpm version premajor --preid=beta --no-git-tag-version
+                      pnpm version premajor --preid=beta --no-git-tag-version --no-git-checks
                     elif [[ "$BUMP_TYPE" == "minor" ]]; then
-                      pnpm version preminor --preid=beta --no-git-tag-version
+                      pnpm version preminor --preid=beta --no-git-tag-version --no-git-checks
                     else
                       # For patch, just increment the beta number
-                      pnpm version prerelease --preid=beta --no-git-tag-version
+                      pnpm version prerelease --preid=beta --no-git-tag-version --no-git-checks
                     fi
                   else
-                    pnpm version $BUMP_TYPE --no-git-tag-version
+                    pnpm version $BUMP_TYPE --no-git-tag-version --no-git-checks
                   fi
 
                   NEW_VERSION=$(node -p "require('./package.json').version")
@@ -152,12 +154,13 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   NODE_ENV: production
 
+            # Second setup-node ensures Node 26 is on PATH for the SEA injection step.
+            # No `cache:` here — the composite already restored the pnpm cache earlier in this job.
             - name: Setup Node.js 26 for CLI builds
               if: matrix.platform != 'win'
               uses: actions/setup-node@v6
               with:
                   node-version: '26'
-                  cache: 'pnpm'
 
             - name: Build CLI app (macOS/Linux only)
               if: matrix.platform != 'win'
@@ -192,11 +195,11 @@ jobs:
               with:
                   download-bumped: 'true'
 
+            # No `cache:` — the composite already restored the pnpm cache for this job.
             - name: Setup Node.js 26 for CLI build
               uses: actions/setup-node@v6
               with:
                   node-version: '26'
-                  cache: 'pnpm'
 
             - name: Build CLI Linux ARM app (native arm64 runner)
               run: pnpm build:cli:linux-arm

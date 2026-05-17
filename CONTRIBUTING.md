@@ -7,7 +7,11 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 ### Prerequisites
 
 - Node.js 26+ (matches `package.json` `engines.node` and `.nvmrc`; CI builds also pin to 26)
-- pnpm 11+ (installed automatically via `corepack enable` — Node ships with corepack)
+- pnpm 11+. The repo pins the exact version via the `packageManager` field in `package.json`; enable [corepack](https://nodejs.org/api/corepack.html) to use it:
+    ```bash
+    corepack enable
+    ```
+    Corepack ships with the official Node.js installer (nodejs.org). On some Linux distros (Debian/Ubuntu via apt, Fedora/RHEL, Arch) it may be packaged separately or absent — if `corepack: command not found`, install it with `npm i -g corepack` and re-run `corepack enable`. The repo also enables `engine-strict` in `.npmrc`, so any package whose `engines.node` doesn't satisfy Node 26+ will fail to install — that's intentional.
 
 ### Setup
 
