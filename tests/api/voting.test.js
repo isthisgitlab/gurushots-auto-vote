@@ -42,6 +42,10 @@ jest.mock('../../src/js/logger', () => {
             progress: jest.fn(),
             success: jest.fn(),
         })),
+        challengeTag: (c, t) =>
+            c && typeof c === 'object'
+                ? `[Challenge ${c.id ?? 'unknown'}: ${c.title ?? 'unknown'}]`
+                : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
         // Export the mock functions for testing
         __mockEndOperationFn: mockEndOperationFn,
     };
@@ -225,7 +229,7 @@ describe('voting', () => {
             // Should log warning about insufficient images
             expect(mockWarningFn).toHaveBeenCalledWith(
                 expect.stringContaining(
-                    'Insufficient images to reach 100% exposure for Test Challenge (only 1 images available)',
+                    '[Challenge 123: Test Challenge] Insufficient images to reach 100% exposure (only 1 available)',
                 ),
                 null,
             );
@@ -245,10 +249,9 @@ describe('voting', () => {
             const result = await submitVotes(mockVoteImages, mockToken);
 
             expect(logger.withCategory).toHaveBeenCalledWith('voting');
-            expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(
-                expect.any(String),
+            expect(mockErrorFn).toHaveBeenCalledWith(
+                expect.stringContaining('[Challenge 123: Test Challenge] Vote submission failed'),
                 null,
-                'Vote submission failed',
             );
             expect(result).toBeUndefined();
         });
@@ -267,7 +270,10 @@ describe('voting', () => {
 
             const result = await submitVotes(mockVoteImages, mockToken);
 
-            expect(mockWarningFn).toHaveBeenCalledWith('Failed to update metadata for challenge 123', null);
+            expect(mockWarningFn).toHaveBeenCalledWith(
+                'Failed to update metadata for [Challenge 123: Test Challenge]',
+                null,
+            );
             expect(result).toEqual(mockResponse);
         });
 
@@ -288,7 +294,10 @@ describe('voting', () => {
 
             const result = await submitVotes(mockVoteImages, mockToken);
 
-            expect(mockWarningFn).toHaveBeenCalledWith('Error updating metadata for challenge 123:', mockError);
+            expect(mockWarningFn).toHaveBeenCalledWith(
+                'Error updating metadata for [Challenge 123: Test Challenge]:',
+                mockError,
+            );
             expect(result).toEqual(mockResponse);
         });
     });

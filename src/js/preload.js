@@ -48,11 +48,11 @@ contextBridge.exposeInMainWorld('api', {
     logDebug: (message, data) => ipcRenderer.invoke('log-debug', message, data),
     logError: (message, data) => ipcRenderer.invoke('log-error', message, data),
     logWarning: (message, data) => ipcRenderer.invoke('log-warning', message, data),
-    logSuccess: (message, data) => ipcRenderer.invoke('log-success', message, data),
     logApi: (message, data) => ipcRenderer.invoke('log-api', message, data),
     getLogFile: () => ipcRenderer.invoke('get-log-file'),
     getErrorLogFile: () => ipcRenderer.invoke('get-error-log-file'),
     getApiLogFile: () => ipcRenderer.invoke('get-api-log-file'),
+    getLogBacklog: () => ipcRenderer.invoke('get-log-backlog'),
 
     // Boost configuration methods
     getBoostThreshold: (challengeId) => ipcRenderer.invoke('get-boost-threshold', challengeId),

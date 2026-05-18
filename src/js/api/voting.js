@@ -19,7 +19,9 @@ const { updateChallengeVoteMetadata } = require('../metadata');
  */
 const getVoteImages = async (challenge, token) => {
     const operationId = `get-vote-images-${challenge.id}`;
-    logger.withCategory('api').startOperation(operationId, `Fetching vote images for challenge ${challenge.title}`);
+    logger
+        .withCategory('api')
+        .startOperation(operationId, `Fetching vote images for ${logger.challengeTag(challenge)}`, 'DEBUG');
 
     // Request up to 100 images for voting
     const data = `limit=100&url=${challenge.url}`;
@@ -30,13 +32,14 @@ const getVoteImages = async (challenge, token) => {
 
     const response = await makePostRequest(ENDPOINTS.voteImages, headers, data);
 
-    // Validate response contains images
+    // No-images is an expected branch (mock-mode, or pool emptied between cycles).
+    // The outer voting op reports the user-visible line; we close at DEBUG.
     if (!response || !response.images || response.images.length === 0) {
-        logger.withCategory('api').endOperation(operationId, null, 'No images available for voting');
+        logger.withCategory('api').endOperation(operationId, 'no images available, returning null');
         return null;
     }
 
-    logger.withCategory('api').endOperation(operationId, `Retrieved ${response.images.length} images for voting`);
+    logger.withCategory('api').endOperation(operationId, `retrieved ${response.images.length} images`);
     return response;
 };
 
@@ -55,17 +58,17 @@ const getVoteImages = async (challenge, token) => {
  */
 const submitVotes = async (voteImages, token, targetExposure = 100) => {
     const { challenge, voting, images } = voteImages;
-    const operationId = `submit-votes-${challenge.id}`;
+    const startTime = Date.now();
 
     // Validate we have images to vote on
     if (!images || images.length === 0) {
-        logger.withCategory('voting').warning(`No images to vote on for challenge: ${challenge.title}`, null);
+        logger.withCategory('voting').warning(`${logger.challengeTag(challenge)} No images to vote on`, null);
         return;
     }
 
     logger
         .withCategory('voting')
-        .startOperation(operationId, `Submitting votes for challenge ${challenge.title} (target: ${targetExposure}%)`);
+        .debug(`${logger.challengeTag(challenge)} Submitting votes (target: ${targetExposure}%)`, null);
 
     // Prepare data for vote submission
     let votedImages = '';
@@ -94,7 +97,7 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
             logger
                 .withCategory('voting')
                 .warning(
-                    `Insufficient images to reach ${targetExposure}% exposure for ${challenge.title} (only ${uniqueImageIds.size} images available)`,
+                    `${logger.challengeTag(challenge)} Insufficient images to reach ${targetExposure}% exposure (only ${uniqueImageIds.size} available)`,
                     null,
                 );
             break;
@@ -111,7 +114,7 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
     // Submit votes to API
     const response = await makePostRequest(ENDPOINTS.submitVote, headers, data);
     if (!response) {
-        logger.withCategory('voting').endOperation(operationId, null, 'Vote submission failed');
+        logger.withCategory('voting').error(`${logger.challengeTag(challenge)} Vote submission failed`, null);
         return;
     }
 
@@ -121,23 +124,26 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
         if (success) {
             logger
                 .withCategory('voting')
-                .info(
-                    `Updated metadata for challenge ${challenge.id}: original exposure ${Math.round(originalExposureFactor)}%`,
+                .debug(
+                    `Updated metadata for ${logger.challengeTag(challenge)}: original exposure ${Math.round(originalExposureFactor)}%`,
                     null,
                 );
         } else {
-            logger.withCategory('voting').warning(`Failed to update metadata for challenge ${challenge.id}`, null);
+            logger.withCategory('voting').warning(`Failed to update metadata for ${logger.challengeTag(challenge)}`, null);
         }
     } catch (error) {
-        logger.withCategory('voting').warning(`Error updating metadata for challenge ${challenge.id}:`, error);
+        logger.withCategory('voting').warning(`Error updating metadata for ${logger.challengeTag(challenge)}:`, error);
     }
 
+    const duration = Date.now() - startTime;
     logger
         .withCategory('voting')
-        .endOperation(
-            operationId,
-            `Votes submitted successfully (${uniqueImageIds.size} images, ~${exposure_factor.toFixed(1)}% exposure)`,
+        .success(
+            `${logger.challengeTag(challenge)} Votes submitted (${uniqueImageIds.size} images, ~${exposure_factor.toFixed(1)}% exposure)`,
+            null,
+            duration,
         );
+
     return response;
 };
 

@@ -27,7 +27,7 @@ function LogsPageContent() {
                         <div className="h-[600px] overflow-y-auto bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg">
                             <div className="space-y-1">
                                 {entries.length === 0 ? (
-                                    <LogsEmptyState text={t('logs.waiting')} />
+                                    <LogsEmptyState text={t('logs.empty')} />
                                 ) : (
                                     entries.map((entry, index) => (
                                         <LogEntry key={`${entry.timestamp}-${index}`} entry={entry} />

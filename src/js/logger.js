@@ -267,6 +267,14 @@ const getContext = () => {
 
 const getTimeString = () => formatTimeHMS();
 
+// Severity colors — strict 4-level set.
+const LEVEL_COLORS = {
+    DEBUG: 'gray',
+    INFO: 'blue',
+    WARN: 'yellow',
+    ERROR: 'red',
+};
+
 /**
  * Apply color to text (only in CLI mode and when not sending to GUI)
  */
@@ -283,7 +291,8 @@ const colorize = (text, color, forConsole = false) => {
 };
 
 /**
- * Format console output with context and colors
+ * Format console output. Fixed-column order:
+ *   [timestamp] [LEVEL] [CONTEXT] [category] message
  */
 const formatConsoleMessage = (
     level,
@@ -291,25 +300,15 @@ const formatConsoleMessage = (
     context = getContext(),
     timestamp = getTimeString(),
     forConsole = false,
-    category = null,
+    category = 'general',
 ) => {
-    const levelColors = {
-        INFO: 'blue',
-        SUCCESS: 'green',
-        WARNING: 'yellow',
-        ERROR: 'red',
-        DEBUG: 'gray',
-        API: 'cyan',
-        PROGRESS: 'magenta',
-    };
-
-    const color = levelColors[level] || 'white';
+    const color = LEVEL_COLORS[level] || 'white';
+    const coloredTime = colorize(`[${timestamp}]`, 'gray', forConsole);
     const coloredLevel = colorize(`[${level}]`, color, forConsole);
     const coloredContext = colorize(`[${context}]`, 'cyan', forConsole);
-    const coloredTime = colorize(`[${timestamp}]`, 'gray', forConsole);
-    const categoryString = category ? colorize(`[${category.toUpperCase()}]`, 'yellow', forConsole) + ' ' : '';
+    const coloredCategory = colorize(`[${category}]`, 'yellow', forConsole);
 
-    return `${categoryString}${coloredContext} ${coloredLevel} ${coloredTime} ${message}`;
+    return `${coloredTime} ${coloredLevel} ${coloredContext} ${coloredCategory} ${message}`;
 };
 
 // Keys whose values must never reach disk in plaintext. Match is case-
@@ -343,125 +342,86 @@ const sanitizeForLog = (value, depth = 0, seen = new WeakSet()) => {
     return out;
 };
 
+// Ring buffer of recent log entries — drives the GUI Logs page on mount
+// so users see the backlog since app start instead of "Waiting...". The
+// monotonic seq lets the renderer de-dupe live messages that race the
+// backlog fetch.
+const MAX_RECENT = 1000;
+const recentLogs = [];
+let nextSeq = 1;
+
+// Routes a log entry to the appropriate disk file. ERROR always wins
+// over category-based routing so errors stay co-located across domains.
+const routeLogFile = (level, category) => {
+    if (level === 'ERROR') return currentLogFiles.error;
+    if (category === 'api') return currentLogFiles.api;
+    if (category === 'settings') return currentLogFiles.settings;
+    return currentLogFiles.app;
+};
+
 /**
- * Write to log file with enhanced formatting
+ * Core write path. All sugar methods funnel through this.
+ *
+ * Emits to ring buffer, disk (when fs is available), console, and the
+ * GUI IPC fan-out (when wired). Sanitizes data for disk; sends raw to
+ * the GUI which renders it.
  */
-const writeToLogFile = (logFile, level, message, data = null, context = getContext(), category = null) => {
+const writeLog = (level, message, data = null, category = null) => {
     try {
+        const context = getContext();
         const timestamp = new Date().toISOString();
-        const categoryString = category ? `[${category.toUpperCase()}] ` : '';
-        let logEntry = `${categoryString}[${context}] [${level}] [${timestamp}] ${message}`;
+        const cat = category || 'general';
+        const sanitized = data ? sanitizeForLog(data) : null;
+        const seq = nextSeq++;
+        const entry = { seq, level, context, category: cat, timestamp, message, data: sanitized };
 
-        if (data) {
-            if (typeof data === 'object') {
-                logEntry += '\n' + JSON.stringify(sanitizeForLog(data), null, 2);
-            } else {
-                logEntry += '\n' + data;
-            }
-        }
+        recentLogs.push(entry);
+        if (recentLogs.length > MAX_RECENT) recentLogs.shift();
 
-        logEntry += '\n' + '='.repeat(80) + '\n';
-
-        // Route settings logs to settings file
-        let targetLogFile = logFile;
-        if (category === 'settings') {
-            targetLogFile = currentLogFiles.settings;
-        }
-
-        // Write to file. On Capacitor / browser, logsDir is empty and
-        // fs is the require-shim — skip silently and rely on the
-        // console.log below + sendLogToGUI for in-app log surfacing.
         if (logsDir && typeof fs.appendFileSync === 'function') {
+            const target = routeLogFile(level, cat);
+            let line = `[${timestamp}] [${level}] [${context}] [${cat}] ${message}`;
+            if (sanitized) {
+                line += '\n' + (typeof sanitized === 'object' ? JSON.stringify(sanitized, null, 2) : sanitized);
+            }
+            line += '\n' + '='.repeat(80) + '\n';
             try {
-                fs.appendFileSync(targetLogFile, logEntry);
+                fs.appendFileSync(target, line);
             } catch {
                 // best-effort; never let a log write tear down the app.
             }
         }
 
-        // Also log to console with formatting (colors enabled for console)
-        console.log(formatConsoleMessage(level, message, context, getTimeString(), true, category));
+        console.log(formatConsoleMessage(level, message, context, getTimeString(), true, cat));
 
-        // Send to GUI if available and log stream is active (no colors for GUI)
         if (typeof global !== 'undefined' && global.sendLogToGUI) {
-            const timeString = getTimeString();
-            global.sendLogToGUI(level, message, context, timeString, category);
+            global.sendLogToGUI({
+                seq,
+                level,
+                context,
+                category: cat,
+                timestamp: getTimeString(),
+                message,
+            });
         }
     } catch (error) {
-        console.error('Error writing to log file:', error);
+        console.error('Error writing log entry:', error);
     }
 };
 
 /**
- * Enhanced logging with operation tracking
- */
-const logWithOperation = (level, operation, message, data = null, duration = null) => {
-    let baseMessage = message;
-
-    if (operation) {
-        baseMessage = `${operation}: ${message}`;
-    }
-
-    // Create clean message for GUI/file (without colors)
-    let cleanMessage = baseMessage;
-
-    if (duration !== null) {
-        cleanMessage += ` (${duration}ms)`;
-    }
-
-    const logFile =
-        level === 'ERROR' ? currentLogFiles.error : level === 'API' ? currentLogFiles.api : currentLogFiles.app;
-
-    // Use the clean message for file/GUI logging
-    writeToLogFile(logFile, level, cleanMessage, data);
-};
-
-/**
- * Progress indicator for long operations
- */
-const logProgress = (message, current = null, total = null) => {
-    let progressMessage = message;
-
-    if (current !== null && total !== null) {
-        const percentage = Math.round((current / total) * 100);
-        const progressBar = '█'.repeat(Math.floor(percentage / 5)) + '░'.repeat(20 - Math.floor(percentage / 5));
-        progressMessage += ` [${progressBar}] ${percentage}% (${current}/${total})`;
-    }
-
-    console.log(formatConsoleMessage('PROGRESS', progressMessage, getContext(), getTimeString(), true));
-};
-
-/**
- * Success message with checkmark
- */
-const logSuccess = (message, data = null, duration = null, category = null) => {
-    let successMessage = `✅ ${message}`;
-    if (duration !== null) {
-        successMessage += ` (${duration}ms)`;
-    }
-    writeToLogFile(currentLogFiles.app, 'SUCCESS', successMessage, data, getContext(), category);
-};
-
-/**
- * Warning message with warning symbol
- */
-const logWarning = (message, data = null, category = null) => {
-    const warningMessage = `⚠️ ${message}`;
-    writeToLogFile(currentLogFiles.app, 'WARNING', warningMessage, data, getContext(), category);
-};
-
-/**
- * Operation start tracker
+ * Operation tracker. `startOperation` stores the level + category so
+ * `endOperation` can emit the success line at the same severity as the
+ * start (e.g. inner ops both start and end at DEBUG without cluttering
+ * the default log). Failures always emit at ERROR regardless of start
+ * level — a real bug should never be silently swallowed.
  */
 const operations = new Map();
 
-const startOperation = (operationId, message) => {
+const startOperation = (operationId, message, level = 'INFO', category = null) => {
     const startTime = Date.now();
-    operations.set(operationId, { startTime, message });
-
-    const startMessage = `🔄 ${message}...`;
-    writeToLogFile(currentLogFiles.app, 'INFO', startMessage);
-
+    operations.set(operationId, { startTime, message, level, category });
+    writeLog(level, `🔄 ${message}...`, null, category);
     return startTime;
 };
 
@@ -474,13 +434,21 @@ const endOperation = (operationId, successMessage = null, errorMessage = null) =
 
     if (errorMessage) {
         const failMessage = `❌ ${operation.message} failed: ${errorMessage}`;
-        writeToLogFile(currentLogFiles.error, 'ERROR', failMessage);
+        writeLog('ERROR', failMessage, null, operation.category);
     } else {
         const completeMessage = successMessage || `${operation.message} completed`;
-        logSuccess(completeMessage, null, duration);
+        writeLog(operation.level, `✅ ${completeMessage} (${duration}ms)`, null, operation.category);
     }
 
     return duration;
+};
+
+/** Build a progress message with optional [bar] suffix. */
+const buildProgressMessage = (message, current, total) => {
+    if (current === null || total === null) return message;
+    const percentage = Math.round((current / total) * 100);
+    const bar = '█'.repeat(Math.floor(percentage / 5)) + '░'.repeat(20 - Math.floor(percentage / 5));
+    return `${message} [${bar}] ${percentage}% (${current}/${total})`;
 };
 
 // Initialize cleanup on module load
@@ -529,139 +497,99 @@ const LOG_CATEGORIES = {
     GENERAL: 'general',
 };
 
+// API and debug emissions only land in source-code builds — packaged
+// apps stay quiet on these noisy channels.
+const apiOrDebugEnabled = () => isSourceCode();
+
 // Export logger functions
 module.exports = {
     // Category constants
     CATEGORIES: LOG_CATEGORIES,
-    // Basic logging methods (backward compatibility)
-    error: (message, data, category) =>
-        writeToLogFile(currentLogFiles.error, 'ERROR', message, data, getContext(), category),
-    info: (message, data, category) =>
-        writeToLogFile(currentLogFiles.app, 'INFO', message, data, getContext(), category),
+
+    // Basic logging methods
+    error: (message, data, category) => writeLog('ERROR', message, data, category),
+    info: (message, data, category) => writeLog('INFO', message, data, category),
     debug: (message, data, category) => {
-        // Only log debug messages in non-built app (source code)
-        if (isSourceCode()) {
-            writeToLogFile(currentLogFiles.app, 'DEBUG', message, data, getContext(), category);
-        }
-        // In built app, debug messages are completely suppressed for both CLI and GUI
+        if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
     },
-    api: (message, data, category) => {
-        // Always log API messages to file in non-built app
-        if (isSourceCode()) {
-            writeToLogFile(currentLogFiles.api, 'API', message, data, getContext(), category);
-        }
+    api: (message, data, category = 'api') => {
+        if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
     },
 
     // Enhanced logging methods
-    success: logSuccess,
-    warning: logWarning,
-    progress: logProgress,
+    success: (message, data = null, duration = null, category = null) => {
+        const suffix = duration !== null ? ` (${duration}ms)` : '';
+        writeLog('INFO', `✅ ${message}${suffix}`, data, category);
+    },
+    warning: (message, data = null, category = null) => {
+        writeLog('WARN', `⚠️ ${message}`, data, category);
+    },
+    progress: (message, current = null, total = null) => {
+        writeLog('INFO', buildProgressMessage(message, current, total), null, null);
+    },
 
-    // Category logging - creates a logger for any category
+    // Category logging - creates a logger bound to a category
     withCategory: (category) => ({
-        info: (message, data) => writeToLogFile(currentLogFiles.app, 'INFO', message, data, getContext(), category),
-        error: (message, data) => writeToLogFile(currentLogFiles.error, 'ERROR', message, data, getContext(), category),
+        info: (message, data) => writeLog('INFO', message, data, category),
+        error: (message, data) => writeLog('ERROR', message, data, category),
         debug: (message, data) => {
-            if (isSourceCode()) {
-                writeToLogFile(currentLogFiles.app, 'DEBUG', message, data, getContext(), category);
-            }
+            if (apiOrDebugEnabled()) writeLog('DEBUG', message, data, category);
         },
         api: (message, data) => {
-            // Always log API messages to file in non-built app
-            if (isSourceCode()) {
-                writeToLogFile(currentLogFiles.api, 'API', message, data, getContext(), category);
-            }
+            if (apiOrDebugEnabled()) writeLog('INFO', message, data, category);
         },
         apiRequest: (method, url, duration = null) => {
-            const message = duration ? `${method} ${url} (${duration}ms)` : `${method} ${url}`;
-            // Always log API requests to file in non-built app
-            if (isSourceCode()) {
-                writeToLogFile(currentLogFiles.api, 'API', `🌐 REQUEST: ${message}`, null, getContext(), category);
-            }
+            if (!apiOrDebugEnabled()) return;
+            const suffix = duration !== null ? ` (${duration}ms)` : '';
+            writeLog('INFO', `🌐 REQUEST: ${method} ${url}${suffix}`, null, category);
         },
-        success: (message, data, duration) => logSuccess(message, data, duration, category),
-        warning: (message, data) => logWarning(message, data, category),
+        apiResponse: (method, url, status, duration = null) => {
+            if (!apiOrDebugEnabled()) return;
+            const statusEmoji = status >= 200 && status < 300 ? '✅' : '❌';
+            const suffix = duration !== null ? ` (${duration}ms)` : '';
+            writeLog('INFO', `${statusEmoji} RESPONSE: ${method} ${url} → ${status}${suffix}`, null, category);
+        },
+        success: (message, data, duration) => {
+            const suffix = duration !== null && duration !== undefined ? ` (${duration}ms)` : '';
+            writeLog('INFO', `✅ ${message}${suffix}`, data, category);
+        },
+        warning: (message, data) => writeLog('WARN', `⚠️ ${message}`, data, category),
         progress: (message, current = null, total = null) => {
-            let progressMessage = message;
-
-            if (current !== null && total !== null) {
-                const percentage = Math.round((current / total) * 100);
-                const progressBar =
-                    '█'.repeat(Math.floor(percentage / 5)) + '░'.repeat(20 - Math.floor(percentage / 5));
-                progressMessage += ` [${progressBar}] ${percentage}% (${current}/${total})`;
-            }
-
-            console.log(
-                formatConsoleMessage('PROGRESS', progressMessage, getContext(), getTimeString(), true, category),
-            );
+            writeLog('INFO', buildProgressMessage(message, current, total), null, category);
         },
-        startOperation: (operationId, message) => {
-            const startTime = Date.now();
-            operations.set(operationId, { startTime, message });
-
-            const startMessage = `🔄 ${message}...`;
-            writeToLogFile(currentLogFiles.app, 'INFO', startMessage, null, getContext(), category);
-
-            return startTime;
-        },
-        endOperation: (operationId, successMessage = null, errorMessage = null) => {
-            const operation = operations.get(operationId);
-            if (!operation) return;
-
-            const duration = Date.now() - operation.startTime;
-            operations.delete(operationId);
-
-            if (errorMessage) {
-                const failMessage = `❌ ${operation.message} failed: ${errorMessage}`;
-                writeToLogFile(currentLogFiles.error, 'ERROR', failMessage, null, getContext(), category);
-            } else {
-                const completeMessage = successMessage || `${operation.message} completed`;
-                logSuccess(completeMessage, null, duration, category);
-            }
-
-            return duration;
-        },
+        startOperation: (operationId, message, level = 'INFO') => startOperation(operationId, message, level, category),
+        endOperation,
     }),
 
-    // Operation tracking
+    // Operation tracking (top-level)
     startOperation,
     endOperation,
 
-    // Enhanced logging with context
-    logWithOperation,
-
-    // Challenge-specific logging
-    challengeInfo: (challengeId, challengeTitle, message, data) => {
-        const contextMessage = `[Challenge ${challengeId}: ${challengeTitle}] ${message}`;
-        writeToLogFile(currentLogFiles.app, 'INFO', contextMessage, data);
-    },
-
-    challengeSuccess: (challengeId, challengeTitle, message, data, duration) => {
-        const contextMessage = `[Challenge ${challengeId}: ${challengeTitle}] ✅ ${message}`;
-        logSuccess(contextMessage, data, duration);
-    },
-
-    challengeError: (challengeId, challengeTitle, message, data) => {
-        const contextMessage = `[Challenge ${challengeId}: ${challengeTitle}] ❌ ${message}`;
-        writeToLogFile(currentLogFiles.error, 'ERROR', contextMessage, data);
-    },
-
-    // API-specific logging with timing
+    // API-specific logging with timing (top-level convenience)
     apiRequest: (method, url, duration = null) => {
-        const message = duration ? `${method} ${url} (${duration}ms)` : `${method} ${url}`;
-        // Always log API requests to file in non-built app
-        if (isSourceCode()) {
-            writeToLogFile(currentLogFiles.api, 'API', `🌐 REQUEST: ${message}`);
-        }
+        if (!apiOrDebugEnabled()) return;
+        const suffix = duration !== null ? ` (${duration}ms)` : '';
+        writeLog('INFO', `🌐 REQUEST: ${method} ${url}${suffix}`, null, 'api');
     },
 
     apiResponse: (method, url, status, duration = null) => {
+        if (!apiOrDebugEnabled()) return;
         const statusEmoji = status >= 200 && status < 300 ? '✅' : '❌';
-        const message = duration ? `${method} ${url} → ${status} (${duration}ms)` : `${method} ${url} → ${status}`;
-        // Always log API responses to file in non-built app
-        if (isSourceCode()) {
-            writeToLogFile(currentLogFiles.api, 'API', `${statusEmoji} RESPONSE: ${message}`);
+        const suffix = duration !== null ? ` (${duration}ms)` : '';
+        writeLog('INFO', `${statusEmoji} RESPONSE: ${method} ${url} → ${status}${suffix}`, null, 'api');
+    },
+
+    // Ring buffer accessor — drives GUI backlog replay on mount.
+    getRecentLogs: () => recentLogs.slice(),
+
+    // Formats a challenge object as the standard log prefix
+    // `[Challenge {id}: {title}]`. Pass the whole challenge object or
+    // (id, title) directly; missing fields render as 'unknown'.
+    challengeTag: (challengeOrId, title) => {
+        if (challengeOrId && typeof challengeOrId === 'object') {
+            return `[Challenge ${challengeOrId.id ?? 'unknown'}: ${challengeOrId.title ?? 'unknown'}]`;
         }
+        return `[Challenge ${challengeOrId ?? 'unknown'}: ${title ?? 'unknown'}]`;
     },
 
     // Utility methods

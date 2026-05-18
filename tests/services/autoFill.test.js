@@ -30,6 +30,10 @@ const makeLogger = () => ({
         error: jest.fn(),
         debug: jest.fn(),
     })),
+    challengeTag: (c, t) =>
+        c && typeof c === 'object'
+            ? `[Challenge ${c.id ?? 'unknown'}: ${c.title ?? 'unknown'}]`
+            : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
 });
 
 const makeSettings = ({ autoFill = false, intervalMinutes = 10 } = {}) => ({

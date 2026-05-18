@@ -26,7 +26,7 @@ const cancellation = require('../voting/cancellation');
 const runTurboMiniGame = async (challenge, token) => {
     const set = await getChallengeTurbo(challenge.id, token);
     if (!set) {
-        logger.withCategory('turbo').warning(`No turbo battle set returned for challenge ${challenge.id}`, null);
+        logger.withCategory('turbo').warning(`${logger.challengeTag(challenge)} No turbo battle set returned`, null);
         return { played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false };
     }
 
@@ -71,7 +71,7 @@ const runTurboMiniGame = async (challenge, token) => {
             if (code) {
                 logger
                     .withCategory('turbo')
-                    .warning(`Battle skipped on challenge ${challenge.id}, error_code=${code}`, null);
+                    .warning(`${logger.challengeTag(challenge)} Turbo battle skipped, error_code=${code}`, null);
             }
         }
         await sleep(TURBO_SELECTION_DELAY_MS);
@@ -178,7 +178,9 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
             const isKeyUnlockedAvailable =
                 boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout);
             if (isTimerBasedAvailable || isKeyUnlockedAvailable) {
-                logger.challengeInfo(challenge.id, challenge.title, 'Boost available');
+                logger
+                    .withCategory('voting')
+                    .info(`${logger.challengeTag(challenge)} Boost available`, null);
 
                 // Use the centralized voting logic service for boost decisions
                 const shouldApplyBoost = votingLogic.shouldApplyBoost(challenge, now);
@@ -220,20 +222,12 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                         minutesRemaining > 60
                             ? `${Math.floor(minutesRemaining / 60)}h ${minutesRemaining % 60}m`
                             : `${minutesRemaining}m`;
-                    if (isTimerBasedAvailable) {
-                        logger.challengeInfo(
-                            challenge.id,
-                            challenge.title,
-                            `Boost not ready - ${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`,
-                        );
-                    } else {
-                        // Key-unlocked path uses the 10-minute rule; omit timer threshold language
-                        logger.challengeInfo(
-                            challenge.id,
-                            challenge.title,
-                            `Boost not ready - ${timeDisplay} until challenge ends (needs ≤ 10m to auto-apply)`,
-                        );
-                    }
+                    const reason = isTimerBasedAvailable
+                        ? `${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`
+                        : `${timeDisplay} until challenge ends (needs ≤ 10m to auto-apply)`;
+                    logger
+                        .withCategory('voting')
+                        .info(`${logger.challengeTag(challenge)} Boost not ready - ${reason}`, null);
                 }
             }
 
@@ -291,11 +285,12 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                 submitToChallenge,
             });
             if (fillResult === 'submitted') {
-                logger.challengeInfo(
-                    challenge.id,
-                    challenge.title,
-                    'autoFill: entry submitted; boost/turbo will be evaluated on next cycle',
-                );
+                logger
+                    .withCategory('voting')
+                    .info(
+                        `${logger.challengeTag(challenge)} autoFill: entry submitted; boost/turbo will be evaluated on next cycle`,
+                        null,
+                    );
             }
 
             // Use the centralized voting logic service
@@ -305,7 +300,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
             if (shouldVote) {
                 logger
                     .withCategory('voting')
-                    .startOperation(`vote-${challenge.id}`, `Voting on challenge ${challenge.title}`);
+                    .startOperation(`vote-${challenge.id}`, `Voting on ${logger.challengeTag(challenge)}`, 'DEBUG');
 
                 try {
                     // Check for cancellation before voting
@@ -317,7 +312,12 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                         return { success: false, message: 'Voting cancelled by user' };
                     }
 
-                    logger.challengeInfo(challenge.id, challenge.title, `Starting voting process - ${voteReason}`);
+                    logger
+                        .withCategory('voting')
+                        .info(
+                            `${logger.challengeTag(challenge)} Starting voting process - ${voteReason}`,
+                            null,
+                        );
 
                     // Get images to vote on
                     const voteImages = await getVoteImages(challenge, token);
@@ -333,11 +333,12 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                             return { success: false, message: 'Voting cancelled by user' };
                         }
 
-                        logger.challengeInfo(
-                            challenge.id,
-                            challenge.title,
-                            `Submitting votes for ${voteImages.images.length} images`,
-                        );
+                        logger
+                            .withCategory('voting')
+                            .info(
+                                `${logger.challengeTag(challenge)} Submitting votes for ${voteImages.images.length} images`,
+                                null,
+                            );
 
                         // Submit votes to target exposure (dynamic based on voting rules)
                         await submitVotes(voteImages, token, targetExposure);
@@ -353,27 +354,31 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                             return { success: false, message: 'Voting cancelled by user' };
                         }
 
-                        logger
-                            .withCategory('voting')
-                            .endOperation(`vote-${challenge.id}`, 'Votes submitted successfully');
+                        logger.withCategory('voting').endOperation(`vote-${challenge.id}`, 'voting attempt complete');
 
                         // Add random delay between challenges to mimic human behavior
                         const delay = getRandomDelay(2000, 5000);
                         logger.withCategory('voting').debug(`Adding ${delay}ms delay between challenges`, null);
                         await sleep(delay);
                     } else {
-                        logger.challengeError(challenge.id, challenge.title, 'No vote images available');
+                        // No images is a valid "nothing to do" state — close the op as a
+                        // DEBUG success (silent) and surface one WARN for user visibility.
+                        logger.withCategory('voting').endOperation(`vote-${challenge.id}`, 'no vote images available');
                         logger
                             .withCategory('voting')
-                            .endOperation(`vote-${challenge.id}`, null, 'No vote images available');
+                            .warning(
+                                `${logger.challengeTag(challenge)} No vote images available — skipping`,
+                                null,
+                            );
                     }
                 } catch (error) {
-                    logger.challengeError(challenge.id, challenge.title, `Voting failed: ${error.message || error}`);
                     logger.withCategory('voting').endOperation(`vote-${challenge.id}`, null, error.message || error);
                 }
             } else {
                 // Log why voting was skipped
-                logger.challengeInfo(challenge.id, challenge.title, `Skipping voting - ${voteReason}`);
+                logger
+                    .withCategory('voting')
+                    .info(`${logger.challengeTag(challenge)} Skipping voting - ${voteReason}`, null);
             }
         }
 

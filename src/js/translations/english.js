@@ -291,7 +291,7 @@
         logs: {
             title: 'Logs',
             status: 'Status',
-            waiting: 'Waiting for log messages...',
+            empty: 'No logs yet.',
             connected: 'Connected',
             disconnected: 'Disconnected',
         },

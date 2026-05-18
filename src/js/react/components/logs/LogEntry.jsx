@@ -1,14 +1,11 @@
 /**
- * Color mapping for log levels
+ * Severity → text color. Strict 4-value set matches logger.js.
  */
 const LEVEL_COLORS = {
-    'INFO': 'text-blue-400',
-    'SUCCESS': 'text-green-400',
-    'WARNING': 'text-yellow-400',
-    'ERROR': 'text-red-400',
-    'DEBUG': 'text-gray-400',
-    'API': 'text-cyan-400',
-    'PROGRESS': 'text-purple-400',
+    DEBUG: 'text-gray-400',
+    INFO: 'text-blue-400',
+    WARN: 'text-yellow-400',
+    ERROR: 'text-red-400',
 };
 
 /**
@@ -24,8 +21,8 @@ function escapeHtml(text) {
 }
 
 /**
- * Single log entry component
- * Displays formatted log message with color-coded level
+ * Single log entry. Three small badges then the message:
+ *   [severity] [context] [category] message
  */
 export function LogEntry({ entry }) {
     const { level, message, context, timestamp, category } = entry;
@@ -33,18 +30,14 @@ export function LogEntry({ entry }) {
 
     return (
         <div className="log-entry whitespace-pre-wrap break-words">
-            <span className="text-cyan-400">[{context || 'APP'}]</span>
-            {' '}
             <span className="text-gray-400">[{timestamp}]</span>
             {' '}
             <span className={levelColor}>[{level}]</span>
             {' '}
-            {category && (
-                <>
-                    <span className="text-yellow-400">[{category}]</span>
-                    {' '}
-                </>
-            )}
+            <span className="text-cyan-400">[{context || 'APP'}]</span>
+            {' '}
+            <span className="text-yellow-400">[{category || 'general'}]</span>
+            {' '}
             <span className="text-white">{escapeHtml(message)}</span>
         </div>
     );
@@ -53,7 +46,7 @@ export function LogEntry({ entry }) {
 /**
  * Empty state when no logs are present
  */
-export function LogsEmptyState({ text = 'Waiting for log messages...' }) {
+export function LogsEmptyState({ text = 'No logs yet.' }) {
     return (
         <div className="text-gray-500 text-center py-8">
             {text}

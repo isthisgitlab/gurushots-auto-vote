@@ -89,9 +89,9 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
     }
 
     const startMsg = manual
-        ? '🗳️ Starting manual voting process for challenge:'
-        : '🗳️ Starting voting process for challenge:';
-    logger.withCategory('voting').info(startMsg, challenge.title);
+        ? `🗳️ ${logger.challengeTag(challenge)} Starting manual voting process`
+        : `🗳️ ${logger.challengeTag(challenge)} Starting voting process`;
+    logger.withCategory('voting').info(startMsg, null);
 
     const result = await submitVotesForChallenge(challenge, strategy, userSettings.token, now);
     if (result.outcome === 'not-eligible') {
@@ -202,23 +202,23 @@ const buildHandlers = () => ({
                         logger
                             .withCategory('voting')
                             .success(
-                                `✅ Voted on challenge: ${challenge.title} (target: ${result.targetExposure}%)`,
+                                `✅ ${logger.challengeTag(challenge)} Voted (target: ${result.targetExposure}%)`,
                                 null,
                             );
                         await new Promise((resolve) => setTimeout(resolve, STAGGER_MS));
                     } else if (result.outcome === 'no-images') {
                         logger
                             .withCategory('voting')
-                            .warning(`⚠️ No vote images available for: ${challenge.title}`, null);
+                            .warning(`⚠️ ${logger.challengeTag(challenge)} No vote images available`, null);
                         skippedCount++;
                     } else {
                         logger
                             .withCategory('voting')
-                            .info(`⏭️ Skipping challenge: ${challenge.title} - ${result.errorMessage}`, null);
+                            .info(`⏭️ ${logger.challengeTag(challenge)} Skipping - ${result.errorMessage}`, null);
                         skippedCount++;
                     }
                 } catch (error) {
-                    logger.withCategory('voting').error(`❌ Error voting on challenge ${challenge.title}:`, error);
+                    logger.withCategory('voting').error(`❌ ${logger.challengeTag(challenge)} Error voting:`, error);
                     skippedCount++;
                 }
             }

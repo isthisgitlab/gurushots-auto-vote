@@ -159,16 +159,16 @@ class BaseMiddleware {
                         await new Promise((resolve) => setTimeout(resolve, STAGGER_MS));
                     } else if (result.outcome === 'no-images') {
                         skipped++;
-                        logger.withCategory('voting').warning(`No vote images available for: ${challenge.title}`, null);
+                        logger.withCategory('voting').warning(`${logger.challengeTag(challenge)} No vote images available`, null);
                     } else {
                         skipped++;
                         logger
                             .withCategory('voting')
-                            .info(`Skipping ${challenge.title} - ${result.errorMessage}`, null);
+                            .info(`${logger.challengeTag(challenge)} Skipping - ${result.errorMessage}`, null);
                     }
                 } catch (error) {
                     skipped++;
-                    logger.withCategory('voting').error(`Error voting on challenge ${challenge.title}:`, error);
+                    logger.withCategory('voting').error(`${logger.challengeTag(challenge)} Error voting:`, error);
                 }
             }
             const summary = `Manual vote: ${voted} voted, ${skipped} skipped of ${challenges.length}`;

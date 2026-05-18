@@ -67,10 +67,8 @@ describe('voting/cancellation', () => {
                     progress: jest.fn(),
                     startOperation: jest.fn(),
                     endOperation: jest.fn(),
-                    challengeInfo: jest.fn(),
                 }),
                 isDevMode: () => false,
-                challengeInfo: jest.fn(),
                 CATEGORIES: { VOTING: 'voting' },
             }));
 

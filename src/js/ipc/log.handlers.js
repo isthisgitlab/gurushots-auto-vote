@@ -2,8 +2,10 @@
  * IPC handlers for the log channel.
  *
  * Two surfaces live here:
- *   1. one-shot writes (log-debug/error/api, get-*-log-file)
+ *   1. one-shot writes (log-debug/info/warning/error/api, get-*-log-file)
  *   2. live log streaming to renderer windows (start/stop-log-stream)
+ *      + backlog replay (get-log-backlog) so the Logs page shows entries
+ *      that landed before the page mounted.
  *
  * The streaming side stashes a fan-out function on `global.sendLogToGUI`
  * which `logger.js` calls when a log line is emitted. That global was
@@ -14,11 +16,12 @@ const logger = require('../logger');
 
 const logStreamWindows = new Set();
 
-const sendLogToGUI = (level, message, context, timestamp, category) => {
-    const logData = { level, message, context, timestamp, category };
+// logger.js calls this with a full entry object: { seq, level, context,
+// category, timestamp, message }. We forward as-is to renderers.
+const sendLogToGUI = (entry) => {
     logStreamWindows.forEach((webContents) => {
         if (!webContents.isDestroyed()) {
-            webContents.send('log-message', logData);
+            webContents.send('log-message', entry);
         }
     });
 };
@@ -38,6 +41,13 @@ const buildHandlers = () => ({
         return { success: true };
     },
 
+    'log-warning': async (event, message, data) => {
+        logger.setContext('GUI');
+        logger.withCategory('ui').warning(message, data);
+        logger.clearContext();
+        return { success: true };
+    },
+
     'log-api': async (event, message, data) => {
         logger.setContext('GUI');
         logger.withCategory('api').api(message, data);
@@ -48,6 +58,8 @@ const buildHandlers = () => ({
     'get-log-file': async () => logger.getLogFile(),
     'get-error-log-file': async () => logger.getErrorLogFile(),
     'get-api-log-file': async () => logger.getApiLogFile(),
+
+    'get-log-backlog': async () => logger.getRecentLogs(),
 
     'start-log-stream': async (event) => {
         try {

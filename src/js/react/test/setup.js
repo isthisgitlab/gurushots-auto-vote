@@ -17,7 +17,10 @@ const mockApi = {
         defaultMock: false,
         platform: 'darwin',
     }),
-    getSettingsSchema: jest.fn().mockResolvedValue({}),
+    // Match the real IPC shape — { schema, defaults }. Returning a bare
+    // `{}` makes hooks that destructure `{ schema }` early-return, which
+    // silently masks any reload path under test.
+    getSettingsSchema: jest.fn().mockResolvedValue({ schema: {}, defaults: {} }),
 
     // Authentication
     authenticate: jest.fn().mockResolvedValue({ success: true }),
@@ -59,13 +62,13 @@ const mockApi = {
     logDebug: jest.fn().mockResolvedValue(undefined),
     logError: jest.fn().mockResolvedValue(undefined),
     logWarning: jest.fn().mockResolvedValue(undefined),
-    logSuccess: jest.fn().mockResolvedValue(undefined),
     logApi: jest.fn().mockResolvedValue(undefined),
 
     // Log stream
     startLogStream: jest.fn().mockResolvedValue({ success: true }),
     stopLogStream: jest.fn().mockResolvedValue(undefined),
     onLogMessage: jest.fn(),
+    getLogBacklog: jest.fn().mockResolvedValue([]),
 
     // Update
     checkForUpdates: jest.fn().mockResolvedValue(undefined),

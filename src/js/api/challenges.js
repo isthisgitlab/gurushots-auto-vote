@@ -17,7 +17,7 @@ const logger = require('../logger');
  */
 const getActiveChallenges = async (token) => {
     const operationId = 'get-active-challenges';
-    logger.withCategory('api').startOperation(operationId, 'Fetching active challenges');
+    logger.withCategory('api').startOperation(operationId, 'Fetching active challenges', 'DEBUG');
 
     logger.withCategory('api').debug('Requesting active challenges from API', {
         hasToken: !!token,
@@ -42,7 +42,7 @@ const getActiveChallenges = async (token) => {
         responseKeys: Object.keys(response || {}),
     });
 
-    logger.withCategory('api').endOperation(operationId, `Retrieved ${challengeCount} active challenges`);
+    logger.withCategory('api').endOperation(operationId, `retrieved ${challengeCount} challenges`);
     return response;
 };
 

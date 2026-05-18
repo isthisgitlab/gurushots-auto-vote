@@ -292,7 +292,7 @@
         logs: {
             title: 'Žurnāli',
             status: 'Statuss',
-            waiting: 'Gaida žurnāla ziņojumus...',
+            empty: 'Vēl nav žurnāla ierakstu.',
             connected: 'Savienots',
             disconnected: 'Nav savienots',
         },

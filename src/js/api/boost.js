@@ -80,7 +80,7 @@ const applyBoost = async (challenge, token) => {
     const operationId = `apply-boost-${challengeId}`;
     logger
         .withCategory('boost')
-        .startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${challengeId}`);
+        .startOperation(operationId, `Applying boost to image ${boostImageId} in challenge ${challengeId}`, 'DEBUG');
 
     const response = await _postBoost(challengeId, boostImageId, token);
     if (!response) {
@@ -88,7 +88,7 @@ const applyBoost = async (challenge, token) => {
         return null;
     }
 
-    logger.withCategory('boost').endOperation(operationId, `Boost applied successfully to image ${boostImageId}`);
+    logger.withCategory('boost').endOperation(operationId, `boost applied to image ${boostImageId}`);
     return response;
 };
 

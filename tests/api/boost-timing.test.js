@@ -88,9 +88,6 @@ jest.mock('../../src/js/logger', () => {
         info: jest.fn(),
         warning: jest.fn(),
         progress: jest.fn(),
-        challengeInfo: jest.fn(),
-        challengeSuccess: jest.fn(),
-        challengeError: jest.fn(),
         error: jest.fn(),
         success: jest.fn(),
         debug: jest.fn(),
@@ -107,6 +104,10 @@ jest.mock('../../src/js/logger', () => {
             progress: jest.fn(),
             success: jest.fn(),
         })),
+        challengeTag: (c, t) =>
+            c && typeof c === 'object'
+                ? `[Challenge ${c.id ?? 'unknown'}: ${c.title ?? 'unknown'}]`
+                : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
         // Export the mock functions for testing
         __mockStartOperationFn: mockStartOperationFn,
         __mockEndOperationFn: mockEndOperationFn,

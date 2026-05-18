@@ -47,6 +47,12 @@ jest.mock('../src/js/logger.js', () => ({
     // Runtime detection helpers (canonical source) — settings.js destructures these from logger.
     isSourceCode: jest.fn(() => true),
     getAppName: jest.fn(() => 'gurushots-auto-vote-dev'),
+    challengeTag: jest.fn((c, t) =>
+        c && typeof c === 'object'
+            ? `[Challenge ${c.id ?? 'unknown'}: ${c.title ?? 'unknown'}]`
+            : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
+    ),
+    getRecentLogs: jest.fn(() => []),
     CATEGORIES: {
         SETTINGS: 'settings',
         AUTHENTICATION: 'authentication',

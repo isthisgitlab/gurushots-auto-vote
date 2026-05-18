@@ -77,7 +77,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         logger
             .withCategory('autoFill')
             .warning(
-                `autoFill: failed to fetch eligible photos for challenge ${challengeId}: ${error.message || error}`,
+                `autoFill: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
                 null,
             );
         return 'error';
@@ -85,7 +85,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
 
     const picked = pickPhotosForChallenge(challenge, eligible, 1);
     if (picked.length === 0) {
-        logger.withCategory('autoFill').info(`autoFill: no eligible photos for challenge ${challengeId}`, null);
+        logger.withCategory('autoFill').info(`autoFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
         return 'no-eligible-photos';
     }
 
@@ -95,19 +95,19 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
             logger
                 .withCategory('autoFill')
                 .success(
-                    `autoFill: submitted 1 entry for challenge ${challengeId} (${slotsRemaining - 1} slots remain)`,
+                    `autoFill: submitted 1 entry for ${logger.challengeTag(challenge)} (${slotsRemaining - 1} slots remain)`,
                     null,
                 );
             return 'submitted';
         }
         logger
             .withCategory('autoFill')
-            .warning(`autoFill: submit returned ok=false for challenge ${challengeId}`, null);
+            .warning(`autoFill: submit returned ok=false for ${logger.challengeTag(challenge)}`, null);
         return 'error';
     } catch (error) {
         logger
             .withCategory('autoFill')
-            .warning(`autoFill: submit threw for challenge ${challengeId}: ${error.message || error}`, null);
+            .warning(`autoFill: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
         return 'error';
     }
 };
@@ -145,7 +145,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
         logger
             .withCategory('autoFill')
             .warning(
-                `manualFill: failed to fetch eligible photos for challenge ${challengeId}: ${error.message || error}`,
+                `manualFill: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
                 null,
             );
         return {
@@ -159,7 +159,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     const wantCount = mode === 'all' ? slotsRemaining : 1;
     const picked = pickPhotosForChallenge(challenge, eligible, wantCount);
     if (picked.length === 0) {
-        logger.withCategory('autoFill').info(`manualFill: no eligible photos for challenge ${challengeId}`, null);
+        logger.withCategory('autoFill').info(`manualFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
         return { success: false, submitted: 0, skipped: slotsRemaining, error: 'No eligible photos found' };
     }
 
@@ -168,7 +168,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
         if (result && result.ok) {
             logger
                 .withCategory('autoFill')
-                .success(`manualFill: submitted ${picked.length} entries for challenge ${challengeId}`, null);
+                .success(`manualFill: submitted ${picked.length} entries for ${logger.challengeTag(challenge)}`, null);
             return {
                 success: true,
                 submitted: picked.length,
@@ -177,7 +177,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
         }
         logger
             .withCategory('autoFill')
-            .warning(`manualFill: submit returned ok=false for challenge ${challengeId}`, null);
+            .warning(`manualFill: submit returned ok=false for ${logger.challengeTag(challenge)}`, null);
         return {
             success: false,
             submitted: 0,
@@ -187,7 +187,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     } catch (error) {
         logger
             .withCategory('autoFill')
-            .warning(`manualFill: submit threw for challenge ${challengeId}: ${error.message || error}`, null);
+            .warning(`manualFill: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
         return {
             success: false,
             submitted: 0,
