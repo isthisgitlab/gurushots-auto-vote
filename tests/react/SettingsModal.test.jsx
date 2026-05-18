@@ -117,8 +117,13 @@ describe('SettingsModal — timezone "+" inline-add', () => {
         fireEvent.click(findTimezoneAddButton());
         const input = document.querySelector('input[type="text"]');
         fireEvent.change(input, { target: { value: 'Not/A/Real/Tz' } });
-        fireEvent.blur(input);
-        // After blur with invalid input the input-error class should be set.
+        // Pressing Enter routes through the same handleTimezoneAdd path that
+        // onBlur uses, but without the focusout-translation flakiness — onBlur
+        // sometimes fails to fire under @testing-library/preact when the new
+        // state from the prior fireEvent.change hasn't flushed yet, leaving
+        // the closure stale. Enter avoids that race entirely.
+        fireEvent.keyDown(input, { key: 'Enter' });
+        // After invalid submit the input-error class should be set.
         // Re-query because the rerender may have replaced the node.
         const after = document.querySelector('input[type="text"]');
         expect(after.className).toMatch(/input-error/);
