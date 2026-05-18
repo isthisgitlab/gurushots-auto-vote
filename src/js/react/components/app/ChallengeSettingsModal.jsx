@@ -25,41 +25,57 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         }
     }, [isOpen, refetchSchema]);
 
-    // Load existing overrides exactly once per open session. Without the guard,
-    // each schema refetch produces a new schema reference and re-runs this
-    // effect, clobbering in-progress user edits.
-    const overridesInitForOpenRef = useRef(false);
+    // Load existing overrides once per (open, challengeId) session.
+    //
+    // Two intertwined concerns:
+    //   1. Don't clobber in-progress user edits when useSettingsSchema
+    //      refetches and hands us a new schema reference mid-session.
+    //      Tracked by loadedForChallengeRef — once we've loaded for a
+    //      given challengeId, the effect early-returns even if schema
+    //      ref changes.
+    //   2. Drop in-flight loads when the user closes the modal or the
+    //      target challengeId changes before the IPC sequence resolves,
+    //      so a stale setOverrides can never land. Tracked by the
+    //      per-run `cancelled` flag set from the effect cleanup.
+    //
+    // The previous "single ref" guard handled (1) but missed (2), and
+    // rapid open/close cycles could land stale state — which is the
+    // most likely contributor to the blank page seen on rapid clicks.
+    const loadedForChallengeRef = useRef(null);
     useEffect(() => {
         if (!isOpen) {
-            overridesInitForOpenRef.current = false;
-            return;
+            loadedForChallengeRef.current = null;
+            return undefined;
         }
-        if (overridesInitForOpenRef.current) return;
-        if (!challengeId || !schema) return;
+        if (!challengeId || !schema) return undefined;
+        if (loadedForChallengeRef.current === challengeId) return undefined;
 
-        const loadOverrides = async () => {
+        let cancelled = false;
+        const load = async () => {
             setLoading(true);
-            const loadedOverrides = {};
-
+            const loaded = {};
             try {
                 for (const key of Object.keys(schema)) {
-                    if (schema[key].perChallenge) {
-                        const override = await window.api.getChallengeOverride(key, challengeId.toString());
-                        if (override !== null) {
-                            loadedOverrides[key] = override;
-                        }
-                    }
+                    if (!schema[key].perChallenge) continue;
+                    const value = await window.api.getChallengeOverride(key, challengeId.toString());
+                    if (cancelled) return;
+                    if (value !== null) loaded[key] = value;
                 }
-                setOverrides(loadedOverrides);
-                overridesInitForOpenRef.current = true;
+                if (cancelled) return;
+                setOverrides(loaded);
+                loadedForChallengeRef.current = challengeId;
             } catch (err) {
+                if (cancelled) return;
                 await window.api.logError(`Error loading challenge overrides: ${err.message || err}`);
             } finally {
-                setLoading(false);
+                if (!cancelled) setLoading(false);
             }
         };
 
-        loadOverrides();
+        load();
+        return () => {
+            cancelled = true;
+        };
     }, [isOpen, challengeId, schema]);
 
     const handleOverrideChange = useCallback((key, value) => {
@@ -79,7 +95,10 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     }, []);
 
     const handleSave = useCallback(async () => {
-        if (!challengeId) return;
+        // Schema can be null if its fetch failed but schemaLoading flipped
+        // to false — the Save button is then reachable but Object.keys(null)
+        // would throw. Bail out instead of crashing the boundary.
+        if (!challengeId || !schema) return;
 
         setSaving(true);
         try {

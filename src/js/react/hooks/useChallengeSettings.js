@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 /**
  * Reads the per-challenge effective values + override flags that
@@ -23,19 +23,33 @@ export function useChallengeSettings(challengeId) {
     const [isCompact, setIsCompact] = useState(false);
     const [hasCompactOverride, setHasCompactOverride] = useState(false);
 
+    // Tracks whether the card is still mounted. ChallengesSection refreshes
+    // the challenge list on a timer and may unmount cards mid-reload (via the
+    // `key={id-refreshKey}` strategy in that file). The flag prevents the
+    // batch of setState calls from landing on an unmounted component.
+    const mountedRef = useRef(true);
+    useEffect(() => {
+        mountedRef.current = true;
+        return () => {
+            mountedRef.current = false;
+        };
+    }, []);
+
     // Walks the schema and sets the five state slots from current overrides.
     // Used by both the mount effect and toggleCompact so the
     // hasCustomSettings flag stays in sync after a per-challenge write.
     const reload = useCallback(async () => {
         const id = challengeId.toString();
         try {
-            const schema = await window.api.getSettingsSchema();
+            const { schema } = (await window.api.getSettingsSchema()) || {};
+            if (!schema || !mountedRef.current) return;
             const perChallengeKeys = Object.entries(schema)
                 .filter(([, config]) => config.perChallenge)
                 .map(([key]) => key);
             const overrideResults = await Promise.all(
                 perChallengeKeys.map((key) => window.api.getChallengeOverride(key, id)),
             );
+            if (!mountedRef.current) return;
             setHasCustomSettings(overrideResults.some((o) => o !== null));
 
             const [boostOnly, fillOn, compact, compactOverride] = await Promise.all([
@@ -44,6 +58,7 @@ export function useChallengeSettings(challengeId) {
                 window.api.getEffectiveSetting('compactCards', id),
                 window.api.getChallengeOverride('compactCards', id),
             ]);
+            if (!mountedRef.current) return;
             setOnlyBoost(boostOnly);
             setAutoFillEnabled(fillOn === true);
             setIsCompact(compact === true);

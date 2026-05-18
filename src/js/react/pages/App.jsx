@@ -12,6 +12,7 @@ import { SettingsModal } from '@/components/app/SettingsModal';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { UpdateDialog } from '@/components/app/UpdateDialog';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
 /**
  * Main app content (inside all providers)
@@ -51,10 +52,26 @@ function AppContent() {
         setSettingsModalOpen(true);
     }, []);
 
-    // Handle challenge settings click
-    const handleChallengeSettingsClick = useCallback((challengeId, challengeTitle) => {
-        setSelectedChallenge({ id: challengeId, title: challengeTitle });
-        setChallengeSettingsOpen(true);
+    // Handle challenge settings click. Skip when the modal is already
+    // open for the same challenge so rapid taps don't churn parent state
+    // and re-thrash the modal's effects (rapid clicks were producing a
+    // blank page when the in-flight load raced the re-render).
+    const handleChallengeSettingsClick = useCallback(
+        (challengeId, challengeTitle) => {
+            if (challengeSettingsOpen && selectedChallenge.id === challengeId) return;
+            setSelectedChallenge({ id: challengeId, title: challengeTitle });
+            setChallengeSettingsOpen(true);
+        },
+        [challengeSettingsOpen, selectedChallenge.id],
+    );
+
+    const handleChallengeSettingsClose = useCallback(() => {
+        setChallengeSettingsOpen(false);
+        setSelectedChallenge({ id: null, title: '' });
+    }, []);
+
+    const handleSettingsClose = useCallback(() => {
+        setSettingsModalOpen(false);
     }, []);
 
     // Handle autovote toggle
@@ -74,43 +91,49 @@ function AppContent() {
     return (
         <div className="min-h-screen bg-base-200">
             <div className="container mx-auto px-4 py-4 max-w-4xl">
-                {/* Navbar */}
-                <Navbar isMock={isMock} onSettingsClick={handleSettingsClick} onLogout={handleLogout} />
+                <ErrorBoundary>
+                    {/* Navbar */}
+                    <Navbar isMock={isMock} onSettingsClick={handleSettingsClick} onLogout={handleLogout} />
 
-                {/* Autovote Controls */}
-                <AutoVoteControls
-                    running={autovote.running}
-                    status={autovote.status}
-                    statusClass={autovote.statusClass}
-                    lastRun={autovote.lastRun}
-                    cycles={autovote.cycles}
-                    onToggle={handleAutovoteToggle}
-                />
+                    {/* Autovote Controls */}
+                    <AutoVoteControls
+                        running={autovote.running}
+                        status={autovote.status}
+                        statusClass={autovote.statusClass}
+                        lastRun={autovote.lastRun}
+                        cycles={autovote.cycles}
+                        onToggle={handleAutovoteToggle}
+                    />
 
-                {/* Challenges Section */}
-                <ChallengesSection
-                    timezone={timezone}
-                    autovoteRunning={autovote.running}
-                    isLoggedIn={isLoggedIn}
-                    onChallengeSettingsClick={handleChallengeSettingsClick}
-                />
+                    {/* Challenges Section */}
+                    <ChallengesSection
+                        timezone={timezone}
+                        autovoteRunning={autovote.running}
+                        isLoggedIn={isLoggedIn}
+                        onChallengeSettingsClick={handleChallengeSettingsClick}
+                    />
 
-                {/* Settings Modal */}
-                <SettingsModal isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} />
+                    {/* Settings Modal */}
+                    <ErrorBoundary>
+                        <SettingsModal isOpen={settingsModalOpen} onClose={handleSettingsClose} />
+                    </ErrorBoundary>
 
-                {/* Challenge Settings Modal */}
-                <ChallengeSettingsModal
-                    isOpen={challengeSettingsOpen}
-                    onClose={() => {
-                        setChallengeSettingsOpen(false);
-                        setSelectedChallenge({ id: null, title: '' });
-                    }}
-                    challengeId={selectedChallenge.id}
-                    challengeTitle={selectedChallenge.title}
-                />
+                    {/* Challenge Settings Modal — keyed by challenge id so a
+                        challenge change forces a fresh modal instance with no
+                        carry-over state from a previous open. */}
+                    <ErrorBoundary>
+                        <ChallengeSettingsModal
+                            key={selectedChallenge.id ?? 'closed'}
+                            isOpen={challengeSettingsOpen}
+                            onClose={handleChallengeSettingsClose}
+                            challengeId={selectedChallenge.id}
+                            challengeTitle={selectedChallenge.title}
+                        />
+                    </ErrorBoundary>
 
-                {/* Update Dialog */}
-                <UpdateDialog />
+                    {/* Update Dialog */}
+                    <UpdateDialog />
+                </ErrorBoundary>
             </div>
         </div>
     );
