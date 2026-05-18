@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus } from '@/utils/formatters';
+import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
@@ -114,6 +115,10 @@ export function ChallengeCard({
 
     const nextLevelInfo = getNextLevelInfo();
     const endTime = formatEndTime(challenge.close_time, timezone);
+    const sanitizedWelcome = useMemo(
+        () => sanitizeWelcomeMessage(challenge.welcome_message),
+        [challenge.welcome_message],
+    );
 
     const handleOpenUrl = async () => {
         if (challenge.url) {
@@ -134,11 +139,11 @@ export function ChallengeCard({
                 <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
                     <div className="min-w-0">
                         <h3 className="font-bold text-base truncate">{challenge.title}</h3>
-                        {/* Welcome message — hidden in compact mode to keep the card a tight widget. truncate prevents long welcome text from forcing the grid cell wider. */}
-                        {!isCompact && (
+                        {/* Welcome message — hidden in compact mode to keep the card a tight widget. truncate prevents long welcome text from forcing the grid cell wider. sanitizeWelcomeMessage strips medium-editor toolbar leakage and allowlists safe tags. */}
+                        {!isCompact && sanitizedWelcome && (
                             <div
                                 className="text-xs text-base-content/60 truncate"
-                                dangerouslySetInnerHTML={{ __html: challenge.welcome_message }}
+                                dangerouslySetInnerHTML={{ __html: sanitizedWelcome }}
                             />
                         )}
                         {/* Challenge Type Badges */}
