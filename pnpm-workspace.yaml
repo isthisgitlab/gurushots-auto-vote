@@ -12,3 +12,5 @@ allowBuilds:
     electron-winstaller: true
     # Native resolver pulled in transitively by ESLint v10 — napi-postinstall verifies prebuilds.
     unrs-resolver: true
+minimumReleaseAgeExclude:
+    - electron@42.2.0

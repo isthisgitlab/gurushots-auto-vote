@@ -99,8 +99,8 @@
         "@testing-library/preact": "^3.2.4",
         "concurrently": "^9.2.1",
         "cross-env": "^10.1.0",
-        "daisyui": "^5.5.19",
-        "electron": "^42.1.0",
+        "daisyui": "^5.5.20",
+        "electron": "^42.2.0",
         "electron-builder": "^26.10.0",
         "electronmon": "^2.0.4",
         "esbuild": "^0.28.0",
@@ -111,8 +111,8 @@
         "jest-environment-jsdom": "^30.4.1",
         "jest-environment-node": "^30.4.1",
         "only-allow": "^1.2.2",
-        "postject": "^1.0.0-alpha.6",
-        "prettier": "^4.0.0-alpha.13",
+        "postject": "1.0.0-alpha.6",
+        "prettier": "4.0.0-alpha.13",
         "tailwindcss": "^4.3.0"
     },
     "electronmon": {
