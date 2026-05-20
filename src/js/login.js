@@ -49,7 +49,10 @@ const logger = {
 
 // Function for production login using real GuruShots API
 const loginProd = async (username, password) => {
-    logger.withCategory('authentication').info('Production login with:', username, password);
+    // Never log credentials. The renderer shim folds positional args into the
+    // message string, which the on-disk sanitizer (keyed on object fields)
+    // does not see — logging username/password here would leak them to disk.
+    logger.withCategory('authentication').info('Production login attempt');
 
     try {
         // Use the IPC call to authenticate through the main process
@@ -66,7 +69,8 @@ const loginProd = async (username, password) => {
 
 // Function for mock login using mock authentication data
 const loginMock = async (username, password) => {
-    logger.withCategory('authentication').info('Mock login with:', username, password);
+    // Never log credentials — see loginProd above.
+    logger.withCategory('authentication').info('Mock login attempt');
 
     try {
         // Use the IPC call to authenticate through the main process with mock flag

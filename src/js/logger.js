@@ -342,6 +342,22 @@ const sanitizeForLog = (value, depth = 0, seen = new WeakSet()) => {
     return out;
 };
 
+// Message-level counterpart to sanitizeForLog. sanitizeForLog only sees the
+// structured `data` object; it never touches the free-form message string.
+// Callers that fold a credential into the message via positional args (the
+// renderer login shim used to log `login with: <user> <password>`) would
+// otherwise leak plaintext to disk. This scrubs the value after any
+// sensitive key written as `key: value` or `key=value` (quotes optional)
+// and runs on every writeLog message. The key set mirrors SENSITIVE_KEY_RE;
+// \b anchors keep `tokenizer` etc. from matching.
+const SENSITIVE_MSG_RE =
+    /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+
+const redactMessage = (message) => {
+    if (typeof message !== 'string') return message;
+    return message.replace(SENSITIVE_MSG_RE, (_match, key, sep) => `${key}${sep}${REDACTED}`);
+};
+
 // Ring buffer of recent log entries — drives the GUI Logs page on mount
 // so users see the backlog since app start instead of "Waiting...". The
 // monotonic seq lets the renderer de-dupe live messages that race the
@@ -371,6 +387,9 @@ const writeLog = (level, message, data = null, category = null) => {
         const context = getContext();
         const timestamp = new Date().toISOString();
         const cat = category || 'general';
+        // Scrub credentials folded into the message string before it reaches
+        // the ring buffer, disk, console, or the GUI fan-out below.
+        message = redactMessage(message);
         const sanitized = data ? sanitizeForLog(data) : null;
         const seq = nextSeq++;
         const entry = { seq, level, context, category: cat, timestamp, message, data: sanitized };
@@ -614,4 +633,8 @@ module.exports = {
     // Test seam: redacts sensitive keys before disk write. Exported so the
     // contract is unit-testable; production callers don't need to call it.
     sanitizeForLog,
+
+    // Test seam: redacts credentials folded into a message string. Applied
+    // automatically by writeLog; exported so the contract is unit-testable.
+    redactMessage,
 };

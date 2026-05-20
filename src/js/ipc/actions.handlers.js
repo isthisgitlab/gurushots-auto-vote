@@ -68,7 +68,9 @@ const buildHandlers = () => ({
                             display_name: mockLoginSuccess.user.display_name,
                         },
                     };
-                    logger.withCategory('authentication').info('🔐 Mock authentication successful:', result);
+                    logger
+                        .withCategory('authentication')
+                        .info('🔐 Mock authentication successful', { success: true, userId: result.user.id });
                     return result;
                 }
                 const result = {
@@ -87,7 +89,11 @@ const buildHandlers = () => ({
                 return { success: false, message: 'Authentication failed - no response from server' };
             }
 
-            logger.withCategory('authentication').info('🔐 Real authentication response:', response);
+            logger.withCategory('authentication').info('🔐 Real authentication response received', {
+                hasToken: !!(response.token || response.access_token || response.auth_token),
+                status: response.status,
+                success: response.success,
+            });
 
             // GuruShots may return different success indicators across
             // versions; accept any of token / success===true / status==='success'.
@@ -106,7 +112,9 @@ const buildHandlers = () => ({
                                 response.user_name || response.username || response.name || response.display_name,
                         },
                     };
-                    logger.withCategory('authentication').info('🔐 Real authentication successful:', result);
+                    logger
+                        .withCategory('authentication')
+                        .info('🔐 Real authentication successful', { success: true, userId: result.user.id });
                     return result;
                 }
             }
