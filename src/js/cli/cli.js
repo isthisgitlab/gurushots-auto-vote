@@ -31,9 +31,27 @@ const {
     helpSettings,
     resetWindows,
 } = require('./commands/settings');
+const { showLogs } = require('./commands/logs');
 
 const args = process.argv.slice(2);
 const command = args[0];
+
+// Pull --challenge=<id> (or --challenge <id>) out of an arg list and return
+// the remaining positional args, so per-challenge settings commands accept
+// the flag in any position (mirrors `run --challenge=<id>`).
+const extractChallenge = (argv) => {
+    const challengeId = parseChallengeFlag(argv);
+    const rest = [];
+    for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === '--challenge') {
+            i++; // skip the flag and its separate value
+            continue;
+        }
+        if (argv[i].startsWith('--challenge=')) continue;
+        rest.push(argv[i]);
+    }
+    return { challengeId, rest };
+};
 
 const showHelp = () => {
     const userSettings = settings.loadSettings();
@@ -52,13 +70,14 @@ Commands:
   start    - Start continuous voting with cron scheduling
   stop     - Stop continuous voting (if running)
   status   - Show current status and settings
-  get-setting <key> - Get a setting value
-  set-setting <key> <value> - Set a setting value
+  get-setting <key> [--challenge=<id>] - Get a setting value (effective value for a challenge with --challenge)
+  set-setting <key> <value> [--challenge=<id>] - Set a setting value (per-challenge override with --challenge)
   set-global-default <key> <value> - Set global default with validation
-  list-settings - Show all settings and their values
-  reset-setting <key> - Reset a setting to default
+  list-settings [--challenge=<id>] - Show all settings (per-challenge view with --challenge)
+  reset-setting <key> [--challenge=<id>] - Reset a setting to default (clear a challenge override with --challenge)
   reset-all-settings - Reset all settings to defaults
   help-settings - Show detailed settings help
+  logs [--error|--api|--settings] [--lines=<n>] - Print the tail of a log file
   reset-windows  - Reset window positions to default
   help     - Show this help message
 
@@ -67,6 +86,9 @@ Examples:
   vote
   run
   run --challenge=12345
+  set-setting exposure 80 --challenge=12345
+  list-settings --challenge=12345
+  logs --error --lines=50
   start
   reset-windows
 
@@ -106,37 +128,45 @@ const main = async () => {
                 showStatus();
                 process.exit(0);
                 break;
-            case 'get-setting':
-                if (!args[1]) {
+            case 'get-setting': {
+                const { challengeId, rest } = extractChallenge(args.slice(1));
+                if (!rest[0]) {
                     logger.withCategory('ui').error('Please specify a setting key');
-                    logger.withCategory('ui').info('Usage: get-setting <key>');
+                    logger.withCategory('ui').info('Usage: get-setting <key> [--challenge=<id>]');
                     process.exit(1);
                 }
-                getSetting(args[1]);
+                getSetting(rest[0], challengeId);
                 process.exit(0);
                 break;
-            case 'set-setting':
-                if (!args[1] || !args[2]) {
+            }
+            case 'set-setting': {
+                const { challengeId, rest } = extractChallenge(args.slice(1));
+                if (!rest[0] || rest[1] === undefined) {
                     logger.withCategory('ui').error('Please specify both key and value');
-                    logger.withCategory('ui').info('Usage: set-setting <key> <value>');
+                    logger.withCategory('ui').info('Usage: set-setting <key> <value> [--challenge=<id>]');
                     process.exit(1);
                 }
-                setSetting(args[1], args[2]);
+                setSetting(rest[0], rest[1], challengeId);
                 process.exit(0);
                 break;
-            case 'list-settings':
-                listSettings();
+            }
+            case 'list-settings': {
+                const { challengeId } = extractChallenge(args.slice(1));
+                listSettings(challengeId);
                 process.exit(0);
                 break;
-            case 'reset-setting':
-                if (!args[1]) {
+            }
+            case 'reset-setting': {
+                const { challengeId, rest } = extractChallenge(args.slice(1));
+                if (!rest[0]) {
                     logger.withCategory('ui').error('Please specify a setting key');
-                    logger.withCategory('ui').info('Usage: reset-setting <key>');
+                    logger.withCategory('ui').info('Usage: reset-setting <key> [--challenge=<id>]');
                     process.exit(1);
                 }
-                resetSetting(args[1]);
+                resetSetting(rest[0], challengeId);
                 process.exit(0);
                 break;
+            }
             case 'set-global-default':
                 if (!args[1] || !args[2]) {
                     logger.withCategory('ui').error('Please specify both setting key and value');
@@ -151,6 +181,18 @@ const main = async () => {
                 resetAllSettings();
                 process.exit(0);
                 break;
+            case 'logs': {
+                const rest = args.slice(1);
+                let category = 'app';
+                if (rest.includes('--error')) category = 'error';
+                else if (rest.includes('--api')) category = 'api';
+                else if (rest.includes('--settings')) category = 'settings';
+                const linesArg = rest.find((a) => a.startsWith('--lines='));
+                const lines = linesArg ? parseInt(linesArg.slice('--lines='.length), 10) || 100 : 100;
+                showLogs({ category, lines });
+                process.exit(0);
+                break;
+            }
             case 'help-settings':
                 helpSettings();
                 process.exit(0);

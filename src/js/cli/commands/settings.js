@@ -21,8 +21,28 @@ const formatSettingForLog = (key, value) => {
     return masked[key] === '[REDACTED]' ? '[REDACTED]' : JSON.stringify(value);
 };
 
-const getSetting = (key) => {
+// Guard for the per-challenge variants: a key must declare perChallenge in
+// the schema before it can carry an override. Logs and returns false on miss.
+const requirePerChallenge = (key) => {
+    if (!settings.SETTINGS_SCHEMA[key]?.perChallenge) {
+        logger.withCategory('settings').error(`Setting '${key}' does not support per-challenge overrides`);
+        return false;
+    }
+    return true;
+};
+
+const getSetting = (key, challengeId = null) => {
     try {
+        if (challengeId) {
+            if (!requirePerChallenge(key)) return;
+            const effective = settings.getEffectiveSetting(key, challengeId);
+            const isOverride = settings.getChallengeOverride(key, challengeId) !== null;
+            const status = isOverride ? 'override' : 'inherited from global default';
+            logger
+                .withCategory('settings')
+                .info(`${key} [challenge ${challengeId}]: ${formatSettingForLog(key, effective)} (${status})`);
+            return;
+        }
         const value = settings.getSetting(key);
         if (value === undefined) {
             logger.withCategory('settings').error(`Setting '${key}' not found`);
@@ -34,9 +54,22 @@ const getSetting = (key) => {
     }
 };
 
-const setSetting = (key, value) => {
+const setSetting = (key, value, challengeId = null) => {
     try {
         const parsedValue = parseSettingValue(value);
+        if (challengeId) {
+            if (!requirePerChallenge(key)) return;
+            if (settings.setChallengeOverride(key, challengeId, parsedValue)) {
+                logger
+                    .withCategory('settings')
+                    .success(`Set ${key} = ${JSON.stringify(parsedValue)} for challenge ${challengeId}`);
+            } else {
+                logger
+                    .withCategory('settings')
+                    .error(`Failed to set ${key} for challenge ${challengeId} — validation failed`);
+            }
+            return;
+        }
         settings.setSetting(key, parsedValue);
         logger.withCategory('settings').success(`Set ${key} = ${JSON.stringify(parsedValue)}`);
     } catch (error) {
@@ -76,8 +109,27 @@ const setGlobalDefault = (key, value) => {
     }
 };
 
-const listSettings = () => {
+const listSettings = (challengeId = null) => {
     try {
+        if (challengeId) {
+            const schema = settings.SETTINGS_SCHEMA;
+            const perChallengeKeys = Object.keys(schema)
+                .filter((key) => schema[key].perChallenge)
+                .sort();
+
+            logger.withCategory('settings').info(`=== Settings for challenge ${challengeId} ===`);
+            perChallengeKeys.forEach((key) => {
+                const effective = settings.getEffectiveSetting(key, challengeId);
+                const isOverride = settings.getChallengeOverride(key, challengeId) !== null;
+                const status = isOverride ? 'Override ✏️' : 'Inherited ✅';
+                logger.withCategory('settings').info(`${key}: ${formatSettingForLog(key, effective)}  [${status}]`);
+            });
+            logger
+                .withCategory('ui')
+                .info('💡 Only per-challenge-capable settings are shown. Use "list-settings" for all global settings.');
+            return;
+        }
+
         const userSettings = settings.loadSettings();
         const defaultSettings = getDefaultSettings();
 
@@ -108,8 +160,16 @@ const listSettings = () => {
     }
 };
 
-const resetSetting = (key) => {
+const resetSetting = (key, challengeId = null) => {
     try {
+        if (challengeId) {
+            if (!requirePerChallenge(key)) return;
+            settings.removeChallengeOverride(key, challengeId);
+            logger
+                .withCategory('settings')
+                .success(`Reset ${key} for challenge ${challengeId} (now inherits the global default)`);
+            return;
+        }
         const defaultSettings = getDefaultSettings();
         const defaultValue = defaultSettings[key];
 
@@ -151,6 +211,16 @@ Available Commands:
   reset-setting <key>   - Reset a setting to its default value
   reset-all-settings    - Reset all settings to defaults
   help-settings         - Show this help message
+
+Per-challenge overrides:
+  Append --challenge=<id> to get-setting / set-setting / reset-setting /
+  list-settings to read or write a single challenge's override. Without an
+  override the challenge inherits the global default. Only settings that
+  support per-challenge overrides accept the flag.
+  Examples:
+    set-setting exposure 80 --challenge=12345
+    get-setting exposure --challenge=12345
+    reset-setting exposure --challenge=12345   (clears the override)
 
 Common Settings:
   apiTimeout           - API request timeout in seconds (default: 30)
