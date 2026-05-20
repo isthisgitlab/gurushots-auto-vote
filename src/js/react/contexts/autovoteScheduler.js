@@ -46,3 +46,23 @@ export async function calculateNextThresholdEntry(challenges, now) {
 
     return nextEntry;
 }
+
+/**
+ * True when at least one non-flash, still-open challenge is currently inside
+ * its per-challenge `lastMinuteThreshold` window. Mirrors the guards + threshold
+ * lookup in `calculateNextThresholdEntry`, but tests "now" rather than a future
+ * entry time — used by the context to decide when to leave the fixed last-minute
+ * cadence and revert to the normal randomized cadence. (Parallel of
+ * `runScheduler.js`'s `isAnyChallengeInThresholdWindow`.)
+ *
+ * @param {Array} challenges - Active challenges from the API
+ * @param {number} now       - Current Unix timestamp (seconds)
+ * @returns {Promise<boolean>}
+ */
+export async function isAnyChallengeInThresholdWindow(challenges, now) {
+    const eligible = challenges.filter((c) => c.type !== 'flash' && c.close_time > now);
+    const thresholds = await Promise.all(
+        eligible.map((c) => window.api.getEffectiveSetting('lastMinuteThreshold', c.id.toString())),
+    );
+    return eligible.some((challenge, i) => challenge.close_time - now <= thresholds[i] * 60);
+}

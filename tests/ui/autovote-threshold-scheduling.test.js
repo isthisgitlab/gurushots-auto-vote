@@ -1,233 +1,118 @@
 /**
- * Test file for autovote threshold scheduling functionality
+ * Unit tests for the React autovote scheduler helpers
+ * (src/js/react/contexts/autovoteScheduler.js).
+ *
+ * NOTE: the previous version of this file re-declared *inline copies* of the
+ * scheduler logic and asserted against those copies — so it exercised nothing
+ * in the real module and could never catch a regression (it didn't catch the
+ * missing revert-to-normal-cadence path that pinned the GUI at a 1-minute
+ * cadence). These tests import the actual exports.
+ *
+ * The helpers read per-challenge thresholds via window.api.getEffectiveSetting;
+ * the node test environment has no `window`, so we inject a global stub.
  */
 
-describe('Autovote Threshold Scheduling', () => {
-    let mockApi;
+const {
+    calculateNextThresholdEntry,
+    isAnyChallengeInThresholdWindow,
+} = require('../../src/js/react/contexts/autovoteScheduler');
+
+describe('autovoteScheduler helpers', () => {
+    let getEffectiveSetting;
 
     beforeEach(() => {
-        // Mock API functions
-        mockApi = {
-            logDebug: jest.fn(),
-            logWarning: jest.fn(),
-            getSettings: jest.fn(),
-            getEffectiveSetting: jest.fn(),
-            getActiveChallenges: jest.fn(),
-            getSetting: jest.fn(),
-            runVotingCycle: jest.fn(),
-            setCancelVoting: jest.fn(),
-        };
+        // Default: every challenge has a 5-minute last-minute threshold.
+        getEffectiveSetting = jest.fn().mockResolvedValue(5);
+        global.window = { ...global.window, api: { getEffectiveSetting } };
     });
 
     afterEach(() => {
         jest.clearAllMocks();
     });
 
-    describe('Threshold Entry Calculation', () => {
-        it('should calculate next threshold entry correctly', async () => {
+    describe('calculateNextThresholdEntry', () => {
+        it('returns the soonest challenge to cross its last-minute boundary', async () => {
             const now = Math.floor(Date.now() / 1000);
             const challenges = [
-                {
-                    id: 1,
-                    title: 'Challenge 1',
-                    type: 'regular',
-                    close_time: now + 3600, // 1 hour from now
-                },
-                {
-                    id: 2,
-                    title: 'Challenge 2',
-                    type: 'regular',
-                    close_time: now + 1800, // 30 minutes from now
-                },
-                {
-                    id: 3,
-                    title: 'Flash Challenge',
-                    type: 'flash',
-                    close_time: now + 1200, // 20 minutes from now
-                },
+                { id: 1, title: 'C1', type: 'regular', close_time: now + 3600 },
+                { id: 2, title: 'C2', type: 'regular', close_time: now + 1800 }, // soonest entry
+                { id: 3, title: 'Flash', type: 'flash', close_time: now + 1200 },
             ];
 
-            mockApi.getEffectiveSetting.mockResolvedValue(5); // 5 minute threshold
+            const result = await calculateNextThresholdEntry(challenges, now);
 
-            // Test the threshold calculation logic
-            const calculateNextLastThresholdEntry = async (challenges, now) => {
-                let nextEntry = null;
-                let earliestEntryTime = Infinity;
-
-                for (const challenge of challenges) {
-                    if (challenge.type === 'flash' || challenge.close_time <= now) {
-                        continue;
-                    }
-
-                    const effectiveLastMinuteThreshold = await mockApi.getEffectiveSetting(
-                        'lastMinuteThreshold',
-                        challenge.id.toString(),
-                    );
-                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
-
-                    if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
-                        earliestEntryTime = thresholdEntryTime;
-                        nextEntry = {
-                            challengeId: challenge.id,
-                            challengeTitle: challenge.title,
-                            entryTime: thresholdEntryTime,
-                            lastMinuteThreshold: effectiveLastMinuteThreshold,
-                        };
-                    }
-                }
-
-                return nextEntry;
-            };
-
-            const result = await calculateNextLastThresholdEntry(challenges, now);
-
-            expect(result).toBeDefined();
-            expect(result.challengeId).toBe(2); // Challenge 2 should be first (30 min - 5 min = 25 min from now)
-            expect(result.entryTime).toBe(now + 1800 - 300); // close_time - threshold
+            expect(result).not.toBeNull();
+            expect(result.challengeId).toBe(2);
+            expect(result.entryTime).toBe(now + 1800 - 300); // close_time - threshold*60
             expect(result.lastMinuteThreshold).toBe(5);
         });
 
-        it('should skip flash challenges', async () => {
+        it('skips flash challenges', async () => {
             const now = Math.floor(Date.now() / 1000);
-            const challenges = [
-                {
-                    id: 1,
-                    title: 'Flash Challenge',
-                    type: 'flash',
-                    close_time: now + 1800,
-                },
-            ];
-
-            mockApi.getEffectiveSetting.mockResolvedValue(5);
-
-            const calculateNextLastThresholdEntry = async (challenges, now) => {
-                let nextEntry = null;
-                let earliestEntryTime = Infinity;
-
-                for (const challenge of challenges) {
-                    if (challenge.type === 'flash' || challenge.close_time <= now) {
-                        continue;
-                    }
-
-                    const effectiveLastMinuteThreshold = await mockApi.getEffectiveSetting(
-                        'lastMinuteThreshold',
-                        challenge.id.toString(),
-                    );
-                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
-
-                    if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
-                        earliestEntryTime = thresholdEntryTime;
-                        nextEntry = {
-                            challengeId: challenge.id,
-                            challengeTitle: challenge.title,
-                            entryTime: thresholdEntryTime,
-                            lastMinuteThreshold: effectiveLastMinuteThreshold,
-                        };
-                    }
-                }
-
-                return nextEntry;
-            };
-
-            const result = await calculateNextLastThresholdEntry(challenges, now);
-
-            expect(result).toBeNull();
+            const challenges = [{ id: 1, title: 'Flash', type: 'flash', close_time: now + 1800 }];
+            expect(await calculateNextThresholdEntry(challenges, now)).toBeNull();
         });
 
-        it('should skip ended challenges', async () => {
+        it('skips already-closed challenges', async () => {
             const now = Math.floor(Date.now() / 1000);
-            const challenges = [
-                {
-                    id: 1,
-                    title: 'Ended Challenge',
-                    type: 'regular',
-                    close_time: now - 3600, // 1 hour ago
-                },
-            ];
+            const challenges = [{ id: 1, title: 'Ended', type: 'regular', close_time: now - 3600 }];
+            expect(await calculateNextThresholdEntry(challenges, now)).toBeNull();
+        });
 
-            mockApi.getEffectiveSetting.mockResolvedValue(5);
-
-            const calculateNextLastThresholdEntry = async (challenges, now) => {
-                let nextEntry = null;
-                let earliestEntryTime = Infinity;
-
-                for (const challenge of challenges) {
-                    if (challenge.type === 'flash' || challenge.close_time <= now) {
-                        continue;
-                    }
-
-                    const effectiveLastMinuteThreshold = await mockApi.getEffectiveSetting(
-                        'lastMinuteThreshold',
-                        challenge.id.toString(),
-                    );
-                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
-
-                    if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
-                        earliestEntryTime = thresholdEntryTime;
-                        nextEntry = {
-                            challengeId: challenge.id,
-                            challengeTitle: challenge.title,
-                            entryTime: thresholdEntryTime,
-                            lastMinuteThreshold: effectiveLastMinuteThreshold,
-                        };
-                    }
-                }
-
-                return nextEntry;
-            };
-
-            const result = await calculateNextLastThresholdEntry(challenges, now);
-
-            expect(result).toBeNull();
+        it('returns null when the only challenge is already inside its window (no future entry)', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // closes in 2 min, 5-min threshold → entryTime already in the past.
+            const challenges = [{ id: 1, title: 'Closing', type: 'regular', close_time: now + 120 }];
+            expect(await calculateNextThresholdEntry(challenges, now)).toBeNull();
         });
     });
 
-    describe('Threshold Scheduling Logic', () => {
-        it('should schedule interval changes at the right time', () => {
-            // Mock setTimeout and clearTimeout
-            const originalSetTimeout = global.setTimeout;
-            const originalClearTimeout = global.clearTimeout;
+    describe('isAnyChallengeInThresholdWindow', () => {
+        it('is true when a non-flash challenge is within threshold*60 of close', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Closing', type: 'regular', close_time: now + 120 }];
+            expect(await isAnyChallengeInThresholdWindow(challenges, now)).toBe(true);
+        });
 
-            const mockSetTimeout = jest.fn();
-            const mockClearTimeout = jest.fn();
+        it('is true at the inclusive boundary (close_time - now === threshold*60)', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Boundary', type: 'regular', close_time: now + 300 }];
+            expect(await isAnyChallengeInThresholdWindow(challenges, now)).toBe(true);
+        });
 
-            global.setTimeout = mockSetTimeout;
-            global.clearTimeout = mockClearTimeout;
+        it('is false when every challenge is further out than its window', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [
+                { id: 1, title: 'Far', type: 'regular', close_time: now + 3600 },
+                { id: 2, title: 'Also far', type: 'regular', close_time: now + 1800 },
+            ];
+            expect(await isAnyChallengeInThresholdWindow(challenges, now)).toBe(false);
+        });
 
-            try {
-                const now = Math.floor(Date.now() / 1000);
-                const nextEntry = {
-                    challengeId: 1,
-                    challengeTitle: 'Test Challenge',
-                    entryTime: now + 300, // 5 minutes from now
-                    lastMinuteThreshold: 5,
-                };
+        it('ignores flash and already-closed challenges', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [
+                { id: 1, title: 'Flash closing', type: 'flash', close_time: now + 60 },
+                { id: 2, title: 'Closed', type: 'regular', close_time: now - 10 },
+            ];
+            expect(await isAnyChallengeInThresholdWindow(challenges, now)).toBe(false);
+        });
 
-                const scheduleThresholdIntervalChange = async (nextEntry) => {
-                    if (!nextEntry) {
-                        return;
-                    }
+        it('is false for an empty challenge list', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            expect(await isAnyChallengeInThresholdWindow([], now)).toBe(false);
+        });
 
-                    const now = Math.floor(Date.now() / 1000);
-                    const timeUntilEntry = (nextEntry.entryTime - now) * 1000; // Convert to milliseconds
-
-                    if (timeUntilEntry <= 0) {
-                        return;
-                    }
-
-                    // Schedule the interval change
-                    return setTimeout(() => {
-                        // This would be the actual interval change logic
-                    }, timeUntilEntry);
-                };
-
-                const result = scheduleThresholdIntervalChange(nextEntry);
-
-                expect(mockSetTimeout).toHaveBeenCalledWith(expect.any(Function), 300000); // 5 minutes in milliseconds
-            } finally {
-                global.setTimeout = originalSetTimeout;
-                global.clearTimeout = originalClearTimeout;
-            }
+        it('respects per-challenge thresholds (only the in-window one counts)', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // Challenge 1 closes in 8 min; challenge 2 in 4 min. With a 5-min
+            // threshold for both, only challenge 2 is in-window.
+            getEffectiveSetting.mockResolvedValue(5);
+            const challenges = [
+                { id: 1, title: 'Eight', type: 'regular', close_time: now + 480 },
+                { id: 2, title: 'Four', type: 'regular', close_time: now + 240 },
+            ];
+            expect(await isAnyChallengeInThresholdWindow(challenges, now)).toBe(true);
         });
     });
 });
