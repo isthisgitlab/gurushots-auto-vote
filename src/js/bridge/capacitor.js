@@ -92,6 +92,16 @@ const buildAllHandlers = () => {
                     assetSuffix: '.apk',
                 });
                 if (result.updateAvailable) {
+                    // Honor a user-skipped version. Electron tracks this in
+                    // metadata.json (fs); the bridge has no fs, so it reads
+                    // the version from the settings facade (set by
+                    // skip-update-version below).
+                    const skipped = settings.getSetting('skipUpdateVersion');
+                    if (skipped && skipped === result.version) {
+                        lastUpdateInfo = null;
+                        emit('update-not-available', { version: result.version });
+                        return { success: true, updateInfo: null };
+                    }
                     const updateInfo = {
                         currentVersion: pkg.version,
                         latestVersion: result.version,
@@ -123,6 +133,7 @@ const buildAllHandlers = () => {
             const result = await androidUpdateInstaller.downloadAndInstall({
                 downloadUrl: lastUpdateInfo.downloadUrl,
                 version: lastUpdateInfo.latestVersion,
+                onProgress: (progress) => emit('update-download-progress', progress),
             });
             if (result.success) {
                 // The browser is now downloading. The user finishes
@@ -135,14 +146,27 @@ const buildAllHandlers = () => {
             }
             return { ...result, fallbackUrl: updateChecker.getReleasesUrl() };
         },
-        // The system installer drives install once the user taps the
-        // downloaded APK. Nothing for the bridge to do here.
+        // With the native ApkInstaller the system installer launches
+        // automatically once the download finishes; via the browser
+        // fallback the user taps the downloaded APK. Either way the bridge
+        // has nothing left to drive here.
         'install-update': async () => ({
             success: true,
-            info: 'Tap the downloaded APK in your notifications to install.',
+            info: 'The system installer will prompt you to confirm. If it does not appear, tap the downloaded APK in your notifications.',
         }),
-        'skip-update-version': async () => ({ success: false, error: 'Skip not yet wired on mobile' }),
-        'clear-skip-version': async () => ({ success: true }),
+        'skip-update-version': async () => {
+            const version = lastUpdateInfo?.latestVersion;
+            if (!version) {
+                return { success: false, error: 'No update info — run check-for-updates first' };
+            }
+            settings.setSetting('skipUpdateVersion', version);
+            lastUpdateInfo = null;
+            return { success: true, version };
+        },
+        'clear-skip-version': async () => {
+            settings.setSetting('skipUpdateVersion', '');
+            return { success: true };
+        },
         'get-releases-url': async () => ({ success: true, url: updateChecker.getReleasesUrl() }),
         'can-auto-update': async () => ({ success: true, canAutoUpdate: true }),
     };

@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
         // Register custom plugins BEFORE super.onCreate so the
         // Capacitor bridge picks them up during plugin initialization.
         registerPlugin(AutoVotePlugin.class);
+        registerPlugin(ApkInstallerPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -100,6 +100,9 @@
             autovoteRunning: 'Automātiskā balsošana darbojas',
             autovoteRunningDesc:
                 'Iekšējs karogs — saglabā automātiskās balsošanas stāvokli starp lietotnes restartiem, lai balsošana varētu atsākties automātiski',
+            skipUpdateVersion: 'Izlaistā atjauninājuma versija',
+            skipUpdateVersionDesc:
+                'Iekšējs — atjauninājuma versija, ko lietotājs izvēlējās izlaist; lietotne nepiedāvās šo versiju, līdz tā tiek notīrīta',
             available: 'Pieejams',
             used: 'Izmantots',
             unavailable: 'Nav pieejams',

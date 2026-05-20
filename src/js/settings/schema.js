@@ -364,6 +364,20 @@ const SETTINGS_SCHEMA = {
         label: 'app.autovoteRunning',
         description: 'app.autovoteRunningDesc',
     },
+    // Update version the user chose to skip. Electron persists this in
+    // metadata.json (fs); the Android/Capacitor bridge has no fs, so it
+    // routes skip-update-version through the settings facade instead, which
+    // has a platform-agnostic transport (@capacitor/preferences). Empty
+    // string means "nothing skipped".
+    skipUpdateVersion: {
+        type: 'string',
+        default: '',
+        perChallenge: false,
+        validation: (value) => typeof value === 'string',
+        validationOrder: 1,
+        label: 'app.skipUpdateVersion',
+        description: 'app.skipUpdateVersionDesc',
+    },
 };
 
 /**

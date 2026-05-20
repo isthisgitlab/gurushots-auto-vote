@@ -99,6 +99,9 @@
             autovoteRunning: 'Auto-Vote Running',
             autovoteRunningDesc:
                 'Internal flag — persists auto-vote state across app restarts so voting can resume automatically',
+            skipUpdateVersion: 'Skipped Update Version',
+            skipUpdateVersionDesc:
+                'Internal — the update version the user chose to skip; the app stops prompting for this version until cleared',
             available: 'Available',
             used: 'Used',
             unavailable: 'Unavailable',
