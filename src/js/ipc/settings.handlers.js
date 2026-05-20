@@ -161,6 +161,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                         type: schema[key].type,
                         default: schema[key].default,
                         perChallenge: schema[key].perChallenge,
+                        group: schema[key].group,
                         label: schema[key].label,
                         description: schema[key].description,
                         min: schema[key].min,
@@ -169,7 +170,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                     };
                     defaults[key] = settings.getGlobalDefault(key);
                 });
-                return { schema: serializableSchema, defaults };
+                return { schema: serializableSchema, defaults, groups: settings.SETTINGS_GROUPS };
             } catch (error) {
                 logger.withCategory('settings').error('Error getting settings schema:', error);
                 return { schema: {}, defaults: {} };

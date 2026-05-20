@@ -123,6 +123,131 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
 };
 
 /**
+ * Emergency fill — a safety net for the two cases the staggered
+ * auto-fill path deliberately leaves empty right up to the deadline:
+ *   (a) auto-fill is off for the challenge, or
+ *   (b) a Must Include Tags filter is set, nothing matches it, and
+ *       fillWithoutTagMatch is off (so the slot would stay empty).
+ *
+ * When the challenge is within `emergencyFill` minutes of closing and in
+ * one of those states, fill every remaining slot in a single submission,
+ * relaxing the must-include hard filter (the whole point is "don't leave
+ * slots empty at the buzzer"). There's no time to stagger this close to
+ * the end, so unlike maybeAutoFillChallenge it batches all slots at once,
+ * like the manual "fill all" button. Self-guarding: if auto-fill would
+ * already handle the challenge, it returns 'skipped' so it never
+ * double-fills.
+ *
+ * @param {object} challenge - challenge with member.ranking.entries
+ * @param {string} token
+ * @param {number} now - unix seconds
+ * @param {{
+ *   settings: object,
+ *   logger: object,
+ *   getEligiblePhotos: function,
+ *   submitToChallenge: function,
+ * }} deps
+ * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-eligible-photos'|'error'>}
+ */
+const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
+    const { settings, logger, getEligiblePhotos, submitToChallenge } = deps;
+    const challengeId = challenge?.id;
+    if (challengeId === undefined || challengeId === null) return 'skipped';
+
+    const emergencyMinutes = settings.getEffectiveSetting('emergencyFill', String(challengeId));
+    if (!Number.isFinite(emergencyMinutes) || emergencyMinutes <= 0) return 'disabled';
+
+    const closeTime = Number(challenge.close_time);
+    if (!Number.isFinite(closeTime)) return 'skipped';
+    const secondsRemaining = closeTime - now;
+    if (secondsRemaining <= 0) return 'skipped';
+    if (secondsRemaining > emergencyMinutes * 60) return 'skipped'; // not in the emergency window yet
+
+    const slotsRemaining = getSlotsRemaining(challenge);
+    if (slotsRemaining <= 0) return 'skipped';
+
+    const autoFillEnabled = settings.getEffectiveSetting('autoFill', String(challengeId)) === true;
+    const mustIncludeTags = settings.getEffectiveSetting('mustIncludeTags', String(challengeId));
+    const shouldIncludeTags = settings.getEffectiveSetting('shouldIncludeTags', String(challengeId));
+    const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
+
+    // Stand down before any network call when normal auto-fill already owns
+    // this challenge: auto-fill on with no must-include filter means the
+    // staggered path fills the slots, so emergency fill has nothing to add.
+    // This is the common configuration, so the early return avoids fetching
+    // eligible photos every cycle just to discard them.
+    const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
+    if (autoFillEnabled && !mustActive) return 'skipped';
+
+    let eligible;
+    try {
+        eligible = await getEligiblePhotos(challengeId, token);
+    } catch (error) {
+        logger
+            .withCategory('autoFill')
+            .warning(
+                `emergencyFill: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
+                null,
+            );
+        return 'error';
+    }
+
+    // With auto-fill on and a must-include filter set, only step in if that
+    // filter would leave the slot empty (a non-empty result means the normal
+    // staggered path can still fill it, so stand down). With auto-fill off,
+    // always step in — nothing else will fill the slot.
+    if (autoFillEnabled) {
+        const wouldPick = pickPhotosForChallenge(challenge, eligible, 1, {
+            mustIncludeTags,
+            shouldIncludeTags,
+            fillWithoutTagMatch,
+        });
+        if (wouldPick.length > 0) return 'skipped';
+    }
+
+    // Fill every remaining slot. Keep the user's tag preferences (must
+    // photos still win when they exist) but force fillWithoutTagMatch on so
+    // a missing match never leaves a slot empty at the deadline — that
+    // override is the whole point of emergency fill.
+    const picked = pickPhotosForChallenge(challenge, eligible, slotsRemaining, {
+        mustIncludeTags,
+        shouldIncludeTags,
+        fillWithoutTagMatch: true,
+    });
+    if (picked.length === 0) {
+        logger
+            .withCategory('autoFill')
+            .info(`emergencyFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
+        return 'no-eligible-photos';
+    }
+
+    try {
+        const result = await submitToChallenge(challengeId, picked, token);
+        if (result && result.ok) {
+            logger
+                .withCategory('autoFill')
+                .success(
+                    `emergencyFill: submitted ${picked.length} entr${picked.length === 1 ? 'y' : 'ies'} for ${logger.challengeTag(challenge)} near deadline`,
+                    null,
+                );
+            return 'submitted';
+        }
+        logger
+            .withCategory('autoFill')
+            .warning(`emergencyFill: submit returned ok=false for ${logger.challengeTag(challenge)}`, null);
+        return 'error';
+    } catch (error) {
+        logger
+            .withCategory('autoFill')
+            .warning(
+                `emergencyFill: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`,
+                null,
+            );
+        return 'error';
+    }
+};
+
+/**
  * Manual fill (GUI button). Submits one or all missing slots in a
  * single request. Ignores the autoFill toggle and the spacing math,
  * but still honors mustIncludeTags / shouldIncludeTags so the tag
@@ -249,6 +374,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
 
 module.exports = {
     maybeAutoFillChallenge,
+    maybeEmergencyFillChallenge,
     fillChallengeNow,
     // exported for tests
     getSlotsRemaining,

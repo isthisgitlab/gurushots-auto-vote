@@ -24,11 +24,13 @@ const mockSchemaState = {
             type: 'number',
             default: 30,
             perChallenge: true,
+            group: 'boost',
             label: 'app.boostTime',
             description: 'app.boostTimeDesc',
         },
     },
     defaults: { boostTime: 30 },
+    groups: [{ id: 'boost', label: 'app.groupBoost' }],
     refetch: jest.fn(),
     loading: false,
 };

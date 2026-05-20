@@ -3,6 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
+import { groupSchemaEntries } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -13,7 +14,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 export function SettingsModal({ isOpen, onClose }) {
     const { t, language, setLanguage } = useTranslation();
     const { settings, updateSetting, refetch: refetchSettings } = useSettings();
-    const { schema, defaults, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
+    const { schema, defaults, groups, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
     const {
         formValues,
@@ -340,32 +341,36 @@ export function SettingsModal({ isOpen, onClose }) {
                         </div>
                     </div>
 
-                    {/* Challenge Defaults Section */}
+                    {/* Challenge Defaults Section — grouped into static sub-sections */}
                     <div>
                         <h4 className="font-semibold text-base mb-3 border-b border-base-300 pb-2">
                             {t('app.challengeDefaults')}
                         </h4>
-                        <div className="space-y-4">
-                            {schema &&
-                                Object.entries(schema).map(([key, config]) => (
-                                    <div key={key} className="form-control">
-                                        <label className="label">
-                                            <span className="label-text font-medium">{t(config.label)}</span>
-                                            <span className="badge badge-ghost badge-xs ml-2">
-                                                {t('app.globalDefault')}
-                                            </span>
-                                        </label>
-                                        <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
-                                        <SettingInput
-                                            settingKey={key}
-                                            config={config}
-                                            value={formValues[key] ?? config.default}
-                                            onChange={handleFormChange}
-                                            onReset={handleResetGlobal}
-                                        />
-                                    </div>
-                                ))}
-                        </div>
+                        {groupSchemaEntries(schema, groups).map(({ id, label, entries }) => (
+                            <div key={id} className="mb-4">
+                                <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(label)}</h5>
+                                <div className="space-y-4">
+                                    {entries.map(([key, config]) => (
+                                        <div key={key} className="form-control">
+                                            <label className="label">
+                                                <span className="label-text font-medium">{t(config.label)}</span>
+                                                <span className="badge badge-ghost badge-xs ml-2">
+                                                    {t('app.globalDefault')}
+                                                </span>
+                                            </label>
+                                            <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+                                            <SettingInput
+                                                settingKey={key}
+                                                config={config}
+                                                value={formValues[key] ?? config.default}
+                                                onChange={handleFormChange}
+                                                onReset={handleResetGlobal}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
                     </div>
 
                     {/* Bottom Action Buttons */}

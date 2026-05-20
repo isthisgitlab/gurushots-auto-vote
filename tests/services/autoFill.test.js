@@ -3,7 +3,11 @@
  * (maybeAutoFillChallenge) and the manual GUI entry point (fillChallengeNow).
  */
 
-const { maybeAutoFillChallenge, fillChallengeNow } = require('../../src/js/services/autoFill');
+const {
+    maybeAutoFillChallenge,
+    maybeEmergencyFillChallenge,
+    fillChallengeNow,
+} = require('../../src/js/services/autoFill');
 
 const makeChallenge = ({ id = 'c1', closeIn = 600, maxSubmits = 4, entries = [] } = {}) => ({
     id,
@@ -42,6 +46,7 @@ const makeSettings = ({
     mustIncludeTags = [],
     shouldIncludeTags = [],
     fillWithoutTagMatch = true, // mirrors the schema default
+    emergencyFill = 5, // mirrors the schema default
 } = {}) => ({
     getEffectiveSetting: jest.fn((key) => {
         if (key === 'autoFill') return autoFill;
@@ -49,6 +54,7 @@ const makeSettings = ({
         if (key === 'mustIncludeTags') return mustIncludeTags;
         if (key === 'shouldIncludeTags') return shouldIncludeTags;
         if (key === 'fillWithoutTagMatch') return fillWithoutTagMatch;
+        if (key === 'emergencyFill') return emergencyFill;
         return null;
     }),
 });
@@ -415,6 +421,259 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             submitToChallenge: jest.fn().mockRejectedValue('also-not-error'),
         });
         expect(submitResult).toBe('error');
+    });
+});
+
+describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () => {
+    test('returns disabled when emergencyFill is 0 (off)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const getEligiblePhotos = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 0 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('disabled');
+        expect(getEligiblePhotos).not.toHaveBeenCalled();
+    });
+
+    test('returns disabled when emergencyFill is non-numeric', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: null }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(),
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('disabled');
+    });
+
+    test('returns skipped outside the emergency window (T-30m, emergencyFill 5)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 30 * 60 });
+        const getEligiblePhotos = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('skipped');
+        expect(getEligiblePhotos).not.toHaveBeenCalled();
+    });
+
+    test('returns skipped when challenge already closed', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: -10 });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(),
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('skipped');
+    });
+
+    test('auto-fill OFF, in window: fills ALL empty slots in one submission', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2'), allowedPhoto('p3'), allowedPhoto('p4')]);
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(submitToChallenge.mock.calls[0][1]).toHaveLength(4);
+    });
+
+    test('auto-fill OFF, must tags set with a match: prefers the matching photo', async () => {
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 3 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: false,
+                emergencyFill: 5,
+                mustIncludeTags: ['sunset'],
+                fillWithoutTagMatch: false,
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('match', ['Sunset']), allowedPhoto('other', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        // 1 empty slot; the must-include preference is honored when a match exists,
+        // even though emergency fill forces fillWithoutTagMatch on as a fallback.
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['match'], 'tok');
+    });
+
+    test('auto-fill ON, must tags set with no match and fallback off: relaxes filter and submits', async () => {
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 3 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                emergencyFill: 5,
+                mustIncludeTags: ['sunset'],
+                fillWithoutTagMatch: false,
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        // 1 empty slot; the must-include filter is relaxed so the non-matching photo is used.
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+    });
+
+    test('auto-fill ON, tags match: stands down so it never double-fills', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const submitToChallenge = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                emergencyFill: 5,
+                mustIncludeTags: ['sunset'],
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Sunset'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('auto-fill ON, no tag filter: stands down without fetching photos', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const getEligiblePhotos = jest.fn();
+        const submitToChallenge = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        // Common config: normal auto-fill owns it, so emergency fill must not
+        // burn an API call fetching eligible photos it would only discard.
+        expect(getEligiblePhotos).not.toHaveBeenCalled();
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('auto-fill ON, must tags set but fillWithoutTagMatch on: stands down (staggered path has a fallback)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const submitToChallenge = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                emergencyFill: 5,
+                mustIncludeTags: ['sunset'],
+                // fillWithoutTagMatch defaults true → the picker relaxes, so the
+                // normal staggered path can still fill the slot. Emergency stands down.
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('fires at the exact window boundary (secondsRemaining === emergencyFill * 60)', async () => {
+        // Window guard is `secondsRemaining > emergencyFill*60` → the exact
+        // boundary is inside the window, mirroring the staggered fill convention.
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge.mock.calls[0][1]).toHaveLength(2);
+    });
+
+    test('returns skipped when no slots remaining (does not fetch photos)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 1, entries: [{ id: 'e1' }], closeIn: 3 * 60 });
+        const getEligiblePhotos = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('skipped');
+        expect(getEligiblePhotos).not.toHaveBeenCalled();
+    });
+
+    test('returns no-eligible-photos when triggered but nothing to submit', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const submitToChallenge = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([]),
+            submitToChallenge,
+        });
+        expect(result).toBe('no-eligible-photos');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('returns error when getEligiblePhotos throws', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockRejectedValue(new Error('network')),
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('error');
+    });
+
+    test('returns error when submit returns ok=false', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
+        });
+        expect(result).toBe('error');
+    });
+
+    test('returns error when submit throws (Error and non-Error are both caught)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const errResult = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn().mockRejectedValue(new Error('boom')),
+        });
+        expect(errResult).toBe('error');
+
+        const nonErrResult = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn().mockRejectedValue('string-not-error'),
+        });
+        expect(nonErrResult).toBe('error');
+    });
+
+    test('returns skipped when challenge has no id', async () => {
+        const result = await maybeEmergencyFillChallenge({ title: 'orphan' }, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 5 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(),
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('skipped');
     });
 });
 

@@ -291,6 +291,21 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                     );
             }
 
+            // Emergency fill: net for slots that staggered auto-fill leaves
+            // empty (auto-fill off, or tags set with no match) — fills all
+            // remaining slots once the challenge is inside the emergency window.
+            const emergencyResult = await autoFill.maybeEmergencyFillChallenge(challenge, token, now, {
+                settings,
+                logger,
+                getEligiblePhotos,
+                submitToChallenge,
+            });
+            if (emergencyResult === 'submitted') {
+                logger
+                    .withCategory('voting')
+                    .info(`${logger.challengeTag(challenge)} emergencyFill: entries submitted near deadline`, null);
+            }
+
             // Use the centralized voting logic service
             const { shouldVote, voteReason, targetExposure } = votingLogic.evaluateVotingDecision(challenge, now);
 

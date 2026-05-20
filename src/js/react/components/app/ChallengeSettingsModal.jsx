@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
+import { groupSchemaEntries } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -10,7 +11,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
  */
 export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challengeTitle }) {
     const { t } = useTranslation();
-    const { schema, defaults, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
+    const { schema, defaults, groups, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
     // Local state for override values
     const [overrides, setOverrides] = useState({});
@@ -150,49 +151,52 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                         <span>{t('app.challengeOverrideInfo')}</span>
                     </div>
 
-                    {/* Settings List */}
-                    {schema &&
-                        Object.entries(schema).map(([key, config]) => {
-                            // Only show settings that support per-challenge overrides
-                            if (!config.perChallenge) return null;
+                    {/* Settings grouped into static sections */}
+                    {groupSchemaEntries(schema, groups, { perChallengeOnly: true }).map(({ id, label, entries }) => (
+                        <div key={id}>
+                            <h4 className="font-semibold text-base mb-3 border-b border-base-300 pb-2">{t(label)}</h4>
+                            <div className="space-y-4">
+                                {entries.map(([key, config]) => {
+                                    const hasOverride = key in overrides;
+                                    const globalDefault = defaults?.[key] ?? config.default;
+                                    const currentValue = hasOverride ? overrides[key] : globalDefault;
 
-                            const hasOverride = key in overrides;
-                            const globalDefault = defaults?.[key] ?? config.default;
-                            const currentValue = hasOverride ? overrides[key] : globalDefault;
-
-                            return (
-                                <div key={key} className="form-control">
-                                    <label className="label">
-                                        <span className="label-text font-medium">{t(config.label)}</span>
-                                        <div className="flex gap-1">
-                                            {hasOverride ? (
-                                                <span className="badge badge-accent badge-xs">
-                                                    {t('app.overridden')}
-                                                </span>
-                                            ) : (
-                                                <span className="badge badge-ghost badge-xs">
-                                                    {t('app.usingGlobal')}
-                                                </span>
-                                            )}
+                                    return (
+                                        <div key={key} className="form-control">
+                                            <label className="label">
+                                                <span className="label-text font-medium">{t(config.label)}</span>
+                                                <div className="flex gap-1">
+                                                    {hasOverride ? (
+                                                        <span className="badge badge-accent badge-xs">
+                                                            {t('app.overridden')}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="badge badge-ghost badge-xs">
+                                                            {t('app.usingGlobal')}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </label>
+                                            <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+                                            <SettingInput
+                                                settingKey={key}
+                                                config={config}
+                                                value={currentValue}
+                                                onChange={handleOverrideChange}
+                                                onReset={hasOverride ? handleClearOverride : null}
+                                            />
+                                            <p className="text-xs text-base-content/40 mt-1">
+                                                {t('app.globalDefault')}:{' '}
+                                                {Array.isArray(globalDefault)
+                                                    ? globalDefault.join(', ') || t('app.none')
+                                                    : String(globalDefault)}
+                                            </p>
                                         </div>
-                                    </label>
-                                    <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
-                                    <SettingInput
-                                        settingKey={key}
-                                        config={config}
-                                        value={currentValue}
-                                        onChange={handleOverrideChange}
-                                        onReset={hasOverride ? handleClearOverride : null}
-                                    />
-                                    <p className="text-xs text-base-content/40 mt-1">
-                                        {t('app.globalDefault')}:{' '}
-                                        {Array.isArray(globalDefault)
-                                            ? globalDefault.join(', ') || t('app.none')
-                                            : String(globalDefault)}
-                                    </p>
-                                </div>
-                            );
-                        })}
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
 
                     {/* Action Buttons */}
                     <div className="flex justify-end gap-2 pt-4 border-t border-base-300">

@@ -27,31 +27,20 @@ const isValidTagsList = (value) =>
     value.length <= MAX_TAGS_PER_LIST &&
     value.every((v) => typeof v === 'string' && v.length > 0 && v.length <= MAX_TAG_LENGTH && v.trim().length > 0);
 
+// Entries are grouped by their `group` field (see SETTINGS_GROUPS below) and
+// declared in group order so the file reads top-to-bottom the way the
+// settings modals render. Object key order has no runtime effect —
+// getSchemaDefault resolves at call time and validationOrder/dependsOn drive
+// dependency ordering — so the order here is purely for readability.
 const SETTINGS_SCHEMA = {
-    boostTime: {
-        type: 'time', // Special type for hours/minutes input
-        default: 3600, // 1 hour in seconds
-        perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0,
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.boostTime',
-        description: 'app.boostTimeDesc',
-    },
-    autoBoost: {
-        type: 'boolean',
-        default: true,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.autoBoost',
-        description: 'app.autoBoostDesc',
-    },
+    // --- General ---
     exposure: {
         type: 'number',
         default: 100,
         perChallenge: true,
         validation: (value) => typeof value === 'number' && value >= 1 && value <= 100,
         validationOrder: 1, // Validate first (no dependencies)
+        group: 'general',
         label: 'app.exposure',
         description: 'app.exposureDesc',
     },
@@ -81,17 +70,9 @@ const SETTINGS_SCHEMA = {
         },
         dependsOn: ['exposure'],
         validationOrder: 2, // Validate after dependencies
+        group: 'general',
         label: 'app.exposureTarget',
         description: 'app.exposureTargetDesc',
-    },
-    lastMinuteThreshold: {
-        type: 'number',
-        default: 10,
-        perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.lastMinuteThreshold',
-        description: 'app.lastMinuteThresholdDesc',
     },
     onlyBoost: {
         type: 'boolean',
@@ -99,6 +80,7 @@ const SETTINGS_SCHEMA = {
         perChallenge: true,
         validation: (value) => typeof value === 'boolean',
         validationOrder: 1, // Validate first (no dependencies)
+        group: 'general',
         label: 'app.onlyBoost',
         description: 'app.onlyBoostDesc',
     },
@@ -108,39 +90,105 @@ const SETTINGS_SCHEMA = {
         perChallenge: true,
         validation: (value) => typeof value === 'boolean',
         validationOrder: 1,
+        group: 'general',
         label: 'app.compactCards',
         description: 'app.compactCardsDesc',
     },
-    // Persisted autovote-running flag. Written on Start / Stop so a
-    // relaunch of the app (Capacitor WebView destroyed + recreated,
-    // Electron window reopen) can resume voting without the user
-    // tapping Start again.
-    autovoteRunning: {
+
+    // --- Boost ---
+    autoBoost: {
         type: 'boolean',
-        default: false,
-        perChallenge: false,
+        default: true,
+        perChallenge: true,
         validation: (value) => typeof value === 'boolean',
         validationOrder: 1,
-        label: 'app.autovoteRunning',
-        description: 'app.autovoteRunningDesc',
+        group: 'boost',
+        label: 'app.autoBoost',
+        description: 'app.autoBoostDesc',
     },
-    voteOnlyInLastMinute: {
+    boostTime: {
+        type: 'time', // Special type for hours/minutes input
+        default: 3600, // 1 hour in seconds
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 0,
+        validationOrder: 1, // Validate first (no dependencies)
+        group: 'boost',
+        label: 'app.boostTime',
+        description: 'app.boostTimeDesc',
+    },
+    boostImageIndex: {
+        type: 'number',
+        default: 1,
+        perChallenge: true,
+        validation: (value) => Number.isInteger(value) && value >= 0,
+        validationOrder: 1,
+        group: 'boost',
+        label: 'app.boostImageIndex',
+        description: 'app.boostImageIndexDesc',
+    },
+
+    // --- Turbo ---
+    useTurbo: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        group: 'turbo',
+        label: 'app.useTurbo',
+        description: 'app.useTurboDesc',
+    },
+    autoTurbo: {
+        type: 'boolean',
+        default: true,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        group: 'turbo',
+        label: 'app.autoTurbo',
+        description: 'app.autoTurboDesc',
+    },
+    turboTime: {
+        type: 'time',
+        default: 7200, // 2 hours in seconds
+        perChallenge: true,
+        validation: (value) => typeof value === 'number' && value >= 0,
+        validationOrder: 1,
+        group: 'turbo',
+        label: 'app.turboTime',
+        description: 'app.turboTimeDesc',
+    },
+    turboImageIndex: {
+        type: 'number',
+        default: 1,
+        perChallenge: true,
+        validation: (value) => Number.isInteger(value) && value >= 0,
+        validationOrder: 1,
+        group: 'turbo',
+        label: 'app.turboImageIndex',
+        description: 'app.turboImageIndexDesc',
+    },
+    turboApplyWhenBoostActive: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        group: 'turbo',
+        label: 'app.turboApplyWhenBoostActive',
+        description: 'app.turboApplyWhenBoostActiveDesc',
+    },
+
+    // --- Last Hour Exposure ---
+    useLastHourExposure: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: (value) => typeof value === 'boolean',
         validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.voteOnlyInLastMinute',
-        description: 'app.voteOnlyInLastMinuteDesc',
-    },
-    lastMinuteCheckFrequency: {
-        type: 'number',
-        default: 1,
-        perChallenge: false,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.lastMinuteCheckFrequency',
-        description: 'app.lastMinuteCheckFrequencyDesc',
+        group: 'lastHour',
+        label: 'app.useLastHourExposure',
+        description: 'app.useLastHourExposureDesc',
     },
     lastHourExposure: {
         type: 'number',
@@ -167,17 +215,9 @@ const SETTINGS_SCHEMA = {
         },
         dependsOn: ['exposure'],
         validationOrder: 2, // Validate after dependencies
+        group: 'lastHour',
         label: 'app.lastHourExposure',
         description: 'app.lastHourExposureDesc',
-    },
-    useLastHourExposure: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1, // Validate first (no dependencies)
-        label: 'app.useLastHourExposure',
-        description: 'app.useLastHourExposureDesc',
     },
     lastHourExposureTarget: {
         type: 'number',
@@ -204,69 +244,51 @@ const SETTINGS_SCHEMA = {
         },
         dependsOn: ['lastHourExposure'],
         validationOrder: 2,
+        group: 'lastHour',
         label: 'app.lastHourExposureTarget',
         description: 'app.lastHourExposureTargetDesc',
     },
-    autoTurbo: {
-        type: 'boolean',
-        default: true,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.autoTurbo',
-        description: 'app.autoTurboDesc',
-    },
-    useTurbo: {
+
+    // --- Last Minute ---
+    voteOnlyInLastMinute: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.useTurbo',
-        description: 'app.useTurboDesc',
+        validationOrder: 1, // Validate first (no dependencies)
+        group: 'lastMinute',
+        label: 'app.voteOnlyInLastMinute',
+        description: 'app.voteOnlyInLastMinuteDesc',
     },
-    turboTime: {
-        type: 'time',
-        default: 7200, // 2 hours in seconds
+    lastMinuteThreshold: {
+        type: 'number',
+        default: 10,
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0,
-        validationOrder: 1,
-        label: 'app.turboTime',
-        description: 'app.turboTimeDesc',
+        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
+        validationOrder: 1, // Validate first (no dependencies)
+        group: 'lastMinute',
+        label: 'app.lastMinuteThreshold',
+        description: 'app.lastMinuteThresholdDesc',
     },
-    turboImageIndex: {
+    lastMinuteCheckFrequency: {
         type: 'number',
         default: 1,
-        perChallenge: true,
-        validation: (value) => Number.isInteger(value) && value >= 0,
-        validationOrder: 1,
-        label: 'app.turboImageIndex',
-        description: 'app.turboImageIndexDesc',
+        perChallenge: false,
+        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
+        validationOrder: 1, // Validate first (no dependencies)
+        group: 'lastMinute',
+        label: 'app.lastMinuteCheckFrequency',
+        description: 'app.lastMinuteCheckFrequencyDesc',
     },
-    boostImageIndex: {
-        type: 'number',
-        default: 1,
-        perChallenge: true,
-        validation: (value) => Number.isInteger(value) && value >= 0,
-        validationOrder: 1,
-        label: 'app.boostImageIndex',
-        description: 'app.boostImageIndexDesc',
-    },
-    turboApplyWhenBoostActive: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
-        validationOrder: 1,
-        label: 'app.turboApplyWhenBoostActive',
-        description: 'app.turboApplyWhenBoostActiveDesc',
-    },
+
+    // --- Auto Fill ---
     autoFill: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: (value) => typeof value === 'boolean',
         validationOrder: 1,
+        group: 'autoFill',
         label: 'app.autoFill',
         description: 'app.autoFillDesc',
     },
@@ -276,8 +298,36 @@ const SETTINGS_SCHEMA = {
         perChallenge: true,
         validation: (value) => Number.isInteger(value) && value >= 1 && value <= 60,
         validationOrder: 1,
+        group: 'autoFill',
         label: 'app.autoFillIntervalMinutes',
         description: 'app.autoFillIntervalMinutesDesc',
+    },
+    fillWithoutTagMatch: {
+        type: 'boolean',
+        default: true,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        group: 'autoFill',
+        label: 'app.fillWithoutTagMatch',
+        description: 'app.fillWithoutTagMatchDesc',
+    },
+    // Emergency fill only acts on scheduler cycles that actually run, so it
+    // depends on cadence: keep emergencyFill <= lastMinuteThreshold and the
+    // fast last-minute cron is already active throughout the window. If it is
+    // larger, the early part of the window relies on the slower normal cadence
+    // (it still fires, just less tightly) — see emergencyFillDesc.
+    emergencyFill: {
+        type: 'number',
+        default: 5,
+        perChallenge: true,
+        // 0 is the off sentinel; otherwise minutes-before-close (1-59, mirrors lastMinuteThreshold).
+        validation: (value) => Number.isInteger(value) && value >= 0 && value <= 59,
+        validationOrder: 1,
+        group: 'autoFill',
+        label: 'app.emergencyFill',
+        description: 'app.emergencyFillDesc',
+        unit: 'app.minutes',
     },
     mustIncludeTags: {
         type: 'tags',
@@ -285,6 +335,7 @@ const SETTINGS_SCHEMA = {
         perChallenge: true,
         validation: isValidTagsList,
         validationOrder: 1,
+        group: 'autoFill',
         label: 'app.mustIncludeTags',
         description: 'app.mustIncludeTagsDesc',
     },
@@ -294,19 +345,41 @@ const SETTINGS_SCHEMA = {
         perChallenge: true,
         validation: isValidTagsList,
         validationOrder: 1,
+        group: 'autoFill',
         label: 'app.shouldIncludeTags',
         description: 'app.shouldIncludeTagsDesc',
     },
-    fillWithoutTagMatch: {
+
+    // --- Internal (no UI group; never rendered in a settings section) ---
+    // Persisted autovote-running flag. Written on Start / Stop so a
+    // relaunch of the app (Capacitor WebView destroyed + recreated,
+    // Electron window reopen) can resume voting without the user
+    // tapping Start again.
+    autovoteRunning: {
         type: 'boolean',
-        default: true,
-        perChallenge: true,
+        default: false,
+        perChallenge: false,
         validation: (value) => typeof value === 'boolean',
         validationOrder: 1,
-        label: 'app.fillWithoutTagMatch',
-        description: 'app.fillWithoutTagMatchDesc',
+        label: 'app.autovoteRunning',
+        description: 'app.autovoteRunningDesc',
     },
 };
+
+/**
+ * Ordered UI grouping for the settings modals. Each schema entry's `group`
+ * field matches an `id` here; the modals render one static section per group
+ * in this order. Entries with no `group` (e.g. autovoteRunning) are
+ * intentionally excluded from every section.
+ */
+const SETTINGS_GROUPS = [
+    { id: 'general', label: 'app.groupGeneral' },
+    { id: 'boost', label: 'app.groupBoost' },
+    { id: 'turbo', label: 'app.groupTurbo' },
+    { id: 'lastHour', label: 'app.groupLastHour' },
+    { id: 'lastMinute', label: 'app.groupLastMinute' },
+    { id: 'autoFill', label: 'app.groupAutoFill' },
+];
 
 /**
  * Validate a single setting value against SETTINGS_SCHEMA. Keys that are
@@ -360,6 +433,7 @@ const getSettingsSchema = async () => SETTINGS_SCHEMA;
 
 module.exports = {
     SETTINGS_SCHEMA,
+    SETTINGS_GROUPS,
     getSchemaDefault,
     validateSetting,
     getValidationError,
