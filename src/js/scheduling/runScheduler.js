@@ -14,6 +14,11 @@ const cron = require('node-cron');
 const logger = require('../logger');
 const settings = require('../settings');
 const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } = require('./randomDelay');
+const { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow } = require('./thresholdWindow');
+
+// Node resolver for the shared threshold math: per-challenge lastMinuteThreshold
+// straight from the settings facade (synchronous on Electron/CLI/Android-node).
+const resolveThreshold = (challengeId) => settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
 
 // Node's timer delay is a 32-bit signed int of milliseconds; a larger delay
 // silently wraps and fires after ~1ms. A challenge whose threshold entry is
@@ -37,47 +42,6 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
     let lastSettingsHash = null;
     let currentCronJob = null;
     let normalScheduler = null;
-
-    const calculateNextLastThresholdEntry = async (challenges, now) => {
-        let nextEntry = null;
-        let earliestEntryTime = Infinity;
-
-        for (const challenge of challenges) {
-            if (challenge.type === 'flash' || challenge.close_time <= now) continue;
-
-            const effectiveLastMinuteThreshold = settings.getEffectiveSetting(
-                'lastMinuteThreshold',
-                challenge.id.toString(),
-            );
-            const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
-
-            if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
-                earliestEntryTime = thresholdEntryTime;
-                nextEntry = {
-                    challengeId: challenge.id,
-                    challengeTitle: challenge.title,
-                    entryTime: thresholdEntryTime,
-                    lastMinuteThreshold: effectiveLastMinuteThreshold,
-                };
-            }
-        }
-
-        return nextEntry;
-    };
-
-    // True when at least one non-flash, still-open challenge is currently
-    // inside its last-minute window. Mirrors the guards + per-challenge
-    // threshold lookup in calculateNextLastThresholdEntry, but tests "now"
-    // rather than a future entry time — used to decide when to leave cron mode.
-    const isAnyChallengeInThresholdWindow = (challenges, now) =>
-        challenges.some((challenge) => {
-            if (challenge.type === 'flash' || challenge.close_time <= now) return false;
-            const effectiveLastMinuteThreshold = settings.getEffectiveSetting(
-                'lastMinuteThreshold',
-                challenge.id.toString(),
-            );
-            return challenge.close_time - now <= effectiveLastMinuteThreshold * 60;
-        });
 
     // (Re)start the last-minute cron at the current lastMinuteCheckFrequency,
     // stopping any cron already running. Shared by the initial switch and the
@@ -219,7 +183,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 // window, restart the cron so a new lastMinuteCheckFrequency takes
                 // effect immediately rather than waiting for the next switch. (When
                 // nothing is in-window, the revert below returns us to normal mode.)
-                if (currentCronJob && isAnyChallengeInThresholdWindow(challenges, now)) {
+                if (currentCronJob && (await isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold))) {
                     logger
                         .withCategory('voting')
                         .info('⏰ Settings changed mid-cron — restarting last-minute cron at the new frequency');
@@ -233,7 +197,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
             // randomized cadence. Without this the cron is a one-way door: a
             // single challenge entering its final minutes would pin the whole
             // session at lastMinuteCheckFrequency forever, even after it closes.
-            if (currentCronJob && !isAnyChallengeInThresholdWindow(challenges, now)) {
+            if (currentCronJob && !(await isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold))) {
                 logger
                     .withCategory('voting')
                     .info('⏰ No challenges within last-minute window — reverting to normal check frequency');
@@ -248,7 +212,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 scheduleNextNormalCycle(Date.now());
             }
 
-            const nextEntry = await calculateNextLastThresholdEntry(challenges, now);
+            const nextEntry = await calculateNextThresholdEntry(challenges, now, resolveThreshold);
 
             if (nextEntry) {
                 await scheduleThresholdCronChange(nextEntry);

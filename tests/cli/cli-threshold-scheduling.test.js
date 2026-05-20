@@ -1,214 +1,47 @@
 /**
- * Test file for CLI threshold scheduling functionality
+ * CLI/Node threshold-entry calculation.
+ *
+ * NOTE: this file used to re-declare *inline copies* of the threshold logic
+ * and assert against those copies, so it exercised nothing in the real code
+ * (the same anti-pattern the autovote scheduler test header documents). The
+ * logic now lives once in src/js/scheduling/thresholdWindow.js, consumed by
+ * runScheduler.js with a synchronous settings.getEffectiveSetting resolver.
+ * These tests import the real module and use a sync resolver to represent the
+ * CLI/Node path. Real cron switch/revert behavior is covered by
+ * tests/scheduling/runScheduler.test.js.
  */
 
-describe('CLI Threshold Scheduling', () => {
-    describe('Threshold Entry Calculation', () => {
-        it('should calculate next threshold entry correctly', async () => {
-            const now = Math.floor(Date.now() / 1000);
-            const challenges = [
-                {
-                    id: 1,
-                    title: 'Challenge 1',
-                    type: 'regular',
-                    close_time: now + 3600, // 1 hour from now
-                },
-                {
-                    id: 2,
-                    title: 'Challenge 2',
-                    type: 'regular',
-                    close_time: now + 1800, // 30 minutes from now
-                },
-                {
-                    id: 3,
-                    title: 'Flash Challenge',
-                    type: 'flash',
-                    close_time: now + 1200, // 20 minutes from now
-                },
-            ];
+const { calculateNextThresholdEntry } = require('../../src/js/scheduling/thresholdWindow');
 
-            // Mock getEffectiveSetting function
-            const mockGetEffectiveSetting = jest.fn((key, challengeId) => {
-                if (key === 'lastMinuteThreshold') return 5;
-                return null;
-            });
+// CLI/Node resolver shape: synchronous return (settings.getEffectiveSetting).
+const resolveThreshold = () => 5;
 
-            // Test the threshold calculation logic
-            const calculateNextLastThresholdEntry = async (challenges, now) => {
-                let nextEntry = null;
-                let earliestEntryTime = Infinity;
+describe('CLI threshold entry calculation (shared thresholdWindow, sync resolver)', () => {
+    it('returns the soonest non-flash challenge to cross its last-minute boundary', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const challenges = [
+            { id: 1, title: 'Challenge 1', type: 'regular', close_time: now + 3600 },
+            { id: 2, title: 'Challenge 2', type: 'regular', close_time: now + 1800 },
+            { id: 3, title: 'Flash Challenge', type: 'flash', close_time: now + 1200 },
+        ];
 
-                for (const challenge of challenges) {
-                    if (challenge.type === 'flash' || challenge.close_time <= now) {
-                        continue;
-                    }
+        const result = await calculateNextThresholdEntry(challenges, now, resolveThreshold);
 
-                    const effectiveLastMinuteThreshold = mockGetEffectiveSetting(
-                        'lastMinuteThreshold',
-                        challenge.id.toString(),
-                    );
-                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
-
-                    if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
-                        earliestEntryTime = thresholdEntryTime;
-                        nextEntry = {
-                            challengeId: challenge.id,
-                            challengeTitle: challenge.title,
-                            entryTime: thresholdEntryTime,
-                            lastMinuteThreshold: effectiveLastMinuteThreshold,
-                        };
-                    }
-                }
-
-                return nextEntry;
-            };
-
-            const result = await calculateNextLastThresholdEntry(challenges, now);
-
-            expect(result).toBeDefined();
-            expect(result.challengeId).toBe(2); // Challenge 2 should be first (30 min - 5 min = 25 min from now)
-            expect(result.entryTime).toBe(now + 1800 - 300); // close_time - threshold
-            expect(result.lastMinuteThreshold).toBe(5);
-        });
-
-        it('should skip flash challenges', async () => {
-            const now = Math.floor(Date.now() / 1000);
-            const challenges = [
-                {
-                    id: 1,
-                    title: 'Flash Challenge',
-                    type: 'flash',
-                    close_time: now + 1800,
-                },
-            ];
-
-            const calculateNextLastThresholdEntry = async (challenges, now) => {
-                let nextEntry = null;
-                let earliestEntryTime = Infinity;
-
-                for (const challenge of challenges) {
-                    if (challenge.type === 'flash' || challenge.close_time <= now) {
-                        continue;
-                    }
-
-                    const effectiveLastMinuteThreshold = 5; // Mock value
-                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
-
-                    if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
-                        earliestEntryTime = thresholdEntryTime;
-                        nextEntry = {
-                            challengeId: challenge.id,
-                            challengeTitle: challenge.title,
-                            entryTime: thresholdEntryTime,
-                            lastMinuteThreshold: effectiveLastMinuteThreshold,
-                        };
-                    }
-                }
-
-                return nextEntry;
-            };
-
-            const result = await calculateNextLastThresholdEntry(challenges, now);
-
-            expect(result).toBeNull();
-        });
-
-        it('should skip ended challenges', async () => {
-            const now = Math.floor(Date.now() / 1000);
-            const challenges = [
-                {
-                    id: 1,
-                    title: 'Ended Challenge',
-                    type: 'regular',
-                    close_time: now - 3600, // 1 hour ago
-                },
-            ];
-
-            const calculateNextLastThresholdEntry = async (challenges, now) => {
-                let nextEntry = null;
-                let earliestEntryTime = Infinity;
-
-                for (const challenge of challenges) {
-                    if (challenge.type === 'flash' || challenge.close_time <= now) {
-                        continue;
-                    }
-
-                    const effectiveLastMinuteThreshold = 5; // Mock value
-                    const thresholdEntryTime = challenge.close_time - effectiveLastMinuteThreshold * 60;
-
-                    if (thresholdEntryTime > now && thresholdEntryTime < earliestEntryTime) {
-                        earliestEntryTime = thresholdEntryTime;
-                        nextEntry = {
-                            challengeId: challenge.id,
-                            challengeTitle: challenge.title,
-                            entryTime: thresholdEntryTime,
-                            lastMinuteThreshold: effectiveLastMinuteThreshold,
-                        };
-                    }
-                }
-
-                return nextEntry;
-            };
-
-            const result = await calculateNextLastThresholdEntry(challenges, now);
-
-            expect(result).toBeNull();
-        });
+        expect(result).not.toBeNull();
+        expect(result.challengeId).toBe(2); // 30 min - 5 min threshold = soonest entry
+        expect(result.entryTime).toBe(now + 1800 - 300);
+        expect(result.lastMinuteThreshold).toBe(5);
     });
 
-    describe('Cron Scheduling Logic', () => {
-        it('should schedule cron changes at the right time', () => {
-            // Mock setTimeout and clearTimeout
-            const originalSetTimeout = global.setTimeout;
-            const originalClearTimeout = global.clearTimeout;
+    it('skips flash challenges', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const challenges = [{ id: 1, title: 'Flash Challenge', type: 'flash', close_time: now + 1800 }];
+        expect(await calculateNextThresholdEntry(challenges, now, resolveThreshold)).toBeNull();
+    });
 
-            const mockSetTimeout = jest.fn();
-            const mockClearTimeout = jest.fn();
-
-            global.setTimeout = mockSetTimeout;
-            global.clearTimeout = mockClearTimeout;
-
-            try {
-                const now = Math.floor(Date.now() / 1000);
-                const nextEntry = {
-                    challengeId: 1,
-                    challengeTitle: 'Test Challenge',
-                    entryTime: now + 300, // 5 minutes from now
-                    lastMinuteThreshold: 5,
-                };
-
-                const scheduleThresholdCronChange = async (nextEntry) => {
-                    if (!nextEntry) {
-                        return;
-                    }
-
-                    const now = Math.floor(Date.now() / 1000);
-                    const timeUntilEntry = (nextEntry.entryTime - now) * 1000; // Convert to milliseconds
-
-                    if (timeUntilEntry <= 0) {
-                        return;
-                    }
-
-                    // Schedule the cron change
-                    return setTimeout(() => {
-                        // This would be the actual cron change logic
-                    }, timeUntilEntry);
-                };
-
-                const result = scheduleThresholdCronChange(nextEntry);
-
-                expect(mockSetTimeout).toHaveBeenCalledWith(expect.any(Function), 300000); // 5 minutes in milliseconds
-            } finally {
-                global.setTimeout = originalSetTimeout;
-                global.clearTimeout = originalClearTimeout;
-            }
-        });
-
-        it('should create correct cron expressions for threshold frequency', () => {
-            const lastMinuteCheckFrequency = 2; // 2 minutes
-            const thresholdCronExpression = `*/${lastMinuteCheckFrequency} * * * *`;
-
-            expect(thresholdCronExpression).toBe('*/2 * * * *');
-        });
+    it('skips ended challenges', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const challenges = [{ id: 1, title: 'Ended Challenge', type: 'regular', close_time: now - 3600 }];
+        expect(await calculateNextThresholdEntry(challenges, now, resolveThreshold)).toBeNull();
     });
 });
