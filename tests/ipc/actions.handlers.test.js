@@ -358,6 +358,20 @@ describe('fill-challenge-now', () => {
         const result = await handlers['fill-challenge-now']({}, '123', 'all');
         expect(result).toMatchObject({ success: true, submitted: 3, skipped: 1, message: 'Submitted 3 entries' });
     });
+
+    test('forwards the settings module in deps so tag rules apply', async () => {
+        stubAuthGuardOk();
+        const liveChallenge = { id: 123, title: 'C' };
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveChallenge] }) });
+        autoFill.fillChallengeNow = jest.fn().mockResolvedValue({ success: true, submitted: 1, skipped: 0 });
+        const handlers = buildHandlers();
+        await handlers['fill-challenge-now']({}, '123', 'one');
+        const depsArg = autoFill.fillChallengeNow.mock.calls[0][3];
+        // Identity check, not just defined — a future refactor that passes
+        // an empty stub instead of the real module would break tag-rule
+        // resolution and silently degrade.
+        expect(depsArg.settings).toBe(settings);
+    });
 });
 
 describe('apply-boost-to-entry', () => {

@@ -185,14 +185,18 @@ const stem = (word) => {
     return w;
 };
 
-const tokenise = (text) => {
+// keepStopwords skips the photography-noise stopword list. Challenge text
+// is full of boilerplate ("shots", "best", "good luck") that drowns out the
+// real subject, so the keyword path filters it. But a user who explicitly
+// types those words as a tag means them literally — honor the input.
+const tokenise = (text, { keepStopwords = false } = {}) => {
     if (typeof text !== 'string' || text.length === 0) return [];
     return text
         .toLowerCase()
         .replace(/<[^>]*>/g, ' ')
         .split(/[^a-z0-9]+/)
         .map((t) => t.replace(/\d+$/, ''))
-        .filter((t) => t.length > 1 && !isPureDigit(t) && !STOPWORDS.has(t))
+        .filter((t) => t.length > 1 && !isPureDigit(t) && (keepStopwords || !STOPWORDS.has(t)))
         .map(stem);
 };
 
@@ -207,10 +211,60 @@ const buildChallengeKeywords = (challenge) => {
 const matches = (labelStem, keywordStem) =>
     labelStem === keywordStem || labelStem.includes(keywordStem) || keywordStem.includes(labelStem);
 
-const scorePhoto = (photo, keywords) => {
+// User-typed tags are filtered by length to avoid the bidirectional-substring
+// trick in `matches()` producing surprising hits — e.g. a tag stem `"pi"`
+// would otherwise match a label `"spiral"`. The challenge-keyword path
+// keeps its 2-char floor (set by `tokenise`) because keywords come from
+// curated challenge text where short tokens like "sky" or "cat" should match.
+const MIN_USER_TAG_STEM_LENGTH = 3;
+
+/**
+ * Normalise a user-entered tag list (array of strings) into the same stem
+ * space used for challenge keywords, so must/should rules compare like
+ * with like against `photo.labels`. Unlike the keyword path, stopwords are
+ * kept (a user typing "shot" means it), but stems shorter than
+ * MIN_USER_TAG_STEM_LENGTH are dropped to avoid spurious substring matches.
+ * Empty/non-array input → [].
+ */
+const tokeniseTagList = (tags) => {
+    if (!Array.isArray(tags) || tags.length === 0) return [];
+    const joined = tags.filter((t) => typeof t === 'string').join(' ');
+    const stems = tokenise(joined, { keepStopwords: true }).filter((s) => s.length >= MIN_USER_TAG_STEM_LENGTH);
+    return Array.from(new Set(stems));
+};
+
+const labelStemsOf = (photo) => {
+    if (!Array.isArray(photo?.labels)) return [];
+    return photo.labels.map((l) => stem(String(l).toLowerCase())).filter(Boolean);
+};
+
+const photoMatchesAnyStem = (labelStems, targetStems) => {
+    for (const labelStem of labelStems) {
+        for (const target of targetStems) {
+            if (matches(labelStem, target)) return true;
+        }
+    }
+    return false;
+};
+
+const countShouldMatches = (labelStems, shouldStems) => {
+    if (shouldStems.length === 0 || labelStems.length === 0) return 0;
+    let matched = 0;
+    for (const target of shouldStems) {
+        for (const labelStem of labelStems) {
+            if (matches(labelStem, target)) {
+                matched++;
+                break;
+            }
+        }
+    }
+    return matched;
+};
+
+const scorePhoto = (photo, keywords, precomputedLabelStems = null) => {
     if (keywords.length === 0) return 0;
-    if (!Array.isArray(photo.labels) || photo.labels.length === 0) return 0;
-    const labelStems = photo.labels.map((l) => stem(String(l).toLowerCase()));
+    const labelStems = precomputedLabelStems || labelStemsOf(photo);
+    if (labelStems.length === 0) return 0;
     let score = 0;
     for (const labelStem of labelStems) {
         if (!labelStem) continue;
@@ -236,25 +290,58 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  * @param {object} challenge - challenge object (url, title, welcome_message all optional)
  * @param {Array<object>} eligiblePhotos - candidates from getEligiblePhotos
  * @param {number} slotsToFill - how many photos to return at most
+ * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[], fillWithoutTagMatch?: boolean}} [opts]
+ *   mustIncludeTags: hard filter — keep only photos whose labels match at
+ *   least one tag (ANY semantics). Empty/missing = no filter.
+ *   shouldIncludeTags: soft boost — photos with more matching tags rank
+ *   above photos with fewer, before the existing keyword/quality tiers.
+ *   fillWithoutTagMatch: when the must-filter matches NOTHING, fall back to
+ *   the unfiltered set rather than returning [] (so a slot isn't left empty
+ *   just because no photo carried a must-include tag). Defaults to true;
+ *   pass false to keep the slot empty until a matching photo exists. Only
+ *   the all-or-nothing case is relaxed — a partial match still fills with
+ *   matches only.
  * @returns {Array<string>} ordered list of photo ids; length <= slotsToFill
  */
-const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill) => {
+const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {}) => {
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
     if (!Array.isArray(eligiblePhotos) || eligiblePhotos.length === 0) return [];
 
     const allowed = eligiblePhotos.filter((p) => p && p.permission && p.permission.allowed === true && p.id);
     if (allowed.length === 0) return [];
 
+    const mustStems = tokeniseTagList(opts.mustIncludeTags);
+    const shouldStems = tokeniseTagList(opts.shouldIncludeTags);
+
+    // Stem each photo's labels once and carry the result through both the
+    // must-filter and the should-scoring rather than recomputing.
+    const withStems = allowed.map((photo) => ({ photo, labelStems: labelStemsOf(photo) }));
+    let filtered =
+        mustStems.length === 0
+            ? withStems
+            : withStems.filter(({ labelStems }) => photoMatchesAnyStem(labelStems, mustStems));
+    if (filtered.length === 0) {
+        // Must-filter eliminated everything. Unless the caller opted out,
+        // relax to the unfiltered set so the slot still gets filled.
+        if (mustStems.length > 0 && opts.fillWithoutTagMatch !== false) {
+            filtered = withStems;
+        } else {
+            return [];
+        }
+    }
+
     const keywords = buildChallengeKeywords(challenge);
-    const scored = allowed.map((photo) => ({
+    const scored = filtered.map(({ photo, labelStems }) => ({
         id: photo.id,
-        score: scorePhoto(photo, keywords),
+        shouldMatchCount: countShouldMatches(labelStems, shouldStems),
+        score: scorePhoto(photo, keywords, labelStems),
         achievementCount: achievementCountOf(photo),
         votes: votesOf(photo),
         uploadDate: uploadDateOf(photo),
     }));
 
     scored.sort((a, b) => {
+        if (b.shouldMatchCount !== a.shouldMatchCount) return b.shouldMatchCount - a.shouldMatchCount;
         if (b.score !== a.score) return b.score - a.score;
         if (b.achievementCount !== a.achievementCount) return b.achievementCount - a.achievementCount;
         if (b.votes !== a.votes) return b.votes - a.votes;
@@ -271,5 +358,6 @@ module.exports = {
     stem,
     buildChallengeKeywords,
     scorePhoto,
+    tokeniseTagList,
     STOPWORDS,
 };

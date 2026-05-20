@@ -8,6 +8,7 @@ const {
     stem,
     buildChallengeKeywords,
     scorePhoto,
+    tokeniseTagList,
 } = require('../../src/js/services/photoPicker');
 
 const allowed = (id, labels, uploadDate = 1000, extras = {}) => ({
@@ -140,6 +141,18 @@ describe('photoPicker', () => {
         test('skips empty labels without crashing', () => {
             const photo = { labels: ['', 'Pink', ''] };
             expect(scorePhoto(photo, ['pink'])).toBe(1);
+        });
+        test('2-char challenge keyword can match a label (keyword path floor is 2, not 3)', () => {
+            // tokenise keeps 2-char tokens for the challenge-keyword path,
+            // unlike the user-tag path which floors at 3. Confirm a 2-char
+            // keyword still matches.
+            const photo = { labels: ['Ox', 'Farm'] };
+            expect(scorePhoto(photo, ['ox'])).toBe(1);
+        });
+        test('honors precomputed label stems when provided', () => {
+            const photo = { labels: ['Pink'] };
+            // Pass stems directly; scorePhoto should use them rather than re-deriving.
+            expect(scorePhoto(photo, ['pink'], ['pink'])).toBe(1);
         });
     });
 
@@ -274,6 +287,214 @@ describe('photoPicker', () => {
         test('drops blocked photos even if otherwise high-score', () => {
             const photos = [blocked('blocked-perfect', ['Pink', 'Nature']), allowed('weak', ['Misc'], 1000)];
             expect(pickPhotosForChallenge(challenge, photos, 2)).toEqual(['weak']);
+        });
+    });
+
+    describe('tokeniseTagList', () => {
+        test('lowercases, stems, and dedups across a tag array', () => {
+            // 'sunsets' stems to 'sunset'; 'Beach' lowercases; duplicate dropped
+            expect(tokeniseTagList(['Sunsets', 'beach', 'Beach'])).toEqual(['sunset', 'beach']);
+        });
+        test('empty / non-array → []', () => {
+            expect(tokeniseTagList([])).toEqual([]);
+            expect(tokeniseTagList(null)).toEqual([]);
+            expect(tokeniseTagList(undefined)).toEqual([]);
+        });
+        test('multi-word tag is split into per-word stems', () => {
+            // A user typing "golden hour" gets ["golden", "hour"] for matching.
+            expect(tokeniseTagList(['golden hour'])).toEqual(['golden', 'hour']);
+        });
+        test('drops stems shorter than 3 chars to avoid spurious substring matches', () => {
+            // "pi" would otherwise match labels like "spiral" via substring
+            // containment. Tags that stem to <3 chars are filtered out.
+            expect(tokeniseTagList(['pi'])).toEqual([]);
+            expect(tokeniseTagList(['go'])).toEqual([]);
+            // 3-char stems pass through.
+            expect(tokeniseTagList(['cat'])).toEqual(['cat']);
+        });
+        test('filters non-string entries gracefully', () => {
+            // Schema validation rejects these upstream, but the picker
+            // still defends against bad input reaching it.
+            expect(tokeniseTagList([42, 'beach', null, 'cat'])).toEqual(['beach', 'cat']);
+        });
+        test('whitespace-only entries collapse to []', () => {
+            expect(tokeniseTagList(['   ', '\t'])).toEqual([]);
+        });
+        test('keeps stopwords (a user typing "shot" means it literally)', () => {
+            // The challenge-keyword path strips "shot" as photography noise,
+            // but an explicit user tag must be honored.
+            expect(tokeniseTagList(['shot'])).toEqual(['shot']);
+            expect(tokeniseTagList(['winner'])).toEqual(['winner']);
+        });
+    });
+
+    describe('tokenise keepStopwords option', () => {
+        test('default strips photography-noise stopwords', () => {
+            expect(tokenise('best shot ever')).toEqual(['ever']);
+        });
+        test('keepStopwords:true retains them', () => {
+            expect(tokenise('best shot ever', { keepStopwords: true })).toEqual(['best', 'shot', 'ever']);
+        });
+    });
+
+    describe('pickPhotosForChallenge — short tag stems are filtered (no spurious matches)', () => {
+        const challenge = { url: 'pink-in-nature23', title: 'Show the color Pink' };
+
+        test('2-char user tag does not substring-match longer labels', () => {
+            // Without the min-length filter, mustIncludeTags=['pi'] would
+            // pass through to matches() and 'pi'.includes / 'spiral'.includes
+            // would not trigger, but 'spi'.includes('pi') would — so the
+            // hard filter must NOT keep a photo via a 2-char user stem.
+            const photos = [allowed('a', ['Spiral'], 1000), allowed('b', ['Cat'], 5000)];
+            // Filter degrades to "no tags" → both photos pass, ranked
+            // by date.
+            expect(pickPhotosForChallenge(challenge, photos, 5, { mustIncludeTags: ['pi'] })).toEqual(['b', 'a']);
+        });
+    });
+
+    describe('pickPhotosForChallenge — mustIncludeTags', () => {
+        const challenge = { url: 'pink-in-nature23', title: 'Show the color Pink' };
+
+        test('empty list is a no-op (same result as no opts)', () => {
+            const photos = [allowed('a', ['Pink'], 1000), allowed('b', ['Misc'], 2000)];
+            expect(pickPhotosForChallenge(challenge, photos, 2, { mustIncludeTags: [] })).toEqual(
+                pickPhotosForChallenge(challenge, photos, 2),
+            );
+        });
+
+        test('keeps only photos whose labels match ANY listed tag', () => {
+            const photos = [allowed('hasSunset', ['Sunset', 'Sky'], 1000), allowed('hasOther', ['Cat', 'Pet'], 9000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                mustIncludeTags: ['sunset'],
+            });
+            expect(picked).toEqual(['hasSunset']);
+        });
+
+        test('stemming applies: "cats" tag matches label "Cat"', () => {
+            const photos = [allowed('a', ['Cat'], 1000), allowed('b', ['Dog'], 5000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, { mustIncludeTags: ['cats'] });
+            expect(picked).toEqual(['a']);
+        });
+
+        test('no candidates after filter → [] when fillWithoutTagMatch is false', () => {
+            const photos = [allowed('a', ['Cat'], 1000), allowed('b', ['Dog'], 5000)];
+            expect(
+                pickPhotosForChallenge(challenge, photos, 5, {
+                    mustIncludeTags: ['mountain'],
+                    fillWithoutTagMatch: false,
+                }),
+            ).toEqual([]);
+        });
+
+        test('ANY (not ALL) semantics: photo matching one of several tags qualifies', () => {
+            const photos = [allowed('a', ['Sunset'], 1000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                mustIncludeTags: ['sunset', 'beach', 'ocean'],
+            });
+            expect(picked).toEqual(['a']);
+        });
+    });
+
+    describe('pickPhotosForChallenge — fillWithoutTagMatch fallback', () => {
+        const challenge = { url: 'pink-in-nature23', title: 'Show the color Pink' };
+
+        test('default (undefined): no must-match falls back to unfiltered set', () => {
+            const photos = [allowed('a', ['Cat'], 1000), allowed('b', ['Dog'], 5000)];
+            // No photo matches 'mountain'; with the default-on fallback, the
+            // best unfiltered photo (newest, since neither matches keywords) is
+            // returned rather than [].
+            const picked = pickPhotosForChallenge(challenge, photos, 5, { mustIncludeTags: ['mountain'] });
+            expect(picked).toEqual(['b', 'a']);
+        });
+
+        test('explicit true: same fallback behavior', () => {
+            const photos = [allowed('a', ['Cat'], 1000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                mustIncludeTags: ['mountain'],
+                fillWithoutTagMatch: true,
+            });
+            expect(picked).toEqual(['a']);
+        });
+
+        test('false: keeps the slot empty when nothing matches', () => {
+            const photos = [allowed('a', ['Cat'], 1000)];
+            expect(
+                pickPhotosForChallenge(challenge, photos, 5, {
+                    mustIncludeTags: ['mountain'],
+                    fillWithoutTagMatch: false,
+                }),
+            ).toEqual([]);
+        });
+
+        test('fallback does not kick in when there IS a match (partial match, no top-up beyond matches)', () => {
+            // 'match' matches 'sunset'; 'other' does not. Even though there are
+            // 2 slots and the fallback is on, the filter has a non-empty result
+            // so only the matching photo is returned — fallback is all-or-nothing.
+            const photos = [allowed('match', ['Sunset'], 1000), allowed('other', ['Cat'], 9000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                mustIncludeTags: ['sunset'],
+                fillWithoutTagMatch: true,
+            });
+            expect(picked).toEqual(['match']);
+        });
+
+        test('fallback still applies shouldIncludeTags ranking', () => {
+            // Nothing matches the must tag → fallback to all photos, but the
+            // should tag still boosts the matching one to the top.
+            const photos = [allowed('plain', ['Cat'], 9000), allowed('preferred', ['Beach'], 1000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                mustIncludeTags: ['mountain'],
+                shouldIncludeTags: ['beach'],
+            });
+            expect(picked).toEqual(['preferred', 'plain']);
+        });
+    });
+
+    describe('pickPhotosForChallenge — shouldIncludeTags', () => {
+        const challenge = { url: 'pink-in-nature23', title: 'Show the color Pink' };
+
+        test('matching photo wins over higher keyword-score photo', () => {
+            // Without should: 'themeMatch' would win by score (matches 'pink').
+            // With shouldIncludeTags=['sunset'], 'preferred' takes the top slot
+            // because shouldMatchCount outranks keyword score.
+            const photos = [allowed('themeMatch', ['Pink', 'Flower'], 1000), allowed('preferred', ['Sunset'], 1000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 2, {
+                shouldIncludeTags: ['sunset'],
+            });
+            expect(picked).toEqual(['preferred', 'themeMatch']);
+        });
+
+        test('does not exclude non-matching photos (soft, not hard)', () => {
+            const photos = [allowed('hasPreferred', ['Sunset'], 1000), allowed('noMatch', ['Misc'], 5000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                shouldIncludeTags: ['sunset'],
+            });
+            expect(picked).toEqual(['hasPreferred', 'noMatch']);
+        });
+
+        test('more should-matches outranks fewer', () => {
+            const photos = [allowed('twoMatches', ['Sunset', 'Beach'], 1000), allowed('oneMatch', ['Sunset'], 9000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 2, {
+                shouldIncludeTags: ['sunset', 'beach'],
+            });
+            expect(picked).toEqual(['twoMatches', 'oneMatch']);
+        });
+    });
+
+    describe('pickPhotosForChallenge — must + should together', () => {
+        const challenge = { url: 'pink-in-nature23', title: 'Show the color Pink' };
+
+        test('must filters first, should orders within survivors', () => {
+            const photos = [
+                allowed('mustOnly', ['Sunset'], 5000),
+                allowed('mustAndShould', ['Sunset', 'Beach'], 1000),
+                allowed('shouldOnly', ['Beach'], 9000), // dropped by must
+            ];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                mustIncludeTags: ['sunset'],
+                shouldIncludeTags: ['beach'],
+            });
+            expect(picked).toEqual(['mustAndShould', 'mustOnly']);
         });
     });
 });

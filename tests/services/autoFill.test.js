@@ -36,10 +36,19 @@ const makeLogger = () => ({
             : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
 });
 
-const makeSettings = ({ autoFill = false, intervalMinutes = 10 } = {}) => ({
+const makeSettings = ({
+    autoFill = false,
+    intervalMinutes = 10,
+    mustIncludeTags = [],
+    shouldIncludeTags = [],
+    fillWithoutTagMatch = true, // mirrors the schema default
+} = {}) => ({
     getEffectiveSetting: jest.fn((key) => {
         if (key === 'autoFill') return autoFill;
         if (key === 'autoFillIntervalMinutes') return intervalMinutes;
+        if (key === 'mustIncludeTags') return mustIncludeTags;
+        if (key === 'shouldIncludeTags') return shouldIncludeTags;
+        if (key === 'fillWithoutTagMatch') return fillWithoutTagMatch;
         return null;
     }),
 });
@@ -272,6 +281,123 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(result).toBe('submitted');
     });
 
+    test('mustIncludeTags hard-filters: with fillWithoutTagMatch off, no-match photo is not submitted', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                intervalMinutes: 10,
+                mustIncludeTags: ['sunset'],
+                fillWithoutTagMatch: false,
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('no-eligible-photos');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('fillWithoutTagMatch default ON: no-match photo IS submitted (fallback)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            // fillWithoutTagMatch defaults to true in makeSettings
+            settings: makeSettings({
+                autoFill: true,
+                intervalMinutes: 10,
+                mustIncludeTags: ['sunset'],
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+    });
+
+    test('fillWithoutTagMatch does NOT override an actual match (matching photo still wins)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                intervalMinutes: 10,
+                mustIncludeTags: ['sunset'],
+                fillWithoutTagMatch: true,
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('match', ['Sunset']), allowedPhoto('other', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['match'], 'tok');
+    });
+
+    test('mustIncludeTags lets matching photo through', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                intervalMinutes: 10,
+                mustIncludeTags: ['sunset'],
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('keep', ['Sunset']), allowedPhoto('drop', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['keep'], 'tok');
+    });
+
+    test('getEffectiveSetting returning null for tag settings means "no filter"', async () => {
+        // Real settings.js can return null when no global default is set;
+        // tokeniseTagList handles null/undefined → []. Verify the picker
+        // is reached with both photos eligible.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const settings = {
+            getEffectiveSetting: jest.fn((key) => {
+                if (key === 'autoFill') return true;
+                if (key === 'autoFillIntervalMinutes') return 10;
+                return null;
+            }),
+        };
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings,
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+    });
+
+    test('shouldIncludeTags re-orders pick within the eligible set', async () => {
+        // Without should: 'themed' wins via keyword score (label "Pink" matches challenge "pink").
+        // With should=['sunset']: 'preferred' wins despite zero keyword score.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                intervalMinutes: 10,
+                shouldIncludeTags: ['sunset'],
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('themed', ['Pink']), allowedPhoto('preferred', ['Sunset'])]),
+            submitToChallenge,
+        });
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['preferred'], 'tok');
+    });
+
     test('error path handles thrown non-Error gracefully (no .message)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const fetchResult = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
@@ -430,5 +556,105 @@ describe('fillChallengeNow — manual fill', () => {
         });
         expect(result.success).toBe(false);
         expect(result.error).toBe('Submit failed');
+    });
+
+    test('mustIncludeTags gates manual fill when fillWithoutTagMatch is off', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
+        const submitToChallenge = jest.fn();
+        const result = await fillChallengeNow(challenge, 'tok', 'all', {
+            settings: makeSettings({ mustIncludeTags: ['mountain'], fillWithoutTagMatch: false }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat']), allowedPhoto('p2', ['Sky'])]),
+            submitToChallenge,
+        });
+        expect(result.success).toBe(false);
+        // Candidates existed but the must-filter removed them all → the error
+        // names the filter rather than the generic "no eligible photos".
+        expect(result.error).toMatch(/must include tags/i);
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('manual fill falls back (default) when no photo matches the must tags', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await fillChallengeNow(challenge, 'tok', 'one', {
+            // fillWithoutTagMatch defaults true
+            settings: makeSettings({ mustIncludeTags: ['mountain'] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat']), allowedPhoto('p2', ['Sky'])]),
+            submitToChallenge,
+        });
+        expect(result.success).toBe(true);
+        expect(result.submitted).toBe(1);
+        expect(submitToChallenge).toHaveBeenCalled();
+    });
+
+    test('generic "no eligible photos" message when there were no candidates at all', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
+        const result = await fillChallengeNow(challenge, 'tok', 'all', {
+            settings: makeSettings({ mustIncludeTags: ['mountain'], fillWithoutTagMatch: false }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([]),
+            submitToChallenge: jest.fn(),
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/no eligible photos/i);
+    });
+
+    test('shouldIncludeTags re-orders manual pick', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 86400 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        await fillChallengeNow(challenge, 'tok', 'one', {
+            settings: makeSettings({ shouldIncludeTags: ['sunset'] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('themed', ['Pink']), allowedPhoto('preferred', ['Sunset'])]),
+            submitToChallenge,
+        });
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['preferred'], 'tok');
+    });
+
+    test('null tag settings degrade to no-filter (not crash)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        // settings.getEffectiveSetting can legitimately return null when no
+        // global default is wired; the picker must treat it as "no filter".
+        const settings = {
+            getEffectiveSetting: jest.fn((key) => {
+                if (key === 'mustIncludeTags') return null;
+                if (key === 'shouldIncludeTags') return null;
+                return null;
+            }),
+        };
+        const result = await fillChallengeNow(challenge, 'tok', 'one', {
+            settings,
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result.success).toBe(true);
+        expect(result.submitted).toBe(1);
+    });
+
+    test('omitting settings emits a debug log on the degradation path', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
+        const debug = jest.fn();
+        const logger = {
+            withCategory: jest.fn(() => ({
+                info: jest.fn(),
+                warning: jest.fn(),
+                success: jest.fn(),
+                error: jest.fn(),
+                debug,
+            })),
+            challengeTag: (c) => `[${c.id}]`,
+        };
+        await fillChallengeNow(challenge, 'tok', 'one', {
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+        expect(debug).toHaveBeenCalledWith(expect.stringMatching(/settings module not provided/), null);
     });
 });

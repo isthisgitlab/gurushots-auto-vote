@@ -135,6 +135,17 @@
             autoFillIntervalMinutesDesc:
                 'Minutes between each auto-fill submission. Two missing slots with a 10-minute interval submit at T-20m and T-10m. Wider gap = more time for each entry to gather votes.',
             autoFillBadge: 'auto-fill',
+            mustIncludeTags: 'Must Include Tags',
+            mustIncludeTagsDesc:
+                'Hard filter for both auto-fill and the manual fill buttons. Only consider photos whose auto-detected labels match at least one of these tags. Leave empty to consider all eligible photos. Matching is case-insensitive and forgiving (e.g. "cat" matches "cats").',
+            shouldIncludeTags: 'Should Include Tags',
+            shouldIncludeTagsDesc:
+                'Soft preference for both auto-fill and manual fill. Prefer photos whose labels match these tags; matches rank above the auto-detected challenge keyword score but do not exclude other photos. If nothing matches, fill proceeds with the normal ranking.',
+            fillWithoutTagMatch: 'Fill Even Without a Tag Match',
+            fillWithoutTagMatchDesc:
+                'Only matters when Must Include Tags is set. When on (default), if none of your photos match those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a matching photo exists.',
+            tagsPlaceholder: 'e.g. sunset, beach, ocean',
+            none: '(none)',
             addOnePhoto: 'Add one photo to fill an empty slot',
             fillAllPhotos: 'Fill all empty slots now (no spacing)',
             cancel: 'Cancel',

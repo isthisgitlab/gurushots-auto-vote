@@ -185,7 +185,10 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                         onReset={hasOverride ? handleClearOverride : null}
                                     />
                                     <p className="text-xs text-base-content/40 mt-1">
-                                        {t('app.globalDefault')}: {String(globalDefault)}
+                                        {t('app.globalDefault')}:{' '}
+                                        {Array.isArray(globalDefault)
+                                            ? globalDefault.join(', ') || t('app.none')
+                                            : String(globalDefault)}
                                     </p>
                                 </div>
                             );

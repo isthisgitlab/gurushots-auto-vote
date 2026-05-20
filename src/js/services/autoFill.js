@@ -70,6 +70,10 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         return 'skipped';
     }
 
+    const mustIncludeTags = settings.getEffectiveSetting('mustIncludeTags', String(challengeId));
+    const shouldIncludeTags = settings.getEffectiveSetting('shouldIncludeTags', String(challengeId));
+    const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
+
     let eligible;
     try {
         eligible = await getEligiblePhotos(challengeId, token);
@@ -83,9 +87,15 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         return 'error';
     }
 
-    const picked = pickPhotosForChallenge(challenge, eligible, 1);
+    const picked = pickPhotosForChallenge(challenge, eligible, 1, {
+        mustIncludeTags,
+        shouldIncludeTags,
+        fillWithoutTagMatch,
+    });
     if (picked.length === 0) {
-        logger.withCategory('autoFill').info(`autoFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
+        logger
+            .withCategory('autoFill')
+            .info(`autoFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
         return 'no-eligible-photos';
     }
 
@@ -114,20 +124,26 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
 
 /**
  * Manual fill (GUI button). Submits one or all missing slots in a
- * single request. Ignores the autoFill toggle and the spacing math.
+ * single request. Ignores the autoFill toggle and the spacing math,
+ * but still honors mustIncludeTags / shouldIncludeTags so the tag
+ * rules mean the same thing whether triggered by the user or the
+ * scheduler.
  *
  * @param {object} challenge
  * @param {string} token
  * @param {'one'|'all'} mode
  * @param {{
+ *   settings?: object,
  *   logger: object,
  *   getEligiblePhotos: function,
  *   submitToChallenge: function,
- * }} deps
+ * }} deps - settings is required in production (the IPC handler always
+ *   passes it); it is optional only so legacy failure-path unit tests can
+ *   omit it, in which case tag rules degrade to "no filter".
  * @returns {Promise<{success: boolean, submitted: number, skipped: number, error?: string}>}
  */
 const fillChallengeNow = async (challenge, token, mode, deps) => {
-    const { logger, getEligiblePhotos, submitToChallenge } = deps;
+    const { settings, logger, getEligiblePhotos, submitToChallenge } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) {
         return { success: false, submitted: 0, skipped: 0, error: 'Invalid challenge' };
@@ -136,6 +152,26 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     const slotsRemaining = getSlotsRemaining(challenge);
     if (slotsRemaining <= 0) {
         return { success: true, submitted: 0, skipped: 0 };
+    }
+
+    // settings is optional for fillChallengeNow — unit tests for legacy
+    // failure paths invoke without it. The production IPC handler always
+    // passes settings, so this branch firing in real runs would mean a
+    // caller forgot to wire deps; emit a debug line so it's observable.
+    let mustIncludeTags = null;
+    let shouldIncludeTags = null;
+    let fillWithoutTagMatch; // undefined → picker treats as default (true)
+    if (settings) {
+        mustIncludeTags = settings.getEffectiveSetting('mustIncludeTags', String(challengeId));
+        shouldIncludeTags = settings.getEffectiveSetting('shouldIncludeTags', String(challengeId));
+        fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
+    } else {
+        logger
+            .withCategory('autoFill')
+            .debug(
+                `manualFill: settings module not provided to fillChallengeNow for ${logger.challengeTag(challenge)}; tag rules will not apply`,
+                null,
+            );
     }
 
     let eligible;
@@ -157,10 +193,24 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     }
 
     const wantCount = mode === 'all' ? slotsRemaining : 1;
-    const picked = pickPhotosForChallenge(challenge, eligible, wantCount);
+    const picked = pickPhotosForChallenge(challenge, eligible, wantCount, {
+        mustIncludeTags,
+        shouldIncludeTags,
+        fillWithoutTagMatch,
+    });
     if (picked.length === 0) {
-        logger.withCategory('autoFill').info(`manualFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
-        return { success: false, submitted: 0, skipped: slotsRemaining, error: 'No eligible photos found' };
+        // When the "must include" filter is active and there were photos to
+        // consider, it's the most likely reason nothing was picked — say so,
+        // otherwise the user sees a generic message and can't tell their own
+        // tag filter is the cause.
+        const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
+        const hadCandidates = Array.isArray(eligible) && eligible.length > 0;
+        const error =
+            mustActive && hadCandidates ? 'No photos matched the Must Include Tags filter' : 'No eligible photos found';
+        logger
+            .withCategory('autoFill')
+            .info(`manualFill: ${error.toLowerCase()} for ${logger.challengeTag(challenge)}`, null);
+        return { success: false, submitted: 0, skipped: slotsRemaining, error };
     }
 
     try {

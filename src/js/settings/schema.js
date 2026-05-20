@@ -16,6 +16,17 @@
  */
 const getSchemaDefault = (key) => SETTINGS_SCHEMA[key]?.default;
 
+// Per-string and total-array caps for tag-list settings. A typical use is
+// a few words per tag, a handful of tags per challenge — the caps exist
+// to keep a corrupted settings file or out-of-band write from passing
+// pathological input to the picker.
+const MAX_TAG_LENGTH = 50;
+const MAX_TAGS_PER_LIST = 50;
+const isValidTagsList = (value) =>
+    Array.isArray(value) &&
+    value.length <= MAX_TAGS_PER_LIST &&
+    value.every((v) => typeof v === 'string' && v.length > 0 && v.length <= MAX_TAG_LENGTH && v.trim().length > 0);
+
 const SETTINGS_SCHEMA = {
     boostTime: {
         type: 'time', // Special type for hours/minutes input
@@ -267,6 +278,33 @@ const SETTINGS_SCHEMA = {
         validationOrder: 1,
         label: 'app.autoFillIntervalMinutes',
         description: 'app.autoFillIntervalMinutesDesc',
+    },
+    mustIncludeTags: {
+        type: 'tags',
+        default: [],
+        perChallenge: true,
+        validation: isValidTagsList,
+        validationOrder: 1,
+        label: 'app.mustIncludeTags',
+        description: 'app.mustIncludeTagsDesc',
+    },
+    shouldIncludeTags: {
+        type: 'tags',
+        default: [],
+        perChallenge: true,
+        validation: isValidTagsList,
+        validationOrder: 1,
+        label: 'app.shouldIncludeTags',
+        description: 'app.shouldIncludeTagsDesc',
+    },
+    fillWithoutTagMatch: {
+        type: 'boolean',
+        default: true,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        label: 'app.fillWithoutTagMatch',
+        description: 'app.fillWithoutTagMatchDesc',
     },
 };
 

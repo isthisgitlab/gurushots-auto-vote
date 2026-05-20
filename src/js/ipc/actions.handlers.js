@@ -253,6 +253,7 @@ const buildHandlers = () => ({
             }
 
             const result = await autoFill.fillChallengeNow(liveChallenge, guard.token, safeMode, {
+                settings,
                 logger,
                 getEligiblePhotos: strategy.getEligiblePhotos,
                 submitToChallenge: strategy.submitToChallenge,

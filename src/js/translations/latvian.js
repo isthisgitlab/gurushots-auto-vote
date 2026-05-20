@@ -135,6 +135,17 @@
             autoFillIntervalMinutesDesc:
                 'Minūtes starp katru auto-aizpildes iesniegšanu. Divas trūkstošās vietas ar 10 minūšu intervālu tiek iesniegtas T-20m un T-10m. Plašāks intervāls = vairāk laika katram foto savākt balsis.',
             autoFillBadge: 'auto-aizpilde',
+            mustIncludeTags: 'Obligātie tagi',
+            mustIncludeTagsDesc:
+                'Striktais filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Apsvērt tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar vismaz vienu no šiem tagiem. Atstāj tukšu, lai apsvērtu visus piemērotos foto. Salīdzināšana nav reģistrjutīga un ir saudzīga (piem., "kaķis" sakrīt ar "kaķiem").',
+            shouldIncludeTags: 'Vēlamie tagi',
+            shouldIncludeTagsDesc:
+                'Vēlamais kritērijs gan auto-aizpildei, gan manuālajai aizpildei. Priekšroku dot foto, kuru tagi sakrīt ar šiem; sakritības tiek ranžētas augstāk par automātiski noteikto izaicinājuma atslēgvārdu vērtējumu, bet neizslēdz pārējos foto. Ja neviens nesakrīt, aizpilde turpinās ar parasto ranžēšanu.',
+            fillWithoutTagMatch: 'Aizpildīt arī bez tagu sakritības',
+            fillWithoutTagMatchDesc:
+                'Attiecas tikai tad, ja ir iestatīti obligātie tagi. Kad ieslēgts (noklusējums), ja neviens no taviem foto nesakrīt ar šiem tagiem, tik un tā tiek pievienots labākais pieejamais foto, lai vieta nepaliek tukša. Kad izslēgts, vieta paliek tukša, līdz parādās foto ar atbilstošu tagu.',
+            tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
+            none: '(nav)',
             addOnePhoto: 'Pievienot vienu foto, lai aizpildītu tukšu vietu',
             fillAllPhotos: 'Aizpildīt visas tukšās vietas tagad (bez intervāla)',
             cancel: 'Atcelt',

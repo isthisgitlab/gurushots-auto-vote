@@ -360,6 +360,9 @@ const _applyChallengeOverride = (settings, settingKey, challengeId, value, batch
     }
 
     const container = _ensureChallengeContainer(settings, challengeId);
+    // TODO: this is reference-equality so any reference type (e.g. array
+    // defaults like mustIncludeTags) never matches and never auto-clears.
+    // Out of scope for the tag-rules feature; touches all setting types.
     if (value !== getGlobalDefault(settingKey)) {
         container[settingKey] = value;
         return 'set';
