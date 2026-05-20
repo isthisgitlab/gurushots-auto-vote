@@ -206,6 +206,41 @@ describe('challenges', () => {
             expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(expect.any(String), null, 'API request failed');
         });
 
+        test('coalesces concurrent calls for the same token into a single request', async () => {
+            let resolveRequest;
+            makePostRequest.mockReturnValueOnce(
+                new Promise((resolve) => {
+                    resolveRequest = resolve;
+                }),
+            );
+
+            // Two callers fire while the request is still in flight (the
+            // post-cycle UI refresh + the scheduler's window re-check).
+            const first = getActiveChallenges(mockToken);
+            const second = getActiveChallenges(mockToken);
+
+            expect(first).toBe(second); // same in-flight promise shared
+
+            resolveRequest({ challenges: [{ id: '1' }] });
+            const [r1, r2] = await Promise.all([first, second]);
+
+            expect(makePostRequest).toHaveBeenCalledTimes(1);
+            expect(r1).toEqual({ challenges: [{ id: '1' }] });
+            expect(r2).toBe(r1);
+        });
+
+        test('does not coalesce sequential calls (no stale caching)', async () => {
+            makePostRequest
+                .mockResolvedValueOnce({ challenges: [] })
+                .mockResolvedValueOnce({ challenges: [{ id: '2' }] });
+
+            await getActiveChallenges(mockToken);
+            const second = await getActiveChallenges(mockToken);
+
+            expect(makePostRequest).toHaveBeenCalledTimes(2);
+            expect(second).toEqual({ challenges: [{ id: '2' }] });
+        });
+
         test('should truncate long tokens in logs', async () => {
             const longToken = 'very-long-token-that-should-be-truncated-for-security';
             const mockResponse = { challenges: [] };
