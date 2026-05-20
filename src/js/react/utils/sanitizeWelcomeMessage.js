@@ -6,14 +6,39 @@
 // formatting and links, then auto-linkify bare URLs.
 
 const ALLOWED_TAGS = new Set([
-    'b', 'strong', 'i', 'em', 'u', 'a', 'p', 'br',
-    'h2', 'h3', 'h4', 'ul', 'ol', 'li', 'span', 'div',
+    'b',
+    'strong',
+    'i',
+    'em',
+    'u',
+    'a',
+    'p',
+    'br',
+    'h2',
+    'h3',
+    'h4',
+    'ul',
+    'ol',
+    'li',
+    'span',
+    'div',
 ]);
 
 const STRIP_WITH_CONTENTS = new Set([
-    'button', 'input', 'select', 'textarea', 'form',
-    'script', 'style', 'iframe', 'object', 'embed', 'svg',
-    'link', 'meta', 'noscript',
+    'button',
+    'input',
+    'select',
+    'textarea',
+    'form',
+    'script',
+    'style',
+    'iframe',
+    'object',
+    'embed',
+    'svg',
+    'link',
+    'meta',
+    'noscript',
 ]);
 
 const URL_RE = /\bhttps?:\/\/[^\s<]+/g;
@@ -74,11 +99,7 @@ function walk(node) {
 }
 
 function escapeText(s) {
-    return s
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function isInsideAnchor(textNode, root) {

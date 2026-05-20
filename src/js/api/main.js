@@ -178,9 +178,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
             const isKeyUnlockedAvailable =
                 boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout);
             if (isTimerBasedAvailable || isKeyUnlockedAvailable) {
-                logger
-                    .withCategory('voting')
-                    .info(`${logger.challengeTag(challenge)} Boost available`, null);
+                logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost available`, null);
 
                 // Use the centralized voting logic service for boost decisions
                 const shouldApplyBoost = votingLogic.shouldApplyBoost(challenge, now);
@@ -314,10 +312,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
 
                     logger
                         .withCategory('voting')
-                        .info(
-                            `${logger.challengeTag(challenge)} Starting voting process - ${voteReason}`,
-                            null,
-                        );
+                        .info(`${logger.challengeTag(challenge)} Starting voting process - ${voteReason}`, null);
 
                     // Get images to vote on
                     const voteImages = await getVoteImages(challenge, token);
@@ -366,10 +361,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                         logger.withCategory('voting').endOperation(`vote-${challenge.id}`, 'no vote images available');
                         logger
                             .withCategory('voting')
-                            .warning(
-                                `${logger.challengeTag(challenge)} No vote images available — skipping`,
-                                null,
-                            );
+                            .warning(`${logger.challengeTag(challenge)} No vote images available — skipping`, null);
                     }
                 } catch (error) {
                     logger.withCategory('voting').endOperation(`vote-${challenge.id}`, null, error.message || error);

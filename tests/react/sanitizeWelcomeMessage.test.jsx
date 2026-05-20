@@ -62,7 +62,9 @@ describe('sanitizeWelcomeMessage', () => {
 
     test('auto-linkifies bare URLs in text', () => {
         const out = sanitizeWelcomeMessage('see https://example.com for more');
-        expect(out).toContain('<a href="https://example.com" target="_blank" rel="noopener noreferrer">https://example.com</a>');
+        expect(out).toContain(
+            '<a href="https://example.com" target="_blank" rel="noopener noreferrer">https://example.com</a>',
+        );
     });
 
     test('does not double-wrap URLs already inside anchors', () => {

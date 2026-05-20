@@ -129,7 +129,9 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
                     null,
                 );
         } else {
-            logger.withCategory('voting').warning(`Failed to update metadata for ${logger.challengeTag(challenge)}`, null);
+            logger
+                .withCategory('voting')
+                .warning(`Failed to update metadata for ${logger.challengeTag(challenge)}`, null);
         }
     } catch (error) {
         logger.withCategory('voting').warning(`Error updating metadata for ${logger.challengeTag(challenge)}:`, error);

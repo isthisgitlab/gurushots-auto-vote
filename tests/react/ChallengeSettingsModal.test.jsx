@@ -65,23 +65,13 @@ describe('ChallengeSettingsModal load cancellation', () => {
             );
 
         const { rerender } = render(
-            <ChallengeSettingsModal
-                isOpen={true}
-                onClose={jest.fn()}
-                challengeId="1"
-                challengeTitle="Challenge 1"
-            />,
+            <ChallengeSettingsModal isOpen={true} onClose={jest.fn()} challengeId="1" challengeTitle="Challenge 1" />,
         );
 
         // Swap to challenge "2" while challenge "1"'s load is still pending —
         // this is the cleanup that flips cancelled=true on the first run.
         rerender(
-            <ChallengeSettingsModal
-                isOpen={true}
-                onClose={jest.fn()}
-                challengeId="2"
-                challengeTitle="Challenge 2"
-            />,
+            <ChallengeSettingsModal isOpen={true} onClose={jest.fn()} challengeId="2" challengeTitle="Challenge 2" />,
         );
 
         // Now land challenge 1's late response. Because the first run is

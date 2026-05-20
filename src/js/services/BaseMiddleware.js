@@ -159,7 +159,9 @@ class BaseMiddleware {
                         await new Promise((resolve) => setTimeout(resolve, STAGGER_MS));
                     } else if (result.outcome === 'no-images') {
                         skipped++;
-                        logger.withCategory('voting').warning(`${logger.challengeTag(challenge)} No vote images available`, null);
+                        logger
+                            .withCategory('voting')
+                            .warning(`${logger.challengeTag(challenge)} No vote images available`, null);
                     } else {
                         skipped++;
                         logger
