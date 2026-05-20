@@ -4,12 +4,19 @@
  * takes, and an overrunning cycle should pause MIN_CYCLE_GAP_MS before
  * firing again (rather than re-firing immediately).
  *
- * Threshold-mode (node-cron) is out of scope — we mock node-cron so it
- * stays inert and the normal-mode setTimeout chain is exercised directly.
+ * The normal-mode tests mock node-cron so it stays inert and the
+ * setTimeout chain is exercised directly. The threshold-mode revert test
+ * (further down) drives the captured cron callback manually to simulate
+ * a tick.
  */
 
+let mockCronCallback = null;
+const mockCronJob = { start: jest.fn(), stop: jest.fn() };
 jest.mock('node-cron', () => ({
-    schedule: jest.fn(() => ({ start: jest.fn(), stop: jest.fn() })),
+    schedule: jest.fn((expr, cb) => {
+        mockCronCallback = cb;
+        return mockCronJob;
+    }),
 }));
 
 jest.mock('../../src/js/settings', () => ({
@@ -19,6 +26,7 @@ jest.mock('../../src/js/settings', () => ({
 }));
 
 const settings = require('../../src/js/settings');
+const cron = require('node-cron');
 const { createScheduler } = require('../../src/js/scheduling/runScheduler');
 const { MIN_CYCLE_GAP_MS, MS_PER_MINUTE } = require('../../src/js/scheduling/randomDelay');
 
@@ -193,5 +201,158 @@ describe('createScheduler — normal-mode cycle spacing', () => {
         await flushMicrotasks();
 
         expect(cycleStarts).toHaveLength(1);
+    });
+});
+
+describe('createScheduler — threshold-mode revert', () => {
+    const LAST_MINUTE_THRESHOLD = 10; // minutes before close that triggers cron mode
+    let runVotingCycle;
+    let getActiveChallenges;
+    let scheduler;
+    let now;
+    let lastMinuteCheckFrequencyValue; // mutable so a test can change it mid-cron
+
+    beforeEach(() => {
+        jest.useFakeTimers();
+        mockCronCallback = null;
+        lastMinuteCheckFrequencyValue = 1;
+        settings.loadSettings.mockReturnValue({
+            checkFrequencyMin: FIXED_DELAY_MIN,
+            checkFrequencyMax: FIXED_DELAY_MIN,
+        });
+        settings.getSetting.mockReturnValue(FIXED_DELAY_MIN);
+        settings.getEffectiveSetting.mockImplementation((key) => {
+            if (key === 'lastMinuteThreshold') return LAST_MINUTE_THRESHOLD;
+            if (key === 'lastMinuteCheckFrequency') return lastMinuteCheckFrequencyValue;
+            return 1;
+        });
+        runVotingCycle = jest.fn().mockResolvedValue(true);
+        now = Math.floor(Date.now() / 1000);
+    });
+
+    afterEach(() => {
+        if (scheduler) scheduler.stop();
+        scheduler = null;
+        jest.useRealTimers();
+        jest.clearAllMocks();
+    });
+
+    // A regular challenge whose last-minute window opens 60s from now:
+    // entryTime = close_time - threshold*60 = now + 60.
+    const challengeEnteringIn60s = () => ({
+        id: 42,
+        title: 'Closing Soon',
+        type: 'regular',
+        close_time: now + LAST_MINUTE_THRESHOLD * 60 + 60,
+    });
+
+    // Drives start() → normal mode, then advances exactly 60s so the threshold
+    // setTimeout fires and the scheduler switches into the 1-min cron. 60_000ms
+    // is load-bearing: it equals timeUntilEntry for challengeEnteringIn60s
+    // (entryTime = close_time - threshold*60 = now + 60). After the advance the
+    // challenge sits at exactly close_time - now == threshold*60 — the inclusive
+    // (<=) boundary of isAnyChallengeInThresholdWindow.
+    const enterCronMode = async () => {
+        scheduler = createScheduler({ runVotingCycle, getActiveChallenges });
+        const startPromise = scheduler.start();
+        await flushMicrotasks();
+        await startPromise;
+
+        await jest.advanceTimersByTimeAsync(60_000);
+        await flushMicrotasks();
+    };
+
+    test('reverts to normal cadence once no challenge is within its last-minute window', async () => {
+        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [challengeEnteringIn60s()] });
+
+        await enterCronMode();
+
+        // Switched into 1-min cron.
+        expect(cron.schedule).toHaveBeenCalledWith('*/1 * * * *', expect.any(Function), expect.anything());
+        expect(mockCronJob.start).toHaveBeenCalled();
+        expect(typeof mockCronCallback).toBe('function');
+
+        // The triggering challenge has now closed — nothing left in window.
+        getActiveChallenges.mockResolvedValue({ challenges: [] });
+
+        const callsBeforeTick = runVotingCycle.mock.calls.length;
+
+        // Simulate a cron tick: runs a cycle, then updateThresholdScheduling
+        // should detect the empty window and revert to normal mode.
+        await mockCronCallback();
+        await flushMicrotasks();
+
+        expect(mockCronJob.stop).toHaveBeenCalled();
+        // The tick itself ran one cycle.
+        expect(runVotingCycle.mock.calls.length).toBe(callsBeforeTick + 1);
+
+        // Normal 3-min chain is live again: advancing the normal delay fires
+        // another cycle (the dead cron would never do this).
+        const callsBeforeResume = runVotingCycle.mock.calls.length;
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+        await flushMicrotasks();
+        expect(runVotingCycle.mock.calls.length).toBe(callsBeforeResume + 1);
+    });
+
+    test('stays in cron mode while a challenge remains within its last-minute window', async () => {
+        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [challengeEnteringIn60s()] });
+
+        await enterCronMode();
+
+        expect(mockCronJob.start).toHaveBeenCalled();
+        const stopCallsAfterSwitch = mockCronJob.stop.mock.calls.length;
+
+        // Challenge is still open and within its window — a tick must NOT revert.
+        const callsBeforeTick = runVotingCycle.mock.calls.length;
+        await mockCronCallback();
+        await flushMicrotasks();
+
+        expect(runVotingCycle.mock.calls.length).toBe(callsBeforeTick + 1);
+        expect(mockCronJob.stop.mock.calls.length).toBe(stopCallsAfterSwitch);
+    });
+
+    test('restarts the cron at the new frequency when lastMinuteCheckFrequency changes mid-cron', async () => {
+        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [challengeEnteringIn60s()] });
+
+        await enterCronMode();
+
+        expect(cron.schedule).toHaveBeenLastCalledWith('*/1 * * * *', expect.any(Function), expect.anything());
+        const stopCallsAfterSwitch = mockCronJob.stop.mock.calls.length;
+
+        // Operator raises the last-minute cadence from 1 to 5 minutes mid-cron;
+        // the challenge is still in its window, so the running cron must restart
+        // at */5 rather than wait for the next switch.
+        lastMinuteCheckFrequencyValue = 5;
+
+        await mockCronCallback();
+        await flushMicrotasks();
+
+        expect(cron.schedule).toHaveBeenLastCalledWith('*/5 * * * *', expect.any(Function), expect.anything());
+        // The restart stopped the old (*/1) cron.
+        expect(mockCronJob.stop.mock.calls.length).toBeGreaterThan(stopCallsAfterSwitch);
+    });
+
+    test('defers scheduling a threshold switch that is beyond the max timer delay', async () => {
+        // close_time ~30 days out → entry is ~30 days away, exceeding Node's
+        // 32-bit setTimeout ceiling. The switch must be deferred (no cron, no
+        // threshold timer) instead of arming a timer that would fire immediately.
+        const farFuture = () => ({
+            id: 99,
+            title: 'Weeks Away',
+            type: 'regular',
+            close_time: now + 30 * 24 * 3600,
+        });
+        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [farFuture()] });
+
+        scheduler = createScheduler({ runVotingCycle, getActiveChallenges });
+        const startPromise = scheduler.start();
+        await flushMicrotasks();
+        await startPromise;
+
+        // No switch armed: cron untouched and the only pending timer is the
+        // normal-mode setTimeout (without the guard, a second threshold timer
+        // would be armed → count of 2).
+        expect(cron.schedule).not.toHaveBeenCalled();
+        expect(jest.getTimerCount()).toBe(1);
     });
 });
