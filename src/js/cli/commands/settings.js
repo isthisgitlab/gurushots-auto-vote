@@ -187,14 +187,18 @@ const resetSetting = (key, challengeId = null) => {
 
 const resetAllSettings = () => {
     try {
-        const defaultSettings = getDefaultSettings();
-
-        Object.keys(defaultSettings).forEach((key) => {
-            settings.setSetting(key, defaultSettings[key]);
-        });
-
-        logger.withCategory('settings').success('All settings reset to defaults');
-        logger.withCategory('ui').info('💡 Run "list-settings" to see all current values');
+        // Delegate to the facade so the CLI matches the GUI/IPC path and the
+        // documented contract: it preserves token, mock flag, and apiHeaders.
+        // (Re-implementing the loop here previously wiped the auth token because
+        // getDefaultSettings() includes token:'' / mock / apiHeaders.)
+        if (settings.resetAllSettings()) {
+            logger
+                .withCategory('settings')
+                .success('All settings reset to defaults (token, mock flag, and API headers preserved)');
+            logger.withCategory('ui').info('💡 Run "list-settings" to see all current values');
+        } else {
+            logger.withCategory('settings').error('Failed to reset all settings');
+        }
     } catch (error) {
         logger.withCategory('settings').error('Error resetting all settings', error);
     }
