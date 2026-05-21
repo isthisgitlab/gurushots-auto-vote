@@ -22,10 +22,10 @@ jobs:
 
             - name: Run tests
               run: pnpm test
-              continue-on-error: true
 
     version-bump:
         runs-on: ubuntu-latest
+        needs: [test]
         if: github.event_name == 'push'
         outputs:
             new-version: ${{ steps.bump_version.outputs.NEW_VERSION }}

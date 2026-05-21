@@ -43,6 +43,8 @@ const getDefaultSettings = () => {
         language: 'en', // Default language
         // Timing settings (stored in user-friendly units)
         apiTimeout: 30, // API request timeout in seconds (default: 30 seconds)
+        apiMaxRetries: 3, // Retries for transient API failures (network/timeout/429/5xx). 0 disables.
+        apiRetryBaseDelayMs: 1000, // Base for exponential backoff between retries (ms).
         checkFrequencyMin: 3, // Lower bound (minutes). Equal to max → fixed-cadence behavior.
         checkFrequencyMax: 3, // Upper bound (minutes). Each cycle picks a random delay in [min, max].
         // Window position and size settings

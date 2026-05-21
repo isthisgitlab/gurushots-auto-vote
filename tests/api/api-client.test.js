@@ -42,6 +42,13 @@ jest.mock(
     { virtual: true },
 );
 
+// Mock settings so the request timeout and retry/backoff knobs are
+// deterministic. The default impl is installed in beforeEach;
+// apiRetryBaseDelayMs is 0 there so backoff sleeps are instant.
+jest.mock('../../src/js/settings', () => ({
+    getSetting: jest.fn(),
+}));
+
 // Mock the logger module
 jest.mock('../../src/js/logger', () => {
     const mockApiFn = jest.fn();
@@ -80,11 +87,27 @@ describe('api-client', () => {
     const mockUrl = 'https://api.gurushots.com/test';
     const mockData = 'test=data';
     const logger = require('../../src/js/logger');
+    const settings = require('../../src/js/settings');
 
     beforeEach(() => {
         jest.clearAllMocks();
-        // Reset axios mock
-        axios.mockClear();
+        // mockReset (not mockClear) so any unconsumed *Once queue from a
+        // prior test can't leak into the next one.
+        axios.mockReset();
+        // Deterministic settings: real timeout, retries on, zero base delay
+        // so exponential-backoff sleeps don't slow the suite.
+        settings.getSetting.mockImplementation((key) => {
+            switch (key) {
+                case 'apiTimeout':
+                    return 30;
+                case 'apiMaxRetries':
+                    return 3;
+                case 'apiRetryBaseDelayMs':
+                    return 0;
+                default:
+                    return undefined;
+            }
+        });
     });
 
     describe('FORM_CONTENT_TYPE', () => {
@@ -401,6 +424,106 @@ describe('api-client', () => {
                 duration: expect.any(Number),
                 responseData: mockResponse.data,
             });
+        });
+    });
+
+    describe('makePostRequest retry/backoff', () => {
+        const headers = createCommonHeaders(mockToken);
+
+        const timeoutError = () => {
+            const e = new Error('timeout of 30000ms exceeded');
+            e.code = 'ECONNABORTED';
+            return e;
+        };
+        const httpError = (status, data = {}) => {
+            const e = new Error(`Request failed with status code ${status}`);
+            e.response = { status, data, headers: {} };
+            return e;
+        };
+
+        test('retries a timed-out request and returns data once it succeeds', async () => {
+            axios
+                .mockRejectedValueOnce(timeoutError())
+                .mockRejectedValueOnce(timeoutError())
+                .mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
+
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            expect(result).toEqual({ ok: true });
+            expect(axios).toHaveBeenCalledTimes(3);
+        });
+
+        test('retries network errors (no response) before giving up', async () => {
+            axios.mockRejectedValue(new Error('Network Error'));
+
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            expect(result).toBeNull();
+            // 1 initial attempt + apiMaxRetries (3) retries.
+            expect(axios).toHaveBeenCalledTimes(4);
+        });
+
+        test('retries 5xx responses up to apiMaxRetries then returns null', async () => {
+            axios.mockRejectedValue(httpError(503));
+
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            expect(result).toBeNull();
+            expect(axios).toHaveBeenCalledTimes(4);
+        });
+
+        test('does not retry a non-retryable 4xx response', async () => {
+            axios.mockRejectedValue(httpError(400, { error: 'Bad request' }));
+
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            expect(result).toBeNull();
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('apiMaxRetries of 0 makes a single attempt (escape hatch)', async () => {
+            settings.getSetting.mockImplementation((key) => {
+                switch (key) {
+                    case 'apiTimeout':
+                        return 30;
+                    case 'apiMaxRetries':
+                        return 0;
+                    default:
+                        return 0;
+                }
+            });
+            axios.mockRejectedValue(httpError(503));
+
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            expect(result).toBeNull();
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('gives up immediately when a 429 retry_after exceeds the in-call cap', async () => {
+            // retry_after is in seconds; 60s is far longer than a voting cycle,
+            // so the request defers to the scheduler instead of blocking.
+            axios.mockRejectedValue(httpError(429, { retry_after: 60 }));
+
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            expect(result).toBeNull();
+            expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('honors a short 429 retry_after then retries', async () => {
+            jest.useFakeTimers();
+            axios
+                .mockRejectedValueOnce(httpError(429, { retry_after: 5 }))
+                .mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
+
+            const promise = makePostRequest(mockUrl, headers, mockData);
+            await jest.advanceTimersByTimeAsync(6000);
+            const result = await promise;
+
+            expect(result).toEqual({ ok: true });
+            expect(axios).toHaveBeenCalledTimes(2);
+            jest.useRealTimers();
         });
     });
 });
