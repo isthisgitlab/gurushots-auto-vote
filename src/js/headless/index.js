@@ -31,17 +31,17 @@ const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}
  * last-minute frequency when any challenge is inside its window, else a
  * fresh random delay in [checkFrequencyMin, checkFrequencyMax]. Returned
  * to native so AlarmManager schedules the next cycle accordingly.
+ *
+ * `prefetched` reuses the challenge list runOneCycle's fetchChallengesAndVote
+ * already fetched, avoiding a duplicate getActiveChallenges request. A non-array
+ * (e.g. the vote step threw before fetching) falls back to a fresh fetch.
  */
-const computeNextDelayMs = async (token) => {
+const computeNextDelayMs = async (token, prefetched = null) => {
     const userSettings = settings.loadSettings();
     try {
-        // TODO: this re-fetches active challenges after fetchChallengesAndVote
-        // already fetched them (mirrors the desktop scheduler's separate
-        // threshold re-check). getActiveChallenges coalesces concurrent calls
-        // but this is a sequential second call. Avoiding it needs main.js to
-        // return the challenge list — out of scope here.
-        const { challenges } = await apiFactory.getApiStrategy().getActiveChallenges(token);
-        const list = challenges || [];
+        const list = Array.isArray(prefetched)
+            ? prefetched
+            : (await apiFactory.getApiStrategy().getActiveChallenges(token))?.challenges || [];
         const now = Math.floor(Date.now() / 1000);
         const resolveThreshold = (id) => settings.getEffectiveSetting('lastMinuteThreshold', id);
         if (await isAnyChallengeInThresholdWindow(list, now, resolveThreshold)) {
@@ -79,7 +79,7 @@ const runOneCycle = async () => {
         log('cycle starting');
         const result = await apiFactory.getApiStrategy().fetchChallengesAndVote(token);
         const ok = result ? result.success !== false : false;
-        const nextDelayMs = await computeNextDelayMs(token);
+        const nextDelayMs = await computeNextDelayMs(token, result?.challenges);
         log('cycle complete', { ok, nextDelayMs });
         reportComplete({ ok, message: (result && (result.message || result.error)) || null, nextDelayMs });
     } catch (err) {

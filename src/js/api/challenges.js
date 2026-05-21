@@ -39,15 +39,18 @@ const fetchActiveChallenges = async (token) => {
     return response;
 };
 
-// In-flight request coalescing. A single voting cycle triggers several
-// independent consumers that each want the current active-challenge list
-// back-to-back — the post-cycle UI refresh and the scheduler's last-minute
-// window re-check fire within the same tick. Without coalescing each issues
-// its own HTTP request (the burst the user sees in the logs). We share the
-// in-flight promise per token and clear it as soon as the request settles, so
-// only genuinely *concurrent* calls are merged — a later (sequential) call,
-// e.g. the next cycle's pre-vote fetch, still hits the network for fresh data.
-// No resolved-result caching, so this never serves stale challenge state.
+// In-flight request coalescing. Independent consumers can want the current
+// active-challenge list at the same instant — e.g. a UI challenges refresh
+// racing an in-progress voting cycle. We share the in-flight promise per token
+// and clear it as soon as the request settles, so only genuinely *concurrent*
+// calls are merged; a later (sequential) call still hits the network for fresh
+// data. No resolved-result caching, so this never serves stale challenge state.
+//
+// Note: the scheduler's post-cycle threshold re-check used to fire a second,
+// sequential fetch here every cycle (the back-to-back duplicate seen in the
+// logs). That step now reuses the list the voting cycle already fetched (see
+// runScheduler.js / AutovoteContext.jsx / headless/index.js), so coalescing is
+// no longer what dedupes it — the redundant call is gone at the source.
 const inFlightByToken = new Map();
 
 /**

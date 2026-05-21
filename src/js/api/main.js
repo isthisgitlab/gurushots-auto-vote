@@ -97,7 +97,10 @@ const setCancellationFlag = (cancel) => {
  * @param {string} token - Authentication token
  * @param {number|function} [getExposureThreshold] - Optional exposure-threshold resolver kept for caller backward-compat; unused internally (the voting-logic service reads settings directly).
  * @param {string|number} [challengeIdFilter] - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
- * @returns {void}
+ * @returns {Promise<{success:boolean, message?:string, error?:string, challenges?:Array}>}
+ *   `challenges` is the *full* active list this cycle fetched (not the per-challenge
+ *   filtered subset), so callers can reuse it for threshold scheduling instead of
+ *   re-fetching. Absent only when the fetch itself threw before a list was obtained.
  */
 // eslint-disable-next-line no-unused-vars
 const fetchChallengesAndVote = async (token, getExposureThreshold = null, challengeIdFilter = null) => {
@@ -115,7 +118,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
         if (allChallenges.length === 0) {
             logger.withCategory('challenges').warning('No active challenges found', null);
             logger.withCategory('voting').endOperation('voting-process', 'No challenges to process');
-            return { success: true, message: 'No active challenges found' };
+            return { success: true, message: 'No active challenges found', challenges: allChallenges };
         }
 
         // Cleanup stale metadata against the full active list — must
@@ -141,7 +144,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                 const msg = `Challenge ${idStr} is not active`;
                 logger.withCategory('challenges').warning(msg, null);
                 logger.withCategory('voting').endOperation('voting-process', null, msg);
-                return { success: false, error: msg };
+                return { success: false, error: msg, challenges: allChallenges };
             }
             logger
                 .withCategory('voting')
@@ -157,7 +160,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
             if (cancellation.isCancelled()) {
                 logger.withCategory('voting').warning('🛑 Voting cancelled by user', null);
                 logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
-                return { success: false, message: 'Voting cancelled by user' };
+                return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
             }
 
             // Log progress
@@ -322,7 +325,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                             .withCategory('voting')
                             .warning('🛑 Voting cancelled by user during challenge processing', null);
                         logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
-                        return { success: false, message: 'Voting cancelled by user' };
+                        return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
                     }
 
                     logger
@@ -340,7 +343,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                             logger
                                 .withCategory('voting')
                                 .endOperation('voting-process', null, 'Voting cancelled by user');
-                            return { success: false, message: 'Voting cancelled by user' };
+                            return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
                         }
 
                         logger
@@ -361,7 +364,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                             logger
                                 .withCategory('voting')
                                 .endOperation('voting-process', null, 'Voting cancelled by user');
-                            return { success: false, message: 'Voting cancelled by user' };
+                            return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
                         }
 
                         logger.withCategory('voting').endOperation(`vote-${challenge.id}`, 'voting attempt complete');
@@ -394,7 +397,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
             .withCategory('voting')
             .endOperation('voting-process', `All ${challenges.length} challenges processed successfully`);
 
-        return { success: true, message: 'Voting process completed successfully' };
+        return { success: true, message: 'Voting process completed successfully', challenges: allChallenges };
     } catch (error) {
         logger.withCategory('voting').endOperation('voting-process', null, error.message || error);
         return { success: false, error: error.message || 'Voting process failed' };

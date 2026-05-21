@@ -17,6 +17,10 @@ const { formatDateTime } = require('../../dateFormat');
  * vote path (votes to 100% regardless of threshold settings). Pass
  * {challengeId} to scope a strategy cycle to a single challenge —
  * ignored when isManual is true.
+ *
+ * @returns {Promise<{success:boolean, challenges:Array|null}>} `challenges` is the
+ *   full active list the strategy cycle fetched (null for the manual path or any
+ *   failure), letting the scheduler reuse it for threshold scheduling.
  */
 const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId = null } = {}) => {
     const scopeSuffix = !isManual && challengeId != null ? ` (challenge ${challengeId})` : '';
@@ -37,23 +41,32 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
         if (!getMiddleware().isAuthenticated()) {
             logger.withCategory('authentication').error('No authentication token found. Please login first');
             logger.withCategory('ui').info('Run: login');
-            return false;
+            return { success: false, challenges: null };
         }
 
         logger.withCategory('voting').startOperation(opId, `${label} cycle ${cycleNumber}${scopeSuffix}`);
+        // Capture the strategy cycle's challenge list so the scheduler can hand it
+        // to the threshold step (avoids a duplicate getActiveChallenges fetch). The
+        // manual path votes-to-100% and surfaces no list.
+        let challenges = null;
+        let success = true;
         if (isManual) {
             await getMiddleware().cliVoteManual();
         } else {
-            await getMiddleware().cliVote(challengeId);
+            const result = await getMiddleware().cliVote(challengeId);
+            challenges = Array.isArray(result?.challenges) ? result.challenges : null;
+            // Reflect the strategy's real outcome rather than always reporting
+            // success on the non-throw path.
+            success = result?.success !== false;
         }
         logger.withCategory('voting').endOperation(opId, `${label} cycle ${cycleNumber} completed`);
 
-        return true;
+        return { success, challenges };
     } catch (error) {
         const noun = isManual ? 'manual voting' : 'voting';
         logger.withCategory('voting').error(`Error during ${noun} cycle ${cycleNumber}`, error);
         logger.withCategory('voting').debug(`Full ${noun} cycle error details:`, error);
-        return false;
+        return { success: false, challenges: null };
     }
 };
 

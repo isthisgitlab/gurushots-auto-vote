@@ -30,8 +30,8 @@ const MAX_TIMEOUT_DELAY_MS = 2_147_483_647;
  * Create a continuous voting scheduler.
  *
  * @param {Object} deps
- * @param {(cycleNumber:number)=>Promise<boolean>} deps.runVotingCycle - one-shot voting cycle.
- * @param {()=>Promise<{challenges:Array}>} deps.getActiveChallenges - fetcher for threshold scheduling.
+ * @param {(cycleNumber:number)=>Promise<{success:boolean, challenges:Array|null}>} deps.runVotingCycle - one-shot voting cycle; resolves with the active list it fetched (null on failure/manual). A non-array `challenges` (or a legacy boolean return) is treated as "no list" and triggers a fresh fetch in the threshold step.
+ * @param {()=>Promise<{challenges:Array}>} deps.getActiveChallenges - fetcher for threshold scheduling (used only when a cycle didn't hand its list over).
  * @returns {{start:()=>Promise<void>, stop:()=>void, getCycleCount:()=>number, isRunning:()=>boolean}}
  */
 const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
@@ -63,8 +63,8 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 }
 
                 try {
-                    await runVotingCycle(++cycleCount);
-                    await updateThresholdScheduling();
+                    const cycleResult = await runVotingCycle(++cycleCount);
+                    await updateThresholdScheduling(cycleResult?.challenges);
                 } catch (error) {
                     logger.withCategory('voting').error('Error in scheduled voting cycle');
                     logger.withCategory('voting').debug('Full threshold cron error details:', error);
@@ -158,12 +158,16 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
         }, timeUntilEntry);
     };
 
-    const updateThresholdScheduling = async () => {
+    // `prefetched` lets a just-completed voting cycle hand over the active list it
+    // already fetched, so we skip a redundant getActiveChallenges request (the
+    // back-to-back duplicate that otherwise shows up in the logs every cycle). A
+    // non-array (null/undefined — standalone re-arm with no preceding cycle, or a
+    // cycle that failed before fetching) falls back to a fresh fetch.
+    const updateThresholdScheduling = async (prefetched = null) => {
         if (!isRunning) return;
 
         try {
-            const challengesResponse = await getActiveChallenges();
-            const challenges = challengesResponse?.challenges || [];
+            const challenges = Array.isArray(prefetched) ? prefetched : (await getActiveChallenges())?.challenges || [];
             const now = Math.floor(Date.now() / 1000);
 
             const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
@@ -265,8 +269,8 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
             }
             const cycleStartMs = Date.now();
             try {
-                await runVotingCycle(++cycleCount);
-                await updateThresholdScheduling();
+                const cycleResult = await runVotingCycle(++cycleCount);
+                await updateThresholdScheduling(cycleResult?.challenges);
             } catch (error) {
                 logger.withCategory('voting').error('Error in scheduled voting cycle');
                 logger.withCategory('voting').debug('Full normal cycle error details:', error);
@@ -282,7 +286,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
 
         logger.withCategory('voting').info('🚀 Running initial voting cycle...');
         const initialCycleStartMs = Date.now();
-        await runVotingCycle(++cycleCount);
+        const initialCycle = await runVotingCycle(++cycleCount);
 
         scheduleNextNormalCycle(initialCycleStartMs);
         logger
@@ -291,7 +295,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 `Continuous voting started with check frequency range ${settings.getSetting('checkFrequencyMin')}-${settings.getSetting('checkFrequencyMax')} min`,
             );
 
-        await updateThresholdScheduling();
+        await updateThresholdScheduling(initialCycle?.challenges);
     };
 
     const stop = () => {

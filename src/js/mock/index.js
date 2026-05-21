@@ -471,12 +471,15 @@ const mockApiClient = {
         if (token) {
             // Simulate getting challenges
             const challengesResponse = await simulateApiResponse(challenges.mockActiveChallenges, 800);
-            let challengeList = challengesResponse.challenges;
+            // Keep the full active list (parity with real main.js): callers reuse
+            // it for threshold scheduling, so it must not be the filtered subset.
+            const allChallenges = challengesResponse.challenges;
+            let challengeList = allChallenges;
             if (challengeIdFilter != null) {
                 const idStr = String(challengeIdFilter);
                 challengeList = challengeList.filter((c) => String(c.id) === idStr);
                 if (challengeList.length === 0) {
-                    return { success: false, error: `Challenge ${idStr} is not active` };
+                    return { success: false, error: `Challenge ${idStr} is not active`, challenges: allChallenges };
                 }
             }
             logger.withCategory('challenges').info(`Found ${challengeList.length} active challenges`, null);
@@ -486,7 +489,7 @@ const mockApiClient = {
                 // Check for cancellation before processing each challenge
                 if (cancellation.isCancelled()) {
                     logger.withCategory('voting').info('Mock voting cancelled by user', null);
-                    return { success: false, message: 'Mock voting cancelled by user' };
+                    return { success: false, message: 'Mock voting cancelled by user', challenges: allChallenges };
                 }
 
                 logger.withCategory('challenges').debug(`Processing challenge: ${challenge.title}`, null);
@@ -506,7 +509,7 @@ const mockApiClient = {
                     // Check for cancellation before boost
                     if (cancellation.isCancelled()) {
                         logger.withCategory('voting').info('Mock voting cancelled by user before boost', null);
-                        return { success: false, message: 'Mock voting cancelled by user' };
+                        return { success: false, message: 'Mock voting cancelled by user', challenges: allChallenges };
                     }
 
                     logger.withCategory('voting').debug(`Applying boost to challenge: ${challenge.title}`, null);
@@ -522,7 +525,7 @@ const mockApiClient = {
                     // Check for cancellation before voting
                     if (cancellation.isCancelled()) {
                         logger.withCategory('voting').info('Mock voting cancelled by user before voting', null);
-                        return { success: false, message: 'Mock voting cancelled by user' };
+                        return { success: false, message: 'Mock voting cancelled by user', challenges: allChallenges };
                     }
 
                     logger.withCategory('voting').debug(`Voting on challenge: ${challenge.title}`, null);
@@ -538,7 +541,11 @@ const mockApiClient = {
                                 logger
                                     .withCategory('voting')
                                     .info('Mock voting cancelled by user before vote submission', null);
-                                return { success: false, message: 'Mock voting cancelled by user' };
+                                return {
+                                    success: false,
+                                    message: 'Mock voting cancelled by user',
+                                    challenges: allChallenges,
+                                };
                             }
 
                             await simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
@@ -554,7 +561,7 @@ const mockApiClient = {
                 // Check for cancellation before delay
                 if (cancellation.isCancelled()) {
                     logger.withCategory('voting').info('Mock voting cancelled by user before delay', null);
-                    return { success: false, message: 'Mock voting cancelled by user' };
+                    return { success: false, message: 'Mock voting cancelled by user', challenges: allChallenges };
                 }
 
                 // Simulate delay between challenges
@@ -562,7 +569,7 @@ const mockApiClient = {
             }
 
             logger.withCategory('voting').info('Mock Voting Process Completed', null);
-            return { success: true, message: 'Mock voting process completed' };
+            return { success: true, message: 'Mock voting process completed', challenges: allChallenges };
         } else {
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
         }

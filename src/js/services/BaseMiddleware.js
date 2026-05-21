@@ -87,9 +87,18 @@ class BaseMiddleware {
             return { success: false, error };
         }
         if (result && result.success) {
-            return { success: true, message: result.message || 'Voting cycle completed successfully' };
+            // Surface the fetched challenge list so the renderer's threshold
+            // scheduler can reuse it instead of issuing a second IPC fetch.
+            return {
+                success: true,
+                message: result.message || 'Voting cycle completed successfully',
+                challenges: result.challenges,
+            };
         }
-        return { success: false, error: result?.error || 'Voting cycle failed' };
+        // Forward the list even on a non-error failure (cancelled / inactive
+        // filtered challenge) so the contract matches main.js; consumers still
+        // guard with Array.isArray and fall back to fetching when it's absent.
+        return { success: false, error: result?.error || 'Voting cycle failed', challenges: result?.challenges };
     }
 
     /**
@@ -111,13 +120,35 @@ class BaseMiddleware {
         const scopeLabel = challengeId == null ? '' : ` (challenge ${challengeId})`;
         logger.withCategory('voting').info(`=== GuruShots Auto Voter - CLI Voting${scopeLabel} ===`, null);
         const token = this._requireCliToken();
-        if (!token) return;
+        if (!token) return { success: false, error: 'No authentication token found' };
         logger.withCategory('voting').startOperation('cli-vote', `CLI Voting Process${scopeLabel}`);
         try {
-            await this.apiStrategy.fetchChallengesAndVote(token, settings.getExposureResolver(), challengeId);
-            logger.withCategory('voting').endOperation('cli-vote', 'Voting process completed successfully');
+            // Return the strategy result so the scheduler can reuse its
+            // already-fetched challenge list for threshold scheduling instead
+            // of issuing a second getActiveChallenges request.
+            const result = await this.apiStrategy.fetchChallengesAndVote(
+                token,
+                settings.getExposureResolver(),
+                challengeId,
+            );
+            // Reflect the actual outcome in the operation log — a non-error
+            // failure (e.g. cancelled, or a filtered challenge that isn't active)
+            // must not be reported as a success.
+            if (result && result.success === false) {
+                logger
+                    .withCategory('voting')
+                    .endOperation(
+                        'cli-vote',
+                        null,
+                        result.error || result.message || 'Voting process did not complete',
+                    );
+            } else {
+                logger.withCategory('voting').endOperation('cli-vote', 'Voting process completed successfully');
+            }
+            return result;
         } catch (error) {
             logger.withCategory('voting').endOperation('cli-vote', null, error.message || error);
+            return { success: false, error: error.message || String(error) };
         }
     }
 

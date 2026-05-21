@@ -114,4 +114,36 @@ describe('headless runOneCycle', () => {
         expect(payload.error).toBe('boom');
         expect(typeof payload.nextDelayMs).toBe('number');
     });
+
+    test('reuses the cycle challenge list for the cadence decision (no second fetch)', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const inWindow = { id: 1, type: 'default', close_time: now + 60 };
+        // The cycle now hands back the list it fetched; computeNextDelayMs must
+        // reuse it instead of issuing its own getActiveChallenges request.
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, challenges: [inWindow] });
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges });
+        settings.getEffectiveSetting.mockImplementation((key) => (key === 'lastMinuteThreshold' ? 10 : 1));
+
+        await globalThis.GS.runOneCycle();
+
+        // No redundant fetch...
+        expect(getActiveChallenges).not.toHaveBeenCalled();
+        // ...and the reused list still drives the in-window 1-minute cadence.
+        expect(lastPayload().nextDelayMs).toBe(60000);
+    });
+
+    test('falls back to fetching when the cycle returns no challenge list', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const inWindow = { id: 1, type: 'default', close_time: now + 60 };
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true }); // no challenges field
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [inWindow] });
+        apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges });
+        settings.getEffectiveSetting.mockImplementation((key) => (key === 'lastMinuteThreshold' ? 10 : 1));
+
+        await globalThis.GS.runOneCycle();
+
+        expect(getActiveChallenges).toHaveBeenCalledWith('tok');
+        expect(lastPayload().nextDelayMs).toBe(60000);
+    });
 });

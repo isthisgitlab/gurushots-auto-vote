@@ -470,7 +470,13 @@ describe('mock/index', () => {
 
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 
-                expect(result).toEqual({ success: true, message: 'Mock voting process completed' });
+                // `challenges` carries the full active list (parity with real main.js)
+                // so callers can reuse it for threshold scheduling.
+                expect(result).toEqual({
+                    success: true,
+                    message: 'Mock voting process completed',
+                    challenges: expect.any(Array),
+                });
                 expect(logger.__mockInfoFn).toHaveBeenCalledWith('Mock Voting Process Started', null);
                 expect(logger.__mockInfoFn).toHaveBeenCalledWith('Mock Voting Process Completed', null);
             });
@@ -480,7 +486,11 @@ describe('mock/index', () => {
 
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 
-                expect(result).toEqual({ success: false, message: 'Mock voting cancelled by user' });
+                expect(result).toEqual({
+                    success: false,
+                    message: 'Mock voting cancelled by user',
+                    challenges: expect.any(Array),
+                });
                 // Note: Cancellation messages were not migrated to logger
             });
 

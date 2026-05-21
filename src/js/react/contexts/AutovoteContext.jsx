@@ -51,7 +51,14 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     }, []);
 
     /**
-     * Run a single voting cycle
+     * Run a single voting cycle. On success resolves with the active-challenge
+     * list the cycle fetched, so the threshold scheduler can reuse it instead of
+     * issuing a second IPC fetch; resolves falsy on failure / not-running /
+     * not-logged-in (callers fall back to fetching).
+     *
+     * @returns {Promise<Array|boolean>} The fetched challenge list on success (or
+     *   `true` when the cycle succeeded without surfacing one), `false` otherwise.
+     *   Consumers MUST treat any non-array as "fetch fresh" (Array.isArray guard).
      */
     const runVotingCycle = useCallback(async () => {
         if (!runningRef.current) {
@@ -86,7 +93,10 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                     onChallengesRefresh();
                 }
 
-                return true;
+                // Hand the fetched list back so the threshold scheduler can skip
+                // its own fetch. Fall back to `true` (truthy, but not an array)
+                // when no list is present so callers fetch fresh.
+                return result?.challenges ?? true;
             } else {
                 dispatch({ type: ACTIONS.SET_ERROR, payload: result?.error || 'Voting failed' });
                 return false;
@@ -100,100 +110,106 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     /**
      * Update threshold scheduling
      */
-    const updateThresholdScheduling = useCallback(async () => {
-        if (!runningRef.current) return;
+    const updateThresholdScheduling = useCallback(
+        async (prefetched = null) => {
+            if (!runningRef.current) return;
 
-        try {
-            const settings = await window.api.getSettings();
-            const result = await window.api.getActiveChallenges(settings.token);
-            const challenges = result?.challenges || [];
-            const now = Math.floor(Date.now() / 1000);
+            try {
+                const settings = await window.api.getSettings();
+                // Reuse a just-completed cycle's challenge list when provided; a
+                // non-array (standalone re-arm, or a failed cycle) fetches fresh.
+                const challenges = Array.isArray(prefetched)
+                    ? prefetched
+                    : (await window.api.getActiveChallenges(settings.token))?.challenges || [];
+                const now = Math.floor(Date.now() / 1000);
 
-            // Revert: if the fixed last-minute interval is live but nothing is
-            // currently within its last-minute window, tear it down and resume
-            // the normal randomized cadence. Without this the interval is a
-            // one-way door — a single challenge entering its final minutes would
-            // pin the session at lastMinuteCheckFrequency forever, even after it
-            // closes. Mirrors runScheduler.js's revert block.
-            if (lastMinuteModeRef.current && !(await isAnyChallengeInThresholdWindow(challenges, now))) {
-                if (autovoteIntervalRef.current) {
-                    clearInterval(autovoteIntervalRef.current);
-                    autovoteIntervalRef.current = null;
-                }
-                lastMinuteModeRef.current = false;
-                if (scheduleNormalRef.current) {
-                    scheduleNormalRef.current(settings, Date.now());
-                }
-                // Best-effort parity log (optional-chained so a host without
-                // logDebug, e.g. a minimal Capacitor bridge, can't abort the revert).
-                await window.api.logDebug?.(
-                    '⏰ No challenges within last-minute window — reverting to normal check frequency',
-                );
-            }
-
-            const nextEntry = await calculateNextThresholdEntry(challenges, now);
-
-            if (nextEntry) {
-                // Check for duplicate scheduling
-                if (
-                    currentScheduledChallengeRef.current?.challengeId === nextEntry.challengeId &&
-                    currentScheduledChallengeRef.current?.entryTime === nextEntry.entryTime
-                ) {
-                    return;
-                }
-
-                const timeUntilEntry = (nextEntry.entryTime - now) * 1000;
-
-                if (timeUntilEntry <= 0) return;
-
-                // Clear existing scheduler
-                if (thresholdSchedulerRef.current) {
-                    clearTimeout(thresholdSchedulerRef.current);
-                }
-
-                currentScheduledChallengeRef.current = nextEntry;
-
-                thresholdSchedulerRef.current = setTimeout(async () => {
-                    if (!runningRef.current) return;
-
-                    // Switch to last threshold frequency
+                // Revert: if the fixed last-minute interval is live but nothing is
+                // currently within its last-minute window, tear it down and resume
+                // the normal randomized cadence. Without this the interval is a
+                // one-way door — a single challenge entering its final minutes would
+                // pin the session at lastMinuteCheckFrequency forever, even after it
+                // closes. Mirrors runScheduler.js's revert block.
+                if (lastMinuteModeRef.current && !(await isAnyChallengeInThresholdWindow(challenges, now))) {
                     if (autovoteIntervalRef.current) {
                         clearInterval(autovoteIntervalRef.current);
+                        autovoteIntervalRef.current = null;
+                    }
+                    lastMinuteModeRef.current = false;
+                    if (scheduleNormalRef.current) {
+                        scheduleNormalRef.current(settings, Date.now());
+                    }
+                    // Best-effort parity log (optional-chained so a host without
+                    // logDebug, e.g. a minimal Capacitor bridge, can't abort the revert).
+                    await window.api.logDebug?.(
+                        '⏰ No challenges within last-minute window — reverting to normal check frequency',
+                    );
+                }
+
+                const nextEntry = await calculateNextThresholdEntry(challenges, now);
+
+                if (nextEntry) {
+                    // Check for duplicate scheduling
+                    if (
+                        currentScheduledChallengeRef.current?.challengeId === nextEntry.challengeId &&
+                        currentScheduledChallengeRef.current?.entryTime === nextEntry.entryTime
+                    ) {
+                        return;
                     }
 
-                    const lastMinuteCheckFrequency = await window.api.getEffectiveSetting(
-                        'lastMinuteCheckFrequency',
-                        'global',
-                    );
-                    const votingIntervalMs = lastMinuteCheckFrequency * 60000;
+                    const timeUntilEntry = (nextEntry.entryTime - now) * 1000;
 
-                    lastMinuteModeRef.current = true;
-                    autovoteIntervalRef.current = setInterval(async () => {
-                        if (!runningRef.current) {
+                    if (timeUntilEntry <= 0) return;
+
+                    // Clear existing scheduler
+                    if (thresholdSchedulerRef.current) {
+                        clearTimeout(thresholdSchedulerRef.current);
+                    }
+
+                    currentScheduledChallengeRef.current = nextEntry;
+
+                    thresholdSchedulerRef.current = setTimeout(async () => {
+                        if (!runningRef.current) return;
+
+                        // Switch to last threshold frequency
+                        if (autovoteIntervalRef.current) {
                             clearInterval(autovoteIntervalRef.current);
-                            autovoteIntervalRef.current = null;
-                            return;
                         }
-                        // Re-evaluate after every tick so the window-passed
-                        // revert (above) can return us to normal cadence.
-                        await runVotingCycle();
-                        await updateThresholdScheduling();
-                    }, votingIntervalMs);
 
-                    currentScheduledChallengeRef.current = null;
-                    await updateThresholdScheduling();
-                }, timeUntilEntry);
-            } else {
-                if (thresholdSchedulerRef.current) {
-                    clearTimeout(thresholdSchedulerRef.current);
-                    thresholdSchedulerRef.current = null;
-                    currentScheduledChallengeRef.current = null;
+                        const lastMinuteCheckFrequency = await window.api.getEffectiveSetting(
+                            'lastMinuteCheckFrequency',
+                            'global',
+                        );
+                        const votingIntervalMs = lastMinuteCheckFrequency * 60000;
+
+                        lastMinuteModeRef.current = true;
+                        autovoteIntervalRef.current = setInterval(async () => {
+                            if (!runningRef.current) {
+                                clearInterval(autovoteIntervalRef.current);
+                                autovoteIntervalRef.current = null;
+                                return;
+                            }
+                            // Re-evaluate after every tick so the window-passed
+                            // revert (above) can return us to normal cadence.
+                            const cycleChallenges = await runVotingCycle();
+                            await updateThresholdScheduling(cycleChallenges);
+                        }, votingIntervalMs);
+
+                        currentScheduledChallengeRef.current = null;
+                        await updateThresholdScheduling();
+                    }, timeUntilEntry);
+                } else {
+                    if (thresholdSchedulerRef.current) {
+                        clearTimeout(thresholdSchedulerRef.current);
+                        thresholdSchedulerRef.current = null;
+                        currentScheduledChallengeRef.current = null;
+                    }
                 }
+            } catch (err) {
+                await window.api.logWarning(`Error updating threshold scheduling: ${err.message || err}`);
             }
-        } catch (err) {
-            await window.api.logWarning(`Error updating threshold scheduling: ${err.message || err}`);
-        }
-    }, [runVotingCycle]);
+        },
+        [runVotingCycle],
+    );
 
     /**
      * Start autovote
@@ -232,7 +248,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
 
         // Run immediately
         const initialCycleStartMs = Date.now();
-        await runVotingCycle();
+        const initialChallenges = await runVotingCycle();
 
         // Setup interval
         const settings = await window.api.getSettings();
@@ -240,8 +256,11 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
 
         let useLastThresholdInterval = false;
 
-        const result = await window.api.getActiveChallenges(settings.token);
-        const challenges = result?.challenges || [];
+        // Reuse the initial cycle's challenge list rather than re-fetching it here
+        // and again in updateThresholdScheduling below.
+        const challenges = Array.isArray(initialChallenges)
+            ? initialChallenges
+            : (await window.api.getActiveChallenges(settings.token))?.challenges || [];
         const now = Math.floor(Date.now() / 1000);
 
         for (const challenge of challenges) {
@@ -322,16 +341,16 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                 }
                 // Re-evaluate after every tick so the window-passed revert in
                 // updateThresholdScheduling can return us to normal cadence.
-                await runVotingCycle();
-                await updateThresholdScheduling();
+                const cycleChallenges = await runVotingCycle();
+                await updateThresholdScheduling(cycleChallenges);
             }, votingIntervalMs);
         } else {
             lastMinuteModeRef.current = false;
             scheduleNext(settings, initialCycleStartMs);
         }
 
-        // Setup threshold scheduling
-        await updateThresholdScheduling();
+        // Setup threshold scheduling (reuse the initial cycle's list).
+        await updateThresholdScheduling(initialChallenges);
     }, [runVotingCycle, updateThresholdScheduling]);
 
     /**

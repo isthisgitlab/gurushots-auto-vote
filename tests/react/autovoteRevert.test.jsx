@@ -110,6 +110,52 @@ describe('AutovoteContext — last-minute cadence reverts to normal', () => {
         expect(window.api.runVotingCycle.mock.calls.length).toBe(callsAfterRevert + 1);
     });
 
+    it('reuses the cycle challenge list on each tick instead of re-fetching for threshold scheduling', async () => {
+        // The voting cycle now returns the list it fetched over IPC; the
+        // last-minute tick's threshold re-check must reuse it rather than issue
+        // its own getActiveChallenges round-trip.
+        window.api.runVotingCycle.mockResolvedValue({ success: true, challenges: activeChallenges });
+
+        renderProvider();
+        await act(async () => {
+            await ctx.start();
+        });
+
+        // Measure only the tick's behavior (start()'s own fetches are irrelevant).
+        const fetchesBeforeTick = window.api.getActiveChallenges.mock.calls.length;
+        const cyclesBeforeTick = window.api.runVotingCycle.mock.calls.length;
+
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(MIN);
+        });
+
+        // The 1-minute tick ran a cycle...
+        expect(window.api.runVotingCycle.mock.calls.length).toBe(cyclesBeforeTick + 1);
+        // ...and reused that cycle's list — no new getActiveChallenges fetch.
+        expect(window.api.getActiveChallenges.mock.calls.length).toBe(fetchesBeforeTick);
+    });
+
+    it('falls back to fetching when the cycle surfaces no challenge list (IPC dropped challenges)', async () => {
+        // Simulate the backend not returning `challenges` (e.g. an older main
+        // process, or a partial refactor): the threshold re-check must fall back
+        // to a fresh getActiveChallenges fetch rather than treat it as empty.
+        window.api.runVotingCycle.mockResolvedValue({ success: true }); // no challenges field
+
+        renderProvider();
+        await act(async () => {
+            await ctx.start();
+        });
+
+        const fetchesBeforeTick = window.api.getActiveChallenges.mock.calls.length;
+
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(MIN);
+        });
+
+        // The tick could not reuse a list, so it fetched fresh.
+        expect(window.api.getActiveChallenges.mock.calls.length).toBeGreaterThan(fetchesBeforeTick);
+    });
+
     it('stays at the 1-minute cadence while a challenge remains in its window', async () => {
         renderProvider();
 

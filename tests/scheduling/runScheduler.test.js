@@ -262,6 +262,38 @@ describe('createScheduler — threshold-mode revert', () => {
         await flushMicrotasks();
     };
 
+    test('reuses the cycle challenge list and skips the post-cycle getActiveChallenges fetch', async () => {
+        // The voting cycle now resolves with the active list it fetched; the
+        // post-cycle threshold step must reuse it rather than fetch again (the
+        // back-to-back duplicate request that showed up in the logs).
+        runVotingCycle = jest.fn().mockResolvedValue({ success: true, challenges: [challengeEnteringIn60s()] });
+        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+
+        scheduler = createScheduler({ runVotingCycle, getActiveChallenges });
+        const startPromise = scheduler.start();
+        await flushMicrotasks();
+        await startPromise;
+
+        // Initial cycle ran once; its list was reused, so getActiveChallenges
+        // (only ever called by updateThresholdScheduling) was never hit.
+        expect(runVotingCycle).toHaveBeenCalledTimes(1);
+        expect(getActiveChallenges).not.toHaveBeenCalled();
+    });
+
+    test('falls back to fetching when the cycle hands over no list', async () => {
+        // A non-array result (here the legacy boolean) must not short-circuit:
+        // the threshold step still fetches a fresh list.
+        runVotingCycle = jest.fn().mockResolvedValue(true);
+        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+
+        scheduler = createScheduler({ runVotingCycle, getActiveChallenges });
+        const startPromise = scheduler.start();
+        await flushMicrotasks();
+        await startPromise;
+
+        expect(getActiveChallenges).toHaveBeenCalled();
+    });
+
     test('reverts to normal cadence once no challenge is within its last-minute window', async () => {
         getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [challengeEnteringIn60s()] });
 
