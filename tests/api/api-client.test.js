@@ -442,6 +442,12 @@ describe('api-client', () => {
             return e;
         };
 
+        // Some tests below switch to fake timers; restore real timers even if
+        // one throws before its inline useRealTimers() so it can't bleed over.
+        afterEach(() => {
+            jest.useRealTimers();
+        });
+
         test('retries a timed-out request and returns data once it succeeds', async () => {
             axios
                 .mockRejectedValueOnce(timeoutError())

@@ -208,12 +208,13 @@ class AutoVoteService : Service() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(cycleWatchdog)
+        // onDestroy runs on the main thread (like completeCycle and handleStop's
+        // posted block), so these fields can be touched directly — no race, and
+        // no need to defer the WebView teardown to a later message.
         cycleWakeLock?.let { if (it.isHeld) it.release() }
         cycleWakeLock = null
-        mainHandler.post {
-            webView?.destroy()
-            webView = null
-        }
+        webView?.destroy()
+        webView = null
         super.onDestroy()
     }
 
@@ -226,10 +227,11 @@ class AutoVoteService : Service() {
         wv.settings.javaScriptEnabled = true
         wv.settings.domStorageEnabled = true
         wv.settings.allowFileAccess = true
-        // Defense in depth: the page is a first-party local asset, but make
-        // the cross-origin file-read defaults explicit so they can't drift.
-        wv.settings.allowFileAccessFromFileURLs = false
-        wv.settings.allowUniversalAccessFromFileURLs = false
+        // Defense in depth: cross-origin file-URL access stays at the secure
+        // defaults (allowFileAccessFromFileURLs / allowUniversalAccessFromFileURLs
+        // are false by default on all supported API levels and are deprecated —
+        // setting them explicitly only adds a deprecation warning), so a file://
+        // page can't read other file:// origins.
         wv.addJavascriptInterface(HeadlessHttp(), "AndroidHeadlessHttp")
         wv.addJavascriptInterface(HeadlessStore(), "AndroidHeadlessStore")
         wv.addJavascriptInterface(HeadlessBridge(), "AndroidHeadlessBridge")
