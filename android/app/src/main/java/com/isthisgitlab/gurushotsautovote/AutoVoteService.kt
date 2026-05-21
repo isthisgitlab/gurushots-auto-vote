@@ -21,6 +21,7 @@ import android.webkit.WebViewClient
 import androidx.core.app.NotificationCompat
 import okhttp3.Call
 import okhttp3.Callback
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -83,6 +84,11 @@ class AutoVoteService : Service() {
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    // True for debuggable (debug) builds — used to keep JS console output out
+    // of release logcat without depending on a generated BuildConfig.
+    private val isDebuggable: Boolean by lazy {
+        (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    }
     private var webView: WebView? = null
     @Volatile private var pageReady = false
     private val cycleDone = AtomicBoolean(true)
@@ -141,6 +147,10 @@ class AutoVoteService : Service() {
             return
         }
         mainHandler.post {
+            // A STOP may have been processed after this lambda was queued —
+            // don't start a cycle (or acquire a wakelock) against a service
+            // that's shutting down.
+            if (!isRunning) return@post
             if (webView == null) createWebView()
             if (!pageReady) {
                 Log.i(TAG, "Headless page not ready yet — retrying shortly")
@@ -196,6 +206,8 @@ class AutoVoteService : Service() {
 
     override fun onDestroy() {
         mainHandler.removeCallbacks(cycleWatchdog)
+        cycleWakeLock?.let { if (it.isHeld) it.release() }
+        cycleWakeLock = null
         mainHandler.post {
             webView?.destroy()
             webView = null
@@ -212,12 +224,19 @@ class AutoVoteService : Service() {
         wv.settings.javaScriptEnabled = true
         wv.settings.domStorageEnabled = true
         wv.settings.allowFileAccess = true
+        // Defense in depth: the page is a first-party local asset, but make
+        // the cross-origin file-read defaults explicit so they can't drift.
+        wv.settings.allowFileAccessFromFileURLs = false
+        wv.settings.allowUniversalAccessFromFileURLs = false
         wv.addJavascriptInterface(HeadlessHttp(), "AndroidHeadlessHttp")
         wv.addJavascriptInterface(HeadlessStore(), "AndroidHeadlessStore")
         wv.addJavascriptInterface(HeadlessBridge(), "AndroidHeadlessBridge")
         wv.webChromeClient = object : WebChromeClient() {
             override fun onConsoleMessage(cm: ConsoleMessage): Boolean {
-                Log.i("$TAG/JS", "${cm.message()} (${cm.sourceId()}:${cm.lineNumber()})")
+                // Debug builds only — keeps JS console output out of release logcat.
+                if (isDebuggable) {
+                    Log.i("$TAG/JS", "${cm.message()} (${cm.sourceId()}:${cm.lineNumber()})")
+                }
                 return true
             }
         }
@@ -225,6 +244,18 @@ class AutoVoteService : Service() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 pageReady = true
                 Log.i(TAG, "Headless page loaded: $url")
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: android.webkit.WebResourceRequest?,
+                error: android.webkit.WebResourceError?,
+            ) {
+                // Main-frame load failure — don't run cycles against a broken page.
+                if (request?.isForMainFrame == true) {
+                    pageReady = false
+                    Log.w(TAG, "Headless page load error: ${error?.description}")
+                }
             }
         }
         pageReady = false
@@ -263,8 +294,22 @@ class AutoVoteService : Service() {
     }
 
     private fun buildRequest(method: String, url: String, headersJson: String, body: String): Request {
-        val mediaType = "application/x-www-form-urlencoded; charset=utf-8".toMediaType()
-        val builder = Request.Builder().url(url).method(method.uppercase(Locale.US), body.toRequestBody(mediaType))
+        val parsed = url.toHttpUrlOrNull() ?: throw IllegalArgumentException("invalid url")
+        // Defense in depth: the only caller is first-party JS targeting
+        // api.gurushots.com over https. Reject anything else so a future bug
+        // that fed an attacker-controlled URL here can't become an SSRF.
+        if (parsed.scheme != "https" || !parsed.host.endsWith("gurushots.com")) {
+            throw IllegalArgumentException("blocked url host/scheme: ${parsed.host}")
+        }
+        val m = method.uppercase(Locale.US)
+        // OkHttp rejects a body on GET/HEAD; the API is POST-only but the
+        // bridge is generic, so guard it.
+        val reqBody = if (m == "GET" || m == "HEAD") {
+            null
+        } else {
+            body.toRequestBody("application/x-www-form-urlencoded; charset=utf-8".toMediaType())
+        }
+        val builder = Request.Builder().url(parsed).method(m, reqBody)
         val headers = JSONObject(headersJson)
         val keys = headers.keys()
         while (keys.hasNext()) {
@@ -286,6 +331,14 @@ class AutoVoteService : Service() {
 
         @android.webkit.JavascriptInterface
         fun write(data: String) {
+            // Guard the shared settings store: only persist parseable JSON so a
+            // JS bug can't corrupt the blob the main app reads (incl. the token).
+            try {
+                JSONObject(data)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Refusing to persist non-JSON settings blob")
+                return
+            }
             getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(SETTINGS_KEY, data).apply()
         }
     }
@@ -418,7 +471,14 @@ class AutoVoteService : Service() {
 
     private fun formatStatus(): String {
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        return lastError?.let { "Last error at $time: $it" } ?: "Last cycle at $time (#$cycleCount)"
+        val err = lastError ?: return "Last cycle at $time (#$cycleCount)"
+        // Map internal codes to something an end user can act on.
+        val friendly = when (err) {
+            "no-token" -> "Not logged in — open the app and log in"
+            "cycle-timeout" -> "Timed out — will retry"
+            else -> err
+        }
+        return "Last error at $time: $friendly"
     }
 
     private fun acquireWakelock(): PowerManager.WakeLock? {

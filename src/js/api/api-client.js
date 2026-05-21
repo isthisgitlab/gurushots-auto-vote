@@ -20,6 +20,11 @@ let capacitorAdapter = null;
 const getCapacitorHttpAdapter = () => {
     if (capacitorAdapter) return capacitorAdapter;
     const { CapacitorHttp } = require('@capacitor/core');
+    // TODO: unlike the headless adapter, this resolves for ALL statuses and
+    // does not enforce validateStatus — so on the Capacitor foreground path a
+    // 429/5xx returns the error body as "success" and the retry/backoff layer
+    // never fires. Aligning it (reject non-2xx) is deferred: it changes live
+    // foreground error/auth flows that aren't re-verified here.
     capacitorAdapter = async (config) => {
         const response = await CapacitorHttp.request({
             method: (config.method || 'get').toUpperCase(),
@@ -123,6 +128,20 @@ const MAX_RETRY_DELAY_MS = 30_000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Smallest delay we'll wait before a retry, even if the server asks for
+// less (or 0) — guards against a misbehaving server spinning the loop.
+const MIN_RETRY_DELAY_MS = 100;
+
+// Coerce a user/CLI-supplied setting to a non-negative integer, falling
+// back to the default for missing / negative / non-numeric values. The
+// retry knobs aren't in the schema, so this is the only guard against a
+// bad `set-setting apiMaxRetries -1` turning the loop into a no-op (or a
+// NaN bound that never terminates).
+const coerceNonNegInt = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+};
+
 /**
  * Whether a failed request is worth retrying. Transient conditions —
  * no response (network drop), a client timeout, a 429, or any 5xx —
@@ -130,6 +149,9 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * a definitive answer and is not retried.
  */
 const isRetryableError = (error) => {
+    // A TypeError (or similar) means an adapter/programmer bug, not a
+    // transient network failure — retrying it just wastes the backoff.
+    if (error instanceof TypeError) return false;
     if (!error.response) return true; // network error / no response
     if (error.code === 'ECONNABORTED') return true; // client timeout
     const status = error.response.status;
@@ -169,8 +191,8 @@ const getRetryAfterMs = (error) => {
  * @returns {object|null} - Response data or null if request failed
  */
 const makePostRequest = async (url, headers, data = '') => {
-    const maxRetries = settings.getSetting('apiMaxRetries') ?? 3;
-    const baseDelayMs = settings.getSetting('apiRetryBaseDelayMs') ?? 1000;
+    const maxRetries = coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3);
+    const baseDelayMs = coerceNonNegInt(settings.getSetting('apiRetryBaseDelayMs'), 1000);
 
     for (let attempt = 0; ; attempt++) {
         const startTime = Date.now();
@@ -231,7 +253,7 @@ const makePostRequest = async (url, headers, data = '') => {
             let delayMs;
             if (cooldownMs != null) {
                 if (cooldownMs > MAX_RETRY_DELAY_MS) return null;
-                delayMs = cooldownMs;
+                delayMs = Math.max(cooldownMs, MIN_RETRY_DELAY_MS);
             } else {
                 delayMs = Math.min(baseDelayMs * 2 ** attempt + Math.random() * baseDelayMs, MAX_RETRY_DELAY_MS);
             }

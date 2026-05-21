@@ -273,7 +273,7 @@
             reliability: 'Reliability',
             apiMaxRetries: 'API Retries',
             apiMaxRetriesDesc:
-                'How many times to retry a failed API request before giving up (0 disables). Covers transient network errors, timeouts, rate limits (429) and server errors (5xx). The second field is the base backoff delay in milliseconds, doubling each attempt.',
+                'How many times to retry a failed API request before giving up (0 disables). Covers transient network errors, timeouts, rate limits (429) and server errors (5xx). Retry Delay is the base backoff in milliseconds, which roughly doubles each attempt.',
             apiRetryBaseDelayMs: 'Retry Delay (ms)',
             voteOnlyInLastMinute: 'Vote Only in Last Minute',
             voteOnlyInLastMinuteDesc: 'Only auto-vote when within the last minute threshold, skip voting otherwise',

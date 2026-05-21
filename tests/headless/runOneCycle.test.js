@@ -74,4 +74,44 @@ describe('headless runOneCycle', () => {
         expect(fetchChallengesAndVote).not.toHaveBeenCalled();
         expect(lastPayload().skipped).toBe('mock');
     });
+
+    test('reports ok:false when the cycle returns a falsy result', async () => {
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue(null);
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges });
+
+        await globalThis.GS.runOneCycle();
+
+        const payload = lastPayload();
+        expect(payload.ok).toBe(false);
+        expect(typeof payload.nextDelayMs).toBe('number');
+    });
+
+    test('uses the fixed last-minute cadence when a challenge is inside its threshold window', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true });
+        const getActiveChallenges = jest
+            .fn()
+            .mockResolvedValue({ challenges: [{ id: 1, type: 'default', close_time: now + 60 }] });
+        apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges });
+        // lastMinuteThreshold=10min → a challenge closing in 60s is in-window;
+        // lastMinuteCheckFrequency=1min → next cadence is 60000ms.
+        settings.getEffectiveSetting.mockImplementation((key) => (key === 'lastMinuteThreshold' ? 10 : 1));
+
+        await globalThis.GS.runOneCycle();
+
+        expect(lastPayload().nextDelayMs).toBe(60000);
+    });
+
+    test('reports ok:false and a fallback delay when the cycle throws', async () => {
+        const fetchChallengesAndVote = jest.fn().mockRejectedValue(new Error('boom'));
+        apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges: jest.fn() });
+
+        await globalThis.GS.runOneCycle();
+
+        const payload = lastPayload();
+        expect(payload.ok).toBe(false);
+        expect(payload.error).toBe('boom');
+        expect(typeof payload.nextDelayMs).toBe('number');
+    });
 });

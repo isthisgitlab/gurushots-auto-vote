@@ -42,4 +42,12 @@ describe('storage — headless service branch', () => {
         expect(store.write).toHaveBeenCalledWith('{"token":"xyz"}');
         expect(storage.readRaw()).toBe('{"token":"xyz"}');
     });
+
+    test('writeRaw swallows a native store failure instead of propagating', () => {
+        store.write.mockImplementation(() => {
+            throw new Error('SharedPreferences unavailable');
+        });
+        // Must not throw — settings persistence is on a synchronous path.
+        expect(() => storage.writeRaw('{"token":"x"}')).not.toThrow();
+    });
 });

@@ -272,7 +272,7 @@
             reliability: 'Uzticamība',
             apiMaxRetries: 'API atkārtojumi',
             apiMaxRetriesDesc:
-                'Cik reižu atkārtot neizdevušos API pieprasījumu pirms padošanās (0 atspējo). Attiecas uz īslaicīgām tīkla kļūdām, noildzēm, pieprasījumu ierobežojumiem (429) un servera kļūdām (5xx). Otrais lauks ir bāzes aizkave milisekundēs, kas dubultojas katrā mēģinājumā.',
+                'Cik reižu atkārtot neizdevušos API pieprasījumu pirms padošanās (0 atspējo). Attiecas uz īslaicīgām tīkla kļūdām, noildzēm, pieprasījumu ierobežojumiem (429) un servera kļūdām (5xx). “Atkārtojuma aizkave” ir bāzes aizkave milisekundēs, kas aptuveni dubultojas katrā mēģinājumā.',
             apiRetryBaseDelayMs: 'Atkārtojuma aizkave (ms)',
             voteOnlyInLastMinute: 'Balsot tikai pēdējās minūtes laikā',
             voteOnlyInLastMinuteDesc:

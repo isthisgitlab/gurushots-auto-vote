@@ -600,5 +600,37 @@ describe('api-client', () => {
             expect(axios).toHaveBeenCalledTimes(2);
             jest.useRealTimers();
         });
+
+        test('honors a 429 retry_after at exactly the 30s cap (boundary, inclusive)', async () => {
+            jest.useFakeTimers();
+            axios
+                .mockRejectedValueOnce(httpError(429, { retry_after: 30 }))
+                .mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
+
+            const promise = makePostRequest(mockUrl, headers, mockData);
+            await jest.advanceTimersByTimeAsync(31000);
+            const result = await promise;
+
+            expect(result).toEqual({ ok: true });
+            expect(axios).toHaveBeenCalledTimes(2);
+            jest.useRealTimers();
+        });
+
+        test('honors a Retry-After header when no retry_after body field is present', async () => {
+            jest.useFakeTimers();
+            const err = httpError(429);
+            err.response.headers = { 'retry-after': '2' };
+            axios
+                .mockRejectedValueOnce(err)
+                .mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
+
+            const promise = makePostRequest(mockUrl, headers, mockData);
+            await jest.advanceTimersByTimeAsync(3000);
+            const result = await promise;
+
+            expect(result).toEqual({ ok: true });
+            expect(axios).toHaveBeenCalledTimes(2);
+            jest.useRealTimers();
+        });
     });
 });

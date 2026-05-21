@@ -35,6 +35,11 @@ const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}
 const computeNextDelayMs = async (token) => {
     const userSettings = settings.loadSettings();
     try {
+        // TODO: this re-fetches active challenges after fetchChallengesAndVote
+        // already fetched them (mirrors the desktop scheduler's separate
+        // threshold re-check). getActiveChallenges coalesces concurrent calls
+        // but this is a sequential second call. Avoiding it needs main.js to
+        // return the challenge list — out of scope here.
         const { challenges } = await apiFactory.getApiStrategy().getActiveChallenges(token);
         const list = challenges || [];
         const now = Math.floor(Date.now() / 1000);
@@ -44,7 +49,7 @@ const computeNextDelayMs = async (token) => {
             return Math.max(1, freq) * 60_000;
         }
     } catch (err) {
-        log('next-delay computation failed; using normal cadence', err.message);
+        log('next-delay computation failed; using normal cadence', err?.message ?? String(err));
     }
     return getRandomCheckFrequencyMs(userSettings);
 };
