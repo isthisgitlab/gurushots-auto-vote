@@ -501,6 +501,26 @@ describe('api-client', () => {
             expect(axios).toHaveBeenCalledTimes(1);
         });
 
+        test('a negative apiMaxRetries falls back to the default instead of disabling retries', async () => {
+            settings.getSetting.mockImplementation((key) => {
+                switch (key) {
+                    case 'apiTimeout':
+                        return 30;
+                    case 'apiMaxRetries':
+                        return -1;
+                    default:
+                        return 0;
+                }
+            });
+            axios.mockRejectedValue(httpError(503));
+
+            const result = await makePostRequest(mockUrl, headers, mockData);
+
+            expect(result).toBeNull();
+            // -1 is invalid → falls back to default 3 retries → 1 + 3 attempts.
+            expect(axios).toHaveBeenCalledTimes(4);
+        });
+
         test('gives up immediately when a 429 retry_after exceeds the in-call cap', async () => {
             // retry_after is in seconds; 60s is far longer than a voting cycle,
             // so the request defers to the scheduler instead of blocking.

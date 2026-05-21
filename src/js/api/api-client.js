@@ -138,6 +138,7 @@ const MIN_RETRY_DELAY_MS = 100;
 // bad `set-setting apiMaxRetries -1` turning the loop into a no-op (or a
 // NaN bound that never terminates).
 const coerceNonNegInt = (value, fallback) => {
+    if (value == null) return fallback; // undefined/null → default, not Number(null)===0
     const n = Number(value);
     return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
 };

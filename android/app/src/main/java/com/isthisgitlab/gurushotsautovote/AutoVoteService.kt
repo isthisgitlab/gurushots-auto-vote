@@ -193,9 +193,11 @@ class AutoVoteService : Service() {
         isRunning = false
         mainHandler.removeCallbacks(cycleWatchdog)
         cancelPendingAlarm()
-        cycleWakeLock?.let { if (it.isHeld) it.release() }
-        cycleWakeLock = null
+        // Touch cycleWakeLock + webView only on the main thread — completeCycle
+        // also runs there, so the two can't race on these non-volatile fields.
         mainHandler.post {
+            cycleWakeLock?.let { if (it.isHeld) it.release() }
+            cycleWakeLock = null
             webView?.destroy()
             webView = null
             pageReady = false
@@ -242,8 +244,12 @@ class AutoVoteService : Service() {
         }
         wv.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
-                pageReady = true
-                Log.i(TAG, "Headless page loaded: $url")
+                // Only the headless document marks readiness — guards against a
+                // subframe load firing this on older WebView versions.
+                if (url == HEADLESS_URL) {
+                    pageReady = true
+                    Log.i(TAG, "Headless page loaded: $url")
+                }
             }
 
             override fun onReceivedError(
@@ -298,8 +304,11 @@ class AutoVoteService : Service() {
         // Defense in depth: the only caller is first-party JS targeting
         // api.gurushots.com over https. Reject anything else so a future bug
         // that fed an attacker-controlled URL here can't become an SSRF.
-        if (parsed.scheme != "https" || !parsed.host.endsWith("gurushots.com")) {
-            throw IllegalArgumentException("blocked url host/scheme: ${parsed.host}")
+        // Dot-anchored so "evilgurushots.com" doesn't slip past a bare suffix.
+        val host = parsed.host
+        val hostAllowed = host == "gurushots.com" || host.endsWith(".gurushots.com")
+        if (parsed.scheme != "https" || !hostAllowed) {
+            throw IllegalArgumentException("blocked url host/scheme: $host")
         }
         val m = method.uppercase(Locale.US)
         // OkHttp rejects a body on GET/HEAD; the API is POST-only but the
@@ -355,7 +364,13 @@ class AutoVoteService : Service() {
             } catch (t: Throwable) {
                 Log.w(TAG, "Bad onCycleComplete payload", t)
             }
-            Log.i(TAG, "Cycle reported complete: nextDelayMs=$delay error=$lastError")
+            // lastError can carry API-derived content; keep the detail out of
+            // release logcat (the JS console path is gated the same way).
+            if (isDebuggable) {
+                Log.i(TAG, "Cycle reported complete: nextDelayMs=$delay error=$lastError")
+            } else {
+                Log.i(TAG, "Cycle reported complete: nextDelayMs=$delay${if (lastError != null) " (error)" else ""}")
+            }
             completeCycle(delay)
         }
     }
