@@ -277,7 +277,7 @@ const getEffectiveBoostTime = (challengeId) => {
  * - Timer-based available (state === 'AVAILABLE' with timeout):
  *   apply when timeUntilBoostExpires <= effectiveBoostTime
  * - Key-unlocked available (state === 'AVAILABLE_KEY' or available with no timeout):
- *   ignore boost timer completely and apply only if challenge ends in next 10 minutes
+ *   ignore boost timer completely and apply only if challenge ends in next 15 minutes
  * @param {Object} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
  * @returns {boolean} - True if boost should be applied
@@ -304,7 +304,7 @@ const shouldApplyBoost = (challenge, now) => {
     const CLOSING = 15 * 60; // seconds
 
     if (isKeyUnlocked) {
-        // Auto-apply only if the challenge ends within next 10 minutes
+        // Auto-apply only if the challenge ends within next 15 minutes (CLOSING)
         return timeUntilEnd > 0 && timeUntilEnd <= CLOSING;
     }
 

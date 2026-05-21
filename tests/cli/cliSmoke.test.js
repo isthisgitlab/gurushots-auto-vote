@@ -34,11 +34,17 @@ describe('CLI smoke', () => {
             'vote',
             'run',
             'start',
-            'stop',
             'status',
             'get-setting',
             'set-setting',
+            'set-global-default',
+            'list-settings',
+            'reset-setting',
+            'reset-all-settings',
+            'logs',
+            'help-settings',
             'reset-windows',
+            'help',
         ];
         for (const cmd of expectedCommands) {
             expect(stdout).toContain(cmd);

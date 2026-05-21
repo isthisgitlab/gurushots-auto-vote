@@ -67,8 +67,7 @@ Commands:
   vote     - Run one manual voting cycle (votes to 100% regardless of settings)
   run      - Run one full auto-strategy cycle (boost / turbo / auto-fill / threshold-aware vote).
              Add --challenge=<id> to scope to a single challenge.
-  start    - Start continuous voting with cron scheduling
-  stop     - Stop continuous voting (if running)
+  start    - Start continuous voting with cron scheduling (runs until stopped with Ctrl+C)
   status   - Show current status and settings
   get-setting <key> [--challenge=<id>] - Get a setting value (effective value for a challenge with --challenge)
   set-setting <key> <value> [--challenge=<id>] - Set a setting value (per-challenge override with --challenge)
@@ -93,7 +92,7 @@ Examples:
   reset-windows
 
 Note: You must login first before you can vote.
-      The 'start' command will run continuously until stopped.
+      The 'start' command will run continuously until stopped with Ctrl+C.
       Voting interval adjusts dynamically based on challenge states.
       Use 'get-setting checkFrequencyMin'/'checkFrequencyMax' to view, 'set-setting checkFrequencyMin 2' / 'set-setting checkFrequencyMax 5' to set the random range.
       Current mode: ${isMockMode ? 'MOCK (simulated API calls)' : 'REAL (live API calls)'}
