@@ -47,9 +47,11 @@
             title: 'Welcome to GuruShots Auto Vote',
             intro: 'This app votes on your active GuruShots challenges automatically on a schedule, keeping your exposure up without you lifting a finger.',
             howItWorksTitle: 'How it works',
-            howItWorks: 'Log in, pick your thresholds in Settings, and toggle Auto-vote on. The app checks your challenges every few minutes and votes when needed.',
+            howItWorks:
+                'Log in, pick your thresholds in Settings, and toggle Auto-vote on. The app checks your challenges every few minutes and votes when needed.',
             batteryTitle: 'Keep it running in the background',
-            batteryBody: 'To keep voting while the screen is off, exclude this app from battery optimization in your phone settings. Some vendors (Samsung, Xiaomi, OnePlus) aggressively kill background apps.',
+            batteryBody:
+                'To keep voting while the screen is off, exclude this app from battery optimization in your phone settings. Some vendors (Samsung, Xiaomi, OnePlus) aggressively kill background apps.',
             gotIt: 'Got it',
         },
         // Menu translations
