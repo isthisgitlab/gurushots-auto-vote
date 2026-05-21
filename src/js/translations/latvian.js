@@ -269,6 +269,11 @@
                 'Katrs cikls izmanto nejaušu aizkavi šajā diapazonā. Vienāds min un max nozīmē fiksētu biežumu.',
             checkFrequencyMin: 'Min',
             checkFrequencyMax: 'Max',
+            reliability: 'Uzticamība',
+            apiMaxRetries: 'API atkārtojumi',
+            apiMaxRetriesDesc:
+                'Cik reižu atkārtot neizdevušos API pieprasījumu pirms padošanās (0 atspējo). Attiecas uz īslaicīgām tīkla kļūdām, noildzēm, pieprasījumu ierobežojumiem (429) un servera kļūdām (5xx). Otrais lauks ir bāzes aizkave milisekundēs, kas dubultojas katrā mēģinājumā.',
+            apiRetryBaseDelayMs: 'Atkārtojuma aizkave (ms)',
             voteOnlyInLastMinute: 'Balsot tikai pēdējās minūtes laikā',
             voteOnlyInLastMinuteDesc:
                 'Balsot tikai tad, ja līdz izaicinājuma beigām ir mazāk laika, nekā norādīts pēdējās minūtes slieksnī.',

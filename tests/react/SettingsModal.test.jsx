@@ -23,6 +23,8 @@ const mockFormState = {
         customTimezones: [],
         checkFrequencyMin: 5,
         checkFrequencyMax: 10,
+        apiMaxRetries: 3,
+        apiRetryBaseDelayMs: 1000,
     },
     saving: false,
     originalUiValues: {
@@ -32,6 +34,8 @@ const mockFormState = {
         customTimezones: [],
         checkFrequencyMin: 5,
         checkFrequencyMax: 10,
+        apiMaxRetries: 3,
+        apiRetryBaseDelayMs: 1000,
     },
     handleFormChange: jest.fn(),
     handleUiChange: jest.fn(),
@@ -69,6 +73,8 @@ const resetHookState = () => {
             customTimezones: [],
             checkFrequencyMin: 5,
             checkFrequencyMax: 10,
+            apiMaxRetries: 3,
+            apiRetryBaseDelayMs: 1000,
         },
         saving: false,
         originalUiValues: {
@@ -78,6 +84,8 @@ const resetHookState = () => {
             customTimezones: [],
             checkFrequencyMin: 5,
             checkFrequencyMax: 10,
+            apiMaxRetries: 3,
+            apiRetryBaseDelayMs: 1000,
         },
         handleFormChange: jest.fn(),
         handleUiChange: jest.fn(),
@@ -215,5 +223,25 @@ describe('SettingsModal — closed state', () => {
     test('returns null when isOpen is false', () => {
         const { container } = render(<SettingsModal isOpen={false} onClose={jest.fn()} />);
         expect(container.innerHTML).toBe('');
+    });
+});
+
+describe('SettingsModal — reliability (API retry/backoff) controls', () => {
+    test('renders the API retry inputs seeded from uiValues', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(screen.getByLabelText('app.apiMaxRetries').value).toBe('3');
+        expect(screen.getByLabelText('app.apiRetryBaseDelayMs').value).toBe('1000');
+    });
+
+    test('editing API Retries calls handleUiChange with the parsed integer', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.change(screen.getByLabelText('app.apiMaxRetries'), { target: { value: '5' } });
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('apiMaxRetries', 5);
+    });
+
+    test('editing Retry Delay calls handleUiChange with the parsed integer', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.change(screen.getByLabelText('app.apiRetryBaseDelayMs'), { target: { value: '2000' } });
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('apiRetryBaseDelayMs', 2000);
     });
 });

@@ -338,6 +338,58 @@ export function SettingsModal({ isOpen, onClose }) {
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Reliability — API retry / backoff */}
+                            <div className="form-control">
+                                <label className="label">
+                                    <span className="label-text font-medium">{t('app.reliability')}</span>
+                                    <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
+                                </label>
+                                <p className="text-xs text-base-content/60 mb-2">{t('app.apiMaxRetriesDesc')}</p>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm">{t('app.apiMaxRetries')}</span>
+                                    <input
+                                        type="number"
+                                        className="input input-bordered input-sm w-20"
+                                        min="0"
+                                        max="10"
+                                        aria-label={t('app.apiMaxRetries')}
+                                        value={uiValues.apiMaxRetries}
+                                        onChange={(e) =>
+                                            handleUiChange('apiMaxRetries', parseInt(e.target.value, 10) || 0)
+                                        }
+                                    />
+                                    <span className="text-sm">{t('app.apiRetryBaseDelayMs')}</span>
+                                    <input
+                                        type="number"
+                                        className="input input-bordered input-sm w-24"
+                                        min="100"
+                                        max="10000"
+                                        step="100"
+                                        aria-label={t('app.apiRetryBaseDelayMs')}
+                                        value={uiValues.apiRetryBaseDelayMs}
+                                        onChange={(e) =>
+                                            handleUiChange('apiRetryBaseDelayMs', parseInt(e.target.value, 10) || 1000)
+                                        }
+                                    />
+                                    <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => {
+                                            handleResetUi('apiMaxRetries');
+                                            handleResetUi('apiRetryBaseDelayMs');
+                                        }}
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth="2"
+                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                            />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

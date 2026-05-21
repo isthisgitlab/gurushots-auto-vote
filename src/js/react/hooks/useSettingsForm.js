@@ -18,6 +18,10 @@ export const DEFAULT_UI_VALUES = {
     apiTimeout: 30,
     checkFrequencyMin: 3,
     checkFrequencyMax: 3,
+    // Resilience: retries on transient API failures (network/timeout/429/5xx)
+    // with exponential backoff. Mirror src/js/settings.js getDefaultSettings.
+    apiMaxRetries: 3,
+    apiRetryBaseDelayMs: 1000,
 };
 
 /**
@@ -85,6 +89,8 @@ export function useSettingsForm({
                 apiTimeout: settings.apiTimeout ?? 30,
                 checkFrequencyMin: settings.checkFrequencyMin ?? 3,
                 checkFrequencyMax: settings.checkFrequencyMax ?? 3,
+                apiMaxRetries: settings.apiMaxRetries ?? 3,
+                apiRetryBaseDelayMs: settings.apiRetryBaseDelayMs ?? 1000,
             };
             setUiValues(initialUiValues);
             setOriginalUiValues(initialUiValues);

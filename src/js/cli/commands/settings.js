@@ -224,6 +224,8 @@ Per-challenge overrides:
 
 Common Settings:
   apiTimeout           - API request timeout in seconds (default: 30)
+  apiMaxRetries        - Retries for transient API failures: network/timeout/429/5xx (default: 3; 0 disables)
+  apiRetryBaseDelayMs  - Base backoff delay between retries in ms, doubling each attempt (default: 1000)
   checkFrequencyMin    - Minimum minutes between voting cycles (default: 3)
   checkFrequencyMax    - Maximum minutes between voting cycles (default: 3). Each cycle picks
                          a random delay in [min, max]; set min === max for a fixed cadence.

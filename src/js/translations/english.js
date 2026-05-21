@@ -270,6 +270,11 @@
                 'Each cycle uses a random delay in this range. Set min and max equal for a fixed cadence.',
             checkFrequencyMin: 'Min',
             checkFrequencyMax: 'Max',
+            reliability: 'Reliability',
+            apiMaxRetries: 'API Retries',
+            apiMaxRetriesDesc:
+                'How many times to retry a failed API request before giving up (0 disables). Covers transient network errors, timeouts, rate limits (429) and server errors (5xx). The second field is the base backoff delay in milliseconds, doubling each attempt.',
+            apiRetryBaseDelayMs: 'Retry Delay (ms)',
             voteOnlyInLastMinute: 'Vote Only in Last Minute',
             voteOnlyInLastMinuteDesc: 'Only auto-vote when within the last minute threshold, skip voting otherwise',
             lastMinuteCheckFrequency: 'Last Minute Check Frequency',
