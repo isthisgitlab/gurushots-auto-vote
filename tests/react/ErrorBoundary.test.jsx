@@ -6,12 +6,15 @@
 import { fireEvent, render, screen } from '@/test/test-utils';
 import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { mockApi } from '../../src/js/react/test/setup';
+import { mockApi, mockTranslationManager } from '../../src/js/react/test/setup';
 
-// Pin window.api per-test — the global jsdom setup occasionally loses
-// it across files. Keeps this suite hermetic.
+// Pin window.api + window.translationManager per-test — the global jsdom setup
+// occasionally loses them across files. ErrorBoundary reads translationManager
+// directly (it's a class boundary, no hook), so restore it to exercise the
+// localized path. Keeps this suite hermetic.
 beforeEach(() => {
     window.api = mockApi;
+    window.translationManager = mockTranslationManager;
 });
 
 function Boom({ shouldThrow }) {
@@ -49,7 +52,7 @@ describe('ErrorBoundary', () => {
             </ErrorBoundary>,
         );
 
-        expect(screen.getByText('Something went wrong')).toBeTruthy();
+        expect(screen.getByText('errors.boundaryTitle')).toBeTruthy();
         expect(screen.getByText(/boom from child/)).toBeTruthy();
         expect(screen.queryByText('child ok')).toBeNull();
     });
@@ -70,7 +73,7 @@ describe('ErrorBoundary', () => {
         render(<Toggle />);
 
         // Initial mount throws → boundary shows fallback.
-        expect(screen.getByText('Something went wrong')).toBeTruthy();
+        expect(screen.getByText('errors.boundaryTitle')).toBeTruthy();
         expect(screen.queryByText('child ok')).toBeNull();
 
         // While still in the error state, click the Toggle's child button
@@ -79,9 +82,9 @@ describe('ErrorBoundary', () => {
         // error state, so we have to flip the toggle from inside the
         // fallback by clicking Dismiss first to remount the children, THEN
         // flipping the toggle on the recovered render.)
-        fireEvent.click(screen.getByText('Dismiss'));
+        fireEvent.click(screen.getByText('errors.dismiss'));
         // Same error re-throws immediately, fallback is back.
-        expect(screen.getByText('Something went wrong')).toBeTruthy();
+        expect(screen.getByText('errors.boundaryTitle')).toBeTruthy();
 
         // Logger must NOT fire again — the same error was already logged.
         expect(mockApi.logError).toHaveBeenCalledTimes(1);
@@ -98,7 +101,7 @@ describe('ErrorBoundary', () => {
                 <Controlled shouldThrow={true} />
             </ErrorBoundary>,
         );
-        expect(screen.getByText('Something went wrong')).toBeTruthy();
+        expect(screen.getByText('errors.boundaryTitle')).toBeTruthy();
 
         // Flip the prop so the child stops throwing, then dismiss.
         rerender(
@@ -109,9 +112,9 @@ describe('ErrorBoundary', () => {
         // Re-render alone doesn't clear the boundary — dismiss is required.
         expect(screen.queryByText('child ok')).toBeNull();
 
-        fireEvent.click(screen.getByText('Dismiss'));
+        fireEvent.click(screen.getByText('errors.dismiss'));
         expect(screen.getByText('child ok')).toBeTruthy();
-        expect(screen.queryByText('Something went wrong')).toBeNull();
+        expect(screen.queryByText('errors.boundaryTitle')).toBeNull();
     });
 
     test('passes children through when nothing throws', () => {
@@ -122,6 +125,6 @@ describe('ErrorBoundary', () => {
         );
 
         expect(screen.getByText('child ok')).toBeTruthy();
-        expect(screen.queryByText('Something went wrong')).toBeNull();
+        expect(screen.queryByText('errors.boundaryTitle')).toBeNull();
     });
 });

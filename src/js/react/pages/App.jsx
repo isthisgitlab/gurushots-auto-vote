@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
 import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext';
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
@@ -11,6 +11,7 @@ import { ChallengesSection } from '@/components/app/ChallengesSection';
 import { SettingsModal } from '@/components/app/SettingsModal';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
 import { UpdateDialog } from '@/components/app/UpdateDialog';
+import { WelcomeModal } from '@/components/app/WelcomeModal';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 
@@ -19,13 +20,14 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
  */
 function AppContent() {
     const { ready, t } = useTranslation();
-    const { settings, loading: settingsLoading } = useSettings();
+    const { settings, loading: settingsLoading, updateSetting } = useSettings();
     const autovote = useAutovote();
 
     // Local state
     const [settingsModalOpen, setSettingsModalOpen] = useState(false);
     const [challengeSettingsOpen, setChallengeSettingsOpen] = useState(false);
     const [selectedChallenge, setSelectedChallenge] = useState({ id: null, title: '' });
+    const [welcomeOpen, setWelcomeOpen] = useState(false);
 
     // Apply theme
     useEffect(() => {
@@ -33,6 +35,31 @@ function AppContent() {
             document.documentElement.setAttribute('data-theme', settings.theme);
         }
     }, [settings?.theme]);
+
+    // Show the first-run welcome once per launch until dismissed. A ref (not
+    // settings state) gates it: a failed persist triggers a settings refetch
+    // that re-runs this effect with the flag still false, and without the ref
+    // that would reopen the modal mid-session. Persisted via the settings
+    // facade so it stays dismissed across launches/platforms.
+    const welcomeHandledRef = useRef(false);
+    useEffect(() => {
+        if (welcomeHandledRef.current) return;
+        if (!settingsLoading && settings && !settings.onboardingCompleted) {
+            welcomeHandledRef.current = true;
+            setWelcomeOpen(true);
+        }
+    }, [settingsLoading, settings?.onboardingCompleted]);
+
+    const handleWelcomeClose = useCallback(async () => {
+        setWelcomeOpen(false);
+        try {
+            await updateSetting('onboardingCompleted', true);
+        } catch (err) {
+            // Won't reappear this session (ref-gated); log so a persistent
+            // write failure (e.g. Android storage I/O) stays diagnosable.
+            await window.api.logError(`Failed to persist onboardingCompleted: ${err?.message || err}`);
+        }
+    }, [updateSetting]);
 
     // Handle logout
     const handleLogout = useCallback(async () => {
@@ -133,6 +160,11 @@ function AppContent() {
 
                     {/* Update Dialog */}
                     <UpdateDialog />
+
+                    {/* First-run onboarding */}
+                    <ErrorBoundary>
+                        <WelcomeModal isOpen={welcomeOpen} onClose={handleWelcomeClose} />
+                    </ErrorBoundary>
                 </ErrorBoundary>
             </div>
         </div>

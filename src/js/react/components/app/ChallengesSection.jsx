@@ -10,7 +10,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
  */
 export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onChallengeSettingsClick }) {
     const { t } = useTranslation();
-    const { challenges, loading, refetch } = useChallenges();
+    const { challenges, loading, error, refetch } = useChallenges();
     const times = useTimers(challenges);
     const [votingAll, setVotingAll] = useState(false);
     const [runningCycle, setRunningCycle] = useState(false);
@@ -94,6 +94,15 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
         refetch(true);
     }, [refetch]);
 
+    // Transient-failure banner: a failed fetch (retries exhausted) surfaces
+    // here instead of being silently shown as "no challenges". Auto-clears on
+    // the next successful refresh.
+    const fetchErrorBanner = error ? (
+        <div role="alert" className="alert alert-warning text-sm mb-4">
+            <span>{t('errors.fetchFailed')}</span>
+        </div>
+    ) : null;
+
     if (loading && challenges.length === 0) {
         return (
             <div className="flex justify-center py-8">
@@ -104,14 +113,25 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
 
     if (!challenges || challenges.length === 0) {
         return (
-            <div className="text-center py-4 text-base-content/60">
-                {isLoggedIn ? t('app.noActiveChallenges') : t('app.pleaseLogin')}
+            <div>
+                {fetchErrorBanner}
+                <div className="text-center py-4 text-base-content/60">
+                    {isLoggedIn ? t('app.noActiveChallenges') : t('app.pleaseLogin')}
+                </div>
+                {error && isLoggedIn && (
+                    <div className="text-center">
+                        <button type="button" className="btn btn-sm" onClick={handleRefresh}>
+                            {t('common.refresh')}
+                        </button>
+                    </div>
+                )}
             </div>
         );
     }
 
     return (
         <div>
+            {fetchErrorBanner}
             {/* Action Buttons — flex-wrap so the Compact toggle wraps
                 to a second row on narrow viewports instead of clipping
                 off the right edge. */}
@@ -210,7 +230,7 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                     <ChallengeCard
                         key={`${challenge.id}-${refreshKey}`}
                         challenge={challenge}
-                        timeRemaining={times[challenge.id] || 'Loading...'}
+                        timeRemaining={times[challenge.id] || t('common.loading')}
                         timezone={timezone}
                         autovoteRunning={autovoteRunning}
                         onVoteComplete={handleVoteComplete}

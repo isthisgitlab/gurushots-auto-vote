@@ -18,6 +18,7 @@
             languageLatvian: 'Latviešu',
             light: 'Gaišs',
             loading: 'Ielādē...',
+            closeModal: 'Aizvērt',
             logout: 'Iziet',
             mock: 'Tests:',
             never: 'Nekad',
@@ -33,6 +34,23 @@
             title: 'GuruShots Auto Vote',
             yes: 'Jā',
             ok: 'Labi',
+        },
+        // Error / recovery UI
+        errors: {
+            boundaryTitle: 'Kaut kas nogāja greizi',
+            dismiss: 'Aizvērt',
+            reload: 'Pārlādēt',
+            fetchFailed: 'Neizdevās sasniegt GuruShots — automātiski mēģinām vēlreiz.',
+        },
+        // First-run onboarding
+        onboarding: {
+            title: 'Laipni lūdzam GuruShots Auto Vote',
+            intro: 'Šī lietotne automātiski balso tavās aktīvajās GuruShots sacensībās pēc grafika, uzturot tavu redzamību augstu bez tavas iesaistes.',
+            howItWorksTitle: 'Kā tas darbojas',
+            howItWorks: 'Pieslēdzies, izvēlies sliekšņus iestatījumos un ieslēdz automātisko balsošanu. Lietotne pārbauda sacensības ik pēc dažām minūtēm un balso, kad nepieciešams.',
+            batteryTitle: 'Darbība fonā',
+            batteryBody: 'Lai balsošana turpinātos, kad ekrāns ir izslēgts, izslēdz šai lietotnei akumulatora optimizāciju tālruņa iestatījumos. Daži ražotāji (Samsung, Xiaomi, OnePlus) agresīvi pārtrauc fona lietotnes.',
+            gotIt: 'Sapratu',
         },
         // Menu translations
         menu: {

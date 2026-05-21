@@ -18,6 +18,7 @@
             languageLatvian: 'Latviešu',
             light: 'Light',
             loading: 'Loading...',
+            closeModal: 'Close modal',
             logout: 'Logout',
             mock: 'Mock:',
             never: 'Never',
@@ -33,6 +34,23 @@
             title: 'GuruShots Auto Vote',
             yes: 'Yes',
             ok: 'OK',
+        },
+        // Error / recovery UI
+        errors: {
+            boundaryTitle: 'Something went wrong',
+            dismiss: 'Dismiss',
+            reload: 'Reload',
+            fetchFailed: "Couldn't reach GuruShots — retrying automatically.",
+        },
+        // First-run onboarding
+        onboarding: {
+            title: 'Welcome to GuruShots Auto Vote',
+            intro: 'This app votes on your active GuruShots challenges automatically on a schedule, keeping your exposure up without you lifting a finger.',
+            howItWorksTitle: 'How it works',
+            howItWorks: 'Log in, pick your thresholds in Settings, and toggle Auto-vote on. The app checks your challenges every few minutes and votes when needed.',
+            batteryTitle: 'Keep it running in the background',
+            batteryBody: 'To keep voting while the screen is off, exclude this app from battery optimization in your phone settings. Some vendors (Samsung, Xiaomi, OnePlus) aggressively kill background apps.',
+            gotIt: 'Got it',
         },
         // Menu translations
         menu: {

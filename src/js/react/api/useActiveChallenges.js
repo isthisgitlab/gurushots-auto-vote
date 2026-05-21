@@ -24,11 +24,26 @@ export function useActiveChallenges() {
         // `loading` true→false there busts the ChallengesContext value
         // memo every interval even when the payload is unchanged.
         if (!skipCleanup) setLoading(true);
-        setError(null);
 
         try {
             const settings = await window.api.getSettings();
             const result = await window.api.getActiveChallenges(settings.token);
+
+            // The api-client returns null after exhausting retries on a
+            // transient network/5xx failure. With a token present that's a
+            // fetch failure, not an empty challenge list — surface it (so the
+            // UI can show a "retrying" banner) and keep the last-known
+            // challenges on screen rather than blanking them on a blip.
+            if (settings.token && result == null) {
+                setError(new Error('fetch_failed'));
+                return;
+            }
+
+            // Reached a valid response — clear any prior transient error here
+            // (not at the top of refetch) so a repeatedly-failing 60s background
+            // refresh doesn't clear-then-re-raise the banner on every tick.
+            setError(null);
+
             const challenges = result?.challenges || [];
 
             // Dedup against the previous payload. The 60s auto-refresh

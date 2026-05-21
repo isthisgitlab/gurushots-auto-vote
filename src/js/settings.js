@@ -41,6 +41,7 @@ const getDefaultSettings = () => {
         timezone: 'Europe/Riga',
         customTimezones: [],
         language: 'en', // Default language
+        onboardingCompleted: false, // First-run welcome dismissed? (app-level flag, same class as apiTimeout)
         // Timing settings (stored in user-friendly units)
         apiTimeout: 30, // API request timeout in seconds (default: 30 seconds)
         apiMaxRetries: 3, // Retries for transient API failures (network/timeout/429/5xx). 0 disables.
