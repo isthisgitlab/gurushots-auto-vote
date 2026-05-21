@@ -12,6 +12,19 @@ const settings = require('../settings');
 const runtime = require('../runtime');
 const { FORM_CONTENT_TYPE } = require('./constants');
 
+// A custom axios adapter must enforce validateStatus itself — axios does not
+// post-process an adapter's resolved value — so non-2xx responses must reject
+// with the response attached. That's what lets makePostRequest's retry/backoff
+// classify 429/5xx as retryable and surface other 4xx (e.g. invalid token) as
+// terminal, instead of handing an error body back to callers as a "success".
+// Shared by both the Capacitor and headless adapters below.
+const finalizeAdapterResponse = (response) => {
+    if (response.status >= 200 && response.status < 300) return response;
+    const err = new Error(`Request failed with status code ${response.status}`);
+    err.response = response;
+    throw err;
+};
+
 // Capacitor adapter: routes axios requests through CapacitorHttp's native
 // OkHttp client (Android) so we can set headers that browser fetch can't
 // (host, user-agent, etc. — the iOS-spoof in randomizer.js depends on it).
@@ -20,11 +33,6 @@ let capacitorAdapter = null;
 const getCapacitorHttpAdapter = () => {
     if (capacitorAdapter) return capacitorAdapter;
     const { CapacitorHttp } = require('@capacitor/core');
-    // TODO: unlike the headless adapter, this resolves for ALL statuses and
-    // does not enforce validateStatus — so on the Capacitor foreground path a
-    // 429/5xx returns the error body as "success" and the retry/backoff layer
-    // never fires. Aligning it (reject non-2xx) is deferred: it changes live
-    // foreground error/auth flows that aren't re-verified here.
     capacitorAdapter = async (config) => {
         const response = await CapacitorHttp.request({
             method: (config.method || 'get').toUpperCase(),
@@ -34,13 +42,16 @@ const getCapacitorHttpAdapter = () => {
             connectTimeout: config.timeout,
             readTimeout: config.timeout,
         });
-        return {
+        // Throwing here surfaces as a rejection from this async adapter, so a
+        // 429/5xx on the foreground path now reaches the retry layer instead
+        // of being mistaken for a successful response.
+        return finalizeAdapterResponse({
             data: response.data,
             status: response.status,
             statusText: '',
             headers: response.headers || {},
             config,
-        };
+        });
     };
     return capacitorAdapter;
 };
@@ -91,24 +102,24 @@ const getHeadlessHttpAdapter = () => {
                     } catch {
                         /* non-JSON body — return the raw string */
                     }
-                    const response = { data, status: parsed.status, statusText: '', headers: parsed.headers || {}, config };
-                    // A custom adapter must enforce validateStatus itself (axios
-                    // doesn't post-adapter), so non-2xx rejects with the response
-                    // attached — that's what lets makePostRequest's retry/backoff
-                    // classify 429/5xx and surface 4xx.
-                    if (parsed.status >= 200 && parsed.status < 300) {
-                        resolve(response);
-                    } else {
-                        const err = new Error(`Request failed with status code ${parsed.status}`);
-                        err.response = response;
-                        reject(err);
-                    }
+                    const response = {
+                        data,
+                        status: parsed.status,
+                        statusText: '',
+                        headers: parsed.headers || {},
+                        config,
+                    };
+                    // finalizeAdapterResponse throws on non-2xx (with the
+                    // response attached) — that throw is caught by the
+                    // surrounding catch below and rejected, so the retry/backoff
+                    // layer classifies it; otherwise we resolve the 2xx response.
+                    const finalized = finalizeAdapterResponse(response);
+                    resolve(finalized);
                 } catch (err) {
                     reject(err);
                 }
             });
-            const body =
-                typeof config.data === 'string' ? config.data : config.data ? JSON.stringify(config.data) : '';
+            const body = typeof config.data === 'string' ? config.data : config.data ? JSON.stringify(config.data) : '';
             globalThis.AndroidHeadlessHttp.request(
                 id,
                 (config.method || 'get').toUpperCase(),

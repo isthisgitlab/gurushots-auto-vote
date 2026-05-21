@@ -403,6 +403,36 @@ describe('api-client', () => {
             runtime.isCapacitor.mockReturnValue(false);
         });
 
+        test('CapacitorHttp adapter rejects non-2xx so retry/backoff can classify it', async () => {
+            // Regression guard: CapacitorHttp.request resolves for ALL statuses,
+            // so before finalizeAdapterResponse the foreground path treated a
+            // 429/5xx error body as a success and the retry layer never fired.
+            const runtime = require('../../src/js/runtime');
+            runtime.isCapacitor.mockReturnValue(true);
+
+            let capturedAdapter;
+            axios.mockImplementationOnce(async (config) => {
+                capturedAdapter = config.adapter;
+                return { status: 200, headers: {}, data: {} };
+            });
+            await makePostRequest(mockUrl, createCommonHeaders(mockToken), mockData);
+
+            const { CapacitorHttp } = require('@capacitor/core');
+            CapacitorHttp.request.mockResolvedValueOnce({
+                data: { retry_after: 1 },
+                status: 503,
+                headers: {},
+            });
+
+            await expect(
+                capturedAdapter({ method: 'post', url: mockUrl, headers: {}, data: '' }),
+            ).rejects.toMatchObject({
+                response: { status: 503, data: { retry_after: 1 } },
+            });
+
+            runtime.isCapacitor.mockReturnValue(false);
+        });
+
         test('should log API response with full data', async () => {
             const logger = require('../../src/js/logger');
 
@@ -604,7 +634,9 @@ describe('api-client', () => {
                     );
                 }),
             };
-            await expect(capturedAdapter({ method: 'post', url: mockUrl, headers: {}, data: '' })).rejects.toMatchObject({
+            await expect(
+                capturedAdapter({ method: 'post', url: mockUrl, headers: {}, data: '' }),
+            ).rejects.toMatchObject({
                 response: { status: 503, data: { retry_after: 1 } },
             });
 
@@ -646,9 +678,7 @@ describe('api-client', () => {
             jest.useFakeTimers();
             const err = httpError(429);
             err.response.headers = { 'retry-after': '2' };
-            axios
-                .mockRejectedValueOnce(err)
-                .mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
+            axios.mockRejectedValueOnce(err).mockResolvedValueOnce({ status: 200, headers: {}, data: { ok: true } });
 
             const promise = makePostRequest(mockUrl, headers, mockData);
             await jest.advanceTimersByTimeAsync(3000);

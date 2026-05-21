@@ -9,16 +9,16 @@
  * No-op on Electron, CLI, and non-Capacitor builds. The plugin is
  * lazy-required so non-Capacitor bundles never resolve it.
  *
+ * Scope: this controls ONLY the persistent notification. Since M3 the actual
+ * background voting cycle runs natively in AutoVoteService's headless WebView,
+ * driven by AlarmManager — not a JS setInterval (which dies with the WebView).
+ * Doze-exact 1-min precision is handled there via setExactAndAllowWhileIdle();
+ * see AutoVoteService.kt and NativeAutovoteBridge.js.
+ *
  * Limitations (documented for the next person who looks at this):
- *  - The plugin keeps the process alive but does not run JS in the
- *    background by itself. The cycle loop continues to live in the
- *    React tree's setInterval; Doze / battery-saver can still pause
- *    timers when the phone is in deep sleep. For 1-min last-minute
- *    precision we'd need AlarmManager.setExactAndAllowWhileIdle()
- *    via a custom plugin or Capacitor 8's BackgroundRunner.
- *  - Vendor battery killers (Samsung / Xiaomi / OnePlus) may still
- *    kill the service. First-launch onboarding should prompt the
- *    user to whitelist the app per-vendor.
+ *  - Vendor battery killers (Samsung / Xiaomi / OnePlus) may still kill the
+ *    service. First-run onboarding should prompt the user to exclude the app
+ *    from battery optimization per-vendor.
  */
 
 const runtime = require('../runtime');
