@@ -40,6 +40,81 @@ const getCapacitorHttpAdapter = () => {
     return capacitorAdapter;
 };
 
+// Headless background-service adapter: routes axios through a native
+// @JavascriptInterface (AndroidHeadlessHttp) backed by OkHttp, since the
+// bare service WebView has no Capacitor runtime / CapacitorHttp.
+//
+// Asynchronous by design: a synchronous bridge would block the WebView's
+// JS thread for the whole network round-trip. Instead `request` returns
+// immediately, native runs OkHttp off-thread, and posts the result back
+// by calling globalThis.__gsResolveHeadlessHttp(id, resultJson) — where
+// resultJson is a JSON string { status, body, headers }.
+let headlessReqSeq = 0;
+const headlessPending = new Map();
+const ensureHeadlessResolver = () => {
+    if (globalThis.__gsResolveHeadlessHttp) return;
+    globalThis.__gsResolveHeadlessHttp = (id, resultJson) => {
+        const cb = headlessPending.get(id);
+        if (cb) {
+            headlessPending.delete(id);
+            cb(resultJson);
+        }
+    };
+};
+
+let headlessAdapter = null;
+const getHeadlessHttpAdapter = () => {
+    if (headlessAdapter) return headlessAdapter;
+    ensureHeadlessResolver();
+    headlessAdapter = (config) =>
+        new Promise((resolve, reject) => {
+            const id = ++headlessReqSeq;
+            headlessPending.set(id, (resultJson) => {
+                try {
+                    const parsed = JSON.parse(resultJson);
+                    // A transport/network failure on the native side — reject so
+                    // the retry layer treats it as a (retryable) no-response error.
+                    if (parsed.error) {
+                        reject(new Error(parsed.error));
+                        return;
+                    }
+                    // The API returns JSON; parse the body so callers get an
+                    // object, matching CapacitorHttp/axios. Leave non-JSON as-is.
+                    let data = parsed.body;
+                    try {
+                        data = JSON.parse(parsed.body);
+                    } catch {
+                        /* non-JSON body — return the raw string */
+                    }
+                    const response = { data, status: parsed.status, statusText: '', headers: parsed.headers || {}, config };
+                    // A custom adapter must enforce validateStatus itself (axios
+                    // doesn't post-adapter), so non-2xx rejects with the response
+                    // attached — that's what lets makePostRequest's retry/backoff
+                    // classify 429/5xx and surface 4xx.
+                    if (parsed.status >= 200 && parsed.status < 300) {
+                        resolve(response);
+                    } else {
+                        const err = new Error(`Request failed with status code ${parsed.status}`);
+                        err.response = response;
+                        reject(err);
+                    }
+                } catch (err) {
+                    reject(err);
+                }
+            });
+            const body =
+                typeof config.data === 'string' ? config.data : config.data ? JSON.stringify(config.data) : '';
+            globalThis.AndroidHeadlessHttp.request(
+                id,
+                (config.method || 'get').toUpperCase(),
+                config.url,
+                JSON.stringify(config.headers || {}),
+                body,
+            );
+        });
+    return headlessAdapter;
+};
+
 // Upper bound on how long a single request will block while retrying.
 // A server-sent cooldown longer than this (e.g. a multi-minute 429
 // Retry-After) is left for the scheduler's next cycle rather than
@@ -111,7 +186,9 @@ const makePostRequest = async (url, headers, data = '') => {
                 data,
                 timeout: settings.getSetting('apiTimeout') * 1000, // Convert seconds to milliseconds
             };
-            if (runtime.isCapacitor()) {
+            if (runtime.isHeadlessService()) {
+                requestConfig.adapter = getHeadlessHttpAdapter();
+            } else if (runtime.isCapacitor()) {
                 requestConfig.adapter = getCapacitorHttpAdapter();
             }
             const response = await axios(requestConfig);

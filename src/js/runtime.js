@@ -20,9 +20,16 @@ const isCapacitor = () => {
     return cap != null && typeof cap.isNativePlatform === 'function';
 };
 
+// The Android background service runs the JS in a bare WebView with no
+// Capacitor runtime, and injects this flag so the storage and HTTP layers
+// route through the native @JavascriptInterface bridges instead of
+// @capacitor/preferences / CapacitorHttp.
+const isHeadlessService = () => globalThis.__GS_HEADLESS__ === true;
+
 const isCli = () => hasNode && !isElectron();
 
 const getPlatform = () => {
+    if (isHeadlessService()) return 'headless';
     if (isElectron()) return 'electron';
     if (isCapacitor()) return 'capacitor';
     if (isCli()) return 'cli';
@@ -89,6 +96,7 @@ const getUserDataDir = (appName) => {
 module.exports = {
     isElectron,
     isCapacitor,
+    isHeadlessService,
     isCli,
     getPlatform,
     isPackaged,

@@ -45,6 +45,13 @@ const getCapacitorPreferences = () => {
 const storage = {
     /** Returns the raw settings JSON string, or null if not yet written. */
     readRaw: () => {
+        if (runtime.isHeadlessService()) {
+            // Background WebView: read from the native bridge backed by the
+            // same store the app's @capacitor/preferences uses, so the token
+            // and settings stay in sync between app and background.
+            const store = globalThis.AndroidHeadlessStore;
+            return (store && store.read()) || null;
+        }
         if (runtime.isCapacitor()) {
             return cachedSettingsJson;
         }
@@ -54,6 +61,17 @@ const storage = {
     },
     /** Writes the raw settings JSON string. Sync on Electron/CLI; cache + async write-behind on Capacitor. */
     writeRaw: (data) => {
+        if (runtime.isHeadlessService()) {
+            // Persist through the native bridge to the shared store; the
+            // commit is synchronous so a later read() in the same cycle
+            // sees the new value.
+            try {
+                globalThis.AndroidHeadlessStore?.write(data);
+            } catch (err) {
+                logger.withCategory('settings').error('Headless store write failed:', err);
+            }
+            return;
+        }
         if (runtime.isCapacitor()) {
             // Update the cache so synchronous reads see the new value
             // immediately, then fire async write-behind to Preferences.

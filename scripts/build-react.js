@@ -5,6 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 
 const reactDir = path.join(__dirname, '..', 'src', 'js', 'react');
+const jsDir = path.join(__dirname, '..', 'src', 'js');
 const distDir = path.join(__dirname, '..', 'dist');
 
 // Entry points for each page
@@ -13,6 +14,9 @@ const entryPoints = {
     app: path.join(reactDir, 'pages', 'App.jsx'),
     logs: path.join(reactDir, 'pages', 'Logs.jsx'),
     capacitor: path.join(reactDir, 'pages', 'Capacitor.jsx'),
+    // Android background service entry — runs in a bare WebView (no
+    // Capacitor runtime) owned by AutoVoteService. Not a React page.
+    headless: path.join(jsDir, 'headless', 'index.js'),
 };
 
 // Capacitor entry point. Capacitor copies dist/ wholesale into the
@@ -37,6 +41,22 @@ const capacitorIndexHtml = `<!doctype html>
 </html>
 `;
 
+// Headless background document. Loaded by AutoVoteService in a bare
+// WebView (no Capacitor). It sets the headless flag before the bundle
+// executes so runtime.isHeadlessService() is true at module load, then
+// the bundle installs window.GS.runOneCycle() for the service to call.
+const headlessHtml = `<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>GuruShots Auto Vote — background</title>
+        <script>window.__GS_HEADLESS__ = true;</script>
+        <script defer src="headless-bundle.js"></script>
+    </head>
+    <body></body>
+</html>
+`;
+
 // Check if watch mode is enabled
 const isWatch = process.argv.includes('--watch');
 
@@ -51,6 +71,8 @@ async function buildReact() {
     // Emit the Capacitor entry point. Electron ignores it; the Android
     // WebView treats it as the app's root document.
     fs.writeFileSync(path.join(distDir, 'index.html'), capacitorIndexHtml);
+    // Background service document (loaded by AutoVoteService's WebView).
+    fs.writeFileSync(path.join(distDir, 'headless.html'), headlessHtml);
 
     const commonOptions = {
         bundle: true,
@@ -190,6 +212,11 @@ async function buildReact() {
         // native bridge proxies (Preferences.set, Filesystem.writeFile,
         // ForegroundService.startForegroundService, ...) actually work.
         capacitor: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
+        // Headless background entry: like the Electron entries, externalize
+        // Capacitor packages — the headless cycle never touches them (it
+        // uses the native AndroidHeadless* @JavascriptInterfaces), so the
+        // require shim's empty object is never accessed.
+        headless: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
     };
 
     try {

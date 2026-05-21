@@ -9,34 +9,48 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import android.webkit.ConsoleMessage
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.core.app.NotificationCompat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import org.json.JSONObject
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Foreground Service that owns the native background voting loop.
+ * Foreground Service that owns background voting.
  *
- * Lifecycle:
- *   ACTION_START — promote to foreground with persistent notification,
- *                  schedule the first alarm via AlarmManager. Returns
- *                  START_STICKY so the OS restarts us if killed.
- *   ACTION_RUN_CYCLE — fired by AutoVoteAlarmReceiver. Acquires a
- *                  wakelock, runs one voting cycle, updates the
- *                  notification, schedules the next alarm.
- *   ACTION_STOP — cancel pending alarm, stop foreground, stop self.
+ * The native AlarmManager/Doze/wakelock/notification scaffolding is kept
+ * (it survives the app being swiped from recents and Doze deep-sleep),
+ * but the per-cycle work now runs the SHARED JS voting strategy in a
+ * service-owned headless WebView instead of a Kotlin re-implementation —
+ * so boost / turbo / auto-fill / last-minute reach full parity with the
+ * desktop scheduler from one codebase.
  *
- * The Service runs whether the WebView / Activity is alive or not,
- * which is the whole point of this plugin.
+ * Per cycle: an alarm fires -> handleRunCycle() acquires a wakelock and
+ * calls window.GS.runOneCycle() in the WebView. The JS reaches the
+ * network through AndroidHeadlessHttp (async OkHttp) and settings through
+ * AndroidHeadlessStore (the same SharedPreferences @capacitor/preferences
+ * uses), then reports {ok, nextDelayMs} via AndroidHeadlessBridge so we
+ * schedule the next alarm at the JS-computed cadence. A watchdog releases
+ * the wakelock and reschedules if the JS never reports back.
  */
 class AutoVoteService : Service() {
 
@@ -54,10 +68,40 @@ class AutoVoteService : Service() {
         @Volatile var lastError: String? = null
 
         private const val DEFAULT_CYCLE_INTERVAL_MS = 3L * 60L * 1000L
+        private const val INITIAL_DELAY_MS = 1_000L
+        // Retry the page is loading delay — first alarm can land before the
+        // WebView finishes loading the headless bundle.
+        private const val PAGE_RETRY_MS = 3_000L
+        // Watchdog: if JS never reports completion, recover after this long.
+        private const val CYCLE_TIMEOUT_MS = 120_000L
+        // Clamp JS-supplied cadence to a sane band (1s .. 6h).
+        private const val MAX_DELAY_MS = 6L * 60L * 60L * 1000L
+        // @capacitor/preferences store the JS settings module reads/writes.
+        private const val PREFS_FILE = "CapacitorStorage"
+        private const val SETTINGS_KEY = "gurushots-settings"
+        private const val HEADLESS_URL = "file:///android_asset/public/headless.html"
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var cycleJob: Job? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var webView: WebView? = null
+    @Volatile private var pageReady = false
+    private val cycleDone = AtomicBoolean(true)
+    private var cycleWakeLock: PowerManager.WakeLock? = null
+
+    private val http: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
+
+    private val cycleWatchdog = Runnable {
+        Log.w(TAG, "Cycle watchdog fired — JS did not report completion in time")
+        lastError = "cycle-timeout"
+        completeCycle(-1L)
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -87,7 +131,8 @@ class AutoVoteService : Service() {
         cycleCount = 0
         lastError = null
         startForegroundNotification("Auto-vote starting…")
-        scheduleNextAlarm(initial = true)
+        mainHandler.post { createWebView() }
+        scheduleNextAlarm(INITIAL_DELAY_MS)
     }
 
     private fun handleRunCycle() {
@@ -95,48 +140,171 @@ class AutoVoteService : Service() {
             Log.i(TAG, "RUN_CYCLE received but service not in running state — ignoring")
             return
         }
-        // Run the cycle on an IO coroutine. We allow a fresh job per
-        // alarm tick; the previous job is cancelled to avoid overlap
-        // if a previous cycle is still in flight when the next alarm
-        // fires (rare but possible on slow networks).
-        cycleJob?.cancel()
-        cycleJob = scope.launch {
-            val wakeLock = acquireWakelock()
-            try {
-                val started = System.currentTimeMillis()
-                Log.i(TAG, "Cycle ${cycleCount + 1} starting")
-                val result = withContext(Dispatchers.IO) {
-                    AutoVoteCycle.run(this@AutoVoteService)
-                }
-                cycleCount += 1
-                lastRunAtMillis = System.currentTimeMillis()
-                lastError = result.error
-                val durationMs = lastRunAtMillis - started
-                val statusText = formatStatus(result, durationMs)
-                updateNotification(statusText)
-                Log.i(TAG, "Cycle $cycleCount done: $statusText")
-            } catch (t: Throwable) {
-                lastError = t.message ?: t.javaClass.simpleName
-                updateNotification("Last cycle error: $lastError")
-                Log.e(TAG, "Cycle threw", t)
-            } finally {
-                wakeLock?.release()
-                if (isRunning) scheduleNextAlarm(initial = false)
+        mainHandler.post {
+            if (webView == null) createWebView()
+            if (!pageReady) {
+                Log.i(TAG, "Headless page not ready yet — retrying shortly")
+                scheduleNextAlarm(PAGE_RETRY_MS)
+                return@post
+            }
+            cycleDone.set(false)
+            cycleWakeLock = acquireWakelock()
+            mainHandler.postDelayed(cycleWatchdog, CYCLE_TIMEOUT_MS)
+            Log.i(TAG, "Cycle ${cycleCount + 1} starting (JS)")
+            webView?.evaluateJavascript(
+                "(function(){try{" +
+                    "if(window.GS&&window.GS.runOneCycle){window.GS.runOneCycle();}" +
+                    "else{AndroidHeadlessBridge.onCycleComplete(JSON.stringify({ok:false,error:'not-loaded'}));}" +
+                    "}catch(e){AndroidHeadlessBridge.onCycleComplete(JSON.stringify({ok:false,error:String(e)}));}})()",
+                null,
+            )
+        }
+    }
+
+    /** Single-shot cycle completion: cancel the watchdog, release the wakelock, schedule the next alarm. */
+    private fun completeCycle(nextDelayMs: Long) {
+        mainHandler.post {
+            if (!cycleDone.compareAndSet(false, true)) return@post
+            mainHandler.removeCallbacks(cycleWatchdog)
+            cycleWakeLock?.let { if (it.isHeld) it.release() }
+            cycleWakeLock = null
+            cycleCount += 1
+            lastRunAtMillis = System.currentTimeMillis()
+            updateNotification(formatStatus())
+            if (isRunning) {
+                val delay = if (nextDelayMs in 1_000L..MAX_DELAY_MS) nextDelayMs else cycleIntervalMs()
+                Log.i(TAG, "Cycle $cycleCount done; next in ${delay}ms")
+                scheduleNextAlarm(delay)
             }
         }
     }
 
     private fun handleStop() {
         isRunning = false
-        cycleJob?.cancel()
+        mainHandler.removeCallbacks(cycleWatchdog)
         cancelPendingAlarm()
+        cycleWakeLock?.let { if (it.isHeld) it.release() }
+        cycleWakeLock = null
+        mainHandler.post {
+            webView?.destroy()
+            webView = null
+            pageReady = false
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
-        cycleJob?.cancel()
+        mainHandler.removeCallbacks(cycleWatchdog)
+        mainHandler.post {
+            webView?.destroy()
+            webView = null
+        }
         super.onDestroy()
+    }
+
+    // ---------- Headless WebView ----------
+
+    private fun createWebView() {
+        if (webView != null) return
+        Log.i(TAG, "Creating headless WebView")
+        val wv = WebView(this)
+        wv.settings.javaScriptEnabled = true
+        wv.settings.domStorageEnabled = true
+        wv.settings.allowFileAccess = true
+        wv.addJavascriptInterface(HeadlessHttp(), "AndroidHeadlessHttp")
+        wv.addJavascriptInterface(HeadlessStore(), "AndroidHeadlessStore")
+        wv.addJavascriptInterface(HeadlessBridge(), "AndroidHeadlessBridge")
+        wv.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(cm: ConsoleMessage): Boolean {
+                Log.i("$TAG/JS", "${cm.message()} (${cm.sourceId()}:${cm.lineNumber()})")
+                return true
+            }
+        }
+        wv.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                pageReady = true
+                Log.i(TAG, "Headless page loaded: $url")
+            }
+        }
+        pageReady = false
+        wv.loadUrl(HEADLESS_URL)
+        webView = wv
+    }
+
+    /** OkHttp-backed HTTP bridge. Async so the WebView's JS thread never blocks on network. */
+    inner class HeadlessHttp {
+        @android.webkit.JavascriptInterface
+        fun request(id: Int, method: String, url: String, headersJson: String, body: String) {
+            val req = try {
+                buildRequest(method, url, headersJson, body)
+            } catch (t: Throwable) {
+                resolveHttp(id, JSONObject().put("error", t.message ?: "bad-request"))
+                return
+            }
+            http.newCall(req).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    resolveHttp(id, JSONObject().put("error", e.message ?: "network-error"))
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use { resp ->
+                        val bodyStr = resp.body?.string() ?: ""
+                        val headersObj = JSONObject()
+                        for (name in resp.headers.names()) headersObj.put(name.lowercase(Locale.US), resp.header(name))
+                        resolveHttp(
+                            id,
+                            JSONObject().put("status", resp.code).put("body", bodyStr).put("headers", headersObj),
+                        )
+                    }
+                }
+            })
+        }
+    }
+
+    private fun buildRequest(method: String, url: String, headersJson: String, body: String): Request {
+        val mediaType = "application/x-www-form-urlencoded; charset=utf-8".toMediaType()
+        val builder = Request.Builder().url(url).method(method.uppercase(Locale.US), body.toRequestBody(mediaType))
+        val headers = JSONObject(headersJson)
+        val keys = headers.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            builder.header(key, headers.optString(key, ""))
+        }
+        return builder.build()
+    }
+
+    private fun resolveHttp(id: Int, payload: JSONObject) {
+        val js = "window.__gsResolveHeadlessHttp && window.__gsResolveHeadlessHttp($id, ${JSONObject.quote(payload.toString())});"
+        mainHandler.post { webView?.evaluateJavascript(js, null) }
+    }
+
+    /** Settings bridge — same store @capacitor/preferences uses, so token/settings stay in sync. */
+    inner class HeadlessStore {
+        @android.webkit.JavascriptInterface
+        fun read(): String? = getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null)
+
+        @android.webkit.JavascriptInterface
+        fun write(data: String) {
+            getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(SETTINGS_KEY, data).apply()
+        }
+    }
+
+    /** Cycle-completion bridge — JS reports {ok, nextDelayMs, error} when a cycle finishes. */
+    inner class HeadlessBridge {
+        @android.webkit.JavascriptInterface
+        fun onCycleComplete(json: String) {
+            var delay = -1L
+            try {
+                val o = JSONObject(json)
+                delay = o.optLong("nextDelayMs", -1L)
+                lastError = if (o.has("error") && o.optString("error", "").isNotEmpty()) o.optString("error") else null
+            } catch (t: Throwable) {
+                Log.w(TAG, "Bad onCycleComplete payload", t)
+            }
+            Log.i(TAG, "Cycle reported complete: nextDelayMs=$delay error=$lastError")
+            completeCycle(delay)
+        }
     }
 
     // ---------- AlarmManager ----------
@@ -154,29 +322,24 @@ class AutoVoteService : Service() {
     }
 
     private fun cycleIntervalMs(): Long {
-        // Read checkFrequencyMin from the persisted settings JSON.
-        // Fall back to 3 minutes on parse error so a corrupted settings
-        // store does not silently stop voting.
         val configured = AutoVoteSettings.read(this).normalIntervalSeconds
         return if (configured > 0) configured * 1000L else DEFAULT_CYCLE_INTERVAL_MS
     }
 
-    private fun scheduleNextAlarm(initial: Boolean) {
+    private fun scheduleNextAlarm(delayMs: Long) {
         val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val triggerAt = System.currentTimeMillis() + if (initial) 1_000L else cycleIntervalMs()
+        val triggerAt = System.currentTimeMillis() + delayMs.coerceAtLeast(1_000L)
         try {
-            // setExactAndAllowWhileIdle is the only Android primitive
-            // that pierces Doze for sub-15-min cadence. Android 12+
-            // requires SCHEDULE_EXACT_ALARM permission; if the user
-            // has not granted it, fall back to setAndAllowWhileIdle
-            // which is best-effort but does not throw.
+            // setExactAndAllowWhileIdle is the only Android primitive that
+            // pierces Doze for sub-15-min cadence. Android 12+ requires
+            // SCHEDULE_EXACT_ALARM; without it, fall back to the inexact
+            // (best-effort) variant which does not throw.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !am.canScheduleExactAlarms()) {
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent())
             } else {
                 am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent())
             }
         } catch (sec: SecurityException) {
-            // Some OEMs revoke exact-alarm permission silently. Fall back.
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, alarmIntent())
         }
     }
@@ -253,13 +416,9 @@ class AutoVoteService : Service() {
         nm.notify(NOTIFICATION_ID, buildNotification(text))
     }
 
-    private fun formatStatus(result: AutoVoteCycle.Result, durationMs: Long): String {
+    private fun formatStatus(): String {
         val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
-        return if (result.error != null) {
-            "Last error at $time: ${result.error}"
-        } else {
-            "Voted ${result.votedCount} of ${result.processedCount} at $time (${durationMs}ms)"
-        }
+        return lastError?.let { "Last error at $time: $it" } ?: "Last cycle at $time (#$cycleCount)"
     }
 
     private fun acquireWakelock(): PowerManager.WakeLock? {
@@ -270,7 +429,7 @@ class AutoVoteService : Service() {
                 "GuruShotsAutoVote::CycleWakelock",
             )
             wl.setReferenceCounted(false)
-            wl.acquire(60_000L) // 1-minute upper bound; cycle should be much faster
+            wl.acquire(CYCLE_TIMEOUT_MS) // upper bound; released as soon as the cycle reports back
             wl
         } catch (t: Throwable) {
             Log.w(TAG, "Failed to acquire wakelock", t)

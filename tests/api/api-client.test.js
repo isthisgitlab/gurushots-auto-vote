@@ -21,6 +21,7 @@ jest.mock('../../src/js/api/randomizer', () => ({
 // Mock the runtime module so we can flip isCapacitor() per-test.
 jest.mock('../../src/js/runtime', () => ({
     isCapacitor: jest.fn(() => false),
+    isHeadlessService: jest.fn(() => false),
     isElectron: jest.fn(() => false),
     isCli: jest.fn(() => true),
     getPlatform: jest.fn(() => 'cli'),
@@ -509,6 +510,80 @@ describe('api-client', () => {
 
             expect(result).toBeNull();
             expect(axios).toHaveBeenCalledTimes(1);
+        });
+
+        test('uses the headless native HTTP adapter when running in the background service', async () => {
+            const runtime = require('../../src/js/runtime');
+            runtime.isHeadlessService.mockReturnValue(true);
+
+            let capturedAdapter;
+            axios.mockImplementationOnce(async (config) => {
+                capturedAdapter = config.adapter;
+                return { status: 200, headers: {}, data: { ok: true } };
+            });
+            await makePostRequest(mockUrl, headers, mockData);
+
+            // The headless adapter (not the CapacitorHttp one) should be attached.
+            expect(typeof capturedAdapter).toBe('function');
+
+            // Drive the adapter directly. The native interface is async: it
+            // returns immediately and posts the result back by invoking the
+            // global resolver, which the adapter wired up.
+            globalThis.AndroidHeadlessHttp = {
+                request: jest.fn((id) => {
+                    globalThis.__gsResolveHeadlessHttp(
+                        id,
+                        JSON.stringify({ status: 201, body: JSON.stringify({ hello: 'native' }), headers: { x: '1' } }),
+                    );
+                }),
+            };
+            const adapterResult = await capturedAdapter({
+                method: 'post',
+                url: 'https://api.gurushots.com/headless-test',
+                headers: { foo: 'bar' },
+                data: 'payload',
+            });
+
+            expect(globalThis.AndroidHeadlessHttp.request).toHaveBeenCalledWith(
+                expect.any(Number),
+                'POST',
+                'https://api.gurushots.com/headless-test',
+                JSON.stringify({ foo: 'bar' }),
+                'payload',
+            );
+            expect(adapterResult.status).toBe(201);
+            expect(adapterResult.data).toEqual({ hello: 'native' });
+            expect(adapterResult.headers).toEqual({ x: '1' });
+
+            runtime.isHeadlessService.mockReturnValue(false);
+            delete globalThis.AndroidHeadlessHttp;
+        });
+
+        test('the headless adapter rejects non-2xx so retry/backoff can classify it', async () => {
+            const runtime = require('../../src/js/runtime');
+            runtime.isHeadlessService.mockReturnValue(true);
+
+            let capturedAdapter;
+            axios.mockImplementationOnce(async (config) => {
+                capturedAdapter = config.adapter;
+                return { status: 200, headers: {}, data: {} };
+            });
+            await makePostRequest(mockUrl, headers, mockData);
+
+            globalThis.AndroidHeadlessHttp = {
+                request: jest.fn((id) => {
+                    globalThis.__gsResolveHeadlessHttp(
+                        id,
+                        JSON.stringify({ status: 503, body: JSON.stringify({ retry_after: 1 }), headers: {} }),
+                    );
+                }),
+            };
+            await expect(capturedAdapter({ method: 'post', url: mockUrl, headers: {}, data: '' })).rejects.toMatchObject({
+                response: { status: 503, data: { retry_after: 1 } },
+            });
+
+            runtime.isHeadlessService.mockReturnValue(false);
+            delete globalThis.AndroidHeadlessHttp;
         });
 
         test('honors a short 429 retry_after then retries', async () => {
