@@ -144,8 +144,14 @@
             boostImageIndex: 'Boost foto',
             boostImageIndexDesc:
                 'Kuram foto pielietot Boost: 1 = pirmais, 2 = otrais utt. Izmanto 0 priekš pēdējā foto. Ja Turbo jau ir uz šī foto, Boost pāriet uz iepriekšējo bildi (no 1 pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusētā vērtība ir 1, tāpēc, ja abi auto-režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto.',
+            boostFillNew: 'Boost jaunam iesniegtam foto',
+            boostFillNewDesc:
+                'Ja ieslēgts, tieši pirms Boost tiek iesniegts jauns foto (izmantojot tavus automātiskās aizpildes tagu noteikumus) un Boost tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Boost foto.',
             turboApplyWhenBoostActive: 'Pielietot Turbo Boost laikā',
             turboApplyWhenBoostActiveDesc: 'Ja izslēgts, nepielieto Turbo, kamēr šim izaicinājumam ir pieejams Boost',
+            turboFillNew: 'Turbo jaunam iesniegtam foto',
+            turboFillNewDesc:
+                'Ja ieslēgts, tieši pirms Turbo tiek iesniegts jauns foto (izmantojot tavus automātiskās aizpildes tagu noteikumus) un Turbo tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Turbo foto; ja vēl nav neviena foto, Turbo šajā ciklā tiek izlaists.',
             playAutoTurbo: 'Spēlēt Turbo mini-spēli, lai iegūtu Turbo',
             autoTurboRunsWithAutovote: 'Automātiskā balsošana jau spēlē Turbo mini-spēli katrā ciklā',
             earnTurbo: 'Iegūt Turbo',
@@ -167,9 +173,9 @@
             fillWithoutTagMatch: 'Aizpildīt arī bez tagu sakritības',
             fillWithoutTagMatchDesc:
                 'Attiecas tikai tad, ja ir iestatīti obligātie tagi. Kad ieslēgts (noklusējums), ja neviens no taviem foto nesakrīt ar šiem tagiem, tik un tā tiek pievienots labākais pieejamais foto, lai vieta nepaliek tukša. Kad izslēgts, vieta paliek tukša, līdz parādās foto ar atbilstošu tagu.',
-            emergencyFill: 'Ārkārtas aizpilde (minūtes pirms beigām)',
+            emergencyFill: 'Ārkārtas aizpilde',
             emergencyFillDesc:
-                'Drošības tīkls, kas darbojas izaicinājuma pēdējās minūtēs, kad auto-aizpilde citādi atstātu foto vietas tukšas — vai nu tāpēc, ka auto-aizpilde ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un "Aizpildīt arī bez tagu sakritības" ir izslēgts. Kad izaicinājumam līdz beigām atlikušas tik minūtes, atlikušās vietas tiek aizpildītas ar labākajiem pieejamajiem foto, pat ja tie nesakrīt ar taviem tagiem. Tas apzināti ignorē šos iestatījumus, lai izaicinājums nebeigtos ar neizmantotām vietām. Noklusējums 5; iestati 0, lai izslēgtu. Padoms: turi šo vienādu vai mazāku par pēdējās minūtes slieksni (noklusējums 10), lai lietotne jau bieži pārbauda pēdējās minūtēs.',
+                'Drošības tīkls, kas darbojas izaicinājuma pēdējās minūtēs, kad auto-aizpilde citādi atstātu foto vietas tukšas — vai nu tāpēc, ka auto-aizpilde ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un "Aizpildīt arī bez tagu sakritības" ir izslēgts. Kad izaicinājumam līdz beigām atlicis tik daudz laika, atlikušās vietas tiek aizpildītas ar labākajiem pieejamajiem foto, pat ja tie nesakrīt ar taviem tagiem. Tas apzināti ignorē šos iestatījumus, lai izaicinājums nebeigtos ar neizmantotām vietām. Grafiskajā lietotnē ievada kā stundas un minūtes. Noklusējums 5 minūtes; iestati 0, lai izslēgtu. Padoms: turi šo vienādu vai mazāku par pēdējās minūtes slieksni (noklusējums 10), lai lietotne jau bieži pārbauda pēdējās minūtēs.',
             tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
             none: '(nav)',
             addOnePhoto: 'Pievienot vienu foto, lai aizpildītu tukšu vietu',

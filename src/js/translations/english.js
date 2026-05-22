@@ -143,9 +143,15 @@
             boostImageIndex: 'Boost Entry',
             boostImageIndexDesc:
                 'Which entry gets Boost: 1 = first, 2 = second, etc. Use 0 for the last entry. If Turbo is already on that entry, Boost moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry.',
+            boostFillNew: 'Boost a Freshly Submitted Photo',
+            boostFillNewDesc:
+                'When on, this submits a new photo (using your Auto-Fill tag rules) just before boosting and boosts that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to boosting your configured Boost Entry.',
             turboApplyWhenBoostActive: 'Apply Turbo During Boost Window',
             turboApplyWhenBoostActiveDesc:
                 'When off, skip Turbo apply if a Boost is currently available on the same challenge',
+            turboFillNew: 'Turbo a Freshly Submitted Photo',
+            turboFillNewDesc:
+                'When on, this submits a new photo (using your Auto-Fill tag rules) just before applying Turbo and applies Turbo to that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to your configured Turbo Entry; if you have no entry yet, Turbo is skipped this cycle.',
             playAutoTurbo: 'Play the Turbo mini-game now to earn Turbo',
             autoTurboRunsWithAutovote: 'Auto-vote already plays the Turbo mini-game on each cycle',
             earnTurbo: 'Earn Turbo',
@@ -167,9 +173,9 @@
             fillWithoutTagMatch: 'Fill Even Without a Tag Match',
             fillWithoutTagMatchDesc:
                 'Only matters when Must Include Tags is set. When on (default), if none of your photos match those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a matching photo exists.',
-            emergencyFill: 'Emergency Fill (minutes before end)',
+            emergencyFill: 'Emergency Fill',
             emergencyFillDesc:
-                'Safety net that runs in the last minutes of a challenge when auto-fill would otherwise leave entry slots empty — either because auto-fill is off, or because your Must Include Tags match no photo and Fill Without Tag Match is off. When a challenge is within this many minutes of closing, it fills the remaining slots with your best available photos anyway, even if they do not match your tags. This overrides those settings on purpose, so the challenge does not end with unused slots. Default 5; set to 0 to disable. Tip: keep this at or below the Last Minute Threshold (default 10) so the app is already checking frequently in the final minutes.',
+                'Safety net that runs in the last minutes of a challenge when auto-fill would otherwise leave entry slots empty — either because auto-fill is off, or because your Must Include Tags match no photo and Fill Without Tag Match is off. When a challenge is within this much time of closing, it fills the remaining slots with your best available photos anyway, even if they do not match your tags. This overrides those settings on purpose, so the challenge does not end with unused slots. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable. Tip: keep this at or below the Last Minute Threshold (default 10) so the app is already checking frequently in the final minutes.',
             tagsPlaceholder: 'e.g. sunset, beach, ocean',
             none: '(none)',
             addOnePhoto: 'Add one photo to fill an empty slot',

@@ -33,6 +33,23 @@ const getSlotsRemaining = (challenge) => {
 };
 
 /**
+ * Reflect a freshly submitted "fill-new" entry on the local challenge object
+ * so the rest of this cycle (turbo-after-boost, staggered/emergency auto-fill)
+ * sees the slot it consumed. The challenge isn't re-fetched mid-cycle, so
+ * without this getSlotsRemaining would still count the just-used slot as free
+ * and could over-submit. The minimal shape carries the conflict flags that
+ * boost/turbo entry selection reads (boosted/turbo).
+ */
+const reflectNewEntry = (challenge, imageId) => {
+    const ranking = challenge?.member?.ranking;
+    if (!ranking || !imageId) return;
+    if (!Array.isArray(ranking.entries)) ranking.entries = [];
+    // Coerce the server-supplied id to a string before it joins shared
+    // challenge state (mirrors how _postBoost stringifies the image_id).
+    ranking.entries.push({ id: String(imageId), turbo: false, boosted: false, boost: -1, boosting: false });
+};
+
+/**
  * Cycle-driven, staggered auto-fill. Submits at most one photo per
  * call; the next call (next scheduler cycle) will see the updated
  * entries.length and either skip (still too early) or submit again.
@@ -129,7 +146,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
  *   (b) a Must Include Tags filter is set, nothing matches it, and
  *       fillWithoutTagMatch is off (so the slot would stay empty).
  *
- * When the challenge is within `emergencyFill` minutes of closing and in
+ * When the challenge is within `emergencyFill` seconds of closing and in
  * one of those states, fill every remaining slot in a single submission,
  * relaxing the must-include hard filter (the whole point is "don't leave
  * slots empty at the buzzer"). There's no time to stagger this close to
@@ -154,14 +171,14 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) return 'skipped';
 
-    const emergencyMinutes = settings.getEffectiveSetting('emergencyFill', String(challengeId));
-    if (!Number.isFinite(emergencyMinutes) || emergencyMinutes <= 0) return 'disabled';
+    const emergencySeconds = settings.getEffectiveSetting('emergencyFill', String(challengeId));
+    if (!Number.isFinite(emergencySeconds) || emergencySeconds <= 0) return 'disabled';
 
     const closeTime = Number(challenge.close_time);
     if (!Number.isFinite(closeTime)) return 'skipped';
     const secondsRemaining = closeTime - now;
     if (secondsRemaining <= 0) return 'skipped';
-    if (secondsRemaining > emergencyMinutes * 60) return 'skipped'; // not in the emergency window yet
+    if (secondsRemaining > emergencySeconds) return 'skipped'; // not in the emergency window yet
 
     const slotsRemaining = getSlotsRemaining(challenge);
     if (slotsRemaining <= 0) return 'skipped';
@@ -372,10 +389,104 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     }
 };
 
+/**
+ * Submit exactly one new photo into a challenge and return its id, so the
+ * caller can immediately boost/turbo that fresh entry (the "fill new"
+ * boost/turbo options). Unlike maybeAutoFillChallenge/fillChallengeNow this
+ * returns the submitted photo id rather than a count — boost/turbo need the
+ * id to act on. Photo selection reuses the same tag rules and picker as
+ * auto-fill so "fill new" honors the user's Must/Should Include Tags config.
+ *
+ * Never submits when the challenge is already full (getSlotsRemaining guard),
+ * so callers can safely fall back to acting on an existing entry.
+ *
+ * @param {object} challenge - challenge with member.ranking.entries
+ * @param {string} token
+ * @param {{
+ *   settings: object,
+ *   logger: object,
+ *   getEligiblePhotos: function,
+ *   submitToChallenge: function,
+ * }} deps
+ * @returns {Promise<{ok: boolean, imageId: string|null, reason: string}>}
+ *   reason ∈ 'submitted'|'no-slots'|'no-eligible'|'fetch-error'|'submit-failed'|'invalid-challenge'
+ */
+const submitNewEntryForAction = async (challenge, token, deps) => {
+    const { settings, logger, getEligiblePhotos, submitToChallenge } = deps;
+    const challengeId = challenge?.id;
+    if (challengeId === undefined || challengeId === null) {
+        return { ok: false, imageId: null, reason: 'invalid-challenge' };
+    }
+
+    // Slots-full is guarded here so callers never submit beyond the limit;
+    // they fall back to acting on an existing entry instead.
+    if (getSlotsRemaining(challenge) <= 0) {
+        return { ok: false, imageId: null, reason: 'no-slots' };
+    }
+
+    const mustIncludeTags = settings.getEffectiveSetting('mustIncludeTags', String(challengeId));
+    const shouldIncludeTags = settings.getEffectiveSetting('shouldIncludeTags', String(challengeId));
+    const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
+
+    let eligible;
+    try {
+        eligible = await getEligiblePhotos(challengeId, token);
+    } catch (error) {
+        logger
+            .withCategory('autoFill')
+            .warning(
+                `fillNew: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
+                null,
+            );
+        return { ok: false, imageId: null, reason: 'fetch-error' };
+    }
+
+    const picked = pickPhotosForChallenge(challenge, eligible, 1, {
+        mustIncludeTags,
+        shouldIncludeTags,
+        fillWithoutTagMatch,
+    });
+    if (picked.length === 0) {
+        logger.withCategory('autoFill').info(`fillNew: no eligible photos for ${logger.challengeTag(challenge)}`, null);
+        return { ok: false, imageId: null, reason: 'no-eligible' };
+    }
+
+    const imageId = picked[0];
+    if (!imageId) {
+        // Defensive: pickPhotosForChallenge only returns truthy ids, but guard
+        // so an empty value never propagates to the boost/turbo image_id —
+        // applyBoostToEntry has no own null-guard (unlike applyTurbo).
+        logger
+            .withCategory('autoFill')
+            .info(`fillNew: picked an empty photo id for ${logger.challengeTag(challenge)}`, null);
+        return { ok: false, imageId: null, reason: 'no-eligible' };
+    }
+    try {
+        const result = await submitToChallenge(challengeId, [imageId], token);
+        if (result && result.ok) {
+            logger
+                .withCategory('autoFill')
+                .success(`fillNew: submitted entry ${imageId} for ${logger.challengeTag(challenge)}`, null);
+            return { ok: true, imageId, reason: 'submitted' };
+        }
+        logger
+            .withCategory('autoFill')
+            .warning(`fillNew: submit returned ok=false for ${logger.challengeTag(challenge)}`, null);
+        return { ok: false, imageId: null, reason: 'submit-failed' };
+    } catch (error) {
+        logger
+            .withCategory('autoFill')
+            .warning(`fillNew: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
+        return { ok: false, imageId: null, reason: 'submit-failed' };
+    }
+};
+
 module.exports = {
     maybeAutoFillChallenge,
     maybeEmergencyFillChallenge,
     fillChallengeNow,
+    submitNewEntryForAction,
+    reflectNewEntry,
     // exported for tests
     getSlotsRemaining,
 };

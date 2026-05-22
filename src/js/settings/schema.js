@@ -126,6 +126,16 @@ const SETTINGS_SCHEMA = {
         label: 'app.boostImageIndex',
         description: 'app.boostImageIndexDesc',
     },
+    boostFillNew: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        group: 'boost',
+        label: 'app.boostFillNew',
+        description: 'app.boostFillNewDesc',
+    },
 
     // --- Turbo ---
     useTurbo: {
@@ -177,6 +187,16 @@ const SETTINGS_SCHEMA = {
         group: 'turbo',
         label: 'app.turboApplyWhenBoostActive',
         description: 'app.turboApplyWhenBoostActiveDesc',
+    },
+    turboFillNew: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: (value) => typeof value === 'boolean',
+        validationOrder: 1,
+        group: 'turbo',
+        label: 'app.turboFillNew',
+        description: 'app.turboFillNewDesc',
     },
 
     // --- Last Hour Exposure ---
@@ -318,16 +338,15 @@ const SETTINGS_SCHEMA = {
     // larger, the early part of the window relies on the slower normal cadence
     // (it still fires, just less tightly) — see emergencyFillDesc.
     emergencyFill: {
-        type: 'number',
-        default: 5,
+        type: 'time', // Special type for hours/minutes input (stored as seconds)
+        default: 300, // 5 minutes in seconds
         perChallenge: true,
-        // 0 is the off sentinel; otherwise minutes-before-close (1-59, mirrors lastMinuteThreshold).
-        validation: (value) => Number.isInteger(value) && value >= 0 && value <= 59,
+        // 0 is the off sentinel; otherwise seconds-before-close (mirrors boostTime/turboTime).
+        validation: (value) => typeof value === 'number' && value >= 0,
         validationOrder: 1,
         group: 'autoFill',
         label: 'app.emergencyFill',
         description: 'app.emergencyFillDesc',
-        unit: 'app.minutes',
     },
     mustIncludeTags: {
         type: 'tags',
