@@ -51,8 +51,8 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 
 #### 🖥️ Grafiskā lietotne (ieteicams lielākajai daļai lietotāju)
 
-| Platforma         | Lejupielāde                                                                                                                                                            | Izmērs | Tips                  |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------- |
+| Platforma         | Lejupielāde                                                                                                                                                          | Izmērs | Tips                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------- |
 | **Windows**       | [📥 GuruShotsAutoVote-v1.0.0-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.0.0-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
 | **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.0.0-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.0.0-arm64.dmg)             | ~50 MB | DMG instalētājs       |
 | **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.0.0-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.0.0-arm64.app.zip)     | ~50 MB | App komplekts (ZIP)   |
@@ -63,16 +63,16 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 
 #### 📱 Mobilā lietotne (Android, sānielāde — bez Play Store)
 
-| Platforma                     | Lejupielāde                                                                                                                                    | Izmērs | Tips           |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------- |
+| Platforma                     | Lejupielāde                                                                                                                                  | Izmērs | Tips           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------- |
 | **Android (8.0+, sānielāde)** | [📥 GuruShotsAutoVote-v1.0.0.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.0.0.apk) | ~10 MB | Parakstīts APK |
 
 Android versija ir Capacitor apvalks ap to pašu React saskarni plus Kotlin spraudnis, kas balsošanas ciklus izpilda native līmenī fonā ar `AlarmManager` un foreground servisu. Balsošana turpinās, kad telefons ir bloķēts un lietotne aizvilkta no nesenajiem.
 
 #### 💻 Komandrinda (pieredzējušiem lietotājiem / automatizācijai)
 
-| Platforma             | Lejupielāde                                                                                                                            | Izmērs | Tips                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------- |
+| Platforma             | Lejupielāde                                                                                                                          | Izmērs | Tips                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------ | --------------------- |
 | **macOS CLI**         | [📥 gurucli-v1.0.0-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.0.0-mac)             | ~55 MB | Termināļa izpildfaila |
 | **Linux CLI (x64)**   | [📥 gurucli-v1.0.0-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.0.0-linux)         | ~50 MB | Termināļa izpildfaila |
 | **Linux CLI (ARM64)** | [📥 gurucli-v1.0.0-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.0.0-linux-arm) | ~47 MB | Termināļa izpildfaila |
@@ -250,7 +250,7 @@ Grafiskajā lietotnē rokā esošu turbo varat pielietot arī konkrētai fotogr�
 
 Kad izaicinājums ļauj iesniegt vairākas fotogrāfijas un esat atstājuši tukšas vietas, šīs vietas beigās tiek izniekotas. Ar ieslēgtu `autoFill` plānotājs iesniedz **vienu fotogrāfiju katrā ciklā**, lai tās aizpildītu, ar atstarpi `autoFillIntervalMinutes`, sākot, kad `atlikušās_sekundes ≤ atlikušās_vietas × autoFillIntervalMinutes × 60`. Atstarpe ir svarīga, jo GuruShots atšķaida balsis starp vienlaikus iesniegtiem ierakstiem, tāpēc atstatums dod katram jaunajam ierakstam neatkarīgu ekspozīciju.
 
-- **`emergencyFill`** — drošības tīkls: pēdējās N minūtēs tas aizpilda visas atlikušās vietas pat tad, kad normālie noteikumi gaidītu, un pārraksta must-include tagu filtru. `0` to atspējo; turiet to `≤ lastMinuteThreshold`, lai ātrā pēdējās minūtes kadence būtu aktīva visā logā.
+- **`emergencyFill`** — drošības tīkls: pēdējā posmā pirms beigām tas aizpilda visas atlikušās vietas pat tad, kad normālie noteikumi gaidītu, un pārraksta must-include tagu filtru. Grafiskajā lietotnē ievada kā h+m (glabā sekundēs). `0` to atspējo; turiet to `≤ lastMinuteThreshold`, lai ātrā pēdējās minūtes kadence būtu aktīva visā logā.
 - **Tagu filtri** — `mustIncludeTags` ir cietais filtrs (atbilstošas tikai fotogrāfijas ar vismaz vienu tagu); `shouldIncludeTags` ir mīkstā preference. `fillWithoutTagMatch` izlemj, kas notiek, kad must-include tagi ir iestatīti, bet nekas neatbilst: tomēr aizpildīt (noklusējums) vai atstāt vietu tukšu.
 - **Fotogrāfiju ranžēšana** — atlasītājs ranžē jūsu atbilstošās fotogrāfijas pēc, šādā secībā: tēmas atbilstības rezultāta (atslēgvārdi no izaicinājuma nosaukuma/slug/sveiciena ziņas pret katras fotogrāfijas vīzijas iezīmēm), sasniegumu skaita, kopējā balsu skaita, tad augšupielādes datuma.
 - **Manuālās pogas** — katrai kartītei ar tukšām vietām ir **`+1`** (iesniegt labāk ranžēto fotogrāfiju vienā vietā) un **`+N`** (aizpildīt visas atlikušās vietas uzreiz, ignorējot atstarpi). Manuālie klikšķi ignorē `autoFill` slēdzi un ir atspējoti, kamēr auto-balsošana darbojas.
@@ -328,14 +328,14 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 
 **Auto-aizpilde**
 
-| Iestatījums               | Noklusējums | Diapazons / vērtības | Apraksts                                                                                                                                                          |
-| ------------------------- | ----------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `autoFill`                | `false`     | bool                 | Iesniegt fotogrāfijas tukšajās foto vietās tuvu beigām (ar atstarpi, vienu katrā ciklā).                                                                          |
-| `autoFillIntervalMinutes` | `10`        | 1–60 min             | Atstarpe starp auto-aizpildes iesniegumiem.                                                                                                                       |
-| `fillWithoutTagMatch`     | `true`      | bool                 | Ja must-include tagi iestatīti, bet neviens neatbilst: tomēr aizpildīt (`true`) vai atstāt vietu tukšu (`false`).                                                 |
-| `emergencyFill`           | `5`         | `0` vai 1–59 min     | Pēdējo minūšu drošības tīkls: aizpildīt atlikušās vietas pat ja noteikumi gaidītu, pārrakstot must-include tagus. `0` = izslēgts. Turiet ≤ `lastMinuteThreshold`. |
-| `mustIncludeTags`         | `[]`        | līdz 50 tagiem       | Cietais filtrs: aizpildīt tikai ar fotogrāfijām, kas atbilst vismaz vienam no šiem tagiem.                                                                        |
-| `shouldIncludeTags`       | `[]`        | līdz 50 tagiem       | Mīkstā preference: dot priekšroku fotogrāfijām ar šiem tagiem, bet neizslēgt citas.                                                                               |
+| Iestatījums               | Noklusējums  | Diapazons / vērtības | Apraksts                                                                                                                                                                                             |
+| ------------------------- | ------------ | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoFill`                | `false`      | bool                 | Iesniegt fotogrāfijas tukšajās foto vietās tuvu beigām (ar atstarpi, vienu katrā ciklā).                                                                                                             |
+| `autoFillIntervalMinutes` | `10`         | 1–60 min             | Atstarpe starp auto-aizpildes iesniegumiem.                                                                                                                                                          |
+| `fillWithoutTagMatch`     | `true`       | bool                 | Ja must-include tagi iestatīti, bet neviens neatbilst: tomēr aizpildīt (`true`) vai atstāt vietu tukšu (`false`).                                                                                    |
+| `emergencyFill`           | `300` s (5m) | ≥ 0                  | Pēdējo minūšu drošības tīkls: aizpildīt atlikušās vietas pat ja noteikumi gaidītu, pārrakstot must-include tagus. `0` = izslēgts. Turiet ≤ `lastMinuteThreshold`. Grafiskajā lietotnē ievada kā h+m. |
+| `mustIncludeTags`         | `[]`         | līdz 50 tagiem       | Cietais filtrs: aizpildīt tikai ar fotogrāfijām, kas atbilst vismaz vienam no šiem tagiem.                                                                                                           |
+| `shouldIncludeTags`       | `[]`         | līdz 50 tagiem       | Mīkstā preference: dot priekšroku fotogrāfijām ar šiem tagiem, bet neizslēgt citas.                                                                                                                  |
 
 ## 📐 Ieteicamie iestatījumi
 

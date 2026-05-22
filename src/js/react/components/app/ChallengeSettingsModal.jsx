@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { groupSchemaEntries } from '@/utils/groupSettings';
+import { formatSettingDefault } from '@/utils/formatters';
 import { SettingInput } from './SettingInput';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -187,9 +188,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                             />
                                             <p className="text-xs text-base-content/40 mt-1">
                                                 {t('app.globalDefault')}:{' '}
-                                                {Array.isArray(globalDefault)
-                                                    ? globalDefault.join(', ') || t('app.none')
-                                                    : String(globalDefault)}
+                                                {formatSettingDefault(globalDefault, config, t)}
                                             </p>
                                         </div>
                                     );

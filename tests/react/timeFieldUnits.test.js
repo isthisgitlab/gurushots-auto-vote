@@ -1,4 +1,8 @@
-const { secondsToHoursMinutes, hoursMinutesToSeconds } = require('../../src/js/react/utils/timeFieldUnits');
+const {
+    secondsToHoursMinutes,
+    hoursMinutesToSeconds,
+    formatSecondsAsHoursMinutes,
+} = require('../../src/js/react/utils/timeFieldUnits');
 
 describe('timeFieldUnits', () => {
     describe('secondsToHoursMinutes', () => {
@@ -67,6 +71,31 @@ describe('timeFieldUnits', () => {
         test('coerces invalid input to 0', () => {
             expect(hoursMinutesToSeconds(undefined, undefined)).toBe(0);
             expect(hoursMinutesToSeconds(NaN, NaN)).toBe(0);
+        });
+    });
+
+    describe('formatSecondsAsHoursMinutes', () => {
+        test('720 → "0 hours, 12 minutes"', () => {
+            expect(formatSecondsAsHoursMinutes(720, 'hours', 'minutes')).toBe('0 hours, 12 minutes');
+        });
+
+        test('schema defaults format as whole hours', () => {
+            expect(formatSecondsAsHoursMinutes(3600, 'hours', 'minutes')).toBe('1 hours, 0 minutes');
+            expect(formatSecondsAsHoursMinutes(7200, 'hours', 'minutes')).toBe('2 hours, 0 minutes');
+        });
+
+        test('zero → "0 hours, 0 minutes"', () => {
+            expect(formatSecondsAsHoursMinutes(0, 'hours', 'minutes')).toBe('0 hours, 0 minutes');
+        });
+
+        test('invalid input coerces to "0 hours, 0 minutes"', () => {
+            expect(formatSecondsAsHoursMinutes(undefined, 'hours', 'minutes')).toBe('0 hours, 0 minutes');
+            expect(formatSecondsAsHoursMinutes(NaN, 'hours', 'minutes')).toBe('0 hours, 0 minutes');
+            expect(formatSecondsAsHoursMinutes(-100, 'hours', 'minutes')).toBe('0 hours, 0 minutes');
+        });
+
+        test('uses the provided unit labels', () => {
+            expect(formatSecondsAsHoursMinutes(720, 'stunda(s)', 'minūte(s)')).toBe('0 stunda(s), 12 minūte(s)');
         });
     });
 

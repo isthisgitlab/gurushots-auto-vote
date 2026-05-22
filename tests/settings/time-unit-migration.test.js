@@ -1,10 +1,14 @@
 /**
- * Tests for the boostTime/turboTime unit migration in loadSettings().
+ * Tests for the time-unit migrations in loadSettings().
  *
- * Pre-fix, SettingInput.jsx encoded these `type: 'time'` values as minutes
- * (h*60+m) while the runtime treated them as seconds. The migration
- * detects values produced by the buggy GUI (range [1, 1439]) and multiplies
- * by 60. Defaults (3600s, 7200s) are above this band so they pass through.
+ * 1. boostTime/turboTime: pre-fix, SettingInput.jsx encoded these
+ *    `type: 'time'` values as minutes (h*60+m) while the runtime treated
+ *    them as seconds. The migration detects values produced by the buggy
+ *    GUI (range [1, 1439]) and multiplies by 60. Defaults (3600s, 7200s)
+ *    are above this band so they pass through.
+ * 2. emergencyFill: was a plain `number` of minutes-before-close (1-59); it
+ *    is now a `time` setting in seconds. The migration multiplies stored
+ *    values in (0, 60) by 60 under the `_emergencyFillTimeMigratedV1` flag.
  */
 
 const buildFixture = (overrides = {}) => ({
@@ -133,13 +137,15 @@ describe('time-unit migration in loadSettings', () => {
         settings.loadSettings();
         const firstWrites = fs.writeFileSync.mock.calls.length;
 
-        // Now simulate that the file on disk reflects the migrated state.
+        // Now simulate that the file on disk reflects the migrated state
+        // (both time-unit migration flags set).
         setSettingsFile({
             challengeSettings: {
                 globalDefaults: { turboTime: 10800 },
                 perChallenge: {},
             },
             _timeUnitMigratedV1: true,
+            _emergencyFillTimeMigratedV1: true,
         });
 
         settings.loadSettings();
@@ -189,5 +195,107 @@ describe('time-unit migration in loadSettings', () => {
         const loaded = settings.loadSettings();
 
         expect(loaded.challengeSettings.globalDefaults.boostTime).toBe(60);
+    });
+});
+
+describe('emergencyFill minute->second migration in loadSettings', () => {
+    let settings;
+    let fs;
+
+    const setSettingsFile = (payload) => {
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue(JSON.stringify(payload));
+    };
+
+    beforeEach(() => {
+        jest.resetModules();
+        jest.clearAllMocks();
+        if (typeof global !== 'undefined') delete global.autovoteRunning;
+        if (typeof globalThis !== 'undefined') delete globalThis.autovoteRunning;
+        fs = require('node:fs');
+        settings = require('../../src/js/settings');
+    });
+
+    test('inflates a minute-encoded global default by 60 (5 -> 300)', () => {
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { emergencyFill: 5 },
+            }),
+        );
+
+        const loaded = settings.loadSettings();
+
+        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(300);
+        expect(loaded._emergencyFillTimeMigratedV1).toBe(true);
+    });
+
+    test('leaves zero untouched (means "disabled")', () => {
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { emergencyFill: 0 },
+            }),
+        );
+
+        const loaded = settings.loadSettings();
+
+        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(0);
+    });
+
+    test('leaves an already-seconds value (>= 60) untouched', () => {
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { emergencyFill: 300 },
+            }),
+        );
+
+        const loaded = settings.loadSettings();
+
+        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(300);
+        expect(loaded._emergencyFillTimeMigratedV1).toBe(true);
+    });
+
+    test('migrates per-challenge overrides independently', () => {
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { emergencyFill: 300 },
+                perChallenge: {
+                    42: { emergencyFill: 10 },
+                    99: { emergencyFill: 600 },
+                },
+            }),
+        );
+
+        const loaded = settings.loadSettings();
+
+        expect(loaded.challengeSettings.perChallenge[42].emergencyFill).toBe(600);
+        expect(loaded.challengeSettings.perChallenge[99].emergencyFill).toBe(600);
+    });
+
+    test('boundary: 59 migrates, 60 is left alone', () => {
+        setSettingsFile(
+            buildFixture({
+                globalDefaults: { emergencyFill: 59 },
+                perChallenge: { 7: { emergencyFill: 60 } },
+            }),
+        );
+
+        const loaded = settings.loadSettings();
+
+        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(59 * 60);
+        expect(loaded.challengeSettings.perChallenge[7].emergencyFill).toBe(60);
+    });
+
+    test('does not migrate when flag is already true even if minute value present', () => {
+        setSettingsFile({
+            challengeSettings: {
+                globalDefaults: { emergencyFill: 5 },
+                perChallenge: {},
+            },
+            _emergencyFillTimeMigratedV1: true,
+        });
+
+        const loaded = settings.loadSettings();
+
+        expect(loaded.challengeSettings.globalDefaults.emergencyFill).toBe(5);
     });
 });

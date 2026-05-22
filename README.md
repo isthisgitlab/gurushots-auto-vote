@@ -54,8 +54,8 @@ If you hit a rate-limit error: stop every instance, wait 5–10 minutes, then st
 
 #### 🖥️ GUI (recommended for most users)
 
-| Platform          | Download                                                                                                                                                               | Size   | Type                |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------- |
+| Platform          | Download                                                                                                                                                             | Size   | Type                |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------- |
 | **Windows**       | [📥 GuruShotsAutoVote-v1.0.0-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.0.0-x64.exe)                 | ~50 MB | Portable Executable |
 | **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.0.0-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.0.0-arm64.dmg)             | ~50 MB | DMG Installer       |
 | **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.0.0-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.0.0-arm64.app.zip)     | ~50 MB | App Bundle (ZIP)    |
@@ -66,16 +66,16 @@ If you hit a rate-limit error: stop every instance, wait 5–10 minutes, then st
 
 #### 📱 Mobile (Android sideload — no Play Store)
 
-| Platform                     | Download                                                                                                                                       | Size   | Type       |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
+| Platform                     | Download                                                                                                                                     | Size   | Type       |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------- |
 | **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.0.0.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.0.0.apk) | ~10 MB | Signed APK |
 
 The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin plugin that runs voting cycles natively in the background via `AlarmManager` and a foreground service. Voting continues with the phone locked and the app swiped away from recents.
 
 #### 💻 CLI (for power users / automation)
 
-| Platform              | Download                                                                                                                               | Size   | Type                |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------------------- |
+| Platform              | Download                                                                                                                             | Size   | Type                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------------------- |
 | **macOS CLI**         | [📥 gurucli-v1.0.0-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.0.0-mac)             | ~55 MB | Terminal Executable |
 | **Linux CLI (x64)**   | [📥 gurucli-v1.0.0-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.0.0-linux)         | ~50 MB | Terminal Executable |
 | **Linux CLI (ARM64)** | [📥 gurucli-v1.0.0-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.0.0-linux-arm) | ~47 MB | Terminal Executable |
@@ -253,7 +253,7 @@ In the GUI you can also apply a held turbo to a specific photo with its **⚡** 
 
 When a challenge allows multiple submissions and you've left slots empty, those slots are wasted at close time. With `autoFill` on, the scheduler submits **one photo per cycle** to fill them, spaced by `autoFillIntervalMinutes`, starting when `secondsRemaining ≤ slotsRemaining × autoFillIntervalMinutes × 60`. The spacing matters because GuruShots dilutes votes across entries submitted at the same moment, so staggering gives each new entry independent exposure.
 
-- **`emergencyFill`** — a safety net: in the final N minutes it fills any remaining slots even when the normal rules would wait, and overrides the must-include tag filter. `0` disables it; keep it `≤ lastMinuteThreshold` so the fast last-minute cadence is active throughout the window.
+- **`emergencyFill`** — a safety net: in the final stretch before close it fills any remaining slots even when the normal rules would wait, and overrides the must-include tag filter. Entered as h+m in the GUI (stored as seconds). `0` disables it; keep it `≤ lastMinuteThreshold` so the fast last-minute cadence is active throughout the window.
 - **Tag filters** — `mustIncludeTags` is a hard filter (only photos matching at least one tag are eligible); `shouldIncludeTags` is a soft preference. `fillWithoutTagMatch` decides what happens when must-include tags are set but nothing matches: fill anyway (default) or leave the slot empty.
 - **Photo ranking** — the picker ranks your eligible photos by, in order: theme-match score (keywords from the challenge title/slug/welcome message vs. each photo's vision labels), achievement count, total votes, then upload date.
 - **Manual buttons** — each card with empty slots shows **`+1`** (submit the best-ranked photo into one slot) and **`+N`** (fill all remaining slots at once, ignoring the spacing). Manual clicks ignore the `autoFill` toggle and are disabled while auto-vote is running.
@@ -331,14 +331,14 @@ All of these support per-challenge overrides except where noted.
 
 **Auto fill**
 
-| Setting                   | Default | Range / values   | Description                                                                                                                               |
-| ------------------------- | ------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `autoFill`                | `false` | bool             | Submit photos into empty entry slots near the deadline (staggered, one per cycle).                                                        |
-| `autoFillIntervalMinutes` | `10`    | 1–60 min         | Spacing between staggered auto-fill submissions.                                                                                          |
-| `fillWithoutTagMatch`     | `true`  | bool             | If must-include tags are set but none match: fill anyway (`true`) or leave the slot empty (`false`).                                      |
-| `emergencyFill`           | `5`     | `0`, or 1–59 min | Final-minutes safety net: fill remaining slots even if rules wait, overriding must-include tags. `0` = off. Keep ≤ `lastMinuteThreshold`. |
-| `mustIncludeTags`         | `[]`    | up to 50 tags    | Hard filter: only fill with photos matching at least one of these tags.                                                                   |
-| `shouldIncludeTags`       | `[]`    | up to 50 tags    | Soft preference: prefer photos matching these tags, but don't exclude others.                                                             |
+| Setting                   | Default      | Range / values | Description                                                                                                                                                          |
+| ------------------------- | ------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoFill`                | `false`      | bool           | Submit photos into empty entry slots near the deadline (staggered, one per cycle).                                                                                   |
+| `autoFillIntervalMinutes` | `10`         | 1–60 min       | Spacing between staggered auto-fill submissions.                                                                                                                     |
+| `fillWithoutTagMatch`     | `true`       | bool           | If must-include tags are set but none match: fill anyway (`true`) or leave the slot empty (`false`).                                                                 |
+| `emergencyFill`           | `300` s (5m) | ≥ 0            | Final-minutes safety net: fill remaining slots even if rules wait, overriding must-include tags. `0` = off. Keep ≤ `lastMinuteThreshold`. Entered as h+m in the GUI. |
+| `mustIncludeTags`         | `[]`         | up to 50 tags  | Hard filter: only fill with photos matching at least one of these tags.                                                                                              |
+| `shouldIncludeTags`       | `[]`         | up to 50 tags  | Soft preference: prefer photos matching these tags, but don't exclude others.                                                                                        |
 
 ## 📐 Recommended Setups
 

@@ -136,6 +136,49 @@ const loadSettings = () => {
                 migrationChanges = true;
             }
 
+            // Migrate emergencyFill from minutes to seconds. It used to be a
+            // plain `number` of minutes-before-close (1-59); it's now a `time`
+            // setting stored in seconds (mirrors boostTime/turboTime). The old
+            // GUI/CLI could only write 1-59, so a value in (0, 60) is a stale
+            // minute encoding; 0 is the off sentinel and stays 0; legitimate new
+            // seconds values from the time input start at 60, so the band
+            // cleanly separates old-minutes from new-seconds. This is a separate
+            // flag because _timeUnitMigratedV1 is already set for current users.
+            if (!mergedSettings._emergencyFillTimeMigratedV1) {
+                const looksMinuteEncoded = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 60;
+
+                const globalDefaults = mergedSettings.challengeSettings?.globalDefaults || {};
+                if (looksMinuteEncoded(globalDefaults.emergencyFill)) {
+                    const before = globalDefaults.emergencyFill;
+                    globalDefaults.emergencyFill = before * 60;
+                    migrationChanges = true;
+                    logger
+                        .withCategory('settings')
+                        .info(
+                            `Migrated emergencyFill global default from minute-encoded ${before} to ${globalDefaults.emergencyFill}s`,
+                            null,
+                        );
+                }
+
+                const perChallenge = mergedSettings.challengeSettings?.perChallenge || {};
+                for (const [challengeId, overrides] of Object.entries(perChallenge)) {
+                    if (looksMinuteEncoded(overrides.emergencyFill)) {
+                        const before = overrides.emergencyFill;
+                        overrides.emergencyFill = before * 60;
+                        migrationChanges = true;
+                        logger
+                            .withCategory('settings')
+                            .info(
+                                `Migrated emergencyFill override on challenge ${challengeId} from ${before} to ${overrides.emergencyFill}s`,
+                                null,
+                            );
+                    }
+                }
+
+                mergedSettings._emergencyFillTimeMigratedV1 = true;
+                migrationChanges = true;
+            }
+
             // If migration made changes, save the updated settings
             if (migrationChanges) {
                 storage.writeRaw(JSON.stringify(mergedSettings, null, 2));

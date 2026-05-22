@@ -3,6 +3,36 @@
  * Ported from src/js/ui/formatters.js - pure functions only
  */
 
+import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
+
+/**
+ * Format a setting value for the read-only "Global default" hint so it reads
+ * the same way SettingInput renders the editable value: hours+minutes for
+ * `time` settings (stored as seconds), `value unit` for unit-bearing numbers,
+ * and a comma-joined list (or the "none" label) for tag arrays. Everything
+ * else falls back to `String(value)`.
+ *
+ * `t` is the translation function, passed in so this stays a pure util with no
+ * dependency on the React translation context.
+ *
+ * @param {*} value - The value to render (seconds, number, boolean, or array)
+ * @param {object} config - The setting's schema entry (reads `type` and `unit`)
+ * @param {(key: string) => string} t - Translation lookup
+ * @returns {string}
+ */
+export const formatSettingDefault = (value, config, t) => {
+    if (Array.isArray(value)) {
+        return value.join(', ') || t('app.none');
+    }
+    if (config?.type === 'time') {
+        return formatSecondsAsHoursMinutes(value, t('app.hours'), t('app.minutes'));
+    }
+    if (config?.type === 'number' && config.unit) {
+        return `${value} ${t(config.unit)}`;
+    }
+    return String(value);
+};
+
 /**
  * Format time remaining from Unix timestamp
  * @param {number} endTime - Unix timestamp of end time

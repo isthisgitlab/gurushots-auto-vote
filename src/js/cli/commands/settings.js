@@ -238,6 +238,12 @@ Common Settings:
   language             - UI language: "en" or "lv" (default: "en")
   timezone             - Timezone for timestamps (default: "Europe/Riga")
 
+Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
+  boostTime            - Seconds before close to apply a timer boost (default: 3600 = 1h)
+  turboTime            - Seconds before close to apply turbo (default: 7200 = 2h)
+  emergencyFill        - Seconds before close to fill empty slots as a last resort
+                         (default: 300 = 5 min; 0 = off). NOTE: this used to be minutes.
+
 Value Types:
   String:   "value" or value
   Number:   30, 3, 100
