@@ -404,12 +404,18 @@ const shouldPlayAutoTurbo = (challenge, now) => {
 
 /**
  * Decides whether to apply a won Turbo to one of the user's entries.
+ *
+ * When `turboFillNew` is on the caller will submit a fresh photo and Turbo
+ * that instead of an existing entry, so the "no entries" guard is relaxed
+ * (fill-new can create the first entry) and `imageId` is returned only as a
+ * fallback target for when the fresh submit can't happen.
+ *
  * @param {Object} challenge
  * @param {number} now - Unix timestamp in seconds
- * @returns {{apply: boolean, imageId: string|null, reason: string}}
+ * @returns {{apply: boolean, imageId: string|null, fillNew: boolean, reason: string}}
  */
 const shouldApplyTurbo = (challenge, now) => {
-    const noop = (reason) => ({ apply: false, imageId: null, reason });
+    const noop = (reason) => ({ apply: false, imageId: null, fillNew: false, reason });
     if (!challenge) return noop('no challenge');
     if (challenge.close_time <= now) return noop('challenge ended');
 
@@ -430,20 +436,31 @@ const shouldApplyTurbo = (challenge, now) => {
         return noop('boost window currently open');
     }
 
+    const fillNew = settings.getEffectiveSetting('turboFillNew', challengeId) === true;
+
+    // Resolve the existing-entry pick. With fill-new on it is only the
+    // fallback target (used when no fresh photo can be submitted), so an
+    // empty/conflicting entry list is fine — fill-new creates a new entry.
     const entries = challenge.member?.ranking?.entries;
-    if (!Array.isArray(entries) || entries.length === 0) {
+    const hasEntries = Array.isArray(entries) && entries.length > 0;
+    const requestedIndex = settings.getEffectiveSetting('turboImageIndex', challengeId);
+    const picked = hasEntries ? pickEntryAvoidingConflict(entries, requestedIndex, 'boosted') : null;
+    const existingImageId = picked?.id || null;
+
+    if (fillNew) {
+        return { apply: true, imageId: existingImageId, fillNew: true, reason: 'eligible (fill-new)' };
+    }
+
+    if (!hasEntries) {
         return noop('no entries to apply turbo to');
     }
-    const requestedIndex = settings.getEffectiveSetting('turboImageIndex', challengeId);
-    const picked = pickEntryAvoidingConflict(entries, requestedIndex, 'boosted');
     if (!picked) {
         // The invariant (≤1 boost per challenge) means picker-null is only
         // reachable when entries.length === 1 and that entry has Boost.
         return noop('only entry already has Boost applied');
     }
-    const imageId = picked.id;
-    if (!imageId) return noop('selected entry has no id');
-    return { apply: true, imageId, reason: 'eligible' };
+    if (!existingImageId) return noop('selected entry has no id');
+    return { apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' };
 };
 
 module.exports = {

@@ -11,6 +11,7 @@ const boost = require('./boost');
 const errors = require('./errors');
 const settings = require('../settings');
 const votingLogic = require('../services/VotingLogic');
+const autoFill = require('../services/autoFill');
 const logger = require('../logger');
 const cancellation = require('../voting/cancellation');
 
@@ -504,6 +505,16 @@ const mockApiClient = {
                     .withCategory('voting')
                     .debug(`Challenge ${challenge.id} exposure threshold: ${effectiveThreshold}`, null);
 
+                const now = Math.floor(Date.now() / 1000);
+
+                // Deps for the shared fill-new helper, wired to the mock photo API.
+                const fillDeps = {
+                    settings,
+                    logger,
+                    getEligiblePhotos: mockApiClient.getEligiblePhotos,
+                    submitToChallenge: mockApiClient.submitToChallenge,
+                };
+
                 // Simulate boost application if available
                 if (challenge.member.boost.state === 'AVAILABLE') {
                     // Check for cancellation before boost
@@ -513,11 +524,51 @@ const mockApiClient = {
                     }
 
                     logger.withCategory('voting').debug(`Applying boost to challenge: ${challenge.title}`, null);
-                    await simulateApiResponse(boost.mockBoostSuccess, 1500);
+                    const cid = challenge.id.toString();
+                    if (settings.getEffectiveSetting('boostFillNew', cid) === true) {
+                        // Fill-new: submit a fresh photo and boost that entry instead
+                        // of an existing one; fall back to the configured entry when
+                        // no fresh photo can be submitted (full / none / failed).
+                        const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
+                        if (filled.ok) {
+                            autoFill.reflectNewEntry(challenge, filled.imageId);
+                            await mockApiClient.applyBoostToEntry(cid, filled.imageId, token);
+                        } else {
+                            await mockApiClient.applyBoost(challenge, token);
+                        }
+                    } else {
+                        await mockApiClient.applyBoost(challenge, token);
+                    }
+                }
+
+                // Auto-apply a won turbo when eligible (mirrors real main.js)
+                const turboApply = votingLogic.shouldApplyTurbo(challenge, now);
+                if (turboApply.apply) {
+                    let imageId = turboApply.imageId;
+                    if (turboApply.fillNew) {
+                        const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
+                        if (filled.ok) {
+                            autoFill.reflectNewEntry(challenge, filled.imageId);
+                            imageId = filled.imageId;
+                        }
+                    }
+                    if (imageId) {
+                        logger.withCategory('voting').debug(`Applying turbo to entry ${imageId}`, null);
+                        await mockApiClient.applyTurbo(challenge.id, imageId, token);
+                    } else {
+                        // Parity with real main.js: log why turbo was skipped so a
+                        // dev reading mock-mode logs can tell a fill-new miss from
+                        // a turbo that simply wasn't eligible.
+                        logger
+                            .withCategory('turbo')
+                            .info(
+                                `${logger.challengeTag(challenge)} turbo fill-new could not submit a photo and there is no existing entry — skipped`,
+                                null,
+                            );
+                    }
                 }
 
                 // Use the centralized voting logic service
-                const now = Math.floor(Date.now() / 1000);
                 const { shouldVote, voteReason } = votingLogic.evaluateVotingDecision(challenge, now);
 
                 // Simulate voting if conditions are met

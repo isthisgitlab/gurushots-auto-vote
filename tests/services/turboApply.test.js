@@ -36,6 +36,7 @@ const mockSettings = (overrides = {}) => {
         turboTime: 7200,
         turboApplyWhenBoostActive: false,
         turboImageIndex: 1,
+        turboFillNew: false,
     };
     settings.getEffectiveSetting = jest.fn((key) => ({ ...defaults, ...overrides })[key]);
 };
@@ -126,11 +127,64 @@ describe('shouldApplyTurbo', () => {
         expect(result.imageId).toBe('b');
     });
 
-    test('returns no-eligible when challenge has no entries', () => {
+    test('does not apply (no entries) when challenge has no entries and fill-new is off', () => {
         mockSettings();
         const challenge = buildChallenge({ closeInSeconds: 600, entries: [] });
         const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
         expect(result.apply).toBe(false);
         expect(result.reason).toBe('no entries to apply turbo to');
+    });
+
+    test('reports fillNew=false on the normal (non fill-new) path', () => {
+        mockSettings();
+        const challenge = buildChallenge({ closeInSeconds: 600 });
+        const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+        expect(result.apply).toBe(true);
+        expect(result.fillNew).toBe(false);
+    });
+
+    describe('turboFillNew (fill-new)', () => {
+        test('applies with fillNew=true and no entries (fill-new can create the first entry)', () => {
+            mockSettings({ turboFillNew: true });
+            const challenge = buildChallenge({ closeInSeconds: 600, entries: [] });
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(true);
+            expect(result.fillNew).toBe(true);
+            expect(result.imageId).toBeNull(); // no existing fallback target
+        });
+
+        test('still passes the existing entry as a fallback target when entries exist', () => {
+            mockSettings({ turboFillNew: true });
+            const challenge = buildChallenge({ closeInSeconds: 600 }); // entry-1..3
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(true);
+            expect(result.fillNew).toBe(true);
+            expect(result.imageId).toBe('entry-1'); // turboImageIndex=1 → first entry
+        });
+
+        test('still honors the WON gate when fill-new is on', () => {
+            mockSettings({ turboFillNew: true });
+            const challenge = buildChallenge({ turboState: 'TIMER', closeInSeconds: 600, entries: [] });
+            expect(VotingLogic.shouldApplyTurbo(challenge, NOW()).apply).toBe(false);
+        });
+
+        test('still honors the timing threshold when fill-new is on', () => {
+            mockSettings({ turboFillNew: true, turboTime: 600 });
+            const challenge = buildChallenge({ closeInSeconds: 7200, entries: [] });
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(false);
+            expect(result.reason).toContain('threshold');
+        });
+
+        test('applies with a null fallback when the only existing entry is already boosted', () => {
+            // Picker returns null (single entry already boosted) — fill-new still
+            // applies, with imageId=null so the caller knows there is no fallback.
+            mockSettings({ turboFillNew: true });
+            const challenge = buildChallenge({ closeInSeconds: 600, entries: [{ id: 'b1', boosted: true }] });
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(true);
+            expect(result.fillNew).toBe(true);
+            expect(result.imageId).toBeNull();
+        });
     });
 });

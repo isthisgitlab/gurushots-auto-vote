@@ -63,6 +63,7 @@ jest.mock('../../src/js/logger', () => {
         apiRequest: jest.fn(),
         apiResponse: jest.fn(),
         isDevMode: jest.fn(() => false),
+        challengeTag: jest.fn((c) => `[Challenge ${c?.id ?? 'unknown'}]`),
         // Export the shared functions for access in tests
         __mockDebugFn: mockDebugFn,
         __mockInfoFn: mockInfoFn,
@@ -498,6 +499,131 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.fetchChallengesAndVote(null)).rejects.toEqual(
                     errors.mockAuthErrors.invalidToken,
                 );
+            });
+        });
+
+        describe('fetchChallengesAndVote — fill-new options', () => {
+            const settings = require('../../src/js/settings');
+
+            const fillableChallenge = (over = {}) => {
+                const now = Math.floor(Date.now() / 1000);
+                return {
+                    id: '1',
+                    title: 'Fillable',
+                    url: 'no-vote-images-url', // not in mockVoteImagesByChallenge → no vote submit
+                    close_time: now + 600,
+                    max_photo_submits: 4,
+                    member: {
+                        boost: { state: 'AVAILABLE', timeout: now + 120 },
+                        turbo: { state: 'NONE' },
+                        ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
+                    },
+                    ...over,
+                };
+            };
+
+            // Override only the toggle keys under test; delegate everything else
+            // (tags, exposure, turbo timing) to the real schema defaults so the
+            // shared picker and voting logic behave normally.
+            const stubToggles = (toggles) => {
+                const realGet = settings.getEffectiveSetting;
+                jest.spyOn(settings, 'getEffectiveSetting').mockImplementation((key, cid) =>
+                    key in toggles ? toggles[key] : realGet.call(settings, key, cid),
+                );
+            };
+
+            afterEach(() => jest.restoreAllMocks());
+
+            test('boost fill-new submits a fresh photo and boosts that entry', async () => {
+                challenges.mockActiveChallenges = { challenges: [fillableChallenge()] };
+                stubToggles({ boostFillNew: true, useTurbo: false, turboFillNew: false });
+                const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
+                const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');
+                const boostSpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoost');
+
+                const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
+
+                expect(result.success).toBe(true);
+                expect(submitSpy).toHaveBeenCalledTimes(1);
+                const submittedId = submitSpy.mock.calls[0][1][0];
+                expect(boostEntrySpy).toHaveBeenCalledWith('1', submittedId, 'test-token');
+                expect(boostSpy).not.toHaveBeenCalled();
+            });
+
+            test('boost fill-new falls back to applyBoost when the challenge is full', async () => {
+                challenges.mockActiveChallenges = {
+                    challenges: [fillableChallenge({ max_photo_submits: 1 })], // 1 entry already → full
+                };
+                stubToggles({ boostFillNew: true, useTurbo: false, turboFillNew: false });
+                const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
+                const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');
+                const boostSpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoost');
+
+                await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
+
+                expect(submitSpy).not.toHaveBeenCalled();
+                expect(boostEntrySpy).not.toHaveBeenCalled();
+                expect(boostSpy).toHaveBeenCalledTimes(1);
+            });
+
+            test('turbo fill-new submits a fresh photo and applies turbo to it', async () => {
+                challenges.mockActiveChallenges = {
+                    challenges: [
+                        fillableChallenge({
+                            member: {
+                                boost: { state: 'LOCKED', timeout: 0 }, // isolate from boost
+                                turbo: { state: 'WON' },
+                                ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
+                            },
+                        }),
+                    ],
+                };
+                stubToggles({ boostFillNew: false, useTurbo: true, turboFillNew: true });
+                const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
+                const turboSpy = jest.spyOn(mockIndex.mockApiClient, 'applyTurbo');
+
+                await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
+
+                expect(submitSpy).toHaveBeenCalledTimes(1);
+                const submittedId = submitSpy.mock.calls[0][1][0];
+                expect(turboSpy).toHaveBeenCalledWith('1', submittedId, 'test-token');
+            });
+
+            test('both fill-new toggles in one cycle consume only one free slot (no double-submit)', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                challenges.mockActiveChallenges = {
+                    challenges: [
+                        {
+                            id: '1',
+                            title: 'OneSlot',
+                            url: 'no-vote-images-url',
+                            close_time: now + 600,
+                            max_photo_submits: 2, // 1 entry below → exactly one free slot
+                            member: {
+                                boost: { state: 'AVAILABLE', timeout: now + 120 },
+                                turbo: { state: 'WON' },
+                                ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
+                            },
+                        },
+                    ],
+                };
+                stubToggles({
+                    boostFillNew: true,
+                    useTurbo: true,
+                    turboFillNew: true,
+                    turboApplyWhenBoostActive: true, // boost window is open this cycle
+                });
+                const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
+                const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');
+                const turboSpy = jest.spyOn(mockIndex.mockApiClient, 'applyTurbo');
+
+                await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
+
+                // Boost consumed the only free slot (reflectNewEntry updated the local
+                // entries), so turbo saw no-slots and fell back to the existing entry.
+                expect(submitSpy).toHaveBeenCalledTimes(1);
+                expect(boostEntrySpy).toHaveBeenCalledTimes(1);
+                expect(turboSpy).toHaveBeenCalledWith('1', 'e1', 'test-token');
             });
         });
     });

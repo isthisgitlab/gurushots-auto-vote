@@ -201,7 +201,33 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                     logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
 
                     try {
-                        const boostResult = await applyBoost(challenge, token);
+                        const cid = challenge.id.toString();
+                        let boostResult;
+                        if (settings.getEffectiveSetting('boostFillNew', cid) === true) {
+                            // Fill-new: submit a fresh photo and boost that entry instead
+                            // of an existing one. Falls back to the configured Boost Entry
+                            // when no fresh photo can be submitted (full / none / failed).
+                            const filled = await autoFill.submitNewEntryForAction(challenge, token, {
+                                settings,
+                                logger,
+                                getEligiblePhotos,
+                                submitToChallenge,
+                            });
+                            if (filled.ok) {
+                                autoFill.reflectNewEntry(challenge, filled.imageId);
+                                boostResult = await applyBoostToEntry(cid, filled.imageId, token);
+                            } else {
+                                logger
+                                    .withCategory('boost')
+                                    .info(
+                                        `${logger.challengeTag(challenge)} boost fill-new unavailable (${filled.reason}); boosting existing entry`,
+                                        null,
+                                    );
+                                boostResult = await applyBoost(challenge, token);
+                            }
+                        } else {
+                            boostResult = await applyBoost(challenge, token);
+                        }
                         if (boostResult) {
                             const successSuffix = isTimerBasedAvailable
                                 ? `${timeDisplay} remaining`
@@ -251,30 +277,59 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
             // Auto-apply a won turbo when eligible
             const turboApply = votingLogic.shouldApplyTurbo(challenge, now);
             if (turboApply.apply) {
-                logger
-                    .withCategory('turbo')
-                    .startOperation(
-                        `turbo-apply-${challenge.id}`,
-                        `Applying turbo to entry ${turboApply.imageId} on ${challenge.title}`,
-                    );
-                try {
-                    const result = await applyTurbo(challenge.id, turboApply.imageId, token);
-                    if (result.ok) {
+                let imageId = turboApply.imageId;
+                if (turboApply.fillNew) {
+                    // Fill-new: submit a fresh photo and turbo that entry instead of an
+                    // existing one. Falls back to the configured Turbo Entry (if any)
+                    // when no fresh photo can be submitted (full / none / failed).
+                    const filled = await autoFill.submitNewEntryForAction(challenge, token, {
+                        settings,
+                        logger,
+                        getEligiblePhotos,
+                        submitToChallenge,
+                    });
+                    if (filled.ok) {
+                        autoFill.reflectNewEntry(challenge, filled.imageId);
+                        imageId = filled.imageId;
+                    } else if (imageId) {
                         logger
                             .withCategory('turbo')
-                            .endOperation(
-                                `turbo-apply-${challenge.id}`,
-                                `Turbo applied to entry ${turboApply.imageId}`,
+                            .info(
+                                `${logger.challengeTag(challenge)} turbo fill-new unavailable (${filled.reason}); applying to existing entry`,
+                                null,
                             );
-                    } else {
-                        logger
-                            .withCategory('turbo')
-                            .endOperation(`turbo-apply-${challenge.id}`, null, 'Apply request returned ok=false');
                     }
-                } catch (error) {
+                }
+                if (!imageId) {
                     logger
                         .withCategory('turbo')
-                        .endOperation(`turbo-apply-${challenge.id}`, null, error.message || error);
+                        .info(
+                            `${logger.challengeTag(challenge)} turbo fill-new could not submit a photo and there is no existing entry — skipped`,
+                            null,
+                        );
+                } else {
+                    logger
+                        .withCategory('turbo')
+                        .startOperation(
+                            `turbo-apply-${challenge.id}`,
+                            `Applying turbo to entry ${imageId} on ${challenge.title}`,
+                        );
+                    try {
+                        const result = await applyTurbo(challenge.id, imageId, token);
+                        if (result.ok) {
+                            logger
+                                .withCategory('turbo')
+                                .endOperation(`turbo-apply-${challenge.id}`, `Turbo applied to entry ${imageId}`);
+                        } else {
+                            logger
+                                .withCategory('turbo')
+                                .endOperation(`turbo-apply-${challenge.id}`, null, 'Apply request returned ok=false');
+                        }
+                    } catch (error) {
+                        logger
+                            .withCategory('turbo')
+                            .endOperation(`turbo-apply-${challenge.id}`, null, error.message || error);
+                    }
                 }
             }
 
