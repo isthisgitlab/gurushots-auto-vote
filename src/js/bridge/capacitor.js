@@ -201,14 +201,27 @@ const installBridge = () => {
     // to (or just no-ops, since the React app already drives navigation
     // off the token in settings).
     api.login = () => emit('login-success');
-    api.logout = () => {
+    api.logout = async () => {
         try {
             settings.setSetting('token', '');
+            // The cleared token is written behind a cache. Await the flush so
+            // it reaches @capacitor/preferences before we navigate away —
+            // otherwise an OS kill right after logout could leave the old
+            // token persisted and silently restore the session on next launch.
+            // The app stays alive through logout, so this await is effective
+            // (unlike the best-effort flush on background/pagehide).
+            await settings.flushPendingWrites?.();
         } catch (err) {
             logger.withCategory('authentication').error('Logout failed to clear token', err);
         }
         emit('logout');
     };
+
+    // Route logger fan-out into the in-process emitter so the Logs page
+    // (useLogStream → onLogMessage) receives live entries. Electron does
+    // the equivalent in log.handlers.register() by setting
+    // global.sendLogToGUI; the WebView has no `global`, so use globalThis.
+    globalThis.sendLogToGUI = (entry) => emit('log-message', entry);
 
     // Event listeners. The Electron contract returns nothing (or an
     // unsubscribe for the settings-changed listener); preserve that

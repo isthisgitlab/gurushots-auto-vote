@@ -63,6 +63,11 @@ const buildHandlers = () => ({
 
     'start-log-stream': async (event) => {
         try {
+            // Capacitor passes no IPC event (single-process WebView): there
+            // is no webContents to register. Delivery is handled by the
+            // bridge wiring globalThis.sendLogToGUI → in-process emitter, so
+            // just acknowledge and let the renderer fetch its backlog.
+            if (!event?.sender) return { success: true };
             logStreamWindows.add(event.sender);
             event.sender.on('destroyed', () => {
                 logStreamWindows.delete(event.sender);
@@ -76,7 +81,7 @@ const buildHandlers = () => ({
 
     'stop-log-stream': async (event) => {
         try {
-            logStreamWindows.delete(event.sender);
+            if (event?.sender) logStreamWindows.delete(event.sender);
             return { success: true };
         } catch (error) {
             logger.withCategory('ui').error('Error stopping log stream:', error);

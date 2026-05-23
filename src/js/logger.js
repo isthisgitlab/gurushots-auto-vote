@@ -275,6 +275,15 @@ const LEVEL_COLORS = {
     ERROR: 'red',
 };
 
+// Resolve the GUI fan-out sink. Electron main sets global.sendLogToGUI
+// (a Node context). The Capacitor WebView bundle has no `global`, so the
+// bridge sets globalThis.sendLogToGUI instead — check both surfaces.
+const resolveGuiSink = () => {
+    if (typeof global !== 'undefined' && global.sendLogToGUI) return global.sendLogToGUI;
+    if (typeof globalThis !== 'undefined' && globalThis.sendLogToGUI) return globalThis.sendLogToGUI;
+    return null;
+};
+
 /**
  * Apply color to text (only in CLI mode and when not sending to GUI)
  */
@@ -284,7 +293,7 @@ const colorize = (text, color, forConsole = false) => {
         return text;
     }
     // Don't apply colors if we're sending to GUI (even in CLI mode)
-    if (typeof global !== 'undefined' && global.sendLogToGUI && !forConsole) {
+    if (resolveGuiSink() && !forConsole) {
         return text;
     }
     return `${colors[color]}${text}${colors.reset}`;
@@ -413,8 +422,9 @@ const writeLog = (level, message, data = null, category = null) => {
 
         console.log(formatConsoleMessage(level, message, context, getTimeString(), true, cat));
 
-        if (typeof global !== 'undefined' && global.sendLogToGUI) {
-            global.sendLogToGUI({
+        const guiSink = resolveGuiSink();
+        if (guiSink) {
+            guiSink({
                 seq,
                 level,
                 context,
