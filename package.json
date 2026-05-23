@@ -294,10 +294,10 @@
         ],
         "coverageThreshold": {
             "global": {
-                "branches": 56,
-                "functions": 52,
-                "lines": 59,
-                "statements": 59
+                "branches": 60,
+                "functions": 60,
+                "lines": 60,
+                "statements": 60
             }
         }
     }
