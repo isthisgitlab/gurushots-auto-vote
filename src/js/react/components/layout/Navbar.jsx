@@ -1,10 +1,16 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 
+// Detect a real native (Android) platform without importing the node-flavored
+// runtime into the browser bundle. The in-app Logs button is only shown on
+// Capacitor — Electron opens the Logs window from the application menu instead.
+const isCapacitorPlatform = () => globalThis.Capacitor?.isNativePlatform?.() === true;
+
 /**
- * Main app navbar with title, mock status, settings, and logout
+ * Main app navbar with title, mock status, logs (Android), settings, and logout
  */
-export function Navbar({ isMock, onSettingsClick, onLogout }) {
+export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
     const { t } = useTranslation();
+    const showLogs = isCapacitorPlatform();
 
     return (
         <div className="navbar bg-base-100 shadow-md mb-4">
@@ -13,6 +19,18 @@ export function Navbar({ isMock, onSettingsClick, onLogout }) {
                 {isMock && <span className="badge badge-warning ml-2 whitespace-nowrap">{t('app.mockMode')}</span>}
             </div>
             <div className="navbar-end gap-2">
+                {showLogs && (
+                    <button className="btn btn-ghost btn-sm" onClick={onLogsClick} title={t('logs.title')}>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                            />
+                        </svg>
+                    </button>
+                )}
                 <button className="btn btn-ghost btn-sm" onClick={onSettingsClick} title={t('app.settings')}>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path

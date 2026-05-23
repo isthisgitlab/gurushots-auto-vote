@@ -38,11 +38,11 @@ export function useLogStream() {
 
         async function connect() {
             try {
-                const result = await window.api.startLogStream();
+                const result = await window.api?.startLogStream?.();
                 if (!result?.success || !mountedRef.current) return;
                 setConnected(true);
 
-                const unsubscribe = window.api.onLogMessage((logData) => {
+                const unsubscribe = window.api?.onLogMessage?.((logData) => {
                     if (!mountedRef.current) return;
                     if (!seeded) {
                         liveBuffer.push(logData);
@@ -80,7 +80,7 @@ export function useLogStream() {
                 unsubscribeRef.current();
                 unsubscribeRef.current = null;
             }
-            if (window.api.stopLogStream) {
+            if (window.api?.stopLogStream) {
                 window.api.stopLogStream();
             }
         };

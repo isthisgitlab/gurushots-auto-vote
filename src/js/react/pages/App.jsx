@@ -10,6 +10,7 @@ import { AutoVoteControls } from '@/components/app/AutoVoteControls';
 import { ChallengesSection } from '@/components/app/ChallengesSection';
 import { SettingsModal } from '@/components/app/SettingsModal';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
+import { LogsModal } from '@/components/app/LogsModal';
 import { UpdateDialog } from '@/components/app/UpdateDialog';
 import { WelcomeModal } from '@/components/app/WelcomeModal';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
@@ -28,6 +29,7 @@ function AppContent() {
     const [challengeSettingsOpen, setChallengeSettingsOpen] = useState(false);
     const [selectedChallenge, setSelectedChallenge] = useState({ id: null, title: '' });
     const [welcomeOpen, setWelcomeOpen] = useState(false);
+    const [logsOpen, setLogsOpen] = useState(false);
 
     // Apply theme
     useEffect(() => {
@@ -79,6 +81,15 @@ function AppContent() {
         setSettingsModalOpen(true);
     }, []);
 
+    // Handle logs click (in-app log viewer; Navbar button is Capacitor-gated)
+    const handleLogsClick = useCallback(() => {
+        setLogsOpen(true);
+    }, []);
+
+    const handleLogsClose = useCallback(() => {
+        setLogsOpen(false);
+    }, []);
+
     // Handle challenge settings click. Skip when the modal is already
     // open for the same challenge so rapid taps don't churn parent state
     // and re-thrash the modal's effects (rapid clicks were producing a
@@ -120,7 +131,12 @@ function AppContent() {
             <div className="container mx-auto px-4 py-4 max-w-4xl">
                 <ErrorBoundary>
                     {/* Navbar */}
-                    <Navbar isMock={isMock} onSettingsClick={handleSettingsClick} onLogout={handleLogout} />
+                    <Navbar
+                        isMock={isMock}
+                        onLogsClick={handleLogsClick}
+                        onSettingsClick={handleSettingsClick}
+                        onLogout={handleLogout}
+                    />
 
                     {/* Autovote Controls */}
                     <AutoVoteControls
@@ -156,6 +172,11 @@ function AppContent() {
                             challengeId={selectedChallenge.id}
                             challengeTitle={selectedChallenge.title}
                         />
+                    </ErrorBoundary>
+
+                    {/* In-app Logs viewer (Android; Electron uses the menu window) */}
+                    <ErrorBoundary>
+                        <LogsModal isOpen={logsOpen} onClose={handleLogsClose} />
                     </ErrorBoundary>
 
                     {/* Update Dialog */}
