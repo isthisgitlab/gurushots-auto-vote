@@ -1,7 +1,7 @@
 /**
- * CLI auth commands. Currently just `login` — interactive credential
- * prompt that mutes the password echo and refuses non-TTY invocation
- * (piped stdin would let the password through unmuted).
+ * CLI auth commands: `login` — interactive credential prompt that mutes the
+ * password echo and refuses non-TTY invocation (piped stdin would let the
+ * password through unmuted) — and `logout`, which clears the saved token.
  */
 
 const logger = require('../../logger');
@@ -77,4 +77,19 @@ const handleLogin = async () => {
     }
 };
 
-module.exports = { handleLogin };
+/**
+ * Clear the saved authentication token. Mirrors the GUI/Capacitor `logout`
+ * (both just blank the token in settings); the next vote/run reports
+ * "Not authenticated" until the user logs in again.
+ */
+const handleLogout = () => {
+    const hadToken = !!settings.getSetting('token');
+    settings.setSetting('token', '');
+    if (hadToken) {
+        logger.withCategory('authentication').success('Logged out — token cleared');
+    } else {
+        logger.withCategory('ui').info('Already logged out — no token was set');
+    }
+};
+
+module.exports = { handleLogin, handleLogout };

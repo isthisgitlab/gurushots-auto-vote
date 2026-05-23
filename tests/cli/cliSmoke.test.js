@@ -31,10 +31,15 @@ describe('CLI smoke', () => {
         // will fail this test, which is the point.
         const expectedCommands = [
             'login',
+            'logout',
             'vote',
             'run',
+            'boost',
+            'turbo',
+            'fill',
             'start',
             'status',
+            'check-updates',
             'get-setting',
             'set-setting',
             'set-global-default',
@@ -56,6 +61,20 @@ describe('CLI smoke', () => {
         expect(exitCode).toBe(0);
         // status either says MOCK or REAL — both are valid.
         expect(stdout).toMatch(/(MOCK|REAL)/i);
+    });
+
+    test('vote --challenge= (empty value) errors instead of voting every challenge', () => {
+        // Guards against the dangerous footgun: a malformed --challenge must
+        // NOT fall through to the bare-vote path (which votes ALL challenges).
+        const { exitCode, stdout, stderr } = runCli(['vote', '--challenge=']);
+        expect(exitCode).toBe(1);
+        expect(`${stdout}${stderr}`).toMatch(/specify a challenge/i);
+    });
+
+    test('boost without --challenge exits non-zero with usage', () => {
+        const { exitCode, stdout, stderr } = runCli(['boost']);
+        expect(exitCode).toBe(1);
+        expect(`${stdout}${stderr}`).toMatch(/--challenge/);
     });
 
     test('unknown command: exits non-zero or prints help', () => {

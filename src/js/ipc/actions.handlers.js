@@ -283,11 +283,15 @@ const buildHandlers = () => ({
     },
 
     'apply-boost-to-entry': async (event, challengeId, imageId) => {
+        // Sanitize before logging (matches the sibling turbo/fill handlers) —
+        // these args can be arbitrary user input via the CLI `boost --image=`.
+        const safeChallengeId = sanitizeForLog(challengeId);
+        const safeImageId = sanitizeForLog(imageId);
         try {
             logger
                 .withCategory('general')
                 .info(
-                    `🚀 Apply boost to entry request: Challenge=${challengeId}, Image=${imageId}`,
+                    `🚀 Apply boost to entry request: Challenge=${safeChallengeId}, Image=${safeImageId}`,
                     null,
                     logger.CATEGORIES.VOTING,
                 );
@@ -300,7 +304,7 @@ const buildHandlers = () => ({
             logger
                 .withCategory('general')
                 .info(
-                    `🚀 Applying boost to entry: Challenge=${challengeId}, Image=${imageId}`,
+                    `🚀 Applying boost to entry: Challenge=${safeChallengeId}, Image=${safeImageId}`,
                     null,
                     logger.CATEGORIES.VOTING,
                 );

@@ -13,6 +13,13 @@ const { createScheduler } = require('../../scheduling/runScheduler');
 const { formatDateTime } = require('../../dateFormat');
 const { isBoostWindowOpen } = require('../../services/VotingLogic');
 
+// Reuse the GUI's single-challenge manual-vote handler (votes to 100%,
+// bypassing thresholds). Built lazily on first use so loading this module for
+// status/scheduling commands doesn't construct the handler set; invoked with
+// a null event.
+let _votingHandlers;
+const votingHandlers = () => (_votingHandlers ??= require('../../ipc/voting.handlers').buildHandlers());
+
 /**
  * Format a remaining-seconds duration with sensible units (largest two):
  * "Xd Yh" / "Xh Ym" / "Xm", and "<1m" under a minute (urgent, not "0m").
@@ -91,6 +98,50 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
 };
 
 /**
+ * Manually vote a single challenge to 100% (bypassing threshold settings) —
+ * the CLI parity of the GUI card's manual-vote button. Reuses the
+ * vote-on-challenge-manual handler; resolves the challenge title first
+ * because that handler validates a non-empty title.
+ *
+ * @returns {Promise<{success:boolean, message?:string, error?:string}>}
+ */
+const voteChallengeManual = async (challengeId) => {
+    if (!getMiddleware().isAuthenticated()) {
+        logger.withCategory('authentication').error('No authentication token found. Please login first');
+        logger.withCategory('ui').info('Run: login');
+        return { success: false, error: 'Not authenticated' };
+    }
+
+    let title;
+    try {
+        const resp = await getMiddleware().getActiveChallenges();
+        const challenges = Array.isArray(resp?.challenges) ? resp.challenges : [];
+        const challenge = challenges.find((c) => String(c.id) === String(challengeId));
+        if (!challenge) {
+            logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
+            return { success: false, error: `Challenge ${challengeId} not found` };
+        }
+        title = challenge.title;
+    } catch (err) {
+        logger.withCategory('challenges').error(`Failed to fetch challenges: ${err?.message || err}`);
+        return { success: false, error: 'Failed to fetch challenges' };
+    }
+
+    try {
+        const result = await votingHandlers()['vote-on-challenge-manual'](null, challengeId, title);
+        if (result?.success) {
+            logger.withCategory('voting').success(result.message || `Voted on "${title}"`);
+        } else {
+            logger.withCategory('voting').error(result?.error || 'Failed to vote');
+        }
+        return result;
+    } catch (err) {
+        logger.withCategory('voting').error(`Failed to vote on "${title}": ${err?.message || err}`);
+        return { success: false, error: err?.message || 'Failed to vote' };
+    }
+};
+
+/**
  * Pull a `--challenge=<id>` or `--challenge <id>` flag value from
  * the remaining argv tail. Returns null when absent.
  */
@@ -98,7 +149,9 @@ const parseChallengeFlag = (argv) => {
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--challenge') {
-            return argv[i + 1] ?? null;
+            // `|| null` (not `??`) so a present-but-empty value (`--challenge ''`)
+            // is treated as missing, matching the `--challenge=` form below.
+            return argv[i + 1] || null;
         }
         if (a.startsWith('--challenge=')) {
             return a.slice('--challenge='.length) || null;
@@ -235,4 +288,4 @@ const showStatus = async () => {
     logger.withCategory('ui').info('\nTo change mode, run: login');
 };
 
-module.exports = { runVotingCycle, parseChallengeFlag, startContinuousVoting, showStatus };
+module.exports = { runVotingCycle, voteChallengeManual, parseChallengeFlag, startContinuousVoting, showStatus };
