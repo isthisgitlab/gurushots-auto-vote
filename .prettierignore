@@ -4,3 +4,4 @@ build
 coverage
 logs
 package-lock.json
+pnpm-lock.yaml
