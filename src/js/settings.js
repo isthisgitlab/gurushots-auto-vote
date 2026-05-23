@@ -18,6 +18,7 @@ const {
 const {
     storage,
     initializeAsync,
+    flushPendingWrites,
     isAutovoteRunning,
     getDefaultMockSetting,
     getUserDataPath,
@@ -777,6 +778,7 @@ const isGlobalDefaultModified = (settingKey) => {
 
 module.exports = {
     initializeAsync,
+    flushPendingWrites,
     loadSettings,
     saveSettings,
     getSetting,

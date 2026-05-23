@@ -14,7 +14,7 @@
 globalThis.__capacitorBootstrap = true;
 
 import { installBridge, subscribe } from '../../bridge/capacitor';
-import { initializeAsync as initSettings, getSetting } from '../../settings';
+import { initializeAsync as initSettings, flushPendingWrites, getSetting } from '../../settings';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
 import { mountApp } from './App';
@@ -73,6 +73,22 @@ const bootstrap = async () => {
     if (isCapacitor()) {
         installBridge();
         await initSettings();
+
+        // Settings writes are write-behind (cache now, persist async). When
+        // the OS backgrounds or tears down the WebView, push the latest
+        // write so it is not lost. Best-effort: the serialized write chain
+        // already guarantees order, this just narrows the durability window.
+        const flush = () => {
+            try {
+                flushPendingWrites();
+            } catch {
+                // never let a teardown handler throw
+            }
+        };
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) flush();
+        });
+        globalThis.addEventListener('pagehide', flush);
     }
     // Translations need an explicit load — the UMD factory just
     // constructs a TranslationManager with initialized=false. Electron

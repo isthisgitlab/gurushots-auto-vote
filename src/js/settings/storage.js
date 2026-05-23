@@ -36,6 +36,12 @@ let capacitorInitialized = false;
 let cachedSettingsJson = null;
 let capacitorPreferences = null;
 
+// Serializes Capacitor write-behind so concurrent full-blob writes apply
+// in issue order — an earlier write can never resolve after a later one
+// and clobber it. flushPendingWrites() awaits the tail so callers can
+// guarantee durability (e.g. before the WebView is suspended).
+let writeChain = Promise.resolve();
+
 const getCapacitorPreferences = () => {
     if (capacitorPreferences) return capacitorPreferences;
     capacitorPreferences = require('@capacitor/preferences').Preferences;
@@ -81,8 +87,11 @@ const storage = {
             // skip its hydration and previously-persisted settings would
             // be lost on the next read of an unwritten key.
             cachedSettingsJson = data;
-            getCapacitorPreferences()
-                .set({ key: SETTINGS_KEY, value: data })
+            // Chain onto the previous write so persistence is ordered. A
+            // failed write is logged but does not break the chain for the
+            // next one (the cache still holds the latest value).
+            writeChain = writeChain
+                .then(() => getCapacitorPreferences().set({ key: SETTINGS_KEY, value: data }))
                 .catch((err) => {
                     logger.withCategory('settings').error('Capacitor preferences write failed:', err);
                 });
@@ -116,6 +125,18 @@ const initializeAsync = async () => {
         capacitorInitialized = true;
     }
 };
+
+/**
+ * Returns the in-flight Capacitor write-behind chain. AWAIT the returned
+ * promise to ensure the latest settings have reached @capacitor/preferences
+ * (e.g. before invalidating a session). The caller owns the await — calling
+ * this without awaiting does not flush anything. The chain absorbs write
+ * failures internally, so the returned promise resolves even if the last
+ * write failed; it signals "the queue has drained", not "every write
+ * succeeded". On Electron/CLI writes are already synchronous, so this is the
+ * initial already-resolved promise and awaiting it is an immediate no-op.
+ */
+const flushPendingWrites = () => writeChain;
 
 // Define the settings file path in the userData directory
 const getSettingsPath = () => {
@@ -205,6 +226,7 @@ const getEnvironmentInfo = () => {
 module.exports = {
     storage,
     initializeAsync,
+    flushPendingWrites,
     getSettingsPath,
     isAutovoteRunning,
     getDefaultMockSetting,
