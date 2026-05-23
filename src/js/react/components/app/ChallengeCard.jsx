@@ -127,7 +127,10 @@ export function ChallengeCard({
     };
 
     return (
-        <div className="border rounded-lg p-3 mb-3 bg-base-100">
+        // id + scroll-mt make the card a smooth-scroll target for the
+        // boost-window banner's anchor chips (scroll-mt is a stock Tailwind
+        // utility — keeps the card off the top edge after scrollIntoView).
+        <div id={`challenge-${challenge.id}`} className="border rounded-lg p-3 mb-3 bg-base-100 scroll-mt-4">
             <div className="space-y-2">
                 {/* Title row uses CSS Grid [1fr auto] so the title
                     block gets exactly the remaining width and the

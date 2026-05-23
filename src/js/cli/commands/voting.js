@@ -11,6 +11,26 @@ const settings = require('../../settings');
 const { getMiddleware } = require('../../apiFactory');
 const { createScheduler } = require('../../scheduling/runScheduler');
 const { formatDateTime } = require('../../dateFormat');
+const { isBoostWindowOpen } = require('../../services/VotingLogic');
+
+/**
+ * Format a remaining-seconds duration with sensible units (largest two):
+ * "Xd Yh" / "Xh Ym" / "Xm", and "<1m" under a minute (urgent, not "0m").
+ * Mirrors the renderer's formatDuration so the CLI status and the GUI banner
+ * read the same. Clamps negatives.
+ * @param {number} seconds
+ * @returns {string}
+ */
+const formatRemaining = (seconds) => {
+    const total = Math.max(0, Math.floor(seconds));
+    if (total < 60) return '<1m';
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+};
 
 /**
  * Run a single voting cycle. Pass {isManual: true} to use the manual
@@ -127,7 +147,7 @@ const startContinuousVoting = async () => {
     process.stdin.resume();
 };
 
-const showStatus = () => {
+const showStatus = async () => {
     const userSettings = settings.loadSettings();
     const isMockMode = userSettings.mock;
     const isAuthenticated = getMiddleware().isAuthenticated();
@@ -168,6 +188,48 @@ const showStatus = () => {
                 logger.withCategory('settings').info(`    ${key}: ${value}`);
             });
         });
+    }
+
+    // Boost-window status: the CLI parity of the GUI banner (no anchors —
+    // just the informational list). Best-effort fetch: a failed/offline call
+    // prints a note and never crashes status. Reuses the engine's own
+    // predicate so there is no duplicated boost-window logic.
+    if (isAuthenticated) {
+        logger.withCategory('ui').info('\nBoost Window Open:');
+        try {
+            const resp = await getMiddleware().getActiveChallenges();
+            const challenges = Array.isArray(resp?.challenges) ? resp.challenges : [];
+            const now = Math.floor(Date.now() / 1000);
+            const open = challenges
+                .filter((c) => isBoostWindowOpen(c, now))
+                .map((c) => {
+                    const boost = c.member?.boost;
+                    // Only timed windows carry a countdown; key-unlocked
+                    // (AVAILABLE_KEY) boosts never expire.
+                    const remaining =
+                        boost?.state === 'AVAILABLE' && typeof boost.timeout === 'number' && boost.timeout > 0
+                            ? boost.timeout - now
+                            : null;
+                    return { title: c.title, remaining };
+                })
+                // Soonest-expiring first; key-unlocked (no timer) sort last.
+                .sort((a, b) => {
+                    if (a.remaining == null) return b.remaining == null ? 0 : 1;
+                    if (b.remaining == null) return -1;
+                    return a.remaining - b.remaining;
+                });
+
+            if (open.length === 0) {
+                logger.withCategory('ui').info('  None');
+            } else {
+                open.forEach(({ title, remaining }) => {
+                    const suffix = remaining == null ? 'no expiry' : formatRemaining(remaining);
+                    logger.withCategory('ui').info(`  • ${title} — ${suffix}`);
+                });
+            }
+        } catch (err) {
+            logger.withCategory('ui').info(`  (unavailable — ${err?.message || err})`);
+        }
     }
 
     logger.withCategory('ui').info('\nTo change mode, run: login');

@@ -126,6 +126,7 @@
             used: 'Used',
             unavailable: 'Unavailable',
             boost: 'Boost',
+            boostWindowOpen: 'Boost window open',
             boostTime: 'Boost Time',
             boostTimeDesc: 'When to automatically apply boost (time remaining)',
             autoBoost: 'Auto-Apply Boost',

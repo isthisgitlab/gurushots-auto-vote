@@ -63,6 +63,28 @@ export const formatTimeRemaining = (endTime) => {
 };
 
 /**
+ * Format a remaining-seconds duration with sensible units (largest two):
+ *   >= 1 day  → "Xd Yh"
+ *   >= 1 hour → "Xh Ym"
+ *   >= 1 min  → "Xm"
+ *   < 1 min   → "<1m"   (urgent, not the misleading "0m")
+ * Minute granularity keeps boost-window chips from churning every second on a
+ * long window. Negatives clamp to "<1m".
+ * @param {number} seconds
+ * @returns {string}
+ */
+export const formatDuration = (seconds) => {
+    const total = Math.max(0, Math.floor(seconds));
+    if (total < 60) return '<1m';
+    const days = Math.floor(total / 86400);
+    const hours = Math.floor((total % 86400) / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+};
+
+/**
  * Format end time to localized string
  * @param {number} endTime - Unix timestamp
  * @param {string} timezone - Timezone string (e.g., 'local', 'Europe/Riga')
@@ -123,6 +145,29 @@ export const getBoostStatus = (boost) => {
     } else {
         return { text: boost.state || 'Unknown', colorClass: 'text-purple-500' };
     }
+};
+
+/**
+ * Whether a challenge's boost window is currently open (boost can be applied
+ * right now). Mirrors the voting engine's predicate
+ * (services/VotingLogic.js:isBoostWindowOpen) but takes the boost object +
+ * `now` so it stays a pure renderer util with no Node/service dependency:
+ *   - AVAILABLE_KEY (key-unlocked) → open, no expiry
+ *   - AVAILABLE → open while a positive timeout is still in the future;
+ *     AVAILABLE without a timeout is treated as key-unlocked (open)
+ *   - anything else → closed
+ * @param {object} boost - Boost object from API (challenge.member.boost)
+ * @param {number} now - Current time (Unix seconds)
+ * @returns {boolean}
+ */
+export const isBoostWindowOpen = (boost, now) => {
+    if (!boost || !boost.state) return false;
+    if (boost.state === 'AVAILABLE_KEY') return true;
+    if (boost.state === 'AVAILABLE') {
+        const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
+        return hasTimeout ? boost.timeout > now : true;
+    }
+    return false;
 };
 
 /**

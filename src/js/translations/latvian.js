@@ -127,6 +127,7 @@
             used: 'Izmantots',
             unavailable: 'Nav pieejams',
             boost: 'Boost',
+            boostWindowOpen: 'Boost logs ir atvērts',
             boostTime: 'Boost laiks',
             boostTimeDesc: 'Kad automātiski pielietot "Boost" (pēc atlikušā laika)',
             autoBoost: 'Auto-pielietot Boost',

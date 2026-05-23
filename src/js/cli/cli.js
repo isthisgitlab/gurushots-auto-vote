@@ -124,7 +124,7 @@ const main = async () => {
                 // Don't exit for continuous mode — it keeps running.
                 break;
             case 'status':
-                showStatus();
+                await showStatus();
                 process.exit(0);
                 break;
             case 'get-setting': {
