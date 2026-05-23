@@ -1,0 +1,3 @@
+# Added by k0d3: the local memory MCP server writes a plaintext store here — do not commit.
+memory.jsonl
+memory.jsonl.*
