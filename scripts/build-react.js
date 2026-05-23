@@ -148,8 +148,6 @@ async function buildReact() {
     const CAPACITOR_EXTERNALS = [
         '@capacitor/core',
         '@capacitor/preferences',
-        '@capacitor/filesystem',
-        '@capacitor/local-notifications',
         '@capawesome-team/capacitor-android-foreground-service',
     ];
     // Two browser-shim banners. require() is faked because external
@@ -209,7 +207,7 @@ async function buildReact() {
         app: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
         logs: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
         // Capacitor entry: bundle the Capacitor plugin packages so the
-        // native bridge proxies (Preferences.set, Filesystem.writeFile,
+        // native bridge proxies (Preferences.set,
         // ForegroundService.startForegroundService, ...) actually work.
         capacitor: { external: RENDERER_EXTERNALS, banner: REQUIRE_SHIM },
         // Headless background entry: like the Electron entries, externalize
