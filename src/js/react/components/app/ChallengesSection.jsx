@@ -235,7 +235,7 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                     <ChallengeCard
                         key={`${challenge.id}-${refreshKey}`}
                         challenge={challenge}
-                        timeRemaining={times[challenge.id] || t('common.loading')}
+                        timeRemaining={times[challenge.id]}
                         timezone={timezone}
                         autovoteRunning={autovoteRunning}
                         onVoteComplete={handleVoteComplete}

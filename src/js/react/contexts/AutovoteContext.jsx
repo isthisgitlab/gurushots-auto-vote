@@ -24,7 +24,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     // Keep runningRef in sync with state. Publishing through a window
     // CustomEvent lets ChallengesProvider's sibling tree react without
     // a 1-Hz polling timer. dispatchEvent + CustomEvent exist in every
-    // target (Electron Chromium, Capacitor WebView, jsdom).
+    // target (Electron Chromium, Capacitor WebView, happy-dom test env).
     useEffect(() => {
         runningRef.current = state.running;
         window.autovoteRunning = state.running;

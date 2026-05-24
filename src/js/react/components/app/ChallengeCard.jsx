@@ -39,6 +39,13 @@ export function ChallengeCard({
         return () => clearInterval(id);
     }, []);
 
+    // timeRemaining is a Signal<string> from useTimers — reading .value here
+    // subscribes this card so the countdown text stays live. The badges smoke
+    // test passes a plain string, so fall back to the raw value (or a loading
+    // placeholder) when it isn't a signal.
+    const timeText =
+        timeRemaining && typeof timeRemaining === 'object' ? timeRemaining.value : timeRemaining || t('common.loading');
+
     const member = challenge.member;
     const entries = member.ranking.entries || [];
     const exposureFactor = member.ranking.exposure.exposure_factor;
@@ -321,12 +328,8 @@ export function ChallengeCard({
                 {/* Compact mode: single-line widget summary instead of the 6-cell grid. */}
                 {isCompact && (
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/80">
-                        <span
-                            className={
-                                timeRemaining === 'Ended' ? 'text-error font-medium' : 'text-success font-medium'
-                            }
-                        >
-                            ⏱ {timeRemaining}
+                        <span className={timeText === 'Ended' ? 'text-error font-medium' : 'text-success font-medium'}>
+                            ⏱ {timeText}
                         </span>
                         <span>📊 {exposureFactor}%</span>
                         <span className={boostStatus.colorClass}>🚀 {boostStatus.text}</span>
@@ -365,9 +368,7 @@ export function ChallengeCard({
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
                         <div className="text-center p-2 bg-base-200 rounded">
                             <div className="font-medium">{t('app.time')}</div>
-                            <div className={timeRemaining === 'Ended' ? 'text-error' : 'text-success'}>
-                                {timeRemaining}
-                            </div>
+                            <div className={timeText === 'Ended' ? 'text-error' : 'text-success'}>{timeText}</div>
                         </div>
                         <div className="text-center p-2 bg-base-200 rounded">
                             <div className="font-medium">{t('app.ends')}</div>
