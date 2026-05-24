@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="description" content="{{description}}" />
+        <title>{{title}}</title>
+        <link rel="icon" href="./logo.png" />
+        <link rel="stylesheet" href="./styles.css" />
+        <script>
+            // Apply the saved/preferred theme before first paint to avoid a flash.
+            (function () {
+                try {
+                    var saved = localStorage.getItem('theme');
+                    var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    document.documentElement.dataset.theme = saved || (prefersDark ? 'dark' : 'light');
+                } catch (e) {
+                    document.documentElement.dataset.theme = 'light';
+                }
+            })();
+        </script>
+    </head>
+    <body class="min-h-screen bg-base-100 text-base-content">
+        <div class="navbar bg-base-200 border-b border-base-300 sticky top-0 z-30">
+            <div class="container mx-auto flex flex-wrap items-center gap-2 px-4">
+                <a href="./index.html" class="flex flex-1 items-center gap-2 text-lg font-bold">
+                    <img src="./logo.png" alt="" class="h-8 w-8 rounded" />
+                    <span class="text-latvian">GuruShots Auto Vote</span>
+                </a>
+                <nav class="flex flex-wrap items-center justify-end gap-1">
+                    {{nav}}
+                    <a
+                        href="https://github.com/isthisgitlab/gurushots-auto-vote"
+                        class="btn btn-ghost btn-sm"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        >GitHub</a
+                    >
+                    <button id="theme-toggle" class="btn btn-ghost btn-circle btn-sm" aria-label="Switch to dark theme">
+                        🌙
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <main class="container mx-auto max-w-4xl px-4 py-8">
+            <article class="prose dark:prose-invert max-w-none">{{content}}</article>
+        </main>
+
+        <footer class="footer footer-center bg-base-200 text-base-content/70 border-t border-base-300 mt-8 p-6">
+            <aside class="space-y-1">
+                <p>
+                    GuruShots Auto Vote · v{{version}} ·
+                    <a class="link" href="https://github.com/isthisgitlab/gurushots-auto-vote">Source on GitHub</a>
+                </p>
+                <p class="text-xs">Rendered from the project README. Not affiliated with GuruShots.</p>
+            </aside>
+        </footer>
+
+        <script>
+            (function () {
+                var btn = document.getElementById('theme-toggle');
+                if (!btn) return;
+                var sync = function () {
+                    var dark = document.documentElement.dataset.theme === 'dark';
+                    btn.textContent = dark ? '☀️' : '🌙';
+                    // Announce the action the button performs, not just a static label.
+                    btn.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+                };
+                sync();
+                btn.addEventListener('click', function () {
+                    var next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+                    document.documentElement.dataset.theme = next;
+                    try {
+                        localStorage.setItem('theme', next);
+                    } catch (e) {
+                        /* ignore storage failures (private mode) */
+                    }
+                    sync();
+                });
+            })();
+        </script>
+    </body>
+</html>

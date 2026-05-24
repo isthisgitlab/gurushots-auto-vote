@@ -1,0 +1,68 @@
+name: Pages
+
+# Builds the README (+ linked docs) into a branded static site and publishes it
+# to GitHub Pages. Requires a one-time repo setting:
+# Settings → Pages → Build and deployment → Source = "GitHub Actions".
+on:
+    push:
+        branches: [master]
+        paths:
+            - 'README.md'
+            - 'docs/**'
+            - 'scripts/build-site.js'
+            - 'scripts/site/**'
+            - 'src/assets/logo.png'
+            - 'package.json'
+            - 'pnpm-lock.yaml'
+            - '.github/workflows/pages.yml'
+    workflow_dispatch:
+
+# Least privilege: the build job only reads source and uploads an artifact;
+# id-token (OIDC) is granted to the deploy job alone, where deploy-pages needs it.
+permissions:
+    contents: read
+
+# Allow one in-flight Pages deploy at a time; don't cancel a running publish.
+concurrency:
+    group: pages
+    cancel-in-progress: false
+
+jobs:
+    build:
+        runs-on: ubuntu-slim
+        timeout-minutes: 15
+        permissions:
+            contents: read
+            pages: write
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
+
+            - name: Build site
+              run: pnpm build:site
+
+            - name: Configure Pages
+              uses: actions/configure-pages@v6
+
+            - name: Upload Pages artifact
+              uses: actions/upload-pages-artifact@v5
+              with:
+                  path: dist-site
+
+    deploy:
+        needs: build
+        runs-on: ubuntu-slim
+        timeout-minutes: 10
+        permissions:
+            pages: write
+            id-token: write
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        steps:
+            - name: Deploy to GitHub Pages
+              id: deployment
+              uses: actions/deploy-pages@v5

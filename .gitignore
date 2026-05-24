@@ -97,6 +97,9 @@ out
 .nuxt
 dist
 
+# GitHub Pages static site output (scripts/build-site.js)
+dist-site/
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js

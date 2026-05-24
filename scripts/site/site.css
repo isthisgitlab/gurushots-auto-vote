@@ -1,0 +1,30 @@
+/* Tailwind v4 entry for the GitHub Pages site. Mirrors the app's CSS-first
+ * setup (src/styles/styles.css) but scans only the generated site + this
+ * layout, and adds the typography plugin for `prose`-rendered Markdown.
+ * Build with: pnpm build:site:css (after build:site:html generates the HTML). */
+@import 'tailwindcss' source(none);
+
+@source "../../dist-site/**/*.html";
+@source "./layout.html";
+
+@plugin "daisyui" {
+    themes: light, dark;
+    base: true;
+    styled: true;
+    utils: true;
+    logs: false;
+}
+@plugin "@tailwindcss/typography";
+
+/* DaisyUI switches themes via data-theme, so tie the `dark:` variant to it
+ * (instead of the default prefers-color-scheme) — this is what makes
+ * `prose dark:prose-invert` follow the navbar toggle. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme {
+    --color-latvian: #960018;
+}
+
+.text-latvian {
+    color: var(--color-latvian);
+}
