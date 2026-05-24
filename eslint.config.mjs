@@ -69,5 +69,25 @@ export default [
             'no-undef': 'off', // Disable no-undef for browser globals
         },
     },
+    // Jest test files. `pnpm lint` only scans src/ + scripts/, but the lefthook
+    // pre-commit hook lints any staged *.{js,jsx} — tests included — so the Jest
+    // globals (describe/it/test/expect/jest/beforeEach/…) must be declared here
+    // or a staged test edit fails no-undef. Browser globals come too: the
+    // jsdom-project tests touch window/document.
+    {
+        files: ['tests/**/*.js', 'tests/**/*.jsx'],
+        languageOptions: {
+            globals: {
+                ...globals.node,
+                ...globals.browser,
+                ...globals.jest,
+            },
+            parserOptions: {
+                ecmaFeatures: {
+                    jsx: true,
+                },
+            },
+        },
+    },
     eslintConfigPrettier,
 ];
