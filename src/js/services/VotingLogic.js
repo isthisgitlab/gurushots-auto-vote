@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Voting Logic Service
  *
@@ -6,7 +7,45 @@
  * duplicated across api/main.js, mock/index.js, and index.js
  */
 
-const settings = require('../settings');
+// Cast to any at the boundary: the settings facade isn't `// @ts-check`ed yet,
+// and its `challengeId = null` defaults make TS infer param types too narrow
+// (null) to accept the string IDs passed here. Drop the cast once settings.js
+// is typed.
+const settings = /** @type {any} */ (require('../settings'));
+
+/**
+ * Intermediate result from the shared rule engine (`_runVotingRules`); the
+ * per-mode wrappers map it onto their caller-facing shapes.
+ * @typedef {object} VotingRuleResult
+ * @property {boolean} eligible
+ * @property {boolean} atTarget
+ * @property {string|null} skipReason
+ * @property {number} targetExposure
+ * @property {string|null} ruleLabel
+ * @property {*} thresholdInfo
+ */
+
+/**
+ * @typedef {object} AutoVoteDecision
+ * @property {boolean} shouldVote
+ * @property {string} voteReason
+ * @property {number} targetExposure
+ */
+
+/**
+ * @typedef {object} ManualVoteDecision
+ * @property {boolean} shouldAllowVoting
+ * @property {string} errorMessage
+ * @property {number} targetExposure
+ */
+
+/**
+ * @typedef {object} TurboDecision
+ * @property {boolean} apply
+ * @property {string|null} imageId
+ * @property {boolean} fillNew
+ * @property {string} reason
+ */
 
 /**
  * Check if a challenge is within the last hour
@@ -85,6 +124,11 @@ const getEffectiveLastHourExposureTarget = (challengeId) => {
  *     targetExposure:number,
  *     ruleLabel:     string,          // 'flash', 'lastminute', 'last-hour', 'normal'
  *     thresholdInfo: object }         // small bundle of settings the wrapper formats
+ *
+ * @param {any} challenge
+ * @param {number} now
+ * @param {'auto'|'manual'} mode
+ * @returns {VotingRuleResult}
  */
 const _runVotingRules = (challenge, now, mode) => {
     const challengeId = challenge.id.toString();
@@ -102,6 +146,7 @@ const _runVotingRules = (challenge, now, mode) => {
     const withinLastHour = isWithinLastHour(challenge.close_time, now);
     const currentExposure = challenge.member.ranking.exposure.exposure_factor;
 
+    /** @param {string} skipReason @returns {VotingRuleResult} */
     const blocked = (skipReason) => ({
         eligible: false,
         atTarget: false,
@@ -112,6 +157,13 @@ const _runVotingRules = (challenge, now, mode) => {
     });
     // Eligibility uses the trigger ("vote if below"); the loop ceiling uses the target
     // ("vote up to"). For flash and lastminute they are intentionally both 100.
+    /**
+     * @param {string} ruleLabel
+     * @param {number} trigger
+     * @param {number} target
+     * @param {*} thresholdInfo
+     * @returns {VotingRuleResult}
+     */
     const decided = (ruleLabel, trigger, target, thresholdInfo) => {
         const atTarget = currentExposure >= trigger;
         return {
@@ -156,6 +208,9 @@ const _runVotingRules = (challenge, now, mode) => {
 
 /**
  * Auto-vote evaluator. Returns { shouldVote, voteReason, targetExposure }.
+ * @param {any} challenge
+ * @param {number} now
+ * @returns {AutoVoteDecision}
  */
 const evaluateVotingDecision = (challenge, now) => {
     const r = _runVotingRules(challenge, now, 'auto');
@@ -169,7 +224,9 @@ const evaluateVotingDecision = (challenge, now) => {
         effectiveExposureTarget,
         effectiveLastHourExposureTarget,
     } = r.thresholdInfo;
+    /** @param {number} trigger @param {number} target @returns {string} */
     const targetSuffix = (trigger, target) => (target !== trigger ? ` (vote up to ${target}%)` : '');
+    /** @type {Record<string, string>} */
     const reasons = {
         flash: r.atTarget ? 'flash type: exposure already at 100%' : `flash type: exposure ${currentExposure}% < 100%`,
         lastminute: r.atTarget
@@ -182,11 +239,19 @@ const evaluateVotingDecision = (challenge, now) => {
             ? `normal threshold: exposure ${currentExposure}% < ${effectiveThreshold}%${targetSuffix(effectiveThreshold, effectiveExposureTarget)}`
             : `normal threshold: exposure ${currentExposure}% >= ${effectiveThreshold}%`,
     };
-    return { shouldVote: r.eligible, voteReason: reasons[r.ruleLabel], targetExposure: r.targetExposure };
+    return {
+        shouldVote: r.eligible,
+        voteReason: reasons[/** @type {string} */ (r.ruleLabel)],
+        targetExposure: r.targetExposure,
+    };
 };
 
 /**
  * Manual-vote evaluator. Returns { shouldAllowVoting, errorMessage, targetExposure }.
+ * @param {any} challenge
+ * @param {number} now
+ * @param {string} challengeTitle
+ * @returns {ManualVoteDecision}
  */
 const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
     const r = _runVotingRules(challenge, now, 'manual');
@@ -203,13 +268,18 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
 
     if (r.atTarget) {
         const { effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure } = r.thresholdInfo;
+        /** @type {Record<string, string>} */
         const messages = {
             flash: `Challenge "${challengeTitle}" already has 100% exposure (flash type)`,
             lastminute: `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`,
             'last-hour': `Challenge "${challengeTitle}" already has ${effectiveLastHourExposure}% exposure (last hour threshold)`,
             normal: `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`,
         };
-        return { shouldAllowVoting: false, errorMessage: messages[r.ruleLabel], targetExposure: r.targetExposure };
+        return {
+            shouldAllowVoting: false,
+            errorMessage: messages[/** @type {string} */ (r.ruleLabel)],
+            targetExposure: r.targetExposure,
+        };
     }
 
     return { shouldAllowVoting: true, errorMessage: '', targetExposure: r.targetExposure };
@@ -218,7 +288,7 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
 /**
  * Evaluate whether manual voting to 100% should be allowed on a challenge
  * (Used for manual vote buttons - bypasses all threshold configurations)
- * @param {Object} challenge - Challenge object
+ * @param {any} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
  * @param {string} challengeTitle - Challenge title for error messages
  * @returns {Object} - Decision with shouldAllowVoting boolean, errorMessage string, and targetExposure number
@@ -278,7 +348,7 @@ const getEffectiveBoostTime = (challengeId) => {
  *   apply when timeUntilBoostExpires <= effectiveBoostTime
  * - Key-unlocked available (state === 'AVAILABLE_KEY' or available with no timeout):
  *   ignore boost timer completely and apply only if challenge ends in next 15 minutes
- * @param {Object} challenge - Challenge object
+ * @param {any} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
  * @returns {boolean} - True if boost should be applied
  */
@@ -323,7 +393,7 @@ const shouldApplyBoost = (challenge, now) => {
  * with an active timer, or AVAILABLE_KEY / AVAILABLE without timeout).
  * Used by both shouldApplyBoost (for its own decision) and shouldApplyTurbo
  * (to optionally skip turbo while a boost is queued for the same challenge).
- * @param {Object} challenge
+ * @param {any} challenge
  * @param {number} now - Unix timestamp in seconds
  * @returns {boolean}
  */
@@ -337,6 +407,10 @@ const isBoostWindowOpen = (challenge, now) => {
     return false;
 };
 
+/**
+ * @param {string} challengeId
+ * @returns {number}
+ */
 const getEffectiveTurboTime = (challengeId) => {
     return settings.getEffectiveSetting('turboTime', challengeId);
 };
@@ -351,6 +425,10 @@ const getEffectiveTurboTime = (challengeId) => {
  *     → slot 0 (first entry) rather than propagating NaN
  *   - 0 → last entry slot (sentinel)
  *   - positives → clamped to [0, entries.length - 1]
+ *
+ * @param {*} entries
+ * @param {*} requestedIndex
+ * @returns {number|null}
  */
 const resolveEntryIndex = (entries, requestedIndex) => {
     if (!Array.isArray(entries) || entries.length === 0) return null;
@@ -370,10 +448,16 @@ const resolveEntryIndex = (entries, requestedIndex) => {
  * the boosted one (conflictField='boosted'). A single-step backward fallback
  * is always sufficient — unless the challenge has only one entry and that
  * one is already in the conflicting state, in which case returns null.
+ *
+ * @param {*} entries
+ * @param {*} requestedIndex
+ * @param {string} conflictField
+ * @returns {*}
  */
 const pickEntryAvoidingConflict = (entries, requestedIndex, conflictField) => {
     if (!Array.isArray(entries) || entries.length === 0) return null;
-    let slot = resolveEntryIndex(entries, requestedIndex);
+    // Non-empty array guaranteed above, so resolveEntryIndex returns a number.
+    let slot = /** @type {number} */ (resolveEntryIndex(entries, requestedIndex));
     if (entries[slot]?.[conflictField]) {
         slot = (slot - 1 + entries.length) % entries.length;
     }
@@ -382,7 +466,7 @@ const pickEntryAvoidingConflict = (entries, requestedIndex, conflictField) => {
 
 /**
  * Decides whether to play the Turbo mini-game on a challenge.
- * @param {Object} challenge
+ * @param {any} challenge
  * @param {number} now - Unix timestamp in seconds
  * @returns {boolean}
  */
@@ -410,11 +494,12 @@ const shouldPlayAutoTurbo = (challenge, now) => {
  * (fill-new can create the first entry) and `imageId` is returned only as a
  * fallback target for when the fresh submit can't happen.
  *
- * @param {Object} challenge
+ * @param {any} challenge
  * @param {number} now - Unix timestamp in seconds
  * @returns {{apply: boolean, imageId: string|null, fillNew: boolean, reason: string}}
  */
 const shouldApplyTurbo = (challenge, now) => {
+    /** @param {string} reason @returns {TurboDecision} */
     const noop = (reason) => ({ apply: false, imageId: null, fillNew: false, reason });
     if (!challenge) return noop('no challenge');
     if (challenge.close_time <= now) return noop('challenge ended');

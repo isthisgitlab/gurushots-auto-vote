@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * GuruShots Auto Voter - API Factory
  *
@@ -20,6 +21,26 @@ const { applyTurbo } = require('./api/turbo');
 const { getEligiblePhotos, submitToChallenge } = require('./api/submissions');
 const { mockApiClient } = require('./mock');
 
+/**
+ * The API surface that both the real and mock strategies must implement.
+ * Annotating `realApi` and `mockApi` against this keeps the two in lockstep:
+ * drop, rename, or mistype a method on one and `pnpm typecheck` fails.
+ *
+ * @typedef {object} ApiStrategy
+ * @property {(...args: any[]) => any} authenticate
+ * @property {(...args: any[]) => any} fetchChallengesAndVote
+ * @property {(...args: any[]) => any} getActiveChallenges
+ * @property {(...args: any[]) => any} getVoteImages
+ * @property {(...args: any[]) => any} submitVotes
+ * @property {(...args: any[]) => any} applyBoost
+ * @property {(...args: any[]) => any} applyBoostToEntry
+ * @property {(...args: any[]) => any} applyTurbo
+ * @property {(...args: any[]) => any} getEligiblePhotos
+ * @property {(...args: any[]) => any} submitToChallenge
+ * @property {() => string} getStrategyType
+ */
+
+/** @type {ApiStrategy} */
 const realApi = {
     authenticate,
     fetchChallengesAndVote,
@@ -34,6 +55,13 @@ const realApi = {
     getStrategyType: () => 'RealAPI',
 };
 
+/**
+ * Wraps a mock implementation so each call emits a debug log first.
+ *
+ * @param {string} label
+ * @param {(...args: any[]) => any} fn
+ * @returns {(...args: any[]) => Promise<any>}
+ */
 const withMockDebug =
     (label, fn) =>
     async (...args) => {
@@ -41,6 +69,7 @@ const withMockDebug =
         return fn(...args);
     };
 
+/** @type {ApiStrategy} */
 const mockApi = {
     authenticate: withMockDebug('authentication', mockApiClient.authenticate.bind(mockApiClient)),
     fetchChallengesAndVote: withMockDebug(
@@ -58,8 +87,11 @@ const mockApi = {
     getStrategyType: () => 'MockAPI',
 };
 
+/** @type {ApiStrategy | null} */
 let currentStrategy = null;
+/** @type {InstanceType<typeof BaseMiddleware> | null} */
 let currentMiddleware = null;
+/** @type {boolean | null} */
 let lastMockSetting = null;
 
 const getApiStrategy = () => {

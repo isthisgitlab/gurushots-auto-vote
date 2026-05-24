@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Centralized Settings Schema
  *
@@ -9,10 +10,34 @@
  */
 
 /**
+ * Shape of a single SETTINGS_SCHEMA entry. All fields are optional so the
+ * heterogeneous entries (some carry contextValidation/getContextError, most
+ * don't) all fit one type; the typed validator signatures also give the
+ * inline `(value) => ...` callbacks contextual typing so they aren't flagged
+ * as implicit-any.
+ *
+ * @typedef {object} SettingsSchemaEntry
+ * @property {string} [type]
+ * @property {*} [default]
+ * @property {boolean} [perChallenge]
+ * @property {(value: any) => boolean} [validation]
+ * @property {(value: any, allSettings: any, challengeId?: any) => boolean} [contextValidation]
+ * @property {(value: any, allSettings: any, challengeId?: any) => string} [getContextError]
+ * @property {string[]} [dependsOn]
+ * @property {number} [validationOrder]
+ * @property {string} [group]
+ * @property {string} [label]
+ * @property {string} [description]
+ */
+
+/**
  * Helper to read schema defaults at runtime. Defined ahead of
  * SETTINGS_SCHEMA so the contextValidation closures inside the schema
  * can resolve sibling defaults without forward-referencing the constant
  * literal during construction.
+ *
+ * @param {string} key
+ * @returns {*}
  */
 const getSchemaDefault = (key) => SETTINGS_SCHEMA[key]?.default;
 
@@ -22,6 +47,10 @@ const getSchemaDefault = (key) => SETTINGS_SCHEMA[key]?.default;
 // pathological input to the picker.
 const MAX_TAG_LENGTH = 50;
 const MAX_TAGS_PER_LIST = 50;
+/**
+ * @param {*} value
+ * @returns {boolean}
+ */
 const isValidTagsList = (value) =>
     Array.isArray(value) &&
     value.length <= MAX_TAGS_PER_LIST &&
@@ -32,6 +61,7 @@ const isValidTagsList = (value) =>
 // settings modals render. Object key order has no runtime effect —
 // getSchemaDefault resolves at call time and validationOrder/dependsOn drive
 // dependency ordering — so the order here is purely for readability.
+/** @type {Record<string, SettingsSchemaEntry>} */
 const SETTINGS_SCHEMA = {
     // --- General ---
     exposure: {
@@ -418,6 +448,12 @@ const SETTINGS_GROUPS = [
  * Validate a single setting value against SETTINGS_SCHEMA. Keys that are
  * not in the schema are treated as valid because the schema is the only
  * source of validation rules for per-challenge tunables.
+ *
+ * @param {string} key
+ * @param {*} value
+ * @param {Record<string, any>|null} [allSettings]
+ * @param {string|null} [challengeId]
+ * @returns {boolean}
  */
 const validateSetting = (key, value, allSettings = null, challengeId = null) => {
     const schemaConfig = SETTINGS_SCHEMA[key];
@@ -435,6 +471,12 @@ const validateSetting = (key, value, allSettings = null, challengeId = null) => 
  * (challengeId is forwarded to contextValidation) so a future schema
  * entry that depends on per-challenge context behaves identically
  * across both validation paths.
+ *
+ * @param {string} settingKey
+ * @param {*} value
+ * @param {Record<string, any>|null} [allSettings]
+ * @param {string|null} [challengeId]
+ * @returns {string|null}
  */
 const getValidationError = (settingKey, value, allSettings = null, challengeId = null) => {
     const schemaConfig = SETTINGS_SCHEMA[settingKey];
