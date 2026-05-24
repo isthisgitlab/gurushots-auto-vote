@@ -11,6 +11,7 @@
 import {
     calculateNextThresholdEntry as calcNextThresholdEntry,
     isAnyChallengeInThresholdWindow as anyChallengeInThresholdWindow,
+    computeNextCycleDelayMs as computeNextDelayMs,
 } from '../../scheduling/thresholdWindow';
 
 // WebView resolver: per-challenge lastMinuteThreshold over IPC (Promise).
@@ -35,4 +36,18 @@ export async function calculateNextThresholdEntry(challenges, now) {
  */
 export async function isAnyChallengeInThresholdWindow(challenges, now) {
     return anyChallengeInThresholdWindow(challenges, now, resolveThreshold);
+}
+
+/**
+ * Delay (ms) until the next voting cycle, using the shared decision: fast fixed
+ * cadence while in-window, otherwise the rolled random delay capped to the
+ * soonest upcoming threshold entry. The host rolls `normalDelayMs` and resolves
+ * `lastMinuteCheckMinutes` (over IPC) and passes them in.
+ * @param {Array} challenges
+ * @param {number} now - Unix timestamp (seconds)
+ * @param {{normalDelayMs:number, lastMinuteCheckMinutes:number, minGapMs:number}} opts
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'normal', nextEntry:(object|null)}>}
+ */
+export async function computeNextCycleDelayMs(challenges, now, { normalDelayMs, lastMinuteCheckMinutes, minGapMs }) {
+    return computeNextDelayMs(challenges, now, { resolveThreshold, normalDelayMs, lastMinuteCheckMinutes, minGapMs });
 }

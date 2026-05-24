@@ -15,6 +15,7 @@
 const {
     calculateNextThresholdEntry,
     isAnyChallengeInThresholdWindow,
+    computeNextCycleDelayMs,
 } = require('../../src/js/react/contexts/autovoteScheduler');
 
 describe('autovoteScheduler helpers', () => {
@@ -113,6 +114,34 @@ describe('autovoteScheduler helpers', () => {
                 { id: 2, title: 'Four', type: 'regular', close_time: now + 240 },
             ];
             expect(await isAnyChallengeInThresholdWindow(challenges, now)).toBe(true);
+        });
+    });
+
+    describe('computeNextCycleDelayMs (WebView resolver)', () => {
+        const opts = (extra) => ({
+            normalDelayMs: 3 * 60_000,
+            lastMinuteCheckMinutes: 1,
+            minGapMs: 5_000,
+            ...extra,
+        });
+
+        it('caps the delay to an upcoming boundary resolved over IPC', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            getEffectiveSetting.mockResolvedValue(16); // per-challenge threshold via IPC
+            // closes in 17 min, threshold 16 → boundary 60s out, under the 3-min delay
+            const challenges = [{ id: 126202, title: 'Cats', type: 'regular', close_time: now + 17 * 60 }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts());
+            expect(result.mode).toBe('approaching');
+            expect(result.delayMs).toBe(60_000);
+        });
+
+        it('uses the fixed fast cadence when already in-window', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            getEffectiveSetting.mockResolvedValue(10);
+            const challenges = [{ id: 1, title: 'Closing', type: 'regular', close_time: now + 120 }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts({ lastMinuteCheckMinutes: 2 }));
+            expect(result.mode).toBe('last-minute');
+            expect(result.delayMs).toBe(2 * 60_000);
         });
     });
 });

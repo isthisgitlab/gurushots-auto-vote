@@ -14,6 +14,7 @@
 const {
     calculateNextThresholdEntry,
     isAnyChallengeInThresholdWindow,
+    computeNextCycleDelayMs,
 } = require('../../src/js/scheduling/thresholdWindow');
 
 // Two resolver shapes: Node (sync return) and WebView (Promise). Both yield 5.
@@ -104,6 +105,101 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
         it('is false for an empty challenge list', async () => {
             const now = Math.floor(Date.now() / 1000);
             expect(await isAnyChallengeInThresholdWindow([], now, resolveThreshold)).toBe(false);
+        });
+    });
+
+    describe('computeNextCycleDelayMs', () => {
+        const NORMAL = 3 * 60_000; // 3 min rolled random delay
+        const FAST = 1; // lastMinuteCheckMinutes
+        const MIN_GAP = 5_000;
+        const opts = (extra) => ({
+            resolveThreshold,
+            normalDelayMs: NORMAL,
+            lastMinuteCheckMinutes: FAST,
+            minGapMs: MIN_GAP,
+            ...extra,
+        });
+
+        it('uses the fixed fast cadence when a challenge is already in-window', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Closing', type: 'regular', close_time: now + 120 }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts());
+            expect(result.mode).toBe('last-minute');
+            expect(result.delayMs).toBe(FAST * 60_000);
+        });
+
+        it('caps the delay to the soonest upcoming boundary when it is sooner than the random delay', async () => {
+            // Regression lock for the reported bug: challenge closes in 17 min,
+            // per-challenge threshold 16 min → boundary is 60s away. With a 3-min
+            // random delay we must cap to ~60s, not overshoot to 3 min.
+            const now = Math.floor(Date.now() / 1000);
+            const closeIn17m = now + 17 * 60;
+            const sixteenMin = () => 16;
+            const challenges = [{ id: 126202, title: 'Cats', type: 'regular', close_time: closeIn17m }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts({ resolveThreshold: sixteenMin }));
+            expect(result.mode).toBe('approaching');
+            expect(result.delayMs).toBe(60_000); // (17 - 16) min to the boundary
+            expect(result.nextEntry.challengeId).toBe(126202);
+        });
+
+        it('keeps the normal random delay when the boundary is further than one delay out', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // close in 1h, threshold 5 → boundary 55 min out, well beyond the 3-min delay
+            const challenges = [{ id: 1, title: 'Far', type: 'regular', close_time: now + 3600 }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts());
+            expect(result.mode).toBe('normal');
+            expect(result.delayMs).toBe(NORMAL);
+        });
+
+        it('returns the normal delay when there are no eligible challenges', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Flash', type: 'flash', close_time: now + 120 }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts());
+            expect(result.mode).toBe('normal');
+            expect(result.delayMs).toBe(NORMAL);
+            expect(result.nextEntry).toBeNull();
+        });
+
+        it('floors the approaching delay at minGapMs when the boundary is essentially here', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // close in 5 min + 1s, threshold 5 → boundary 1s away, below the 5s floor
+            const challenges = [{ id: 1, title: 'Imminent', type: 'regular', close_time: now + 301 }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts());
+            expect(result.mode).toBe('approaching');
+            expect(result.delayMs).toBe(MIN_GAP);
+        });
+
+        it('treats the exact boundary (close_time - now === threshold*60) as in-window, not approaching', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // resolver returns 5 (min) → 300s window; close in exactly 300s sits
+            // on the inclusive boundary, so it is in-window (last-minute), and
+            // calculateNextThresholdEntry would (correctly) report no future entry.
+            const challenges = [{ id: 1, title: 'Boundary', type: 'regular', close_time: now + 300 }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts());
+            expect(result.mode).toBe('last-minute');
+            expect(result.delayMs).toBe(FAST * 60_000);
+        });
+
+        it('prefers last-minute when one challenge is in-window even if another is only approaching', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // Both have a 5-min (300s) window. #1 is approaching (entry 60s out),
+            // #2 is already in-window. The in-window challenge must win.
+            const challenges = [
+                { id: 1, title: 'Approaching', type: 'regular', close_time: now + 360 },
+                { id: 2, title: 'In window', type: 'regular', close_time: now + 120 },
+            ];
+            const result = await computeNextCycleDelayMs(challenges, now, opts());
+            expect(result.mode).toBe('last-minute');
+            expect(result.delayMs).toBe(FAST * 60_000);
+        });
+
+        it('floors the fast cadence at minGapMs', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            const challenges = [{ id: 1, title: 'Closing', type: 'regular', close_time: now + 60 }];
+            // lastMinuteCheckMinutes so small its ms value is under the floor
+            const result = await computeNextCycleDelayMs(challenges, now, opts({ lastMinuteCheckMinutes: 0.001 }));
+            expect(result.mode).toBe('last-minute');
+            expect(result.delayMs).toBe(MIN_GAP);
         });
     });
 });

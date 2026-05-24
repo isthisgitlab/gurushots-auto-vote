@@ -3,7 +3,7 @@ import { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } from '../../scheduling/ra
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
-import { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow } from './autovoteScheduler';
+import { computeNextCycleDelayMs } from './autovoteScheduler';
 
 const AutovoteContext = createContext(null);
 
@@ -13,20 +13,13 @@ const AutovoteContext = createContext(null);
 export function AutovoteProvider({ children, onChallengesRefresh }) {
     const [state, dispatch] = useReducer(autovoteReducer, initialState);
 
-    // Refs to prevent stale closures in intervals
+    // Refs to prevent stale closures in the timer chain.
     const runningRef = useRef(state.running);
-    const autovoteIntervalRef = useRef(null);
-    const thresholdSchedulerRef = useRef(null);
-    const currentScheduledChallengeRef = useRef(null);
-    // True while the fixed last-minute setInterval is the live cadence.
-    // autovoteIntervalRef alone can't tell the two modes apart (it holds either
-    // a setInterval id in last-minute mode or a setTimeout id in normal mode),
-    // so this flag gates the revert-to-normal path in updateThresholdScheduling.
-    const lastMinuteModeRef = useRef(false);
-    // Holds the latest normal-cadence starter (start()'s scheduleNext). Stored
-    // in a ref so updateThresholdScheduling can resume normal cadence on revert
-    // without a render-time dependency cycle between the two callbacks.
-    const scheduleNormalRef = useRef(null);
+    // Single recursive setTimeout handle for the whole cadence chain. Each cycle
+    // decides its own next delay (fast in-window / capped approaching / normal)
+    // via the shared computeNextCycleDelayMs, so there is no separate fast-mode
+    // interval or boundary-switch timer to keep in sync.
+    const cycleTimerRef = useRef(null);
 
     // Keep runningRef in sync with state. Publishing through a window
     // CustomEvent lets ChallengesProvider's sibling tree react without
@@ -41,11 +34,8 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (autovoteIntervalRef.current) {
-                clearInterval(autovoteIntervalRef.current);
-            }
-            if (thresholdSchedulerRef.current) {
-                clearTimeout(thresholdSchedulerRef.current);
+            if (cycleTimerRef.current) {
+                clearTimeout(cycleTimerRef.current);
             }
         };
     }, []);
@@ -108,105 +98,84 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     }, [onChallengesRefresh]);
 
     /**
-     * Update threshold scheduling
+     * Decide the delay until the next cycle and arm the single timer. Each cycle
+     * picks its own cadence: fixed fast cadence while a challenge is in-window,
+     * the rolled random delay capped to the soonest upcoming threshold entry
+     * otherwise. `prefetched` reuses a just-completed cycle's challenge list; a
+     * non-array (standalone re-arm or a cycle that surfaced no list) fetches
+     * fresh. In normal mode the wait is anchored to the previous cycle start so
+     * the gap between starts ≈ the delay; in approaching/last-minute mode it runs
+     * from cycle completion so the boundary is never undershot.
      */
-    const updateThresholdScheduling = useCallback(
-        async (prefetched = null) => {
-            if (!runningRef.current) return;
+    const scheduleNext = useCallback(
+        async (prefetched = null, previousCycleStartMs = null) => {
+            if (!runningRef.current) {
+                cycleTimerRef.current = null;
+                return;
+            }
 
+            let waitMs;
             try {
                 const settings = await window.api.getSettings();
-                // Reuse a just-completed cycle's challenge list when provided; a
-                // non-array (standalone re-arm, or a failed cycle) fetches fresh.
+                const normalDelayMs = getRandomCheckFrequencyMs(settings);
                 const challenges = Array.isArray(prefetched)
                     ? prefetched
                     : (await window.api.getActiveChallenges(settings.token))?.challenges || [];
                 const now = Math.floor(Date.now() / 1000);
+                const lastMinuteCheckMinutes =
+                    Number(await window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
 
-                // Revert: if the fixed last-minute interval is live but nothing is
-                // currently within its last-minute window, tear it down and resume
-                // the normal randomized cadence. Without this the interval is a
-                // one-way door — a single challenge entering its final minutes would
-                // pin the session at lastMinuteCheckFrequency forever, even after it
-                // closes. Mirrors runScheduler.js's revert block.
-                if (lastMinuteModeRef.current && !(await isAnyChallengeInThresholdWindow(challenges, now))) {
-                    if (autovoteIntervalRef.current) {
-                        clearInterval(autovoteIntervalRef.current);
-                        autovoteIntervalRef.current = null;
-                    }
-                    lastMinuteModeRef.current = false;
-                    if (scheduleNormalRef.current) {
-                        scheduleNormalRef.current(settings, Date.now());
-                    }
+                const decision = await computeNextCycleDelayMs(challenges, now, {
+                    normalDelayMs,
+                    lastMinuteCheckMinutes,
+                    minGapMs: MIN_CYCLE_GAP_MS,
+                });
+
+                if (decision.mode === 'normal') {
+                    const anchorMs = previousCycleStartMs ?? Date.now();
+                    const remainingMs = anchorMs + decision.delayMs - Date.now();
+                    waitMs = Math.min(decision.delayMs, Math.max(MIN_CYCLE_GAP_MS, remainingMs));
+                } else {
+                    waitMs = decision.delayMs;
                     // Best-effort parity log (optional-chained so a host without
-                    // logDebug, e.g. a minimal Capacitor bridge, can't abort the revert).
+                    // logDebug, e.g. a minimal Capacitor bridge, can't abort scheduling).
                     await window.api.logDebug?.(
-                        '⏰ No challenges within last-minute window — reverting to normal check frequency',
+                        decision.mode === 'last-minute'
+                            ? `⏰ Last-minute cadence — next cycle in ${Math.round(waitMs / 1000)}s`
+                            : `⏰ Approaching last-minute window for "${decision.nextEntry?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s`,
                     );
                 }
+            } catch (err) {
+                await window.api.logWarning(
+                    `Error computing next cycle delay; using normal cadence: ${err.message || err}`,
+                );
+                try {
+                    waitMs = getRandomCheckFrequencyMs(await window.api.getSettings());
+                } catch {
+                    waitMs = getRandomCheckFrequencyMs({});
+                }
+            }
 
-                const nextEntry = await calculateNextThresholdEntry(challenges, now);
+            if (!runningRef.current) {
+                cycleTimerRef.current = null;
+                return;
+            }
 
-                if (nextEntry) {
-                    // Check for duplicate scheduling
-                    if (
-                        currentScheduledChallengeRef.current?.challengeId === nextEntry.challengeId &&
-                        currentScheduledChallengeRef.current?.entryTime === nextEntry.entryTime
-                    ) {
-                        return;
-                    }
-
-                    const timeUntilEntry = (nextEntry.entryTime - now) * 1000;
-
-                    if (timeUntilEntry <= 0) return;
-
-                    // Clear existing scheduler
-                    if (thresholdSchedulerRef.current) {
-                        clearTimeout(thresholdSchedulerRef.current);
-                    }
-
-                    currentScheduledChallengeRef.current = nextEntry;
-
-                    thresholdSchedulerRef.current = setTimeout(async () => {
-                        if (!runningRef.current) return;
-
-                        // Switch to last threshold frequency
-                        if (autovoteIntervalRef.current) {
-                            clearInterval(autovoteIntervalRef.current);
-                        }
-
-                        const lastMinuteCheckFrequency = await window.api.getEffectiveSetting(
-                            'lastMinuteCheckFrequency',
-                            'global',
-                        );
-                        const votingIntervalMs = lastMinuteCheckFrequency * 60000;
-
-                        lastMinuteModeRef.current = true;
-                        autovoteIntervalRef.current = setInterval(async () => {
-                            if (!runningRef.current) {
-                                clearInterval(autovoteIntervalRef.current);
-                                autovoteIntervalRef.current = null;
-                                return;
-                            }
-                            // Re-evaluate after every tick so the window-passed
-                            // revert (above) can return us to normal cadence.
-                            const cycleChallenges = await runVotingCycle();
-                            await updateThresholdScheduling(cycleChallenges);
-                        }, votingIntervalMs);
-
-                        currentScheduledChallengeRef.current = null;
-                        await updateThresholdScheduling();
-                    }, timeUntilEntry);
-                } else {
-                    if (thresholdSchedulerRef.current) {
-                        clearTimeout(thresholdSchedulerRef.current);
-                        thresholdSchedulerRef.current = null;
-                        currentScheduledChallengeRef.current = null;
+            const timeoutId = setTimeout(async () => {
+                // A newer chain may have taken over (e.g. start() re-armed); only
+                // the timer that is still current may run + reschedule.
+                if (!runningRef.current || cycleTimerRef.current !== timeoutId) return;
+                const cycleStartMs = Date.now();
+                let cycleChallenges;
+                try {
+                    cycleChallenges = await runVotingCycle();
+                } finally {
+                    if (cycleTimerRef.current === timeoutId) {
+                        await scheduleNext(cycleChallenges, cycleStartMs);
                     }
                 }
-            } catch (err) {
-                await window.api.logWarning(`Error updating threshold scheduling: ${err.message || err}`);
-            }
+            }, waitMs);
+            cycleTimerRef.current = timeoutId;
         },
         [runVotingCycle],
     );
@@ -218,6 +187,11 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         if (runningRef.current) return;
 
         dispatch({ type: ACTIONS.START });
+        // Mark running synchronously: the dispatch-driven useEffect that syncs
+        // runningRef only flushes after the current async turn, so without this
+        // the awaits below (and the cycle/scheduling that follow) would still
+        // see runningRef.current === false and bail before arming the timer.
+        runningRef.current = true;
         await window.api.setCancelVoting(false);
 
         // Persist the running flag so a remount of the app (Capacitor
@@ -250,108 +224,16 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         const initialCycleStartMs = Date.now();
         const initialChallenges = await runVotingCycle();
 
-        // Setup interval
-        const settings = await window.api.getSettings();
-        const lastMinuteCheckFrequency = await window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
-
-        let useLastThresholdInterval = false;
-
-        // Reuse the initial cycle's challenge list rather than re-fetching it here
-        // and again in updateThresholdScheduling below.
-        const challenges = Array.isArray(initialChallenges)
-            ? initialChallenges
-            : (await window.api.getActiveChallenges(settings.token))?.challenges || [];
-        const now = Math.floor(Date.now() / 1000);
-
-        for (const challenge of challenges) {
-            if (challenge.type !== 'flash') {
-                const effectiveLastMinuteThreshold = await window.api.getEffectiveSetting(
-                    'lastMinuteThreshold',
-                    challenge.id.toString(),
-                );
-                const timeUntilEnd = challenge.close_time - now;
-                const isWithinLastMinuteThreshold =
-                    timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
-
-                if (isWithinLastMinuteThreshold) {
-                    useLastThresholdInterval = true;
-                    break;
-                }
-            }
+        // Hand off to the unified cadence chain. The shared decision (fast
+        // in-window / capped approaching / normal) means start() no longer needs
+        // to special-case "already inside a window" — scheduleNext picks the
+        // right cadence from the initial cycle's challenge list.
+        if (cycleTimerRef.current) {
+            clearTimeout(cycleTimerRef.current);
+            cycleTimerRef.current = null;
         }
-
-        if (autovoteIntervalRef.current) {
-            clearInterval(autovoteIntervalRef.current);
-            autovoteIntervalRef.current = null;
-        }
-
-        // Normal-mode cadence starter. Defined before the branch and stored in
-        // scheduleNormalRef so the revert path in updateThresholdScheduling can
-        // resume normal cadence even when start() itself entered last-minute mode.
-        //
-        // Normal mode re-rolls a random delay in [min, max] after every cycle, so the voting
-        // pattern looks less like a metronome to anti-bot heuristics. The threshold path
-        // (updateThresholdScheduling) may swap the ref out for a fixed-cadence setInterval
-        // while we're mid-await — the captured timeoutId guard below stops us from clobbering it.
-        //
-        // The wait is anchored to the *start* of the previous cycle so the gap between
-        // cycle starts ≈ delayMs regardless of how long the cycle took. Overruns pause
-        // MIN_CYCLE_GAP_MS before firing again instead of immediately.
-        const scheduleNext = (currentSettings, previousCycleStartMs = null) => {
-            if (!runningRef.current) {
-                autovoteIntervalRef.current = null;
-                return;
-            }
-            const delayMs = getRandomCheckFrequencyMs(currentSettings);
-            const anchorMs = previousCycleStartMs ?? Date.now();
-            // Clamp into [MIN_CYCLE_GAP_MS, delayMs]: floor protects against
-            // overruns; ceiling protects against wall-clock backward jumps
-            // (suspend/resume, NTP) that would otherwise inflate the wait.
-            const waitMs = Math.min(delayMs, Math.max(MIN_CYCLE_GAP_MS, anchorMs + delayMs - Date.now()));
-            const timeoutId = setTimeout(async () => {
-                if (!runningRef.current) return;
-                const cycleStartMs = Date.now();
-                try {
-                    await runVotingCycle();
-                    if (autovoteIntervalRef.current !== timeoutId) return; // threshold path took over
-                    const fresh = await window.api.getSettings();
-                    scheduleNext(fresh, cycleStartMs);
-                } catch {
-                    // Don't let an unexpected IPC / settings-fetch error
-                    // kill the loop. Reschedule with the last-known
-                    // settings; the next cycle will re-read on success.
-                    if (autovoteIntervalRef.current === timeoutId) {
-                        scheduleNext(currentSettings, cycleStartMs);
-                    }
-                }
-            }, waitMs);
-            autovoteIntervalRef.current = timeoutId;
-        };
-        scheduleNormalRef.current = scheduleNext;
-
-        if (useLastThresholdInterval) {
-            // Last-minute mode keeps a fixed cadence — deadline timing matters more than randomness.
-            const votingIntervalMs = lastMinuteCheckFrequency * 60000;
-            lastMinuteModeRef.current = true;
-            autovoteIntervalRef.current = setInterval(async () => {
-                if (!runningRef.current) {
-                    clearInterval(autovoteIntervalRef.current);
-                    autovoteIntervalRef.current = null;
-                    return;
-                }
-                // Re-evaluate after every tick so the window-passed revert in
-                // updateThresholdScheduling can return us to normal cadence.
-                const cycleChallenges = await runVotingCycle();
-                await updateThresholdScheduling(cycleChallenges);
-            }, votingIntervalMs);
-        } else {
-            lastMinuteModeRef.current = false;
-            scheduleNext(settings, initialCycleStartMs);
-        }
-
-        // Setup threshold scheduling (reuse the initial cycle's list).
-        await updateThresholdScheduling(initialChallenges);
-    }, [runVotingCycle, updateThresholdScheduling]);
+        await scheduleNext(initialChallenges, initialCycleStartMs);
+    }, [runVotingCycle, scheduleNext]);
 
     /**
      * Stop autovote
@@ -360,6 +242,9 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         if (!runningRef.current) return;
 
         dispatch({ type: ACTIONS.STOP });
+        // Mark stopped synchronously so an in-flight scheduleNext / timer
+        // callback sees it immediately rather than after the next render flush.
+        runningRef.current = false;
         await window.api.setCancelVoting(true);
 
         // Clear the persisted running flag so a relaunch does not
@@ -379,20 +264,11 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
             await foregroundService.stop();
         }
 
-        // Clear interval
-        if (autovoteIntervalRef.current) {
-            clearInterval(autovoteIntervalRef.current);
-            autovoteIntervalRef.current = null;
+        // Clear the cadence timer.
+        if (cycleTimerRef.current) {
+            clearTimeout(cycleTimerRef.current);
+            cycleTimerRef.current = null;
         }
-        lastMinuteModeRef.current = false;
-
-        // Clear threshold scheduler
-        if (thresholdSchedulerRef.current) {
-            clearTimeout(thresholdSchedulerRef.current);
-            thresholdSchedulerRef.current = null;
-        }
-
-        currentScheduledChallengeRef.current = null;
 
         // Trigger challenges refresh to show vote buttons
         if (onChallengesRefresh) {

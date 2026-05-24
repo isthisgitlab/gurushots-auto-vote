@@ -156,6 +156,51 @@ describe('AutovoteContext — last-minute cadence reverts to normal', () => {
         expect(window.api.getActiveChallenges.mock.calls.length).toBeGreaterThan(fetchesBeforeTick);
     });
 
+    it('does not re-arm the cadence chain when stop() is called while a cycle is in flight', async () => {
+        // Normal cadence (nothing in window) so we control the timing precisely.
+        activeChallenges = [];
+
+        let releaseCycle;
+        let cycleCalls = 0;
+        window.api.runVotingCycle.mockImplementation(() => {
+            cycleCalls += 1;
+            // The first timer-driven cycle (#2) hangs until we release it, so we
+            // can call stop() while it is mid-flight.
+            if (cycleCalls === 2) {
+                return new Promise((resolve) => {
+                    releaseCycle = () => resolve({ success: true });
+                });
+            }
+            return Promise.resolve({ success: true });
+        });
+
+        renderProvider();
+        await act(async () => {
+            await ctx.start();
+        });
+        expect(cycleCalls).toBe(1); // initial cycle; normal 3-min timer armed
+
+        // Fire the timer → cycle #2 starts and blocks awaiting runVotingCycle.
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(3 * MIN);
+        });
+        expect(cycleCalls).toBe(2);
+
+        // Stop mid-flight, then let the hung cycle resolve. Its finally must see
+        // the cleared timer ref and decline to schedule the next cycle.
+        await act(async () => {
+            await ctx.stop();
+            releaseCycle();
+            await Promise.resolve();
+        });
+
+        // No ghost chain: advancing well past any cadence fires nothing more.
+        await act(async () => {
+            await jest.advanceTimersByTimeAsync(10 * MIN);
+        });
+        expect(cycleCalls).toBe(2);
+    });
+
     it('stays at the 1-minute cadence while a challenge remains in its window', async () => {
         renderProvider();
 

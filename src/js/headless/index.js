@@ -21,16 +21,17 @@
 const settings = require('../settings');
 const apiFactory = require('../apiFactory');
 const logger = require('../logger');
-const { getRandomCheckFrequencyMs } = require('../scheduling/randomDelay');
-const { isAnyChallengeInThresholdWindow } = require('../scheduling/thresholdWindow');
+const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } = require('../scheduling/randomDelay');
+const { computeNextCycleDelayMs } = require('../scheduling/thresholdWindow');
 
 const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
 
 /**
- * Mirror the scheduler's cadence decision for a single tick: fixed
- * last-minute frequency when any challenge is inside its window, else a
- * fresh random delay in [checkFrequencyMin, checkFrequencyMax]. Returned
- * to native so AlarmManager schedules the next cycle accordingly.
+ * Mirror the scheduler's cadence decision for a single tick via the shared
+ * computeNextCycleDelayMs: fixed last-minute frequency when a challenge is
+ * inside its window, otherwise a fresh random delay capped to the soonest
+ * upcoming threshold boundary so the next AlarmManager tick lands on it instead
+ * of overshooting. Returned to native so AlarmManager schedules accordingly.
  *
  * `prefetched` reuses the challenge list runOneCycle's fetchChallengesAndVote
  * already fetched, avoiding a duplicate getActiveChallenges request. A non-array
@@ -44,14 +45,18 @@ const computeNextDelayMs = async (token, prefetched = null) => {
             : (await apiFactory.getApiStrategy().getActiveChallenges(token))?.challenges || [];
         const now = Math.floor(Date.now() / 1000);
         const resolveThreshold = (id) => settings.getEffectiveSetting('lastMinuteThreshold', id);
-        if (await isAnyChallengeInThresholdWindow(list, now, resolveThreshold)) {
-            const freq = Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
-            return Math.max(1, freq) * 60_000;
-        }
+        const lastMinuteCheckMinutes = Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
+        const { delayMs } = await computeNextCycleDelayMs(list, now, {
+            resolveThreshold,
+            normalDelayMs: getRandomCheckFrequencyMs(userSettings),
+            lastMinuteCheckMinutes,
+            minGapMs: MIN_CYCLE_GAP_MS,
+        });
+        return delayMs;
     } catch (err) {
         log('next-delay computation failed; using normal cadence', err?.message ?? String(err));
+        return getRandomCheckFrequencyMs(userSettings);
     }
-    return getRandomCheckFrequencyMs(userSettings);
 };
 
 const reportComplete = (payload) => {

@@ -103,6 +103,22 @@ describe('headless runOneCycle', () => {
         expect(lastPayload().nextDelayMs).toBe(60000);
     });
 
+    test('caps the next delay to an upcoming boundary instead of the normal random delay', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        // threshold 10min → window opens at close-600s; closing in 660s puts the
+        // boundary 60s out. The normal random delay is 2min (min=max=2), so the
+        // next tick must be capped to the 60s boundary, not the 120s random.
+        const approaching = { id: 1, type: 'default', close_time: now + 660 };
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, challenges: [approaching] });
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges });
+        settings.getEffectiveSetting.mockImplementation((key) => (key === 'lastMinuteThreshold' ? 10 : 1));
+
+        await globalThis.GS.runOneCycle();
+
+        expect(lastPayload().nextDelayMs).toBe(60000);
+    });
+
     test('reports ok:false and a fallback delay when the cycle throws', async () => {
         const fetchChallengesAndVote = jest.fn().mockRejectedValue(new Error('boom'));
         apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges: jest.fn() });

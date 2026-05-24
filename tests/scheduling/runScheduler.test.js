@@ -1,23 +1,15 @@
 /**
- * Verifies the start-anchored scheduling in normal mode: the gap between
- * cycle starts should be ~delayMs regardless of how long any single cycle
- * takes, and an overrunning cycle should pause MIN_CYCLE_GAP_MS before
- * firing again (rather than re-firing immediately).
+ * Verifies the single-timer scheduler.
  *
- * The normal-mode tests mock node-cron so it stays inert and the
- * setTimeout chain is exercised directly. The threshold-mode revert test
- * (further down) drives the captured cron callback manually to simulate
- * a tick.
+ * Normal mode keeps the start-anchored spacing: the gap between cycle starts
+ * should be ~delayMs regardless of how long any single cycle takes, and an
+ * overrunning cycle should pause MIN_CYCLE_GAP_MS before firing again.
+ *
+ * Threshold mode no longer uses a separate node-cron switch — the next delay is
+ * decided each cycle by computeNextCycleDelayMs, so the chain caps to an
+ * upcoming boundary (approaching), holds a fixed fast cadence while in-window
+ * (last-minute), and reverts to the random cadence once the window clears.
  */
-
-let mockCronCallback = null;
-const mockCronJob = { start: jest.fn(), stop: jest.fn() };
-jest.mock('node-cron', () => ({
-    schedule: jest.fn((expr, cb) => {
-        mockCronCallback = cb;
-        return mockCronJob;
-    }),
-}));
 
 jest.mock('../../src/js/settings', () => ({
     loadSettings: jest.fn(),
@@ -26,7 +18,6 @@ jest.mock('../../src/js/settings', () => ({
 }));
 
 const settings = require('../../src/js/settings');
-const cron = require('node-cron');
 const { createScheduler } = require('../../src/js/scheduling/runScheduler');
 const { MIN_CYCLE_GAP_MS, MS_PER_MINUTE } = require('../../src/js/scheduling/randomDelay');
 
@@ -204,17 +195,16 @@ describe('createScheduler — normal-mode cycle spacing', () => {
     });
 });
 
-describe('createScheduler — threshold-mode revert', () => {
-    const LAST_MINUTE_THRESHOLD = 10; // minutes before close that triggers cron mode
+describe('createScheduler — threshold-aware cadence', () => {
+    const LAST_MINUTE_THRESHOLD = 10; // minutes before close the window opens
     let runVotingCycle;
     let getActiveChallenges;
     let scheduler;
     let now;
-    let lastMinuteCheckFrequencyValue; // mutable so a test can change it mid-cron
+    let lastMinuteCheckFrequencyValue; // mutable so a test can change it mid-run
 
     beforeEach(() => {
         jest.useFakeTimers();
-        mockCronCallback = null;
         lastMinuteCheckFrequencyValue = 1;
         settings.loadSettings.mockReturnValue({
             checkFrequencyMin: FIXED_DELAY_MIN,
@@ -226,7 +216,6 @@ describe('createScheduler — threshold-mode revert', () => {
             if (key === 'lastMinuteCheckFrequency') return lastMinuteCheckFrequencyValue;
             return 1;
         });
-        runVotingCycle = jest.fn().mockResolvedValue(true);
         now = Math.floor(Date.now() / 1000);
     });
 
@@ -237,8 +226,7 @@ describe('createScheduler — threshold-mode revert', () => {
         jest.clearAllMocks();
     });
 
-    // A regular challenge whose last-minute window opens 60s from now:
-    // entryTime = close_time - threshold*60 = now + 60.
+    // Window opens 60s from now: entryTime = close_time - threshold*60 = now + 60.
     const challengeEnteringIn60s = () => ({
         id: 42,
         title: 'Closing Soon',
@@ -246,145 +234,192 @@ describe('createScheduler — threshold-mode revert', () => {
         close_time: now + LAST_MINUTE_THRESHOLD * 60 + 60,
     });
 
-    // Drives start() → normal mode, then advances exactly 60s so the threshold
-    // setTimeout fires and the scheduler switches into the 1-min cron. 60_000ms
-    // is load-bearing: it equals timeUntilEntry for challengeEnteringIn60s
-    // (entryTime = close_time - threshold*60 = now + 60). After the advance the
-    // challenge sits at exactly close_time - now == threshold*60 — the inclusive
-    // (<=) boundary of isAnyChallengeInThresholdWindow.
-    const enterCronMode = async () => {
+    // Already inside its window: close_time - now (120s) <= threshold*60 (600s).
+    const challengeInWindow = () => ({
+        id: 42,
+        title: 'In Window',
+        type: 'regular',
+        close_time: now + 120,
+    });
+
+    const startWith = async (cycleResult) => {
+        runVotingCycle = jest.fn().mockResolvedValue(cycleResult);
         scheduler = createScheduler({ runVotingCycle, getActiveChallenges });
         const startPromise = scheduler.start();
         await flushMicrotasks();
         await startPromise;
-
-        await jest.advanceTimersByTimeAsync(60_000);
-        await flushMicrotasks();
     };
 
-    test('reuses the cycle challenge list and skips the post-cycle getActiveChallenges fetch', async () => {
-        // The voting cycle now resolves with the active list it fetched; the
-        // post-cycle threshold step must reuse it rather than fetch again (the
-        // back-to-back duplicate request that showed up in the logs).
-        runVotingCycle = jest.fn().mockResolvedValue({ success: true, challenges: [challengeEnteringIn60s()] });
-        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+    test('caps the next delay to an upcoming boundary instead of the random delay', async () => {
+        // Boundary is 60s out; the random delay is 3 min. The next cycle must
+        // land on the 60s boundary, not overshoot to 3 min. This is the
+        // reported-bug regression lock.
+        await startWith({ success: true, challenges: [challengeEnteringIn60s()] });
 
+        expect(runVotingCycle).toHaveBeenCalledTimes(1); // initial cycle only
+
+        await jest.advanceTimersByTimeAsync(60_000 - 1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(1); // not yet — boundary not reached
+
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(2); // fired at the boundary, well before 3 min
+    });
+
+    test('holds a fixed last-minute cadence while a challenge is in-window', async () => {
+        lastMinuteCheckFrequencyValue = 2; // distinct from the 60s boundary cap
+        await startWith({ success: true, challenges: [challengeInWindow()] });
+
+        expect(runVotingCycle).toHaveBeenCalledTimes(1);
+
+        // Fast cadence is lastMinuteCheckFrequency (2 min), not the 3-min random.
+        await jest.advanceTimersByTimeAsync(2 * MS_PER_MINUTE - 1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(1);
+
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(2);
+    });
+
+    test('reverts to the normal random cadence once the window clears', async () => {
+        // First cycle is in-window (fast 1-min cadence); afterwards the challenge
+        // has closed, so every later cycle hands over an empty list.
+        let list = [challengeInWindow()];
+        runVotingCycle = jest.fn().mockImplementation(async () => ({ success: true, challenges: list }));
         scheduler = createScheduler({ runVotingCycle, getActiveChallenges });
         const startPromise = scheduler.start();
         await flushMicrotasks();
         await startPromise;
 
-        // Initial cycle ran once; its list was reused, so getActiveChallenges
-        // (only ever called by updateThresholdScheduling) was never hit.
+        // In-window → 1-min cadence: the 2nd cycle fires at 1 min.
+        await jest.advanceTimersByTimeAsync(MS_PER_MINUTE);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(2);
+
+        // Window now clears.
+        list = [];
+        // The 2nd cycle already scheduled the 3rd at the fast cadence (it saw the
+        // in-window list); let it fire so the post-empty decision is made.
+        await jest.advanceTimersByTimeAsync(MS_PER_MINUTE);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(3);
+
+        // From here the cadence is the normal 3-min random: nothing fires before
+        // 3 min, then a cycle does.
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS - 1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(3);
+
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(4);
+    });
+
+    test('reflects a mid-run lastMinuteCheckFrequency change on the next in-window cycle', async () => {
+        await startWith({ success: true, challenges: [challengeInWindow()] });
+
+        // Operator raises the last-minute cadence from 1 to 5 minutes.
+        lastMinuteCheckFrequencyValue = 5;
+
+        // The next decision (after the initial cycle) already used freq 1, so the
+        // 2nd cycle fires at 1 min; the cycle after that reflects freq 5.
+        await jest.advanceTimersByTimeAsync(MS_PER_MINUTE);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(2);
+
+        // 2nd cycle decided with freq 5 → next fires at 5 min, not 1.
+        await jest.advanceTimersByTimeAsync(5 * MS_PER_MINUTE - 1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(2);
+
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(3);
+    });
+
+    test('picks up a mid-run per-challenge lastMinuteThreshold change and re-caps the cadence', async () => {
+        // The reported bug, at the integration layer: a per-challenge threshold
+        // is changed mid-run; the very next cycle must respect the new boundary
+        // instead of riding out the old random cadence. 1-min normal cadence
+        // keeps the boundary arithmetic easy to follow.
+        settings.loadSettings.mockReturnValue({ checkFrequencyMin: 1, checkFrequencyMax: 1 });
+        let thresholdMin = 5;
+        settings.getEffectiveSetting.mockImplementation((key) => {
+            if (key === 'lastMinuteThreshold') return thresholdMin;
+            if (key === 'lastMinuteCheckFrequency') return lastMinuteCheckFrequencyValue;
+            return 1;
+        });
+        // Closes in 1000s. threshold 5 → boundary 700s out, beyond the 60s normal
+        // delay → normal cadence.
+        const challenge = { id: 7, title: 'Cats', type: 'regular', close_time: now + 1000 };
+        runVotingCycle = jest.fn().mockResolvedValue({ success: true, challenges: [challenge] });
+        scheduler = createScheduler({ runVotingCycle, getActiveChallenges });
+        const startPromise = scheduler.start();
+        await flushMicrotasks();
+        await startPromise;
+
+        expect(runVotingCycle).toHaveBeenCalledTimes(1); // initial cycle, normal cadence armed
+
+        // User tightens the per-challenge threshold to 15 min → boundary now at
+        // abs t=100s (1000 - 900). Cycle #2 fires at the 60s normal boundary.
+        thresholdMin = 15;
+        await jest.advanceTimersByTimeAsync(60_000);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(2);
+
+        // Cycle #2 re-evaluated with threshold 15: boundary is ~40s out, under the
+        // 60s random delay, so the next cycle must be capped to ~40s — not another
+        // full 60s. Nothing fires before the cap...
+        await jest.advanceTimersByTimeAsync(40_000 - 1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(2);
+
+        // ...and the capped cycle fires at the new boundary.
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(3);
+    });
+
+    test('reuses the cycle challenge list and skips the post-cycle getActiveChallenges fetch', async () => {
+        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        await startWith({ success: true, challenges: [challengeEnteringIn60s()] });
+
+        // Initial cycle ran once; its list was reused to decide the delay, so
+        // getActiveChallenges (the fetch-only fallback) was never hit.
         expect(runVotingCycle).toHaveBeenCalledTimes(1);
         expect(getActiveChallenges).not.toHaveBeenCalled();
     });
 
     test('falls back to fetching when the cycle hands over no list', async () => {
-        // A non-array result (here the legacy boolean) must not short-circuit:
-        // the threshold step still fetches a fresh list.
-        runVotingCycle = jest.fn().mockResolvedValue(true);
         getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
-
-        scheduler = createScheduler({ runVotingCycle, getActiveChallenges });
-        const startPromise = scheduler.start();
-        await flushMicrotasks();
-        await startPromise;
+        // A non-array result (legacy boolean) must trigger a fresh fetch.
+        await startWith(true);
 
         expect(getActiveChallenges).toHaveBeenCalled();
     });
 
-    test('reverts to normal cadence once no challenge is within its last-minute window', async () => {
-        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [challengeEnteringIn60s()] });
-
-        await enterCronMode();
-
-        // Switched into 1-min cron.
-        expect(cron.schedule).toHaveBeenCalledWith('*/1 * * * *', expect.any(Function), expect.anything());
-        expect(mockCronJob.start).toHaveBeenCalled();
-        expect(typeof mockCronCallback).toBe('function');
-
-        // The triggering challenge has now closed — nothing left in window.
-        getActiveChallenges.mockResolvedValue({ challenges: [] });
-
-        const callsBeforeTick = runVotingCycle.mock.calls.length;
-
-        // Simulate a cron tick: runs a cycle, then updateThresholdScheduling
-        // should detect the empty window and revert to normal mode.
-        await mockCronCallback();
-        await flushMicrotasks();
-
-        expect(mockCronJob.stop).toHaveBeenCalled();
-        // The tick itself ran one cycle.
-        expect(runVotingCycle.mock.calls.length).toBe(callsBeforeTick + 1);
-
-        // Normal 3-min chain is live again: advancing the normal delay fires
-        // another cycle (the dead cron would never do this).
-        const callsBeforeResume = runVotingCycle.mock.calls.length;
-        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
-        await flushMicrotasks();
-        expect(runVotingCycle.mock.calls.length).toBe(callsBeforeResume + 1);
-    });
-
-    test('stays in cron mode while a challenge remains within its last-minute window', async () => {
-        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [challengeEnteringIn60s()] });
-
-        await enterCronMode();
-
-        expect(mockCronJob.start).toHaveBeenCalled();
-        const stopCallsAfterSwitch = mockCronJob.stop.mock.calls.length;
-
-        // Challenge is still open and within its window — a tick must NOT revert.
-        const callsBeforeTick = runVotingCycle.mock.calls.length;
-        await mockCronCallback();
-        await flushMicrotasks();
-
-        expect(runVotingCycle.mock.calls.length).toBe(callsBeforeTick + 1);
-        expect(mockCronJob.stop.mock.calls.length).toBe(stopCallsAfterSwitch);
-    });
-
-    test('restarts the cron at the new frequency when lastMinuteCheckFrequency changes mid-cron', async () => {
-        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [challengeEnteringIn60s()] });
-
-        await enterCronMode();
-
-        expect(cron.schedule).toHaveBeenLastCalledWith('*/1 * * * *', expect.any(Function), expect.anything());
-        const stopCallsAfterSwitch = mockCronJob.stop.mock.calls.length;
-
-        // Operator raises the last-minute cadence from 1 to 5 minutes mid-cron;
-        // the challenge is still in its window, so the running cron must restart
-        // at */5 rather than wait for the next switch.
-        lastMinuteCheckFrequencyValue = 5;
-
-        await mockCronCallback();
-        await flushMicrotasks();
-
-        expect(cron.schedule).toHaveBeenLastCalledWith('*/5 * * * *', expect.any(Function), expect.anything());
-        // The restart stopped the old (*/1) cron.
-        expect(mockCronJob.stop.mock.calls.length).toBeGreaterThan(stopCallsAfterSwitch);
-    });
-
-    test('defers scheduling a threshold switch that is beyond the max timer delay', async () => {
-        // close_time ~30 days out → entry is ~30 days away, exceeding Node's
-        // 32-bit setTimeout ceiling. The switch must be deferred (no cron, no
-        // threshold timer) instead of arming a timer that would fire immediately.
+    test('a far-future boundary uses the normal cadence (no premature switch)', async () => {
         const farFuture = () => ({
             id: 99,
             title: 'Weeks Away',
             type: 'regular',
             close_time: now + 30 * 24 * 3600,
         });
-        getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [farFuture()] });
+        await startWith({ success: true, challenges: [farFuture()] });
 
-        scheduler = createScheduler({ runVotingCycle, getActiveChallenges });
-        const startPromise = scheduler.start();
-        await flushMicrotasks();
-        await startPromise;
-
-        // No switch armed: cron untouched and the only pending timer is the
-        // normal-mode setTimeout (without the guard, a second threshold timer
-        // would be armed → count of 2).
-        expect(cron.schedule).not.toHaveBeenCalled();
+        expect(runVotingCycle).toHaveBeenCalledTimes(1);
+        // Exactly one pending timer (the next normal cycle), and it fires at the
+        // normal 3-min cadence — the far boundary doesn't shorten it.
         expect(jest.getTimerCount()).toBe(1);
+
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS - 1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(1);
+
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(2);
     });
 });

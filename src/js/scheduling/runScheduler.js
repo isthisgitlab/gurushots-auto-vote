@@ -1,281 +1,126 @@
 /**
- * Host-agnostic continuous voting scheduler. Implements the same two-tier
- * model as before (normal mode = recursive setTimeout with random delay
- * each tick; threshold mode = node-cron with last-minute cadence) but
- * lives outside the CLI entry point so foreground-service hosts (Android)
- * can drive the same engine.
+ * Host-agnostic continuous voting scheduler.
+ *
+ * A single recursive setTimeout chain: after every cycle the next delay is
+ * decided in one place (`computeNextCycleDelayMs` in ./thresholdWindow) so the
+ * cadence can never sleep past an upcoming last-minute boundary — the delay is
+ * always the minimum of the rolled random delay and the time until the soonest
+ * upcoming threshold entry, or a fixed fast cadence once a challenge is inside
+ * its window. This replaces the old two-tier model (normal setTimeout chain +
+ * a separate node-cron switch) whose independent boundary timer could race a
+ * mid-run per-challenge threshold change and overshoot the boundary.
  *
  * The factory takes platform-agnostic dependencies; the host owns
  * signal/lifecycle (SIGINT on CLI, Service.onDestroy on Android) and
  * keeps the process alive.
  */
 
-const cron = require('node-cron');
 const logger = require('../logger');
 const settings = require('../settings');
 const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } = require('./randomDelay');
-const { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow } = require('./thresholdWindow');
+const { computeNextCycleDelayMs } = require('./thresholdWindow');
 
 // Node resolver for the shared threshold math: per-challenge lastMinuteThreshold
 // straight from the settings facade (synchronous on Electron/CLI/Android-node).
 const resolveThreshold = (challengeId) => settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
 
-// Node's timer delay is a 32-bit signed int of milliseconds; a larger delay
-// silently wraps and fires after ~1ms. A challenge whose threshold entry is
-// further out than this can't be armed with a single setTimeout — defer it and
-// let a later cycle re-arm it once it's within range.
-const MAX_TIMEOUT_DELAY_MS = 2_147_483_647;
-
 /**
  * Create a continuous voting scheduler.
  *
  * @param {Object} deps
- * @param {(cycleNumber:number)=>Promise<{success:boolean, challenges:Array|null}>} deps.runVotingCycle - one-shot voting cycle; resolves with the active list it fetched (null on failure/manual). A non-array `challenges` (or a legacy boolean return) is treated as "no list" and triggers a fresh fetch in the threshold step.
- * @param {()=>Promise<{challenges:Array}>} deps.getActiveChallenges - fetcher for threshold scheduling (used only when a cycle didn't hand its list over).
+ * @param {(cycleNumber:number)=>Promise<{success:boolean, challenges:Array|null}>} deps.runVotingCycle - one-shot voting cycle; resolves with the active list it fetched (null on failure/manual). A non-array `challenges` (or a legacy boolean return) is treated as "no list" and triggers a fresh fetch when deciding the next delay.
+ * @param {()=>Promise<{challenges:Array}>} deps.getActiveChallenges - fetcher used only when a cycle didn't hand its list over.
  * @returns {{start:()=>Promise<void>, stop:()=>void, getCycleCount:()=>number, isRunning:()=>boolean}}
  */
 const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
     let cycleCount = 0;
     let isRunning = false;
-    let thresholdScheduler = null;
-    let currentScheduledChallenge = null;
-    let lastSettingsHash = null;
-    let currentCronJob = null;
-    let normalScheduler = null;
+    let timer = null;
 
-    // (Re)start the last-minute cron at the current lastMinuteCheckFrequency,
-    // stopping any cron already running. Shared by the initial switch and the
-    // mid-cron settings-change restart so the cadence value is read in one place.
-    const startThresholdCron = () => {
-        const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
-        const thresholdCronExpression = `*/${lastMinuteCheckFrequency} * * * *`;
-
-        if (currentCronJob) {
-            currentCronJob.stop();
-        }
-
-        currentCronJob = cron.schedule(
-            thresholdCronExpression,
-            async () => {
-                if (!isRunning) {
-                    currentCronJob.stop();
-                    return;
-                }
-
-                try {
-                    const cycleResult = await runVotingCycle(++cycleCount);
-                    await updateThresholdScheduling(cycleResult?.challenges);
-                } catch (error) {
-                    logger.withCategory('voting').error('Error in scheduled voting cycle');
-                    logger.withCategory('voting').debug('Full threshold cron error details:', error);
-                }
-            },
-            { scheduled: false },
-        );
-
-        currentCronJob.start();
-        logger
-            .withCategory('voting')
-            .info(
-                `⏰ Switched to last threshold cron: ${thresholdCronExpression} (every ${lastMinuteCheckFrequency} minute(s))`,
-            );
-    };
-
-    const scheduleThresholdCronChange = async (nextEntry) => {
-        if (!nextEntry || !isRunning) return;
-
-        if (
-            currentScheduledChallenge &&
-            currentScheduledChallenge.challengeId === nextEntry.challengeId &&
-            currentScheduledChallenge.entryTime === nextEntry.entryTime
-        ) {
-            logger
-                .withCategory('voting')
-                .debug(
-                    `⏰ Already scheduling threshold change for challenge "${nextEntry.challengeTitle}", skipping duplicate`,
-                );
+    // Decide how long to wait before the next cycle and arm the single timer.
+    //
+    // `prefetched` lets a just-completed cycle hand over the active list it
+    // already fetched, so we skip a redundant getActiveChallenges request. A
+    // non-array (null/undefined, or a cycle that failed before fetching) falls
+    // back to a fresh fetch. In normal mode the wait is anchored to the *start*
+    // of the previous cycle so the gap between cycle starts ≈ the rolled delay
+    // regardless of how long the cycle took; in approaching/last-minute mode the
+    // wait runs from cycle completion so the boundary is never undershot.
+    const scheduleNext = async (prefetched = null, previousCycleStartMs = null) => {
+        if (!isRunning) {
+            timer = null;
             return;
         }
 
-        const now = Math.floor(Date.now() / 1000);
-        const timeUntilEntry = (nextEntry.entryTime - now) * 1000;
-
-        if (timeUntilEntry <= 0) {
-            logger
-                .withCategory('voting')
-                .debug(
-                    `⏰ Threshold entry time for challenge "${nextEntry.challengeTitle}" has already passed, skipping`,
-                );
-            return;
-        }
-
-        if (timeUntilEntry > MAX_TIMEOUT_DELAY_MS) {
-            logger
-                .withCategory('voting')
-                .debug(
-                    `⏰ Threshold entry for challenge "${nextEntry.challengeTitle}" is ${Math.round(timeUntilEntry / 1000)}s away — beyond the max timer delay; deferring to a later cycle`,
-                );
-            return;
-        }
-
-        logger
-            .withCategory('voting')
-            .info(
-                `⏰ Scheduling threshold cron change for challenge "${nextEntry.challengeTitle}" in ${Math.round(timeUntilEntry / 1000)} seconds`,
-            );
-
-        if (thresholdScheduler) {
-            clearTimeout(thresholdScheduler);
-            thresholdScheduler = null;
-        }
-
-        currentScheduledChallenge = {
-            challengeId: nextEntry.challengeId,
-            challengeTitle: nextEntry.challengeTitle,
-            entryTime: nextEntry.entryTime,
-            lastMinuteThreshold: nextEntry.lastMinuteThreshold,
-        };
-
-        thresholdScheduler = setTimeout(async () => {
-            if (!isRunning) return;
-
-            logger
-                .withCategory('voting')
-                .info(
-                    `⏰ Threshold entry time reached for challenge "${nextEntry.challengeTitle}", switching to last threshold frequency`,
-                );
-
-            // Stop normal-mode setTimeout chain (one-way transition into threshold cron)
-            if (normalScheduler) {
-                clearTimeout(normalScheduler);
-                normalScheduler = null;
-            }
-
-            startThresholdCron();
-
-            currentScheduledChallenge = null;
-            await updateThresholdScheduling();
-        }, timeUntilEntry);
-    };
-
-    // `prefetched` lets a just-completed voting cycle hand over the active list it
-    // already fetched, so we skip a redundant getActiveChallenges request (the
-    // back-to-back duplicate that otherwise shows up in the logs every cycle). A
-    // non-array (null/undefined — standalone re-arm with no preceding cycle, or a
-    // cycle that failed before fetching) falls back to a fresh fetch.
-    const updateThresholdScheduling = async (prefetched = null) => {
-        if (!isRunning) return;
-
+        let waitMs;
         try {
+            const fresh = settings.loadSettings();
+            const normalDelayMs = getRandomCheckFrequencyMs(fresh);
             const challenges = Array.isArray(prefetched) ? prefetched : (await getActiveChallenges())?.challenges || [];
             const now = Math.floor(Date.now() / 1000);
+            const lastMinuteCheckMinutes =
+                Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
 
-            const lastMinuteCheckFrequency = settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global');
-            const lastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', 'global');
+            const decision = await computeNextCycleDelayMs(challenges, now, {
+                resolveThreshold,
+                normalDelayMs,
+                lastMinuteCheckMinutes,
+                minGapMs: MIN_CYCLE_GAP_MS,
+            });
 
-            const currentSettingsHash = JSON.stringify({ lastMinuteCheckFrequency, lastMinuteThreshold });
-
-            if (lastSettingsHash !== null && lastSettingsHash !== currentSettingsHash) {
-                logger.withCategory('settings').info('⏰ Settings changed, clearing existing threshold scheduler');
-                if (thresholdScheduler) {
-                    clearTimeout(thresholdScheduler);
-                    thresholdScheduler = null;
-                }
-                currentScheduledChallenge = null;
-
-                // If we're already in cron mode and a challenge is still within its
-                // window, restart the cron so a new lastMinuteCheckFrequency takes
-                // effect immediately rather than waiting for the next switch. (When
-                // nothing is in-window, the revert below returns us to normal mode.)
-                if (currentCronJob && (await isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold))) {
-                    logger
-                        .withCategory('voting')
-                        .info('⏰ Settings changed mid-cron — restarting last-minute cron at the new frequency');
-                    startThresholdCron();
-                }
-            }
-            lastSettingsHash = currentSettingsHash;
-
-            // If we're in last-minute cron mode but nothing is currently within
-            // its last-minute window, tear down the cron and resume the normal
-            // randomized cadence. Without this the cron is a one-way door: a
-            // single challenge entering its final minutes would pin the whole
-            // session at lastMinuteCheckFrequency forever, even after it closes.
-            if (currentCronJob && !(await isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold))) {
+            if (decision.mode === 'normal') {
+                // Anchor to the previous cycle start: floor handles an overrun
+                // (cycle took longer than the delay); the delayMs ceiling handles
+                // a wall-clock jump backward that would otherwise inflate the wait.
+                const anchorMs = previousCycleStartMs ?? Date.now();
+                const remainingMs = anchorMs + decision.delayMs - Date.now();
+                waitMs = Math.min(decision.delayMs, Math.max(MIN_CYCLE_GAP_MS, remainingMs));
                 logger
                     .withCategory('voting')
-                    .info('⏰ No challenges within last-minute window — reverting to normal check frequency');
-                currentCronJob.stop();
-                currentCronJob = null;
-                // normalScheduler is already null in cron mode (cleared on entry),
-                // but clear defensively so we can never leave two live timer chains.
-                if (normalScheduler) {
-                    clearTimeout(normalScheduler);
-                    normalScheduler = null;
+                    .info(
+                        `Next cycle in ${(waitMs / 60_000).toFixed(2)} min (target ${(decision.delayMs / 60_000).toFixed(2)} min between starts, range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`,
+                    );
+            } else {
+                waitMs = decision.delayMs;
+                if (decision.mode === 'last-minute') {
+                    logger
+                        .withCategory('voting')
+                        .info(`⏰ Last-minute cadence — next cycle in ${(waitMs / 60_000).toFixed(2)} min`);
+                } else {
+                    logger
+                        .withCategory('voting')
+                        .info(
+                            `⏰ Approaching last-minute window for "${decision.nextEntry?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextEntry?.lastMinuteThreshold}m boundary)`,
+                        );
                 }
-                scheduleNextNormalCycle(Date.now());
-            }
-
-            const nextEntry = await calculateNextThresholdEntry(challenges, now, resolveThreshold);
-
-            if (nextEntry) {
-                await scheduleThresholdCronChange(nextEntry);
-            } else if (thresholdScheduler) {
-                clearTimeout(thresholdScheduler);
-                thresholdScheduler = null;
-                currentScheduledChallenge = null;
-                logger.withCategory('voting').info('⏰ No upcoming threshold entries, cleared threshold scheduler');
             }
         } catch (error) {
-            logger.withCategory('voting').warning('Error updating threshold scheduling:');
-            logger.withCategory('voting').debug('updateThresholdScheduling error details:', error);
+            // An error deciding the delay must never kill the loop — fall back to
+            // a plain random cadence; the next cycle re-reads on success.
+            logger.withCategory('voting').warning('Error computing next cycle delay; using normal cadence');
+            logger.withCategory('voting').debug('scheduleNext error details:', error);
+            waitMs = getRandomCheckFrequencyMs(settings.loadSettings());
         }
-    };
 
-    // Normal mode uses a recursive setTimeout chain so each cycle re-rolls a random delay
-    // in [checkFrequencyMin, checkFrequencyMax]. Re-loading settings each tick lets a live
-    // `set-setting checkFrequencyMax 25` apply to the next cycle without restart.
-    //
-    // The wait is anchored to the *start* of the previous cycle, not its end — so the gap
-    // between cycle starts ≈ delayMs regardless of how long the cycle took. When a cycle
-    // overruns the rolled delay we still pause MIN_CYCLE_GAP_MS before firing again.
-    const scheduleNextNormalCycle = (previousCycleStartMs) => {
         if (!isRunning) {
-            normalScheduler = null;
+            timer = null;
             return;
         }
-        const fresh = settings.loadSettings();
-        const delayMs = getRandomCheckFrequencyMs(fresh);
-        const anchorMs = previousCycleStartMs ?? Date.now();
-        const remainingMs = anchorMs + delayMs - Date.now();
-        // Clamp into [MIN_CYCLE_GAP_MS, delayMs]: floor handles overrun (cycle
-        // took longer than delayMs); ceiling handles wall-clock jump backward
-        // (Date.now() shifted earlier than anchor), which would otherwise
-        // produce a wait longer than the user configured.
-        const waitMs = Math.min(delayMs, Math.max(MIN_CYCLE_GAP_MS, remainingMs));
-        const overran = remainingMs < MIN_CYCLE_GAP_MS;
-        logger
-            .withCategory('voting')
-            .info(
-                overran
-                    ? `Next normal cycle in ${(waitMs / 60_000).toFixed(2)} min — previous cycle overran ${(delayMs / 60_000).toFixed(2)} min target, applying ${(MIN_CYCLE_GAP_MS / 1000).toFixed(0)}s floor (range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`
-                    : `Next normal cycle in ${(waitMs / 60_000).toFixed(2)} min (target ${(delayMs / 60_000).toFixed(2)} min between starts, range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`,
-            );
 
-        normalScheduler = setTimeout(async () => {
+        timer = setTimeout(async () => {
             if (!isRunning) {
-                normalScheduler = null;
+                timer = null;
                 return;
             }
             const cycleStartMs = Date.now();
+            let cycleResult;
             try {
-                const cycleResult = await runVotingCycle(++cycleCount);
-                await updateThresholdScheduling(cycleResult?.challenges);
+                cycleResult = await runVotingCycle(++cycleCount);
             } catch (error) {
                 logger.withCategory('voting').error('Error in scheduled voting cycle');
-                logger.withCategory('voting').debug('Full normal cycle error details:', error);
+                logger.withCategory('voting').debug('Full voting cycle error details:', error);
             } finally {
-                scheduleNextNormalCycle(cycleStartMs);
+                await scheduleNext(cycleResult?.challenges, cycleStartMs);
             }
         }, waitMs);
     };
@@ -288,32 +133,21 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
         const initialCycleStartMs = Date.now();
         const initialCycle = await runVotingCycle(++cycleCount);
 
-        scheduleNextNormalCycle(initialCycleStartMs);
         logger
             .withCategory('voting')
             .success(
                 `Continuous voting started with check frequency range ${settings.getSetting('checkFrequencyMin')}-${settings.getSetting('checkFrequencyMax')} min`,
             );
 
-        await updateThresholdScheduling(initialCycle?.challenges);
+        await scheduleNext(initialCycle?.challenges, initialCycleStartMs);
     };
 
     const stop = () => {
         isRunning = false;
-
-        if (thresholdScheduler) {
-            clearTimeout(thresholdScheduler);
-            thresholdScheduler = null;
+        if (timer) {
+            clearTimeout(timer);
+            timer = null;
         }
-        if (normalScheduler) {
-            clearTimeout(normalScheduler);
-            normalScheduler = null;
-        }
-        if (currentCronJob) {
-            currentCronJob.stop();
-            currentCronJob = null;
-        }
-        currentScheduledChallenge = null;
     };
 
     return {
