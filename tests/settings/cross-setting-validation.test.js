@@ -63,13 +63,14 @@ describe('Cross-Setting Validation System', () => {
 
             // Verify exposure schema
             expect(schema.exposure).toBeDefined();
-            expect(schema.exposure.validation).toBeInstanceOf(Function);
+            // `validation` is a zod schema, validated via safeParse.
+            expect(typeof schema.exposure.validation.safeParse).toBe('function');
             expect(schema.exposure.validationOrder).toBe(1);
             expect(schema.exposure.dependsOn).toBeUndefined(); // No dependencies
 
             // Verify lastHourExposure schema
             expect(schema.lastHourExposure).toBeDefined();
-            expect(schema.lastHourExposure.validation).toBeInstanceOf(Function);
+            expect(typeof schema.lastHourExposure.validation.safeParse).toBe('function');
             expect(schema.lastHourExposure.contextValidation).toBeInstanceOf(Function);
             expect(schema.lastHourExposure.validationOrder).toBe(2);
             expect(schema.lastHourExposure.dependsOn).toEqual(['exposure']);
@@ -125,10 +126,11 @@ describe('Cross-Setting Validation System', () => {
             expect(schema.exposureTarget.default).toBe(0);
             expect(schema.exposureTarget.dependsOn).toEqual(['exposure']);
             expect(schema.exposureTarget.validationOrder).toBe(2);
-            expect(schema.exposureTarget.validation(0)).toBe(true);
-            expect(schema.exposureTarget.validation(100)).toBe(true);
-            expect(schema.exposureTarget.validation(-1)).toBe(false);
-            expect(schema.exposureTarget.validation(101)).toBe(false);
+            // `validation` is a zod schema — exercise it via safeParse.
+            expect(schema.exposureTarget.validation.safeParse(0).success).toBe(true);
+            expect(schema.exposureTarget.validation.safeParse(100).success).toBe(true);
+            expect(schema.exposureTarget.validation.safeParse(-1).success).toBe(false);
+            expect(schema.exposureTarget.validation.safeParse(101).success).toBe(false);
         });
 
         test('sentinel 0 is always accepted regardless of exposure', () => {

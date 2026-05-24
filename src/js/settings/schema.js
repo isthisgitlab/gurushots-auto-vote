@@ -1,4 +1,6 @@
 // @ts-check
+const { z } = require('zod');
+
 /**
  * Centralized Settings Schema
  *
@@ -20,7 +22,7 @@
  * @property {string} [type]
  * @property {*} [default]
  * @property {boolean} [perChallenge]
- * @property {(value: any) => boolean} [validation]
+ * @property {import('zod').ZodType} [validation]
  * @property {(value: any, allSettings: any, challengeId?: any) => boolean} [contextValidation]
  * @property {(value: any, allSettings: any, challengeId?: any) => string} [getContextError]
  * @property {string[]} [dependsOn]
@@ -41,20 +43,40 @@
  */
 const getSchemaDefault = (key) => SETTINGS_SCHEMA[key]?.default;
 
+// Reusable zod validators. Each SETTINGS_SCHEMA entry's `validation` field
+// holds one of these schemas; validateSetting / getValidationError run it via
+// safeParse. Centralizing the shapes keeps the per-entry declarations
+// declarative and the type/range rules in one place. zod's z.number()
+// rejects NaN and numeric strings, matching the previous typeof predicates.
+const zBool = z.boolean();
+const zString = z.string();
+const percentage = z.number().min(1).max(100); // exposure-style trigger, 1–100
+const percentageOrZero = z.number().min(0).max(100); // target, 0 = "use trigger" sentinel
+const nonNegNumber = z.number().min(0); // time fields (seconds before close); 0 = off
+const nonNegInt = z.number().int().min(0); // image index (1-indexed, 0 = last)
+// Shared 1–59 range, preserving the previous predicates exactly: used by both
+// lastMinuteThreshold (minutes-before-close that count as "last minute") and
+// lastMinuteCheckFrequency (poll cadence in minutes). Neither is required to be
+// an integer (matching prior behavior); the 59 ceiling keeps both within the hour.
+const minute1to59 = z.number().min(1).max(59);
+const intervalMinutes = z.number().int().min(1).max(60);
+
 // Per-string and total-array caps for tag-list settings. A typical use is
 // a few words per tag, a handful of tags per challenge — the caps exist
 // to keep a corrupted settings file or out-of-band write from passing
-// pathological input to the picker.
+// pathological input to the picker. Each tag must be a non-empty,
+// non-whitespace string of at most MAX_TAG_LENGTH characters.
 const MAX_TAG_LENGTH = 50;
 const MAX_TAGS_PER_LIST = 50;
-/**
- * @param {*} value
- * @returns {boolean}
- */
-const isValidTagsList = (value) =>
-    Array.isArray(value) &&
-    value.length <= MAX_TAGS_PER_LIST &&
-    value.every((v) => typeof v === 'string' && v.length > 0 && v.length <= MAX_TAG_LENGTH && v.trim().length > 0);
+const tagsList = z
+    .array(
+        z
+            .string()
+            .min(1)
+            .max(MAX_TAG_LENGTH)
+            .refine((v) => v.trim().length > 0),
+    )
+    .max(MAX_TAGS_PER_LIST);
 
 // Entries are grouped by their `group` field (see SETTINGS_GROUPS below) and
 // declared in group order so the file reads top-to-bottom the way the
@@ -68,7 +90,7 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 100,
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 100,
+        validation: percentage,
         validationOrder: 1, // Validate first (no dependencies)
         group: 'general',
         label: 'app.exposure',
@@ -80,7 +102,7 @@ const SETTINGS_SCHEMA = {
         // Any 1-100 explicitly overrides the target so the loop keeps voting past the trigger.
         default: 0,
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
+        validation: percentageOrZero,
         contextValidation: (value, allSettings) => {
             if (value === 0) return true; // sentinel — always ok
             const exposureValue = allSettings.exposure;
@@ -108,7 +130,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1, // Validate first (no dependencies)
         group: 'general',
         label: 'app.onlyBoost',
@@ -118,7 +140,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         group: 'general',
         label: 'app.compactCards',
@@ -130,7 +152,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: true,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         group: 'boost',
         label: 'app.autoBoost',
@@ -140,7 +162,7 @@ const SETTINGS_SCHEMA = {
         type: 'time', // Special type for hours/minutes input
         default: 3600, // 1 hour in seconds
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0,
+        validation: nonNegNumber,
         validationOrder: 1, // Validate first (no dependencies)
         group: 'boost',
         label: 'app.boostTime',
@@ -150,7 +172,7 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 1,
         perChallenge: true,
-        validation: (value) => Number.isInteger(value) && value >= 0,
+        validation: nonNegInt,
         validationOrder: 1,
         group: 'boost',
         label: 'app.boostImageIndex',
@@ -160,7 +182,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         group: 'boost',
         label: 'app.boostFillNew',
@@ -172,7 +194,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         group: 'turbo',
         label: 'app.useTurbo',
@@ -182,7 +204,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: true,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         group: 'turbo',
         label: 'app.autoTurbo',
@@ -192,7 +214,7 @@ const SETTINGS_SCHEMA = {
         type: 'time',
         default: 7200, // 2 hours in seconds
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0,
+        validation: nonNegNumber,
         validationOrder: 1,
         group: 'turbo',
         label: 'app.turboTime',
@@ -202,7 +224,7 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 1,
         perChallenge: true,
-        validation: (value) => Number.isInteger(value) && value >= 0,
+        validation: nonNegInt,
         validationOrder: 1,
         group: 'turbo',
         label: 'app.turboImageIndex',
@@ -212,7 +234,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         group: 'turbo',
         label: 'app.turboApplyWhenBoostActive',
@@ -222,7 +244,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         group: 'turbo',
         label: 'app.turboFillNew',
@@ -234,7 +256,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1, // Validate first (no dependencies)
         group: 'lastHour',
         label: 'app.useLastHourExposure',
@@ -244,7 +266,7 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 100,
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 100,
+        validation: percentage,
         contextValidation: (value, allSettings) => {
             const exposureValue = allSettings.exposure;
             // If exposure is not set or invalid, use the exposure default for comparison
@@ -274,7 +296,7 @@ const SETTINGS_SCHEMA = {
         // 0 is a sentinel meaning "vote up to the lastHourExposure trigger value" (legacy behavior).
         default: 0,
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 0 && value <= 100,
+        validation: percentageOrZero,
         contextValidation: (value, allSettings) => {
             if (value === 0) return true;
             const triggerValue = allSettings.lastHourExposure;
@@ -304,7 +326,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1, // Validate first (no dependencies)
         group: 'lastMinute',
         label: 'app.voteOnlyInLastMinute',
@@ -314,7 +336,7 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 10,
         perChallenge: true,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
+        validation: minute1to59,
         validationOrder: 1, // Validate first (no dependencies)
         group: 'lastMinute',
         label: 'app.lastMinuteThreshold',
@@ -324,7 +346,7 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 1,
         perChallenge: false,
-        validation: (value) => typeof value === 'number' && value >= 1 && value <= 59,
+        validation: minute1to59,
         validationOrder: 1, // Validate first (no dependencies)
         group: 'lastMinute',
         label: 'app.lastMinuteCheckFrequency',
@@ -336,7 +358,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         group: 'autoFill',
         label: 'app.autoFill',
@@ -346,7 +368,7 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 10,
         perChallenge: true,
-        validation: (value) => Number.isInteger(value) && value >= 1 && value <= 60,
+        validation: intervalMinutes,
         validationOrder: 1,
         group: 'autoFill',
         label: 'app.autoFillIntervalMinutes',
@@ -356,7 +378,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: true,
         perChallenge: true,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         group: 'autoFill',
         label: 'app.fillWithoutTagMatch',
@@ -372,7 +394,7 @@ const SETTINGS_SCHEMA = {
         default: 300, // 5 minutes in seconds
         perChallenge: true,
         // 0 is the off sentinel; otherwise seconds-before-close (mirrors boostTime/turboTime).
-        validation: (value) => typeof value === 'number' && value >= 0,
+        validation: nonNegNumber,
         validationOrder: 1,
         group: 'autoFill',
         label: 'app.emergencyFill',
@@ -382,7 +404,7 @@ const SETTINGS_SCHEMA = {
         type: 'tags',
         default: [],
         perChallenge: true,
-        validation: isValidTagsList,
+        validation: tagsList,
         validationOrder: 1,
         group: 'autoFill',
         label: 'app.mustIncludeTags',
@@ -392,7 +414,7 @@ const SETTINGS_SCHEMA = {
         type: 'tags',
         default: [],
         perChallenge: true,
-        validation: isValidTagsList,
+        validation: tagsList,
         validationOrder: 1,
         group: 'autoFill',
         label: 'app.shouldIncludeTags',
@@ -408,7 +430,7 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: false,
-        validation: (value) => typeof value === 'boolean',
+        validation: zBool,
         validationOrder: 1,
         label: 'app.autovoteRunning',
         description: 'app.autovoteRunningDesc',
@@ -422,7 +444,7 @@ const SETTINGS_SCHEMA = {
         type: 'string',
         default: '',
         perChallenge: false,
-        validation: (value) => typeof value === 'string',
+        validation: zString,
         validationOrder: 1,
         label: 'app.skipUpdateVersion',
         description: 'app.skipUpdateVersionDesc',
@@ -458,7 +480,7 @@ const SETTINGS_GROUPS = [
 const validateSetting = (key, value, allSettings = null, challengeId = null) => {
     const schemaConfig = SETTINGS_SCHEMA[key];
     if (!schemaConfig) return true;
-    if (schemaConfig.validation && !schemaConfig.validation(value)) return false;
+    if (schemaConfig.validation && !schemaConfig.validation.safeParse(value).success) return false;
     if (schemaConfig.contextValidation && allSettings) {
         if (!schemaConfig.contextValidation(value, allSettings, challengeId)) return false;
     }
@@ -484,7 +506,7 @@ const getValidationError = (settingKey, value, allSettings = null, challengeId =
         return null; // No schema config, assume valid
     }
 
-    if (schemaConfig.validation && !schemaConfig.validation(value)) {
+    if (schemaConfig.validation && !schemaConfig.validation.safeParse(value).success) {
         return 'Invalid value';
     }
 
