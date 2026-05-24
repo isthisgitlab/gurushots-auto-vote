@@ -12,5 +12,8 @@ allowBuilds:
     electron-winstaller: true
     # Native resolver pulled in transitively by ESLint v10 — napi-postinstall verifies prebuilds.
     unrs-resolver: true
+    # lefthook's only build script is a convenience that auto-runs `lefthook install`;
+    # our `prepare` script does that explicitly, so no lifecycle script is needed here.
+    lefthook: false
 minimumReleaseAgeExclude:
     - electron@42.2.0

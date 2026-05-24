@@ -1,0 +1,15 @@
+# Pre-commit hooks. Runs on STAGED files only and keeps fast — the full test
+# suite stays in CI. Sequential (parallel: false) so eslint --fix and
+# prettier --write never race to write the same file; eslint-config-prettier
+# keeps the two from fighting over formatting regardless of order.
+pre-commit:
+    parallel: false
+    commands:
+        eslint:
+            glob: '*.{js,jsx}'
+            run: pnpm exec eslint --fix {staged_files}
+            stage_fixed: true
+        prettier:
+            glob: '*.{js,jsx,json,jsonc,css,md,yml,yaml,html}'
+            run: pnpm exec prettier --write {staged_files}
+            stage_fixed: true

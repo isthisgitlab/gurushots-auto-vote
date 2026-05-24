@@ -1,0 +1,27 @@
+{
+    // TypeScript is used here as a CHECKER ONLY — never as a compiler (noEmit).
+    // checkJs is false, so `tsc` only checks files that opt in with a
+    // `// @ts-check` comment at the top. This keeps the typecheck gate green
+    // from day one and lets the shared core be typed incrementally via JSDoc.
+    "compilerOptions": {
+        "target": "es2025",
+        "lib": ["es2025"],
+        // nodenext (not commonjs) is deliberate: it honors package.json
+        // "type": "commonjs" and checks these .js files as CommonJS, whereas
+        // "module": "commonjs" pulls in moduleResolution "node10", which
+        // TypeScript 6 deprecates (TS5107). require()/module.exports type-check fine.
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "types": ["node"],
+        "allowJs": true,
+        "checkJs": false,
+        "noEmit": true,
+        "strict": true,
+        "esModuleInterop": true,
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "forceConsistentCasingInFileNames": true
+    },
+    "include": ["src/js/**/*.js"],
+    "exclude": ["node_modules", "dist", "build", "coverage", "android", "**/*.test.js"]
+}

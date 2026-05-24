@@ -37,6 +37,7 @@
         "syntax:check": "node scripts/syntax-check.js",
         "preinstall": "only-allow pnpm",
         "prebuild": "pnpm run build:prep",
+        "prepare": "lefthook install",
         "settings:get": "node scripts/settings-cli.js get",
         "settings:global-defaults": "node scripts/settings-cli.js global-defaults",
         "settings:help": "node scripts/settings-cli.js help",
@@ -52,6 +53,7 @@
         "test": "jest",
         "test:coverage": "jest --coverage",
         "test:watch": "jest --watch",
+        "typecheck": "tsc --noEmit",
         "update:readme": "node scripts/readme-version.js",
         "verify:readme": "node scripts/readme-version.js --check",
         "watch:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --watch",
@@ -95,6 +97,7 @@
         "@tailwindcss/cli": "^4.3.0",
         "@testing-library/jest-dom": "^6.9.1",
         "@testing-library/preact": "^3.2.4",
+        "@types/node": "^25.9.1",
         "concurrently": "^9.2.1",
         "cross-env": "^10.1.0",
         "daisyui": "^5.5.20",
@@ -108,10 +111,12 @@
         "jest": "^30.4.2",
         "jest-environment-jsdom": "^30.4.1",
         "jest-environment-node": "^30.4.1",
+        "lefthook": "^2.1.8",
         "only-allow": "^1.2.2",
         "postject": "1.0.0-alpha.6",
         "prettier": "4.0.0-alpha.13",
-        "tailwindcss": "^4.3.0"
+        "tailwindcss": "^4.3.0",
+        "typescript": "^6.0.3"
     },
     "electronmon": {
         "patterns": [
