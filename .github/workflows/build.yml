@@ -24,7 +24,7 @@ jobs:
               run: pnpm test
 
     version-bump:
-        runs-on: ubuntu-latest
+        runs-on: ubuntu-slim
         needs: [test]
         if: github.event_name == 'push'
         outputs:
