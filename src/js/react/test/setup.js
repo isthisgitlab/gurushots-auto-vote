@@ -109,12 +109,15 @@ const mockTranslationManager = {
     getAvailableLanguages: jest.fn().mockReturnValue(['en', 'lv']),
 };
 
-// Set up global mocks
-global.window = {
-    ...global.window,
+// Set up global mocks. Augment the test-env window in place rather than
+// replacing it with a plain object — spreading `{...window}` only copies
+// own-enumerable props and drops prototype methods like dispatchEvent /
+// addEventListener (happy-dom defines them on the prototype). Object.assign
+// keeps the real DOM surface intact while attaching the IPC mocks.
+Object.assign(global.window, {
     api: mockApi,
     translationManager: mockTranslationManager,
-};
+});
 
 // Reset all mocks before each test
 beforeEach(() => {

@@ -43,8 +43,9 @@
 - **Build**: `pnpm build:mac` · `build:win` · `build:linux` · `build:android` · `build:cli:all`
 - **CLI build prereq**: needs `strip` (preinstalled on Linux + Xcode CLT) and, on macOS, `codesign` (Xcode CLT). Each CLI target is built on its native-arch runner — mac on `macos-26`, linux x64 on `ubuntu-latest`, linux arm64 on `ubuntu-24.04-arm` (separate `build-cli-arm` job). Local cross-arch builds (e.g. `build:cli:linux-arm` from an x64 host) aren't supported by the script — run on matching hardware or let CI handle it. UPX is intentionally NOT used — macOS AMFI rejects packed Mach-O, and postject's ELF section injection trips UPX's `bad e_phoff` structural check on Linux. Mac CLI binary is ad-hoc signed by the build — no Developer ID / notarization, so browser-downloaded copies still hit Gatekeeper and need `xattr -d com.apple.quarantine`.
 - **Settings (dev)**: `pnpm settings:get` · `settings:set <key> <value>` · `settings:schema` · `settings:reset`
-- **Tests**: `pnpm test` (full suite) · `pnpm test:watch` · `pnpm test:coverage` — Jest has two projects (`node` and `jsdom`); React tests are `.test.jsx` under `tests/react/`, everything else is `.test.js`
+- **Tests**: `pnpm test` (full suite) · `pnpm test:watch` · `pnpm test:coverage` — Jest has two projects (`node` and `happy-dom`); React tests are `.test.jsx` under `tests/react/`, everything else is `.test.js`
 - **Lint/format/types**: `pnpm lint` · `lint:fix` · `format` (Prettier) · `typecheck` (tsc, checker-only — see **Dependencies & Type Checking**)
+- **Code hygiene**: `pnpm knip` (unused files/deps/types — config in `knip.json`; the `exports`/`nsExports` rules are off because they misfire on this codebase's CJS namespace-access pattern) · `pnpm size` (renderer bundle brotli budgets via size-limit, config in `.size-limit.json`) · `pnpm size:cli` (coarse SEA binary / `cli-bundled.js` size guard, `scripts/check-cli-size.js`)
 - **README version sync**: `pnpm verify:readme` ensures README version strings match `package.json`. `pnpm update:readme` rewrites them. The release workflow enforces this — drift will fail CI.
 
 ## Dependencies & Type Checking
@@ -55,6 +56,7 @@
 - **Type checking** (`pnpm typecheck` → `tsc --noEmit`): this is a JavaScript project — TypeScript is a **checker only, never a compiler** (`tsconfig.json` sets `noEmit` + `checkJs: false`). Only files with a `// @ts-check` comment are type-checked, so add JSDoc + `// @ts-check` to the shared core incrementally. Seeded so far: `apiFactory.js`, `settings/schema.js`, `services/VotingLogic.js`. CI gates on it. When a `// @ts-check` file imports an un-typed module whose inferred signature is too narrow (e.g. a `= null` default), cast the import to `any` at the boundary until that module is typed too.
 - **Pre-commit hooks**: `lefthook` (`lefthook.yml`, installed by the `prepare` script) runs `eslint --fix` + `prettier --write` on staged files only, and re-stages what it fixes (`stage_fixed`) so the fix lands in the same commit — note this re-stages whole files, not partial `git add -p` hunks. Full tests stay in CI. An `--ignore-scripts` install skips hook setup; run `pnpm exec lefthook install` manually if so.
 - **CI security gate**: `pnpm audit --prod --audit-level=high` (shipped deps only) runs in the test workflow; CodeQL (`.github/workflows/codeql.yml`) scans on push/PR and weekly.
+- **CI hygiene gates**: the test workflow also runs `pnpm knip` (dead code / unused deps) and `pnpm size` (renderer bundle budgets); each CLI build job runs `pnpm size:cli`.
 
 ## Git Operations
 

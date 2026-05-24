@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { mockApi, mockTranslationManager } from '../../src/js/react/test/setup';
 
-// Pin window.api + window.translationManager per-test — the global jsdom setup
+// Pin window.api + window.translationManager per-test — the global test setup
 // occasionally loses them across files. ErrorBoundary reads translationManager
 // directly (it's a class boundary, no hook), so restore it to exercise the
 // localized path. Keeps this suite hermetic.

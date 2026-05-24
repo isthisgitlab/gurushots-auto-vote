@@ -1,0 +1,23 @@
+{
+    "$schema": "https://unpkg.com/knip@6/schema.json",
+    "entry": [
+        "src/js/preload.js",
+        "src/js/bridge/capacitor.js",
+        "src/js/headless/index.js",
+        "src/js/react/pages/Login.jsx",
+        "src/js/react/pages/App.jsx",
+        "src/js/react/pages/Logs.jsx",
+        "src/js/react/pages/Capacitor.jsx",
+        "scripts/*.js"
+    ],
+    "project": ["src/**/*.{js,jsx}", "scripts/**/*.js"],
+    "paths": {
+        "@/*": ["src/js/react/*"]
+    },
+    "ignore": [".cache/**"],
+    "ignoreDependencies": ["react", "react-dom", "tailwindcss", "daisyui", "@tailwindcss/typography", "postject"],
+    "rules": {
+        "exports": "off",
+        "nsExports": "off"
+    }
+}

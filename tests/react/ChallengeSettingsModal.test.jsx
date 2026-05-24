@@ -12,7 +12,7 @@ import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal'
 import { mockApi } from '../../src/js/react/test/setup';
 
 // Belt-and-suspenders: the global setup wires window.api, but the
-// jsdom-env globals occasionally lose it between test files. Pin it
+// test-env globals occasionally lose it between test files. Pin it
 // here so this suite is hermetic.
 beforeEach(() => {
     window.api = mockApi;

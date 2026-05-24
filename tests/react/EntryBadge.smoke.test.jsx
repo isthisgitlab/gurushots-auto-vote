@@ -1,8 +1,8 @@
 /**
- * Smoke test for the jsdom Jest project.
+ * Smoke test for the happy-dom Jest project.
  *
  * Goal: prove the React testing pipeline is wired up end-to-end —
- * jest-environment-jsdom resolves, the @swc/jest JSX transform runs,
+ * the happy-dom environment resolves, the @swc/jest JSX transform runs,
  * the @/ moduleNameMapper resolves, the customRender wrapper supplies
  * TranslationProvider, and a basic component renders without errors.
  *

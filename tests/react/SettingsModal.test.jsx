@@ -208,7 +208,7 @@ describe('SettingsModal — handleCancel theme revert', () => {
         fireEvent.click(cancel);
 
         // setAttribute should not have been called by handleCancel
-        // (other parts of jsdom may call setAttribute during render, so
+        // (other parts of happy-dom may call setAttribute during render, so
         // we check it was NOT called specifically with 'data-theme').
         const dataThemeCalls = setSpy.mock.calls.filter((args) => args[0] === 'data-theme');
         expect(dataThemeCalls).toHaveLength(0);

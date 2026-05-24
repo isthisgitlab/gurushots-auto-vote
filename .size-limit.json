@@ -1,0 +1,27 @@
+[
+    {
+        "name": "app bundle (Electron renderer)",
+        "path": "dist/app-bundle.js",
+        "limit": "36 KB"
+    },
+    {
+        "name": "login bundle (Electron renderer)",
+        "path": "dist/login-bundle.js",
+        "limit": "13 KB"
+    },
+    {
+        "name": "logs bundle (Electron renderer)",
+        "path": "dist/logs-bundle.js",
+        "limit": "12 KB"
+    },
+    {
+        "name": "capacitor bundle (Android WebView — bundles Capacitor plugins)",
+        "path": "dist/capacitor-bundle.js",
+        "limit": "175 KB"
+    },
+    {
+        "name": "headless bundle (Android background service)",
+        "path": "dist/headless-bundle.js",
+        "limit": "120 KB"
+    }
+]

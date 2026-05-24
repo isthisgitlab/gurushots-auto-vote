@@ -39,5 +39,11 @@ jobs:
             - name: Type-check (JSDoc + checkJs opt-in)
               run: pnpm typecheck
 
+            - name: Dead-code / unused-dependency check
+              run: pnpm knip
+
             - name: Run tests with coverage
               run: pnpm test:coverage
+
+            - name: Bundle size budget (renderer bundles)
+              run: pnpm size

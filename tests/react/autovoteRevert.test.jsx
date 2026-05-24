@@ -48,7 +48,7 @@ describe('AutovoteContext — last-minute cadence reverts to normal', () => {
 
     beforeEach(() => {
         jest.useFakeTimers();
-        // jsdom-env globals occasionally lose window.api between test files; pin it.
+        // test-env globals occasionally lose window.api between test files; pin it.
         window.api = mockApi;
 
         const now = Math.floor(Date.now() / 1000);

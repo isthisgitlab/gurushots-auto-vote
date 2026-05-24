@@ -168,6 +168,10 @@ jobs:
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+            - name: Check CLI artifact size (macOS/Linux only)
+              if: matrix.platform != 'win'
+              run: pnpm size:cli
+
             - name: Upload build artifacts
               uses: actions/upload-artifact@v7
               with:
@@ -205,6 +209,9 @@ jobs:
               run: pnpm build:cli:linux-arm
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Check CLI artifact size
+              run: pnpm size:cli
 
             - name: Upload Linux ARM CLI artifact
               uses: actions/upload-artifact@v7
