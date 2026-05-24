@@ -296,6 +296,16 @@ jobs:
         needs: [build, build-cli-arm, build-android, version-bump]
         runs-on: ubuntu-latest
         if: github.event_name == 'push'
+        # A job-level permissions block REPLACES the workflow-level set (it does
+        # not merge), so contents/packages are repeated here to preserve the
+        # access this job already had via inheritance.
+        permissions:
+            contents: write
+            packages: write
+            # actions: write is the minimum scope GitHub grants for
+            # workflow_dispatch via GITHUB_TOKEN — needed by the "Trigger Pages
+            # rebuild" step below (gh workflow run dispatches pages.yml).
+            actions: write
 
         steps:
             - name: Checkout code
@@ -403,3 +413,22 @@ jobs:
                   git add package.json README.md docs/
                   git commit -m "Bump version to ${{ needs.version-bump.outputs.new-version }} (${{ needs.version-bump.outputs.bump-type }}) and update documentation [skip ci]"
                   git push origin ${{ github.ref_name }}
+
+            # Keeps the live GitHub Pages site from lagging a release behind. The
+            # bump commit above carries [skip ci] (intentional — without it the
+            # bump push would re-trigger this release workflow and loop), but
+            # [skip ci] is global, so it ALSO suppresses pages.yml, the one commit
+            # that updates the README/version. Compensate by dispatching pages.yml
+            # explicitly: workflow_dispatch is not a push, so build.yml
+            # (push/pull_request only) does not re-fire — no loop. Guarded to
+            # master; Pages serves master, not the develop pre-release channel.
+            - name: Trigger Pages rebuild (master only)
+              if: github.ref_name == 'master'
+              # The release and bump are already published by the time we get here,
+              # so a dispatch hiccup must not fail the whole job — surface a warning
+              # instead so a maintainer can re-run pages.yml from the Actions tab.
+              run: |
+                  gh workflow run pages.yml --ref master \
+                    || echo "::warning::Pages dispatch failed — re-run pages.yml manually from the Actions tab to refresh the site."
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
