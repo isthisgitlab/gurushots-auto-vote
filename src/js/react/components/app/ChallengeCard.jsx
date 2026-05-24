@@ -8,6 +8,7 @@ import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { VoteButton } from './VoteButton';
 import { RunButton } from './RunButton';
 import { EntryBadge } from './EntryBadge';
+import { StatusBadge } from '../ui/StatusBadge';
 
 const TURBO_ERROR_DISPLAY_MS = 5000;
 const FILL_ERROR_DISPLAY_MS = 5000;
@@ -77,6 +78,16 @@ export function ChallengeCard({
     const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
     const canFill = challengeStillOpen && slotsRemaining > 0;
 
+    // Badge row is split into two categories: "logical/state" badges that
+    // reflect live challenge/automation state, and an "override/config"
+    // badge that marks user-configured overrides. They are styled
+    // differently (solid vs muted ghost) and separated so a config marker
+    // is never mistaken for a live state.
+    const showAutoFillBadge = autoFillEnabled && slotsRemaining > 0;
+    const hasLogicalBadge = Boolean(
+        challenge.type || challenge.badge || challenge.max_photo_submits > 1 || showAutoFillBadge,
+    );
+
     // Show vote button logic
     const showVoteButton =
         (!autovoteRunning || (autovoteRunning && onlyBoost)) &&
@@ -132,14 +143,11 @@ export function ChallengeCard({
         // utility — keeps the card off the top edge after scrollIntoView).
         <div id={`challenge-${challenge.id}`} className="border rounded-lg p-3 mb-3 bg-base-100 scroll-mt-4">
             <div className="space-y-2">
-                {/* Title row uses CSS Grid [1fr auto] so the title
-                    block gets exactly the remaining width and the
-                    action buttons get their natural width — no chance
-                    of buttons being pushed off the right edge by a
-                    long title or welcome-message text. min-w-0 on the
-                    title cell forces children to shrink rather than
-                    expand the cell. */}
-                <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
+                {/* Header stacks vertically: the title gets the full card
+                    width (so it truncates far less), and the action buttons
+                    sit on their own row beneath it, wrapping as needed rather
+                    than squeezing the title. */}
+                <div className="flex flex-col gap-2">
                     <div className="min-w-0">
                         <h3 className="font-bold text-base truncate">{challenge.title}</h3>
                         {/* Welcome message — hidden in compact mode to keep the card a tight widget. truncate prevents long welcome text from forcing the grid cell wider. sanitizeWelcomeMessage strips medium-editor toolbar leakage and allowlists safe tags. */}
@@ -149,28 +157,36 @@ export function ChallengeCard({
                                 dangerouslySetInnerHTML={{ __html: sanitizedWelcome }}
                             />
                         )}
-                        {/* Challenge Type Badges */}
-                        <div className="flex gap-1 mt-1">
+                        {/* Challenge badges — logical/state group (solid colors),
+                            then a separated override/config marker (muted ghost). */}
+                        <div className="flex flex-wrap items-center gap-1 mt-1">
                             {challenge.type && (
-                                <span className="badge badge-xs badge-warning">{challenge.type.toUpperCase()}</span>
+                                <StatusBadge variant="warning" size="xs">
+                                    🏁 {challenge.type.toUpperCase()}
+                                </StatusBadge>
                             )}
                             {!challenge.type && challenge.badge && (
-                                <span className="badge badge-xs badge-info">{challenge.badge}</span>
+                                <StatusBadge variant="info" size="xs">
+                                    🏁 {challenge.badge}
+                                </StatusBadge>
                             )}
                             {challenge.max_photo_submits > 1 && (
-                                <span className="badge badge-xs badge-warning">
-                                    {challenge.max_photo_submits} {t('app.photos')}
-                                </span>
+                                <StatusBadge variant="warning" size="xs">
+                                    🖼 {challenge.max_photo_submits} {t('app.photos')}
+                                </StatusBadge>
+                            )}
+                            {showAutoFillBadge && (
+                                <StatusBadge variant="success" size="xs">
+                                    📥 {t('app.autoFillBadge')}
+                                </StatusBadge>
+                            )}
+                            {hasLogicalBadge && hasCustomSettings && (
+                                <span data-testid="badge-divider" className="w-px h-3 bg-base-300 mx-0.5 self-center" />
                             )}
                             {hasCustomSettings && (
-                                <span className="badge badge-xs badge-accent" title="Custom settings configured">
-                                    ⚙️
-                                </span>
-                            )}
-                            {autoFillEnabled && slotsRemaining > 0 && (
-                                <span className="badge badge-xs badge-accent" title={t('app.autoFill')}>
-                                    📥 {t('app.autoFillBadge')}
-                                </span>
+                                <StatusBadge variant="ghost" size="xs">
+                                    ⚙️ {t('app.customBadge')}
+                                </StatusBadge>
                             )}
                         </div>
                         {/* Challenge URL — hidden in compact mode. */}
@@ -198,13 +214,9 @@ export function ChallengeCard({
                             when this card has its own override so the
                             user can see at-a-glance which cards diverge
                             from the global default. */}
-                        <button
-                            className="btn btn-ghost btn-xs px-1"
-                            onClick={toggleCompact}
-                            title={isCompact ? 'Show details' : 'Compact'}
-                        >
+                        <button className="btn btn-ghost btn-xs px-1" onClick={toggleCompact}>
                             <svg
-                                className="w-3 h-3"
+                                className="w-3 h-3 mr-1"
                                 fill={hasCompactOverride ? 'currentColor' : 'none'}
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
@@ -225,14 +237,14 @@ export function ChallengeCard({
                                     />
                                 )}
                             </svg>
+                            {isCompact ? t('app.details') : t('app.compact')}
                         </button>
                         {challenge.type !== 'flash' && (
                             <button
                                 className="btn btn-ghost btn-xs px-1"
                                 onClick={() => onSettingsClick(challenge.id, challenge.title)}
-                                title="Challenge Settings"
                             >
-                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path
                                         strokeLinecap="round"
                                         strokeLinejoin="round"
@@ -246,6 +258,7 @@ export function ChallengeCard({
                                         d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
                                     />
                                 </svg>
+                                {t('app.settings')}
                             </button>
                         )}
                     </div>
@@ -326,7 +339,6 @@ export function ChallengeCard({
                                 className={`btn btn-xs ${turboError ? 'btn-error' : 'btn-info'}`}
                                 onClick={handlePlayAutoTurbo}
                                 disabled={playingTurbo}
-                                title={turboError || t('app.earnTurbo')}
                             >
                                 {playingTurbo ? (
                                     <span className="loading loading-spinner loading-xs" />
@@ -340,11 +352,11 @@ export function ChallengeCard({
                                 className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
                                 onClick={() => handleFill('one')}
                                 disabled={filling || autovoteRunning}
-                                title={fillError || t('app.addOnePhoto')}
                             >
                                 {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
                             </button>
                         )}
+                        {(turboError || fillError) && <span className="text-error">⚠ {turboError || fillError}</span>}
                     </div>
                 )}
 
@@ -377,10 +389,6 @@ export function ChallengeCard({
                                     className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
                                     onClick={handlePlayAutoTurbo}
                                     disabled={playingTurbo || autovoteRunning}
-                                    title={
-                                        turboError ||
-                                        (autovoteRunning ? t('app.autoTurboRunsWithAutovote') : t('app.playAutoTurbo'))
-                                    }
                                 >
                                     {playingTurbo ? (
                                         <span className="loading loading-spinner loading-xs" />
@@ -388,6 +396,12 @@ export function ChallengeCard({
                                         <>🎯 {t('app.earnTurbo')}</>
                                     )}
                                 </button>
+                            )}
+                            {turboError && <div className="text-error text-xs mt-1">{turboError}</div>}
+                            {!turboError && canPlayAutoTurbo && autovoteRunning && (
+                                <div className="text-base-content/60 text-xs mt-1">
+                                    {t('app.autoTurboRunsWithAutovote')}
+                                </div>
                             )}
                         </div>
                         <div className="text-center p-2 bg-base-200 rounded">
@@ -401,7 +415,6 @@ export function ChallengeCard({
                                         className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
                                         onClick={() => handleFill('one')}
                                         disabled={filling || autovoteRunning}
-                                        title={fillError || t('app.addOnePhoto')}
                                     >
                                         {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
                                     </button>
@@ -410,7 +423,6 @@ export function ChallengeCard({
                                             className="btn btn-xs btn-warning"
                                             onClick={() => handleFill('all')}
                                             disabled={filling || autovoteRunning}
-                                            title={t('app.fillAllPhotos')}
                                         >
                                             {filling ? (
                                                 <span className="loading loading-spinner loading-xs" />
@@ -421,6 +433,7 @@ export function ChallengeCard({
                                     )}
                                 </div>
                             )}
+                            {fillError && <div className="text-error text-xs mt-1">{fillError}</div>}
                         </div>
                     </div>
                 )}

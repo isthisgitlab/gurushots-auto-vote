@@ -165,6 +165,7 @@
             autoFillIntervalMinutesDesc:
                 'Minūtes starp katru auto-aizpildes iesniegšanu. Divas trūkstošās vietas ar 10 minūšu intervālu tiek iesniegtas T-20m un T-10m. Plašāks intervāls = vairāk laika katram foto savākt balsis.',
             autoFillBadge: 'auto-aizpilde',
+            customBadge: 'pielāgots',
             mustIncludeTags: 'Obligātie tagi',
             mustIncludeTagsDesc:
                 'Striktais filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Apsvērt tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar vismaz vienu no šiem tagiem. Atstāj tukšu, lai apsvērtu visus piemērotos foto. Salīdzināšana nav reģistrjutīga un ir saudzīga (piem., "kaķis" sakrīt ar "kaķiem").',
@@ -198,6 +199,8 @@
             checkForUpdatesDesc: 'Manuāli pārbaudīt, vai ir pieejama jauna lietotnes versija',
             compactCards: 'Kompaktas kartes',
             compactCardsDesc: 'Attēlot izaicinājumus kompaktā kartes izkārtojumā',
+            compact: 'Kompakts',
+            details: 'Detaļas',
             configureBoost: 'Konfigurēt "Boost" izaicinājumam:',
             currentVersion: 'Pašreizējā versija',
             cycles: 'Cikli:',

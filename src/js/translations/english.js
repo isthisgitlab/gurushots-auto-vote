@@ -165,6 +165,7 @@
             autoFillIntervalMinutesDesc:
                 'Minutes between each auto-fill submission. Two missing slots with a 10-minute interval submit at T-20m and T-10m. Wider gap = more time for each entry to gather votes.',
             autoFillBadge: 'auto-fill',
+            customBadge: 'custom',
             mustIncludeTags: 'Must Include Tags',
             mustIncludeTagsDesc:
                 'Hard filter for both auto-fill and the manual fill buttons. Only consider photos whose auto-detected labels match at least one of these tags. Leave empty to consider all eligible photos. Matching is case-insensitive and forgiving (e.g. "cat" matches "cats").',
@@ -198,6 +199,8 @@
             checkForUpdatesDesc: 'Manually check for new versions of the application',
             compactCards: 'Compact Cards',
             compactCardsDesc: 'Display challenges in a compact card layout',
+            compact: 'Compact',
+            details: 'Details',
             configureBoost: 'Configure Boost for',
             currentVersion: 'Current version',
             cycles: 'Cycles:',

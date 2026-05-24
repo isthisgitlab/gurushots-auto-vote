@@ -66,12 +66,12 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
     test('shows boost button when boostAvailable and entry not actioned', () => {
         render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={true} turboAvailable={false} />);
         // Boost button rendered with rocket icon (not spinner).
-        expect(screen.getByRole('button', { name: '🚀' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /🚀/ })).toBeTruthy();
     });
 
     test('shows turbo button when turboAvailable and entry not actioned', () => {
         render(<EntryBadge entry={baseEntry()} challengeId={777} boostAvailable={false} turboAvailable={true} />);
-        expect(screen.getByRole('button', { name: '⚡' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /⚡/ })).toBeTruthy();
     });
 
     test('hides BOTH buttons when entry.boosted is true (mutual exclusion)', () => {
@@ -83,8 +83,8 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
                 turboAvailable={true}
             />,
         );
-        expect(screen.queryByRole('button', { name: '🚀' })).toBeNull();
-        expect(screen.queryByRole('button', { name: '⚡' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /🚀/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /⚡/ })).toBeNull();
     });
 
     test('hides BOTH buttons when entry.turbo is truthy (mutual exclusion)', () => {
@@ -96,8 +96,8 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
                 turboAvailable={true}
             />,
         );
-        expect(screen.queryByRole('button', { name: '🚀' })).toBeNull();
-        expect(screen.queryByRole('button', { name: '⚡' })).toBeNull();
+        expect(screen.queryByRole('button', { name: /🚀/ })).toBeNull();
+        expect(screen.queryByRole('button', { name: /⚡/ })).toBeNull();
     });
 
     test('reads entry.boosted (not entry.boost) — eligibility flag does not light up the rocket', () => {
@@ -113,7 +113,7 @@ describe('EntryBadge — button visibility (mutual exclusion)', () => {
             />,
         );
         // Button must still be rendered even though entry.boost is true.
-        expect(screen.getByRole('button', { name: '🚀' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: /🚀/ })).toBeTruthy();
     });
 });
 

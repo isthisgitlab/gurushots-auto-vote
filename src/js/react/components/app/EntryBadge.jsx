@@ -81,9 +81,8 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
                     className={`btn btn-xs ml-1 ${boostError ? 'btn-error' : 'btn-success'}`}
                     onClick={handleBoost}
                     disabled={boosting}
-                    title={boostError || t('app.applyBoostToThisEntry')}
                 >
-                    {boosting ? <span className="loading loading-spinner loading-xs" /> : '🚀'}
+                    {boosting ? <span className="loading loading-spinner loading-xs" /> : `🚀 ${t('app.boost')}`}
                 </button>
             )}
             {showTurboButton && (
@@ -91,11 +90,11 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
                     className={`btn btn-xs ml-1 ${turboError ? 'btn-error' : 'btn-warning'}`}
                     onClick={handleTurbo}
                     disabled={turboing}
-                    title={turboError || t('app.applyTurboToThisEntry')}
                 >
-                    {turboing ? <span className="loading loading-spinner loading-xs" /> : '⚡'}
+                    {turboing ? <span className="loading loading-spinner loading-xs" /> : `⚡ ${t('app.turbo')}`}
                 </button>
             )}
+            {(boostError || turboError) && <span className="text-error ml-1">{boostError || turboError}</span>}
         </div>
     );
 }
