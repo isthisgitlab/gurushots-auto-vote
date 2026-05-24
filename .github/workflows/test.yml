@@ -39,11 +39,36 @@ jobs:
             - name: Type-check (JSDoc + checkJs opt-in)
               run: pnpm typecheck
 
-            - name: Dead-code / unused-dependency check
-              run: pnpm knip
-
             - name: Run tests with coverage
               run: pnpm test:coverage
 
             - name: Bundle size budget (renderer bundles)
               run: pnpm size
+
+    knip:
+        # knip runs on a separate, standard runner: its parser (oxc-parser)
+        # allocates a ~2 GiB ArrayBuffer for raw transfer, which the
+        # memory-constrained ubuntu-slim runner used by the `test` job cannot
+        # satisfy (it crashes with "Array buffer allocation failed"). oxc picks
+        # raw transfer purely from the platform (64-bit + Node ≥ 22) with no
+        # opt-out, so the fix is more memory rather than a flag.
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v6
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: '26'
+                  cache: 'pnpm'
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Dead-code / unused-dependency check
+              run: pnpm knip

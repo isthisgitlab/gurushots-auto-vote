@@ -56,7 +56,7 @@
 - **Type checking** (`pnpm typecheck` → `tsc --noEmit`): this is a JavaScript project — TypeScript is a **checker only, never a compiler** (`tsconfig.json` sets `noEmit` + `checkJs: false`). Only files with a `// @ts-check` comment are type-checked, so add JSDoc + `// @ts-check` to the shared core incrementally. Seeded so far: `apiFactory.js`, `settings/schema.js`, `services/VotingLogic.js`. CI gates on it. When a `// @ts-check` file imports an un-typed module whose inferred signature is too narrow (e.g. a `= null` default), cast the import to `any` at the boundary until that module is typed too.
 - **Pre-commit hooks**: `lefthook` (`lefthook.yml`, installed by the `prepare` script) runs `eslint --fix` + `prettier --write` on staged files only, and re-stages what it fixes (`stage_fixed`) so the fix lands in the same commit — note this re-stages whole files, not partial `git add -p` hunks. Full tests stay in CI. An `--ignore-scripts` install skips hook setup; run `pnpm exec lefthook install` manually if so.
 - **CI security gate**: `pnpm audit --prod --audit-level=high` (shipped deps only) runs in the test workflow; CodeQL (`.github/workflows/codeql.yml`) scans on push/PR and weekly.
-- **CI hygiene gates**: the test workflow also runs `pnpm knip` (dead code / unused deps) and `pnpm size` (renderer bundle budgets); each CLI build job runs `pnpm size:cli`.
+- **CI hygiene gates**: the test workflow runs `pnpm size` (renderer bundle budgets) on the main `ubuntu-slim` job and `pnpm knip` (dead code / unused deps) in a separate `knip` job on `ubuntu-latest` — knip's oxc parser allocates a ~2 GiB ArrayBuffer that the slim runner can't satisfy. Each CLI build job runs `pnpm size:cli`.
 
 ## Git Operations
 
