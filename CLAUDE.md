@@ -1,7 +1,5 @@
 # Development Guidelines
 
-> `AGENTS.md` and `CLAUDE.md` carry the same content. If you change one, mirror the change in the other.
-
 ## Code Architecture
 
 - **MCP Integration**: Always utilize MCP (Model Context Protocol) tools and resources first before implementing custom logic. Check available MCP servers for existing solutions.
