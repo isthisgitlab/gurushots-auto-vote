@@ -13,11 +13,28 @@ const path = jest.requireActual('path');
 
 const CLI_PATH = path.resolve(__dirname, '../../src/js/cli/cli.js');
 
+// Each case cold-spawns a fresh `node` running the full CLI. Inside the full
+// parallel jest run every core is busy with workers, so a cold child can take
+// well over the global 10s timeout and get killed (status === null). These are
+// correctness smoke tests, not a perf budget — give the spawn (25s) and the
+// test (40s, clear headroom over the spawn cap) generous room. Scoped to this
+// file; the global 10s in tests/setup.js stays for everything else.
+jest.setTimeout(40000);
+
 const runCli = (args) => {
     const result = spawnSync('node', [CLI_PATH, ...args], {
         encoding: 'utf8',
-        timeout: 10000,
+        timeout: 25000,
     });
+    // A timeout kill (or spawn failure) leaves status === null. Surface it as a
+    // descriptive error rather than letting it resurface downstream as an opaque
+    // `expect(exitCode).toBe(0) // Received: null` — which is exactly what made
+    // the original flake hard to diagnose.
+    if (result.error || result.signal) {
+        throw new Error(
+            `CLI \`${args.join(' ')}\` did not exit normally: ${result.error?.message ?? `killed by ${result.signal}`}`,
+        );
+    }
     return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr };
 };
 
