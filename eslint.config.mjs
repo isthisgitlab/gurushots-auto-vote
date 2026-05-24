@@ -41,7 +41,7 @@ export default [
     },
     // Override for renderer processes (browser environment)
     {
-        files: ['src/js/app.js', 'src/js/login.js', 'src/js/translations.js', 'src/js/ui/**/*.js'],
+        files: ['src/js/ui/**/*.js'],
         languageOptions: {
             globals: {
                 ...globals.browser,
@@ -73,7 +73,7 @@ export default [
     // pre-commit hook lints any staged *.{js,jsx} — tests included — so the Jest
     // globals (describe/it/test/expect/jest/beforeEach/…) must be declared here
     // or a staged test edit fails no-undef. Browser globals come too: the
-    // jsdom-project tests touch window/document.
+    // happy-dom-project tests touch window/document.
     {
         files: ['tests/**/*.js', 'tests/**/*.jsx'],
         languageOptions: {
