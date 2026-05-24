@@ -26,8 +26,18 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
+            - name: Audit dependencies
+              # --prod scopes the gate to shipped runtime deps (the ones that
+              # handle auth tokens) so an unfixable advisory in a dev-only or
+              # alpha-pinned tool can't block unrelated PRs. An unresolvable prod
+              # advisory can be excepted via pnpm's `auditConfig` in package.json.
+              run: pnpm audit --prod --audit-level=high
+
             - name: Run linter
               run: pnpm lint
+
+            - name: Type-check (JSDoc + checkJs opt-in)
+              run: pnpm typecheck
 
             - name: Run tests with coverage
               run: pnpm test:coverage
