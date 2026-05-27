@@ -17,3 +17,5 @@ allowBuilds:
     lefthook: false
 minimumReleaseAgeExclude:
     - electron@42.2.0
+    - '@preact/signals@2.9.1'
+    - electron@42.3.0
