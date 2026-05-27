@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
 import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext';
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
@@ -22,6 +22,7 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 function AppContent() {
     const { ready, t } = useTranslation();
     const { settings, loading: settingsLoading, updateSetting } = useSettings();
+    const { challenges } = useChallenges();
     const autovote = useAutovote();
 
     // Local state
@@ -30,6 +31,15 @@ function AppContent() {
     const [selectedChallenge, setSelectedChallenge] = useState({ id: null, title: '' });
     const [welcomeOpen, setWelcomeOpen] = useState(false);
     const [logsOpen, setLogsOpen] = useState(false);
+
+    // Live challenge object backing the per-challenge settings modal. Resolved
+    // from the context (not snapshotted) so its applicability hints re-render as
+    // the challenge auto-refreshes — a freed entry slot re-enables Auto Fill
+    // without reopening.
+    const selectedChallengeObj = useMemo(
+        () => challenges.find((c) => String(c.id) === String(selectedChallenge.id)) ?? null,
+        [challenges, selectedChallenge.id],
+    );
 
     // Apply theme
     useEffect(() => {
@@ -99,6 +109,9 @@ function AppContent() {
             if (challengeSettingsOpen && selectedChallenge.id === challengeId) return;
             setSelectedChallenge({ id: challengeId, title: challengeTitle });
             setChallengeSettingsOpen(true);
+            // No refetch on open: challenge state is tick-driven (60s auto-refresh)
+            // and selectedChallengeObj is derived live from that context, so the
+            // modal's applicability hints stay current without an imperative fetch.
         },
         [challengeSettingsOpen, selectedChallenge.id],
     );
@@ -171,6 +184,7 @@ function AppContent() {
                             onClose={handleChallengeSettingsClose}
                             challengeId={selectedChallenge.id}
                             challengeTitle={selectedChallenge.title}
+                            challenge={selectedChallengeObj}
                         />
                     </ErrorBoundary>
 

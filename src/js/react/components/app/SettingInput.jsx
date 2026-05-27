@@ -22,7 +22,7 @@ const tagsTextToArray = (text) =>
  * mid-keystroke. Re-syncs when the array prop is replaced from outside
  * (reset button, reload).
  */
-function TagsField({ settingKey, value, onChange, onReset, placeholder }) {
+function TagsField({ settingKey, value, onChange, onReset, placeholder, disabled = false }) {
     const { t } = useTranslation();
     const arr = Array.isArray(value) ? value : [];
     const [draft, setDraft] = useState(() => tagsArrayToText(arr));
@@ -53,6 +53,7 @@ function TagsField({ settingKey, value, onChange, onReset, placeholder }) {
                 placeholder={placeholder}
                 value={draft}
                 onChange={handleChange}
+                disabled={disabled}
             />
             {onReset && (
                 <button
@@ -94,7 +95,7 @@ function getDefaultForType(type) {
 /**
  * Schema-driven input renderer for settings
  */
-export function SettingInput({ settingKey, config, value, onChange, onReset }) {
+export function SettingInput({ settingKey, config, value, onChange, onReset, disabled = false }) {
     const { t } = useTranslation();
 
     // Guard against missing config
@@ -113,6 +114,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset }) {
                 onChange={onChange}
                 onReset={onReset}
                 placeholder={t('app.tagsPlaceholder')}
+                disabled={disabled}
             />
         );
     }
@@ -137,6 +139,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset }) {
                     min="0"
                     value={hours}
                     onChange={handleHoursChange}
+                    disabled={disabled}
                 />
                 <span className="text-sm">{t('app.hours')}</span>
                 <input
@@ -146,6 +149,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset }) {
                     max="59"
                     value={minutes}
                     onChange={handleMinutesChange}
+                    disabled={disabled}
                 />
                 <span className="text-sm">{t('app.minutes')}</span>
                 {onReset && (
@@ -177,6 +181,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset }) {
                     className="checkbox checkbox-sm"
                     checked={!!normalizedValue}
                     onChange={(e) => onChange(settingKey, e.target.checked)}
+                    disabled={disabled}
                 />
                 {onReset && (
                     <button
@@ -209,6 +214,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset }) {
                     max={config.max}
                     value={normalizedValue}
                     onChange={(e) => onChange(settingKey, parseInt(e.target.value, 10) || 0)}
+                    disabled={disabled}
                 />
                 {config.unit && <span className="text-sm">{t(config.unit)}</span>}
                 {onReset && (
@@ -239,6 +245,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset }) {
                 className="input input-bordered input-sm"
                 value={normalizedValue}
                 onChange={(e) => onChange(settingKey, e.target.value)}
+                disabled={disabled}
             />
             {onReset && (
                 <button

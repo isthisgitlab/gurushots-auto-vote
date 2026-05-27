@@ -345,6 +345,16 @@
             usingGlobal: 'Izmanto globālo',
             enableOverride: 'Iespējot pielāgošanu šim izaicinājumam',
             clearAll: 'Notīrīt visu',
+            notApplicable: 'Nav piemērojams',
+            notApplicableHint: 'Jūsu saglabātās vērtības tiek paturētas.',
+            naBoostUsed: 'Boost šim izaicinājumam jau izmantots — šie iestatījumi nedarbosies.',
+            naTurboUsed: 'Turbo šim izaicinājumam jau izmantots — šie iestatījumi nedarbosies.',
+            naSlotsFull: 'Visas bilžu vietas ir aizpildītas — automātiskajai aizpildei nav ko pievienot.',
+            naFlashNoBoost: 'Flash izaicinājumi neatbalsta Boost.',
+            naFlashNoTurbo: 'Flash izaicinājumi neatbalsta Turbo.',
+            naExhibitionNoTurbo: 'Izstādes izaicinājumi neatbalsta Turbo.',
+            naBoostTurboConflict:
+                'Boost nevar pielietot — jūsu vienīgajai bildei jau ir Turbo (Boost un Turbo nevar būt uz vienas bildes).',
         },
         // Logs page specific
         logs: {

@@ -20,6 +20,12 @@ beforeEach(() => {
 
 const mockSchemaState = {
     schema: {
+        // Production declares boostTime as type:'time' (rendered as an
+        // hours+minutes pair of number inputs) and has a second perChallenge
+        // boost field (boostImageIndex). This mock intentionally collapses the
+        // group to a single type:'number' input so the value/disabled assertions
+        // stay simple. The number-input queries below use querySelectorAll +
+        // .every(), so they remain correct if this mock later grows more fields.
         boostTime: {
             type: 'number',
             default: 30,
@@ -39,12 +45,18 @@ jest.mock('@/api/useSettingsSchema', () => ({
     useSettingsSchema: () => mockSchemaState,
 }));
 
+// All currently-rendered number inputs. Assert across the whole set rather
+// than a single querySelector so the tests stay correct if the mocked schema
+// gains another perChallenge field (see mockSchemaState note).
+const numberInputs = () => Array.from(document.querySelectorAll('input[type="number"]'));
+
 function readNumberInput() {
-    // Schema has exactly one perChallenge entry (boostTime, type=number),
-    // so there's a single number input to inspect.
-    const inputs = document.querySelectorAll('input[type="number"]');
+    const inputs = numberInputs();
     return inputs.length ? inputs[inputs.length - 1].value : null;
 }
+
+// The per-field reset button in SettingInput is identified by its title.
+const resetButton = () => document.querySelector('button[title="app.resetToDefaultNotSaved"]');
 
 describe('ChallengeSettingsModal load cancellation', () => {
     test('discards a stale load when challengeId changes mid-fetch', async () => {
@@ -125,5 +137,139 @@ describe('ChallengeSettingsModal load cancellation', () => {
         });
         expect(consoleError).not.toHaveBeenCalled();
         consoleError.mockRestore();
+    });
+});
+
+describe('ChallengeSettingsModal group applicability', () => {
+    // Drain any leftover one-shot impls from the cancellation suite so loads
+    // resolve to "no override" and the inputs render.
+    beforeEach(() => {
+        mockApi.getChallengeOverride.mockReset().mockResolvedValue(null);
+    });
+
+    const renderWithChallenge = (challenge) =>
+        render(
+            <ChallengeSettingsModal
+                isOpen={true}
+                onClose={jest.fn()}
+                challengeId="1"
+                challengeTitle="Challenge 1"
+                challenge={challenge}
+            />,
+        );
+
+    test('disables a group whose action is already used (boost USED)', async () => {
+        renderWithChallenge({ member: { boost: { state: 'USED' } } });
+
+        await waitFor(() => {
+            expect(numberInputs().length).toBeGreaterThan(0);
+        });
+
+        // boostTime is the lone perChallenge entry, in the 'boost' group.
+        expect(numberInputs().every((i) => i.disabled)).toBe(true);
+        expect(document.body.textContent).toContain('app.naBoostUsed');
+        expect(document.body.textContent).toContain('app.notApplicable');
+    });
+
+    test('leaves a group editable when its action can still apply (boost AVAILABLE)', async () => {
+        renderWithChallenge({ member: { boost: { state: 'AVAILABLE' } } });
+
+        await waitFor(() => {
+            expect(numberInputs().length).toBeGreaterThan(0);
+        });
+
+        expect(numberInputs().every((i) => !i.disabled)).toBe(true);
+        expect(document.body.textContent).not.toContain('app.naBoostUsed');
+        expect(document.body.textContent).not.toContain('app.notApplicable');
+    });
+
+    test('re-enables a group when the challenge state clears (live hint, not sticky)', async () => {
+        const { rerender } = renderWithChallenge({ member: { boost: { state: 'USED' } } });
+
+        await waitFor(() => {
+            expect(numberInputs().length).toBeGreaterThan(0);
+        });
+        expect(numberInputs().every((i) => i.disabled)).toBe(true);
+
+        // Same modal instance + challengeId, but a fresh challenge prop (e.g. the
+        // 60s refetch now shows boost is no longer used). The group must re-enable
+        // — proving the disable is a render-time hint derived from live state, not
+        // persisted or sticky.
+        rerender(
+            <ChallengeSettingsModal
+                isOpen={true}
+                onClose={jest.fn()}
+                challengeId="1"
+                challengeTitle="Challenge 1"
+                challenge={{ member: { boost: { state: 'AVAILABLE' } } }}
+            />,
+        );
+
+        await waitFor(() => {
+            expect(numberInputs().every((i) => !i.disabled)).toBe(true);
+        });
+        expect(document.body.textContent).not.toContain('app.naBoostUsed');
+    });
+
+    test('disables boost via the 1/1 turbo conflict and shows the conflict reason + preserved-values hint', async () => {
+        renderWithChallenge({
+            type: 'default',
+            max_photo_submits: 1,
+            member: { ranking: { entries: [{ id: '1', turbo: true }] } },
+        });
+
+        await waitFor(() => {
+            expect(numberInputs().length).toBeGreaterThan(0);
+        });
+
+        expect(numberInputs().every((i) => i.disabled)).toBe(true);
+        expect(document.body.textContent).toContain('app.naBoostTurboConflict');
+        expect(document.body.textContent).toContain('app.notApplicableHint');
+    });
+
+    test('no challenge prop → group editable (no applicability data)', async () => {
+        render(
+            <ChallengeSettingsModal isOpen={true} onClose={jest.fn()} challengeId="1" challengeTitle="Challenge 1" />,
+        );
+
+        await waitFor(() => {
+            expect(numberInputs().length).toBeGreaterThan(0);
+        });
+
+        expect(numberInputs().every((i) => !i.disabled)).toBe(true);
+        expect(document.body.textContent).not.toContain('app.notApplicable');
+    });
+
+    test('applicable group with a stored override → per-field reset button is shown', async () => {
+        // A stored override on boostTime (load returns a non-null value).
+        mockApi.getChallengeOverride.mockResolvedValue(45);
+        renderWithChallenge({ member: { boost: { state: 'AVAILABLE' } } });
+
+        await waitFor(() => {
+            expect(numberInputs().length).toBeGreaterThan(0);
+        });
+
+        // Override present + group applicable → onReset is wired → reset button rendered.
+        expect(document.body.textContent).toContain('app.overridden');
+        expect(numberInputs().every((i) => !i.disabled)).toBe(true);
+        expect(resetButton()).not.toBeNull();
+    });
+
+    test('not-applicable group with a stored override → reset button hidden, override preserved', async () => {
+        // Same stored override, but the group is now inert (boost USED). The
+        // onReset gate (`applicable && hasOverride`) must drop the reset button
+        // while the override itself stays loaded (the "Overridden" badge proves it).
+        mockApi.getChallengeOverride.mockResolvedValue(45);
+        renderWithChallenge({ member: { boost: { state: 'USED' } } });
+
+        await waitFor(() => {
+            expect(numberInputs().length).toBeGreaterThan(0);
+        });
+
+        expect(numberInputs().every((i) => i.disabled)).toBe(true);
+        // Override is retained (not cleared by the disable) ...
+        expect(document.body.textContent).toContain('app.overridden');
+        // ... but the per-field reset is suppressed while the group is inert.
+        expect(resetButton()).toBeNull();
     });
 });

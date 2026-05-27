@@ -344,6 +344,16 @@
             usingGlobal: 'Using Global',
             enableOverride: 'Enable override for this challenge',
             clearAll: 'Clear All',
+            notApplicable: 'Not applicable',
+            notApplicableHint: 'Your saved values are kept.',
+            naBoostUsed: "Boost already used for this challenge — these settings won't take effect.",
+            naTurboUsed: "Turbo already used for this challenge — these settings won't take effect.",
+            naSlotsFull: 'All entry slots are full — auto-fill has nothing to add.',
+            naFlashNoBoost: "Flash challenges don't support Boost.",
+            naFlashNoTurbo: "Flash challenges don't support Turbo.",
+            naExhibitionNoTurbo: "Exhibition challenges don't support Turbo.",
+            naBoostTurboConflict:
+                "Boost can't be applied — your only entry already has Turbo (Boost and Turbo can't share an entry).",
         },
         // Logs page specific
         logs: {
