@@ -353,8 +353,7 @@
             naFlashNoBoost: 'Flash izaicinājumi neatbalsta Boost.',
             naFlashNoTurbo: 'Flash izaicinājumi neatbalsta Turbo.',
             naExhibitionNoTurbo: 'Izstādes izaicinājumi neatbalsta Turbo.',
-            naBoostTurboConflict:
-                'Boost nevar pielietot — jūsu vienīgajai bildei jau ir Turbo (Boost un Turbo nevar būt uz vienas bildes).',
+            naBoostSinglePhoto: 'Viena foto izaicinājumi nekad neatbloķē Boost — šie iestatījumi nedarbosies.',
         },
         // Logs page specific
         logs: {

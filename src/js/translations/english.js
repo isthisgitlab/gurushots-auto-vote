@@ -352,8 +352,7 @@
             naFlashNoBoost: "Flash challenges don't support Boost.",
             naFlashNoTurbo: "Flash challenges don't support Turbo.",
             naExhibitionNoTurbo: "Exhibition challenges don't support Turbo.",
-            naBoostTurboConflict:
-                "Boost can't be applied — your only entry already has Turbo (Boost and Turbo can't share an entry).",
+            naBoostSinglePhoto: "Single-photo challenges never unlock Boost — these settings won't take effect.",
         },
         // Logs page specific
         logs: {

@@ -13,16 +13,17 @@
  * the next render automatically.
  *
  * Conditions where a group's action can't take effect:
- *   - boost group    → flash challenge (no boost); boost already USED; or the
- *                      only entry slot is full with a turboed entry (Boost and
- *                      Turbo can't share an entry and there's no room for a new
- *                      one — mirrors api/boost.js's _pickBoostEntry returning null)
+ *   - boost group    → flash challenge (no boost); boost already USED; or a
+ *                      single-photo challenge (max_photo_submits === 1), where
+ *                      Boost never unlocks — its state stays LOCKED for the whole
+ *                      challenge and can never reach AVAILABLE.
  *   - turbo group    → flash or exhibition challenge (no turbo); turbo already USED
  *   - autoFill group → all entry slots full
- * Deliberately NOT boost/turbo UNAVAILABLE/LOCKED, which can still flip to
- * available later, so the user must remain able to pre-configure those. The
- * turbo-conflict and slots-full checks are reversible (deleting a photo frees a
- * slot / clears the conflict), which is fine — applicability is recomputed live.
+ * Deliberately NOT boost/turbo UNAVAILABLE/LOCKED on multi-photo challenges, where
+ * those states are transient ("not unlocked yet") and can still flip to AVAILABLE
+ * later, so the user must remain able to pre-configure them. The single-photo and
+ * slots-full checks are reversible against live state (it never changes mid-
+ * challenge, but a fresh challenge prop is re-evaluated every render).
  *
  * @param {string} groupId - One of the SETTINGS_GROUPS ids.
  * @param {object|null} [challenge] - Challenge object (reads challenge.member.*).
@@ -35,8 +36,8 @@ export function getGroupApplicability(groupId, challenge) {
     if (!challenge) return applicable;
 
     const member = challenge.member || {};
-    // Shared slot state — used by both the autoFill "all full" check and the
-    // boost "turboed-only-entry" conflict check, so derive it once.
+    // Slot state. maxSlots drives the boost single-photo check (=== 1) and the
+    // autoFill "all full" check; entries feeds slotsFull. Derive once.
     const entries = member.ranking?.entries || [];
     const maxSlots = challenge.max_photo_submits || 0;
     const slotsFull = maxSlots > 0 && entries.length >= maxSlots;
@@ -45,15 +46,13 @@ export function getGroupApplicability(groupId, challenge) {
         case 'boost': {
             if (challenge.type === 'flash') return { applicable: false, reasonKey: 'app.naFlashNoBoost' };
             if (member.boost?.state === 'USED') return { applicable: false, reasonKey: 'app.naBoostUsed' };
-            // Boost and Turbo can't sit on the same entry. If every filled slot
-            // is turboed and there's no free slot for a fresh photo, boost can
-            // never be placed: api/boost.js applyBoost returns null, and
-            // boostFillNew can't rescue it because autoFill.submitNewEntryForAction
-            // refuses once slots are full. With GuruShots' one-turbo-per-challenge
-            // rule this only bites at 1/1.
-            if (slotsFull && entries.length > 0 && entries.every((e) => e?.turbo)) {
-                return { applicable: false, reasonKey: 'app.naBoostTurboConflict' };
-            }
+            // A single-photo challenge never unlocks Boost: its boost state stays
+            // LOCKED for the whole challenge and can never reach AVAILABLE — unlike
+            // a multi-photo challenge, where LOCKED is transient and may flip to
+            // AVAILABLE later, so those must stay configurable. maxSlots === 1 also
+            // subsumes the old Boost-vs-Turbo conflict (Boost and Turbo can't share
+            // an entry, and with one turbo per challenge that only ever bit at 1/1).
+            if (maxSlots === 1) return { applicable: false, reasonKey: 'app.naBoostSinglePhoto' };
             return applicable;
         }
 

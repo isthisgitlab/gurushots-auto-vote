@@ -211,19 +211,16 @@ describe('ChallengeSettingsModal group applicability', () => {
         expect(document.body.textContent).not.toContain('app.naBoostUsed');
     });
 
-    test('disables boost via the 1/1 turbo conflict and shows the conflict reason + preserved-values hint', async () => {
-        renderWithChallenge({
-            type: 'default',
-            max_photo_submits: 1,
-            member: { ranking: { entries: [{ id: '1', turbo: true }] } },
-        });
+    test('disables boost on a single-photo challenge and shows the single-photo reason + preserved-values hint', async () => {
+        // Realistic single-photo shape: boost present but LOCKED (it never unlocks).
+        renderWithChallenge({ type: 'default', max_photo_submits: 1, member: { boost: { state: 'LOCKED' } } });
 
         await waitFor(() => {
             expect(numberInputs().length).toBeGreaterThan(0);
         });
 
         expect(numberInputs().every((i) => i.disabled)).toBe(true);
-        expect(document.body.textContent).toContain('app.naBoostTurboConflict');
+        expect(document.body.textContent).toContain('app.naBoostSinglePhoto');
         expect(document.body.textContent).toContain('app.notApplicableHint');
     });
 

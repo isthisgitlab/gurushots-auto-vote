@@ -29,6 +29,14 @@ describe('getGroupApplicability', () => {
         }
     });
 
+    test('boost LOCKED on a multi-photo challenge → applicable (LOCKED is transient, can still unlock)', () => {
+        // The key distinction from the single-photo rule: on a >1 photo challenge a
+        // LOCKED boost is "not unlocked yet" and may flip to AVAILABLE, so the group
+        // must stay configurable.
+        const challenge = challengeWith({ boost: { state: 'LOCKED' } }, { type: 'default', max_photo_submits: 2 });
+        expect(getGroupApplicability('boost', challenge)).toEqual({ applicable: true, reasonKey: null });
+    });
+
     test('flash challenge → boost group not applicable (even when boost is available)', () => {
         const challenge = challengeWith({ boost: { state: 'AVAILABLE' } }, { type: 'flash' });
         expect(getGroupApplicability('boost', challenge)).toEqual({
@@ -47,22 +55,29 @@ describe('getGroupApplicability', () => {
         });
     });
 
-    test('boost: ranking.entries is null → applicable (|| [] guard, no throw)', () => {
-        // Present `ranking` key with a null `entries` value is a realistic API
-        // shape for a challenge with no submissions; the `|| []` guard must keep
-        // entries.every / .length from throwing, leaving boost applicable at 1/1.
+    test('boost: single-photo challenge (max 1) → not applicable, even with null entries (no throw)', () => {
+        // A null `entries` value is a realistic API shape for a challenge with no
+        // submissions; the single-photo check keys off max_photo_submits, not
+        // entries, so it short-circuits without touching the (guarded) entries list.
         const challenge = challengeWith({ ranking: { entries: null } }, { type: 'default', max_photo_submits: 1 });
-        expect(getGroupApplicability('boost', challenge)).toEqual({ applicable: true, reasonKey: null });
+        expect(getGroupApplicability('boost', challenge)).toEqual({
+            applicable: false,
+            reasonKey: 'app.naBoostSinglePhoto',
+        });
     });
 
-    test('boost: 1/1 slot filled by a turboed entry → not applicable (conflict, no room for a new entry)', () => {
+    test('boost: single-photo challenge (max 1) wins even if boost reads AVAILABLE → not applicable', () => {
+        // Defensive: a single-photo challenge should keep boost LOCKED, but even if
+        // the API ever reported AVAILABLE here, max_photo_submits === 1 is the
+        // authoritative signal and still greys the group — the rule keys off photo
+        // count, not boost.state.
         const challenge = challengeWith(
-            { ranking: { entries: [{ id: '1', turbo: true }] } },
+            { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: '1' }] } },
             { type: 'default', max_photo_submits: 1 },
         );
         expect(getGroupApplicability('boost', challenge)).toEqual({
             applicable: false,
-            reasonKey: 'app.naBoostTurboConflict',
+            reasonKey: 'app.naBoostSinglePhoto',
         });
     });
 
@@ -89,21 +104,24 @@ describe('getGroupApplicability', () => {
         expect(getGroupApplicability('boost', challenge).applicable).toBe(true);
     });
 
-    test('boost: 1/1 with a non-turboed entry (turbo key absent) → applicable', () => {
-        // Realistic API shape: a non-turboed photo simply omits the `turbo` key.
-        // entries.every(e => e?.turbo) must read that as false → boost stays on.
+    test('boost: 1/1 with a non-turboed entry → not applicable (single photo never unlocks boost)', () => {
+        // Even a non-turboed single entry can't be boosted: a single-photo
+        // challenge never unlocks Boost at all (max_photo_submits === 1).
         const challenge = challengeWith(
             { ranking: { entries: [{ id: '1' }] } },
             { type: 'default', max_photo_submits: 1 },
         );
-        expect(getGroupApplicability('boost', challenge).applicable).toBe(true);
+        expect(getGroupApplicability('boost', challenge)).toEqual({
+            applicable: false,
+            reasonKey: 'app.naBoostSinglePhoto',
+        });
     });
 
-    test('boost: USED takes precedence over the turbo conflict', () => {
-        // Both conditions hold (boost used AND only entry is turboed); the
-        // already-used reason must win since it's checked first.
+    test('boost: USED takes precedence over the single-photo rule', () => {
+        // Both conditions hold (boost used AND single photo); the already-used
+        // reason must win since it's checked first.
         const challenge = challengeWith(
-            { boost: { state: 'USED' }, ranking: { entries: [{ id: '1', turbo: true }] } },
+            { boost: { state: 'USED' }, ranking: { entries: [{ id: '1' }] } },
             { type: 'default', max_photo_submits: 1 },
         );
         expect(getGroupApplicability('boost', challenge)).toEqual({
