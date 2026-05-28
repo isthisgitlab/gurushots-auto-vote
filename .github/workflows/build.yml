@@ -421,14 +421,14 @@ jobs:
                   git commit -m "Bump version to ${{ needs.version-bump.outputs.new-version }} (${{ needs.version-bump.outputs.bump-type }}) and update documentation [skip ci]"
                   git push origin ${{ github.ref_name }}
 
-            # Keeps the live GitHub Pages site from lagging a release behind. The
-            # bump commit above carries [skip ci] (intentional — without it the
-            # bump push would re-trigger this release workflow and loop), but
-            # [skip ci] is global, so it ALSO suppresses pages.yml, the one commit
-            # that updates the README/version. Compensate by dispatching pages.yml
-            # explicitly: workflow_dispatch is not a push, so build.yml
-            # (push/pull_request only) does not re-fire — no loop. Guarded to
-            # master; Pages serves master, not the develop pre-release channel.
+            # Pages has no push trigger of its own — it deploys ONLY from this
+            # dispatch, so the site never goes live before a release succeeds.
+            # (The bump commit above carries [skip ci] so build.yml doesn't
+            # re-fire on its own push; workflow_dispatch is not a push, so
+            # dispatching pages.yml here doesn't re-trigger build.yml either —
+            # no loop.) Guarded to master; Pages serves master, not the develop
+            # pre-release channel. A dispatch hiccup must not fail the job — the
+            # release is already published — so warn instead of erroring.
             - name: Trigger Pages rebuild (master only)
               if: github.ref_name == 'master'
               # The release and bump are already published by the time we get here,

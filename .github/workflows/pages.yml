@@ -4,17 +4,10 @@ name: Pages
 # to GitHub Pages. Requires a one-time repo setting:
 # Settings → Pages → Build and deployment → Source = "GitHub Actions".
 on:
-    push:
-        branches: [master]
-        paths:
-            - 'README.md'
-            - 'docs/**'
-            - 'scripts/build-site.js'
-            - 'scripts/site/**'
-            - 'src/assets/logo.png'
-            - 'package.json'
-            - 'pnpm-lock.yaml'
-            - '.github/workflows/pages.yml'
+    # No push trigger: Pages must never go live before a release succeeds.
+    # build.yml's create-release job dispatches this workflow only after a
+    # green build+release (see build.yml "Trigger Pages rebuild"). Manual
+    # refresh is still available from the Actions tab.
     workflow_dispatch:
 
 # Least privilege: the build job only reads source and uploads an artifact;
