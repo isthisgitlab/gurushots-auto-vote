@@ -27,8 +27,8 @@ importers:
         specifier: ^1.16.1
         version: 1.16.1
       electron-updater:
-        specifier: ^6.8.6
-        version: 6.8.6
+        specifier: ^6.8.7
+        version: 6.8.7
       preact:
         specifier: ^10.29.2
         version: 10.29.2
@@ -1792,6 +1792,10 @@ packages:
     resolution: {integrity: sha512-gnk+lN50T7TIRp4bHTVydSnWsNkYAxGiDDbed3U26Z82s1lr8em4E4fLs/EPfIEZIbfi4Zfo5NsdA9gHWbPmXg==}
     engines: {node: '>=12.0.0'}
 
+  builder-util-runtime@9.6.2:
+    resolution: {integrity: sha512-yxUN4XbT+SWucLKb5dVlUbydfJhQ+pmMu+XiAQWbFLA9aU9zM0uV55gUfMtJMQRIn4MCQWoDUJ6tep+dBU0DWA==}
+    engines: {node: '>=12.0.0'}
+
   builder-util@26.11.1:
     resolution: {integrity: sha512-oWRbAjgN9RdVCLvNVN9ltZwaUkrH/FrH8wdggAwpz426PTdcbGEARp7J1HXad/QijURPxYL+BKykThaRjluPIQ==}
     engines: {node: '>=14.0.0'}
@@ -2088,8 +2092,8 @@ packages:
   electron-to-chromium@1.5.362:
     resolution: {integrity: sha512-PUY2DrLvkjkUuWqq+KPL2iWshrJsZOcIojzRQ7eXFacc9dWga7MGMJAa15VbiejSZB1PAXaRLAiKgruHP8LB1w==}
 
-  electron-updater@6.8.6:
-    resolution: {integrity: sha512-taWDzUH44Ax0gi2Zx+107nCfLxky2UfVYnkMlcpcu7WBGrkY8GcSdJIYa3ACHe3L6kMfcXWBIT6tjY5kt/cVFg==}
+  electron-updater@6.8.7:
+    resolution: {integrity: sha512-tFEJQy7h5DFEYFBbEviD37frXyL2XnoQUHD6THJUNoslNgcUEHO67oHhvS0iT6KxIKxaM9UuUf5P4ObnRkXtCA==}
 
   electron-winstaller@5.4.0:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
@@ -5760,6 +5764,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  builder-util-runtime@9.6.2:
+    dependencies:
+      debug: 4.4.3
+      sax: 1.6.0
+    transitivePeerDependencies:
+      - supports-color
+
   builder-util@26.11.1:
     dependencies:
       7zip-bin: 5.2.0
@@ -6104,9 +6115,9 @@ snapshots:
 
   electron-to-chromium@1.5.362: {}
 
-  electron-updater@6.8.6:
+  electron-updater@6.8.7:
     dependencies:
-      builder-util-runtime: 9.6.1
+      builder-util-runtime: 9.6.2
       fs-extra: 10.1.0
       js-yaml: 4.1.1
       lazy-val: 1.0.5
