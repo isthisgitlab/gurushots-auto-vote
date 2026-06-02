@@ -108,7 +108,7 @@
         "@testing-library/dom": "^10.4.1",
         "@testing-library/preact": "^3.2.4",
         "@types/node": "^25.9.1",
-        "concurrently": "^10.0.1",
+        "concurrently": "10.0.1",
         "cross-env": "^10.1.0",
         "daisyui": "^5.5.20",
         "electron": "^42.3.0",

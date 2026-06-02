@@ -70,7 +70,7 @@ importers:
         specifier: ^25.9.1
         version: 25.9.1
       concurrently:
-        specifier: ^10.0.1
+        specifier: 10.0.1
         version: 10.0.1
       cross-env:
         specifier: ^10.1.0
