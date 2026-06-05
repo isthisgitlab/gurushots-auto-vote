@@ -122,7 +122,7 @@
         "jest-environment-node": "^30.4.1",
         "knip": "^6.15.0",
         "lefthook": "^2.1.9",
-        "marked": "^18.0.4",
+        "marked": "^18.0.5",
         "marked-gfm-heading-id": "^4.1.4",
         "only-allow": "^1.2.2",
         "postject": "1.0.0-alpha.6",
