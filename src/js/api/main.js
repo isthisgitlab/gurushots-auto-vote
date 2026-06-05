@@ -174,13 +174,40 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
 
             // Note: effectiveThreshold is now handled by the voting logic service
 
-            // Check if boost is available for this challenge
-            const { boost } = challenge.member;
-            const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
-            const isTimerBasedAvailable = boost.state === 'AVAILABLE' && hasTimeout;
-            const isKeyUnlockedAvailable =
-                boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout);
-            if (isTimerBasedAvailable || isKeyUnlockedAvailable) {
+            // Auto-earn turbo by playing the mini-game when eligible. This has no
+            // close-time threshold (it plays whenever a turbo is winnable), and a
+            // turbo earned this cycle can't be applied until the next cycle re-fetches
+            // state, so it runs ahead of the timer-ordered deadline actions below.
+            if (votingLogic.shouldPlayAutoTurbo(challenge, now)) {
+                logger
+                    .withCategory('turbo')
+                    .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}`);
+                try {
+                    const result = await runTurboMiniGame(challenge, token);
+                    const summary = `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
+                    logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
+                } catch (error) {
+                    logger
+                        .withCategory('turbo')
+                        .endOperation(`turbo-earn-${challenge.id}`, null, error.message || error);
+                }
+            }
+
+            // Deadline actions (boost / auto-fill / turbo apply / emergency fill) run
+            // in the order their configured timers imply — largest seconds-before-close
+            // window first — instead of a fixed code order, so e.g. auto-fill (15m) acts
+            // before turbo (12m) when both are due. Each runner keeps its own full
+            // eligibility check, so an action that isn't actually due just no-ops.
+
+            const runBoost = async () => {
+                // Check if boost is available for this challenge
+                const { boost } = challenge.member;
+                const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
+                const isTimerBasedAvailable = boost.state === 'AVAILABLE' && hasTimeout;
+                const isKeyUnlockedAvailable =
+                    boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout);
+                if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) return;
+
                 logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost available`, null);
 
                 // Use the centralized voting logic service for boost decisions
@@ -256,27 +283,13 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                         .withCategory('voting')
                         .info(`${logger.challengeTag(challenge)} Boost not ready - ${reason}`, null);
                 }
-            }
+            };
 
-            // Auto-earn turbo by playing the mini-game when eligible
-            if (votingLogic.shouldPlayAutoTurbo(challenge, now)) {
-                logger
-                    .withCategory('turbo')
-                    .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}`);
-                try {
-                    const result = await runTurboMiniGame(challenge, token);
-                    const summary = `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
-                    logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
-                } catch (error) {
-                    logger
-                        .withCategory('turbo')
-                        .endOperation(`turbo-earn-${challenge.id}`, null, error.message || error);
-                }
-            }
+            const runTurboApply = async () => {
+                // Auto-apply a won turbo when eligible
+                const turboApply = votingLogic.shouldApplyTurbo(challenge, now);
+                if (!turboApply.apply) return;
 
-            // Auto-apply a won turbo when eligible
-            const turboApply = votingLogic.shouldApplyTurbo(challenge, now);
-            if (turboApply.apply) {
                 let imageId = turboApply.imageId;
                 if (turboApply.fillNew) {
                     // Fill-new: submit a fresh photo and turbo that entry instead of an
@@ -331,37 +344,66 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                             .endOperation(`turbo-apply-${challenge.id}`, null, error.message || error);
                     }
                 }
-            }
+            };
 
-            // Auto-fill missing entries near deadline (one slot per cycle, staggered)
-            const fillResult = await autoFill.maybeAutoFillChallenge(challenge, token, now, {
-                settings,
-                logger,
-                getEligiblePhotos,
-                submitToChallenge,
-            });
-            if (fillResult === 'submitted') {
-                logger
-                    .withCategory('voting')
-                    .info(
-                        `${logger.challengeTag(challenge)} autoFill: entry submitted; boost/turbo will be evaluated on next cycle`,
-                        null,
-                    );
-            }
+            const runAutoFill = async () => {
+                // Auto-fill missing entries near deadline (one slot per cycle, staggered).
+                // On submit it reflects the new entry locally, so a turbo/boost that runs
+                // later this cycle (timer order) acts on it instead of waiting a cycle.
+                const fillResult = await autoFill.maybeAutoFillChallenge(challenge, token, now, {
+                    settings,
+                    logger,
+                    getEligiblePhotos,
+                    submitToChallenge,
+                });
+                if (fillResult === 'submitted') {
+                    logger
+                        .withCategory('voting')
+                        .info(
+                            `${logger.challengeTag(challenge)} autoFill: entry submitted (available to later actions this cycle)`,
+                            null,
+                        );
+                }
+            };
 
-            // Emergency fill: net for slots that staggered auto-fill leaves
-            // empty (auto-fill off, or tags set with no match) — fills all
-            // remaining slots once the challenge is inside the emergency window.
-            const emergencyResult = await autoFill.maybeEmergencyFillChallenge(challenge, token, now, {
-                settings,
-                logger,
-                getEligiblePhotos,
-                submitToChallenge,
-            });
-            if (emergencyResult === 'submitted') {
-                logger
-                    .withCategory('voting')
-                    .info(`${logger.challengeTag(challenge)} emergencyFill: entries submitted near deadline`, null);
+            const runEmergencyFill = async () => {
+                // Emergency fill: net for slots that staggered auto-fill leaves
+                // empty (auto-fill off, or tags set with no match) — fills all
+                // remaining slots once the challenge is inside the emergency window.
+                const emergencyResult = await autoFill.maybeEmergencyFillChallenge(challenge, token, now, {
+                    settings,
+                    logger,
+                    getEligiblePhotos,
+                    submitToChallenge,
+                });
+                if (emergencyResult === 'submitted') {
+                    logger
+                        .withCategory('voting')
+                        .info(`${logger.challengeTag(challenge)} emergencyFill: entries submitted near deadline`, null);
+                }
+            };
+
+            const actionRunners = {
+                boost: runBoost,
+                turbo: runTurboApply,
+                autoFill: runAutoFill,
+                emergencyFill: runEmergencyFill,
+            };
+            // Runners execute SEQUENTIALLY by design: auto-fill mutates the shared
+            // challenge object (reflectNewEntry) so a later turbo/boost in the same
+            // cycle sees the consumed slot and new entry. Do not parallelize them.
+            for (const { action } of votingLogic.orderDeadlineActions(challenge)) {
+                // Honor cancellation between actions, same as the per-challenge guard.
+                if (cancellation.isCancelled()) {
+                    logger.withCategory('voting').warning('🛑 Voting cancelled by user', null);
+                    logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
+                    return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
+                }
+                // Defensive: orderDeadlineActions only emits the four known keys, but
+                // guard the dispatch so a future action added there without a matching
+                // runner degrades to a skip instead of throwing and aborting the loop.
+                const run = actionRunners[action];
+                if (typeof run === 'function') await run();
             }
 
             // Use the centralized voting logic service

@@ -33,12 +33,14 @@ const getSlotsRemaining = (challenge) => {
 };
 
 /**
- * Reflect a freshly submitted "fill-new" entry on the local challenge object
- * so the rest of this cycle (turbo-after-boost, staggered/emergency auto-fill)
- * sees the slot it consumed. The challenge isn't re-fetched mid-cycle, so
- * without this getSlotsRemaining would still count the just-used slot as free
- * and could over-submit. The minimal shape carries the conflict flags that
- * boost/turbo entry selection reads (boosted/turbo).
+ * Reflect a freshly submitted entry on the local challenge object so the rest of
+ * this cycle sees the slot it consumed. Used by both the "fill-new" boost/turbo
+ * path and the staggered/emergency auto-fill paths (which submit before a due
+ * turbo/boost runs in timer order). The challenge isn't re-fetched mid-cycle, so
+ * without this getSlotsRemaining would still count the just-used slot as free and
+ * could over-submit, and a due turbo/boost couldn't act on the new entry. The
+ * minimal shape carries the conflict flags that boost/turbo entry selection reads
+ * (boosted/turbo).
  */
 const reflectNewEntry = (challenge, imageId) => {
     const ranking = challenge?.member?.ranking;
@@ -119,6 +121,11 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     try {
         const result = await submitToChallenge(challengeId, picked, token);
         if (result && result.ok) {
+            // Reflect the consumed slot locally so a due turbo/boost later this
+            // cycle (timer order) sees the new entry and correct slot count.
+            reflectNewEntry(challenge, picked[0]);
+            // `slotsRemaining` is the pre-reflect snapshot from above, so `- 1` is
+            // the post-submit count — keep this log after the reflect, not before.
             logger
                 .withCategory('autoFill')
                 .success(
@@ -241,6 +248,9 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
     try {
         const result = await submitToChallenge(challengeId, picked, token);
         if (result && result.ok) {
+            // Reflect every consumed slot locally so a due turbo/boost later this
+            // cycle (timer order) sees the new entries and correct slot count.
+            for (const id of picked) reflectNewEntry(challenge, id);
             logger
                 .withCategory('autoFill')
                 .success(

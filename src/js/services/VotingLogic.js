@@ -548,6 +548,97 @@ const shouldApplyTurbo = (challenge, now) => {
     return { apply: true, imageId: existingImageId, fillNew: false, reason: 'eligible' };
 };
 
+/**
+ * Effective seconds-before-close at which auto-fill's staggered window opens.
+ * Mirrors maybeAutoFillChallenge's trigger (`secondsRemaining <= slotsRemaining
+ * * intervalSec`) in autoFill.js — keep the two in sync if that formula changes;
+ * with no free slots the window never opens (0). Note: the slot count is read
+ * live, so this is a snapshot at call time (orderDeadlineActions is called once
+ * per challenge before the runners execute).
+ * @param {any} challenge
+ * @param {string} challengeId
+ * @returns {number}
+ */
+const getAutoFillThresholdSec = (challenge, challengeId) => {
+    const max = Number.isFinite(challenge?.max_photo_submits) ? challenge.max_photo_submits : 0;
+    const entries = challenge?.member?.ranking?.entries;
+    const entryCount = Array.isArray(entries) ? entries.length : 0;
+    const slotsRemaining = Math.max(0, max - entryCount);
+    const intervalMinutes = settings.getEffectiveSetting('autoFillIntervalMinutes', challengeId);
+    const intervalSec = (Number.isFinite(intervalMinutes) ? intervalMinutes : 10) * 60;
+    return slotsRemaining * intervalSec;
+};
+
+/**
+ * Effective seconds-before-close at which emergency fill activates (0 = off).
+ * @param {string} challengeId
+ * @returns {number}
+ */
+const getEmergencyFillThresholdSec = (challengeId) => {
+    const seconds = settings.getEffectiveSetting('emergencyFill', challengeId);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+};
+
+/**
+ * Effective seconds-before-close at which boost becomes due. Key-unlocked
+ * boosts apply inside the fixed 15m closing window; timer-based boosts apply
+ * when `timeUntilBoostExpires <= boostTime`, converted to a seconds-before-close
+ * figure (`close_time - boost.timeout + boostTime`) so it's comparable to the
+ * other deadline actions. `boost.timeout` is an absolute Unix-epoch timestamp
+ * (same contract shouldApplyBoost relies on via `boost.timeout - now`), NOT a
+ * countdown; the formula assumes the normal `close_time > boost.timeout` case.
+ * Malformed data where the boost expires after close yields a negative figure,
+ * which only sorts boost later — its handler (shouldApplyBoost) is still the
+ * source of truth for whether to actually apply. Returns -Infinity when no boost
+ * is available, so the boost action sorts last.
+ * @param {any} challenge
+ * @param {string} challengeId
+ * @returns {number}
+ */
+const getBoostThresholdSec = (challenge, challengeId) => {
+    const boost = challenge?.member?.boost || {};
+    const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
+    if (boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout)) {
+        return 15 * 60; // CLOSING window (mirrors shouldApplyBoost)
+    }
+    if (boost.state === 'AVAILABLE' && hasTimeout) {
+        const boostTime = getEffectiveBoostTime(challengeId);
+        return Number(challenge.close_time) - boost.timeout + boostTime;
+    }
+    return -Infinity;
+};
+
+/**
+ * Order the per-challenge deadline actions by the seconds-before-close at which
+ * each becomes due, largest window first — so actions fire in the order their
+ * configured timers imply (e.g. auto-fill 15m → turbo 12m → vote/last-minute
+ * 10m) rather than a fixed code order. Each action's own handler still decides
+ * whether to actually act; this only fixes ordering.
+ *
+ * Tie-break (stable): autoFill → emergencyFill → boost → turbo, so fills and
+ * boost precede turbo and a freshly filled (and locally reflected) entry is
+ * available when turbo runs on a tie.
+ *
+ * @param {any} challenge
+ * @returns {Array<{action: 'autoFill'|'turbo'|'emergencyFill'|'boost', thresholdSec: number}>}
+ */
+const orderDeadlineActions = (challenge) => {
+    const challengeId = challenge?.id?.toString?.() || '';
+    /** @type {Record<string, number>} */
+    const tieOrder = { autoFill: 0, emergencyFill: 1, boost: 2, turbo: 3 };
+    /** @type {Array<{action: 'autoFill'|'turbo'|'emergencyFill'|'boost', thresholdSec: number}>} */
+    const actions = [
+        { action: 'autoFill', thresholdSec: getAutoFillThresholdSec(challenge, challengeId) },
+        { action: 'turbo', thresholdSec: getEffectiveTurboTime(challengeId) },
+        { action: 'emergencyFill', thresholdSec: getEmergencyFillThresholdSec(challengeId) },
+        { action: 'boost', thresholdSec: getBoostThresholdSec(challenge, challengeId) },
+    ];
+    return actions.sort((a, b) => {
+        if (b.thresholdSec !== a.thresholdSec) return b.thresholdSec - a.thresholdSec;
+        return tieOrder[a.action] - tieOrder[b.action];
+    });
+};
+
 module.exports = {
     isWithinLastHour,
     isWithinLastMinuteThreshold,
@@ -566,4 +657,8 @@ module.exports = {
     shouldApplyTurbo,
     resolveEntryIndex,
     pickEntryAvoidingConflict,
+    getAutoFillThresholdSec,
+    getEmergencyFillThresholdSec,
+    getBoostThresholdSec,
+    orderDeadlineActions,
 };

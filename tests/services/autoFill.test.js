@@ -1049,3 +1049,81 @@ describe('reflectNewEntry — same-cycle slot accounting', () => {
         expect(challenge.member.ranking.entries).toHaveLength(1); // unchanged
     });
 });
+
+describe('reflect-on-submit — auto-fill consumes the slot it just used', () => {
+    test('maybeAutoFillChallenge reflects the submitted entry locally', async () => {
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
+        expect(getSlotsRemaining(challenge)).toBe(1);
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+        expect(result).toBe('submitted');
+        expect(getSlotsRemaining(challenge)).toBe(0);
+        expect(challenge.member.ranking.entries.at(-1)).toEqual({
+            id: 'p1',
+            turbo: false,
+            boosted: false,
+            boost: -1,
+            boosting: false,
+        });
+    });
+
+    test('a second same-cycle call returns skipped (no double-submit on stale slots)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const deps = {
+            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge,
+        };
+        expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
+        // Slot now consumed locally → the second pass sees 0 slots and stands down.
+        expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('skipped');
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+    });
+
+    test('does NOT reflect on submit failure (entries untouched)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 5 * 60 });
+        const before = challenge.member.ranking.entries.length;
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
+        });
+        expect(result).toBe('error');
+        expect(challenge.member.ranking.entries).toHaveLength(before);
+    });
+
+    test('maybeEmergencyFillChallenge does NOT reflect when a multi-photo submit fails', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
+        });
+        expect(result).toBe('error');
+        expect(challenge.member.ranking.entries).toHaveLength(0);
+    });
+
+    test('maybeEmergencyFillChallenge reflects every submitted entry', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2'), allowedPhoto('p3'), allowedPhoto('p4')]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+        expect(result).toBe('submitted');
+        expect(getSlotsRemaining(challenge)).toBe(0);
+        expect(challenge.member.ranking.entries).toHaveLength(4);
+        expect(challenge.member.ranking.entries.map((e) => e.id)).toEqual(['p1', 'p2', 'p3', 'p4']);
+    });
+});

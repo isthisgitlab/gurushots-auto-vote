@@ -4,8 +4,6 @@
  * Tests that the boost timing logic respects user settings instead of hardcoded values.
  */
 
-const fs = require('node:fs');
-
 // Mock the settings module
 const mockSettings = {
     getEffectiveSetting: jest.fn(),
@@ -58,6 +56,14 @@ const mockVotingLogic = {
     evaluateVotingDecision: jest.fn(),
     shouldPlayAutoTurbo: jest.fn(() => false),
     shouldApplyTurbo: jest.fn(() => ({ apply: false, imageId: null, reason: 'mocked' })),
+    // main.js dispatches deadline actions in this order; all four are listed so
+    // the boost runner still executes (order is irrelevant to these assertions).
+    orderDeadlineActions: jest.fn(() => [
+        { action: 'boost', thresholdSec: 0 },
+        { action: 'autoFill', thresholdSec: 0 },
+        { action: 'turbo', thresholdSec: 0 },
+        { action: 'emergencyFill', thresholdSec: 0 },
+    ]),
 };
 
 jest.mock('../../src/js/services/VotingLogic', () => mockVotingLogic);

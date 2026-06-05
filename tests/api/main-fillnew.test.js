@@ -20,12 +20,27 @@ jest.mock('../../src/js/api/turbo', () => ({
 }));
 jest.mock('../../src/js/api/submissions', () => ({ getEligiblePhotos: jest.fn(), submitToChallenge: jest.fn() }));
 jest.mock('../../src/js/metadata', () => ({ cleanupStaleMetadata: jest.fn(() => true) }));
+// Default order runs all four deadline actions so the boost/turbo wiring tests
+// below exercise their runners regardless of timer values. Ordering-specific
+// tests override orderDeadlineActions per case.
+const ALL_ACTIONS = [
+    { action: 'boost', thresholdSec: 0 },
+    { action: 'autoFill', thresholdSec: 0 },
+    { action: 'turbo', thresholdSec: 0 },
+    { action: 'emergencyFill', thresholdSec: 0 },
+];
 jest.mock('../../src/js/services/VotingLogic', () => ({
     shouldApplyBoost: jest.fn(() => false),
     getEffectiveBoostTime: jest.fn(() => 3600),
     shouldPlayAutoTurbo: jest.fn(() => false),
     shouldApplyTurbo: jest.fn(() => ({ apply: false, imageId: null, fillNew: false, reason: 'noop' })),
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false })),
+    orderDeadlineActions: jest.fn(() => [
+        { action: 'boost', thresholdSec: 0 },
+        { action: 'autoFill', thresholdSec: 0 },
+        { action: 'turbo', thresholdSec: 0 },
+        { action: 'emergencyFill', thresholdSec: 0 },
+    ]),
 }));
 jest.mock('../../src/js/services/autoFill', () => ({
     submitNewEntryForAction: jest.fn(),
@@ -77,6 +92,7 @@ beforeEach(() => {
     votingLogic.shouldPlayAutoTurbo.mockReturnValue(false);
     votingLogic.shouldApplyTurbo.mockReturnValue({ apply: false, imageId: null, fillNew: false, reason: 'noop' });
     votingLogic.evaluateVotingDecision.mockReturnValue({ shouldVote: false });
+    votingLogic.orderDeadlineActions.mockReturnValue(ALL_ACTIONS);
 });
 
 describe('fetchChallengesAndVote — boost fill-new', () => {
@@ -161,5 +177,60 @@ describe('fetchChallengesAndVote — turbo fill-new', () => {
         await fetchChallengesAndVote(TOKEN);
 
         expect(applyTurbo).not.toHaveBeenCalled();
+    });
+});
+
+describe('fetchChallengesAndVote — timer-ordered actions', () => {
+    test('runs auto-fill before turbo when orderDeadlineActions ranks auto-fill first', async () => {
+        getActiveChallenges.mockResolvedValue({ challenges: [makeChallenge()] });
+        votingLogic.orderDeadlineActions.mockReturnValue([
+            { action: 'autoFill', thresholdSec: 900 },
+            { action: 'turbo', thresholdSec: 720 },
+            { action: 'emergencyFill', thresholdSec: 300 },
+            { action: 'boost', thresholdSec: -Infinity },
+        ]);
+        votingLogic.shouldApplyTurbo.mockReturnValue({
+            apply: true,
+            imageId: 'existing-1',
+            fillNew: false,
+            reason: 'eligible',
+        });
+        applyTurbo.mockResolvedValue({ ok: true });
+
+        await fetchChallengesAndVote(TOKEN);
+
+        expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalled();
+        expect(applyTurbo).toHaveBeenCalledWith('12345', 'existing-1', TOKEN);
+        // main.js dispatches in the order orderDeadlineActions returns.
+        expect(autoFill.maybeAutoFillChallenge.mock.invocationCallOrder[0]).toBeLessThan(
+            applyTurbo.mock.invocationCallOrder[0],
+        );
+    });
+
+    test('runs turbo before auto-fill when orderDeadlineActions ranks turbo first', async () => {
+        getActiveChallenges.mockResolvedValue({ challenges: [makeChallenge()] });
+        votingLogic.orderDeadlineActions.mockReturnValue([
+            { action: 'turbo', thresholdSec: 1200 },
+            { action: 'autoFill', thresholdSec: 900 },
+            { action: 'emergencyFill', thresholdSec: 300 },
+            { action: 'boost', thresholdSec: -Infinity },
+        ]);
+        votingLogic.shouldApplyTurbo.mockReturnValue({
+            apply: true,
+            imageId: 'existing-1',
+            fillNew: false,
+            reason: 'eligible',
+        });
+        applyTurbo.mockResolvedValue({ ok: true });
+
+        await fetchChallengesAndVote(TOKEN);
+
+        // Guard the comparison: both must have actually run, else invocationCallOrder[0]
+        // is undefined and the toBeLessThan check would pass vacuously.
+        expect(applyTurbo).toHaveBeenCalled();
+        expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalled();
+        expect(applyTurbo.mock.invocationCallOrder[0]).toBeLessThan(
+            autoFill.maybeAutoFillChallenge.mock.invocationCallOrder[0],
+        );
     });
 });
