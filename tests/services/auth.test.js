@@ -37,6 +37,15 @@ describe('extractAuthResult', () => {
         expect(extractAuthResult({ status: 'success' }).ok).toBe(false);
     });
 
+    test('a blank / whitespace-only token is rejected, not persisted', () => {
+        expect(extractAuthResult({ token: '' }).ok).toBe(false);
+        expect(extractAuthResult({ token: '   ' })).toEqual({
+            ok: false,
+            token: null,
+            error: 'Authentication failed - invalid response from server',
+        });
+    });
+
     test('surfaces the server-provided error/message on failure', () => {
         expect(extractAuthResult({ error: 'bad creds' }).error).toBe('bad creds');
         expect(extractAuthResult({ message: 'nope' }).error).toBe('nope');

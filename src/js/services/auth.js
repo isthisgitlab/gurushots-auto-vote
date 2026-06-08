@@ -53,9 +53,12 @@ const extractAuthResult = (response) => {
     if (!response) {
         return { ok: false, token: null, error: 'Authentication failed - no response from server' };
     }
-    const token = response.token || response.access_token || response.auth_token || null;
-    const looksSuccessful = !!token || response.success === true || response.status === 'success';
-    if (looksSuccessful && token) {
+    // The only thing that makes a response successful is an actual token under
+    // any of the keys GuruShots has been seen to use; a bare `success: true` /
+    // `status: 'success'` without a token still fails (nothing to persist).
+    // Trim so a whitespace-only token is never persisted as if it were valid.
+    const token = (response.token || response.access_token || response.auth_token || '').trim() || null;
+    if (token) {
         return { ok: true, token, error: null };
     }
     return {
