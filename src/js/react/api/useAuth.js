@@ -13,7 +13,7 @@ export function useAuth() {
      * @param {string} username
      * @param {string} password
      * @param {boolean} isMock - Whether to use mock authentication
-     * @returns {Promise<{success: boolean, token?: string, message?: string, user?: object}>}
+     * @returns {Promise<{success: boolean, token?: string, error?: string}>}
      */
     const authenticate = useCallback(async (username, password, isMock = false) => {
         setLoading(true);
@@ -23,14 +23,14 @@ export function useAuth() {
             const result = await window.api.authenticate(username, password, isMock);
 
             if (!result.success) {
-                setError(result.message || 'Authentication failed');
+                setError(result.error || 'Authentication failed');
             }
 
             return result;
         } catch (err) {
-            const message = err.message || 'Authentication error';
-            setError(message);
-            return { success: false, message };
+            const error = err.message || 'Authentication error';
+            setError(error);
+            return { success: false, error };
         } finally {
             setLoading(false);
         }

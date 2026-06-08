@@ -26,6 +26,7 @@ jest.mock('../src/js/mock', () => ({
     mockApiClient: {
         authenticate: jest.fn(),
         fetchChallengesAndVote: jest.fn(),
+        runTurboMiniGame: jest.fn(),
         getActiveChallenges: jest.fn(),
         getVoteImages: jest.fn(),
         submitVotes: jest.fn(),

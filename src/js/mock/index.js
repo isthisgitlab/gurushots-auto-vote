@@ -348,6 +348,23 @@ const mockApiClient = {
     },
 
     /**
+     * Simulate playing the Turbo mini-game. Mirrors the real
+     * api/main.runTurboMiniGame result shape ({ played, correct, flipped,
+     * doubleFailed, won }) so the manual-turbo IPC handler behaves the same
+     * in mock mode instead of reaching the live battle endpoints.
+     */
+    runTurboMiniGame: async (challenge, token) => {
+        logger.withCategory('turbo').api('Mock runTurboMiniGame', null);
+        logger.withCategory('challenges').debug(`Challenge ID: ${challenge?.id}`, null);
+        if (!token) {
+            logger.withCategory('authentication').error('No token provided, no battles played', null);
+            return { played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false };
+        }
+        await simulateApiResponse({}, 800);
+        return { played: 1, correct: 1, flipped: 0, doubleFailed: 0, won: true };
+    },
+
+    /**
      * Simulate fetching the user's challenge-eligible photo library.
      * Mirrors /rest/get_photos_private; returns an array of items each
      * with the fields the picker uses (id, labels, votes, upload_date,

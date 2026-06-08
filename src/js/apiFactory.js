@@ -13,7 +13,7 @@ const BaseMiddleware = require('./services/BaseMiddleware');
 const logger = require('./logger');
 
 const { authenticate } = require('./api/login');
-const { fetchChallengesAndVote } = require('./api/main');
+const { fetchChallengesAndVote, runTurboMiniGame } = require('./api/main');
 const { getActiveChallenges } = require('./api/challenges');
 const { getVoteImages, submitVotes } = require('./api/voting');
 const { applyBoost, applyBoostToEntry } = require('./api/boost');
@@ -29,6 +29,7 @@ const { mockApiClient } = require('./mock');
  * @typedef {object} ApiStrategy
  * @property {(...args: any[]) => any} authenticate
  * @property {(...args: any[]) => any} fetchChallengesAndVote
+ * @property {(...args: any[]) => any} runTurboMiniGame
  * @property {(...args: any[]) => any} getActiveChallenges
  * @property {(...args: any[]) => any} getVoteImages
  * @property {(...args: any[]) => any} submitVotes
@@ -44,6 +45,7 @@ const { mockApiClient } = require('./mock');
 const realApi = {
     authenticate,
     fetchChallengesAndVote,
+    runTurboMiniGame,
     getActiveChallenges,
     getVoteImages,
     submitVotes,
@@ -76,6 +78,7 @@ const mockApi = {
         'fetchChallengesAndVote',
         mockApiClient.fetchChallengesAndVote.bind(mockApiClient),
     ),
+    runTurboMiniGame: withMockDebug('runTurboMiniGame', mockApiClient.runTurboMiniGame.bind(mockApiClient)),
     getActiveChallenges: withMockDebug('getActiveChallenges', mockApiClient.getActiveChallenges.bind(mockApiClient)),
     getVoteImages: withMockDebug('getVoteImages', mockApiClient.getVoteImages.bind(mockApiClient)),
     submitVotes: withMockDebug('submitVotes', mockApiClient.submitVotes.bind(mockApiClient)),

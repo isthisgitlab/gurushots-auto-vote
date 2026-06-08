@@ -34,4 +34,35 @@ const requireAuthToken = (actionLabel) => {
     return { ok: true, token: userSettings.token, settings: userSettings };
 };
 
-module.exports = { requireAuthToken };
+/**
+ * Normalize a raw authentication response into a single success/token/error
+ * shape, accepting every token key and success indicator GuruShots has been
+ * seen to return across versions. This is the one place that knows the wire
+ * shape — both BaseMiddleware._login (CLI + GUI) and the authenticate IPC
+ * handler call it, so the CLI and GUI agree on what "logged in" means.
+ *
+ * Success requires an actual token: a bare `success: true` / `status:
+ * 'success'` without a token still resolves to a failure (there is nothing to
+ * persist), matching the prior handler behaviour.
+ *
+ * @param {object|null|undefined} response - Raw response from apiStrategy.authenticate.
+ * @returns {{ ok: true, token: string, error: null }
+ *         | { ok: false, token: null, error: string }}
+ */
+const extractAuthResult = (response) => {
+    if (!response) {
+        return { ok: false, token: null, error: 'Authentication failed - no response from server' };
+    }
+    const token = response.token || response.access_token || response.auth_token || null;
+    const looksSuccessful = !!token || response.success === true || response.status === 'success';
+    if (looksSuccessful && token) {
+        return { ok: true, token, error: null };
+    }
+    return {
+        ok: false,
+        token: null,
+        error: response.error || response.message || 'Authentication failed - invalid response from server',
+    };
+};
+
+module.exports = { requireAuthToken, extractAuthResult };

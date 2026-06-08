@@ -10,6 +10,7 @@
 const settings = require('../settings');
 const logger = require('../logger');
 const cancellation = require('../voting/cancellation');
+const { extractAuthResult } = require('./auth');
 const { submitVotesForChallenge, STAGGER_MS } = require('./manualVote');
 
 const requireToken = () => {
@@ -25,22 +26,26 @@ class BaseMiddleware {
 
     async _login(email, password) {
         const response = await this.apiStrategy.authenticate(email, password);
-        if (response && response.token) {
-            settings.setSetting('token', response.token);
-            return { ok: true, response };
+        // Token extraction is shared with the GUI IPC handler via
+        // extractAuthResult so CLI and GUI accept the same token keys /
+        // success indicators — historically _login only honoured `token`.
+        const { ok, token } = extractAuthResult(response);
+        if (ok) {
+            settings.setSetting('token', token);
+            return { ok: true, token, response };
         }
-        return { ok: false, response };
+        return { ok: false, token: null, response };
     }
 
     async cliLogin(email, password) {
         logger.withCategory('authentication').info('=== GuruShots Auto Voter - CLI Login ===', null);
         logger.withCategory('authentication').startOperation('cli-login', 'CLI Authentication');
         try {
-            const { ok, response } = await this._login(email, password);
+            const { ok, token } = await this._login(email, password);
             if (ok) {
                 logger.withCategory('authentication').endOperation('cli-login', 'Authentication successful');
                 logger.withCategory('authentication').success('Token obtained and saved to settings');
-                return { success: true, token: response.token };
+                return { success: true, token };
             }
             logger.withCategory('authentication').endOperation('cli-login', null, 'Invalid credentials');
             return { success: false, error: 'Login failed. Please check your credentials.' };
@@ -52,8 +57,8 @@ class BaseMiddleware {
 
     async guiLogin(email, password) {
         try {
-            const { ok, response } = await this._login(email, password);
-            if (ok) return { success: true, data: response };
+            const { ok, token, response } = await this._login(email, password);
+            if (ok) return { success: true, token, data: response };
             return { success: false, error: 'Invalid credentials' };
         } catch (error) {
             return { success: false, error: error.message || 'Authentication failed' };

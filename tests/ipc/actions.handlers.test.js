@@ -16,23 +16,17 @@ jest.mock('../../src/js/apiFactory');
 jest.mock('../../src/js/services/auth');
 jest.mock('../../src/js/services/VotingLogic');
 jest.mock('../../src/js/services/autoFill');
-jest.mock('../../src/js/api/main', () => ({ runTurboMiniGame: jest.fn() }));
-jest.mock('../../src/js/mock/auth', () => ({
-    mockLoginSuccess: {
-        token: 'mock-token-xyz',
-        user: { id: 1, username: 'mockuser', display_name: 'Mock User' },
-    },
-    mockLoginFailure: { message: 'Mock auth failed' },
-}));
-jest.mock('../../src/js/api/login', () => ({ authenticate: jest.fn() }));
 
 const settings = require('../../src/js/settings');
 const apiFactory = require('../../src/js/apiFactory');
 const auth = require('../../src/js/services/auth');
 const votingLogic = require('../../src/js/services/VotingLogic');
 const autoFill = require('../../src/js/services/autoFill');
-const apiMain = require('../../src/js/api/main');
-const realLogin = require('../../src/js/api/login');
+
+// The handler routes auth through the factory surfaces + the shared
+// extractAuthResult normalizer; exercise the real normalizer rather than a stub
+// so these tests pin the actual token-key handling.
+const { extractAuthResult: realExtractAuthResult } = jest.requireActual('../../src/js/services/auth');
 
 const NOW = () => Math.floor(Date.now() / 1000);
 
@@ -47,6 +41,7 @@ const stubStrategy = (overrides = {}) => {
         applyBoostToEntry: jest.fn(),
         getEligiblePhotos: jest.fn(),
         submitToChallenge: jest.fn(),
+        runTurboMiniGame: jest.fn(),
         ...overrides,
     };
     apiFactory.getApiStrategy = jest.fn().mockReturnValue(strategy);
@@ -93,47 +88,63 @@ describe('get-active-challenges', () => {
 });
 
 describe('authenticate', () => {
-    test('mock path returns success with mock token', async () => {
-        const handlers = buildHandlers();
-        const result = await handlers.authenticate({}, 'user@example.com', 'pw', true);
-        expect(result.success).toBe(true);
-        expect(result.token).toBe('mock-token-xyz');
-        expect(result.user.email).toBe('user@example.com');
+    beforeEach(() => {
+        auth.extractAuthResult = realExtractAuthResult;
+        settings.setSetting = jest.fn();
+        apiFactory.mockApi = { authenticate: jest.fn() };
+        apiFactory.realApi = { authenticate: jest.fn() };
     });
 
-    test('real path returns success when API responds with token', async () => {
-        realLogin.authenticate.mockResolvedValue({
+    test('mock path selects the mock surface and returns its token', async () => {
+        apiFactory.mockApi.authenticate.mockResolvedValue({ token: 'mock-token-xyz' });
+        const handlers = buildHandlers();
+        const result = await handlers.authenticate({}, 'user@example.com', 'pw', true);
+        expect(apiFactory.mockApi.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
+        expect(apiFactory.realApi.authenticate).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: true, token: 'mock-token-xyz' });
+        expect(settings.setSetting).toHaveBeenCalledWith('token', 'mock-token-xyz');
+    });
+
+    test('real path selects the real surface and persists the token', async () => {
+        apiFactory.realApi.authenticate.mockResolvedValue({
             token: 'real-token',
             member_id: 42,
             user_name: 'realuser',
         });
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'user@example.com', 'pw', false);
-        expect(result.success).toBe(true);
-        expect(result.token).toBe('real-token');
-        expect(result.user).toMatchObject({ id: 42, email: 'user@example.com', username: 'realuser' });
+        expect(apiFactory.realApi.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
+        expect(result).toEqual({ success: true, token: 'real-token' });
+        expect(settings.setSetting).toHaveBeenCalledWith('token', 'real-token');
     });
 
-    test('real path returns failure when API returns null', async () => {
-        realLogin.authenticate.mockResolvedValue(null);
+    test('real path accepts a token under access_token (the _login parity fix)', async () => {
+        apiFactory.realApi.authenticate.mockResolvedValue({ access_token: 'alt-token' });
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
-        expect(result).toEqual({ success: false, message: 'Authentication failed - no response from server' });
+        expect(result).toEqual({ success: true, token: 'alt-token' });
     });
 
-    test('real path returns failure when API responds without a token', async () => {
-        realLogin.authenticate.mockResolvedValue({ success: false, error: 'bad creds' });
+    test('returns failure when API returns null', async () => {
+        apiFactory.realApi.authenticate.mockResolvedValue(null);
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('bad creds');
+        expect(result).toEqual({ success: false, error: 'Authentication failed - no response from server' });
+        expect(settings.setSetting).not.toHaveBeenCalled();
     });
 
-    test('real path catches network errors and returns formatted failure', async () => {
-        realLogin.authenticate.mockRejectedValue(new Error('ECONNREFUSED'));
+    test('returns failure when API responds without a token', async () => {
+        apiFactory.realApi.authenticate.mockResolvedValue({ success: false, error: 'bad creds' });
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
-        expect(result).toEqual({ success: false, message: 'ECONNREFUSED' });
+        expect(result).toEqual({ success: false, error: 'bad creds' });
+    });
+
+    test('catches network errors and returns formatted failure', async () => {
+        apiFactory.realApi.authenticate.mockRejectedValue(new Error('ECONNREFUSED'));
+        const handlers = buildHandlers();
+        const result = await handlers.authenticate({}, 'u', 'p', false);
+        expect(result).toEqual({ success: false, error: 'ECONNREFUSED' });
     });
 });
 
@@ -181,7 +192,7 @@ describe('play-auto-turbo', () => {
         // is actually playable (FREE / IN_PROGRESS / cooldown passed).
         setToken('tok');
         const now = NOW();
-        stubStrategy({
+        const strategy = stubStrategy({
             getActiveChallenges: jest.fn().mockResolvedValue({
                 challenges: [
                     {
@@ -194,23 +205,23 @@ describe('play-auto-turbo', () => {
             }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
-        apiMain.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true, flipped: 0, doubleFailed: 0 });
+        strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true, flipped: 0, doubleFailed: 0 });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result.success).toBe(true);
-        expect(apiMain.runTurboMiniGame).toHaveBeenCalled();
+        expect(strategy.runTurboMiniGame).toHaveBeenCalled();
     });
 
     test('returns "no battles" when mini-game played 0', async () => {
         setToken('tok');
         const now = NOW();
-        stubStrategy({
+        const strategy = stubStrategy({
             getActiveChallenges: jest
                 .fn()
                 .mockResolvedValue({ challenges: [{ id: 123, title: 'C', close_time: now + 3600 }] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        apiMain.runTurboMiniGame.mockResolvedValue({ played: 0, correct: 0, won: false });
+        strategy.runTurboMiniGame.mockResolvedValue({ played: 0, correct: 0, won: false });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result).toMatchObject({ success: false, error: 'No battles to play right now' });
@@ -219,13 +230,13 @@ describe('play-auto-turbo', () => {
     test('returns "not earned" when mini-game played but not all correct', async () => {
         setToken('tok');
         const now = NOW();
-        stubStrategy({
+        const strategy = stubStrategy({
             getActiveChallenges: jest
                 .fn()
                 .mockResolvedValue({ challenges: [{ id: 123, title: 'C', close_time: now + 3600 }] }),
         });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        apiMain.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 0, won: false, flipped: 5, doubleFailed: 1 });
+        strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 0, won: false, flipped: 5, doubleFailed: 1 });
         const handlers = buildHandlers();
         const result = await handlers['play-auto-turbo']({}, '123', 'C');
         expect(result.success).toBe(false);
@@ -247,7 +258,7 @@ describe('play-auto-turbo', () => {
         });
         const strategy = stubStrategy({ getActiveChallenges: jest.fn().mockReturnValue(firstHang) });
         votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
-        apiMain.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true });
+        strategy.runTurboMiniGame.mockResolvedValue({ played: 5, correct: 5, won: true });
         const handlers = buildHandlers();
 
         const firstPromise = handlers['play-auto-turbo']({}, '123', 'C');

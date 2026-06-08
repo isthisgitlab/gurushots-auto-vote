@@ -14,7 +14,6 @@ const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
 const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
-const { runTurboMiniGame } = require('../api/main');
 
 // In-process guard that prevents two simultaneous mini-game runs on
 // the same challenge — defends against double-click and against an
@@ -48,86 +47,25 @@ const buildHandlers = () => ({
                 logger.CATEGORIES.AUTHENTICATION,
             );
         try {
-            if (isMock) {
-                const { mockLoginSuccess, mockLoginFailure } = require('../mock/auth');
+            // Route through the factory's surfaces (no direct api/mock imports)
+            // and the shared token normalizer. The explicit isMock arg from the
+            // login screen still selects the surface — login happens before the
+            // mock setting is necessarily committed, so we honour the caller's
+            // choice rather than re-reading settings.mock here.
+            const strategy = isMock ? apiFactory.mockApi : apiFactory.realApi;
+            const response = await strategy.authenticate(username, password);
+            const { ok, token, error } = auth.extractAuthResult(response);
 
-                // Simulate network delay for realistic behavior
-                await new Promise((resolve) => setTimeout(resolve, 500));
-
-                const isValidCredential = true;
-
-                if (isValidCredential) {
-                    const result = {
-                        success: true,
-                        token: mockLoginSuccess.token,
-                        message: 'Mock login successful',
-                        user: {
-                            id: mockLoginSuccess.user.id,
-                            email: username,
-                            username: mockLoginSuccess.user.username,
-                            display_name: mockLoginSuccess.user.display_name,
-                        },
-                    };
-                    logger
-                        .withCategory('authentication')
-                        .info('🔐 Mock authentication successful', { success: true, userId: result.user.id });
-                    return result;
-                }
-                const result = {
-                    success: false,
-                    message: mockLoginFailure.message || 'Invalid mock credentials',
-                };
-                logger.withCategory('authentication').info('🔐 Mock authentication failed:', result);
-                return result;
+            if (ok) {
+                settings.setSetting('token', token);
+                logger.withCategory('authentication').info('🔐 Authentication successful', { success: true });
+                return { success: true, token };
             }
-
-            // Real authentication
-            const { authenticate: realAuthenticate } = require('../api/login');
-            const response = await realAuthenticate(username, password);
-
-            if (!response) {
-                return { success: false, message: 'Authentication failed - no response from server' };
-            }
-
-            logger.withCategory('authentication').info('🔐 Real authentication response received', {
-                hasToken: !!(response.token || response.access_token || response.auth_token),
-                status: response.status,
-                success: response.success,
-            });
-
-            // GuruShots may return different success indicators across
-            // versions; accept any of token / success===true / status==='success'.
-            if (response && (response.token || response.success === true || response.status === 'success')) {
-                const token = response.token || response.access_token || response.auth_token;
-                if (token) {
-                    const result = {
-                        success: true,
-                        token,
-                        message: 'Production login successful',
-                        user: {
-                            id: response.member_id || response.user_id || response.id,
-                            email: username,
-                            username: response.user_name || response.username || response.name,
-                            display_name:
-                                response.user_name || response.username || response.name || response.display_name,
-                        },
-                    };
-                    logger
-                        .withCategory('authentication')
-                        .info('🔐 Real authentication successful', { success: true, userId: result.user.id });
-                    return result;
-                }
-            }
-
-            const result = {
-                success: false,
-                message: response.error || response.message || 'Authentication failed - invalid response from server',
-            };
-            logger.withCategory('authentication').info('🔐 Real authentication failed:', result);
-            return result;
+            logger.withCategory('authentication').info('🔐 Authentication failed', { error });
+            return { success: false, error };
         } catch (error) {
             logger.withCategory('authentication').error('Error handling authenticate request:', error);
-            return { success: false, message: error.message || 'Authentication failed due to network error' };
+            return { success: false, error: error.message || 'Authentication failed due to network error' };
         }
     },
 
@@ -175,7 +113,7 @@ const buildHandlers = () => ({
                     }
                 }
 
-                const result = await runTurboMiniGame(
+                const result = await strategy.runTurboMiniGame(
                     { id: liveChallenge.id, title: liveChallenge.title || safeTitle },
                     userSettings.token,
                 );
