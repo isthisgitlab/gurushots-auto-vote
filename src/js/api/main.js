@@ -17,6 +17,7 @@ const settings = require('../settings');
 const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
 const cancellation = require('../voting/cancellation');
+const { formatDuration } = require('../format/duration');
 
 /**
  * Plays through the Turbo mini-game for a single challenge.
@@ -217,10 +218,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                 const timeUntilDisplayBase = isTimerBasedAvailable ? boost.timeout - now : challenge.close_time - now;
 
                 if (shouldApplyBoost) {
-                    const minutesRemaining = Math.floor(timeUntilDisplayBase / 60);
-                    const hoursRemaining = Math.floor(minutesRemaining / 60);
-                    const timeDisplay =
-                        hoursRemaining > 0 ? `${hoursRemaining}h ${minutesRemaining % 60}m` : `${minutesRemaining}m`;
+                    const timeDisplay = formatDuration(timeUntilDisplayBase);
 
                     const applyingMsg = isTimerBasedAvailable
                         ? `Applying boost to challenge ${challenge.title}`
@@ -271,11 +269,7 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
                             .endOperation(`boost-${challenge.id}`, null, error.message || error);
                     }
                 } else {
-                    const minutesRemaining = Math.floor(timeUntilDisplayBase / 60);
-                    const timeDisplay =
-                        minutesRemaining > 60
-                            ? `${Math.floor(minutesRemaining / 60)}h ${minutesRemaining % 60}m`
-                            : `${minutesRemaining}m`;
+                    const timeDisplay = formatDuration(timeUntilDisplayBase);
                     const reason = isTimerBasedAvailable
                         ? `${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`
                         : `${timeDisplay} until challenge ends (needs ≤ 10m to auto-apply)`;

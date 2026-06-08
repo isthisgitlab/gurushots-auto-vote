@@ -11,6 +11,7 @@ const settings = require('../../settings');
 const { getMiddleware } = require('../../apiFactory');
 const { createScheduler } = require('../../scheduling/runScheduler');
 const { formatDateTime } = require('../../dateFormat');
+const { formatDuration } = require('../../format/duration');
 const { isBoostWindowOpen } = require('../../services/VotingLogic');
 
 // Reuse the GUI's single-challenge manual-vote handler (votes to 100%,
@@ -19,25 +20,6 @@ const { isBoostWindowOpen } = require('../../services/VotingLogic');
 // a null event.
 let _votingHandlers;
 const votingHandlers = () => (_votingHandlers ??= require('../../ipc/voting.handlers').buildHandlers());
-
-/**
- * Format a remaining-seconds duration with sensible units (largest two):
- * "Xd Yh" / "Xh Ym" / "Xm", and "<1m" under a minute (urgent, not "0m").
- * Mirrors the renderer's formatDuration so the CLI status and the GUI banner
- * read the same. Clamps negatives.
- * @param {number} seconds
- * @returns {string}
- */
-const formatRemaining = (seconds) => {
-    const total = Math.max(0, Math.floor(seconds));
-    if (total < 60) return '<1m';
-    const days = Math.floor(total / 86400);
-    const hours = Math.floor((total % 86400) / 3600);
-    const minutes = Math.floor((total % 3600) / 60);
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
-};
 
 /**
  * Run a single voting cycle. Pass {isManual: true} to use the manual
@@ -276,7 +258,7 @@ const showStatus = async () => {
                 logger.withCategory('ui').info('  None');
             } else {
                 open.forEach(({ title, remaining }) => {
-                    const suffix = remaining == null ? 'no expiry' : formatRemaining(remaining);
+                    const suffix = remaining == null ? 'no expiry' : formatDuration(remaining);
                     logger.withCategory('ui').info(`  • ${title} — ${suffix}`);
                 });
             }

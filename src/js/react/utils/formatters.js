@@ -4,6 +4,11 @@
  */
 
 import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
+import { formatDuration } from '../../format/duration';
+
+// Re-exported from the shared core so the renderer, the CLI, and api/main all
+// format durations identically — see src/js/format/duration.js.
+export { formatDuration };
 
 /**
  * Format a setting value for the read-only "Global default" hint so it reads
@@ -46,42 +51,7 @@ export const formatTimeRemaining = (endTime) => {
         return 'Ended';
     }
 
-    const days = Math.floor(remaining / 86400);
-    const hours = Math.floor((remaining % 86400) / 3600);
-    const minutes = Math.floor((remaining % 3600) / 60);
-    const seconds = Math.floor(remaining % 60);
-
-    if (days > 0) {
-        return `${days}d ${hours}h ${minutes}m`;
-    } else if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    } else if (minutes > 0) {
-        return `${minutes}m ${seconds}s`;
-    } else {
-        return `${seconds}s`;
-    }
-};
-
-/**
- * Format a remaining-seconds duration with sensible units (largest two):
- *   >= 1 day  → "Xd Yh"
- *   >= 1 hour → "Xh Ym"
- *   >= 1 min  → "Xm"
- *   < 1 min   → "<1m"   (urgent, not the misleading "0m")
- * Minute granularity keeps boost-window chips from churning every second on a
- * long window. Negatives clamp to "<1m".
- * @param {number} seconds
- * @returns {string}
- */
-export const formatDuration = (seconds) => {
-    const total = Math.max(0, Math.floor(seconds));
-    if (total < 60) return '<1m';
-    const days = Math.floor(total / 86400);
-    const hours = Math.floor((total % 86400) / 3600);
-    const minutes = Math.floor((total % 3600) / 60);
-    if (days > 0) return `${days}d ${hours}h`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
+    return formatDuration(remaining, { includeSeconds: true });
 };
 
 /**
