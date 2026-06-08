@@ -249,7 +249,6 @@ describe('play-auto-turbo', () => {
 
     test('in-flight guard: second simultaneous call for the same challenge is rejected', async () => {
         setToken('tok');
-        const now = NOW();
         // First call's getActiveChallenges hangs forever — keeps the
         // in-flight slot held so the second call sees it occupied.
         let releaseFirst;
