@@ -17,8 +17,6 @@ allowBuilds:
     lefthook: false
 # Explicit (matches the pnpm 11 default). Keeping it written down documents the
 # 24h gate that Dependabot's cooldown (.github/dependabot.yml) is calibrated
-# against, and ensures minimumReleaseAgeExclude applies predictably.
+# against, and gives any future minimumReleaseAgeExclude hotfix entries a
+# predictable gate to punch through.
 minimumReleaseAge: 1440
-minimumReleaseAgeExclude:
-    - electron@42.2.0
-    - '@preact/signals@2.9.1'
