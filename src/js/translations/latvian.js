@@ -267,6 +267,7 @@
                 'Šī darbība atiestatīs:\\n• Visus saskarnes iestatījumus (tēmu, valodu, laika joslu)\\n• Visus globālos noklusējuma iestatījumus izaicinājumiem\\n• Lietotnes preferences\\n• Logu pozīcijas un izmērus\\n• Pielāgotās laika joslas\\n• Lietotājvārda un pieteikšanās sesijas preferences\\n\\nTiks saglabāts tikai jūsu piekļuves marķieris (token), pēdējais atjauninājumu pārbaudes laiks, testa režīma iestatījums un API galvenes.\\n\\nŠo darbību nevar atsaukt.',
             resetAllSuccess: 'Visi iestatījumi ir atiestatīti. Lapa tiks pārlādēta, lai piemērotu izmaiņas.',
             save: 'Saglabāt',
+            scrollToTop: 'Uz augšu',
             seconds: 'sekunde(s)',
             settings: 'Iestatījumi',
             skipThisVersion: 'Izlaist šo versiju',

@@ -15,6 +15,7 @@ import { UpdateDialog } from '@/components/app/UpdateDialog';
 import { WelcomeModal } from '@/components/app/WelcomeModal';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
 
 /**
  * Main app content (inside all providers)
@@ -202,6 +203,9 @@ function AppContent() {
                     </ErrorBoundary>
                 </ErrorBoundary>
             </div>
+
+            {/* Back-to-top for the long challenges list */}
+            <ScrollToTopButton />
         </div>
     );
 }
