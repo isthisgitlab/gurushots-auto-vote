@@ -15,6 +15,8 @@ allowBuilds:
     # lefthook's only build script is a convenience that auto-runs `lefthook install`;
     # our `prepare` script does that explicitly, so no lifecycle script is needed here.
     lefthook: false
-minimumReleaseAgeExclude:
-    - electron@42.2.0
-    - '@preact/signals@2.9.1'
+# Explicit (matches the pnpm 11 default). Keeping it written down documents the
+# 24h gate that Dependabot's cooldown (.github/dependabot.yml) is calibrated
+# against, and gives any future minimumReleaseAgeExclude hotfix entries a
+# predictable gate to punch through.
+minimumReleaseAge: 1440
