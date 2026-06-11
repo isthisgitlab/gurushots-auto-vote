@@ -268,6 +268,7 @@
             resetAllSuccess:
                 'All settings have been reset to their default values. The page will reload to apply changes.',
             save: 'Save',
+            scrollToTop: 'Scroll to top',
             seconds: 'seconds',
             settings: 'Settings',
             skipThisVersion: 'Skip This Version',
