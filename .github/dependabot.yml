@@ -14,6 +14,15 @@ updates:
           interval: 'weekly'
       open-pull-requests-limit: 10
       versioning-strategy: increase
+      # pnpm 11 rejects lockfile entries younger than 24h (minimumReleaseAge,
+      # default 1440 min), so a bump to a fresh release fails CI's
+      # `pnpm install --frozen-lockfile`. Make Dependabot wait longer than that
+      # gate so its PRs arrive already past it — 3 days also gives the ecosystem
+      # time to catch malicious releases before we pull them. Cooldown is a
+      # floor, not a freeze: Dependabot takes the newest version ≥3 days old.
+      # (Security updates bypass cooldown by design and may still trip the gate.)
+      cooldown:
+          default-days: 3
       labels:
           - 'dependencies'
       groups:
