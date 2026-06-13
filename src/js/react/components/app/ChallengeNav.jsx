@@ -24,11 +24,10 @@ export function ChallengeNav({ challenges }) {
                     <button
                         key={c.id}
                         type="button"
-                        className="btn btn-xs"
-                        title={c.title}
+                        className="btn btn-xs h-auto whitespace-normal text-left"
                         onClick={() => scrollToChallenge(c.id)}
                     >
-                        <span className="truncate max-w-[10rem]">{c.title}</span>
+                        {c.title}
                     </button>
                 ))}
             </div>
