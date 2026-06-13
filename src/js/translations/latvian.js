@@ -287,6 +287,7 @@
             run: 'Palaist',
             running: 'Darbojas...',
             vote: 'Balsot',
+            voteTitle: 'Balsot par šo izaicinājumu līdz 100% tagad (apiet automātiku; bots turpina darboties)',
             voteAll: 'Balsot visus',
             voteToNextLevel: 'balsis līdz nākamajam līmenim',
             voted: 'Nobalsots!',

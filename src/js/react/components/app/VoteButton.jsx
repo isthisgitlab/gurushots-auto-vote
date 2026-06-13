@@ -28,7 +28,7 @@ export function VoteButton({ challengeId, challengeTitle, onVoteComplete }) {
     }, [challengeId, challengeTitle, onVoteComplete]);
 
     return (
-        <button className="btn btn-latvian btn-sm" onClick={handleVote} disabled={loading}>
+        <button className="btn btn-latvian btn-sm" onClick={handleVote} disabled={loading} title={t('app.voteTitle')}>
             {loading ? (
                 <>
                     <span className="loading loading-spinner loading-xs" />

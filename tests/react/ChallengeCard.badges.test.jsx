@@ -20,7 +20,6 @@ import { ChallengeCard } from '@/components/app/ChallengeCard';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
-    onlyBoost: false,
     autoFillEnabled: false,
     isCompact: false,
     hasCompactOverride: false,
@@ -85,7 +84,6 @@ const badgeByText = (container, text) =>
 beforeEach(() => {
     Object.assign(mockChallengeSettings, {
         hasCustomSettings: false,
-        onlyBoost: false,
         autoFillEnabled: false,
         isCompact: false,
         hasCompactOverride: false,

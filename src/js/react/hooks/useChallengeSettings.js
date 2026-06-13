@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 
 /**
  * Reads the per-challenge effective values + override flags that
- * ChallengeCard renders from. Bundles five related state slots that used
+ * ChallengeCard renders from. Bundles four related state slots that used
  * to live inline next to unrelated render logic, and exposes a
  * `toggleCompact()` action so the card no longer has to re-derive the
  * "no override → set override; has override → remove override" sequence
@@ -10,7 +10,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
  *
  * Returns:
  *   hasCustomSettings   any perChallenge key has an override
- *   onlyBoost           effective onlyBoost value
  *   autoFillEnabled     effective autoFill value
  *   isCompact           effective compactCards value
  *   hasCompactOverride  whether compactCards has a per-challenge override
@@ -18,7 +17,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
  */
 export function useChallengeSettings(challengeId) {
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
-    const [onlyBoost, setOnlyBoost] = useState(false);
     const [autoFillEnabled, setAutoFillEnabled] = useState(false);
     const [isCompact, setIsCompact] = useState(false);
     const [hasCompactOverride, setHasCompactOverride] = useState(false);
@@ -52,14 +50,12 @@ export function useChallengeSettings(challengeId) {
             if (!mountedRef.current) return;
             setHasCustomSettings(overrideResults.some((o) => o !== null));
 
-            const [boostOnly, fillOn, compact, compactOverride] = await Promise.all([
-                window.api.getEffectiveSetting('onlyBoost', id),
+            const [fillOn, compact, compactOverride] = await Promise.all([
                 window.api.getEffectiveSetting('autoFill', id),
                 window.api.getEffectiveSetting('compactCards', id),
                 window.api.getChallengeOverride('compactCards', id),
             ]);
             if (!mountedRef.current) return;
-            setOnlyBoost(boostOnly);
             setAutoFillEnabled(fillOn === true);
             setIsCompact(compact === true);
             setHasCompactOverride(compactOverride !== null);
@@ -93,7 +89,6 @@ export function useChallengeSettings(challengeId) {
 
     return {
         hasCustomSettings,
-        onlyBoost,
         autoFillEnabled,
         isCompact,
         hasCompactOverride,

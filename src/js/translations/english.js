@@ -288,6 +288,7 @@
             run: 'Run',
             running: 'Running...',
             vote: 'Vote',
+            voteTitle: 'Vote this challenge to 100% now (overrides automation; the bot keeps running)',
             voteAll: 'Vote All',
             voteToNextLevel: 'vote to next level',
             voted: 'Voted!',

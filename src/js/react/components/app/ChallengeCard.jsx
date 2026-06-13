@@ -25,8 +25,9 @@ export function ChallengeCard({
     onSettingsClick,
 }) {
     const { t } = useTranslation();
-    const { hasCustomSettings, onlyBoost, autoFillEnabled, isCompact, hasCompactOverride, toggleCompact } =
-        useChallengeSettings(challenge.id);
+    const { hasCustomSettings, autoFillEnabled, isCompact, hasCompactOverride, toggleCompact } = useChallengeSettings(
+        challenge.id,
+    );
     const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
     const { fillNow, loading: filling, error: fillError, clearError: clearFillError } = useFillChallenge();
 
@@ -95,16 +96,20 @@ export function ChallengeCard({
         challenge.type || challenge.badge || challenge.max_photo_submits > 1 || showAutoFillBadge,
     );
 
-    // Show vote button logic
-    const showVoteButton =
-        (!autovoteRunning || (autovoteRunning && onlyBoost)) &&
-        challenge.start_time < Math.floor(Date.now() / 1000) &&
-        exposureFactor < 100;
+    // Manual "vote to 100%" override. Shown even while the scheduled
+    // autovote loop is running so a single challenge can be pushed to 100%
+    // without stopping the bot first. Safe to overlap a strategy pass: the
+    // manual path (evaluateManualVotingToHundred) bypasses thresholds and the
+    // vote is naturally bounded (the API caps exposure at 100%), unlike the
+    // full-strategy Run button below which stays hidden to avoid racing
+    // turbo/boost/fill actions. Both gates read the per-second `now` tick (not
+    // a raw Date.now()) so they flip the moment a challenge starts.
+    const showVoteButton = challenge.start_time < now && exposureFactor < 100;
 
     // Run button: fires one full auto-strategy cycle for this card.
     // Hidden while the scheduled autovote loop is active to avoid
     // racing concurrent strategy passes for the same challenge.
-    const showRunButton = !autovoteRunning && challenge.start_time < Math.floor(Date.now() / 1000);
+    const showRunButton = !autovoteRunning && challenge.start_time < now;
 
     // Next level info
     const getNextLevelInfo = () => {
