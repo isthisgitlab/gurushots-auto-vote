@@ -57,11 +57,10 @@ export function BoostWindowBanner({ challenges }) {
                     <button
                         key={c.id}
                         type="button"
-                        className="btn btn-xs"
-                        title={c.title}
+                        className="btn btn-xs h-auto whitespace-normal text-left"
                         onClick={() => scrollToChallenge(c.id)}
                     >
-                        <span className="truncate max-w-[10rem]">{c.title}</span>
+                        <span>{c.title}</span>
                         {c.remaining != null && (
                             <span className="opacity-70">· {formatDuration(c.remaining)} left</span>
                         )}
