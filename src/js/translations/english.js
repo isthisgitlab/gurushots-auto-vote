@@ -127,6 +127,7 @@
             unavailable: 'Unavailable',
             boost: 'Boost',
             boostWindowOpen: 'Boost window open',
+            jumpToChallenge: 'Jump to challenge',
             boostTime: 'Boost Time',
             boostTimeDesc: 'When to automatically apply boost (time remaining)',
             autoBoost: 'Auto-Apply Boost',

@@ -128,6 +128,7 @@
             unavailable: 'Nav pieejams',
             boost: 'Boost',
             boostWindowOpen: 'Boost logs ir atvērts',
+            jumpToChallenge: 'Pāriet uz izaicinājumu',
             boostTime: 'Boost laiks',
             boostTimeDesc: 'Kad automātiski pielietot "Boost" (pēc atlikušā laika)',
             autoBoost: 'Auto-pielietot Boost',

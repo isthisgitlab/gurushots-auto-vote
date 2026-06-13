@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { isBoostWindowOpen, formatDuration } from '@/utils/formatters';
+import { scrollToChallenge } from '@/utils/scrollToChallenge';
 
 /**
  * Compact summary placed above the challenge list naming the challenges whose
@@ -46,10 +47,6 @@ export function BoostWindowBanner({ challenges }) {
 
     if (open.length === 0) return null;
 
-    const scrollToCard = (id) => {
-        document.getElementById(`challenge-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    };
-
     return (
         <div className="rounded-lg border border-base-300 bg-base-100 p-2 mb-4">
             <div className="text-sm font-medium mb-2">
@@ -62,7 +59,7 @@ export function BoostWindowBanner({ challenges }) {
                         type="button"
                         className="btn btn-xs"
                         title={c.title}
-                        onClick={() => scrollToCard(c.id)}
+                        onClick={() => scrollToChallenge(c.id)}
                     >
                         <span className="truncate max-w-[10rem]">{c.title}</span>
                         {c.remaining != null && (
