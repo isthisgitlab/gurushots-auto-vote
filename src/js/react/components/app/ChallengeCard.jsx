@@ -150,9 +150,12 @@ export function ChallengeCard({
     };
 
     return (
-        // id + scroll-mt make the card a smooth-scroll target for the
-        // boost-window banner's anchor chips (scroll-mt is a stock Tailwind
-        // utility — keeps the card off the top edge after scrollIntoView).
+        // id + scroll-mt make the card a smooth-scroll target for the anchor
+        // chips in BoostWindowBanner and ChallengeNav (both go through the
+        // scrollToChallenge helper, which looks the card up by this exact id).
+        // scroll-mt is a stock Tailwind utility — keeps the card off the top
+        // edge after scrollIntoView. Keep the `challenge-${id}` scheme in sync
+        // with scrollToChallenge if it ever changes.
         <div id={`challenge-${challenge.id}`} className="border rounded-lg p-3 mb-3 bg-base-100 scroll-mt-4">
             <div className="space-y-2">
                 {/* Header stacks vertically: the title gets the full card

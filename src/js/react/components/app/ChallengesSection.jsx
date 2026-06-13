@@ -4,6 +4,7 @@ import { useChallenges } from '@/contexts/ChallengesContext';
 import { useTimers } from '@/hooks/useTimers';
 import { ChallengeCard } from './ChallengeCard';
 import { BoostWindowBanner } from './BoostWindowBanner';
+import { ChallengeNav } from './ChallengeNav';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
 /**
@@ -228,6 +229,10 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
             {/* Boost-window summary: anchors to the challenges whose boost
                 window is open right now. Self-hides when none are open. */}
             <BoostWindowBanner challenges={challenges} />
+
+            {/* Jump-to-challenge index: anchors to every card by title so the
+                user can click a name instead of scrolling. */}
+            <ChallengeNav challenges={challenges} />
 
             {/* Challenge Cards */}
             <div id="challenges-container">
