@@ -169,6 +169,7 @@ The Android build is **not on Google Play** — install via direct APK download.
 - **Top bar** — app title, mock-mode indicator, Settings, and Logout.
 - **Auto-Vote controls** — Start/Stop, a status badge (running / waiting / idle), the last-run timestamp, and the cycle count for the session.
 - **Challenge list** — each card shows the title, end time, your exposure, and voting status. A **⚙️** button opens a per-challenge override modal (any voting setting can be overridden here; unset values fall back to your global defaults).
+- **Jump-to-challenge bar** — a list of all active challenges above the cards; click a name to scroll straight to its card. A boost-window strip above it highlights challenges whose boost window is currently open.
 - **Challenge details** — your rank/exposure/votes, your submitted photos, and boost/turbo status.
 - **Per-entry actions** — on each photo, **🚀 Apply Boost** and **⚡ Apply Turbo** appear when available. Boost and turbo are mutually exclusive on a single photo, so once one is applied neither button shows for that entry.
 - **Play Auto-Turbo** — on open challenges with no turbo held, triggers the mini-game to earn turbo (also runs automatically when `autoTurbo` is on).
