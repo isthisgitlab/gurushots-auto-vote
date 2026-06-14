@@ -37,6 +37,7 @@ const mockSettings = (overrides = {}) => {
         turboApplyWhenBoostActive: false,
         turboImageIndex: 1,
         turboFillNew: false,
+        emergencyFill: 300,
     };
     settings.getEffectiveSetting = jest.fn((key) => ({ ...defaults, ...overrides })[key]);
 };
@@ -185,6 +186,62 @@ describe('shouldApplyTurbo', () => {
             expect(result.apply).toBe(true);
             expect(result.fillNew).toBe(true);
             expect(result.imageId).toBeNull();
+        });
+    });
+
+    describe('emergency override', () => {
+        test('applies a won turbo in the emergency window even when useTurbo is off', () => {
+            mockSettings({ useTurbo: false, emergencyFill: 300 });
+            const challenge = buildChallenge({ closeInSeconds: 120 }); // inside 5-min window
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW(), { emergency: true });
+            expect(result.apply).toBe(true);
+            expect(result.imageId).toBe('entry-1');
+        });
+
+        test('has no effect without the option flag (default behavior unchanged)', () => {
+            mockSettings({ useTurbo: false, emergencyFill: 300 });
+            const challenge = buildChallenge({ closeInSeconds: 120 });
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(false);
+            expect(result.reason).toBe('useTurbo disabled');
+        });
+
+        test('bypasses the turboTime threshold in the emergency window', () => {
+            mockSettings({ turboTime: 60, emergencyFill: 300 }); // 2 min remaining > 1 min threshold
+            const challenge = buildChallenge({ closeInSeconds: 120 });
+            expect(VotingLogic.shouldApplyTurbo(challenge, NOW()).apply).toBe(false); // blocked without emergency
+            expect(VotingLogic.shouldApplyTurbo(challenge, NOW(), { emergency: true }).apply).toBe(true);
+        });
+
+        test('bypasses the open-boost-window guard in the emergency window', () => {
+            mockSettings({ turboApplyWhenBoostActive: false, emergencyFill: 300 });
+            const challenge = buildChallenge({
+                closeInSeconds: 120,
+                boostState: 'AVAILABLE',
+                boostTimeout: NOW() + 1800,
+            });
+            expect(VotingLogic.shouldApplyTurbo(challenge, NOW()).apply).toBe(false); // blocked without emergency
+            expect(VotingLogic.shouldApplyTurbo(challenge, NOW(), { emergency: true }).apply).toBe(true);
+        });
+
+        test('still honors the WON gate', () => {
+            mockSettings({ useTurbo: false, emergencyFill: 300 });
+            const challenge = buildChallenge({ turboState: 'TIMER', closeInSeconds: 120 });
+            expect(VotingLogic.shouldApplyTurbo(challenge, NOW(), { emergency: true }).apply).toBe(false);
+        });
+
+        test('does not override outside the emergency window', () => {
+            mockSettings({ useTurbo: false, emergencyFill: 300 });
+            const challenge = buildChallenge({ closeInSeconds: 600 }); // 10 min > 5-min window
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW(), { emergency: true });
+            expect(result.apply).toBe(false);
+            expect(result.reason).toBe('useTurbo disabled');
+        });
+
+        test('does not override when Emergency Fill is disabled (0)', () => {
+            mockSettings({ useTurbo: false, emergencyFill: 0 });
+            const challenge = buildChallenge({ closeInSeconds: 120 });
+            expect(VotingLogic.shouldApplyTurbo(challenge, NOW(), { emergency: true }).apply).toBe(false);
         });
     });
 });
