@@ -211,13 +211,25 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
 
                 logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost available`, null);
 
-                // Use the centralized voting logic service for boost decisions
-                const shouldApplyBoost = votingLogic.shouldApplyBoost(challenge, now);
+                // Use the centralized voting logic service for boost decisions.
+                // emergency:true lets shouldApplyBoost apply an available boost
+                // near the deadline even if autoBoost is off for this challenge.
+                const shouldApplyBoost = votingLogic.shouldApplyBoost(challenge, now, { emergency: true });
                 const effectiveBoostTime = votingLogic.getEffectiveBoostTime(challenge.id.toString());
                 // For timer-based availability use boost.timeout; for key-unlocked use challenge end time
                 const timeUntilDisplayBase = isTimerBasedAvailable ? boost.timeout - now : challenge.close_time - now;
 
                 if (shouldApplyBoost) {
+                    // Surface the override so an applied boost on a challenge with
+                    // Auto-Apply Boost off is explained rather than looking like a bug.
+                    if (!settings.getEffectiveSetting('autoBoost', challenge.id.toString())) {
+                        logger
+                            .withCategory('boost')
+                            .info(
+                                `${logger.challengeTag(challenge)} Emergency Fill window — applying available boost despite Auto-Apply Boost being off`,
+                                null,
+                            );
+                    }
                     const timeDisplay = formatDuration(timeUntilDisplayBase);
 
                     const applyingMsg = isTimerBasedAvailable
@@ -280,9 +292,22 @@ const fetchChallengesAndVote = async (token, getExposureThreshold = null, challe
             };
 
             const runTurboApply = async () => {
-                // Auto-apply a won turbo when eligible
-                const turboApply = votingLogic.shouldApplyTurbo(challenge, now);
+                // Auto-apply a won turbo when eligible. emergency:true lets
+                // shouldApplyTurbo apply a won turbo near the deadline even if
+                // Auto-Apply Turbo (useTurbo) is off for this challenge.
+                const turboApply = votingLogic.shouldApplyTurbo(challenge, now, { emergency: true });
                 if (!turboApply.apply) return;
+
+                // Surface the override so an applied turbo on a challenge with
+                // Auto-Apply Turbo off is explained rather than looking like a bug.
+                if (!settings.getEffectiveSetting('useTurbo', challenge.id.toString())) {
+                    logger
+                        .withCategory('turbo')
+                        .info(
+                            `${logger.challengeTag(challenge)} Emergency Fill window — applying won turbo despite Auto-Apply Turbo being off`,
+                            null,
+                        );
+                }
 
                 let imageId = turboApply.imageId;
                 if (turboApply.fillNew) {

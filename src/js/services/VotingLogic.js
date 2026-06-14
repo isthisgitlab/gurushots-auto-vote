@@ -343,6 +343,31 @@ const getEffectiveBoostTime = (challengeId) => {
 };
 
 /**
+ * True when the per-challenge Emergency Fill window is enabled (> 0) and the
+ * challenge is currently inside it (closing within that many seconds). Mirrors
+ * the window check in autoFill.maybeEmergencyFillChallenge.
+ *
+ * Used by the boost/turbo APPLY paths so that at the buzzer an available boost
+ * or won turbo gets used even when its own auto-apply toggle is off — an unused
+ * boost/turbo on a closing challenge is simply wasted. Returns false (no
+ * override) when Emergency Fill is disabled, so a user can opt out by setting it
+ * to 0.
+ * @param {any} challenge
+ * @param {number} now - Unix timestamp in seconds
+ * @returns {boolean}
+ */
+const isWithinEmergencyWindow = (challenge, now) => {
+    if (!challenge) return false;
+    const challengeId = challenge.id?.toString?.() || '';
+    const emergencySeconds = settings.getEffectiveSetting('emergencyFill', challengeId);
+    if (!Number.isFinite(emergencySeconds) || emergencySeconds <= 0) return false;
+    const closeTime = Number(challenge.close_time);
+    if (!Number.isFinite(closeTime)) return false;
+    const secondsRemaining = closeTime - now;
+    return secondsRemaining > 0 && secondsRemaining <= emergencySeconds;
+};
+
+/**
  * Check if boost should be applied to a challenge
  * - Timer-based available (state === 'AVAILABLE' with timeout):
  *   apply when timeUntilBoostExpires <= effectiveBoostTime
@@ -350,16 +375,29 @@ const getEffectiveBoostTime = (challengeId) => {
  *   ignore boost timer completely and apply only if challenge ends in next 15 minutes
  * @param {any} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
+ * @param {{emergency?: boolean}} [options] - When `emergency` is true and the
+ *   challenge is inside the Emergency Fill window, apply any available boost
+ *   regardless of the autoBoost toggle or the boostTime window.
  * @returns {boolean} - True if boost should be applied
  */
-const shouldApplyBoost = (challenge, now) => {
+const shouldApplyBoost = (challenge, now, options = {}) => {
     if (!challenge) return false;
 
     // Never apply if challenge already ended or not started yet
     if (challenge.close_time <= now) return false;
 
     const challengeId = challenge.id?.toString?.() || '';
-    if (!settings.getEffectiveSetting('autoBoost', challengeId)) return false;
+
+    // Emergency override: inside the Emergency Fill window, apply an available
+    // boost even when autoBoost is off — at the buzzer an unused boost is wasted.
+    const emergency = options.emergency === true && isWithinEmergencyWindow(challenge, now);
+    if (!emergency && !settings.getEffectiveSetting('autoBoost', challengeId)) return false;
+
+    // In the emergency window the boostTime threshold no longer matters (the
+    // challenge is about to close), so apply whenever a boost is actually
+    // available to apply — mirrors isBoostWindowOpen.
+    if (emergency) return isBoostWindowOpen(challenge, now);
+
     const effectiveBoostTime = getEffectiveBoostTime(challengeId); // seconds
 
     const boost = challenge.member?.boost || {};
@@ -496,29 +534,43 @@ const shouldPlayAutoTurbo = (challenge, now) => {
  *
  * @param {any} challenge
  * @param {number} now - Unix timestamp in seconds
+ * @param {{emergency?: boolean}} [options] - When `emergency` is true and the
+ *   challenge is inside the Emergency Fill window, apply a won turbo regardless
+ *   of the useTurbo toggle, the turboTime window, or an open boost window.
  * @returns {{apply: boolean, imageId: string|null, fillNew: boolean, reason: string}}
  */
-const shouldApplyTurbo = (challenge, now) => {
+const shouldApplyTurbo = (challenge, now, options = {}) => {
     /** @param {string} reason @returns {TurboDecision} */
     const noop = (reason) => ({ apply: false, imageId: null, fillNew: false, reason });
     if (!challenge) return noop('no challenge');
     if (challenge.close_time <= now) return noop('challenge ended');
 
     const challengeId = challenge.id?.toString?.() || '';
-    if (!settings.getEffectiveSetting('useTurbo', challengeId)) return noop('useTurbo disabled');
+
+    // Emergency override: inside the Emergency Fill window, apply a won turbo
+    // even when useTurbo is off — at the buzzer an unused turbo is wasted. The
+    // turboTime threshold and the turboApplyWhenBoostActive guard below are also
+    // skipped in this case (the challenge is about to close, and any available
+    // boost is applied alongside turbo on a separate entry).
+    const emergency = options.emergency === true && isWithinEmergencyWindow(challenge, now);
+    if (!emergency && !settings.getEffectiveSetting('useTurbo', challengeId)) return noop('useTurbo disabled');
 
     const turbo = challenge.member?.turbo || {};
     if (turbo.state !== 'WON') return noop(`turbo state ${turbo.state || 'unknown'}`);
 
-    const effectiveTurboTime = getEffectiveTurboTime(challengeId);
-    const timeUntilEnd = challenge.close_time - now;
-    if (timeUntilEnd > effectiveTurboTime) {
-        return noop(`${Math.floor(timeUntilEnd / 60)}m remaining > ${Math.floor(effectiveTurboTime / 60)}m threshold`);
-    }
+    if (!emergency) {
+        const effectiveTurboTime = getEffectiveTurboTime(challengeId);
+        const timeUntilEnd = challenge.close_time - now;
+        if (timeUntilEnd > effectiveTurboTime) {
+            return noop(
+                `${Math.floor(timeUntilEnd / 60)}m remaining > ${Math.floor(effectiveTurboTime / 60)}m threshold`,
+            );
+        }
 
-    const allowDuringBoost = settings.getEffectiveSetting('turboApplyWhenBoostActive', challengeId);
-    if (!allowDuringBoost && isBoostWindowOpen(challenge, now)) {
-        return noop('boost window currently open');
+        const allowDuringBoost = settings.getEffectiveSetting('turboApplyWhenBoostActive', challengeId);
+        if (!allowDuringBoost && isBoostWindowOpen(challenge, now)) {
+            return noop('boost window currently open');
+        }
     }
 
     const fillNew = settings.getEffectiveSetting('turboFillNew', challengeId) === true;
@@ -650,6 +702,7 @@ module.exports = {
     evaluateManualVotingDecision,
     evaluateManualVotingToHundred,
     getEffectiveBoostTime,
+    isWithinEmergencyWindow,
     shouldApplyBoost,
     isBoostWindowOpen,
     getEffectiveTurboTime,

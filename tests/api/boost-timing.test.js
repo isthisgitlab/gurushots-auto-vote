@@ -196,7 +196,9 @@ describe('boost timing settings', () => {
             // Verify that voting logic was called for boost decision.
             // `now` may drift by ±1s between capture and the production call, so match
             // the challenge exactly but allow any timestamp.
-            expect(mockVotingLogic.shouldApplyBoost).toHaveBeenCalledWith(challengeWithBoost, expect.any(Number));
+            expect(mockVotingLogic.shouldApplyBoost).toHaveBeenCalledWith(challengeWithBoost, expect.any(Number), {
+                emergency: true,
+            });
             expect(mockVotingLogic.getEffectiveBoostTime).toHaveBeenCalledWith('12345');
 
             // Verify that applyBoost was called (because shouldApplyBoost returned true)
@@ -251,7 +253,9 @@ describe('boost timing settings', () => {
             // Verify that voting logic was called for boost decision.
             // `now` may drift by ±1s between capture and the production call, so match
             // the challenge exactly but allow any timestamp.
-            expect(mockVotingLogic.shouldApplyBoost).toHaveBeenCalledWith(challengeWithBoost, expect.any(Number));
+            expect(mockVotingLogic.shouldApplyBoost).toHaveBeenCalledWith(challengeWithBoost, expect.any(Number), {
+                emergency: true,
+            });
             expect(mockVotingLogic.getEffectiveBoostTime).toHaveBeenCalledWith('12345');
 
             // Verify that applyBoost was NOT called (because shouldApplyBoost returned false)

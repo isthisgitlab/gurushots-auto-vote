@@ -558,8 +558,10 @@ const mockApiClient = {
                     }
                 }
 
-                // Auto-apply a won turbo when eligible (mirrors real main.js)
-                const turboApply = votingLogic.shouldApplyTurbo(challenge, now);
+                // Auto-apply a won turbo when eligible (mirrors real main.js,
+                // including the emergency override that applies near the deadline
+                // even when Auto-Apply Turbo is off).
+                const turboApply = votingLogic.shouldApplyTurbo(challenge, now, { emergency: true });
                 if (turboApply.apply) {
                     let imageId = turboApply.imageId;
                     if (turboApply.fillNew) {

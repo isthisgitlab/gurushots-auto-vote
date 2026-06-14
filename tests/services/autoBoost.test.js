@@ -20,10 +20,22 @@ const buildChallengeWithBoostExpiring = (now) => ({
     },
 });
 
+// A boost is available (timer-based, far-future timeout) but the challenge is
+// seconds from closing — the normal boostTime window would not fire here, so
+// only the emergency override can apply it.
+const buildClosingChallengeWithBoost = (now, closeInSeconds = 120) => ({
+    id: '777',
+    close_time: now + closeInSeconds,
+    member: {
+        boost: { state: 'AVAILABLE', timeout: now + 1800 },
+    },
+});
+
 const mockSettings = (overrides = {}) => {
     const defaults = {
         autoBoost: true,
         boostTime: 3600,
+        emergencyFill: 300,
     };
     settings.getEffectiveSetting = jest.fn((key) => ({ ...defaults, ...overrides })[key]);
 };
@@ -41,5 +53,46 @@ describe('shouldApplyBoost — autoBoost gate', () => {
         mockSettings({ autoBoost: false });
         const now = NOW();
         expect(VotingLogic.shouldApplyBoost(buildChallengeWithBoostExpiring(now), now)).toBe(false);
+    });
+});
+
+describe('shouldApplyBoost — emergency override', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    test('applies an available boost in the emergency window even when autoBoost is off', () => {
+        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        const now = NOW();
+        expect(VotingLogic.shouldApplyBoost(buildClosingChallengeWithBoost(now), now, { emergency: true })).toBe(true);
+    });
+
+    test('emergency override has no effect without the option flag (default behavior unchanged)', () => {
+        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        const now = NOW();
+        expect(VotingLogic.shouldApplyBoost(buildClosingChallengeWithBoost(now), now)).toBe(false);
+    });
+
+    test('does not override outside the emergency window', () => {
+        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        const now = NOW();
+        // Closes in 10 minutes — beyond the 5-minute emergency window.
+        const challenge = buildClosingChallengeWithBoost(now, 600);
+        expect(VotingLogic.shouldApplyBoost(challenge, now, { emergency: true })).toBe(false);
+    });
+
+    test('does not override when Emergency Fill is disabled (0)', () => {
+        mockSettings({ autoBoost: false, emergencyFill: 0 });
+        const now = NOW();
+        expect(VotingLogic.shouldApplyBoost(buildClosingChallengeWithBoost(now), now, { emergency: true })).toBe(false);
+    });
+
+    test('still requires a boost to actually be available', () => {
+        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        const now = NOW();
+        const challenge = {
+            id: '777',
+            close_time: now + 120,
+            member: { boost: { state: 'NONE' } },
+        };
+        expect(VotingLogic.shouldApplyBoost(challenge, now, { emergency: true })).toBe(false);
     });
 });
