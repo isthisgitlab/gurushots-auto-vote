@@ -532,8 +532,10 @@ const mockApiClient = {
                     submitToChallenge: mockApiClient.submitToChallenge,
                 };
 
-                // Simulate boost application if available
-                if (challenge.member.boost.state === 'AVAILABLE') {
+                // Simulate boost application when due (mirrors real main.js,
+                // including the emergency override that applies an available
+                // boost near the deadline even when Auto-Apply Boost is off).
+                if (votingLogic.shouldApplyBoost(challenge, now, { emergency: true })) {
                     // Check for cancellation before boost
                     if (cancellation.isCancelled()) {
                         logger.withCategory('voting').info('Mock voting cancelled by user before boost', null);

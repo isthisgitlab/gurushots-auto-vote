@@ -95,4 +95,71 @@ describe('shouldApplyBoost — emergency override', () => {
         };
         expect(VotingLogic.shouldApplyBoost(challenge, now, { emergency: true })).toBe(false);
     });
+
+    test('applies a key-unlocked boost (AVAILABLE_KEY) in the emergency window with autoBoost off', () => {
+        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        const now = NOW();
+        const challenge = {
+            id: '777',
+            close_time: now + 120,
+            member: { boost: { state: 'AVAILABLE_KEY', timeout: null } },
+        };
+        expect(VotingLogic.shouldApplyBoost(challenge, now, { emergency: true })).toBe(true);
+    });
+
+    test('does not apply an AVAILABLE boost whose timer has already expired (stale state)', () => {
+        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        const now = NOW();
+        const challenge = {
+            id: '777',
+            close_time: now + 120,
+            member: { boost: { state: 'AVAILABLE', timeout: now - 10 } },
+        };
+        expect(VotingLogic.shouldApplyBoost(challenge, now, { emergency: true })).toBe(false);
+    });
+
+    test('window boundary is inclusive (secondsRemaining === emergencyFill applies, +1 does not)', () => {
+        mockSettings({ autoBoost: false, emergencyFill: 300 });
+        const now = NOW();
+        expect(VotingLogic.shouldApplyBoost(buildClosingChallengeWithBoost(now, 300), now, { emergency: true })).toBe(
+            true,
+        );
+        expect(VotingLogic.shouldApplyBoost(buildClosingChallengeWithBoost(now, 301), now, { emergency: true })).toBe(
+            false,
+        );
+    });
+});
+
+describe('isWithinEmergencyWindow', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const challengeClosingIn = (now, secs) => ({ id: '777', close_time: now + secs });
+
+    test('true inside the window, false outside', () => {
+        mockSettings({ emergencyFill: 300 });
+        const now = NOW();
+        expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 120), now)).toBe(true);
+        expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 600), now)).toBe(false);
+    });
+
+    test('boundary is inclusive at exactly emergencyFill seconds', () => {
+        mockSettings({ emergencyFill: 300 });
+        const now = NOW();
+        expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 300), now)).toBe(true);
+        expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 301), now)).toBe(false);
+    });
+
+    test('false when Emergency Fill is disabled (0)', () => {
+        mockSettings({ emergencyFill: 0 });
+        const now = NOW();
+        expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 120), now)).toBe(false);
+    });
+
+    test('false for already-closed or missing close_time', () => {
+        mockSettings({ emergencyFill: 300 });
+        const now = NOW();
+        expect(VotingLogic.isWithinEmergencyWindow(challengeClosingIn(now, 0), now)).toBe(false);
+        expect(VotingLogic.isWithinEmergencyWindow({ id: '777' }, now)).toBe(false);
+        expect(VotingLogic.isWithinEmergencyWindow(null, now)).toBe(false);
+    });
 });
