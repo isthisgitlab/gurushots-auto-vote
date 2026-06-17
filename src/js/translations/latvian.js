@@ -180,6 +180,14 @@
             emergencyFillDesc:
                 'Drošības tīkls, kas darbojas izaicinājuma pēdējās minūtēs, kad auto-aizpilde citādi atstātu foto vietas tukšas — vai nu tāpēc, ka auto-aizpilde ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un "Aizpildīt arī bez tagu sakritības" ir izslēgts. Kad izaicinājumam līdz beigām atlicis tik daudz laika, atlikušās vietas tiek aizpildītas ar labākajiem pieejamajiem foto, pat ja tie nesakrīt ar taviem tagiem. Tas apzināti ignorē šos iestatījumus, lai izaicinājums nebeigtos ar neizmantotām vietām. Šajā pašā logā tā arī izmanto jebkuru pieejamo Boost un jebkuru iegūto Turbo — pat ja "Auto-pielietot Boost" vai "Auto-pielietot Turbo" izaicinājumam ir izslēgts — lai tie netiktu izniekoti, kad izaicinājums beidzas. Grafiskajā lietotnē ievada kā stundas un minūtes. Noklusējums 5 minūtes; iestati 0, lai izslēgtu (kas izslēdz arī šo pēdējās minūtes Boost/Turbo ignorēšanu). Padoms: turi šo vienādu vai mazāku par pēdējās minūtes slieksni (noklusējums 10), lai lietotne jau bieži pārbauda pēdējās minūtēs.',
             tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
+            titleTagRules: 'Tagu noteikumi pēc nosaukuma',
+            titleTagRulesDesc:
+                'Pielieto obligātos/vēlamos tagus izaicinājumam pēc tā precīzā nosaukuma (nav reģistrjutīgs). Izaicinājumi atgriežas ar jaunu id katru reizi, kad tie rotē, tāpēc per-izaicinājuma pārlabojumi tiek zaudēti; šie noteikumi sakrīt pēc nemainīgā nosaukuma un apvieno savus tagus ar globālajiem noklusējumiem ikreiz, kad parādās atbilstošs izaicinājums.',
+            titleTagRuleTitle: 'Izaicinājuma nosaukums',
+            titleTagRuleTitlePlaceholder: "piem., Let's See Hats",
+            addTitleTagRule: 'Pievienot noteikumu',
+            removeTitleTagRule: 'Noņemt noteikumu',
+            noTitleTagRules: 'Vēl nav noteikumu. Pievieno vienu, lai pielietotu tagus izaicinājumam pēc tā nosaukuma.',
             none: '(nav)',
             addOnePhoto: 'Pievienot vienu foto, lai aizpildītu tukšu vietu',
             fillAllPhotos: 'Aizpildīt visas tukšās vietas tagad (bez intervāla)',

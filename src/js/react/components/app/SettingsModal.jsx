@@ -5,6 +5,7 @@ import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { groupSchemaEntries } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
+import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
@@ -44,6 +45,11 @@ export function SettingsModal({ isOpen, onClose }) {
     const [tzInputValue, setTzInputValue] = useState('');
     const [tzInputError, setTzInputError] = useState(false);
 
+    // Title-keyed tag rules. These are not schema-driven (a list, not a single
+    // value), so they live outside the form hook: loaded on open, persisted in
+    // handleSave alongside the schema commit.
+    const [titleRules, setTitleRules] = useState([]);
+
     // Reset the timezone input on every open so a stale "+" panel from a
     // previous session doesn't carry over.
     useEffect(() => {
@@ -52,6 +58,24 @@ export function SettingsModal({ isOpen, onClose }) {
             setTzInputValue('');
             setTzInputError(false);
         }
+    }, [isOpen]);
+
+    // Load the saved title-tag rules whenever the modal opens, so edits start
+    // from the persisted state and a cancelled session is discarded on reopen.
+    useEffect(() => {
+        if (!isOpen) return;
+        let cancelled = false;
+        (async () => {
+            try {
+                const saved = await window.api.getTitleRules();
+                if (!cancelled) setTitleRules(Array.isArray(saved) ? saved : []);
+            } catch {
+                if (!cancelled) setTitleRules([]);
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
     }, [isOpen]);
 
     const isValidTimezone = (tz) => {
@@ -96,6 +120,7 @@ export function SettingsModal({ isOpen, onClose }) {
     const handleSave = useCallback(async () => {
         try {
             await commit();
+            await window.api.setTitleRules(titleRules);
             if (uiValues.language !== language) {
                 setLanguage(uiValues.language);
             }
@@ -106,7 +131,7 @@ export function SettingsModal({ isOpen, onClose }) {
         } catch (err) {
             await window.api.logError(`Error saving settings: ${err.message || err}`);
         }
-    }, [commit, uiValues.language, language, setLanguage, onClose]);
+    }, [commit, titleRules, uiValues.language, language, setLanguage, onClose]);
 
     if (!isOpen) return null;
 
@@ -423,6 +448,15 @@ export function SettingsModal({ isOpen, onClose }) {
                                 </div>
                             </div>
                         ))}
+                    </div>
+
+                    {/* Per-Title Tag Rules Section */}
+                    <div>
+                        <h4 className="font-semibold text-base mb-1 border-b border-base-300 pb-2">
+                            {t('app.titleTagRules')}
+                        </h4>
+                        <p className="text-xs text-base-content/60 mb-3">{t('app.titleTagRulesDesc')}</p>
+                        <TitleTagRulesEditor value={titleRules} onChange={setTitleRules} />
                     </div>
 
                     {/* Bottom Action Buttons */}

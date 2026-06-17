@@ -58,6 +58,12 @@ const getDefaultSettings = () => {
         challengeSettings: {
             globalDefaults: globalDefaults,
             perChallenge: {}, // Challenge ID -> setting overrides mapping
+            // Title-keyed tag rules. Challenges rotate with a fresh id each
+            // time, so id-keyed perChallenge overrides are lost on every
+            // rotation; these rules match on the (stable) challenge title and
+            // are merged into the effective must/should-include tag lists at
+            // fill time. Shape: [{ title, mustIncludeTags: [], shouldIncludeTags: [] }].
+            titleRules: [],
         },
         // API headers for randomization (random per user installation)
         apiHeaders: {},
@@ -542,6 +548,125 @@ const getEffectiveSetting = (settingKey, challengeId = null) => {
 };
 
 /**
+ * Title-keyed tag rules. The setting keys these rules can carry — only the
+ * two tag lists are title-scoped; everything else stays id-keyed.
+ */
+const TITLE_RULE_TAG_KEYS = ['mustIncludeTags', 'shouldIncludeTags'];
+
+// Stable match key for a challenge title: trimmed + lowercased. The same
+// challenge recurs with the same title (but a new id) on each rotation, so
+// this is what survives a rotation.
+const normalizeTitle = (title) => (typeof title === 'string' ? title.trim().toLowerCase() : '');
+
+/**
+ * Order-preserving union of two tag lists with the base first. A null /
+ * non-array base is treated as empty so the result is always a real array
+ * when `extra` has entries.
+ */
+const unionTags = (base, extra) => {
+    const out = [];
+    const seen = new Set();
+    for (const list of [Array.isArray(base) ? base : [], Array.isArray(extra) ? extra : []]) {
+        for (const tag of list) {
+            if (typeof tag !== 'string') continue;
+            if (seen.has(tag)) continue;
+            seen.add(tag);
+            out.push(tag);
+        }
+    }
+    return out;
+};
+
+/**
+ * Get the saved title→tags rules. Tolerates settings persisted before this
+ * feature existed (loadSettings shallow-merges, so an older challengeSettings
+ * block overrides the default whole and has no titleRules array).
+ */
+const getTitleRules = () => {
+    const settings = loadSettings();
+    const rules = settings.challengeSettings?.titleRules;
+    return Array.isArray(rules) ? rules : [];
+};
+
+/**
+ * Find the first title rule matching a challenge title (exact, case-insensitive,
+ * trimmed). Returns null when there is no title or no match.
+ */
+const findTitleRule = (title) => {
+    const key = normalizeTitle(title);
+    if (!key) return null;
+    return getTitleRules().find((rule) => normalizeTitle(rule?.title) === key) || null;
+};
+
+/**
+ * Persist the title→tags rules. Sanitizes input: trims titles, validates each
+ * tag list against the schema's tag validator, drops rules with an empty title
+ * or with both tag lists empty, and de-dupes by normalized title (last wins).
+ */
+const setTitleRules = (rules) => {
+    if (!Array.isArray(rules)) {
+        logger.withCategory('settings').error('setTitleRules expects an array', null);
+        return false;
+    }
+
+    const sanitizeTagList = (key, value) => {
+        const list = (Array.isArray(value) ? value : [])
+            .filter((tag) => typeof tag === 'string')
+            .map((tag) => tag.trim())
+            .filter((tag) => tag.length > 0);
+        // Reuse the schema's tags validator (tagsList: per-tag length + count caps).
+        return validateSetting(key, list) ? list : null;
+    };
+
+    // De-dupe by normalized title, last occurrence wins, preserving the
+    // user-facing title casing of that last occurrence.
+    const byKey = new Map();
+    for (const rule of rules) {
+        const title = typeof rule?.title === 'string' ? rule.title.trim() : '';
+        if (!title) continue;
+
+        const mustIncludeTags = sanitizeTagList('mustIncludeTags', rule?.mustIncludeTags);
+        const shouldIncludeTags = sanitizeTagList('shouldIncludeTags', rule?.shouldIncludeTags);
+        if (mustIncludeTags === null || shouldIncludeTags === null) {
+            logger.withCategory('settings').error(`Invalid tags in title rule for "${title}"`, null);
+            return false;
+        }
+        // A rule that contributes no tags is a no-op — drop it.
+        if (mustIncludeTags.length === 0 && shouldIncludeTags.length === 0) continue;
+
+        byKey.set(normalizeTitle(title), { title, mustIncludeTags, shouldIncludeTags });
+    }
+
+    const settings = loadSettings();
+    if (!settings.challengeSettings) {
+        settings.challengeSettings = getDefaultSettings().challengeSettings;
+    }
+    settings.challengeSettings.titleRules = Array.from(byKey.values());
+    return saveSettings(settings);
+};
+
+/**
+ * Effective value for one of the title-scoped tag lists. Starts from the
+ * id-keyed effective value (per-challenge override or global default) and, when
+ * a title rule matches, unions that rule's tags on top — so a recurring
+ * challenge picks up its tags by title regardless of its rotating id.
+ *
+ * Falls back to plain getEffectiveSetting for any non-tag key, and preserves
+ * the null "no filter" sentinel when there is no rule to contribute tags.
+ */
+const getEffectiveTagSetting = (settingKey, challenge) => {
+    const challengeId = challenge?.id != null ? String(challenge.id) : null;
+    const base = getEffectiveSetting(settingKey, challengeId);
+    if (!TITLE_RULE_TAG_KEYS.includes(settingKey)) return base;
+
+    const rule = findTitleRule(challenge?.title);
+    const ruleTags = rule?.[settingKey];
+    if (!Array.isArray(ruleTags) || ruleTags.length === 0) return base;
+
+    return unionTags(base, ruleTags);
+};
+
+/**
  * Cleanup stale challenge settings for challenges that no longer exist
  */
 const cleanupStaleChallengeSetting = (activeChallengeIds) => {
@@ -801,6 +926,11 @@ module.exports = {
     removeChallengeOverride,
     getEffectiveSetting,
     getExposureResolver,
+
+    // Title-keyed tag rules (survive challenge rotation)
+    getTitleRules,
+    setTitleRules,
+    getEffectiveTagSetting,
 
     // Cleanup functions
     cleanupStaleChallengeSetting,

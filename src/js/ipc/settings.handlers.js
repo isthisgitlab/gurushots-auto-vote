@@ -33,6 +33,8 @@ const THIN_HANDLERS = [
     ['set-challenge-overrides', 'setChallengeOverrides', false, 'setting challenge overrides'],
     ['remove-challenge-override', 'removeChallengeOverride', false, 'removing challenge override'],
     ['get-effective-setting', 'getEffectiveSetting', null, 'getting effective setting'],
+    ['get-title-rules', 'getTitleRules', null, 'getting title rules'],
+    ['set-title-rules', 'setTitleRules', false, 'setting title rules'],
     ['cleanup-stale-challenge-setting', 'cleanupStaleChallengeSetting', false, 'cleaning up stale challenge settings'],
     ['cleanup-obsolete-settings', 'cleanupObsoleteSettings', false, 'cleaning up obsolete settings'],
     ['reset-setting', 'resetSetting', false, 'resetting setting'],

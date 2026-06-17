@@ -180,6 +180,14 @@
             emergencyFillDesc:
                 'Safety net that runs in the last minutes of a challenge when auto-fill would otherwise leave entry slots empty — either because auto-fill is off, or because your Must Include Tags match no photo and Fill Without Tag Match is off. When a challenge is within this much time of closing, it fills the remaining slots with your best available photos anyway, even if they do not match your tags. This overrides those settings on purpose, so the challenge does not end with unused slots. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this at or below the Last Minute Threshold (default 10) so the app is already checking frequently in the final minutes.',
             tagsPlaceholder: 'e.g. sunset, beach, ocean',
+            titleTagRules: 'Per-Title Tag Rules',
+            titleTagRulesDesc:
+                'Apply Must/Should Include tags to a challenge by its exact title (case-insensitive). Challenges return with a new id each time they rotate, so per-challenge overrides are lost; these rules match on the stable title and merge their tags into the global defaults whenever a matching challenge appears.',
+            titleTagRuleTitle: 'Challenge title',
+            titleTagRuleTitlePlaceholder: "e.g. Let's See Hats",
+            addTitleTagRule: 'Add rule',
+            removeTitleTagRule: 'Remove rule',
+            noTitleTagRules: 'No rules yet. Add one to apply tags to a challenge by its title.',
             none: '(none)',
             addOnePhoto: 'Add one photo to fill an empty slot',
             fillAllPhotos: 'Fill all empty slots now (no spacing)',

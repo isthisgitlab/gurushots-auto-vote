@@ -72,6 +72,8 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('remove-challenge-override', settingKey, challengeId),
     getEffectiveSetting: (settingKey, challengeId) =>
         ipcRenderer.invoke('get-effective-setting', settingKey, challengeId),
+    getTitleRules: () => ipcRenderer.invoke('get-title-rules'),
+    setTitleRules: (rules) => ipcRenderer.invoke('set-title-rules', rules),
     cleanupStaleChallengeSetting: (activeChallengeIds) =>
         ipcRenderer.invoke('cleanup-stale-challenge-setting', activeChallengeIds),
     cleanupStaleMetadata: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-metadata', activeChallengeIds),
