@@ -35,7 +35,10 @@ const createWebHeaders = (token) => ({
  *
  * @param {string|number} challengeId
  * @param {string} token
- * @param {{limit?: number, start?: number}} [options]
+ * @param {{limit?: number, start?: number, search?: string}} [options]
+ *   search: optional free-text term; when a non-empty string, the server
+ *   filters the library against its own tag index (mirrors the web UI's
+ *   `search=hat`) so auto-fill can prefer on-theme photos.
  * @returns {Promise<Array<object>>} list of photo items, or empty array on failure
  */
 const getEligiblePhotos = async (challengeId, token, options = {}) => {
@@ -52,6 +55,9 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
         `start=${encodeURIComponent(String(start))}`,
         'usage=submit',
     ];
+    if (typeof options.search === 'string' && options.search.trim() !== '') {
+        params.push(`search=${encodeURIComponent(options.search.trim())}`);
+    }
     const data = params.join('&');
     const response = await makePostRequest(ENDPOINTS.photosPrivate, headers, data);
     if (!response || !Array.isArray(response.items)) {

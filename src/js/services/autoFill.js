@@ -20,7 +20,82 @@
  * without entangling the modules.
  */
 
-const { pickPhotosForChallenge } = require('./photoPicker');
+const { pickPhotosForChallenge, buildSearchTerms } = require('./photoPicker');
+
+/**
+ * Fetch the eligible-photo candidates for a challenge, narrowed to its theme.
+ *
+ * Derives server-side `search` terms from the challenge (Must/Should Include
+ * Tags, else the title) via buildSearchTerms and unions the per-term results
+ * (deduped by id) so auto-fill prefers on-theme photos — the GuruShots search
+ * index is far better than our client-side label matcher. When there are no
+ * terms, every search comes back empty, or none of the matches are allowed,
+ * fall back to the full unfiltered library (today's behavior) so a slot still
+ * gets filled. A single search term erroring is logged and skipped rather than
+ * aborting the fill; the final unfiltered fetch lets its error propagate so the
+ * caller's existing catch handles it exactly as before.
+ *
+ * The returned set is fed unchanged into pickPhotosForChallenge, so the
+ * must/should/fillWithoutTagMatch ranking semantics are preserved.
+ *
+ * @param {object} challenge - challenge with id and (optional) title
+ * @param {string} token
+ * @param {{mustIncludeTags?: string[]|null, shouldIncludeTags?: string[]|null}} tagOpts
+ * @param {{getEligiblePhotos: function, logger: object}} deps
+ * @returns {Promise<Array<object>>}
+ */
+const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligiblePhotos, logger }) => {
+    const challengeId = challenge.id;
+    const terms = buildSearchTerms(challenge, tagOpts);
+    if (terms.length > 0) {
+        // Run the per-term searches concurrently — they're independent reads and
+        // serialising them would add a round-trip of latency per extra term to
+        // the fill path (which can run close to a deadline). allSettled keeps the
+        // per-term fault tolerance: one term erroring is logged and skipped, the
+        // others still contribute, and the unfiltered fallback below still runs.
+        const settled = await Promise.allSettled(
+            terms.map((term) => getEligiblePhotos(challengeId, token, { search: term })),
+        );
+        const byId = new Map();
+        settled.forEach((result, i) => {
+            if (result.status === 'rejected') {
+                const reason = result.reason;
+                logger
+                    .withCategory('autoFill')
+                    .debug(
+                        `autoFill: search "${terms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && reason.message) || reason}`,
+                        null,
+                    );
+                return;
+            }
+            const items = result.value;
+            if (Array.isArray(items)) {
+                // First occurrence wins; dedupe follows term order. The same photo
+                // carries the same permission regardless of which search surfaced
+                // it (permission is a function of challenge + photo, not the query).
+                for (const item of items) {
+                    if (item && item.id !== undefined && item.id !== null && !byId.has(item.id)) {
+                        byId.set(item.id, item);
+                    }
+                }
+            }
+        });
+        const union = Array.from(byId.values());
+        if (union.some((p) => p && p.permission && p.permission.allowed === true && p.id)) {
+            return union;
+        }
+        // Terms existed but the themed search surfaced no eligible photo — log
+        // before relaxing to the full library so the off-theme fallback that
+        // pickPhotosForChallenge may then choose is traceable.
+        logger
+            .withCategory('autoFill')
+            .debug(
+                `autoFill: themed search for ${logger.challengeTag(challenge)} found no eligible photos; falling back to the full library`,
+                null,
+            );
+    }
+    return getEligiblePhotos(challengeId, token);
+};
 
 const getEntries = (challenge) => {
     const entries = challenge?.member?.ranking?.entries;
@@ -95,7 +170,12 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
 
     let eligible;
     try {
-        eligible = await getEligiblePhotos(challengeId, token);
+        eligible = await fetchCandidatesForChallenge(
+            challenge,
+            token,
+            { mustIncludeTags, shouldIncludeTags },
+            { getEligiblePhotos, logger },
+        );
     } catch (error) {
         logger
             .withCategory('autoFill')
@@ -205,7 +285,12 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
 
     let eligible;
     try {
-        eligible = await getEligiblePhotos(challengeId, token);
+        eligible = await fetchCandidatesForChallenge(
+            challenge,
+            token,
+            { mustIncludeTags, shouldIncludeTags },
+            { getEligiblePhotos, logger },
+        );
     } catch (error) {
         logger
             .withCategory('autoFill')
@@ -328,7 +413,12 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
 
     let eligible;
     try {
-        eligible = await getEligiblePhotos(challengeId, token);
+        eligible = await fetchCandidatesForChallenge(
+            challenge,
+            token,
+            { mustIncludeTags, shouldIncludeTags },
+            { getEligiblePhotos, logger },
+        );
     } catch (error) {
         logger
             .withCategory('autoFill')
@@ -440,7 +530,12 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
 
     let eligible;
     try {
-        eligible = await getEligiblePhotos(challengeId, token);
+        eligible = await fetchCandidatesForChallenge(
+            challenge,
+            token,
+            { mustIncludeTags, shouldIncludeTags },
+            { getEligiblePhotos, logger },
+        );
     } catch (error) {
         logger
             .withCategory('autoFill')
@@ -499,4 +594,5 @@ module.exports = {
     reflectNewEntry,
     // exported for tests
     getSlotsRemaining,
+    fetchCandidatesForChallenge,
 };

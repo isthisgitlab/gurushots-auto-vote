@@ -370,8 +370,13 @@ const mockApiClient = {
      * with the fields the picker uses (id, labels, votes, upload_date,
      * permission). Eight photos with varied labels so the tag-match
      * picker has something to differentiate.
+     *
+     * When options.search is a non-empty string, mirror the server's
+     * library filter by returning only items whose labels contain the
+     * term (case-insensitive substring) — so the auto-fill search path
+     * and its unfiltered fallback can both be exercised in mock mode.
      */
-    getEligiblePhotos: async (challengeId, token) => {
+    getEligiblePhotos: async (challengeId, token, options = {}) => {
         logger.withCategory('api').api('Mock getEligiblePhotos', null);
         logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
         if (!token) {
@@ -438,7 +443,15 @@ const mockApiClient = {
             },
         ];
         await simulateApiResponse({}, 400);
-        return items;
+        const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
+        if (search === '') {
+            return items;
+        }
+        return items.filter((item) =>
+            (Array.isArray(item.labels) ? item.labels : []).some((label) =>
+                String(label).toLowerCase().includes(search),
+            ),
+        );
     },
 
     /**
