@@ -1289,3 +1289,58 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok'); // dog matched → no fallback
     });
 });
+
+describe('semantic matching wiring (always on)', () => {
+    test('always computes semantic scores and threads them into the pick', async () => {
+        // p1 wins the lexical tiebreak (newer upload); the semantic map flips
+        // the choice to the on-theme p2. No setting required — always on.
+        const photos = [allowedPhoto('p1', ['Random'], 9000), allowedPhoto('p2', ['Random'], 8000)];
+        const getSemanticScores = jest.fn().mockResolvedValue(
+            new Map([
+                ['p1', 0.1],
+                ['p2', 0.9],
+            ]),
+        );
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
+        const res = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue(photos),
+            submitToChallenge,
+            getSemanticScores,
+        });
+        expect(res).toBe('submitted');
+        expect(getSemanticScores).toHaveBeenCalledTimes(1);
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p2'], 'tok');
+    });
+
+    test('scorer returning null leaves ranking lexical', async () => {
+        const photos = [allowedPhoto('p1', ['Random'], 9000), allowedPhoto('p2', ['Random'], 8000)];
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue(photos),
+            submitToChallenge,
+            getSemanticScores: jest.fn().mockResolvedValue(null),
+        });
+        // Newer upload wins the lexical tiebreak when there's no semantic signal.
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+    });
+
+    test('scorer throwing degrades gracefully — fill still proceeds', async () => {
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
+        const res = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge,
+            getSemanticScores: jest.fn().mockRejectedValue(new Error('boom')),
+        });
+        expect(res).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+    });
+});

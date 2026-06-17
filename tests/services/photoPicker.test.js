@@ -548,4 +548,59 @@ describe('photoPicker', () => {
             expect(picked).toEqual(['mustAndShould', 'mustOnly']);
         });
     });
+
+    describe('semantic ranking tier (opts.semanticScores)', () => {
+        // Title keywords (pink/nature) don't match the labels below, so the
+        // lexical keyword score is 0 for every photo and the tiers under test
+        // are the ones that decide order.
+        const challenge = { title: 'Pink In Nature', url: '', welcome_message: '' };
+
+        test('no semanticScores → ranking is the lexical-only behavior', () => {
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            // votes tiebreak → b
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1)).toEqual(['b']);
+        });
+
+        test('promotes an on-theme photo above a higher-vote off-theme one', () => {
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            const semanticScores = new Map([
+                ['a', 0.9],
+                ['b', 0.1],
+            ]);
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores })).toEqual(['a']);
+        });
+
+        test('sits below the explicit Should Include Tags preference', () => {
+            const pA = allowed('a', ['Random'], 1000);
+            const pB = allowed('b', ['Sunset'], 1000);
+            const semanticScores = new Map([
+                ['a', 0.95],
+                ['b', 0.0],
+            ]);
+            const out = pickPhotosForChallenge(challenge, [pA, pB], 2, {
+                shouldIncludeTags: ['sunset'],
+                semanticScores,
+            });
+            expect(out[0]).toBe('b'); // should-match outranks a higher semantic score
+        });
+
+        test('sub-percent differences bucket together and fall through to lexical tiers', () => {
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            // 0.901 and 0.904 both bucket to 90 → votes decide → b
+            const semanticScores = new Map([
+                ['a', 0.901],
+                ['b', 0.904],
+            ]);
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores })).toEqual(['b']);
+        });
+
+        test('a non-Map semanticScores value is ignored', () => {
+            const pA = allowed('a', ['x'], 1000, { votes: 1 });
+            const pB = allowed('b', ['x'], 1000, { votes: 5 });
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores: { a: 0.9 } })).toEqual(['b']);
+        });
+    });
 });
