@@ -155,6 +155,21 @@ const STOPWORDS = new Set([
     'join',
     'joined',
     'joining',
+    // Title-imperative verbs ("Let's See Hats", "Show us your...",
+    // "Share your best..."). These carry no subject signal and would
+    // otherwise leak into the keyword scorer and the derived search terms.
+    'let',
+    'lets',
+    'see',
+    'seen',
+    'show',
+    'shows',
+    'showing',
+    'shown',
+    'share',
+    'shares',
+    'sharing',
+    'shared',
     // Welcome-message boilerplate adjectives / fillers
     'good',
     'luck',
@@ -231,6 +246,44 @@ const tokeniseTagList = (tags) => {
     const joined = tags.filter((t) => typeof t === 'string').join(' ');
     const stems = tokenise(joined, { keepStopwords: true }).filter((s) => s.length >= MIN_USER_TAG_STEM_LENGTH);
     return Array.from(new Set(stems));
+};
+
+// Issue at most a few server-side searches per fill: a title rarely has more
+// than two or three subject nouns, and tag lists are short. The cap bounds the
+// extra requests the union fetch makes.
+const SEARCH_TERMS_CAP = 3;
+
+/**
+ * Derive the ordered list of server-side `search` terms for a challenge, used
+ * by auto-fill to narrow the eligible library to on-theme photos before
+ * ranking. Precedence: Must Include Tags → Should Include Tags → challenge
+ * title.
+ *
+ * Tags are taken close to as the user typed them (real words the GuruShots
+ * search index can match), only lower-cased/trimmed and length-floored like
+ * tokeniseTagList. The title path reuses `tokenise` (stopword-filtered + light
+ * stemming), so "Let's See Hats" collapses to ["hat"]. Deduped and capped to
+ * SEARCH_TERMS_CAP. Returns [] when nothing usable is derivable (abstract
+ * title, no tags) — the caller then fetches the unfiltered library.
+ *
+ * @param {object} challenge - challenge object (title optional)
+ * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[]}} [opts]
+ * @returns {string[]} ordered, deduped search terms; length <= SEARCH_TERMS_CAP
+ */
+const buildSearchTerms = (challenge, opts = {}) => {
+    const { mustIncludeTags, shouldIncludeTags } = opts || {};
+    const fromTags = (tags) =>
+        Array.isArray(tags)
+            ? tags
+                  .filter((t) => typeof t === 'string')
+                  .map((t) => t.trim().toLowerCase())
+                  .filter((t) => t.length >= MIN_USER_TAG_STEM_LENGTH)
+            : [];
+
+    let terms = fromTags(mustIncludeTags);
+    if (terms.length === 0) terms = fromTags(shouldIncludeTags);
+    if (terms.length === 0) terms = tokenise(challenge?.title);
+    return Array.from(new Set(terms)).slice(0, SEARCH_TERMS_CAP);
 };
 
 const labelStemsOf = (photo) => {
@@ -353,6 +406,7 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
 
 module.exports = {
     pickPhotosForChallenge,
+    buildSearchTerms,
     // exported for unit tests
     tokenise,
     stem,

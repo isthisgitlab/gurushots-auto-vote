@@ -46,6 +46,25 @@ describe('submissions', () => {
             );
         });
 
+        test('appends an encoded search param when a non-empty search is given', async () => {
+            makePostRequest.mockResolvedValueOnce({ items: [] });
+            await getEligiblePhotos('125319', token, { search: 'sun hat' });
+            expect(makePostRequest.mock.calls[0][2]).toBe(
+                'c_id=125319&limit=100&order=date&sort=desc&start=0&usage=submit&search=sun%20hat',
+            );
+        });
+
+        test('omits the search param when search is empty/blank/non-string', async () => {
+            makePostRequest.mockResolvedValue({ items: [] });
+            const noSearch = 'c_id=1&limit=100&order=date&sort=desc&start=0&usage=submit';
+            await getEligiblePhotos('1', token, { search: '' });
+            expect(makePostRequest.mock.calls[0][2]).toBe(noSearch);
+            await getEligiblePhotos('1', token, { search: '   ' });
+            expect(makePostRequest.mock.calls[1][2]).toBe(noSearch);
+            await getEligiblePhotos('1', token, { search: 123 });
+            expect(makePostRequest.mock.calls[2][2]).toBe(noSearch);
+        });
+
         test('returns [] when API returns null or no items', async () => {
             makePostRequest.mockResolvedValueOnce(null);
             expect(await getEligiblePhotos('1', token)).toEqual([]);

@@ -10,6 +10,7 @@ const {
     submitNewEntryForAction,
     reflectNewEntry,
     getSlotsRemaining,
+    fetchCandidatesForChallenge,
 } = require('../../src/js/services/autoFill');
 
 const makeChallenge = ({ id = 'c1', closeIn = 600, maxSubmits = 4, entries = [] } = {}) => ({
@@ -124,7 +125,10 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             submitToChallenge,
         });
         expect(result).toBe('submitted');
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok');
+        // Theme-narrowed fetch: the title "Pink In Nature" derives search
+        // terms, so the eligible-photo fetch is issued with a `search` filter
+        // rather than the bare 2-arg call.
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'pink' });
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
     });
 
@@ -463,6 +467,28 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         });
         expect(result).toBe('skipped');
         expect(getEligiblePhotos).not.toHaveBeenCalled();
+    });
+
+    test('themed search returns nothing → unfiltered fallback + must-relax still fills at the buzzer', async () => {
+        // Two fallback layers compose: the Must-tag search ('sunset') returns no
+        // photo, so fetchCandidatesForChallenge relaxes to the full library; then
+        // the picker's fillWithoutTagMatch:true (forced by emergency fill) relaxes
+        // the must-filter so an off-theme photo is submitted rather than no photo.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+            opts && opts.search ? [] : [allowedPhoto('off', ['Cat'])],
+        );
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 300, mustIncludeTags: ['sunset'] }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'sunset' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // unfiltered fallback
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['off'], 'tok');
     });
 
     test('returns skipped when challenge already closed', async () => {
@@ -1125,5 +1151,85 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
         expect(getSlotsRemaining(challenge)).toBe(0);
         expect(challenge.member.ranking.entries).toHaveLength(4);
         expect(challenge.member.ranking.entries.map((e) => e.id)).toEqual(['p1', 'p2', 'p3', 'p4']);
+    });
+});
+
+describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
+    test('searches per derived term and returns the deduped union', async () => {
+        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) => {
+            if (opts && opts.search === 'cat') return [allowedPhoto('p1', ['Cat']), allowedPhoto('shared', ['Pet'])];
+            if (opts && opts.search === 'dog') return [allowedPhoto('p2', ['Dog']), allowedPhoto('shared', ['Pet'])];
+            return [];
+        });
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1' },
+            'tok',
+            { mustIncludeTags: ['cat', 'dog'] },
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(out.map((p) => p.id).sort()).toEqual(['p1', 'p2', 'shared']);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'cat' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'dog' });
+        // Search produced allowed candidates → the unfiltered fallback is not used.
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok');
+    });
+
+    test('falls back to the unfiltered library when every search is empty', async () => {
+        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+            opts && opts.search ? [] : [allowedPhoto('full', ['Misc'])],
+        );
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1', title: 'Pink In Nature' },
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(out.map((p) => p.id)).toEqual(['full']);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'pink' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // unfiltered fallback
+    });
+
+    test('falls back when search returns only non-allowed photos', async () => {
+        const blockedItem = { id: 'b', labels: ['Cat'], permission: { allowed: false } };
+        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+            opts && opts.search ? [blockedItem] : [allowedPhoto('full', ['Misc'])],
+        );
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1' },
+            'tok',
+            { mustIncludeTags: ['cat'] },
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(out.map((p) => p.id)).toEqual(['full']);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok');
+    });
+
+    test('goes straight to the unfiltered fetch when no terms are derivable', async () => {
+        const getEligiblePhotos = jest.fn(async () => [allowedPhoto('x')]);
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1' }, // no title, no tags → no search terms
+            'tok',
+            {},
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(out.map((p) => p.id)).toEqual(['x']);
+        expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok');
+    });
+
+    test('tolerates a single search term throwing (other terms still contribute)', async () => {
+        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) => {
+            if (opts && opts.search === 'cat') throw new Error('boom');
+            if (opts && opts.search === 'dog') return [allowedPhoto('p2', ['Dog'])];
+            return [allowedPhoto('full')];
+        });
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1' },
+            'tok',
+            { mustIncludeTags: ['cat', 'dog'] },
+            { getEligiblePhotos, logger: makeLogger() },
+        );
+        expect(out.map((p) => p.id)).toEqual(['p2']);
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok'); // dog matched → no fallback
     });
 });

@@ -4,6 +4,7 @@
 
 const {
     pickPhotosForChallenge,
+    buildSearchTerms,
     tokenise,
     stem,
     buildChallengeKeywords,
@@ -32,7 +33,14 @@ describe('photoPicker', () => {
             expect(tokenise('Pink-In-Nature23')).toEqual(['pink', 'nature']);
         });
         test('handles HTML and punctuation', () => {
-            expect(tokenise('<b>Show the color Pink in Nature</b>!')).toEqual(['show', 'color', 'pink', 'nature']);
+            expect(tokenise('<b>Bold the color Pink in Nature</b>!')).toEqual(['bold', 'color', 'pink', 'nature']);
+        });
+        test('drops title-imperative verbs (let / see / show / share)', () => {
+            // "Let's See Hats" and "Show Us Your Pets" are pure GuruShots
+            // boilerplate framing — only the subject noun should survive.
+            expect(tokenise("Let's See Hats")).toEqual(['hat']);
+            expect(tokenise('Show us your Pets')).toEqual(['pet']);
+            expect(tokenise('Share your best Sunsets')).toEqual(['sunset']);
         });
         test('returns [] for empty/null', () => {
             expect(tokenise('')).toEqual([]);
@@ -106,9 +114,52 @@ describe('photoPicker', () => {
         });
         test('strips HTML from welcome_message', () => {
             const keys = buildChallengeKeywords({
-                welcome_message: '<b>Show</b> your <i>sunsets</i><br/>',
+                welcome_message: '<b>Golden</b> your <i>sunsets</i><br/>',
             });
-            expect(keys).toEqual(expect.arrayContaining(['show', 'sunset']));
+            expect(keys).toEqual(expect.arrayContaining(['golden', 'sunset']));
+        });
+        test('drops title-imperative verbs from the keyword scorer (only the subject survives)', () => {
+            // The new stopwords feed both buildSearchTerms and this client-side
+            // scorer — verify the scorer keeps only the subject noun so "Show Us
+            // Your Pets" scores on 'pet', not on the boilerplate framing.
+            const keys = buildChallengeKeywords({ title: 'Show Us Your Pets', welcome_message: "Let's see them!" });
+            expect(keys).toEqual(['pet']);
+        });
+    });
+
+    describe('buildSearchTerms', () => {
+        test('Must Include Tags take precedence over Should and title', () => {
+            const terms = buildSearchTerms(
+                { title: 'Pink In Nature' },
+                { mustIncludeTags: ['hat'], shouldIncludeTags: ['dog'] },
+            );
+            expect(terms).toEqual(['hat']);
+        });
+        test('falls back to Should Include Tags when Must is empty', () => {
+            const terms = buildSearchTerms(
+                { title: 'Pink In Nature' },
+                { mustIncludeTags: [], shouldIncludeTags: ['dog'] },
+            );
+            expect(terms).toEqual(['dog']);
+        });
+        test('falls back to the title (imperative verbs dropped) when no tags', () => {
+            expect(buildSearchTerms({ title: "Let's See Hats" }, {})).toEqual(['hat']);
+        });
+        test('lower-cases, trims and dedupes tags', () => {
+            expect(buildSearchTerms(null, { mustIncludeTags: [' Hat ', 'hat', 'HAT'] })).toEqual(['hat']);
+        });
+        test('drops tags shorter than the min stem length, then falls through', () => {
+            // 'hi' (2 chars) is dropped → Must is effectively empty → title used.
+            expect(buildSearchTerms({ title: 'Mood' }, { mustIncludeTags: ['hi'] })).toEqual(['mood']);
+        });
+        test('caps the number of search terms', () => {
+            const terms = buildSearchTerms({ title: 'Cats and Dogs Running Jumping Playing' }, {});
+            expect(terms).toHaveLength(3);
+            expect(terms).toEqual(expect.arrayContaining(['cat', 'dog']));
+        });
+        test('returns [] when nothing is derivable (abstract title, no tags)', () => {
+            expect(buildSearchTerms({}, {})).toEqual([]);
+            expect(buildSearchTerms(null, null)).toEqual([]);
         });
     });
 
