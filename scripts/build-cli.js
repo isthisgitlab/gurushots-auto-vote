@@ -57,6 +57,14 @@ function generateSeaBlob() {
         output: seaBlobPath,
         disableExperimentalSEAWarning: true,
     };
+    // Embed the semantic-matching word-vector lexicon as a SEA asset so the
+    // single binary can resolve it via node:sea.getAsset() — it is a runtime
+    // asset (loaded by src/js/services/semantic/assets.js), never bundled into
+    // cli-bundled.js, so the JS-bundle budget is unaffected.
+    const lexiconAsset = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
+    if (fs.existsSync(lexiconAsset)) {
+        seaConfig.assets = { 'semantic-vectors.json': lexiconAsset };
+    }
     fs.writeFileSync(seaConfigPath, JSON.stringify(seaConfig, null, 2));
     execFileSync(process.execPath, ['--experimental-sea-config', seaConfigPath], { stdio: 'inherit' });
     console.log('✅ SEA blob generated');

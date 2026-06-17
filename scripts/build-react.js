@@ -74,6 +74,17 @@ async function buildReact() {
     // Background service document (loaded by AutoVoteService's WebView).
     fs.writeFileSync(path.join(distDir, 'headless.html'), headlessHtml);
 
+    // Ship the semantic-matching word-vector lexicon into the webDir so the
+    // Android WebView (Capacitor page + headless service) can fetch() it at
+    // runtime. It is a runtime asset — never imported into a bundle — so the
+    // renderer/headless/capacitor size budgets stay untouched. Regenerate it
+    // with `pnpm build:lexicon`; the committed src/assets copy ships in the
+    // Electron asar and is embedded as a SEA asset for the CLI binary.
+    const lexiconSrc = path.join(__dirname, '..', 'src', 'assets', 'semantic-vectors.json');
+    if (fs.existsSync(lexiconSrc)) {
+        fs.copyFileSync(lexiconSrc, path.join(distDir, 'semantic-vectors.json'));
+    }
+
     const commonOptions = {
         bundle: true,
         platform: 'browser',

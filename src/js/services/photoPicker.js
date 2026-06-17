@@ -343,7 +343,7 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  * @param {object} challenge - challenge object (url, title, welcome_message all optional)
  * @param {Array<object>} eligiblePhotos - candidates from getEligiblePhotos
  * @param {number} slotsToFill - how many photos to return at most
- * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[], fillWithoutTagMatch?: boolean}} [opts]
+ * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[], fillWithoutTagMatch?: boolean, semanticScores?: Map<string, number>}} [opts]
  *   mustIncludeTags: hard filter — keep only photos whose labels match at
  *   least one tag (ANY semantics). Empty/missing = no filter.
  *   shouldIncludeTags: soft boost — photos with more matching tags rank
@@ -354,6 +354,11 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  *   pass false to keep the slot empty until a matching photo exists. Only
  *   the all-or-nothing case is relaxed — a partial match still fills with
  *   matches only.
+ *   semanticScores: optional Map<photoId, similarity 0..1> from the semantic
+ *   matcher. When present it adds one ranking tier (just below the explicit
+ *   should-tag preference, above the lexical keyword score) so on-theme photos
+ *   a substring match misses still rank up. Omit it (the default) and ranking
+ *   is byte-for-byte the lexical-only behavior.
  * @returns {Array<string>} ordered list of photo ids; length <= slotsToFill
  */
 const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {}) => {
@@ -383,10 +388,24 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
         }
     }
 
+    // Optional semantic tier. Bucket the 0..1 similarity to whole percent so
+    // tiny float differences don't churn the order or make it non-deterministic;
+    // photos within the same bucket fall through to the lexical tiers below.
+    // No map (the default) → every bucket is 0 → this tier is inert and the sort
+    // is identical to the lexical-only behavior.
+    const semanticScores = opts.semanticScores instanceof Map ? opts.semanticScores : null;
+    const semanticBucket = (id) => {
+        if (!semanticScores) return 0;
+        const raw = semanticScores.get(String(id));
+        if (!Number.isFinite(raw)) return 0;
+        return Math.round(Math.max(0, Math.min(1, raw)) * 100);
+    };
+
     const keywords = buildChallengeKeywords(challenge);
     const scored = filtered.map(({ photo, labelStems }) => ({
         id: photo.id,
         shouldMatchCount: countShouldMatches(labelStems, shouldStems),
+        semantic: semanticBucket(photo.id),
         score: scorePhoto(photo, keywords, labelStems),
         achievementCount: achievementCountOf(photo),
         votes: votesOf(photo),
@@ -395,6 +414,7 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
 
     scored.sort((a, b) => {
         if (b.shouldMatchCount !== a.shouldMatchCount) return b.shouldMatchCount - a.shouldMatchCount;
+        if (b.semantic !== a.semantic) return b.semantic - a.semantic;
         if (b.score !== a.score) return b.score - a.score;
         if (b.achievementCount !== a.achievementCount) return b.achievementCount - a.achievementCount;
         if (b.votes !== a.votes) return b.votes - a.votes;

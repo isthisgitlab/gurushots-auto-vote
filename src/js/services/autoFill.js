@@ -21,6 +21,30 @@
  */
 
 const { pickPhotosForChallenge, buildSearchTerms } = require('./photoPicker');
+const { getSemanticScores } = require('./semantic');
+
+/**
+ * Semantic match scores for an eligible set, computed once per fill and reused
+ * across every picker call in that fill (the emergency path picks twice).
+ * Always on: returns a Map<photoId, 0..1> to merge into the picker, or null
+ * when the lexicon is unavailable / the challenge has no usable theme text — in
+ * which case ranking stays lexical, exactly as before. The scorer
+ * (`deps.getSemanticScores`, defaulting to the real module) is injectable so
+ * tests can stub it. Never throws.
+ *
+ * @param {object} challenge
+ * @param {Array<object>} eligible
+ * @param {{getSemanticScores?: function}} deps
+ * @returns {Promise<Map<string, number>|null>}
+ */
+const resolveSemanticScores = async (challenge, eligible, deps) => {
+    const scorer = (deps && deps.getSemanticScores) || getSemanticScores;
+    try {
+        return await scorer(challenge, eligible);
+    } catch {
+        return null;
+    }
+};
 
 /**
  * Fetch the eligible-photo candidates for a challenge, narrowed to its theme.
@@ -186,10 +210,12 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         return 'error';
     }
 
+    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
     const picked = pickPhotosForChallenge(challenge, eligible, 1, {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
+        semanticScores,
     });
     if (picked.length === 0) {
         logger
@@ -301,6 +327,10 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
         return 'error';
     }
 
+    // Score once and reuse for both picker calls below (the probe and the
+    // actual fill rank the same eligible set, so they must see the same map).
+    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
+
     // With auto-fill on and a must-include filter set, only step in if that
     // filter would leave the slot empty (a non-empty result means the normal
     // staggered path can still fill it, so stand down). With auto-fill off,
@@ -310,6 +340,7 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
             mustIncludeTags,
             shouldIncludeTags,
             fillWithoutTagMatch,
+            semanticScores,
         });
         if (wouldPick.length > 0) return 'skipped';
     }
@@ -322,6 +353,7 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch: true,
+        semanticScores,
     });
     if (picked.length === 0) {
         logger
@@ -434,11 +466,13 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
         };
     }
 
+    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
     const wantCount = mode === 'all' ? slotsRemaining : 1;
     const picked = pickPhotosForChallenge(challenge, eligible, wantCount, {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
+        semanticScores,
     });
     if (picked.length === 0) {
         // When the "must include" filter is active and there were photos to
@@ -546,10 +580,12 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
         return { ok: false, imageId: null, reason: 'fetch-error' };
     }
 
+    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
     const picked = pickPhotosForChallenge(challenge, eligible, 1, {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
+        semanticScores,
     });
     if (picked.length === 0) {
         logger.withCategory('autoFill').info(`fillNew: no eligible photos for ${logger.challengeTag(challenge)}`, null);
@@ -595,4 +631,5 @@ module.exports = {
     // exported for tests
     getSlotsRemaining,
     fetchCandidatesForChallenge,
+    resolveSemanticScores,
 };
