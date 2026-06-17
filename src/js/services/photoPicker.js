@@ -10,14 +10,20 @@
  *      photography-noise stopword list).
  *   2. Achievements count — past wins are a strong quality signal when
  *      we have no theme match to bias us.
- *   3. Votes — total votes on the photo across all prior challenges.
- *   4. Upload date — last-resort tiebreak.
+ *   3. Votes — total votes on the photo. NOTE: the live get_photos_private
+ *      endpoint returns votes=0 for every library photo, so this tier rarely
+ *      fires against the real API; it's kept for the case where a populated
+ *      value is available (and for mocks/tests).
+ *   4. Views — lifetime view count, which the real endpoint DOES populate.
+ *      This is the practical "best performer" signal that keeps an
+ *      untaggable challenge from collapsing to pure recency.
+ *   5. Upload date — last-resort tiebreak.
  *
- * The achievements/votes layers are why this avoids the "picked my last
+ * The achievements/views layers are why this avoids the "picked my last
  * upload" failure mode: when a challenge theme can't be matched against
  * any of the user's photos (very common — vision labels are concrete
- * nouns; challenge titles are abstract), fall back to "best historical
- * performer" instead of "newest", which has zero quality signal.
+ * nouns; challenge titles are abstract), fall back to "best performer"
+ * instead of "newest", which has zero quality signal.
  */
 
 const STOPWORDS = new Set([
@@ -335,6 +341,8 @@ const achievementCountOf = (photo) => (Array.isArray(photo.achievements) ? photo
 
 const votesOf = (photo) => (Number.isFinite(photo.votes) ? photo.votes : 0);
 
+const viewsOf = (photo) => (Number.isFinite(photo.views) ? photo.views : 0);
+
 const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.upload_date : 0);
 
 /**
@@ -409,6 +417,7 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
         score: scorePhoto(photo, keywords, labelStems),
         achievementCount: achievementCountOf(photo),
         votes: votesOf(photo),
+        views: viewsOf(photo),
         uploadDate: uploadDateOf(photo),
     }));
 
@@ -418,6 +427,7 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
         if (b.score !== a.score) return b.score - a.score;
         if (b.achievementCount !== a.achievementCount) return b.achievementCount - a.achievementCount;
         if (b.votes !== a.votes) return b.votes - a.votes;
+        if (b.views !== a.views) return b.views - a.views;
         return b.uploadDate - a.uploadDate;
     });
 

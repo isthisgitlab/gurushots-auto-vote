@@ -367,9 +367,11 @@ const mockApiClient = {
     /**
      * Simulate fetching the user's challenge-eligible photo library.
      * Mirrors /rest/get_photos_private; returns an array of items each
-     * with the fields the picker uses (id, labels, votes, upload_date,
-     * permission). Eight photos with varied labels so the tag-match
-     * picker has something to differentiate.
+     * with the fields the picker uses (id, labels, votes, views,
+     * upload_date, permission). Eight photos with varied labels so the
+     * tag-match picker has something to differentiate. (The live endpoint
+     * returns votes=0 for library photos and a populated views count, so
+     * views carry per-photo varied values here too.)
      *
      * When options.search is a non-empty string, mirror the server's
      * library filter by returning only items whose labels contain the
@@ -389,6 +391,7 @@ const mockApiClient = {
                 id: 'photo_pink_flower_001',
                 labels: ['Pink', 'Flower', 'Petal', 'Plant'],
                 votes: 312,
+                views: 1820,
                 upload_date: now - 86400 * 2,
                 permission: { allowed: true, message: null },
             },
@@ -396,6 +399,7 @@ const mockApiClient = {
                 id: 'photo_nature_landscape_002',
                 labels: ['Nature', 'Landscape', 'Tree', 'Sky'],
                 votes: 178,
+                views: 1110,
                 upload_date: now - 86400 * 5,
                 permission: { allowed: true, message: null },
             },
@@ -403,6 +407,7 @@ const mockApiClient = {
                 id: 'photo_urban_003',
                 labels: ['Architecture', 'Building', 'Urban'],
                 votes: 89,
+                views: 640,
                 upload_date: now - 86400 * 7,
                 permission: { allowed: true, message: null },
             },
@@ -410,6 +415,7 @@ const mockApiClient = {
                 id: 'photo_recent_004',
                 labels: ['Portrait', 'Person'],
                 votes: 24,
+                views: 95,
                 upload_date: now - 3600,
                 permission: { allowed: true, message: null },
             },
@@ -417,6 +423,7 @@ const mockApiClient = {
                 id: 'photo_pink_petal_005',
                 labels: ['Pink', 'Petal', 'Macro'],
                 votes: 401,
+                views: 2230,
                 upload_date: now - 86400 * 4,
                 permission: { allowed: true, message: null },
             },
@@ -424,6 +431,7 @@ const mockApiClient = {
                 id: 'photo_animal_006',
                 labels: ['Animal', 'Wildlife', 'Bird'],
                 votes: 156,
+                views: 980,
                 upload_date: now - 86400 * 10,
                 permission: { allowed: true, message: null },
             },
@@ -431,6 +439,7 @@ const mockApiClient = {
                 id: 'photo_blocked_007',
                 labels: ['Pink', 'Flower'],
                 votes: 999,
+                views: 5000,
                 upload_date: now - 86400 * 1,
                 permission: { allowed: false, message: 'Already used in another challenge' },
             },
@@ -438,6 +447,7 @@ const mockApiClient = {
                 id: 'photo_old_008',
                 labels: ['Misc'],
                 votes: 12,
+                views: 70,
                 upload_date: now - 86400 * 30,
                 permission: { allowed: true, message: null },
             },
