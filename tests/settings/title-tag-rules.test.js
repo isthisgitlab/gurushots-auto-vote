@@ -122,6 +122,24 @@ describe('settings facade — title-keyed tag rules', () => {
         test('rejects a non-array argument', () => {
             expect(settings.setTitleRules('nope')).toBe(false);
         });
+
+        test('rejects (returns false) more than the rule-count cap', () => {
+            const tooMany = Array.from({ length: 201 }, (_, i) => ({
+                title: `Rule ${i}`,
+                mustIncludeTags: ['x'],
+                shouldIncludeTags: [],
+            }));
+            expect(settings.setTitleRules(tooMany)).toBe(false);
+            expect(settings.getTitleRules()).toEqual([]);
+        });
+
+        test('rejects (returns false) a title longer than the cap', () => {
+            const ok = settings.setTitleRules([
+                { title: 'a'.repeat(201), mustIncludeTags: ['x'], shouldIncludeTags: [] },
+            ]);
+            expect(ok).toBe(false);
+            expect(settings.getTitleRules()).toEqual([]);
+        });
     });
 
     describe('getEffectiveTagSetting', () => {
@@ -169,6 +187,18 @@ describe('settings facade — title-keyed tag rules', () => {
             settings.setTitleRules([{ title: 'Rotating', mustIncludeTags: ['title'], shouldIncludeTags: [] }]);
 
             expect(settings.getEffectiveTagSetting('mustIncludeTags', challenge)).toEqual(['override', 'title']);
+        });
+
+        test('an explicit empty per-challenge override still unions the rule tags (union semantics, by design)', () => {
+            // A user-chosen "merge/union" feature: title-rule tags are always
+            // added on top of the base, even when the base is an explicit empty
+            // per-challenge override. Documents that the rule is not suppressed
+            // by an empty id-keyed override.
+            const challenge = { id: 77, title: 'Rotating Empty' };
+            settings.setChallengeOverride('mustIncludeTags', String(challenge.id), []);
+            settings.setTitleRules([{ title: 'Rotating Empty', mustIncludeTags: ['hat'], shouldIncludeTags: [] }]);
+
+            expect(settings.getEffectiveTagSetting('mustIncludeTags', challenge)).toEqual(['hat']);
         });
 
         test('the SAME title with a DIFFERENT id still resolves the rule (survives rotation)', () => {

@@ -553,6 +553,14 @@ const getEffectiveSetting = (settingKey, challengeId = null) => {
  */
 const TITLE_RULE_TAG_KEYS = ['mustIncludeTags', 'shouldIncludeTags'];
 
+// Defensive caps on renderer-supplied title-rule input. The rules share the
+// single settings JSON blob with every platform, so bound both the count and
+// the per-title length to keep a malformed/oversized payload from bloating the
+// file and slowing every findTitleRule scan. Real GuruShots titles are short,
+// so 200 is comfortably generous for both.
+const MAX_TITLE_RULES = 200;
+const MAX_TITLE_LENGTH = 200;
+
 // Stable match key for a challenge title: trimmed + lowercased. The same
 // challenge recurs with the same title (but a new id) on each rotation, so
 // this is what survives a rotation.
@@ -608,6 +616,16 @@ const setTitleRules = (rules) => {
         logger.withCategory('settings').error('setTitleRules expects an array', null);
         return false;
     }
+    if (rules.length > MAX_TITLE_RULES) {
+        logger
+            .withCategory('settings')
+            .error(`setTitleRules rejected: ${rules.length} rules exceeds the ${MAX_TITLE_RULES} cap`, null);
+        return false;
+    }
+
+    // Bound a user-supplied title before it reaches a log line so an oversized
+    // value can't produce a huge log event (defense in depth for log shipping).
+    const forLog = (title) => (title.length > 80 ? `${title.slice(0, 80)}…` : title);
 
     const sanitizeTagList = (key, value) => {
         const list = (Array.isArray(value) ? value : [])
@@ -624,11 +642,17 @@ const setTitleRules = (rules) => {
     for (const rule of rules) {
         const title = typeof rule?.title === 'string' ? rule.title.trim() : '';
         if (!title) continue;
+        if (title.length > MAX_TITLE_LENGTH) {
+            logger
+                .withCategory('settings')
+                .error(`Title rule rejected: title for "${forLog(title)}" exceeds ${MAX_TITLE_LENGTH} chars`, null);
+            return false;
+        }
 
         const mustIncludeTags = sanitizeTagList('mustIncludeTags', rule?.mustIncludeTags);
         const shouldIncludeTags = sanitizeTagList('shouldIncludeTags', rule?.shouldIncludeTags);
         if (mustIncludeTags === null || shouldIncludeTags === null) {
-            logger.withCategory('settings').error(`Invalid tags in title rule for "${title}"`, null);
+            logger.withCategory('settings').error(`Invalid tags in title rule for "${forLog(title)}"`, null);
             return false;
         }
         // A rule that contributes no tags is a no-op — drop it.

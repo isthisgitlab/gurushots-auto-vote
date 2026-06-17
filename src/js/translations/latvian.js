@@ -182,7 +182,9 @@
             tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
             titleTagRules: 'Tagu noteikumi pēc nosaukuma',
             titleTagRulesDesc:
-                'Pielieto obligātos/vēlamos tagus izaicinājumam pēc tā precīzā nosaukuma (nav reģistrjutīgs). Izaicinājumi atgriežas ar jaunu id katru reizi, kad tie rotē, tāpēc per-izaicinājuma pārlabojumi tiek zaudēti; šie noteikumi sakrīt pēc nemainīgā nosaukuma un apvieno savus tagus ar globālajiem noklusējumiem ikreiz, kad parādās atbilstošs izaicinājums.',
+                'Pielieto obligātos/vēlamos tagus izaicinājumam pēc tā precīzā nosaukuma (nav reģistrjutīgs). Izaicinājumi atgriežas ar jaunu id katru reizi, kad tie rotē, tāpēc per-izaicinājuma pārlabojumi tiek zaudēti; šie noteikumi sakrīt pēc nemainīgā nosaukuma un pievieno savus tagus virs taviem globālajiem noklusējumiem — abi tiek piemēroti kopā — ikreiz, kad parādās atbilstošs izaicinājums.',
+            titleTagRulesSaveError:
+                'Neizdevās saglabāt tagu noteikumus — pārliecinies, ka neviens tags nav garāks par 50 rakstzīmēm. Pārējie iestatījumi tika saglabāti.',
             titleTagRuleTitle: 'Izaicinājuma nosaukums',
             titleTagRuleTitlePlaceholder: "piem., Let's See Hats",
             addTitleTagRule: 'Pievienot noteikumu',

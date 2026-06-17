@@ -182,7 +182,9 @@
             tagsPlaceholder: 'e.g. sunset, beach, ocean',
             titleTagRules: 'Per-Title Tag Rules',
             titleTagRulesDesc:
-                'Apply Must/Should Include tags to a challenge by its exact title (case-insensitive). Challenges return with a new id each time they rotate, so per-challenge overrides are lost; these rules match on the stable title and merge their tags into the global defaults whenever a matching challenge appears.',
+                'Apply Must/Should Include tags to a challenge by its exact title (case-insensitive). Challenges return with a new id each time they rotate, so per-challenge overrides are lost; these rules match on the stable title and add their tags on top of your global defaults — both apply together — whenever a matching challenge appears.',
+            titleTagRulesSaveError:
+                'Could not save the tag rules — check that no tag is longer than 50 characters. Other settings were saved.',
             titleTagRuleTitle: 'Challenge title',
             titleTagRuleTitlePlaceholder: "e.g. Let's See Hats",
             addTitleTagRule: 'Add rule',

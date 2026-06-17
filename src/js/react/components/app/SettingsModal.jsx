@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
@@ -49,6 +49,10 @@ export function SettingsModal({ isOpen, onClose }) {
     // value), so they live outside the form hook: loaded on open, persisted in
     // handleSave alongside the schema commit.
     const [titleRules, setTitleRules] = useState([]);
+    const [titleRulesError, setTitleRulesError] = useState(false);
+    // Only persist the rules on save if the initial load actually succeeded —
+    // a failed load must not let a default-empty state overwrite saved rules.
+    const titleRulesLoadedRef = useRef(false);
 
     // Reset the timezone input on every open so a stale "+" panel from a
     // previous session doesn't carry over.
@@ -65,12 +69,19 @@ export function SettingsModal({ isOpen, onClose }) {
     useEffect(() => {
         if (!isOpen) return;
         let cancelled = false;
+        titleRulesLoadedRef.current = false;
+        setTitleRulesError(false);
         (async () => {
             try {
                 const saved = await window.api.getTitleRules();
-                if (!cancelled) setTitleRules(Array.isArray(saved) ? saved : []);
-            } catch {
-                if (!cancelled) setTitleRules([]);
+                if (cancelled) return;
+                setTitleRules(Array.isArray(saved) ? saved : []);
+                titleRulesLoadedRef.current = true;
+            } catch (err) {
+                // Don't overwrite the in-memory rules with []: a transient load
+                // failure must not become a saved-empty wipe. Leaving
+                // titleRulesLoadedRef false also blocks persistence on save.
+                await window.api.logError(`Error loading title tag rules: ${err?.message || err}`);
             }
         })();
         return () => {
@@ -120,7 +131,19 @@ export function SettingsModal({ isOpen, onClose }) {
     const handleSave = useCallback(async () => {
         try {
             await commit();
-            await window.api.setTitleRules(titleRules);
+            // Persist title rules only when the initial load succeeded (else a
+            // failed load could overwrite saved rules with the empty default).
+            // setTitleRules returns false when the input is rejected (e.g. a tag
+            // over the length cap); surface that and keep the modal open so the
+            // edit isn't silently lost.
+            if (titleRulesLoadedRef.current) {
+                const saved = await window.api.setTitleRules(titleRules);
+                if (saved === false) {
+                    setTitleRulesError(true);
+                    return;
+                }
+            }
+            setTitleRulesError(false);
             if (uiValues.language !== language) {
                 setLanguage(uiValues.language);
             }
@@ -456,7 +479,18 @@ export function SettingsModal({ isOpen, onClose }) {
                             {t('app.titleTagRules')}
                         </h4>
                         <p className="text-xs text-base-content/60 mb-3">{t('app.titleTagRulesDesc')}</p>
-                        <TitleTagRulesEditor value={titleRules} onChange={setTitleRules} />
+                        {titleRulesError && (
+                            <div className="alert alert-error mb-3 py-2 text-sm" role="alert">
+                                <span>{t('app.titleTagRulesSaveError')}</span>
+                            </div>
+                        )}
+                        <TitleTagRulesEditor
+                            value={titleRules}
+                            onChange={(next) => {
+                                if (titleRulesError) setTitleRulesError(false);
+                                setTitleRules(next);
+                            }}
+                        />
                     </div>
 
                     {/* Bottom Action Buttons */}
