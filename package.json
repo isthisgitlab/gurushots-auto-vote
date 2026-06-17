@@ -82,9 +82,9 @@
     "homepage": "https://github.com/isthisgitlab/gurushots-auto-vote#readme",
     "engines": {
         "node": ">=26.0.0",
-        "pnpm": ">=11.0.0"
+        "pnpm": ">=11.7.0"
     },
-    "packageManager": "pnpm@11.5.1",
+    "packageManager": "pnpm@11.7.0",
     "dependencies": {
         "@capacitor/android": "^8.4.0",
         "@capacitor/core": "^8.4.0",
