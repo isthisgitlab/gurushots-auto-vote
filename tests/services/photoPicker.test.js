@@ -603,4 +603,28 @@ describe('photoPicker', () => {
             expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores: { a: 0.9 } })).toEqual(['b']);
         });
     });
+
+    describe('views ranking tier', () => {
+        // Untaggable title → no theme signal; votes is 0 on the real API, so
+        // views is the meaningful "best performer" tiebreak above recency.
+        const challenge = { title: 'Your Photography Goal', url: '', welcome_message: '' };
+
+        test('more views wins over a newer upload with fewer views', () => {
+            const newerFewer = allowed('newer-fewer', ['Random'], 9000, { views: 10 });
+            const olderMore = allowed('older-more', ['Random'], 1000, { views: 999 });
+            expect(pickPhotosForChallenge(challenge, [newerFewer, olderMore], 1)).toEqual(['older-more']);
+        });
+
+        test('upload date still decides when views are equal/absent', () => {
+            const older = allowed('older', ['Random'], 1000);
+            const newer = allowed('newer', ['Random'], 9000);
+            expect(pickPhotosForChallenge(challenge, [older, newer], 1)).toEqual(['newer']);
+        });
+
+        test('votes still outranks views when a real vote count is present', () => {
+            const hiViews = allowed('hi-views', ['Random'], 1000, { views: 9999, votes: 1 });
+            const hiVotes = allowed('hi-votes', ['Random'], 1000, { views: 1, votes: 5 });
+            expect(pickPhotosForChallenge(challenge, [hiViews, hiVotes], 1)).toEqual(['hi-votes']);
+        });
+    });
 });
