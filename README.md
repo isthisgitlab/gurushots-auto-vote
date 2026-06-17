@@ -40,8 +40,9 @@ If you hit a rate-limit error: stop every instance, wait 5–10 minutes, then st
 - **Last-hour exposure** — a separate, usually lower exposure ceiling for the final hour.
 - **Boost** — auto-applies boost near the deadline, on a chosen entry slot.
 - **Turbo (earn + apply)** — auto-plays the mini-game to _earn_ turbo, then auto-_applies_ it to a chosen entry before the deadline.
-- **Auto-fill** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters and an emergency safety net.
+- **Auto-fill** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, theme-aware photo selection, and an emergency safety net.
 - **Per-challenge overrides** — every voting setting has a global default that any individual challenge can override.
+- **Per-title tag rules** — auto-fill tag rules keyed on the challenge title, so they survive GuruShots' per-rotation challenge-ID changes.
 - **Three platforms** — Electron GUI, `gurucli` command line, and an Android app that votes with the phone locked.
 - **Resilient API layer** — configurable timeout plus automatic retry/backoff on transient failures.
 - **Quality-of-life** — light/dark themes, English/Latvian UI, timezone display, mock mode for safe testing, and built-in update notifications.
@@ -181,23 +182,28 @@ The Android build is **not on Google Play** — install via direct APK download.
 
 > **⚠️** Only run ONE instance (GUI or CLI) at a time.
 
-| Command                                           | What it does                                                                                                          |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `login`                                           | Authenticate with GuruShots and save a token (interactive; needs a real terminal).                                    |
-| `vote`                                            | Run **one manual cycle** — votes to **100%** on every active challenge, ignoring all thresholds. A one-shot top-up.   |
-| `run [--challenge=<id>]`                          | Run **one full auto-strategy cycle** (boost / turbo / auto-fill / threshold-aware vote). `--challenge` scopes to one. |
-| `start`                                           | Start **continuous** voting with dynamic scheduling. Runs until you press **Ctrl+C**.                                 |
-| `status`                                          | Show mode (MOCK/REAL), auth status, and key settings.                                                                 |
-| `get-setting <key> [--challenge=<id>]`            | Print a setting's effective value (per-challenge with `--challenge`).                                                 |
-| `set-setting <key> <value> [--challenge=<id>]`    | Set a setting; with `--challenge` it writes a per-challenge override.                                                 |
-| `set-global-default <key> <value>`                | Set a global default **with schema validation**.                                                                      |
-| `list-settings [--challenge=<id>]`                | List all settings and which were modified (per-challenge view with `--challenge`).                                    |
-| `reset-setting <key> [--challenge=<id>]`          | Reset a setting to default (or clear a challenge override with `--challenge`).                                        |
-| `reset-all-settings`                              | Reset everything to defaults (preserves token, mock flag, and API headers).                                           |
-| `logs [--error\|--api\|--settings] [--lines=<n>]` | Print the tail of a log file (default 100 lines; default category is the app log).                                    |
-| `reset-windows`                                   | Reset GUI window positions to defaults.                                                                               |
-| `help-settings`                                   | Detailed help for the settings system — key names, value formats, ranges.                                             |
-| `help`                                            | Show command help.                                                                                                    |
+| Command                                           | What it does                                                                                                            |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `login`                                           | Authenticate with GuruShots and save a token (interactive; needs a real terminal).                                      |
+| `logout`                                          | Clear the saved authentication token.                                                                                   |
+| `vote`                                            | Run **one manual cycle** — votes to **100%** on every active challenge, ignoring all thresholds. A one-shot top-up.     |
+| `run [--challenge=<id>]`                          | Run **one full auto-strategy cycle** (boost / turbo / auto-fill / threshold-aware vote). `--challenge` scopes to one.   |
+| `boost --challenge=<id> [--image=<id>]`           | Apply a boost to one challenge. Without `--image` it uses the `boostImageIndex` slot.                                   |
+| `turbo --challenge=<id>`                          | Play the turbo mini-game to earn turbo for one challenge (earn only; a held turbo is applied by `useTurbo` or the GUI). |
+| `fill --challenge=<id> [--all]`                   | Submit the best-ranked photo into one empty slot, or `--all` to fill every empty slot at once.                          |
+| `check-updates`                                   | Check GitHub for a newer release.                                                                                       |
+| `start`                                           | Start **continuous** voting with dynamic scheduling. Runs until you press **Ctrl+C**.                                   |
+| `status`                                          | Show mode (MOCK/REAL), auth status, and key settings.                                                                   |
+| `get-setting <key> [--challenge=<id>]`            | Print a setting's effective value (per-challenge with `--challenge`).                                                   |
+| `set-setting <key> <value> [--challenge=<id>]`    | Set a setting; with `--challenge` it writes a per-challenge override.                                                   |
+| `set-global-default <key> <value>`                | Set a global default **with schema validation**.                                                                        |
+| `list-settings [--challenge=<id>]`                | List all settings and which were modified (per-challenge view with `--challenge`).                                      |
+| `reset-setting <key> [--challenge=<id>]`          | Reset a setting to default (or clear a challenge override with `--challenge`).                                          |
+| `reset-all-settings`                              | Reset everything to defaults (preserves token, mock flag, and API headers).                                             |
+| `logs [--error\|--api\|--settings] [--lines=<n>]` | Print the tail of a log file (default 100 lines; default category is the app log).                                      |
+| `reset-windows`                                   | Reset GUI window positions to defaults.                                                                                 |
+| `help-settings`                                   | Detailed help for the settings system — key names, value formats, ranges.                                               |
+| `help`                                            | Show command help.                                                                                                      |
 
 Settings are shared with the GUI: a `set-setting` from the CLI is picked up by the GUI and vice-versa.
 
@@ -256,7 +262,9 @@ When a challenge allows multiple submissions and you've left slots empty, those 
 
 - **`emergencyFill`** — a safety net: in the final stretch before close it fills any remaining slots even when the normal rules would wait, and overrides the must-include tag filter. Within this same window it also applies any available Boost and any won Turbo even when `autoBoost` / `useTurbo` are off for the challenge, so they aren't wasted at close. Entered as h+m in the GUI (stored as seconds). `0` disables it (which also disables the boost/turbo override); keep it `≤ lastMinuteThreshold` so the fast last-minute cadence is active throughout the window.
 - **Tag filters** — `mustIncludeTags` is a hard filter (only photos matching at least one tag are eligible); `shouldIncludeTags` is a soft preference. `fillWithoutTagMatch` decides what happens when must-include tags are set but nothing matches: fill anyway (default) or leave the slot empty.
-- **Photo ranking** — the picker ranks your eligible photos by, in order: theme-match score (keywords from the challenge title/slug/welcome message vs. each photo's vision labels), achievement count, total votes, then upload date.
+- **Per-title tag rules** — because GuruShots recycles each challenge under a fresh ID every rotation, ID-keyed overrides are lost. Tag rules keyed on the (stable) challenge title are matched case-insensitively and merged into the effective must/should-include tag lists at fill time. Managed in the GUI Settings modal under **Per-Title Tag Rules** (GUI only).
+- **Photo selection** — candidates are gathered with an always-on server-side themed search against GuruShots' own tag index — using your must/should-include tags when set, otherwise keywords from the challenge title — and fall back to your full eligible library if that surfaces nothing. Each candidate is then ranked by an always-on semantic theme score (how well it fits the challenge, `0`–`1`) — with keyword/stem matching against the photo's vision labels as the fallback when semantic data is unavailable — and ties broken by achievement count, total votes, views, then upload date.
+- **Fill-new boost/turbo** — with `boostFillNew` / `turboFillNew` on, auto-fill submits a fresh photo and immediately boosts / turbos that new entry, so an available boost or turbo isn't left unused on an empty slot.
 - **Manual buttons** — each card with empty slots shows **`+1`** (submit the best-ranked photo into one slot) and **`+N`** (fill all remaining slots at once, ignoring the spacing). Manual clicks ignore the `autoFill` toggle and are disabled while auto-vote is running.
 
 Newly-filled entries are picked up by the boost and turbo gates on the _next_ cycle automatically.
@@ -303,6 +311,7 @@ All of these support per-challenge overrides except where noted.
 | `autoBoost`       | `true`        | bool           | Auto-apply boost near the deadline.                                                         |
 | `boostTime`       | `3600` s (1h) | ≥ 0            | Apply a timer-based boost when this much time (or less) remains. Entered as h+m in the GUI. |
 | `boostImageIndex` | `1`           | integer ≥ 0    | Entry slot to boost (1 = first, `0` = last). Steps back if that slot is already turboed.    |
+| `boostFillNew`    | `false`       | bool           | During auto-fill, submit a fresh photo and immediately boost that new entry.                |
 
 **Turbo**
 
@@ -313,6 +322,7 @@ All of these support per-challenge overrides except where noted.
 | `turboTime`                 | `7200` s (2h) | ≥ 0            | Apply turbo when this much time (or less) remains. Entered as h+m in the GUI.            |
 | `turboImageIndex`           | `1`           | integer ≥ 0    | Entry slot to turbo (1 = first, `0` = last). Steps back if that slot is already boosted. |
 | `turboApplyWhenBoostActive` | `false`       | bool           | Allow turbo to apply while a boost window is open.                                       |
+| `turboFillNew`              | `false`       | bool           | During auto-fill, submit a fresh photo and immediately turbo that new entry.             |
 
 **Last hour**
 
