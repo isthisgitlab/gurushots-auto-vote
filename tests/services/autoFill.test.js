@@ -11,6 +11,7 @@ const {
     reflectNewEntry,
     getSlotsRemaining,
     fetchCandidatesForChallenge,
+    describeSubmitFailure,
 } = require('../../src/js/services/autoFill');
 
 const makeChallenge = ({ id = 'c1', closeIn = 600, maxSubmits = 4, entries = [] } = {}) => ({
@@ -1342,5 +1343,50 @@ describe('semantic matching wiring (always on)', () => {
         });
         expect(res).toBe('submitted');
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+    });
+});
+
+describe('describeSubmitFailure — surfacing the server rejection reason', () => {
+    test('strips HTML from the GuruShots per-image message', () => {
+        const raw = {
+            success: false,
+            message: "This image <b>has won a challenge</b><br/><span>it can't participate in another</span>",
+        };
+        expect(describeSubmitFailure(raw)).toBe("This image has won a challenge it can't participate in another");
+    });
+
+    test('reads error / errors[] shapes', () => {
+        expect(describeSubmitFailure({ error: 'Photo already entered' })).toBe('Photo already entered');
+        expect(describeSubmitFailure({ errors: ['Limit reached'] })).toBe('Limit reached');
+    });
+
+    test('null / non-object → safe placeholder, never throws', () => {
+        expect(describeSubmitFailure(null)).toBe('no response body');
+        expect(describeSubmitFailure(undefined)).toBe('no response body');
+        expect(describeSubmitFailure('nope')).toBe('no response body');
+    });
+
+    test('unknown shape → truncated JSON dump rather than an empty reason', () => {
+        const out = describeSubmitFailure({ success: false, code: 7, detail: { a: 1 } });
+        expect(out.length).toBeGreaterThan(0);
+        expect(out).toContain('success');
+    });
+});
+
+describe('fillChallengeNow surfaces the rejection reason to the caller', () => {
+    test('ok=false with a server message → error carries the reason', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
+        const result = await fillChallengeNow(challenge, 'tok', 'one', {
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest
+                .fn()
+                .mockResolvedValue({
+                    ok: false,
+                    raw: { success: false, message: 'This image <b>has won a challenge</b>' },
+                }),
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('has won a challenge');
     });
 });

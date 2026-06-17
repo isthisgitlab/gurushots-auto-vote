@@ -47,6 +47,32 @@ const resolveSemanticScores = async (challenge, eligible, deps) => {
 };
 
 /**
+ * Extract a concise, human-readable reason from a failed submit_to_challenge
+ * response so the ok=false warning is diagnosable instead of opaque. The server
+ * returns success:false with a per-image reason (e.g. "This image has won a
+ * challenge — it can't participate in another"), sometimes wrapped in HTML. We
+ * strip tags and fall back to a truncated dump of whatever shape it is, since
+ * the exact field name varies and an empty message is worse than raw JSON.
+ *
+ * @param {object|null} raw - the submitToChallenge `raw` response
+ * @returns {string}
+ */
+const describeSubmitFailure = (raw) => {
+    if (!raw || typeof raw !== 'object') return 'no response body';
+    const stripHtml = (s) =>
+        String(s)
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    // Common shapes: a top-level message/error, or a per-image errors map/array.
+    const direct = raw.message || raw.error || raw.error_message;
+    if (typeof direct === 'string' && direct.trim()) return stripHtml(direct);
+    const firstErr = Array.isArray(raw.errors) ? raw.errors[0] : null;
+    if (typeof firstErr === 'string' && firstErr.trim()) return stripHtml(firstErr);
+    return stripHtml(JSON.stringify(raw)).slice(0, 300);
+};
+
+/**
  * Fetch the eligible-photo candidates for a challenge, narrowed to its theme.
  *
  * Derives server-side `search` terms from the challenge (Must/Should Include
@@ -242,7 +268,10 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         }
         logger
             .withCategory('autoFill')
-            .warning(`autoFill: submit returned ok=false for ${logger.challengeTag(challenge)}`, null);
+            .warning(
+                `autoFill: submit rejected for ${logger.challengeTag(challenge)}: ${describeSubmitFailure(result && result.raw)}`,
+                null,
+            );
         return 'error';
     } catch (error) {
         logger
@@ -378,7 +407,10 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
         }
         logger
             .withCategory('autoFill')
-            .warning(`emergencyFill: submit returned ok=false for ${logger.challengeTag(challenge)}`, null);
+            .warning(
+                `emergencyFill: submit rejected for ${logger.challengeTag(challenge)}: ${describeSubmitFailure(result && result.raw)}`,
+                null,
+            );
         return 'error';
     } catch (error) {
         logger
@@ -501,14 +533,15 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
                 skipped: Math.max(0, slotsRemaining - picked.length),
             };
         }
+        const reason = describeSubmitFailure(result && result.raw);
         logger
             .withCategory('autoFill')
-            .warning(`manualFill: submit returned ok=false for ${logger.challengeTag(challenge)}`, null);
+            .warning(`manualFill: submit rejected for ${logger.challengeTag(challenge)}: ${reason}`, null);
         return {
             success: false,
             submitted: 0,
             skipped: slotsRemaining,
-            error: 'Submit failed',
+            error: `Submit rejected: ${reason}`,
         };
     } catch (error) {
         logger
@@ -612,7 +645,10 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
         }
         logger
             .withCategory('autoFill')
-            .warning(`fillNew: submit returned ok=false for ${logger.challengeTag(challenge)}`, null);
+            .warning(
+                `fillNew: submit rejected for ${logger.challengeTag(challenge)}: ${describeSubmitFailure(result && result.raw)}`,
+                null,
+            );
         return { ok: false, imageId: null, reason: 'submit-failed' };
     } catch (error) {
         logger
@@ -632,4 +668,5 @@ module.exports = {
     getSlotsRemaining,
     fetchCandidatesForChallenge,
     resolveSemanticScores,
+    describeSubmitFailure,
 };
