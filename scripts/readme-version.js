@@ -55,6 +55,9 @@ const rules = [
     [`chmod \\+x GuruShotsAutoVote-v${v}-\\*\\.AppImage`, `chmod +x GuruShotsAutoVote-v${vRepl}-*.AppImage`, false],
     [`\\./GuruShotsAutoVote-v${v}-\\*\\.AppImage`, `./GuruShotsAutoVote-v${vRepl}-*.AppImage`, false],
     [`\\./gurucli-v${v}-\\[platform\\]`, `./gurucli-v${vRepl}-[platform]`, false],
+    // Latvian (INSTALACIJA.md) localizes the placeholder as `[platforma]`; without this
+    // rule those example lines are invisible to update/verify and silently drift on bumps.
+    [`\\./gurucli-v${v}-\\[platforma\\]`, `./gurucli-v${vRepl}-[platforma]`, false],
 ];
 
 const files = [path.join(root, 'README.md'), path.join(root, 'docs', 'INSTALACIJA.md')];
