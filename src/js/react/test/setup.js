@@ -98,6 +98,10 @@ const mockApi = {
     getEffectiveSetting: jest.fn().mockResolvedValue(null),
     getGlobalDefault: jest.fn().mockResolvedValue(null),
     setGlobalDefault: jest.fn().mockResolvedValue(undefined),
+
+    // Title-keyed tag rules
+    getTitleRules: jest.fn().mockResolvedValue([]),
+    setTitleRules: jest.fn().mockResolvedValue(true),
 };
 
 // Mock window.translationManager

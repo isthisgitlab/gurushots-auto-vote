@@ -22,7 +22,7 @@ const tagsTextToArray = (text) =>
  * mid-keystroke. Re-syncs when the array prop is replaced from outside
  * (reset button, reload).
  */
-function TagsField({ settingKey, value, onChange, onReset, placeholder, disabled = false }) {
+export function TagsField({ settingKey, value, onChange, onReset, placeholder, disabled = false }) {
     const { t } = useTranslation();
     const arr = Array.isArray(value) ? value : [];
     const [draft, setDraft] = useState(() => tagsArrayToText(arr));

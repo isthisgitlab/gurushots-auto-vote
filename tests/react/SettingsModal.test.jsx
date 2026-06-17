@@ -11,7 +11,7 @@
  * mocked at module top with controllable state objects.
  */
 
-import { fireEvent, render, screen } from '@/test/test-utils';
+import { fireEvent, render, screen, waitFor } from '@/test/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
 
 const mockFormState = {
@@ -243,5 +243,45 @@ describe('SettingsModal — reliability (API retry/backoff) controls', () => {
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         fireEvent.change(screen.getByLabelText('app.apiRetryBaseDelayMs'), { target: { value: '2000' } });
         expect(mockFormState.handleUiChange).toHaveBeenCalledWith('apiRetryBaseDelayMs', 2000);
+    });
+});
+
+describe('SettingsModal — title-tag-rules save', () => {
+    const clickSave = () => {
+        const saveBtn = Array.from(document.querySelectorAll('button')).find(
+            (b) => b.textContent.trim() === 'app.save',
+        );
+        fireEvent.click(saveBtn);
+    };
+
+    test('a rejected setTitleRules (returns false) shows an error and keeps the modal open', async () => {
+        const rule = { title: 'Hats', mustIncludeTags: ['hat'], shouldIncludeTags: [] };
+        window.api.getTitleRules.mockResolvedValueOnce([rule]);
+        window.api.setTitleRules.mockResolvedValueOnce(false); // validation rejection
+        const onClose = jest.fn();
+
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        // Wait for the load effect to seed the rule (and mark it loaded).
+        await screen.findByDisplayValue('Hats');
+
+        clickSave();
+
+        await screen.findByText('app.titleTagRulesSaveError');
+        expect(window.api.setTitleRules).toHaveBeenCalledWith([rule]);
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    test('a successful save persists the rules and closes the modal', async () => {
+        const rule = { title: 'Hats', mustIncludeTags: ['hat'], shouldIncludeTags: [] };
+        window.api.getTitleRules.mockResolvedValueOnce([rule]);
+        const onClose = jest.fn();
+
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        await screen.findByDisplayValue('Hats');
+
+        clickSave();
+
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        expect(window.api.setTitleRules).toHaveBeenCalledWith([rule]);
     });
 });

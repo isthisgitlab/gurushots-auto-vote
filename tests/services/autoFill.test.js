@@ -61,6 +61,14 @@ const makeSettings = ({
         if (key === 'emergencyFill') return emergencyFill;
         return null;
     }),
+    // Title-aware tag resolver. The default stub carries no title rules, so it
+    // resolves to the same tag values as getEffectiveSetting; the merge-by-title
+    // behavior is covered in tests/settings/title-tag-rules.test.js.
+    getEffectiveTagSetting: jest.fn((key) => {
+        if (key === 'mustIncludeTags') return mustIncludeTags;
+        if (key === 'shouldIncludeTags') return shouldIncludeTags;
+        return null;
+    }),
 });
 
 describe('maybeAutoFillChallenge — staggered auto-fill', () => {
@@ -381,6 +389,8 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
                 if (key === 'autoFillIntervalMinutes') return 10;
                 return null;
             }),
+            // No title rule + null base → stays null ("no filter").
+            getEffectiveTagSetting: jest.fn(() => null),
         };
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings,
@@ -389,6 +399,23 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             submitToChallenge,
         });
         expect(result).toBe('submitted');
+    });
+
+    test('tag lists resolve via getEffectiveTagSetting with the full challenge (enables title rules)', async () => {
+        // Title-based rules need the challenge title, so the engine must resolve
+        // tags through getEffectiveTagSetting(key, challenge), not the id-only
+        // getEffectiveSetting(key, id). Guard the wiring against regressions.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const settings = makeSettings({ autoFill: true, intervalMinutes: 10, mustIncludeTags: ['hat'] });
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings,
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Hat'])]),
+            submitToChallenge,
+        });
+        expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
+        expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('shouldIncludeTags', challenge);
     });
 
     test('shouldIncludeTags re-orders pick within the eligible set', async () => {
@@ -489,6 +516,20 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'sunset' });
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // unfiltered fallback
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['off'], 'tok');
+    });
+
+    test('resolves tag lists via getEffectiveTagSetting with the full challenge (enables title rules)', async () => {
+        // Wiring guard: emergency fill must resolve tags by challenge (title), not id.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
+        const settings = makeSettings({ autoFill: false, emergencyFill: 300 });
+        await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings,
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+        expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
+        expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('shouldIncludeTags', challenge);
     });
 
     test('returns skipped when challenge already closed', async () => {
@@ -914,6 +955,7 @@ describe('fillChallengeNow — manual fill', () => {
                 if (key === 'shouldIncludeTags') return null;
                 return null;
             }),
+            getEffectiveTagSetting: jest.fn(() => null),
         };
         const result = await fillChallengeNow(challenge, 'tok', 'one', {
             settings,
@@ -960,6 +1002,20 @@ describe('submitNewEntryForAction — fill-new for boost/turbo', () => {
         });
         expect(result).toEqual({ ok: true, imageId: 'p1', reason: 'submitted' });
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
+    });
+
+    test('resolves tag lists via getEffectiveTagSetting with the full challenge (enables title rules)', async () => {
+        // Wiring guard: fill-new must resolve tags by challenge (title), not id.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [] });
+        const settings = makeSettings();
+        await submitNewEntryForAction(challenge, 'tok', {
+            settings,
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Pink'])]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+        expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
+        expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('shouldIncludeTags', challenge);
     });
 
     test('honors Must Include Tags when picking the photo', async () => {

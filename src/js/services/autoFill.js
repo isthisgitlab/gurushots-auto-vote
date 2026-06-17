@@ -164,8 +164,8 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         return 'skipped';
     }
 
-    const mustIncludeTags = settings.getEffectiveSetting('mustIncludeTags', String(challengeId));
-    const shouldIncludeTags = settings.getEffectiveSetting('shouldIncludeTags', String(challengeId));
+    const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
+    const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
 
     let eligible;
@@ -271,8 +271,8 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
     if (slotsRemaining <= 0) return 'skipped';
 
     const autoFillEnabled = settings.getEffectiveSetting('autoFill', String(challengeId)) === true;
-    const mustIncludeTags = settings.getEffectiveSetting('mustIncludeTags', String(challengeId));
-    const shouldIncludeTags = settings.getEffectiveSetting('shouldIncludeTags', String(challengeId));
+    const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
+    const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
 
     // Stand down before any network call when normal auto-fill already owns
@@ -399,8 +399,8 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     let shouldIncludeTags = null;
     let fillWithoutTagMatch; // undefined → picker treats as default (true)
     if (settings) {
-        mustIncludeTags = settings.getEffectiveSetting('mustIncludeTags', String(challengeId));
-        shouldIncludeTags = settings.getEffectiveSetting('shouldIncludeTags', String(challengeId));
+        mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
+        shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
         fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
     } else {
         logger
@@ -524,8 +524,8 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
         return { ok: false, imageId: null, reason: 'no-slots' };
     }
 
-    const mustIncludeTags = settings.getEffectiveSetting('mustIncludeTags', String(challengeId));
-    const shouldIncludeTags = settings.getEffectiveSetting('shouldIncludeTags', String(challengeId));
+    const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
+    const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
 
     let eligible;
