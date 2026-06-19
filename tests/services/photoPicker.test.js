@@ -413,12 +413,19 @@ describe('photoPicker', () => {
             );
         });
 
-        test('keeps only photos whose labels match ANY listed tag', () => {
-            const photos = [allowed('hasSunset', ['Sunset', 'Sky'], 1000), allowed('hasOther', ['Cat', 'Pet'], 9000)];
+        test('keeps only photos whose labels match every listed tag', () => {
+            // 'hasBoth' carries labels for both required tags; the others miss
+            // at least one and are excluded under ALL semantics.
+            const photos = [
+                allowed('hasBoth', ['Sunset', 'Beach'], 1000),
+                allowed('onlySunset', ['Sunset', 'Sky'], 5000),
+                allowed('onlyBeach', ['Beach', 'Sand'], 9000),
+            ];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
-                mustIncludeTags: ['sunset'],
+                mustIncludeTags: ['sunset', 'beach'],
+                fillWithoutTagMatch: false,
             });
-            expect(picked).toEqual(['hasSunset']);
+            expect(picked).toEqual(['hasBoth']);
         });
 
         test('stemming applies: "cats" tag matches label "Cat"', () => {
@@ -437,10 +444,39 @@ describe('photoPicker', () => {
             ).toEqual([]);
         });
 
-        test('ANY (not ALL) semantics: photo matching one of several tags qualifies', () => {
-            const photos = [allowed('a', ['Sunset'], 1000)];
+        test('ALL (not ANY) semantics: photo matching only one of several tags is excluded', () => {
+            // 'one' matches a single tag, 'all' matches every tag. Under ALL
+            // semantics only 'all' qualifies; fillWithoutTagMatch is off so the
+            // partial match is not relaxed back in.
+            const photos = [allowed('one', ['Sunset'], 9000), allowed('all', ['Sunset', 'Beach', 'Ocean'], 1000)];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
                 mustIncludeTags: ['sunset', 'beach', 'ocean'],
+                fillWithoutTagMatch: false,
+            });
+            expect(picked).toEqual(['all']);
+        });
+
+        test('forgiving matches(): a tag that is a substring of a label still matches (boundary)', () => {
+            // Documents the bidirectional-substring behavior of matches(): the
+            // tag stem 'bud' is contained in the label stem 'buddha', so it
+            // counts as a match. Pins the boundary so a future tightening of
+            // matches() (e.g. to require exact/whole-word stems) is caught here.
+            const photos = [allowed('a', ['Buddha'], 1000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                mustIncludeTags: ['bud'],
+                fillWithoutTagMatch: false,
+            });
+            expect(picked).toEqual(['a']);
+        });
+
+        test('duplicate stems collapse: "sunset, sunsets" is a single requirement', () => {
+            // tokeniseTagList stems then Set-dedups, so the two tags reduce to
+            // one stem. Under ALL semantics a photo carrying just "Sunset"
+            // therefore satisfies the whole list — it is not two requirements.
+            const photos = [allowed('a', ['Sunset'], 1000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                mustIncludeTags: ['sunset', 'sunsets'],
+                fillWithoutTagMatch: false,
             });
             expect(picked).toEqual(['a']);
         });
@@ -477,16 +513,28 @@ describe('photoPicker', () => {
             ).toEqual([]);
         });
 
-        test('fallback does not kick in when there IS a match (partial match, no top-up beyond matches)', () => {
-            // 'match' matches 'sunset'; 'other' does not. Even though there are
-            // 2 slots and the fallback is on, the filter has a non-empty result
-            // so only the matching photo is returned — fallback is all-or-nothing.
-            const photos = [allowed('match', ['Sunset'], 1000), allowed('other', ['Cat'], 9000)];
+        test('multi-tag: a full match suppresses the fallback; a partial match does not survive', () => {
+            // 'full' matches every required tag; 'partial' matches only one and
+            // is excluded under ALL semantics. Because 'full' exists, the filter
+            // is non-empty and the fallback never relaxes 'partial' back in —
+            // even with 2 slots and fillWithoutTagMatch on.
+            const photos = [allowed('full', ['Sunset', 'Beach'], 1000), allowed('partial', ['Sunset'], 9000)];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
-                mustIncludeTags: ['sunset'],
+                mustIncludeTags: ['sunset', 'beach'],
                 fillWithoutTagMatch: true,
             });
-            expect(picked).toEqual(['match']);
+            expect(picked).toEqual(['full']);
+        });
+
+        test('multi-tag: when no photo matches every tag, fallback returns the unfiltered best', () => {
+            // Each photo matches only a subset of the required tags, so the ALL
+            // filter empties out and the default-on fallback returns the
+            // unfiltered set (ranked newest-first, neither matches keywords).
+            const photos = [allowed('partialA', ['Sunset'], 1000), allowed('partialB', ['Beach'], 9000)];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, {
+                mustIncludeTags: ['sunset', 'beach'],
+            });
+            expect(picked).toEqual(['partialB', 'partialA']);
         });
 
         test('fallback still applies shouldIncludeTags ranking', () => {

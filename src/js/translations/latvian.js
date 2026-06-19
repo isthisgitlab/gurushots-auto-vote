@@ -169,13 +169,13 @@
             customBadge: 'pielāgots',
             mustIncludeTags: 'Obligātie tagi',
             mustIncludeTagsDesc:
-                'Striktais filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Apsvērt tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar vismaz vienu no šiem tagiem. Atstāj tukšu, lai apsvērtu visus piemērotos foto. Salīdzināšana nav reģistrjutīga un ir saudzīga (piem., "kaķis" sakrīt ar "kaķiem").',
+                'Striktais filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Apsvērt tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar visiem šiem tagiem. Atstāj tukšu, lai apsvērtu visus piemērotos foto. Salīdzināšana nav reģistrjutīga un ir saudzīga (piem., "kaķis" sakrīt ar "kaķiem").',
             shouldIncludeTags: 'Vēlamie tagi',
             shouldIncludeTagsDesc:
                 'Vēlamais kritērijs gan auto-aizpildei, gan manuālajai aizpildei. Priekšroku dot foto, kuru tagi sakrīt ar šiem; sakritības tiek ranžētas augstāk par automātiski noteikto izaicinājuma atslēgvārdu vērtējumu, bet neizslēdz pārējos foto. Ja neviens nesakrīt, aizpilde turpinās ar parasto ranžēšanu.',
             fillWithoutTagMatch: 'Aizpildīt arī bez tagu sakritības',
             fillWithoutTagMatchDesc:
-                'Attiecas tikai tad, ja ir iestatīti obligātie tagi. Kad ieslēgts (noklusējums), ja neviens no taviem foto nesakrīt ar šiem tagiem, tik un tā tiek pievienots labākais pieejamais foto, lai vieta nepaliek tukša. Kad izslēgts, vieta paliek tukša, līdz parādās foto ar atbilstošu tagu.',
+                'Attiecas tikai tad, ja ir iestatīti obligātie tagi. Tā kā foto jāsakrīt ar visiem tagiem, tas notiek biežāk, kad pieprasīti vairāki tagi. Kad ieslēgts (noklusējums), ja neviens no taviem foto nesakrīt ar visiem šiem tagiem, tik un tā tiek pievienots labākais pieejamais foto, lai vieta nepaliek tukša. Kad izslēgts, vieta paliek tukša, līdz parādās foto, kas sakrīt ar visiem tagiem.',
             emergencyFill: 'Ārkārtas aizpilde',
             emergencyFillDesc:
                 'Drošības tīkls, kas darbojas izaicinājuma pēdējās minūtēs, kad auto-aizpilde citādi atstātu foto vietas tukšas — vai nu tāpēc, ka auto-aizpilde ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un "Aizpildīt arī bez tagu sakritības" ir izslēgts. Kad izaicinājumam līdz beigām atlicis tik daudz laika, atlikušās vietas tiek aizpildītas ar labākajiem pieejamajiem foto, pat ja tie nesakrīt ar taviem tagiem. Tas apzināti ignorē šos iestatījumus, lai izaicinājums nebeigtos ar neizmantotām vietām. Šajā pašā logā tā arī izmanto jebkuru pieejamo Boost un jebkuru iegūto Turbo — pat ja "Auto-pielietot Boost" vai "Auto-pielietot Turbo" izaicinājumam ir izslēgts — lai tie netiktu izniekoti, kad izaicinājums beidzas. Grafiskajā lietotnē ievada kā stundas un minūtes. Noklusējums 5 minūtes; iestati 0, lai izslēgtu (kas izslēdz arī šo pēdējās minūtes Boost/Turbo ignorēšanu). Padoms: turi šo vienādu vai mazāku par pēdējās minūtes slieksni (noklusējums 10), lai lietotne jau bieži pārbauda pēdējās minūtēs.',
