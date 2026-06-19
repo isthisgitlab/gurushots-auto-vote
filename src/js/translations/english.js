@@ -169,13 +169,13 @@
             customBadge: 'custom',
             mustIncludeTags: 'Must Include Tags',
             mustIncludeTagsDesc:
-                'Hard filter for both auto-fill and the manual fill buttons. Only consider photos whose auto-detected labels match at least one of these tags. Leave empty to consider all eligible photos. Matching is case-insensitive and forgiving (e.g. "cat" matches "cats").',
+                'Hard filter for both auto-fill and the manual fill buttons. Only consider photos whose auto-detected labels match all of these tags. Leave empty to consider all eligible photos. Matching is case-insensitive and forgiving (e.g. "cat" matches "cats").',
             shouldIncludeTags: 'Should Include Tags',
             shouldIncludeTagsDesc:
                 'Soft preference for both auto-fill and manual fill. Prefer photos whose labels match these tags; matches rank above the auto-detected challenge keyword score but do not exclude other photos. If nothing matches, fill proceeds with the normal ranking.',
             fillWithoutTagMatch: 'Fill Even Without a Tag Match',
             fillWithoutTagMatchDesc:
-                'Only matters when Must Include Tags is set. When on (default), if none of your photos match those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a matching photo exists.',
+                'Only matters when Must Include Tags is set. Because a photo must match every tag, this triggers more often when several tags are required. When on (default), if none of your photos match all those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a fully matching photo exists.',
             emergencyFill: 'Emergency Fill',
             emergencyFillDesc:
                 'Safety net that runs in the last minutes of a challenge when auto-fill would otherwise leave entry slots empty — either because auto-fill is off, or because your Must Include Tags match no photo and Fill Without Tag Match is off. When a challenge is within this much time of closing, it fills the remaining slots with your best available photos anyway, even if they do not match your tags. This overrides those settings on purpose, so the challenge does not end with unused slots. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this at or below the Last Minute Threshold (default 10) so the app is already checking frequently in the final minutes.',

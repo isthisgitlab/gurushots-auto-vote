@@ -378,6 +378,68 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['keep'], 'tok');
     });
 
+    test('multi-tag ALL: photo missing one required tag is not submitted (fillWithoutTagMatch off)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                intervalMinutes: 10,
+                mustIncludeTags: ['sunset', 'beach'],
+                fillWithoutTagMatch: false,
+            }),
+            logger: makeLogger(),
+            // Only carries one of the two required tags → excluded under ALL.
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Sunset'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('no-eligible-photos');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('multi-tag ALL: full match wins over partial match', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                intervalMinutes: 10,
+                mustIncludeTags: ['sunset', 'beach'],
+                fillWithoutTagMatch: true,
+            }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('full', ['Sunset', 'Beach']), allowedPhoto('partial', ['Sunset'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        // 'partial' is excluded; 'full' matches every tag so the fallback never fires.
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['full'], 'tok');
+    });
+
+    test('multi-tag ALL: no photo matches all tags → fallback fires (default on)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            // fillWithoutTagMatch defaults to true in makeSettings
+            settings: makeSettings({
+                autoFill: true,
+                intervalMinutes: 10,
+                mustIncludeTags: ['sunset', 'beach'],
+            }),
+            logger: makeLogger(),
+            // Each photo carries only one of the two required tags, so the ALL
+            // filter empties out and the default-on fallback submits anyway.
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('p1', ['Sunset']), allowedPhoto('p2', ['Beach'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalled();
+    });
+
     test('getEffectiveSetting returning null for tag settings means "no filter"', async () => {
         // Real settings.js can return null when no global default is set;
         // tokeniseTagList handles null/undefined → []. Verify the picker
@@ -1379,12 +1441,10 @@ describe('fillChallengeNow surfaces the rejection reason to the caller', () => {
         const result = await fillChallengeNow(challenge, 'tok', 'one', {
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
-            submitToChallenge: jest
-                .fn()
-                .mockResolvedValue({
-                    ok: false,
-                    raw: { success: false, message: 'This image <b>has won a challenge</b>' },
-                }),
+            submitToChallenge: jest.fn().mockResolvedValue({
+                ok: false,
+                raw: { success: false, message: 'This image <b>has won a challenge</b>' },
+            }),
         });
         expect(result.success).toBe(false);
         expect(result.error).toContain('has won a challenge');

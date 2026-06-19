@@ -297,14 +297,14 @@ const labelStemsOf = (photo) => {
     return photo.labels.map((l) => stem(String(l).toLowerCase())).filter(Boolean);
 };
 
-const photoMatchesAnyStem = (labelStems, targetStems) => {
-    for (const labelStem of labelStems) {
-        for (const target of targetStems) {
-            if (matches(labelStem, target)) return true;
-        }
-    }
-    return false;
-};
+// ALL (AND) semantics: a photo qualifies only when every target stem is
+// matched by at least one of the photo's label stems. With no labels the
+// inner `some` is always false, so a photo with no labels can never match.
+// Precondition: targetStems is non-empty — the only caller skips this filter
+// when there are no required tags, so the vacuous-true `[].every(...)` case
+// (which would pass every photo) is never reached.
+const photoMatchesAllStems = (labelStems, targetStems) =>
+    targetStems.every((target) => labelStems.some((labelStem) => matches(labelStem, target)));
 
 const countShouldMatches = (labelStems, shouldStems) => {
     if (shouldStems.length === 0 || labelStems.length === 0) return 0;
@@ -352,16 +352,19 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  * @param {Array<object>} eligiblePhotos - candidates from getEligiblePhotos
  * @param {number} slotsToFill - how many photos to return at most
  * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[], fillWithoutTagMatch?: boolean, semanticScores?: Map<string, number>}} [opts]
- *   mustIncludeTags: hard filter — keep only photos whose labels match at
- *   least one tag (ANY semantics). Empty/missing = no filter.
+ *   mustIncludeTags: hard filter — keep only photos whose labels match
+ *   every distinct tag stem (ALL semantics). Tags are deduped to stems
+ *   first, so "larch, larches" collapses to one requirement. A photo
+ *   matching a strict subset of the tags is excluded. Empty/missing = no
+ *   filter.
  *   shouldIncludeTags: soft boost — photos with more matching tags rank
  *   above photos with fewer, before the existing keyword/quality tiers.
- *   fillWithoutTagMatch: when the must-filter matches NOTHING, fall back to
- *   the unfiltered set rather than returning [] (so a slot isn't left empty
- *   just because no photo carried a must-include tag). Defaults to true;
- *   pass false to keep the slot empty until a matching photo exists. Only
- *   the all-or-nothing case is relaxed — a partial match still fills with
- *   matches only.
+ *   fillWithoutTagMatch: when the must-filter matches NOTHING (no photo
+ *   carries every required tag), fall back to the unfiltered set rather
+ *   than returning [] (so a slot isn't left empty). Defaults to true; pass
+ *   false to keep the slot empty until a fully matching photo exists. The
+ *   fallback is all-or-nothing: if any photo matches every tag, only the
+ *   full matches are used and the fallback does not kick in.
  *   semanticScores: optional Map<photoId, similarity 0..1> from the semantic
  *   matcher. When present it adds one ranking tier (just below the explicit
  *   should-tag preference, above the lexical keyword score) so on-theme photos
@@ -385,7 +388,7 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
     let filtered =
         mustStems.length === 0
             ? withStems
-            : withStems.filter(({ labelStems }) => photoMatchesAnyStem(labelStems, mustStems));
+            : withStems.filter(({ labelStems }) => photoMatchesAllStems(labelStems, mustStems));
     if (filtered.length === 0) {
         // Must-filter eliminated everything. Unless the caller opted out,
         // relax to the unfiltered set so the slot still gets filled.
