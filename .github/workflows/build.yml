@@ -15,7 +15,7 @@ jobs:
         runs-on: ubuntu-slim
         steps:
             - name: Checkout code
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -35,7 +35,7 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -118,7 +118,7 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -192,7 +192,7 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -226,7 +226,7 @@ jobs:
         if: github.event_name == 'push'
         steps:
             - name: Checkout code
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
@@ -316,7 +316,7 @@ jobs:
 
         steps:
             - name: Checkout code
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
               with:
                   ref: ${{ github.ref_name }}
 
