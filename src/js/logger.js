@@ -614,11 +614,17 @@ module.exports = {
     // Formats a challenge object as the standard log prefix
     // `[Challenge {id}: {title}]`. Pass the whole challenge object or
     // (id, title) directly; missing fields render as 'unknown'.
+    // id/title originate from the GuruShots API (untrusted), so collapse any
+    // CR/LF before interpolation — a newline in a title would otherwise forge a
+    // synthetic log line (log injection) in the plain-text log file.
     challengeTag: (challengeOrId, title) => {
+        const oneLine = (v) => String(v).replace(/[\r\n]+/g, ' ');
         if (challengeOrId && typeof challengeOrId === 'object') {
-            return `[Challenge ${challengeOrId.id ?? 'unknown'}: ${challengeOrId.title ?? 'unknown'}]`;
+            const id = challengeOrId.id ?? 'unknown';
+            const t = challengeOrId.title ?? 'unknown';
+            return `[Challenge ${oneLine(id)}: ${oneLine(t)}]`;
         }
-        return `[Challenge ${challengeOrId ?? 'unknown'}: ${title ?? 'unknown'}]`;
+        return `[Challenge ${oneLine(challengeOrId ?? 'unknown')}: ${oneLine(title ?? 'unknown')}]`;
     },
 
     // Utility methods

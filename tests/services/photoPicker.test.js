@@ -5,6 +5,7 @@
 const {
     pickPhotosForChallenge,
     buildSearchTerms,
+    detectLetterPrefix,
     tokenise,
     stem,
     buildChallengeKeywords,
@@ -160,6 +161,48 @@ describe('photoPicker', () => {
         test('returns [] when nothing is derivable (abstract title, no tags)', () => {
             expect(buildSearchTerms({}, {})).toEqual([]);
             expect(buildSearchTerms(null, null)).toEqual([]);
+        });
+        test('letter challenge with no tags returns [] (skips the bogus "begin" search)', () => {
+            // "Begins With L" would otherwise tokenise to ['begin']; the letter-
+            // challenge guard returns [] so the caller fetches the full library
+            // and the client-side letter filter narrows it.
+            expect(buildSearchTerms({ title: 'Begins With L' }, {})).toEqual([]);
+        });
+        test('letter challenge still honors Should Include Tags (guard does not fire)', () => {
+            expect(buildSearchTerms({ title: 'Begins With L' }, { shouldIncludeTags: ['nature'] })).toEqual(['nature']);
+        });
+        test('letter challenge still honors Must Include Tags', () => {
+            expect(buildSearchTerms({ title: 'Begins With L' }, { mustIncludeTags: ['pink'] })).toEqual(['pink']);
+        });
+    });
+
+    describe('detectLetterPrefix', () => {
+        test('parses the begins/starts-with family', () => {
+            expect(detectLetterPrefix('Begins With L')).toBe('l');
+            expect(detectLetterPrefix('Starts with the letter A')).toBe('a');
+            expect(detectLetterPrefix('Things That Start With B')).toBe('b');
+            expect(detectLetterPrefix('Beginning with C')).toBe('c');
+            expect(detectLetterPrefix('STARTS WITH d')).toBe('d'); // case-insensitive, lowercased
+        });
+        test('a real word after "with" is not a letter challenge', () => {
+            expect(detectLetterPrefix('Begins With Love')).toBeNull();
+            expect(detectLetterPrefix('Begins With LA')).toBeNull();
+            expect(detectLetterPrefix('Begins With L-A')).toBeNull();
+        });
+        test('out-of-scope title forms return null', () => {
+            expect(detectLetterPrefix('Letter B Challenge')).toBeNull();
+            expect(detectLetterPrefix('L Words')).toBeNull();
+            expect(detectLetterPrefix('Sunset')).toBeNull();
+        });
+        test('non-string and empty input return null', () => {
+            expect(detectLetterPrefix('')).toBeNull();
+            expect(detectLetterPrefix(null)).toBeNull();
+            expect(detectLetterPrefix(undefined)).toBeNull();
+            expect(detectLetterPrefix(123)).toBeNull();
+        });
+        test('a pathologically long title is rejected by the length cap', () => {
+            const long = `Begins With L ${'x'.repeat(300)}`;
+            expect(detectLetterPrefix(long)).toBeNull();
         });
     });
 
@@ -594,6 +637,104 @@ describe('photoPicker', () => {
                 shouldIncludeTags: ['beach'],
             });
             expect(picked).toEqual(['mustAndShould', 'mustOnly']);
+        });
+    });
+
+    describe('pickPhotosForChallenge — letter challenge ("Begins With L")', () => {
+        const challenge = { title: 'Begins With L' };
+
+        test('keeps only photos with a label starting with the letter', () => {
+            const photos = [
+                allowed('landscape', ['Nature', 'Landscape'], 1000),
+                allowed('pink', ['Pink', 'Flower'], 5000),
+                allowed('urban', ['Architecture'], 9000),
+            ];
+            // Only 'landscape' carries an L-label; the newer non-L photos are dropped.
+            expect(pickPhotosForChallenge(challenge, photos, 5, {})).toEqual(['landscape']);
+        });
+
+        test('multiple letter matches fall through to the ranking tiers (votes)', () => {
+            const photos = [
+                allowed('lowVotes', ['Lion'], 1000, { votes: 10 }),
+                allowed('highVotes', ['Leaf'], 1000, { votes: 500 }),
+            ];
+            // Both match L and score 0 on keywords/achievements; votes breaks the tie.
+            expect(pickPhotosForChallenge(challenge, photos, 5, {})).toEqual(['highVotes', 'lowVotes']);
+        });
+
+        test('multi-word labels match on the first character of the whole label', () => {
+            const photos = [allowed('multi', ['Leisure Activity'], 1000), allowed('cat', ['Cat'], 9000)];
+            expect(pickPhotosForChallenge(challenge, photos, 5, {})).toEqual(['multi']);
+        });
+
+        test('short generic labels are excluded by the min-stem-length floor', () => {
+            const iChallenge = { title: 'Begins With I' };
+            const photos = [allowed('shortIn', ['In'], 9000), allowed('iceberg', ['Iceberg'], 1000)];
+            // "In" stems to a 2-char token (< floor of 3) → does not satisfy an I challenge.
+            expect(pickPhotosForChallenge(iChallenge, photos, 5, {})).toEqual(['iceberg']);
+        });
+
+        test('floor leaves the slot empty when only a too-short label would match (fillWithoutTagMatch:false)', () => {
+            const iChallenge = { title: 'Begins With I' };
+            const photos = [allowed('shortIn', ['In'], 1000)];
+            expect(pickPhotosForChallenge(iChallenge, photos, 5, { fillWithoutTagMatch: false })).toEqual([]);
+        });
+
+        test('no letter match + fillWithoutTagMatch:false keeps the slot empty', () => {
+            const photos = [allowed('cat', ['Cat'], 1000)];
+            expect(pickPhotosForChallenge(challenge, photos, 5, { fillWithoutTagMatch: false })).toEqual([]);
+        });
+
+        test('no letter match + default fallback submits the off-theme best performer', () => {
+            const photos = [allowed('cat', ['Cat'], 1000), allowed('dog', ['Dog'], 5000)];
+            // No L-label exists; the default-on fallback returns the unfiltered best
+            // (newest, since neither matches keywords) — intentionally off-theme.
+            expect(pickPhotosForChallenge(challenge, photos, 5, {})).toEqual(['dog', 'cat']);
+        });
+
+        test('composes with Must Include Tags (AND): only a photo matching both survives', () => {
+            const photos = [
+                allowed('lighthouse', ['Lighthouse'], 1000), // matches must + letter
+                allowed('landscape', ['Landscape'], 9000), // letter only — excluded by must
+            ];
+            const picked = pickPhotosForChallenge(challenge, photos, 5, { mustIncludeTags: ['lighthouse'] });
+            expect(picked).toEqual(['lighthouse']);
+        });
+
+        test('combined must + letter with no full match relaxes both filters on fallback', () => {
+            const photos = [
+                allowed('landscape', ['Landscape'], 9000), // letter only, no must
+                allowed('cat', ['Cat'], 1000), // neither
+            ];
+            // Neither satisfies must('lighthouse') AND letter L → filter empties →
+            // default fallback relaxes both and ranks the unfiltered set newest-first.
+            const picked = pickPhotosForChallenge(challenge, photos, 5, { mustIncludeTags: ['lighthouse'] });
+            expect(picked).toEqual(['landscape', 'cat']);
+        });
+
+        test('combined must + letter with no full match and fillWithoutTagMatch:false leaves the slot empty', () => {
+            const photos = [
+                allowed('landscape', ['Landscape'], 9000), // letter only, no must
+                allowed('cat', ['Cat'], 1000), // neither
+            ];
+            // No photo satisfies must AND letter; with fallback opted out, the slot
+            // stays empty rather than relaxing to an off-theme best performer.
+            expect(
+                pickPhotosForChallenge(challenge, photos, 5, {
+                    mustIncludeTags: ['lighthouse'],
+                    fillWithoutTagMatch: false,
+                }),
+            ).toEqual([]);
+        });
+
+        test('shouldIncludeTags re-orders within the letter-filtered survivors', () => {
+            const photos = [
+                allowed('plainL', ['Lion'], 9000), // L, no should match, newer
+                allowed('preferredL', ['Lighthouse'], 1000), // L + should 'lighthouse'
+            ];
+            // Both survive the letter filter; the should-tag match outranks recency.
+            const picked = pickPhotosForChallenge(challenge, photos, 5, { shouldIncludeTags: ['lighthouse'] });
+            expect(picked).toEqual(['preferredL', 'plainL']);
         });
     });
 
