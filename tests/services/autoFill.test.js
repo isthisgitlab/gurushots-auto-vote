@@ -14,10 +14,17 @@ const {
     describeSubmitFailure,
 } = require('../../src/js/services/autoFill');
 
-const makeChallenge = ({ id = 'c1', closeIn = 600, maxSubmits = 4, entries = [] } = {}) => ({
+const makeChallenge = ({
+    id = 'c1',
+    closeIn = 600,
+    maxSubmits = 4,
+    entries = [],
+    title = 'Pink In Nature',
+    url = 'pink-in-nature23',
+} = {}) => ({
     id,
-    title: 'Pink In Nature',
-    url: 'pink-in-nature23',
+    title,
+    url,
     max_photo_submits: maxSubmits,
     close_time: 1_000_000 + closeIn,
     member: { ranking: { entries } },
@@ -1448,5 +1455,104 @@ describe('fillChallengeNow surfaces the rejection reason to the caller', () => {
         });
         expect(result.success).toBe(false);
         expect(result.error).toContain('has won a challenge');
+    });
+});
+
+describe('letter challenges ("Begins With L") — tag-based fill, end to end', () => {
+    test('fetchCandidatesForChallenge skips the search and fetches the full library (with a debug breadcrumb)', async () => {
+        const debug = jest.fn();
+        const logger = {
+            withCategory: () => ({ info: jest.fn(), warning: jest.fn(), success: jest.fn(), error: jest.fn(), debug }),
+            challengeTag: () => '[Challenge c1: Begins With L]',
+        };
+        const getEligiblePhotos = jest.fn(async () => [
+            allowedPhoto('best', ['Pink'], 9000),
+            allowedPhoto('landscape', ['Landscape'], 1000),
+        ]);
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1', title: 'Begins With L' },
+            'tok',
+            {},
+            { getEligiblePhotos, logger },
+        );
+        expect(out.map((p) => p.id)).toEqual(['best', 'landscape']);
+        expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // no { search } term
+        expect(debug).toHaveBeenCalledWith(expect.stringContaining('letter challenge "L"'), null);
+    });
+
+    test('staggered fill submits the L-tagged photo, not the newer off-theme best performer', async () => {
+        // 1 slot, interval 10m, T-9m → due to submit (mirrors the spacing tests).
+        const challenge = makeChallenge({
+            title: 'Begins With L',
+            url: '',
+            maxSubmits: 2,
+            entries: [{ id: 'e1' }],
+            closeIn: 9 * 60,
+        });
+        const getEligiblePhotos = jest.fn().mockResolvedValue([
+            allowedPhoto('best', ['Pink'], 9000), // newer, would win best-performer — but no L label
+            allowedPhoto('landscape', ['Landscape'], 1000), // the only L-tagged photo
+        ]);
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // no themed search
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['landscape'], 'tok');
+    });
+
+    test('emergency fill near the deadline also honors the letter filter', async () => {
+        // autoFill off → emergency owns the slot; within the 300s window.
+        const challenge = makeChallenge({
+            title: 'Begins With L',
+            url: '',
+            maxSubmits: 2,
+            entries: [{ id: 'e1' }],
+            closeIn: 100,
+        });
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([allowedPhoto('best', ['Pink'], 9000), allowedPhoto('lion', ['Lion'], 1000)]);
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // no themed search
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['lion'], 'tok');
+    });
+
+    test('letter challenge WITH must tags uses the themed search and suppresses the breadcrumb', async () => {
+        // When a user sets Must Include Tags, buildSearchTerms returns those tags
+        // (the letter guard never fires), so the candidate fetch is the themed
+        // search — not the full-library path — and the breadcrumb stays quiet. The
+        // client-side letter filter still applies later in pickPhotosForChallenge.
+        const debug = jest.fn();
+        const logger = {
+            withCategory: () => ({ info: jest.fn(), warning: jest.fn(), success: jest.fn(), error: jest.fn(), debug }),
+            challengeTag: () => '[Challenge c1: Begins With L]',
+        };
+        const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>
+            opts && opts.search === 'leaf' ? [allowedPhoto('leaf', ['Leaf'], 1000)] : [],
+        );
+        const out = await fetchCandidatesForChallenge(
+            { id: 'c1', title: 'Begins With L' },
+            'tok',
+            { mustIncludeTags: ['leaf'] },
+            { getEligiblePhotos, logger },
+        );
+        expect(out.map((p) => p.id)).toEqual(['leaf']);
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'leaf' });
+        expect(debug).not.toHaveBeenCalled();
     });
 });

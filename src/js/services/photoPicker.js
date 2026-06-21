@@ -259,6 +259,30 @@ const tokeniseTagList = (tags) => {
 // extra requests the union fetch makes.
 const SEARCH_TERMS_CAP = 3;
 
+// Detect a "letter challenge" title — "Begins With L", "Starts with the letter A",
+// "Things That Start With B" (interior "Start With" matches via the leading \b).
+// Returns the lone target letter (lowercased) or null.
+//
+// SCOPE: only the begins/starts-with family is handled. Titles like "Letter L",
+// "L Words", or "B Is For…" intentionally return null and keep today's behavior.
+//
+// SECURITY: `title` is an untrusted string from the GuruShots API. We cap its
+// length before matching (ReDoS defense-in-depth, though the pattern has no
+// nested quantifiers) and the captured value is a single [a-z] char used ONLY in
+// a first-character equality check downstream — never interpolated into a query,
+// template, or eval.
+//
+// The trailing (?![\w-]) (instead of \b) forces the captured letter to be a
+// standalone token: "Begins With Love" → null (next char is a word char) and
+// "Begins With L-A" → null (next char is '-'); "Begins With L" / "...L." → 'l'.
+const LETTER_CHALLENGE_RE =
+    /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+)?(?:letter\s+)?([a-z])(?![\w-])/i;
+const detectLetterPrefix = (title) => {
+    if (typeof title !== 'string' || title.length > 200) return null;
+    const m = title.match(LETTER_CHALLENGE_RE);
+    return m ? m[1].toLowerCase() : null;
+};
+
 /**
  * Derive the ordered list of server-side `search` terms for a challenge, used
  * by auto-fill to narrow the eligible library to on-theme photos before
@@ -288,7 +312,14 @@ const buildSearchTerms = (challenge, opts = {}) => {
 
     let terms = fromTags(mustIncludeTags);
     if (terms.length === 0) terms = fromTags(shouldIncludeTags);
-    if (terms.length === 0) terms = tokenise(challenge?.title);
+    // Letter challenges ("Begins With L") have no usable server-search term — the
+    // GuruShots search index can't express "label starts with L" — so skip title
+    // tokenisation and leave terms empty; the caller then fetches the full library
+    // and the client-side letter filter in pickPhotosForChallenge narrows it. A
+    // non-letter title still tokenises as before.
+    if (terms.length === 0 && !detectLetterPrefix(challenge?.title)) {
+        terms = tokenise(challenge?.title);
+    }
     return Array.from(new Set(terms)).slice(0, SEARCH_TERMS_CAP);
 };
 
@@ -359,12 +390,14 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  *   filter.
  *   shouldIncludeTags: soft boost — photos with more matching tags rank
  *   above photos with fewer, before the existing keyword/quality tiers.
- *   fillWithoutTagMatch: when the must-filter matches NOTHING (no photo
- *   carries every required tag), fall back to the unfiltered set rather
- *   than returning [] (so a slot isn't left empty). Defaults to true; pass
- *   false to keep the slot empty until a fully matching photo exists. The
- *   fallback is all-or-nothing: if any photo matches every tag, only the
- *   full matches are used and the fallback does not kick in.
+ *   fillWithoutTagMatch: when a HARD filter matches NOTHING, fall back to the
+ *   unfiltered set rather than returning [] (so a slot isn't left empty). A hard
+ *   filter is the must-include tags (no photo carries every required tag) and/or
+ *   the letter-challenge filter derived from the title (no photo has a label
+ *   beginning with the challenge's letter); the two compose with AND. Defaults to
+ *   true; pass false to keep the slot empty until a fully matching photo exists.
+ *   The fallback is all-or-nothing: if any photo satisfies every hard filter,
+ *   only those are used and the fallback does not kick in.
  *   semanticScores: optional Map<photoId, similarity 0..1> from the semantic
  *   matcher. When present it adds one ranking tier (just below the explicit
  *   should-tag preference, above the lexical keyword score) so on-theme photos
@@ -382,17 +415,31 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
     const mustStems = tokeniseTagList(opts.mustIncludeTags);
     const shouldStems = tokeniseTagList(opts.shouldIncludeTags);
 
-    // Stem each photo's labels once and carry the result through both the
-    // must-filter and the should-scoring rather than recomputing.
+    // Letter challenges ("Begins With L") add a hard filter: keep only photos
+    // with a label beginning with that letter. The MIN_USER_TAG_STEM_LENGTH floor
+    // stops generic 2-char vision labels ("in", "at", "on") from spuriously
+    // satisfying an I/A/O challenge. Multi-word labels match on the first char of
+    // the whole label string — the natural reading of "begins with".
+    const letterPrefix = detectLetterPrefix(challenge?.title);
+
+    // Stem each photo's labels once and carry the result through the must-filter,
+    // the letter filter, and the should-scoring rather than recomputing.
     const withStems = allowed.map((photo) => ({ photo, labelStems: labelStemsOf(photo) }));
-    let filtered =
-        mustStems.length === 0
-            ? withStems
-            : withStems.filter(({ labelStems }) => photoMatchesAllStems(labelStems, mustStems));
+    let filtered = withStems;
+    if (mustStems.length > 0) {
+        filtered = filtered.filter(({ labelStems }) => photoMatchesAllStems(labelStems, mustStems));
+    }
+    if (letterPrefix) {
+        filtered = filtered.filter(({ labelStems }) =>
+            labelStems.some((s) => s.length >= MIN_USER_TAG_STEM_LENGTH && s[0] === letterPrefix),
+        );
+    }
     if (filtered.length === 0) {
-        // Must-filter eliminated everything. Unless the caller opted out,
-        // relax to the unfiltered set so the slot still gets filled.
-        if (mustStems.length > 0 && opts.fillWithoutTagMatch !== false) {
+        // A hard filter (must-tags and/or the letter filter) eliminated
+        // everything. Unless the caller opted out, relax to the unfiltered set so
+        // the slot still gets filled (off-theme best performer).
+        const hadHardFilter = mustStems.length > 0 || Boolean(letterPrefix);
+        if (hadHardFilter && opts.fillWithoutTagMatch !== false) {
             filtered = withStems;
         } else {
             return [];
@@ -440,6 +487,7 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
 module.exports = {
     pickPhotosForChallenge,
     buildSearchTerms,
+    detectLetterPrefix,
     // exported for unit tests
     tokenise,
     stem,

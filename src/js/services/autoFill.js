@@ -20,7 +20,7 @@
  * without entangling the modules.
  */
 
-const { pickPhotosForChallenge, buildSearchTerms } = require('./photoPicker');
+const { pickPhotosForChallenge, buildSearchTerms, detectLetterPrefix } = require('./photoPicker');
 const { getSemanticScores } = require('./semantic');
 
 /**
@@ -97,6 +97,19 @@ const describeSubmitFailure = (raw) => {
 const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligiblePhotos, logger }) => {
     const challengeId = challenge.id;
     const terms = buildSearchTerms(challenge, tagOpts);
+    // A letter challenge ("Begins With L") yields no search terms on purpose —
+    // the library is fetched unfiltered and narrowed client-side by the letter
+    // tag filter in pickPhotosForChallenge. Leave a breadcrumb so a "wrong photo"
+    // report is traceable to that path.
+    const letter = detectLetterPrefix(challenge?.title);
+    if (letter && terms.length === 0) {
+        logger
+            .withCategory('autoFill')
+            .debug(
+                `autoFill: letter challenge "${letter.toUpperCase()}" for ${logger.challengeTag(challenge)}; fetching full library for client-side tag filtering`,
+                null,
+            );
+    }
     if (terms.length > 0) {
         // Run the per-term searches concurrently — they're independent reads and
         // serialising them would add a round-trip of latency per extra term to
