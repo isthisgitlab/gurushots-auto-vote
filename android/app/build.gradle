@@ -38,8 +38,8 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     // Native background voting plugin deps
-    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.3.20"
-    implementation "com.squareup.okhttp3:okhttp:5.3.2"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:2.4.0"
+    implementation "com.squareup.okhttp3:okhttp:5.4.0"
     implementation "org.json:json:20260522"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
