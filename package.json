@@ -112,7 +112,7 @@
         "concurrently": "10.0.3",
         "cross-env": "^10.1.0",
         "daisyui": "^5.6.3",
-        "electron": "^42.5.0",
+        "electron": "^43.0.0",
         "electron-builder": "^26.15.3",
         "electronmon": "^2.0.4",
         "esbuild": "^0.28.1",
