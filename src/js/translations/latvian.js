@@ -170,7 +170,7 @@
             customBadge: 'pielāgots',
             mustIncludeTags: 'Obligātie tagi',
             mustIncludeTagsDesc:
-                'Striktais filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Apsvērt tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar visiem šiem tagiem. Atstāj tukšu, lai apsvērtu visus piemērotos foto. Salīdzināšana nav reģistrjutīga un ir saudzīga (piem., "kaķis" sakrīt ar "kaķiem").',
+                'Striktais filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Apsvērt tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar visiem šiem tagiem. Atstāj tukšu, lai apsvērtu visus piemērotos foto. Salīdzināšana nav reģistrjutīga un notiek pa veseliem vārdiem: galotnes un daudzskaitlis joprojām sakrīt ("cat" sakrīt ar "cats"), bet tags nesakritīs ar garāku, nesaistītu vārdu ("cat" nesakrīt ar "catamaran"). Vairāku vārdu tagi sakrīt pa vārdiem, tāpēc "sea life" prasa abus.',
             shouldIncludeTags: 'Vēlamie tagi',
             shouldIncludeTagsDesc:
                 'Vēlamais kritērijs gan auto-aizpildei, gan manuālajai aizpildei. Priekšroku dot foto, kuru tagi sakrīt ar šiem; sakritības tiek ranžētas augstāk par automātiski noteikto izaicinājuma atslēgvārdu vērtējumu, bet neizslēdz pārējos foto. Ja neviens nesakrīt, aizpilde turpinās ar parasto ranžēšanu.',

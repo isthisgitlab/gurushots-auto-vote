@@ -42,6 +42,9 @@ jobs:
             - name: Run tests with coverage
               run: pnpm test:coverage
 
+            - name: Lexicon separates signal from noise at the match floor
+              run: pnpm validate:lexicon
+
             - name: Bundle size budget (renderer bundles)
               run: pnpm size
 

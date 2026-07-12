@@ -12,6 +12,7 @@
         "build:cli:mac": "node scripts/build-cli.js gurucli-mac",
         "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
         "build:lexicon": "node scripts/build-lexicon.js",
+        "validate:lexicon": "node scripts/validate-lexicon.js",
         "build:react": "node scripts/build-react.js",
         "build:prep": "pnpm run build:css && pnpm run build:lexicon && pnpm run build:react",
         "build:site": "pnpm run build:site:html && pnpm run build:site:css",

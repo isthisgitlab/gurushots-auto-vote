@@ -147,13 +147,17 @@ const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligi
         if (union.some((p) => p && p.permission && p.permission.allowed === true && p.id)) {
             return union;
         }
-        // Terms existed but the themed search surfaced no eligible photo — log
-        // before relaxing to the full library so the off-theme fallback that
-        // pickPhotosForChallenge may then choose is traceable.
+        // Terms existed but the themed search surfaced no eligible photo — so the
+        // fill is about to fall back to the full library and may well submit an
+        // off-theme photo. That is a user-visible outcome they did not ask for, and
+        // when the terms came from their own Must/Should Include Tags it usually
+        // means those tags no longer match anything. Warn rather than debug: at
+        // debug level this was invisible at normal verbosity, leaving "why did it
+        // submit that photo?" with no answer in the log.
         logger
             .withCategory('autoFill')
-            .debug(
-                `autoFill: themed search for ${logger.challengeTag(challenge)} found no eligible photos; falling back to the full library`,
+            .warning(
+                `autoFill: themed search (${terms.join(', ')}) for ${logger.challengeTag(challenge)} found no eligible photos; falling back to the full library — an off-theme photo may be submitted`,
                 null,
             );
     }
