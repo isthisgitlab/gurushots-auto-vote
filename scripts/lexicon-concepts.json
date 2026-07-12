@@ -1,14 +1,14 @@
 {
     "$comment": "Source vocabulary for scripts/build-lexicon.js. Each concept is a synonym cluster: all words in `words` get an identical vector (cosine 1 between them), so e.g. a 'feline' challenge keyword matches a 'cat' photo label. `parent` blends a hypernym component so siblings under the same parent (cat vs dog under animal) get a mild positive similarity. Add/edit clusters here and re-run `pnpm build:lexicon`. Words are stemmed at build time with the same stemmer the matcher uses, so list natural forms.",
-    "dims": 48,
-    "conceptWeight": 0.75,
-    "parentWeight": 0.28,
+    "dims": 128,
+    "conceptWeight": 0.6,
+    "parentWeight": 0.8,
     "concepts": [
         { "id": "cat", "parent": "animal", "words": ["cat", "kitten", "kitty", "feline", "tabby", "tomcat"] },
         { "id": "dog", "parent": "animal", "words": ["dog", "puppy", "canine", "hound", "doggo", "pup"] },
-        { "id": "bird", "parent": "animal", "words": ["bird", "avian", "fowl", "songbird", "seabird"] },
+        { "id": "bird", "parent": "animal", "words": ["bird", "avian", "fowl", "songbird", "seabird", "bluebird"] },
         { "id": "horse", "parent": "animal", "words": ["horse", "equine", "pony", "stallion", "mare", "foal"] },
-        { "id": "fish", "parent": "animal", "words": ["fish", "fishes"] },
+        { "id": "fish", "parent": "animal", "words": ["fish", "fishes", "goldfish"] },
         {
             "id": "insect",
             "parent": "animal",
@@ -20,12 +20,16 @@
         {
             "id": "flower",
             "parent": "plant",
-            "words": ["flower", "blossom", "bloom", "floral", "petal", "rose", "tulip"]
+            "words": ["flower", "blossom", "bloom", "floral", "petal", "rose", "tulip", "sunflower", "wildflower"]
         },
         { "id": "tree", "parent": "plant", "words": ["tree", "forest", "woodland", "woods", "foliage"] },
         { "id": "plant", "parent": "plant", "words": ["plant", "flora", "greenery", "leaf", "leaves"] },
 
-        { "id": "water", "parent": "nature", "words": ["water", "aquatic", "wet"] },
+        {
+            "id": "water",
+            "parent": "nature",
+            "words": ["water", "aquatic", "wet", "underwater", "undersea", "submerged"]
+        },
         {
             "id": "ocean",
             "parent": "nature",
@@ -105,7 +109,7 @@
         {
             "id": "landscape",
             "parent": "nature",
-            "words": ["landscape", "scenery", "scenic", "vista", "panorama", "countryside", "rural"]
+            "words": ["landscape", "scenery", "scenic", "vista", "panorama"]
         },
         { "id": "sport", "parent": "activity", "words": ["sport", "athletic", "athlete", "fitness", "competition"] },
         { "id": "running", "parent": "activity", "words": ["running", "runner", "sprint", "jog", "marathon"] },
@@ -116,6 +120,30 @@
         { "id": "flowergarden", "parent": "plant", "words": ["garden", "park"] },
         { "id": "autumn", "parent": "weather", "words": ["autumn", "fall", "harvest"] },
         { "id": "spring", "parent": "weather", "words": ["spring", "springtime"] },
-        { "id": "summer", "parent": "weather", "words": ["summer", "summertime", "tropical"] }
+        { "id": "summer", "parent": "weather", "words": ["summer", "summertime", "tropical"] },
+
+        {
+            "id": "farm",
+            "parent": "rural",
+            "words": ["farm", "farmhouse", "farming", "agriculture", "agricultural", "farmland", "ranch", "homestead"]
+        },
+        { "id": "barn", "parent": "rural", "words": ["barn", "silo", "stable", "coop", "shed"] },
+        {
+            "id": "livestock",
+            "parent": "rural",
+            "words": ["cow", "cattle", "calf", "bull", "ox", "sheep", "lamb", "goat", "pig", "swine", "hog", "donkey"]
+        },
+        {
+            "id": "poultry",
+            "parent": "rural",
+            "words": ["chicken", "hen", "rooster", "duck", "goose", "turkey", "poultry"]
+        },
+        {
+            "id": "field",
+            "parent": "rural",
+            "words": ["field", "meadow", "pasture", "grassland", "prairie", "paddock", "hay", "crop", "wheat", "corn"]
+        },
+        { "id": "tractor", "parent": "rural", "words": ["tractor", "plow", "plough", "harvester"] },
+        { "id": "countryside", "parent": "rural", "words": ["countryside", "rural"] }
     ]
 }

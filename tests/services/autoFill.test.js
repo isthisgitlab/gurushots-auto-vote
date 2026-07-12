@@ -1315,6 +1315,59 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // unfiltered fallback
     });
 
+    // The themed-search-empty fallback is the path that may submit an off-theme
+    // photo. How loudly it logs must depend on WHERE the search terms came from:
+    // the user's own tags failing to match is actionable and warrants a warning,
+    // but a challenge TITLE failing to match is routine (vision labels are concrete
+    // nouns, titles are abstract) and must stay at debug — otherwise every user who
+    // never configured tags gets warnings on the common path and learns to ignore
+    // them, which would bury the case that actually matters.
+    describe('themed-search-empty fallback — log level depends on the term source', () => {
+        // makeLogger() returns a fresh object per withCategory() call, so the spies
+        // are unreachable. Use a logger with a stable category object instead.
+        const makeSpyLogger = () => {
+            const category = {
+                info: jest.fn(),
+                warning: jest.fn(),
+                success: jest.fn(),
+                error: jest.fn(),
+                debug: jest.fn(),
+            };
+            return { logger: { withCategory: () => category, challengeTag: (c) => `[Challenge ${c.id}]` }, category };
+        };
+        const emptySearch = () =>
+            jest.fn(async (_id, _tok, opts) => (opts && opts.search ? [] : [allowedPhoto('full', ['Misc'])]));
+
+        test('terms from the challenge title → debug, not warning (the common path)', async () => {
+            const { logger, category } = makeSpyLogger();
+            await fetchCandidatesForChallenge(
+                { id: 'c1', title: 'Pink In Nature' },
+                'tok',
+                {}, // no user tags — terms derive from the title
+                { getEligiblePhotos: emptySearch(), logger },
+            );
+            expect(category.warning).not.toHaveBeenCalled();
+            expect(category.debug).toHaveBeenCalledWith(
+                expect.stringContaining('falling back to the full library'),
+                null,
+            );
+        });
+
+        test("terms from the user's Must Include Tags → warning (their config matches nothing)", async () => {
+            const { logger, category } = makeSpyLogger();
+            await fetchCandidatesForChallenge(
+                { id: 'c1', title: 'Pink In Nature' },
+                'tok',
+                { mustIncludeTags: ['sunset'] },
+                { getEligiblePhotos: emptySearch(), logger },
+            );
+            expect(category.warning).toHaveBeenCalledWith(
+                expect.stringContaining('Must/Should Include Tags matched none of your photos'),
+                null,
+            );
+        });
+    });
+
     test('falls back when search returns only non-allowed photos', async () => {
         const blockedItem = { id: 'b', labels: ['Cat'], permission: { allowed: false } };
         const getEligiblePhotos = jest.fn(async (_id, _tok, opts) =>

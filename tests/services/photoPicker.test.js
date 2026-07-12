@@ -8,9 +8,13 @@ const {
     detectLetterPrefix,
     tokenise,
     stem,
+    matches,
     buildChallengeKeywords,
     scorePhoto,
     tokeniseTagList,
+    labelWordStems,
+    wholeLabelStems,
+    SEMANTIC_MATCH_FLOOR,
 } = require('../../src/js/services/photoPicker');
 
 const allowed = (id, labels, uploadDate = 1000, extras = {}) => ({
@@ -499,17 +503,19 @@ describe('photoPicker', () => {
             expect(picked).toEqual(['all']);
         });
 
-        test('forgiving matches(): a tag that is a substring of a label still matches (boundary)', () => {
-            // Documents the bidirectional-substring behavior of matches(): the
-            // tag stem 'bud' is contained in the label stem 'buddha', so it
-            // counts as a match. Pins the boundary so a future tightening of
-            // matches() (e.g. to require exact/whole-word stems) is caught here.
+        test('strict matches(): a tag that is merely a substring of a label does NOT match', () => {
+            // This test previously pinned the opposite: matches() was a
+            // bidirectional substring test, so the tag stem 'bud' matched the label
+            // stem 'buddha'. Its own comment said it existed to catch "a future
+            // tightening of matches() (e.g. to require exact/whole-word stems)".
+            // This is that tightening — 'bud' and 'buddha' are different things.
+            // With fillWithoutTagMatch:false the slot is correctly left empty.
             const photos = [allowed('a', ['Buddha'], 1000)];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
                 mustIncludeTags: ['bud'],
                 fillWithoutTagMatch: false,
             });
-            expect(picked).toEqual(['a']);
+            expect(picked).toEqual([]);
         });
 
         test('duplicate stems collapse: "sunset, sunsets" is a single requirement', () => {
@@ -667,6 +673,18 @@ describe('photoPicker', () => {
             expect(pickPhotosForChallenge(challenge, photos, 5, {})).toEqual(['multi']);
         });
 
+        test('a multi-word label does NOT match on a later word ("Ocean Life" is not an L)', () => {
+            // The discriminating case the test above cannot express: in 'Leisure
+            // Activity' both the whole label AND its first word start with 'l', so
+            // it passes whether the filter reads whole-label stems or word stems.
+            // 'Ocean Life' separates them — its second word starts with 'l', and
+            // "begins with L" must read the label as written, not word-by-word.
+            // Guards the wholeLabelStems / labelWordStems split in
+            // pickPhotosForChallenge, where crossing the wires is silent.
+            const photos = [allowed('ocean', ['Ocean Life'], 1000)];
+            expect(pickPhotosForChallenge(challenge, photos, 5, { fillWithoutTagMatch: false })).toEqual([]);
+        });
+
         test('short generic labels are excluded by the min-stem-length floor', () => {
             const iChallenge = { title: 'Begins With I' };
             const photos = [allowed('shortIn', ['In'], 9000), allowed('iceberg', ['Iceberg'], 1000)];
@@ -814,6 +832,170 @@ describe('photoPicker', () => {
             const hiViews = allowed('hi-views', ['Random'], 1000, { views: 9999, votes: 1 });
             const hiVotes = allowed('hi-votes', ['Random'], 1000, { views: 1, votes: 5 });
             expect(pickPhotosForChallenge(challenge, [hiViews, hiVotes], 1)).toEqual(['hi-votes']);
+        });
+    });
+
+    // Regression suite for the "The Farm Life picked a Sea Life photo" bug.
+    // Four separate defects conspired; each gets a test so a partial revert of
+    // any one of them fails loudly rather than silently degrading picks.
+    describe('theme matching — Farm Life / Sea Life regression', () => {
+        const farmLife = { title: 'The Farm Life', url: 'the-farm-life' };
+
+        test('the abstract head-noun "life" is not a search term or a keyword', () => {
+            // "life" used to survive tokenisation, which (a) issued a server-side
+            // search for `life` that dragged Sea Life / Still Life / Wildlife
+            // photos into the candidate pool and (b) scored them as a match. The
+            // modifier "farm" carries the whole subject; the head noun carries none.
+            expect(buildSearchTerms(farmLife, {})).toEqual(['farm']);
+            expect(buildChallengeKeywords(farmLife)).toEqual(['farm']);
+        });
+
+        test('multi-word labels are split into word stems, deduped', () => {
+            // Labels used to be stemmed as ONE string ("Sea Life" -> "sea life"),
+            // which is what let the keyword "life" substring-match them. User tags
+            // were always split; labels being the odd one out was the root cause.
+            expect(labelWordStems({ labels: ['Sea Life'] })).toEqual(['sea', 'life']);
+            // "sea" appears in two labels but must only be counted once.
+            expect(labelWordStems({ labels: ['Sea', 'Sea Life'] })).toEqual(['sea', 'life']);
+            expect(labelWordStems({ labels: [] })).toEqual([]);
+            expect(labelWordStems({})).toEqual([]);
+        });
+
+        test('a Sea Life photo no longer scores as a match for a farm challenge', () => {
+            const keywords = buildChallengeKeywords(farmLife);
+            expect(scorePhoto({ labels: ['Sea Life', 'Underwater', 'Fish'] }, keywords)).toBe(0);
+        });
+
+        test('views cannot outrank a wording fit (the governing rule)', () => {
+            // THE headline guarantee, asserted at the extremes so that any future
+            // reordering of the comparator tiers fails here rather than quietly
+            // shipping. The sea photo is the overwhelmingly better "performer";
+            // it must still lose, because the farm photo is on theme and it is not.
+            const sea = allowed('sea', ['Sea Life', 'Underwater', 'Fish'], 9000, { views: 9999 });
+            const farm = allowed('farm', ['Cow', 'Barn', 'Pasture'], 1000, { views: 1 });
+            // Semantic scores as the real lexicon produces them for this challenge.
+            const semanticScores = new Map([
+                ['sea', 0.003],
+                ['farm', 0.73],
+            ]);
+            expect(pickPhotosForChallenge(farmLife, [sea, farm], 1, { semanticScores })).toEqual(['farm']);
+        });
+
+        test('views still decide when nothing matches the theme (intended last resort)', () => {
+            // The flip side of the rule: popularity is not banned, it is demoted.
+            // With no photo on theme, the best performer is the right pick.
+            const a = allowed('a', ['Teapot'], 1000, { views: 10 });
+            const b = allowed('b', ['Stapler'], 1000, { views: 9999 });
+            expect(pickPhotosForChallenge(farmLife, [a, b], 1, {})).toEqual(['b']);
+        });
+
+        test('a sub-floor semantic score cannot outrank a genuine lexical hit', () => {
+            // The semantic tier sits ABOVE the lexical score, so without the floor
+            // pure vector noise would beat a real keyword match. `noise` scores just
+            // under the floor and must be treated as no match at all.
+            const belowFloor = (SEMANTIC_MATCH_FLOOR - 1) / 100;
+            const noise = allowed('noise', ['Teapot'], 9000);
+            const real = allowed('real', ['Farm'], 1000);
+            const semanticScores = new Map([
+                ['noise', belowFloor],
+                ['real', 0],
+            ]);
+            expect(pickPhotosForChallenge(farmLife, [noise, real], 1, { semanticScores })).toEqual(['real']);
+        });
+
+        test('the floor is inclusive: a score exactly AT it counts as a match', () => {
+            // Pins `>=` rather than `>`. An off-by-one here would silently discard
+            // the weakest genuine matches, and no other test would notice.
+            const atFloor = allowed('atFloor', ['Teapot'], 1000, { views: 1 });
+            const none = allowed('none', ['Stapler'], 9000, { views: 9999 });
+            const semanticScores = new Map([
+                ['atFloor', SEMANTIC_MATCH_FLOOR / 100],
+                ['none', 0],
+            ]);
+            expect(pickPhotosForChallenge(farmLife, [atFloor, none], 1, { semanticScores })).toEqual(['atFloor']);
+        });
+
+        test('scores straddling the floor order correctly (39 loses, 41 wins)', () => {
+            const below = allowed('below', ['Teapot'], 9000, { views: 9999 });
+            const above = allowed('above', ['Stapler'], 1000, { views: 1 });
+            const semanticScores = new Map([
+                ['below', (SEMANTIC_MATCH_FLOOR - 1) / 100],
+                ['above', (SEMANTIC_MATCH_FLOOR + 1) / 100],
+            ]);
+            // `below` is floored to 0 (no match), so despite 9999 views it loses to
+            // `above`, which clears the floor with a single view.
+            expect(pickPhotosForChallenge(farmLife, [below, above], 2, { semanticScores })).toEqual(['above', 'below']);
+        });
+    });
+
+    describe('label stems — untrusted input is bounded and type-guarded', () => {
+        test('labelWordStems caps the number of distinct stems per photo', () => {
+            // Labels are untrusted API data. Feed more distinct words than the cap
+            // and confirm the fan-out is bounded rather than unbounded.
+            const labels = Array.from({ length: 200 }, (_, i) => `word${'abcdefgh'[i % 8]}${i}x`);
+            const stems = labelWordStems({ labels });
+            expect(stems.length).toBeLessThanOrEqual(64);
+        });
+
+        test('labelWordStems caps words taken from a single label', () => {
+            const oneHugeLabel = Array.from({ length: 100 }, (_, i) => `alpha${i}zz`).join(' ');
+            expect(labelWordStems({ labels: [oneHugeLabel] }).length).toBeLessThanOrEqual(12);
+        });
+
+        test('labelWordStems ignores non-string labels rather than stringifying them', () => {
+            // String(null) === 'null' would otherwise become a real, matchable stem.
+            expect(labelWordStems({ labels: [null, undefined, {}, 'Cow'] })).toEqual(['cow']);
+        });
+
+        test('wholeLabelStems ignores non-string labels (so null cannot satisfy "Begins With N")', () => {
+            // The letter filter reads the first character of these stems. Before the
+            // type guard, a null label stemmed to the literal string "null" and would
+            // have counted as a label beginning with N.
+            expect(wholeLabelStems({ labels: [null, 'Sea Life'] })).toEqual(['sea life']);
+            expect(wholeLabelStems({ labels: undefined })).toEqual([]);
+        });
+    });
+
+    describe('matches() — whole-word, not substring', () => {
+        test('rejects unrelated words that merely share characters', () => {
+            // Every one of these matched under the old bidirectional-substring
+            // rule. They are the reason a farm challenge could pick a sea photo.
+            expect(matches('heart', 'art')).toBe(false);
+            expect(matches('catamaran', 'cat')).toBe(false);
+            expect(matches('seagull', 'sea')).toBe(false);
+            expect(matches('buddha', 'bud')).toBe(false);
+            expect(matches('office', 'ice')).toBe(false);
+            expect(matches('spiral', 'spi')).toBe(false);
+        });
+
+        test('still absorbs stemmer residue and inflections', () => {
+            expect(matches('runn', 'run')).toBe(true); // stem('running') === 'runn'
+            expect(matches('cat', stem('cats'))).toBe(true);
+            expect(matches('flower', stem('flowers'))).toBe(true);
+            expect(matches('sea', 'sea')).toBe(true);
+        });
+
+        test('is symmetric', () => {
+            expect(matches('run', 'runn')).toBe(true);
+            expect(matches('art', 'heart')).toBe(false);
+        });
+    });
+
+    describe('multi-word user tags', () => {
+        const challenge = { title: 'Underwater', url: 'underwater' };
+
+        test('"sea life" matches a Sea Life photo but not a bare Ocean photo', () => {
+            // A multi-word tag keeps every word (ALL semantics), so it is precise:
+            // the photo must carry both words. Stopwords are kept on the tag and
+            // label side — a user who types "life" means it literally, unlike the
+            // same word scraped out of a challenge title.
+            const seaLife = allowed('seaLife', ['Sea Life'], 1000);
+            const ocean = allowed('ocean', ['Ocean', 'Wave'], 2000);
+            const picked = pickPhotosForChallenge(challenge, [seaLife, ocean], 5, {
+                mustIncludeTags: ['sea life'],
+                fillWithoutTagMatch: false,
+            });
+            expect(picked).toEqual(['seaLife']);
         });
     });
 });

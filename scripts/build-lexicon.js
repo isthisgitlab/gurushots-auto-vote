@@ -133,6 +133,18 @@ const main = () => {
         words,
     };
 
+    // A word claimed by two concepts silently resolved "last wins", which
+    // degrades that word's vector to whichever cluster happened to be listed
+    // later — invisible in the output and undetectable at runtime. Fail instead:
+    // the source is a hand-edited file, so a collision is always an authoring
+    // mistake, and the asset is committed, so a silent degradation would ship.
+    if (collisions.length) {
+        console.error(`❌ ${collisions.length} word(s) claimed by more than one concept:`);
+        for (const c of collisions) console.error(`   - ${c}`);
+        console.error('   Each word must belong to exactly one concept. Fix scripts/lexicon-concepts.json.');
+        process.exit(1);
+    }
+
     fs.writeFileSync(OUT_ASSET, JSON.stringify(output));
     let copied = '';
     if (fs.existsSync(DIST_DIR)) {
@@ -145,10 +157,6 @@ const main = () => {
         `✅ Lexicon: ${Object.keys(words).length} word-stems, ${concepts.length} concepts, ${dims}d, ` +
             `${(bytes / 1024).toFixed(1)} KB → src/assets/semantic-vectors.json${copied}`,
     );
-    if (collisions.length) {
-        console.warn(`⚠️  ${collisions.length} word(s) claimed by more than one concept (last wins):`);
-        for (const c of collisions) console.warn(`   - ${c}`);
-    }
 };
 
 main();

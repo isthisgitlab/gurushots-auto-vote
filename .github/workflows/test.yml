@@ -42,6 +42,18 @@ jobs:
             - name: Run tests with coverage
               run: pnpm test:coverage
 
+            # Rebuild the asset BEFORE validating it. Validating only the committed
+            # copy would let a PR edit lexicon-concepts.json (weights, dims, a new
+            # cluster) without re-running the build and still pass — the gate would
+            # be checking the stale asset, not the config under review. The build is
+            # seeded and deterministic, so a clean tree here also proves the
+            # committed asset matches its source.
+            - name: Verify lexicon asset is up to date
+              run: pnpm build:lexicon && git diff --exit-code src/assets/semantic-vectors.json
+
+            - name: Verify lexicon separates signal from noise at the match floor
+              run: pnpm verify:lexicon
+
             - name: Bundle size budget (renderer bundles)
               run: pnpm size
 

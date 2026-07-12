@@ -15,7 +15,7 @@
  */
 
 const lexicon = require('./lexicon');
-const { buildChallengeKeywords } = require('../photoPicker');
+const { buildChallengeKeywords, labelWordStems } = require('../photoPicker');
 
 // Small bounded cache of label/keyword embeddings. Photo label sets and
 // challenge themes repeat across fill cycles, so this keeps scoring near-free.
@@ -55,9 +55,14 @@ const getSemanticScores = async (challenge, photos) => {
         for (const photo of photos) {
             const id = photo && photo.id;
             if (id === undefined || id === null) continue;
-            const labels = Array.isArray(photo.labels) ? photo.labels.filter((l) => typeof l === 'string') : [];
-            if (labels.length === 0) continue;
-            const photoVec = embedCached(labels);
+            // Word stems, not raw labels. The lexicon is a word vocabulary with no
+            // multi-word keys, so handing it the label "Sea Life" verbatim is
+            // always a miss — every multi-word vision label was invisible to the
+            // semantic tier. labelWordStems splits and stems them (and bounds the
+            // fan-out, which also bounds the vecCache key size below).
+            const tokens = labelWordStems(photo);
+            if (tokens.length === 0) continue;
+            const photoVec = embedCached(tokens);
             if (!photoVec) continue;
             const sim = lexicon.cosine(challengeVec, photoVec);
             if (Number.isFinite(sim)) scores.set(String(id), Math.max(0, Math.min(1, sim)));
