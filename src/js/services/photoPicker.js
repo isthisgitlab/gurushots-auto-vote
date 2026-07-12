@@ -232,9 +232,9 @@ const isPureDigit = (token) => /^\d+$/.test(token);
  * Light suffix stemmer covering the common inflected forms that show
  * up in challenge text vs. vision labels: plurals (flowers→flower),
  * gerunds (jumping→jump), past tense (jumped→jump), 'ies' nouns
- * (categories→category). Keeps the algorithm dependency-free; pairs
- * with bidirectional substring matching to handle leftover variation
- * like 'runn' (from running) vs 'run'.
+ * (categories→category). Keeps the algorithm dependency-free; the residue it
+ * leaves ('runn' from 'running') is absorbed by the bounded-prefix branch of
+ * matches(), which is what the MAX_STEM_PREFIX_DELTA allowance exists for.
  */
 const stem = (word) => {
     if (typeof word !== 'string' || word.length < 4) return word || '';
@@ -247,6 +247,15 @@ const stem = (word) => {
     return w;
 };
 
+// Every string tokenise() sees is untrusted: challenge title / url /
+// welcome_message and photo labels all come from the GuruShots API. Truncating
+// AFTER tokenising would still pay the full lowercase + tag-strip + regex-split +
+// per-token stem cost on an arbitrarily long input, so bound the input itself —
+// this is the single choke point through which all untrusted text reaches the
+// matcher and the embedding cache. Real titles and labels are a handful of words;
+// 4096 chars is far above anything legitimate and well under anything painful.
+const MAX_TOKENISE_CHARS = 4096;
+
 // keepStopwords skips the photography-noise stopword list. Challenge text
 // is full of boilerplate ("shots", "best", "good luck") that drowns out the
 // real subject, so the keyword path filters it. But a user who explicitly
@@ -254,6 +263,7 @@ const stem = (word) => {
 const tokenise = (text, { keepStopwords = false } = {}) => {
     if (typeof text !== 'string' || text.length === 0) return [];
     return text
+        .slice(0, MAX_TOKENISE_CHARS)
         .toLowerCase()
         .replace(/<[^>]*>/g, ' ')
         .split(/[^a-z0-9]+/)
@@ -262,12 +272,21 @@ const tokenise = (text, { keepStopwords = false } = {}) => {
         .map(stem);
 };
 
+// Keyword count is bounded for the same reason the per-photo stem count is (see
+// MAX_STEMS_PER_PHOTO): these keywords are the inner loop of every scorePhoto
+// call AND become the vecCache key in semantic/index.js, whose MAX_CACHE bounds
+// the number of entries but not the size of one. A challenge's real subject is a
+// few nouns; a welcome_message can be arbitrarily long prose.
+const MAX_CHALLENGE_KEYWORDS = 48;
+
 const buildChallengeKeywords = (challenge) => {
     const fromUrl = tokenise(challenge?.url);
     const fromTitle = tokenise(challenge?.title);
     const fromWelcome = tokenise(challenge?.welcome_message);
     const all = [...fromUrl, ...fromTitle, ...fromWelcome];
-    return Array.from(new Set(all));
+    // url + title first, so if the cap bites it is the long welcome_message prose
+    // that gets dropped, never the title — which is where the subject actually is.
+    return Array.from(new Set(all)).slice(0, MAX_CHALLENGE_KEYWORDS);
 };
 
 // Minimum stem length for the fuzzy (prefix) branch of matches(). Below this a
@@ -427,6 +446,11 @@ const buildSearchTerms = (challenge, opts = {}) => {
 // labels are 1-3 words; these ceilings are far above anything legitimate.
 const MAX_WORDS_PER_LABEL = 12;
 const MAX_STEMS_PER_PHOTO = 64;
+// Bounds the number of labels iterated at all, so a photo carrying thousands of
+// duplicate labels cannot force unbounded tokenise() work: the MAX_STEMS_PER_PHOTO
+// early-exit only fires when the deduping Set actually GROWS, so repeated labels
+// would otherwise be tokenised in full, one after another, without ever tripping it.
+const MAX_LABELS_PER_PHOTO = 64;
 
 /**
  * Whole-label stems: one stem per label, the label stemmed as a single string
@@ -441,7 +465,16 @@ const MAX_STEMS_PER_PHOTO = 64;
  */
 const wholeLabelStems = (photo) => {
     if (!Array.isArray(photo?.labels)) return [];
-    return photo.labels.map((l) => stem(String(l).toLowerCase())).filter(Boolean);
+    return (
+        photo.labels
+            .slice(0, MAX_LABELS_PER_PHOTO)
+            // Same untrusted-input guard as labelWordStems. Without the type check a
+            // null label would stem to the literal string "null" and could satisfy a
+            // "Begins With N" challenge; an unbounded label would be stemmed in full.
+            .filter((l) => typeof l === 'string' || typeof l === 'number')
+            .map((l) => stem(String(l).slice(0, MAX_TOKENISE_CHARS).toLowerCase()))
+            .filter(Boolean)
+    );
 };
 
 /**
@@ -462,7 +495,7 @@ const wholeLabelStems = (photo) => {
 const labelWordStems = (photo) => {
     if (!Array.isArray(photo?.labels)) return [];
     const out = new Set();
-    for (const label of photo.labels) {
+    for (const label of photo.labels.slice(0, MAX_LABELS_PER_PHOTO)) {
         if (typeof label !== 'string' && typeof label !== 'number') continue;
         const words = tokenise(String(label), { keepStopwords: true }).slice(0, MAX_WORDS_PER_LABEL);
         for (const word of words) {

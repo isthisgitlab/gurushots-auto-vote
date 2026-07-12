@@ -13,6 +13,7 @@ const {
     scorePhoto,
     tokeniseTagList,
     labelWordStems,
+    wholeLabelStems,
     SEMANTIC_MATCH_FLOOR,
 } = require('../../src/js/services/photoPicker');
 
@@ -900,6 +901,58 @@ describe('photoPicker', () => {
                 ['real', 0],
             ]);
             expect(pickPhotosForChallenge(farmLife, [noise, real], 1, { semanticScores })).toEqual(['real']);
+        });
+
+        test('the floor is inclusive: a score exactly AT it counts as a match', () => {
+            // Pins `>=` rather than `>`. An off-by-one here would silently discard
+            // the weakest genuine matches, and no other test would notice.
+            const atFloor = allowed('atFloor', ['Teapot'], 1000, { views: 1 });
+            const none = allowed('none', ['Stapler'], 9000, { views: 9999 });
+            const semanticScores = new Map([
+                ['atFloor', SEMANTIC_MATCH_FLOOR / 100],
+                ['none', 0],
+            ]);
+            expect(pickPhotosForChallenge(farmLife, [atFloor, none], 1, { semanticScores })).toEqual(['atFloor']);
+        });
+
+        test('scores straddling the floor order correctly (39 loses, 41 wins)', () => {
+            const below = allowed('below', ['Teapot'], 9000, { views: 9999 });
+            const above = allowed('above', ['Stapler'], 1000, { views: 1 });
+            const semanticScores = new Map([
+                ['below', (SEMANTIC_MATCH_FLOOR - 1) / 100],
+                ['above', (SEMANTIC_MATCH_FLOOR + 1) / 100],
+            ]);
+            // `below` is floored to 0 (no match), so despite 9999 views it loses to
+            // `above`, which clears the floor with a single view.
+            expect(pickPhotosForChallenge(farmLife, [below, above], 2, { semanticScores })).toEqual(['above', 'below']);
+        });
+    });
+
+    describe('label stems — untrusted input is bounded and type-guarded', () => {
+        test('labelWordStems caps the number of distinct stems per photo', () => {
+            // Labels are untrusted API data. Feed more distinct words than the cap
+            // and confirm the fan-out is bounded rather than unbounded.
+            const labels = Array.from({ length: 200 }, (_, i) => `word${'abcdefgh'[i % 8]}${i}x`);
+            const stems = labelWordStems({ labels });
+            expect(stems.length).toBeLessThanOrEqual(64);
+        });
+
+        test('labelWordStems caps words taken from a single label', () => {
+            const oneHugeLabel = Array.from({ length: 100 }, (_, i) => `alpha${i}zz`).join(' ');
+            expect(labelWordStems({ labels: [oneHugeLabel] }).length).toBeLessThanOrEqual(12);
+        });
+
+        test('labelWordStems ignores non-string labels rather than stringifying them', () => {
+            // String(null) === 'null' would otherwise become a real, matchable stem.
+            expect(labelWordStems({ labels: [null, undefined, {}, 'Cow'] })).toEqual(['cow']);
+        });
+
+        test('wholeLabelStems ignores non-string labels (so null cannot satisfy "Begins With N")', () => {
+            // The letter filter reads the first character of these stems. Before the
+            // type guard, a null label stemmed to the literal string "null" and would
+            // have counted as a label beginning with N.
+            expect(wholeLabelStems({ labels: [null, 'Sea Life'] })).toEqual(['sea life']);
+            expect(wholeLabelStems({ labels: undefined })).toEqual([]);
         });
     });
 

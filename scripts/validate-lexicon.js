@@ -20,7 +20,9 @@
  *
  *     p99.9(unrelated) < SEMANTIC_MATCH_FLOOR < p05(related)
  *
- * Fails non-zero if the gap closes. Run: `pnpm validate:lexicon` (and in CI).
+ * Fails non-zero if the gap closes. Run: `pnpm verify:lexicon` (and in CI, where
+ * the asset is rebuilt first so this validates the config under review rather
+ * than whatever copy happens to be committed).
  */
 
 const path = require('node:path');
@@ -71,7 +73,13 @@ const main = async () => {
     related.sort((a, b) => a - b);
     unrelated.sort((a, b) => a - b);
 
-    const floor = SEMANTIC_MATCH_FLOOR / 100;
+    // Mirror the runtime boundary EXACTLY. photoPicker buckets a score with
+    // Math.round(raw * 100) and matches on `bucket >= SEMANTIC_MATCH_FLOOR`, so a
+    // raw cosine of 0.395 already rounds up to 40 and counts as a match. Gating on
+    // the nominal 0.40 would leave the [0.395, 0.40) band unguarded — the validator
+    // would call such a score "safely below floor" while the runtime scored it as a
+    // theme match, which is precisely the drift this script exists to prevent.
+    const floor = (SEMANTIC_MATCH_FLOOR - 0.5) / 100;
     const unrelP999 = percentile(unrelated, 99.9);
     const unrelMax = unrelated[unrelated.length - 1];
     const relP05 = percentile(related, 5);
@@ -81,7 +89,7 @@ const main = async () => {
     console.log(`Lexicon separation check (n_related=${related.length}, n_unrelated=${unrelated.length})`);
     console.log(`  unrelated  p99.9 = ${fmt(unrelP999)}   max = ${fmt(unrelMax)}`);
     console.log(`  related    p05   = ${fmt(relP05)}   median = ${fmt(relMedian)}`);
-    console.log(`  SEMANTIC_MATCH_FLOOR = ${fmt(floor)}`);
+    console.log(`  SEMANTIC_MATCH_FLOOR = ${fmt(SEMANTIC_MATCH_FLOOR / 100)} (effective ${fmt(floor)} after rounding)`);
 
     const failures = [];
     if (!(unrelP999 < floor)) {

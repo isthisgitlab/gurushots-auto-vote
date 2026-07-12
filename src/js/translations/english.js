@@ -173,7 +173,7 @@
                 'Hard filter for both auto-fill and the manual fill buttons. Only consider photos whose auto-detected labels match all of these tags. Leave empty to consider all eligible photos. Matching is case-insensitive and whole-word: plurals and word endings still match ("cat" matches "cats"), but a tag will not match a longer, unrelated word ("cat" does not match "catamaran"). Multi-word tags match per word, so "sea life" requires both.',
             shouldIncludeTags: 'Should Include Tags',
             shouldIncludeTagsDesc:
-                'Soft preference for both auto-fill and manual fill. Prefer photos whose labels match these tags; matches rank above the auto-detected challenge keyword score but do not exclude other photos. If nothing matches, fill proceeds with the normal ranking.',
+                'Soft preference for both auto-fill and manual fill. Prefer photos whose labels match these tags; matches rank above the auto-detected challenge keyword score but do not exclude other photos. If nothing matches, fill proceeds with the normal ranking. Matching follows the same whole-word rules as Must Include Tags.',
             fillWithoutTagMatch: 'Fill Even Without a Tag Match',
             fillWithoutTagMatchDesc:
                 'Only matters when Must Include Tags is set. Because a photo must match every tag, this triggers more often when several tags are required. When on (default), if none of your photos match all those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a fully matching photo exists.',

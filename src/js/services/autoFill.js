@@ -147,19 +147,34 @@ const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligi
         if (union.some((p) => p && p.permission && p.permission.allowed === true && p.id)) {
             return union;
         }
-        // Terms existed but the themed search surfaced no eligible photo — so the
-        // fill is about to fall back to the full library and may well submit an
-        // off-theme photo. That is a user-visible outcome they did not ask for, and
-        // when the terms came from their own Must/Should Include Tags it usually
-        // means those tags no longer match anything. Warn rather than debug: at
-        // debug level this was invisible at normal verbosity, leaving "why did it
-        // submit that photo?" with no answer in the log.
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `autoFill: themed search (${terms.join(', ')}) for ${logger.challengeTag(challenge)} found no eligible photos; falling back to the full library — an off-theme photo may be submitted`,
-                null,
-            );
+        // Terms existed but the themed search surfaced no eligible photo, so the
+        // fill is about to relax to the full library and may submit an off-theme
+        // photo. How loud that should be depends entirely on WHERE the terms came
+        // from:
+        //
+        //   - From the user's own Must/Should Include Tags: their configuration is
+        //     matching nothing. That is actionable and worth a warning — it is the
+        //     only clue they get for "why did it submit that photo?".
+        //   - From the challenge title (the default: no tags configured): this is
+        //     routine. The picker's own header notes that a title often cannot be
+        //     matched at all — vision labels are concrete nouns, titles are
+        //     abstract. Warning here would fire on the common path for every user
+        //     who never touched tag settings and train them to ignore warnings.
+        //
+        // buildSearchTerms with a null challenge yields ONLY the tag-derived terms
+        // (its precedence is must -> should -> title), so an empty result proves the
+        // terms above came from the title. Reusing it keeps the two in lockstep
+        // rather than re-deriving the precedence rule here.
+        const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
+        const message =
+            `autoFill: themed search (${terms.join(', ')}) for ${logger.challengeTag(challenge)} found no eligible photos; ` +
+            `falling back to the full library — an off-theme photo may be submitted`;
+        const log = logger.withCategory('autoFill');
+        if (fromUserTags) {
+            log.warning(`${message}. Your Must/Should Include Tags matched none of your photos.`, null);
+        } else {
+            log.debug(message, null);
+        }
     }
     return getEligiblePhotos(challengeId, token);
 };
