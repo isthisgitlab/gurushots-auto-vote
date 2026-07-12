@@ -91,10 +91,10 @@
         "@capacitor/core": "^8.4.1",
         "@capacitor/preferences": "^8.0.1",
         "@capawesome-team/capacitor-android-foreground-service": "^8.1.0",
-        "@preact/signals": "^2.9.2",
+        "@preact/signals": "^2.9.3",
         "axios": "^1.18.1",
         "electron-updater": "^6.8.9",
-        "preact": "^10.29.3",
+        "preact": "^10.29.7",
         "zod": "^4.4.3"
     },
     "devDependencies": {
