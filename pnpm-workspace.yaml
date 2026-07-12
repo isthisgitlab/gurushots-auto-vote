@@ -15,8 +15,8 @@ allowBuilds:
     # lefthook's only build script is a convenience that auto-runs `lefthook install`;
     # our `prepare` script does that explicitly, so no lifecycle script is needed here.
     lefthook: false
-# Explicit (matches the pnpm 11 default). Keeping it written down documents the
-# 24h gate that Dependabot's cooldown (.github/dependabot.yml) is calibrated
-# against, and gives any future minimumReleaseAgeExclude hotfix entries a
-# predictable gate to punch through.
-minimumReleaseAge: 1440
+# 6h gate — deliberately below the pnpm 11 default of 1440 (24h), so this is
+# looser than Dependabot's cooldown (.github/dependabot.yml) rather than aligned
+# with it. Note this only gates what pnpm resolves; `pnpm bump` (npm-check-updates)
+# ignores it entirely and will still write the newest published version.
+minimumReleaseAge: 360

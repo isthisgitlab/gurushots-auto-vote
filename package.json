@@ -84,18 +84,18 @@
     "homepage": "https://github.com/isthisgitlab/gurushots-auto-vote#readme",
     "engines": {
         "node": ">=26.0.0",
-        "pnpm": ">=11.9.0"
+        "pnpm": ">=11.9.0 <11.11.0"
     },
-    "packageManager": "pnpm@11.9.0",
+    "packageManager": "pnpm@11.10.0",
     "dependencies": {
         "@capacitor/android": "^8.4.1",
         "@capacitor/core": "^8.4.1",
         "@capacitor/preferences": "^8.0.1",
         "@capawesome-team/capacitor-android-foreground-service": "^8.1.0",
-        "@preact/signals": "^2.9.2",
+        "@preact/signals": "^2.9.3",
         "axios": "^1.18.1",
         "electron-updater": "^6.8.9",
-        "preact": "^10.29.4",
+        "preact": "^10.29.7",
         "zod": "^4.4.3"
     },
     "devDependencies": {
@@ -109,29 +109,29 @@
         "@tailwindcss/typography": "^0.5.20",
         "@testing-library/dom": "^10.4.1",
         "@testing-library/preact": "^3.2.4",
-        "@types/node": "^26.1.0",
+        "@types/node": "^26.1.1",
         "concurrently": "10.0.3",
         "cross-env": "^10.1.0",
-        "daisyui": "^5.6.14",
-        "electron": "^42.6.0",
+        "daisyui": "^5.6.17",
+        "electron": "^43.1.0",
         "electron-builder": "^26.15.3",
         "electronmon": "^2.0.4",
         "esbuild": "^0.28.1",
-        "eslint": "^10.6.0",
+        "eslint": "^10.7.0",
         "eslint-config-prettier": "^10.1.8",
         "globals": "^17.7.0",
         "jest": "^30.4.2",
         "jest-environment-node": "^30.4.1",
-        "knip": "^6.24.0",
-        "lefthook": "^2.1.9",
-        "marked": "^18.0.5",
+        "knip": "^6.26.0",
+        "lefthook": "^2.1.10",
+        "marked": "^18.0.6",
         "marked-gfm-heading-id": "^4.1.4",
         "only-allow": "^1.2.2",
         "postject": "1.0.0-alpha.6",
         "prettier": "4.0.0-alpha.13",
         "size-limit": "^12.1.0",
         "tailwindcss": "^4.3.2",
-        "typescript": "^6.0.3"
+        "typescript": "^7.0.2"
     },
     "electronmon": {
         "patterns": [
