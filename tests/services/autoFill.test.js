@@ -1608,4 +1608,90 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'leaf' });
         expect(debug).not.toHaveBeenCalled();
     });
+
+    test('"C is for…" staggered fill submits the C-tagged photo, not the newer off-theme best performer', async () => {
+        const challenge = makeChallenge({
+            title: 'C is for…',
+            url: '',
+            maxSubmits: 2,
+            entries: [{ id: 'e1' }],
+            closeIn: 9 * 60,
+        });
+        const getEligiblePhotos = jest.fn().mockResolvedValue([
+            allowedPhoto('best', ['Pink'], 9000), // newer, would win best-performer — but no C label
+            allowedPhoto('castle', ['Castle'], 1000), // the only C-tagged photo
+        ]);
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // no themed search
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['castle'], 'tok');
+    });
+
+    test('no letter match → off-theme fallback still submits but logs a WARNING (survives packaged builds)', async () => {
+        const warning = jest.fn();
+        const logger = {
+            withCategory: () => ({ info: jest.fn(), warning, success: jest.fn(), error: jest.fn(), debug: jest.fn() }),
+            challengeTag: () => '[Challenge c1: C is for…]',
+        };
+        const challenge = makeChallenge({
+            title: 'C is for…',
+            url: '',
+            maxSubmits: 2,
+            entries: [{ id: 'e1' }],
+            closeIn: 9 * 60,
+        });
+        // Library has no C-labelled photo at all → the picker relaxes to the
+        // unfiltered set (fillWithoutTagMatch defaults true) and must say so
+        // at a level a packaged-build user can actually see.
+        const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('dog', ['Dog'], 9000)]);
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            logger,
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['dog'], 'tok');
+        expect(warning).toHaveBeenCalledWith(
+            expect.stringContaining('no eligible photo has a label starting with "C"'),
+            null,
+        );
+        expect(warning).toHaveBeenCalledWith(expect.stringContaining('off-theme photo may be submitted'), null);
+    });
+
+    test('the emergency-fill dry-run probe never emits the fallback warning', async () => {
+        const warning = jest.fn();
+        const logger = {
+            withCategory: () => ({ info: jest.fn(), warning, success: jest.fn(), error: jest.fn(), debug: jest.fn() }),
+            challengeTag: () => '[Challenge c1: C is for…]',
+        };
+        // autoFill on + no C-labelled photo: the probe's pick relaxes internally
+        // and returns a photo, so emergency fill stands down ('skipped'). A probe
+        // never submits, so it must never warn about an off-theme submission.
+        const challenge = makeChallenge({
+            title: 'C is for…',
+            url: '',
+            maxSubmits: 2,
+            entries: [{ id: 'e1' }],
+            closeIn: 100,
+        });
+        const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('dog', ['Dog'], 9000)]);
+        const submitToChallenge = jest.fn();
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, emergencyFill: 300 }),
+            logger,
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+        expect(warning).not.toHaveBeenCalled();
+    });
 });

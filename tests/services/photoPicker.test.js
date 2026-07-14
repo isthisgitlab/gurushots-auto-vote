@@ -178,6 +178,12 @@ describe('photoPicker', () => {
         test('letter challenge still honors Must Include Tags', () => {
             expect(buildSearchTerms({ title: 'Begins With L' }, { mustIncludeTags: ['pink'] })).toEqual(['pink']);
         });
+        test('"X is for" letter challenge with no tags returns [] too', () => {
+            // "C is for…" tokenises to nothing useful anyway ("c" is under the
+            // length floor, "is"/"for" are stopwords) — the guard makes the
+            // intent explicit and keeps the caller on the full-library path.
+            expect(buildSearchTerms({ title: 'C is for…' }, {})).toEqual([]);
+        });
     });
 
     describe('detectLetterPrefix', () => {
@@ -187,6 +193,19 @@ describe('photoPicker', () => {
             expect(detectLetterPrefix('Things That Start With B')).toBe('b');
             expect(detectLetterPrefix('Beginning with C')).toBe('c');
             expect(detectLetterPrefix('STARTS WITH d')).toBe('d'); // case-insensitive, lowercased
+        });
+        test('parses the "X is for" family', () => {
+            expect(detectLetterPrefix('C is for…')).toBe('c'); // unicode ellipsis
+            expect(detectLetterPrefix('C is for...')).toBe('c'); // ASCII ellipsis
+            expect(detectLetterPrefix('A is for Apple')).toBe('a');
+            expect(detectLetterPrefix('B Is For')).toBe('b'); // case-insensitive, end-of-string boundary
+        });
+        test('a word merely ending in a letter before "is for" is not a letter challenge', () => {
+            expect(detectLetterPrefix('What is for dinner')).toBeNull();
+            expect(detectLetterPrefix('This is for you')).toBeNull();
+            expect(detectLetterPrefix('Music is for everyone')).toBeNull();
+            expect(detectLetterPrefix('Q&A is for everyone')).toBeNull(); // punctuation-adjacent letter
+            expect(detectLetterPrefix('Art is forever')).toBeNull(); // "for" must be a whole word
         });
         test('a real word after "with" is not a letter challenge', () => {
             expect(detectLetterPrefix('Begins With Love')).toBeNull();
@@ -207,6 +226,8 @@ describe('photoPicker', () => {
         test('a pathologically long title is rejected by the length cap', () => {
             const long = `Begins With L ${'x'.repeat(300)}`;
             expect(detectLetterPrefix(long)).toBeNull();
+            // Same cap guards the "is for" family.
+            expect(detectLetterPrefix(`${'x '.repeat(150)}C is for…`)).toBeNull();
         });
     });
 
@@ -753,6 +774,64 @@ describe('photoPicker', () => {
             // Both survive the letter filter; the should-tag match outranks recency.
             const picked = pickPhotosForChallenge(challenge, photos, 5, { shouldIncludeTags: ['lighthouse'] });
             expect(picked).toEqual(['preferredL', 'plainL']);
+        });
+    });
+
+    describe('pickPhotosForChallenge — letter challenge ("C is for…") and onFallback', () => {
+        const challenge = { title: 'C is for…' };
+
+        test('a letter-matching photo beats a higher-voted non-matching one', () => {
+            const photos = [
+                allowed('cat', ['Cat'], 1000, { votes: 10 }),
+                allowed('dog', ['Dog'], 9000, { votes: 500 }),
+            ];
+            // "dog" is newer and far more popular, but only "cat" starts with C.
+            expect(pickPhotosForChallenge(challenge, photos, 5, {})).toEqual(['cat']);
+        });
+
+        test('composes with Must Include Tags (AND) under the new phrasing', () => {
+            const photos = [
+                allowed('castle', ['Castle'], 1000), // matches must + letter
+                allowed('cloud', ['Cloud'], 9000), // letter only — excluded by must
+            ];
+            expect(pickPhotosForChallenge(challenge, photos, 5, { mustIncludeTags: ['castle'] })).toEqual(['castle']);
+        });
+
+        test('no letter match + fillWithoutTagMatch:false keeps the slot empty', () => {
+            const photos = [allowed('dog', ['Dog'], 1000)];
+            expect(pickPhotosForChallenge(challenge, photos, 5, { fillWithoutTagMatch: false })).toEqual([]);
+        });
+
+        test('onFallback fires with the letter when relaxation kicks in', () => {
+            const photos = [allowed('dog', ['Dog'], 1000)];
+            const onFallback = jest.fn();
+            expect(pickPhotosForChallenge(challenge, photos, 5, { onFallback })).toEqual(['dog']);
+            expect(onFallback).toHaveBeenCalledTimes(1);
+            expect(onFallback).toHaveBeenCalledWith(expect.objectContaining({ letterPrefix: 'c' }));
+        });
+
+        test('onFallback does NOT fire when a letter match exists', () => {
+            const photos = [allowed('cat', ['Cat'], 1000)];
+            const onFallback = jest.fn();
+            expect(pickPhotosForChallenge(challenge, photos, 5, { onFallback })).toEqual(['cat']);
+            expect(onFallback).not.toHaveBeenCalled();
+        });
+
+        test('onFallback does NOT fire when fillWithoutTagMatch:false returns []', () => {
+            const photos = [allowed('dog', ['Dog'], 1000)];
+            const onFallback = jest.fn();
+            expect(pickPhotosForChallenge(challenge, photos, 5, { onFallback, fillWithoutTagMatch: false })).toEqual(
+                [],
+            );
+            expect(onFallback).not.toHaveBeenCalled();
+        });
+
+        test('a throwing onFallback is swallowed and the fallback pick still succeeds', () => {
+            const photos = [allowed('dog', ['Dog'], 1000)];
+            const onFallback = jest.fn(() => {
+                throw new Error('boom');
+            });
+            expect(pickPhotosForChallenge(challenge, photos, 5, { onFallback })).toEqual(['dog']);
         });
     });
 

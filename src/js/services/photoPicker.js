@@ -373,14 +373,15 @@ const SEMANTIC_MATCH_FLOOR = 40;
 const SEARCH_TERMS_CAP = 3;
 
 // Detect a "letter challenge" title — "Begins With L", "Starts with the letter A",
-// "Things That Start With B" (interior "Start With" matches via the leading \b).
+// "Things That Start With B" (interior "Start With" matches via the leading \b),
+// plus the "X is for" family below ("C is for…", "A is for Apple").
 // Returns the lone target letter (lowercased) or null.
 //
-// SCOPE: only the begins/starts-with family is handled. Titles like "Letter L",
-// "L Words", or "B Is For…" intentionally return null and keep today's behavior.
+// SCOPE: only the begins/starts-with and "X is for" families are handled. Titles
+// like "Letter L" or "L Words" intentionally return null and keep today's behavior.
 //
 // SECURITY: `title` is an untrusted string from the GuruShots API. We cap its
-// length before matching (ReDoS defense-in-depth, though the pattern has no
+// length before matching (ReDoS defense-in-depth, though neither pattern has
 // nested quantifiers) and the captured value is a single [a-z] char used ONLY in
 // a first-character equality check downstream — never interpolated into a query,
 // template, or eval.
@@ -390,9 +391,18 @@ const SEARCH_TERMS_CAP = 3;
 // "Begins With L-A" → null (next char is '-'); "Begins With L" / "...L." → 'l'.
 const LETTER_CHALLENGE_RE =
     /\b(?:begin(?:s|ning)?|start(?:s|ing)?)\s+with\s+(?:the\s+)?(?:letter\s+)?([a-z])(?![\w-])/i;
+// "C is for…", "A is for Apple". The (?:^|\s) guard forces the letter to be a
+// standalone leading token: "What is for dinner" / "This is for you" → null
+// (the single letter before "is" is the tail of a word), and "Q&A is for
+// everyone" → null ('&' is neither start-of-string nor whitespace). The
+// trailing \b rejects "for" as a prefix of a longer word ("...is forever").
+// (?:^|\s) is deliberately a consuming group rather than a lookbehind
+// (?<![\w-]): it additionally rejects punctuation-adjacent false positives,
+// and only m[1] is read so the consumed whitespace is irrelevant.
+const LETTER_IS_FOR_RE = /(?:^|\s)([a-z])\s+is\s+for\b/i;
 const detectLetterPrefix = (title) => {
     if (typeof title !== 'string' || title.length > 200) return null;
-    const m = title.match(LETTER_CHALLENGE_RE);
+    const m = title.match(LETTER_CHALLENGE_RE) || title.match(LETTER_IS_FOR_RE);
     return m ? m[1].toLowerCase() : null;
 };
 
@@ -560,7 +570,7 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  * @param {object} challenge - challenge object (url, title, welcome_message all optional)
  * @param {Array<object>} eligiblePhotos - candidates from getEligiblePhotos
  * @param {number} slotsToFill - how many photos to return at most
- * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[], fillWithoutTagMatch?: boolean, semanticScores?: Map<string, number>}} [opts]
+ * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[], fillWithoutTagMatch?: boolean, semanticScores?: Map<string, number>, onFallback?: function}} [opts]
  *   mustIncludeTags: hard filter — keep only photos whose labels match
  *   every distinct tag stem (ALL semantics). Tags are deduped to stems
  *   first, so "larch, larches" collapses to one requirement. A photo
@@ -581,6 +591,13 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  *   should-tag preference, above the lexical keyword score) so on-theme photos
  *   a substring match misses still rank up. Omit it (the default) and ranking
  *   is byte-for-byte the lexical-only behavior.
+ *   onFallback: optional callback invoked as onFallback({letterPrefix, mustStems})
+ *   when a hard filter eliminated every photo and the picker relaxed to the
+ *   unfiltered set (i.e. an off-theme photo is about to be picked). Injected
+ *   side-channel so this function stays pure — callers use it to log the
+ *   fallback where a user can see it. Exceptions it throws are swallowed;
+ *   omitting it changes nothing. Not called when fillWithoutTagMatch is false
+ *   (the picker returns [] instead of relaxing).
  * @returns {Array<string>} ordered list of photo ids; length <= slotsToFill
  */
 const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {}) => {
@@ -593,8 +610,8 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
     const mustStems = tokeniseTagList(opts.mustIncludeTags);
     const shouldStems = tokeniseTagList(opts.shouldIncludeTags);
 
-    // Letter challenges ("Begins With L") add a hard filter: keep only photos
-    // with a label beginning with that letter. The MIN_USER_TAG_STEM_LENGTH floor
+    // Letter challenges ("Begins With L", "C is for…") add a hard filter: keep
+    // only photos with a label beginning with that letter. The MIN_USER_TAG_STEM_LENGTH floor
     // stops generic 2-char vision labels ("in", "at", "on") from spuriously
     // satisfying an I/A/O challenge. Multi-word labels match on the first char of
     // the whole label string — the natural reading of "begins with".
@@ -628,6 +645,15 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
         const hadHardFilter = mustStems.length > 0 || Boolean(letterPrefix);
         if (hadHardFilter && opts.fillWithoutTagMatch !== false) {
             filtered = withStems;
+            if (typeof opts.onFallback === 'function') {
+                // Same "never throws" contract as resolveSemanticScores: a buggy
+                // callback must not turn a fill that would succeed into a crash.
+                try {
+                    opts.onFallback({ letterPrefix, mustStems });
+                } catch {
+                    // Deliberately swallowed — the callback is observability-only.
+                }
+            }
         } else {
             return [];
         }
