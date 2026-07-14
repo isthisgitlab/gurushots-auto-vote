@@ -209,6 +209,36 @@ const reflectNewEntry = (challenge, imageId) => {
 };
 
 /**
+ * Build the pickPhotosForChallenge onFallback callback for a submission-bound
+ * pick. Logs at WARNING level — the debug/info channels are compiled out of
+ * packaged builds (logger gates them on isSourceCode), so anything quieter
+ * would leave a real user with an unexplained off-theme submission and no
+ * trace. `prefix` names the calling flow (autoFill/emergencyFill/manualFill/
+ * fillNew) so the line reads like that flow's other logs. Dry-run picks (the
+ * emergency-fill probe) must NOT pass this: a probe never submits, so it must
+ * never warn.
+ */
+const makeFallbackLogger = (prefix, challenge, logger) => {
+    return ({ letterPrefix, mustStems }) => {
+        const reasons = [];
+        if (letterPrefix) {
+            const letter = letterPrefix.toUpperCase();
+            reasons.push(`letter challenge "${letter}" — no eligible photo has a label starting with "${letter}"`);
+        }
+        if (Array.isArray(mustStems) && mustStems.length > 0) {
+            reasons.push('no photo matched every Must Include Tag');
+        }
+        const why = reasons.join('; ') || 'a hard filter matched no photo';
+        logger
+            .withCategory('autoFill')
+            .warning(
+                `${prefix}: ${why} for ${logger.challengeTag(challenge)}; falling back to the full library (an off-theme photo may be submitted)`,
+                null,
+            );
+    };
+};
+
+/**
  * Cycle-driven, staggered auto-fill. Submits at most one photo per
  * call; the next call (next scheduler cycle) will see the updated
  * entries.length and either skip (still too early) or submit again.
@@ -274,6 +304,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         shouldIncludeTags,
         fillWithoutTagMatch,
         semanticScores,
+        onFallback: makeFallbackLogger('autoFill', challenge, logger),
     });
     if (picked.length === 0) {
         logger
@@ -415,6 +446,7 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
         shouldIncludeTags,
         fillWithoutTagMatch: true,
         semanticScores,
+        onFallback: makeFallbackLogger('emergencyFill', challenge, logger),
     });
     if (picked.length === 0) {
         logger
@@ -537,6 +569,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
         shouldIncludeTags,
         fillWithoutTagMatch,
         semanticScores,
+        onFallback: makeFallbackLogger('manualFill', challenge, logger),
     });
     if (picked.length === 0) {
         // When the "must include" filter is active and there were photos to
@@ -651,6 +684,7 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
         shouldIncludeTags,
         fillWithoutTagMatch,
         semanticScores,
+        onFallback: makeFallbackLogger('fillNew', challenge, logger),
     });
     if (picked.length === 0) {
         logger.withCategory('autoFill').info(`fillNew: no eligible photos for ${logger.challengeTag(challenge)}`, null);
