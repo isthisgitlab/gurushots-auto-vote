@@ -53,6 +53,46 @@ describe('formatSettingDefault', () => {
         });
     });
 
+    describe('schedule settings ({count, seconds} rows)', () => {
+        test('rows render sorted by count with the ≤ separator and h/m labels', () => {
+            const value = [
+                { count: 4, seconds: 600 },
+                { count: 2, seconds: 1800 },
+            ];
+            expect(formatSettingDefault(value, { type: 'schedule' }, t)).toBe(
+                '2 ≤ 0 hours, 30 minutes, 4 ≤ 0 hours, 10 minutes',
+            );
+        });
+
+        test('schema default renders all three rows in count order', () => {
+            const value = [
+                { count: 2, seconds: 1800 },
+                { count: 3, seconds: 1200 },
+                { count: 4, seconds: 600 },
+            ];
+            expect(formatSettingDefault(value, { type: 'schedule' }, t)).toBe(
+                '2 ≤ 0 hours, 30 minutes, 3 ≤ 0 hours, 20 minutes, 4 ≤ 0 hours, 10 minutes',
+            );
+        });
+
+        test('empty schedule renders the "none" label', () => {
+            expect(formatSettingDefault([], { type: 'schedule' }, t)).toBe('(none)');
+        });
+
+        test('non-array schedule value degrades to the "none" label (not a crash)', () => {
+            expect(formatSettingDefault(undefined, { type: 'schedule' }, t)).toBe('(none)');
+        });
+
+        test('does not mutate the input array (sort works on a copy)', () => {
+            const value = [
+                { count: 4, seconds: 600 },
+                { count: 2, seconds: 1800 },
+            ];
+            formatSettingDefault(value, { type: 'schedule' }, t);
+            expect(value.map((r) => r.count)).toEqual([4, 2]);
+        });
+    });
+
     describe('fallback (boolean / string / unknown)', () => {
         test('booleans stringify', () => {
             expect(formatSettingDefault(true, { type: 'boolean' }, t)).toBe('true');

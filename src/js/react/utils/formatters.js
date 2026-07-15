@@ -12,10 +12,12 @@ export { formatDuration };
 
 /**
  * Format a setting value for the read-only "Global default" hint so it reads
- * the same way SettingInput renders the editable value: hours+minutes for
- * `time` settings (stored as seconds), `value unit` for unit-bearing numbers,
- * and a comma-joined list (or the "none" label) for tag arrays. Everything
- * else falls back to `String(value)`.
+ * the same way SettingInput renders the editable value: schedule rows as
+ * "count ≤ Xh Ym" (before the generic array join, which would print
+ * [object Object] for them), hours+minutes for `time` settings (stored as
+ * seconds), `value unit` for unit-bearing numbers, and a comma-joined list
+ * (or the "none" label) for tag arrays. Everything else falls back to
+ * `String(value)`.
  *
  * `t` is the translation function, passed in so this stays a pure util with no
  * dependency on the React translation context.
@@ -26,6 +28,18 @@ export { formatDuration };
  * @returns {string}
  */
 export const formatSettingDefault = (value, config, t) => {
+    if (config?.type === 'schedule') {
+        const rows = Array.isArray(value) ? value : [];
+        if (rows.length === 0) return t('app.none');
+        return rows
+            .slice()
+            .sort((a, b) => (a?.count ?? 0) - (b?.count ?? 0))
+            .map(
+                (row) =>
+                    `${row?.count} ≤ ${formatSecondsAsHoursMinutes(row?.seconds, t('app.hours'), t('app.minutes'))}`,
+            )
+            .join(', ');
+    }
     if (Array.isArray(value)) {
         return value.join(', ') || t('app.none');
     }

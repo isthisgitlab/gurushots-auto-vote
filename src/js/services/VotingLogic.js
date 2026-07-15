@@ -12,6 +12,10 @@
 // (null) to accept the string IDs passed here. Drop the cast once settings.js
 // is typed.
 const settings = /** @type {any} */ (require('../settings'));
+// Single source of truth for the auto-fill schedule threshold math (no import
+// cycle: autoFill.js does not require VotingLogic). Cast for the same
+// boundary reason as settings above — autoFill.js isn't `// @ts-check`ed yet.
+const { getNextScheduleThresholdSec } = /** @type {any} */ (require('./autoFill'));
 
 /**
  * Intermediate result from the shared rule engine (`_runVotingRules`); the
@@ -601,24 +605,23 @@ const shouldApplyTurbo = (challenge, now, options = {}) => {
 };
 
 /**
- * Effective seconds-before-close at which auto-fill's staggered window opens.
- * Mirrors maybeAutoFillChallenge's trigger (`secondsRemaining <= slotsRemaining
- * * intervalSec`) in autoFill.js — keep the two in sync if that formula changes;
- * with no free slots the window never opens (0). Note: the slot count is read
- * live, so this is a snapshot at call time (orderDeadlineActions is called once
- * per challenge before the runners execute).
+ * Effective seconds-before-close at which the next auto-fill becomes due:
+ * the largest autoFillSchedule threshold whose target count hasn't been met
+ * yet, straight from autoFill.getNextScheduleThresholdSec (single source of
+ * truth — it does the clamping and defensive parsing). With every row
+ * satisfied, clamped away, or no schedule, the window never opens (0).
+ * Note: the entry count is read live, so this is a snapshot at call time
+ * (orderDeadlineActions is called once per challenge before the runners
+ * execute).
  * @param {any} challenge
  * @param {string} challengeId
  * @returns {number}
  */
 const getAutoFillThresholdSec = (challenge, challengeId) => {
-    const max = Number.isFinite(challenge?.max_photo_submits) ? challenge.max_photo_submits : 0;
     const entries = challenge?.member?.ranking?.entries;
     const entryCount = Array.isArray(entries) ? entries.length : 0;
-    const slotsRemaining = Math.max(0, max - entryCount);
-    const intervalMinutes = settings.getEffectiveSetting('autoFillIntervalMinutes', challengeId);
-    const intervalSec = (Number.isFinite(intervalMinutes) ? intervalMinutes : 10) * 60;
-    return slotsRemaining * intervalSec;
+    const schedule = settings.getEffectiveSetting('autoFillSchedule', challengeId);
+    return getNextScheduleThresholdSec(schedule, entryCount, challenge?.max_photo_submits);
 };
 
 /**

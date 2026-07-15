@@ -5,14 +5,16 @@
  * empty entry slots near their close time.
  *
  * Two entry points:
- *   - maybeAutoFillChallenge: cycle-driven, staggered. Fills at most one
- *     slot per call; the trigger condition `secondsRemaining <=
- *     slotsRemaining * intervalSec` ensures fills are spaced (e.g. with
- *     a 10-minute interval and 2 missing slots, fills land at T-20m and
- *     T-10m). Spacing matters because GuruShots' ranking algorithm
- *     dilutes votes per entry when several are submitted simultaneously.
+ *   - maybeAutoFillChallenge: cycle-driven, schedule-based. Fills at most
+ *     one slot per call. The user-defined autoFillSchedule (rows of
+ *     { count, seconds }) sets the target entry count for the time
+ *     remaining: "have ≥ count entries once ≤ seconds remain". With the
+ *     default schedule (2 @ 30m, 3 @ 20m, 4 @ 10m) fills land spaced out
+ *     before close. Spacing matters because GuruShots' ranking algorithm
+ *     dilutes votes per entry when several are submitted simultaneously;
+ *     if the app starts behind schedule it catches up one photo per cycle.
  *   - fillChallengeNow: manual, batched. The GUI buttons call this and
- *     it ignores both the autoFill toggle and the spacing math; manual
+ *     it ignores both the autoFill toggle and the schedule; manual
  *     means explicit user intent.
  *
  * API methods are injected so the scheduler (real API) and the IPC
@@ -190,6 +192,74 @@ const getSlotsRemaining = (challenge) => {
 };
 
 /**
+ * Rows of an autoFillSchedule value that are actually usable. The value comes
+ * straight off the persisted settings blob via getEffectiveSetting — no zod
+ * re-validation happens on read — and these helpers sit on the per-challenge
+ * dispatch path in api/main.js that has no per-challenge try/catch, so a throw
+ * here would abort the whole voting cycle for every challenge. Anything that
+ * isn't an array of { count, seconds } objects with finite numbers is silently
+ * dropped (mirrors getSlotsRemaining's Number.isFinite convention).
+ *
+ * @param {*} schedule
+ * @returns {Array<{count: number, seconds: number}>}
+ */
+const getValidScheduleRows = (schedule) =>
+    Array.isArray(schedule)
+        ? schedule.filter(
+              (row) => row && typeof row === 'object' && Number.isFinite(row.count) && Number.isFinite(row.seconds),
+          )
+        : [];
+
+/**
+ * Target entry count implied by the schedule for the time remaining: the
+ * largest row count whose threshold has been reached, each row clamped to the
+ * challenge's max_photo_submits. Row order is irrelevant. Returns 0 for an
+ * empty/invalid schedule, a non-finite secondsRemaining, or a non-finite max
+ * (never NaN — a NaN would poison orderDeadlineActions' sort downstream).
+ *
+ * @param {*} schedule - persisted autoFillSchedule value (untrusted shape)
+ * @param {number} secondsRemaining
+ * @param {*} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
+ * @returns {number}
+ */
+const resolveScheduleTarget = (schedule, secondsRemaining, maxPhotoSubmits) => {
+    const max = Number.isFinite(maxPhotoSubmits) ? maxPhotoSubmits : 0;
+    if (!Number.isFinite(secondsRemaining)) return 0;
+    let target = 0;
+    for (const row of getValidScheduleRows(schedule)) {
+        if (secondsRemaining <= row.seconds) {
+            target = Math.max(target, Math.min(row.count, max));
+        }
+    }
+    return target;
+};
+
+/**
+ * Seconds-before-close at which the next auto-fill becomes due: the largest
+ * threshold among rows whose clamped count exceeds the current entry count.
+ * 0 when no further row can ever apply (schedule empty/invalid, or every
+ * remaining row is already satisfied / clamped away). Used by VotingLogic's
+ * orderDeadlineActions so fills sort against boost/turbo/emergency correctly;
+ * the same defensive rules as resolveScheduleTarget apply.
+ *
+ * @param {*} schedule - persisted autoFillSchedule value (untrusted shape)
+ * @param {*} entryCount - current number of entries (untrusted shape)
+ * @param {*} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)
+ * @returns {number}
+ */
+const getNextScheduleThresholdSec = (schedule, entryCount, maxPhotoSubmits) => {
+    const max = Number.isFinite(maxPhotoSubmits) ? maxPhotoSubmits : 0;
+    const count = Number.isFinite(entryCount) ? entryCount : 0;
+    let threshold = 0;
+    for (const row of getValidScheduleRows(schedule)) {
+        if (Math.min(row.count, max) > count) {
+            threshold = Math.max(threshold, row.seconds);
+        }
+    }
+    return threshold;
+};
+
+/**
  * Reflect a freshly submitted entry on the local challenge object so the rest of
  * this cycle sees the slot it consumed. Used by both the "fill-new" boost/turbo
  * path and the staggered/emergency auto-fill paths (which submit before a due
@@ -239,9 +309,10 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
 };
 
 /**
- * Cycle-driven, staggered auto-fill. Submits at most one photo per
+ * Cycle-driven, schedule-based auto-fill. Submits at most one photo per
  * call; the next call (next scheduler cycle) will see the updated
- * entries.length and either skip (still too early) or submit again.
+ * entries.length and either skip (target met) or submit again — so a
+ * challenge behind schedule catches up one photo per cycle.
  *
  * @param {object} challenge - challenge with member.ranking.entries
  * @param {string} token
@@ -252,7 +323,7 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
  *   getEligiblePhotos: function,
  *   submitToChallenge: function,
  * }} deps
- * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-eligible-photos'|'error'>}
+ * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-schedule'|'no-eligible-photos'|'error'>}
  */
 const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     const { settings, logger, getEligiblePhotos, submitToChallenge } = deps;
@@ -270,9 +341,31 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     const slotsRemaining = getSlotsRemaining(challenge);
     if (slotsRemaining <= 0) return 'skipped';
 
-    const intervalMinutes = settings.getEffectiveSetting('autoFillIntervalMinutes', String(challengeId));
-    const intervalSec = (Number.isFinite(intervalMinutes) ? intervalMinutes : 10) * 60;
-    if (secondsRemaining > slotsRemaining * intervalSec) {
+    const schedule = settings.getEffectiveSetting('autoFillSchedule', String(challengeId));
+    // Distinct from 'disabled' (toggle off): the toggle is on but there is no
+    // schedule to act on — a deliberate opt-out state the GUI editor warns about.
+    if (!Array.isArray(schedule) || schedule.length === 0) return 'no-schedule';
+
+    const desired = resolveScheduleTarget(schedule, secondsRemaining, challenge.max_photo_submits);
+    if (getEntries(challenge).length >= desired) {
+        // Schedule satisfied but free slots remain and no further row will ever
+        // raise the target — the schedule tops out below what the challenge
+        // allows. WARNING (not debug/info, which are compiled out of packaged
+        // builds — see makeFallbackLogger) so a real user has a trace for why
+        // those slots stay empty until emergency fill.
+        const max = Number.isFinite(challenge.max_photo_submits) ? challenge.max_photo_submits : 0;
+        const maxTarget = getValidScheduleRows(schedule).reduce(
+            (top, row) => Math.max(top, Math.min(row.count, max)),
+            0,
+        );
+        if (desired > 0 && desired === maxTarget && maxTarget < max) {
+            logger
+                .withCategory('autoFill')
+                .warning(
+                    `autoFill: schedule tops out at ${maxTarget} entries but ${logger.challengeTag(challenge)} allows ${max} — remaining slots are left to emergency fill`,
+                    null,
+                );
+        }
         return 'skipped';
     }
 
@@ -730,6 +823,8 @@ module.exports = {
     fillChallengeNow,
     submitNewEntryForAction,
     reflectNewEntry,
+    resolveScheduleTarget,
+    getNextScheduleThresholdSec,
     // exported for tests
     getSlotsRemaining,
     fetchCandidatesForChallenge,

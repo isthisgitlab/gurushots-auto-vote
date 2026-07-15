@@ -59,7 +59,27 @@ const nonNegInt = z.number().int().min(0); // image index (1-indexed, 0 = last)
 // lastMinuteCheckFrequency (poll cadence in minutes). Neither is required to be
 // an integer (matching prior behavior); the 59 ceiling keeps both within the hour.
 const minute1to59 = z.number().min(1).max(59);
-const intervalMinutes = z.number().int().min(1).max(60);
+
+// Auto-fill schedule: rows of { count, seconds } meaning "have ≥ count entries
+// once ≤ seconds remain before close". Counts start at 2 — entry 1 always
+// exists because joining a challenge IS submitting a photo (there is no
+// separate join flow). Counts must be unique (each target needs exactly one
+// threshold); row order is irrelevant at runtime (the trigger is max-based).
+// The caps are defense-in-depth against a corrupted settings file or
+// out-of-band write, same rationale as the tagsList caps below.
+const MAX_SCHEDULE_ROWS = 20;
+const MAX_SCHEDULE_COUNT = 20;
+const MAX_SCHEDULE_SECONDS = 30 * 24 * 3600; // 30 days
+const fillScheduleRow = z
+    .object({
+        count: z.number().int().min(2).max(MAX_SCHEDULE_COUNT),
+        seconds: z.number().int().min(0).max(MAX_SCHEDULE_SECONDS),
+    })
+    .strict();
+const fillSchedule = z
+    .array(fillScheduleRow)
+    .max(MAX_SCHEDULE_ROWS)
+    .refine((rows) => new Set(rows.map((r) => r.count)).size === rows.length);
 
 // Per-string and total-array caps for tag-list settings. A typical use is
 // a few words per tag, a handful of tags per challenge — the caps exist
@@ -364,15 +384,22 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoFill',
         description: 'app.autoFillDesc',
     },
-    autoFillIntervalMinutes: {
-        type: 'number',
-        default: 10,
+    // Replaces the old autoFillIntervalMinutes single-interval knob (migrated
+    // in settings.js `_autoFillScheduleMigratedV1`). Default mirrors the old
+    // 10-minute default: 2 @ 30m, 3 @ 20m, 4 @ 10m before close.
+    autoFillSchedule: {
+        type: 'schedule',
+        default: [
+            { count: 2, seconds: 1800 },
+            { count: 3, seconds: 1200 },
+            { count: 4, seconds: 600 },
+        ],
         perChallenge: true,
-        validation: intervalMinutes,
+        validation: fillSchedule,
         validationOrder: 1,
         group: 'autoFill',
-        label: 'app.autoFillIntervalMinutes',
-        description: 'app.autoFillIntervalMinutesDesc',
+        label: 'app.autoFillSchedule',
+        description: 'app.autoFillScheduleDesc',
     },
     fillWithoutTagMatch: {
         type: 'boolean',

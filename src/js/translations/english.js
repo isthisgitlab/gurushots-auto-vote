@@ -162,10 +162,19 @@
             applyBoostToThisEntry: 'Apply your Boost to this photo',
             autoFill: 'Auto-Fill Missing Entries',
             autoFillDesc:
-                'Submit additional photos when a challenge nears its deadline and you have fewer entries than allowed. Fills one slot per check cycle, spaced by the interval below.',
-            autoFillIntervalMinutes: 'Auto-Fill Interval (minutes)',
-            autoFillIntervalMinutesDesc:
-                'Minutes between each auto-fill submission. Two missing slots with a 10-minute interval submit at T-20m and T-10m. Wider gap = more time for each entry to gather votes.',
+                'Submit additional photos as a challenge approaches its deadline, following the schedule below. Fills one slot per check cycle.',
+            autoFillSchedule: 'Auto-Fill Schedule',
+            autoFillScheduleDesc:
+                'Each step means: have at least this many entries once this much time remains before close. Example: "Image 2 ≤ 48h" submits your 2nd photo when 48 hours remain. If you are behind schedule (the app started late, or a step is longer than the whole challenge), it catches up one photo per cycle from the start. Steps apply in whichever order matches first; a step above the challenge photo limit is capped to it.',
+            autoFillScheduleImage: 'Image',
+            autoFillScheduleImageCount: 'Image count',
+            autoFillScheduleAddStep: 'Add step',
+            autoFillScheduleRemoveStep: 'Remove step',
+            autoFillScheduleAddDisabled: 'Limit of 20 steps (image counts 2–20) reached',
+            autoFillScheduleEmpty: 'No steps — auto-fill will never submit anything.',
+            autoFillScheduleDominated: 'never applies (another step reaches this count earlier)',
+            autoFillScheduleDuplicate: 'duplicate image count',
+            settingsSaveError: 'Some settings could not be saved — check the highlighted values and try again.',
             autoFillBadge: 'auto-fill',
             customBadge: 'custom',
             mustIncludeTags: 'Must Include Tags',

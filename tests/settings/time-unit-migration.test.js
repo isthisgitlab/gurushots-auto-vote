@@ -138,7 +138,7 @@ describe('time-unit migration in loadSettings', () => {
         const firstWrites = fs.writeFileSync.mock.calls.length;
 
         // Now simulate that the file on disk reflects the migrated state
-        // (both time-unit migration flags set).
+        // (every loadSettings migration flag set).
         setSettingsFile({
             challengeSettings: {
                 globalDefaults: { turboTime: 10800 },
@@ -146,6 +146,7 @@ describe('time-unit migration in loadSettings', () => {
             },
             _timeUnitMigratedV1: true,
             _emergencyFillTimeMigratedV1: true,
+            _autoFillScheduleMigratedV1: true,
         });
 
         settings.loadSettings();

@@ -162,10 +162,19 @@
             applyBoostToThisEntry: 'Pielietot tavu Boost šim foto',
             autoFill: 'Aizpildīt trūkstošos foto',
             autoFillDesc:
-                'Iesniegt papildu foto, kad izaicinājuma termiņš tuvojas un tev ir mazāk foto nekā atļauts. Aizpilda vienu vietu katrā pārbaudes ciklā, ar zemāk norādīto intervālu starp tām.',
-            autoFillIntervalMinutes: 'Auto-aizpildes intervāls (minūtes)',
-            autoFillIntervalMinutesDesc:
-                'Minūtes starp katru auto-aizpildes iesniegšanu. Divas trūkstošās vietas ar 10 minūšu intervālu tiek iesniegtas T-20m un T-10m. Plašāks intervāls = vairāk laika katram foto savākt balsis.',
+                'Iesniegt papildu foto, kad izaicinājuma termiņš tuvojas, sekojot zemāk norādītajam grafikam. Aizpilda vienu vietu katrā pārbaudes ciklā.',
+            autoFillSchedule: 'Auto-aizpildes grafiks',
+            autoFillScheduleDesc:
+                'Katrs solis nozīmē: kad līdz beigām atlicis šis laiks, jābūt vismaz šitik foto. Piemērs: "Foto 2 ≤ 48h" iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai solis ir garāks par visu izaicinājumu), tā panāk grafiku, iesniedzot vienu foto katrā ciklā jau no sākuma. Soļi darbojas neatkarīgi no secības; solis virs izaicinājuma foto limita tiek ierobežots līdz tam.',
+            autoFillScheduleImage: 'Foto',
+            autoFillScheduleImageCount: 'Foto skaits',
+            autoFillScheduleAddStep: 'Pievienot soli',
+            autoFillScheduleRemoveStep: 'Noņemt soli',
+            autoFillScheduleAddDisabled: 'Sasniegts 20 soļu limits (foto skaits 2–20)',
+            autoFillScheduleEmpty: 'Nav soļu — auto-aizpilde neko neiesniegs.',
+            autoFillScheduleDominated: 'nekad nedarbosies (cits solis šo skaitu sasniedz agrāk)',
+            autoFillScheduleDuplicate: 'foto skaits atkārtojas',
+            settingsSaveError: 'Dažus iestatījumus neizdevās saglabāt — pārbaudi izceltās vērtības un mēģini vēlreiz.',
             autoFillBadge: 'auto-aizpilde',
             customBadge: 'pielāgots',
             mustIncludeTags: 'Obligātie tagi',

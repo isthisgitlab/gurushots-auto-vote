@@ -75,6 +75,175 @@ export function TagsField({ settingKey, value, onChange, onReset, placeholder, d
     );
 }
 
+// Bounds mirror the fillSchedule zod validator in settings/schema.js — the
+// editor blocks what the schema would reject so a Save rarely fails validation.
+const SCHEDULE_MIN_COUNT = 2;
+const SCHEDULE_MAX_COUNT = 20;
+const SCHEDULE_MAX_ROWS = 20;
+
+const lowestUnusedScheduleCount = (rows) => {
+    const used = new Set(rows.map((row) => row?.count));
+    for (let count = SCHEDULE_MIN_COUNT; count <= SCHEDULE_MAX_COUNT; count++) {
+        if (!used.has(count)) return count;
+    }
+    return null;
+};
+
+/**
+ * Auto-fill schedule editor: one row per { count, seconds } step, meaning
+ * "have ≥ count entries once ≤ seconds remain". Rows are shown sorted by
+ * count; edits map back through each row's original array index. Duplicate
+ * counts (rejected by the schema) and dominated rows (legal but dead under
+ * the max-based trigger) are flagged inline as the user types.
+ */
+export function ScheduleField({ settingKey, value, onChange, onReset, disabled = false }) {
+    const { t } = useTranslation();
+    const rows = Array.isArray(value) ? value : [];
+
+    const updateRow = (index, patch) => {
+        onChange(
+            settingKey,
+            rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
+        );
+    };
+    const removeRow = (index) => {
+        onChange(
+            settingKey,
+            rows.filter((_, i) => i !== index),
+        );
+    };
+
+    const nextCount = lowestUnusedScheduleCount(rows);
+    const addDisabled = disabled || rows.length >= SCHEDULE_MAX_ROWS || nextCount === null;
+    const addRow = () => {
+        if (addDisabled) return;
+        onChange(settingKey, [...rows, { count: nextCount, seconds: 3600 }]);
+    };
+
+    const isDuplicate = (index) => rows.some((other, i) => i !== index && other?.count === rows[index]?.count);
+    // A row is dead when another row reaches at least the same count no later
+    // (larger-or-equal threshold): the max-based trigger then never needs it.
+    const isDominated = (index) =>
+        rows.some(
+            (other, i) =>
+                i !== index &&
+                other?.count >= rows[index]?.count &&
+                other?.seconds >= rows[index]?.seconds &&
+                (other?.count > rows[index]?.count || other?.seconds > rows[index]?.seconds),
+        );
+
+    const displayOrder = rows
+        .map((row, index) => ({ row, index }))
+        .sort((a, b) => (a.row?.count ?? 0) - (b.row?.count ?? 0));
+
+    return (
+        <div className="space-y-2">
+            {displayOrder.map(({ row, index }) => {
+                const { hours, minutes } = secondsToHoursMinutes(row?.seconds);
+                const duplicate = isDuplicate(index);
+                const dominated = !duplicate && isDominated(index);
+                const hintId = duplicate || dominated ? `${settingKey}-row-${index}-hint` : undefined;
+                return (
+                    <div key={index} className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm">{t('app.autoFillScheduleImage')}</span>
+                        <input
+                            type="number"
+                            className={`input input-bordered input-sm w-16 ${duplicate ? 'input-error' : ''}`}
+                            min={SCHEDULE_MIN_COUNT}
+                            max={SCHEDULE_MAX_COUNT}
+                            aria-label={t('app.autoFillScheduleImageCount')}
+                            aria-describedby={hintId}
+                            value={row?.count ?? SCHEDULE_MIN_COUNT}
+                            onChange={(e) => updateRow(index, { count: parseInt(e.target.value, 10) || 0 })}
+                            disabled={disabled}
+                        />
+                        <span className="text-sm">≤</span>
+                        <input
+                            type="number"
+                            className="input input-bordered input-sm w-16"
+                            min="0"
+                            aria-label={t('app.hours')}
+                            aria-describedby={hintId}
+                            value={hours}
+                            onChange={(e) =>
+                                updateRow(index, {
+                                    seconds: hoursMinutesToSeconds(parseInt(e.target.value, 10), minutes),
+                                })
+                            }
+                            disabled={disabled}
+                        />
+                        <span className="text-sm">{t('app.hours')}</span>
+                        <input
+                            type="number"
+                            className="input input-bordered input-sm w-16"
+                            min="0"
+                            max="59"
+                            aria-label={t('app.minutes')}
+                            aria-describedby={hintId}
+                            value={minutes}
+                            onChange={(e) =>
+                                updateRow(index, {
+                                    seconds: hoursMinutesToSeconds(hours, parseInt(e.target.value, 10)),
+                                })
+                            }
+                            disabled={disabled}
+                        />
+                        <span className="text-sm">{t('app.minutes')}</span>
+                        <button
+                            className="btn btn-ghost btn-sm text-error"
+                            title={t('app.autoFillScheduleRemoveStep')}
+                            aria-label={t('app.autoFillScheduleRemoveStep')}
+                            onClick={() => removeRow(index)}
+                            disabled={disabled}
+                        >
+                            ×
+                        </button>
+                        <span aria-live="polite" id={hintId} className="text-xs">
+                            {duplicate && <span className="text-error">{t('app.autoFillScheduleDuplicate')}</span>}
+                            {dominated && (
+                                <span className="badge badge-warning badge-xs">
+                                    {t('app.autoFillScheduleDominated')}
+                                </span>
+                            )}
+                        </span>
+                    </div>
+                );
+            })}
+            {rows.length === 0 && (
+                <div role="status" className="text-xs text-warning">
+                    {t('app.autoFillScheduleEmpty')}
+                </div>
+            )}
+            <div className="flex items-center gap-2">
+                <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={addRow}
+                    disabled={addDisabled}
+                    title={addDisabled && !disabled ? t('app.autoFillScheduleAddDisabled') : undefined}
+                >
+                    + {t('app.autoFillScheduleAddStep')}
+                </button>
+                {onReset && (
+                    <button
+                        className="btn btn-ghost btn-sm"
+                        title={t('app.resetToDefaultNotSaved')}
+                        onClick={() => onReset(settingKey)}
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                            />
+                        </svg>
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 /**
  * Get default value for a config type to prevent uncontrolled inputs
  */
@@ -86,6 +255,7 @@ function getDefaultForType(type) {
         case 'boolean':
             return false;
         case 'tags':
+        case 'schedule':
             return [];
         default:
             return '';
@@ -114,6 +284,18 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
                 onChange={onChange}
                 onReset={onReset}
                 placeholder={t('app.tagsPlaceholder')}
+                disabled={disabled}
+            />
+        );
+    }
+
+    if (config.type === 'schedule') {
+        return (
+            <ScheduleField
+                settingKey={settingKey}
+                value={normalizedValue}
+                onChange={onChange}
+                onReset={onReset}
                 disabled={disabled}
             />
         );

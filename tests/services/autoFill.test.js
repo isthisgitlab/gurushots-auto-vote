@@ -12,7 +12,18 @@ const {
     getSlotsRemaining,
     fetchCandidatesForChallenge,
     describeSubmitFailure,
+    resolveScheduleTarget,
+    getNextScheduleThresholdSec,
 } = require('../../src/js/services/autoFill');
+
+// Mirrors the schema default: "have ≥2 entries at T-30m, ≥3 at T-20m, ≥4 at
+// T-10m" — the schedule equivalent of the old 10-minute interval on a 4-slot
+// challenge.
+const DEFAULT_SCHEDULE = [
+    { count: 2, seconds: 1800 },
+    { count: 3, seconds: 1200 },
+    { count: 4, seconds: 600 },
+];
 
 const makeChallenge = ({
     id = 'c1',
@@ -54,7 +65,7 @@ const makeLogger = () => ({
 
 const makeSettings = ({
     autoFill = false,
-    intervalMinutes = 10,
+    schedule = DEFAULT_SCHEDULE,
     mustIncludeTags = [],
     shouldIncludeTags = [],
     fillWithoutTagMatch = true, // mirrors the schema default
@@ -62,7 +73,7 @@ const makeSettings = ({
 } = {}) => ({
     getEffectiveSetting: jest.fn((key) => {
         if (key === 'autoFill') return autoFill;
-        if (key === 'autoFillIntervalMinutes') return intervalMinutes;
+        if (key === 'autoFillSchedule') return schedule;
         if (key === 'mustIncludeTags') return mustIncludeTags;
         if (key === 'shouldIncludeTags') return shouldIncludeTags;
         if (key === 'fillWithoutTagMatch') return fillWithoutTagMatch;
@@ -117,11 +128,12 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(result).toBe('skipped');
     });
 
-    test('spacing: 2 slots, interval 10m, T-25m → skipped (too early)', async () => {
+    test('schedule: 2 entries at T-25m → target 2 already met → skipped (too early)', async () => {
+        // Only the {count:2, seconds:1800} row applies at T-25m; entries=2 satisfies it.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 25 * 60 });
         const getEligiblePhotos = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge: jest.fn(),
@@ -130,12 +142,13 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(getEligiblePhotos).not.toHaveBeenCalled();
     });
 
-    test('spacing: 2 slots, interval 10m, T-19m → submits', async () => {
+    test('schedule: 2 entries at T-19m → target 3 → submits', async () => {
+        // At T-19m the {count:3, seconds:1200} row applies; entries=2 < 3.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 19 * 60 });
         const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('p1', ['Pink'])]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -148,10 +161,10 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
     });
 
-    test('spacing: 1 slot, interval 10m, T-11m → skipped', async () => {
+    test('schedule: single {2 @ T-10m} row, T-11m → not yet due → skipped', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 11 * 60 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true, schedule: [{ count: 2, seconds: 600 }] }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -159,12 +172,12 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(result).toBe('skipped');
     });
 
-    test('spacing: 1 slot, interval 10m, T-9m → submits', async () => {
+    test('schedule: single {2 @ T-10m} row, T-9m → due → submits', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
         const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('p1')]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true, schedule: [{ count: 2, seconds: 600 }] }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -179,7 +192,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             .mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2'), allowedPhoto('p3'), allowedPhoto('p4')]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -194,7 +207,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const getEligiblePhotos = jest.fn().mockResolvedValue([]);
         const submitToChallenge = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -207,7 +220,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const getEligiblePhotos = jest.fn().mockRejectedValue(new Error('network'));
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge: jest.fn(),
@@ -218,7 +231,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('returns error when submit returns ok=false', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
@@ -229,7 +242,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('returns error when submit throws (no crash)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockRejectedValue(new Error('boom')),
@@ -257,12 +270,12 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('p1')]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
         });
-        // slotsRemaining = max(0, 4 - 0) = 4; 5 min ≤ 4 * 10 min → submits
+        // slotsRemaining = max(0, 4 - 0) = 4; at T-5m every row applies → target 4 > 0 → submits
         expect(result).toBe('submitted');
     });
 
@@ -273,7 +286,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             member: { ranking: { entries: [] } },
         };
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn(),
             submitToChallenge: jest.fn(),
@@ -297,17 +310,99 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(result).toBe('skipped');
     });
 
-    test('falls back to 10-minute interval when setting is non-numeric', async () => {
-        // intervalMinutes returns null → fallback 10. With slotsRemaining=2 and
-        // secondsRemaining=15min, 15 ≤ 2*10 fires.
+    test('returns no-schedule when the schedule setting is not an array (null)', async () => {
+        // Toggle on but no usable schedule: a deliberate opt-out state,
+        // distinct from 'disabled' (toggle off).
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }], closeIn: 15 * 60 });
+        const getEligiblePhotos = jest.fn();
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: null }),
+            settings: makeSettings({ autoFill: true, schedule: null }),
             logger: makeLogger(),
-            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
-            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+            getEligiblePhotos,
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('no-schedule');
+        expect(getEligiblePhotos).not.toHaveBeenCalled();
+    });
+
+    test('returns no-schedule for an empty-array schedule', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, schedule: [] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(),
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('no-schedule');
+    });
+
+    test('returns no-schedule for a non-array (string) schedule', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, schedule: 'garbage' }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(),
+            submitToChallenge: jest.fn(),
+        });
+        expect(result).toBe('no-schedule');
+    });
+
+    test('malformed non-empty schedule rows → skipped (desired 0), never throws', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn();
+        await expect(
+            maybeAutoFillChallenge(challenge, 'tok', NOW, {
+                settings: makeSettings({ autoFill: true, schedule: [{ count: 'x' }] }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn(),
+                submitToChallenge,
+            }),
+        ).resolves.toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('catch-up: entries far below the current target still submit one per call', async () => {
+        // T-5m → target 4, but only 1 entry exists (the app was behind
+        // schedule). One photo goes in now; the next cycle catches up further.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
+            submitToChallenge,
         });
         expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(submitToChallenge.mock.calls[0][1]).toHaveLength(1);
+    });
+
+    test('logs a coverage-gap warning when the schedule tops out below max_photo_submits', async () => {
+        // Schedule tops out at 4 but the challenge allows 6: with 4 entries and
+        // the schedule satisfied, the remaining 2 slots are left to emergency
+        // fill — a WARNING must say so (debug/info are compiled out of packaged
+        // builds).
+        const warning = jest.fn();
+        const logger = {
+            withCategory: () => ({ info: jest.fn(), warning, success: jest.fn(), error: jest.fn(), debug: jest.fn() }),
+            challengeTag: (c) => `[Challenge ${c.id}]`,
+        };
+        const challenge = makeChallenge({
+            maxSubmits: 6,
+            entries: [{ id: 'e1' }, { id: 'e2' }, { id: 'e3' }, { id: 'e4' }],
+            closeIn: 5 * 60, // inside every row's window → desired = 4 (the schedule's top)
+        });
+        const submitToChallenge = jest.fn();
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos: jest.fn(),
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+        expect(warning).toHaveBeenCalledWith(expect.stringContaining('schedule tops out at 4 entries'), null);
+        expect(warning).toHaveBeenCalledWith(expect.stringContaining('allows 6'), null);
     });
 
     test('mustIncludeTags hard-filters: with fillWithoutTagMatch off, no-match photo is not submitted', async () => {
@@ -316,7 +411,6 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
                 autoFill: true,
-                intervalMinutes: 10,
                 mustIncludeTags: ['sunset'],
                 fillWithoutTagMatch: false,
             }),
@@ -335,7 +429,6 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             // fillWithoutTagMatch defaults to true in makeSettings
             settings: makeSettings({
                 autoFill: true,
-                intervalMinutes: 10,
                 mustIncludeTags: ['sunset'],
             }),
             logger: makeLogger(),
@@ -352,7 +445,6 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
                 autoFill: true,
-                intervalMinutes: 10,
                 mustIncludeTags: ['sunset'],
                 fillWithoutTagMatch: true,
             }),
@@ -372,7 +464,6 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
                 autoFill: true,
-                intervalMinutes: 10,
                 mustIncludeTags: ['sunset'],
             }),
             logger: makeLogger(),
@@ -391,7 +482,6 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
                 autoFill: true,
-                intervalMinutes: 10,
                 mustIncludeTags: ['sunset', 'beach'],
                 fillWithoutTagMatch: false,
             }),
@@ -410,7 +500,6 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
                 autoFill: true,
-                intervalMinutes: 10,
                 mustIncludeTags: ['sunset', 'beach'],
                 fillWithoutTagMatch: true,
             }),
@@ -432,7 +521,6 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             // fillWithoutTagMatch defaults to true in makeSettings
             settings: makeSettings({
                 autoFill: true,
-                intervalMinutes: 10,
                 mustIncludeTags: ['sunset', 'beach'],
             }),
             logger: makeLogger(),
@@ -456,7 +544,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         const settings = {
             getEffectiveSetting: jest.fn((key) => {
                 if (key === 'autoFill') return true;
-                if (key === 'autoFillIntervalMinutes') return 10;
+                if (key === 'autoFillSchedule') return DEFAULT_SCHEDULE;
                 return null;
             }),
             // No title rule + null base → stays null ("no filter").
@@ -477,7 +565,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         // getEffectiveSetting(key, id). Guard the wiring against regressions.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
-        const settings = makeSettings({ autoFill: true, intervalMinutes: 10, mustIncludeTags: ['hat'] });
+        const settings = makeSettings({ autoFill: true, mustIncludeTags: ['hat'] });
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings,
             logger: makeLogger(),
@@ -496,7 +584,6 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({
                 autoFill: true,
-                intervalMinutes: 10,
                 shouldIncludeTags: ['sunset'],
             }),
             logger: makeLogger(),
@@ -511,7 +598,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('error path handles thrown non-Error gracefully (no .message)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const fetchResult = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockRejectedValue('string-not-error'),
             submitToChallenge: jest.fn(),
@@ -519,7 +606,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(fetchResult).toBe('error');
 
         const submitResult = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockRejectedValue('also-not-error'),
@@ -1207,7 +1294,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
         expect(getSlotsRemaining(challenge)).toBe(1);
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
@@ -1227,7 +1314,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const deps = {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge,
@@ -1242,7 +1329,7 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 5 * 60 });
         const before = challenge.member.ranking.entries.length;
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
             submitToChallenge: jest.fn().mockResolvedValue({ ok: false, raw: null }),
@@ -1549,7 +1636,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         ]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -1623,7 +1710,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         ]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos,
             submitToChallenge,
@@ -1652,7 +1739,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         const getEligiblePhotos = jest.fn().mockResolvedValue([allowedPhoto('dog', ['Dog'], 9000)]);
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
-            settings: makeSettings({ autoFill: true, intervalMinutes: 10 }),
+            settings: makeSettings({ autoFill: true }),
             logger,
             getEligiblePhotos,
             submitToChallenge,
@@ -1693,5 +1780,108 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         expect(result).toBe('skipped');
         expect(submitToChallenge).not.toHaveBeenCalled();
         expect(warning).not.toHaveBeenCalled();
+    });
+});
+
+describe('resolveScheduleTarget — target entry count for the time remaining', () => {
+    test('picks the largest row whose threshold has been reached', () => {
+        // T-25m: only the 30m row applies.
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 25 * 60, 4)).toBe(2);
+        // T-19m: 30m and 20m rows apply → 3.
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 19 * 60, 4)).toBe(3);
+        // T-5m: every row applies → 4.
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 5 * 60, 4)).toBe(4);
+    });
+
+    test('no row reached yet → 0', () => {
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 31 * 60, 4)).toBe(0);
+    });
+
+    test('threshold boundary is inclusive (secondsRemaining === row.seconds)', () => {
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1800, 4)).toBe(2);
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1801, 4)).toBe(0);
+    });
+
+    test('row counts clamp to max_photo_submits', () => {
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 300, 3)).toBe(3);
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 300, 2)).toBe(2);
+    });
+
+    test('undefined / NaN max_photo_submits → finite result, never NaN', () => {
+        const forUndefined = resolveScheduleTarget(DEFAULT_SCHEDULE, 300, undefined);
+        const forNaN = resolveScheduleTarget(DEFAULT_SCHEDULE, 300, NaN);
+        expect(forUndefined).toBe(0);
+        expect(forNaN).toBe(0);
+        expect(Number.isFinite(forUndefined)).toBe(true);
+        expect(Number.isFinite(forNaN)).toBe(true);
+    });
+
+    test('non-finite secondsRemaining → 0', () => {
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, NaN, 4)).toBe(0);
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, Infinity, 4)).toBe(0);
+    });
+
+    test('empty or invalid schedule shapes → 0, never throws', () => {
+        expect(resolveScheduleTarget([], 300, 4)).toBe(0);
+        expect(resolveScheduleTarget('garbage', 300, 4)).toBe(0);
+        expect(resolveScheduleTarget({ count: 2, seconds: 600 }, 300, 4)).toBe(0);
+        expect(resolveScheduleTarget(null, 300, 4)).toBe(0);
+        expect(resolveScheduleTarget(undefined, 300, 4)).toBe(0);
+    });
+
+    test('rows missing fields or with non-numeric fields are dropped, not counted', () => {
+        expect(resolveScheduleTarget([{ count: 2 }, { seconds: 600 }], 300, 4)).toBe(0);
+        expect(resolveScheduleTarget([{ count: '2', seconds: '600' }], 300, 4)).toBe(0);
+        expect(resolveScheduleTarget([null, 42, 'row'], 300, 4)).toBe(0);
+        // A valid row still wins even when surrounded by junk.
+        expect(resolveScheduleTarget([{ count: 'x' }, { count: 3, seconds: 600 }], 300, 4)).toBe(3);
+    });
+
+    test('row order is irrelevant', () => {
+        const shuffled = [DEFAULT_SCHEDULE[2], DEFAULT_SCHEDULE[0], DEFAULT_SCHEDULE[1]];
+        expect(resolveScheduleTarget(shuffled, 19 * 60, 4)).toBe(3);
+        expect(resolveScheduleTarget(shuffled, 5 * 60, 4)).toBe(4);
+    });
+});
+
+describe('getNextScheduleThresholdSec — when the next fill becomes due', () => {
+    test('returns the largest threshold among rows above the current entry count', () => {
+        expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, 0, 4)).toBe(1800);
+        expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, 2, 4)).toBe(1200);
+        expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, 3, 4)).toBe(600);
+    });
+
+    test('returns 0 when every row is satisfied', () => {
+        expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, 4, 4)).toBe(0);
+    });
+
+    test('returns 0 when the remaining rows are clamped away by max_photo_submits', () => {
+        // max 2: rows 3 and 4 clamp to 2, which is not above entryCount 2.
+        expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, 2, 2)).toBe(0);
+    });
+
+    test('unordered rows: still picks the largest applicable threshold', () => {
+        const unordered = [
+            { count: 4, seconds: 600 },
+            { count: 2, seconds: 1800 },
+            { count: 3, seconds: 1200 },
+        ];
+        expect(getNextScheduleThresholdSec(unordered, 1, 4)).toBe(1800);
+    });
+
+    test('empty / invalid schedules → 0, never NaN', () => {
+        expect(getNextScheduleThresholdSec([], 0, 4)).toBe(0);
+        expect(getNextScheduleThresholdSec('garbage', 0, 4)).toBe(0);
+        expect(getNextScheduleThresholdSec(null, 0, 4)).toBe(0);
+        expect(getNextScheduleThresholdSec([{ bad: true }], 0, 4)).toBe(0);
+        expect(Number.isFinite(getNextScheduleThresholdSec(undefined, 0, 4))).toBe(true);
+    });
+
+    test('non-finite entryCount / max are coerced to 0, result stays finite', () => {
+        // entryCount NaN → treated as 0 → first row applies.
+        expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, NaN, 4)).toBe(1800);
+        // max undefined → 0 → every row clamps to 0 → nothing is ever due.
+        expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, 0, undefined)).toBe(0);
+        expect(Number.isFinite(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, NaN, NaN))).toBe(true);
     });
 });

@@ -50,6 +50,9 @@ export function SettingsModal({ isOpen, onClose }) {
     // handleSave alongside the schema commit.
     const [titleRules, setTitleRules] = useState([]);
     const [titleRulesError, setTitleRulesError] = useState(false);
+    // True when commit() reported schema writes rejected by validation —
+    // shown as an alert and the modal stays open (mirrors titleRulesError).
+    const [saveError, setSaveError] = useState(false);
     // Only persist the rules on save if the initial load actually succeeded —
     // a failed load must not let a default-empty state overwrite saved rules.
     const titleRulesLoadedRef = useRef(false);
@@ -61,6 +64,7 @@ export function SettingsModal({ isOpen, onClose }) {
             setTzInputVisible(false);
             setTzInputValue('');
             setTzInputError(false);
+            setSaveError(false);
         }
     }, [isOpen]);
 
@@ -130,7 +134,17 @@ export function SettingsModal({ isOpen, onClose }) {
 
     const handleSave = useCallback(async () => {
         try {
-            await commit();
+            // commit() returns the schema keys whose write was rejected by
+            // validation (e.g. a duplicate-count auto-fill schedule). Surface
+            // that and keep the modal open — same rationale as the title-rules
+            // check below — so the edit isn't silently lost behind a closed
+            // modal that looked like a successful save.
+            const rejectedKeys = await commit();
+            if (Array.isArray(rejectedKeys) && rejectedKeys.length > 0) {
+                setSaveError(true);
+                return;
+            }
+            setSaveError(false);
             // Persist title rules only when the initial load succeeded (else a
             // failed load could overwrite saved rules with the empty default).
             // setTitleRules returns false when the input is rejected (e.g. a tag
@@ -164,6 +178,11 @@ export function SettingsModal({ isOpen, onClose }) {
                 <LoadingSpinner text={t('common.loading')} />
             ) : (
                 <div className="space-y-6">
+                    {saveError && (
+                        <div className="alert alert-error py-2 text-sm" role="alert">
+                            <span>{t('app.settingsSaveError')}</span>
+                        </div>
+                    )}
                     {/* Top Action Buttons */}
                     <div className="flex justify-end gap-2">
                         <button className="btn btn-latvian" onClick={handleSave} disabled={saving}>

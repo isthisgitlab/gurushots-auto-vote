@@ -19,12 +19,16 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     const [overrides, setOverrides] = useState({});
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
+    // True when a setChallengeOverride write was rejected by validation —
+    // shown as an alert and the modal stays open so the edit isn't lost.
+    const [saveError, setSaveError] = useState(false);
 
     // Refresh global defaults each time the modal opens so the
     // "Global default: …" hint reflects current persisted state.
     useEffect(() => {
         if (isOpen) {
             refetchSchema();
+            setSaveError(false);
         }
     }, [isOpen, refetchSchema]);
 
@@ -112,10 +116,20 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                 }
             }
 
-            // Then set new overrides
+            // Then set new overrides. setChallengeOverride returns false when
+            // validation rejects the value (e.g. a duplicate-count auto-fill
+            // schedule) — surface that and keep the modal open instead of
+            // closing as if the edit had been saved.
+            let anyRejected = false;
             for (const [key, value] of Object.entries(overrides)) {
-                await window.api.setChallengeOverride(key, challengeId.toString(), value);
+                const saved = await window.api.setChallengeOverride(key, challengeId.toString(), value);
+                if (saved === false) anyRejected = true;
             }
+            if (anyRejected) {
+                setSaveError(true);
+                return;
+            }
+            setSaveError(false);
 
             // Notify threshold scheduling update
             if (window.handleThresholdSettingsChange) {
@@ -140,6 +154,11 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                 <LoadingSpinner text={t('common.loading')} />
             ) : (
                 <div className="space-y-4">
+                    {saveError && (
+                        <div className="alert alert-error py-2 text-sm" role="alert">
+                            <span>{t('app.settingsSaveError')}</span>
+                        </div>
+                    )}
                     {/* Info about overrides */}
                     <div className="alert alert-info text-sm">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

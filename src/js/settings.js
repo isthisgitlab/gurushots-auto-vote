@@ -186,6 +186,56 @@ const loadSettings = () => {
                 migrationChanges = true;
             }
 
+            // Migrate autoFillIntervalMinutes into autoFillSchedule. The single
+            // interval M is replaced by an explicit per-image schedule; the old
+            // trigger (`secondsRemaining <= slotsRemaining * M*60`) maps, for the
+            // common 4-slot challenge, to targets 2 @ 3M, 3 @ 2M, 4 @ 1M minutes
+            // before close. Always derived from the USER'S persisted M (a 15m
+            // user gets 45/30/15), never from the schema default; each scope is
+            // migrated independently. Runs before cleanupObsoleteSettings, which
+            // would otherwise just delete the now-schemaless legacy key.
+            if (!mergedSettings._autoFillScheduleMigratedV1) {
+                const LEGACY_KEY = 'autoFillIntervalMinutes';
+                // Clamp to the old validator's 60-minute ceiling and round: a
+                // hand-edited non-integer or oversized legacy value must not
+                // migrate into a schedule the new int()/max() schema rejects.
+                const toSchedule = (minutes) => {
+                    const m = Math.min(minutes, 60);
+                    return [
+                        { count: 2, seconds: Math.round(3 * m * 60) },
+                        { count: 3, seconds: Math.round(2 * m * 60) },
+                        { count: 4, seconds: Math.round(m * 60) },
+                    ];
+                };
+                const migrateScope = (scope, label) => {
+                    if (!scope) return;
+                    const legacy = scope[LEGACY_KEY];
+                    if (typeof legacy === 'number' && Number.isFinite(legacy) && legacy >= 1) {
+                        if (scope.autoFillSchedule === undefined) {
+                            scope.autoFillSchedule = toSchedule(legacy);
+                            logger
+                                .withCategory('settings')
+                                .info(
+                                    `Migrated ${LEGACY_KEY}=${legacy} ${label} to autoFillSchedule ${JSON.stringify(scope.autoFillSchedule)}`,
+                                    null,
+                                );
+                        }
+                    }
+                    if (Object.prototype.hasOwnProperty.call(scope, LEGACY_KEY)) {
+                        delete scope[LEGACY_KEY];
+                    }
+                };
+
+                migrateScope(mergedSettings.challengeSettings?.globalDefaults, 'global default');
+                const autoFillPerChallenge = mergedSettings.challengeSettings?.perChallenge || {};
+                for (const [challengeId, overrides] of Object.entries(autoFillPerChallenge)) {
+                    migrateScope(overrides, `override on challenge ${challengeId}`);
+                }
+
+                mergedSettings._autoFillScheduleMigratedV1 = true;
+                migrationChanges = true;
+            }
+
             // If migration made changes, save the updated settings
             if (migrationChanges) {
                 storage.writeRaw(JSON.stringify(mergedSettings, null, 2));

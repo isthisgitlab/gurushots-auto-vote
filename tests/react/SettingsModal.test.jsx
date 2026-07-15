@@ -246,6 +246,44 @@ describe('SettingsModal — reliability (API retry/backoff) controls', () => {
     });
 });
 
+describe('SettingsModal — schema save rejection (commit reports rejected keys)', () => {
+    const clickSave = () => {
+        const saveBtn = Array.from(document.querySelectorAll('button')).find(
+            (b) => b.textContent.trim() === 'app.save',
+        );
+        fireEvent.click(saveBtn);
+    };
+
+    test('a commit() reporting rejected keys shows the save-error alert and keeps the modal open', async () => {
+        // useSettingsForm.commit resolves the schema keys whose
+        // setGlobalDefault write returned false (validation rejection —
+        // e.g. a duplicate-count auto-fill schedule).
+        mockFormState.commit = jest.fn().mockResolvedValue(['autoFillSchedule']);
+        const onClose = jest.fn();
+
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        clickSave();
+
+        const alert = await screen.findByText('app.settingsSaveError');
+        expect(alert).toBeTruthy();
+        expect(onClose).not.toHaveBeenCalled();
+        // The save aborts before the title-rules write — the rejected edit
+        // must not be partially persisted beyond what commit already did.
+        expect(window.api.setTitleRules).not.toHaveBeenCalled();
+    });
+
+    test('an empty rejected-keys array saves normally and closes the modal', async () => {
+        mockFormState.commit = jest.fn().mockResolvedValue([]);
+        const onClose = jest.fn();
+
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        clickSave();
+
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        expect(document.querySelector('[role="alert"]')).toBeNull();
+    });
+});
+
 describe('SettingsModal — title-tag-rules save', () => {
     const clickSave = () => {
         const saveBtn = Array.from(document.querySelectorAll('button')).find(

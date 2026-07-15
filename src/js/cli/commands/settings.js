@@ -244,6 +244,14 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
   emergencyFill        - Seconds before close to fill empty slots as a last resort
                          (default: 300 = 5 min; 0 = off). NOTE: this used to be minutes.
 
+Auto-fill schedule (JSON array of {count, seconds} steps; replaces the old
+autoFillIntervalMinutes — existing values are migrated automatically):
+  autoFillSchedule     - Each step: have at least <count> entries once <seconds>
+                         remain before close. Counts 2-20, unique; seconds from close.
+                         Default: [{"count":2,"seconds":1800},{"count":3,"seconds":1200},{"count":4,"seconds":600}]
+  Example (image 2 at 48h, 3 at 3h, 4 at 15min):
+    set-setting autoFillSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
+
 Value Types:
   String:   "value" or value
   Number:   30, 3, 100

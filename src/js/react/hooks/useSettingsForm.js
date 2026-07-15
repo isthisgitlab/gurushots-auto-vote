@@ -140,15 +140,22 @@ export function useSettingsForm({
     }, [schema]);
 
     // Persist current UI + global-default values. The caller drives close
-    // / language toggle / threshold notify around this call.
+    // / language toggle / threshold notify around this call. Returns the
+    // schema keys whose write was REJECTED (setGlobalDefault returns false
+    // on schema/zod validation failure — e.g. a duplicate-count schedule)
+    // so the caller can keep the modal open instead of silently dropping
+    // the edit. The UI-values channel (updateSetting) has no comparable
+    // return contract today, so only schema writes are checked here.
     const commit = useCallback(async () => {
+        const rejectedKeys = [];
         setSaving(true);
         try {
             for (const [key, value] of Object.entries(uiValues)) {
                 await updateSetting(key, value);
             }
             for (const [key, value] of Object.entries(formValues)) {
-                await setGlobalDefault(key, value);
+                const saved = await setGlobalDefault(key, value);
+                if (saved === false) rejectedKeys.push(key);
             }
         } finally {
             setSaving(false);
@@ -157,6 +164,7 @@ export function useSettingsForm({
         // persisted. revert() rolls in-memory React state only; an
         // IPC-level transaction would need broader settings layer
         // changes (out of scope for this hook).
+        return rejectedKeys;
     }, [formValues, uiValues, updateSetting, setGlobalDefault]);
 
     // Roll in-memory state back to whatever the modal opened with. Theme
