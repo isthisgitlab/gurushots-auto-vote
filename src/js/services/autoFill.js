@@ -198,16 +198,22 @@ const getSlotsRemaining = (challenge) => {
  * dispatch path in api/main.js that has no per-challenge try/catch, so a throw
  * here would abort the whole voting cycle for every challenge. Anything that
  * isn't an array of { count, seconds } objects with finite numbers is silently
- * dropped (mirrors getSlotsRemaining's Number.isFinite convention).
+ * dropped (mirrors getSlotsRemaining's Number.isFinite convention). Length is
+ * capped as defense-in-depth: the write path (zod) allows at most 20 rows, so
+ * anything past a generous read cap can only come from a corrupted blob and
+ * would otherwise be iterated every scheduler cycle per challenge.
  *
  * @param {*} schedule
  * @returns {Array<{count: number, seconds: number}>}
  */
+const MAX_SCHEDULE_ROWS_READ = 100;
 const getValidScheduleRows = (schedule) =>
     Array.isArray(schedule)
-        ? schedule.filter(
-              (row) => row && typeof row === 'object' && Number.isFinite(row.count) && Number.isFinite(row.seconds),
-          )
+        ? schedule
+              .slice(0, MAX_SCHEDULE_ROWS_READ)
+              .filter(
+                  (row) => row && typeof row === 'object' && Number.isFinite(row.count) && Number.isFinite(row.seconds),
+              )
         : [];
 
 /**
@@ -354,10 +360,10 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         // builds — see makeFallbackLogger) so a real user has a trace for why
         // those slots stay empty until emergency fill.
         const max = Number.isFinite(challenge.max_photo_submits) ? challenge.max_photo_submits : 0;
-        const maxTarget = getValidScheduleRows(schedule).reduce(
-            (top, row) => Math.max(top, Math.min(row.count, max)),
-            0,
-        );
+        // Highest target the schedule can ever demand = the target as time
+        // runs out (secondsRemaining → 0 matches every row), so reuse
+        // resolveScheduleTarget instead of re-deriving the clamp-and-max here.
+        const maxTarget = resolveScheduleTarget(schedule, 0, max);
         if (desired > 0 && desired === maxTarget && maxTarget < max) {
             logger
                 .withCategory('autoFill')

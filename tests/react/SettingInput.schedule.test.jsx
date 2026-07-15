@@ -1,10 +1,11 @@
 /**
  * Component tests for the `type: 'schedule'` branch of SettingInput — the
  * auto-fill schedule editor (ScheduleField). One row per { count, seconds }
- * step, displayed sorted by count; add/remove emit onChange payloads mapped
- * back through each row's original array index. Duplicate counts and
- * dominated rows are flagged inline. The translation manager mock returns
- * each key verbatim, so labels are the i18n keys.
+ * step, rendered in ARRAY order (never re-sorted mid-edit, so a row can't
+ * jump while its count is typed); the add button inserts at the sorted
+ * position instead. Duplicate counts, out-of-range values, and dominated
+ * rows are flagged inline. The translation manager mock returns each key
+ * verbatim, so labels are the i18n keys.
  */
 
 import { fireEvent, render, screen } from '@/test/test-utils';
@@ -31,17 +32,17 @@ const addButton = () =>
     Array.from(document.querySelectorAll('button')).find((b) => b.textContent.includes('app.autoFillScheduleAddStep'));
 
 describe('SettingInput type=schedule — row rendering', () => {
-    test('renders one row per entry, sorted by count regardless of array order', () => {
+    test('renders one row per entry in array order (no live re-sort under the cursor)', () => {
         renderSchedule([
             { count: 4, seconds: 600 },
             { count: 2, seconds: 1800 },
         ]);
         const counts = countInputs();
         expect(counts).toHaveLength(2);
-        expect(counts.map((i) => i.value)).toEqual(['2', '4']);
-        // Hours/minutes fields carry the per-row seconds (1800s → 0h 30m first).
+        expect(counts.map((i) => i.value)).toEqual(['4', '2']);
+        // Hours/minutes fields carry the per-row seconds (600s → 0h 10m first).
         const minutes = screen.getAllByLabelText('app.minutes');
-        expect(minutes.map((i) => i.value)).toEqual(['30', '10']);
+        expect(minutes.map((i) => i.value)).toEqual(['10', '30']);
     });
 
     test('renders hour + minute inputs per row with translated aria-labels', () => {
@@ -65,16 +66,16 @@ describe('SettingInput type=schedule — add / remove', () => {
         ]);
     });
 
-    test('add button fills a gap in the used counts (2 and 4 used → adds 3)', () => {
+    test('add button fills a gap and inserts at the sorted position (2 and 4 used → 3 before 4)', () => {
         const onChange = renderSchedule([
-            { count: 4, seconds: 600 },
             { count: 2, seconds: 1800 },
+            { count: 4, seconds: 600 },
         ]);
         fireEvent.click(addButton());
         expect(onChange).toHaveBeenCalledWith(KEY, [
-            { count: 4, seconds: 600 },
             { count: 2, seconds: 1800 },
             { count: 3, seconds: 3600 },
+            { count: 4, seconds: 600 },
         ]);
     });
 
@@ -100,15 +101,13 @@ describe('SettingInput type=schedule — add / remove', () => {
         expect(addButton().disabled).toBe(true);
     });
 
-    test('remove button removes the right underlying row (display is sorted)', () => {
-        // Displayed order is [2, 4] but the array order is [4, 2]; removing the
-        // FIRST displayed row must drop {count:2}, not the array's first element.
+    test('remove button removes the right underlying row (array order)', () => {
         const onChange = renderSchedule([
             { count: 4, seconds: 600 },
             { count: 2, seconds: 1800 },
         ]);
         fireEvent.click(removeButtons()[0]);
-        expect(onChange).toHaveBeenCalledWith(KEY, [{ count: 4, seconds: 600 }]);
+        expect(onChange).toHaveBeenCalledWith(KEY, [{ count: 2, seconds: 1800 }]);
     });
 });
 
@@ -147,6 +146,21 @@ describe('SettingInput type=schedule — inline diagnostics', () => {
             { count: 4, seconds: 600 },
         ]);
         expect(screen.queryByText('app.autoFillScheduleDominated')).toBeNull();
+    });
+
+    test('out-of-range values flag the row inline (count below 2)', () => {
+        renderSchedule([
+            { count: 0, seconds: 600 },
+            { count: 3, seconds: 1200 },
+        ]);
+        expect(screen.getAllByText('app.autoFillScheduleOutOfRange')).toHaveLength(1);
+        expect(countInputs()[0].className).toMatch(/input-error/);
+        expect(countInputs()[1].className).not.toMatch(/input-error/);
+    });
+
+    test('out-of-range values flag the row inline (seconds beyond the 30-day cap)', () => {
+        renderSchedule([{ count: 2, seconds: 31 * 24 * 3600 }]);
+        expect(screen.getAllByText('app.autoFillScheduleOutOfRange')).toHaveLength(1);
     });
 
     test('empty schedule renders the role="status" empty warning', () => {

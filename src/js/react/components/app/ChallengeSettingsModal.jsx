@@ -109,17 +109,13 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
 
         setSaving(true);
         try {
-            // First, clear all existing overrides for this challenge
-            for (const key of Object.keys(schema)) {
-                if (schema[key].perChallenge) {
-                    await window.api.removeChallengeOverride(key, challengeId.toString());
-                }
-            }
-
-            // Then set new overrides. setChallengeOverride returns false when
-            // validation rejects the value (e.g. a duplicate-count auto-fill
-            // schedule) — surface that and keep the modal open instead of
-            // closing as if the edit had been saved.
+            // Write the edited overrides FIRST. setChallengeOverride validates
+            // and returns false on rejection (e.g. a duplicate-count auto-fill
+            // schedule); bailing out here — before any removal below — means a
+            // rejected edit leaves the key's previously valid override intact.
+            // (The old clear-then-rewrite order silently dropped it: the clear
+            // loop ran, the invalid rewrite never did, and closing the modal
+            // lost the prior value with no trace.)
             let anyRejected = false;
             for (const [key, value] of Object.entries(overrides)) {
                 const saved = await window.api.setChallengeOverride(key, challengeId.toString(), value);
@@ -130,6 +126,15 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                 return;
             }
             setSaveError(false);
+
+            // Only after every write validated: drop the overrides the user
+            // cleared this session (per-challenge keys absent from the local
+            // overrides map).
+            for (const key of Object.keys(schema)) {
+                if (schema[key].perChallenge && !(key in overrides)) {
+                    await window.api.removeChallengeOverride(key, challengeId.toString());
+                }
+            }
 
             // Notify threshold scheduling update
             if (window.handleThresholdSettingsChange) {

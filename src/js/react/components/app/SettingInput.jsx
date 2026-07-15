@@ -80,6 +80,7 @@ export function TagsField({ settingKey, value, onChange, onReset, placeholder, d
 const SCHEDULE_MIN_COUNT = 2;
 const SCHEDULE_MAX_COUNT = 20;
 const SCHEDULE_MAX_ROWS = 20;
+const SCHEDULE_MAX_SECONDS = 30 * 24 * 3600; // mirrors MAX_SCHEDULE_SECONDS in the schema
 
 const lowestUnusedScheduleCount = (rows) => {
     const used = new Set(rows.map((row) => row?.count));
@@ -91,10 +92,12 @@ const lowestUnusedScheduleCount = (rows) => {
 
 /**
  * Auto-fill schedule editor: one row per { count, seconds } step, meaning
- * "have ≥ count entries once ≤ seconds remain". Rows are shown sorted by
- * count; edits map back through each row's original array index. Duplicate
- * counts (rejected by the schema) and dominated rows (legal but dead under
- * the max-based trigger) are flagged inline as the user types.
+ * "have ≥ count entries once ≤ seconds remain". Rows render in array order —
+ * NOT live-sorted — so a row never jumps position mid-keystroke while its
+ * count is being edited; the add button inserts at the sorted position
+ * instead, which keeps a normally-edited list ordered. Duplicate counts and
+ * out-of-range values (rejected by the schema) and dominated rows (legal but
+ * dead under the max-based trigger) are flagged inline as the user types.
  */
 export function ScheduleField({ settingKey, value, onChange, onReset, disabled = false }) {
     const { t } = useTranslation();
@@ -117,10 +120,28 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
     const addDisabled = disabled || rows.length >= SCHEDULE_MAX_ROWS || nextCount === null;
     const addRow = () => {
         if (addDisabled) return;
-        onChange(settingKey, [...rows, { count: nextCount, seconds: 3600 }]);
+        // Insert at the sorted position (rows render in array order) so the
+        // list stays ordered without ever re-sorting under the user's cursor.
+        const insertAt = rows.findIndex((row) => (row?.count ?? 0) > nextCount);
+        const next = [...rows];
+        next.splice(insertAt === -1 ? rows.length : insertAt, 0, { count: nextCount, seconds: 3600 });
+        onChange(settingKey, next);
     };
 
     const isDuplicate = (index) => rows.some((other, i) => i !== index && other?.count === rows[index]?.count);
+    // Values the zod schema would reject at save time — flagged per-row so the
+    // user sees WHICH row blocks the save, not just the generic save error.
+    const isOutOfRange = (index) => {
+        const row = rows[index];
+        return (
+            !Number.isInteger(row?.count) ||
+            row.count < SCHEDULE_MIN_COUNT ||
+            row.count > SCHEDULE_MAX_COUNT ||
+            !Number.isInteger(row?.seconds) ||
+            row.seconds < 0 ||
+            row.seconds > SCHEDULE_MAX_SECONDS
+        );
+    };
     // A row is dead when another row reaches at least the same count no later
     // (larger-or-equal threshold): the max-based trigger then never needs it.
     const isDominated = (index) =>
@@ -132,23 +153,20 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
                 (other?.count > rows[index]?.count || other?.seconds > rows[index]?.seconds),
         );
 
-    const displayOrder = rows
-        .map((row, index) => ({ row, index }))
-        .sort((a, b) => (a.row?.count ?? 0) - (b.row?.count ?? 0));
-
     return (
         <div className="space-y-2">
-            {displayOrder.map(({ row, index }) => {
+            {rows.map((row, index) => {
                 const { hours, minutes } = secondsToHoursMinutes(row?.seconds);
                 const duplicate = isDuplicate(index);
-                const dominated = !duplicate && isDominated(index);
-                const hintId = duplicate || dominated ? `${settingKey}-row-${index}-hint` : undefined;
+                const outOfRange = !duplicate && isOutOfRange(index);
+                const dominated = !duplicate && !outOfRange && isDominated(index);
+                const hintId = duplicate || outOfRange || dominated ? `${settingKey}-row-${index}-hint` : undefined;
                 return (
                     <div key={index} className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm">{t('app.autoFillScheduleImage')}</span>
                         <input
                             type="number"
-                            className={`input input-bordered input-sm w-16 ${duplicate ? 'input-error' : ''}`}
+                            className={`input input-bordered input-sm w-16 ${duplicate || outOfRange ? 'input-error' : ''}`}
                             min={SCHEDULE_MIN_COUNT}
                             max={SCHEDULE_MAX_COUNT}
                             aria-label={t('app.autoFillScheduleImageCount')}
@@ -160,8 +178,9 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
                         <span className="text-sm">≤</span>
                         <input
                             type="number"
-                            className="input input-bordered input-sm w-16"
+                            className={`input input-bordered input-sm w-16 ${outOfRange ? 'input-error' : ''}`}
                             min="0"
+                            max={SCHEDULE_MAX_SECONDS / 3600}
                             aria-label={t('app.hours')}
                             aria-describedby={hintId}
                             value={hours}
@@ -200,6 +219,7 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
                         </button>
                         <span aria-live="polite" id={hintId} className="text-xs">
                             {duplicate && <span className="text-error">{t('app.autoFillScheduleDuplicate')}</span>}
+                            {outOfRange && <span className="text-error">{t('app.autoFillScheduleOutOfRange')}</span>}
                             {dominated && (
                                 <span className="badge badge-warning badge-xs">
                                     {t('app.autoFillScheduleDominated')}

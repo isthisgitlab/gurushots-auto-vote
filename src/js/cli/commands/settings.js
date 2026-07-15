@@ -248,9 +248,13 @@ Auto-fill schedule (JSON array of {count, seconds} steps; replaces the old
 autoFillIntervalMinutes — existing values are migrated automatically):
   autoFillSchedule     - Each step: have at least <count> entries once <seconds>
                          remain before close. Counts 2-20, unique; seconds from close.
+                         An empty array [] is valid and means auto-fill never submits.
                          Default: [{"count":2,"seconds":1800},{"count":3,"seconds":1200},{"count":4,"seconds":600}]
-  Example (image 2 at 48h, 3 at 3h, 4 at 15min):
-    set-setting autoFillSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
+  Set it with set-global-default (validated; set-setting without --challenge
+  writes an unvalidated top-level key the scheduler never reads):
+    set-global-default autoFillSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
+  Per-challenge override (also validated):
+    set-setting autoFillSchedule '[{"count":2,"seconds":172800}]' --challenge=12345
 
 Value Types:
   String:   "value" or value
