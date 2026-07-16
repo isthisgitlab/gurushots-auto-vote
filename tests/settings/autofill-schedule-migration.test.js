@@ -166,6 +166,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
             _timeUnitMigratedV1: true,
             _emergencyFillTimeMigratedV1: true,
             _autoFillScheduleMigratedV1: true,
+            _autoFillScheduleBoundsV1: true,
         });
 
         const loaded = settings.loadSettings();
@@ -184,6 +185,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
             _timeUnitMigratedV1: true,
             _emergencyFillTimeMigratedV1: true,
             _autoFillScheduleMigratedV1: true,
+            _autoFillScheduleBoundsV1: true,
         });
 
         const loaded = settings.loadSettings();

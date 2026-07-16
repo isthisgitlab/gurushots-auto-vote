@@ -244,11 +244,13 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
   emergencyFill        - Seconds before close to fill empty slots as a last resort
                          (default: 300 = 5 min; 0 = off). NOTE: this used to be minutes.
 
-Auto-fill schedule (JSON array of {count, seconds} steps; replaces the old
+Auto-fill schedule (JSON array of {count, seconds} rows; replaces the old
 autoFillIntervalMinutes — existing values are migrated automatically):
-  autoFillSchedule     - Each step: have at least <count> entries once <seconds>
-                         remain before close. Counts 2-20, unique; seconds from close.
-                         An empty array [] is valid and means auto-fill never submits.
+  autoFillSchedule     - Each row: have at least <count> entries once <seconds>
+                         remain before close. Counts 2-4 (max 3 rows, unique) —
+                         challenges allow at most 4 images and image 1 always
+                         exists. Omit a count to never schedule that image; an
+                         empty array [] means auto-fill never submits.
                          Default: [{"count":2,"seconds":1800},{"count":3,"seconds":1200},{"count":4,"seconds":600}]
   Set it with set-global-default (validated; set-setting without --challenge
   writes an unvalidated top-level key the scheduler never reads):

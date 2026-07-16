@@ -14,6 +14,7 @@ const {
     validateSetting,
     getValidationError,
     getSettingsSchema,
+    sanitizeFillSchedule,
 } = require('./settings/schema');
 const {
     storage,
@@ -233,6 +234,38 @@ const loadSettings = () => {
                 }
 
                 mergedSettings._autoFillScheduleMigratedV1 = true;
+                migrationChanges = true;
+            }
+
+            // Sanitize persisted autoFillSchedule values to the current bounds
+            // (counts 2-4, ≤3 rows, unique counts, seconds within cap). The
+            // wide pre-tightening editor could store counts up to 20; because
+            // the Settings modal resubmits every persisted key on save, such a
+            // value would fail the tightened validator and block saving ANY
+            // setting. Runs after the interval→schedule migration above, whose
+            // output always conforms already.
+            if (!mergedSettings._autoFillScheduleBoundsV1) {
+                const sanitizeScope = (scope, label) => {
+                    if (!scope) return;
+                    const cleaned = sanitizeFillSchedule(scope.autoFillSchedule);
+                    if (cleaned !== null) {
+                        logger
+                            .withCategory('settings')
+                            .info(
+                                `Sanitized autoFillSchedule ${label} to current bounds: ${JSON.stringify(cleaned)}`,
+                                null,
+                            );
+                        scope.autoFillSchedule = cleaned;
+                    }
+                };
+
+                sanitizeScope(mergedSettings.challengeSettings?.globalDefaults, 'global default');
+                const schedulePerChallenge = mergedSettings.challengeSettings?.perChallenge || {};
+                for (const [challengeId, overrides] of Object.entries(schedulePerChallenge)) {
+                    sanitizeScope(overrides, `override on challenge ${challengeId}`);
+                }
+
+                mergedSettings._autoFillScheduleBoundsV1 = true;
                 migrationChanges = true;
             }
 

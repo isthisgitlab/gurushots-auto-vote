@@ -1,17 +1,19 @@
 /**
  * Component tests for the `type: 'schedule'` branch of SettingInput — the
- * auto-fill schedule editor (ScheduleField). One row per { count, seconds }
- * step, rendered in ARRAY order (never re-sorted mid-edit, so a row can't
- * jump while its count is typed); the add button inserts at the sorted
- * position instead. Duplicate counts, out-of-range values, and dominated
- * rows are flagged inline. The translation manager mock returns each key
- * verbatim, so labels are the i18n keys.
+ * fixed auto-fill schedule editor (ScheduleField). GuruShots challenges allow
+ * at most 4 images and entry 1 always exists, so the editor renders exactly
+ * three fixed rows (Image 2, Image 3, Image 4), each a time-before-close.
+ * 0h 0m = off. Edits emit ONLY the active rows (seconds > 0) sorted by count;
+ * any stored row not keyed by counts 2/3/4 is dropped on the first edit. The
+ * translation manager mock returns each key verbatim, so labels are the i18n
+ * keys (row aria-labels read e.g. "app.autoFillScheduleImage 2 app.hours").
  */
 
 import { fireEvent, render, screen } from '@/test/test-utils';
 import { SettingInput } from '@/components/app/SettingInput';
 
 const KEY = 'autoFillSchedule';
+const MAX_SECONDS = 30 * 24 * 3600;
 const config = {
     type: 'schedule',
     default: [
@@ -26,147 +28,154 @@ const renderSchedule = (value, onChange = jest.fn()) => {
     return onChange;
 };
 
-const countInputs = () => screen.queryAllByLabelText('app.autoFillScheduleImageCount');
-const removeButtons = () => screen.queryAllByLabelText('app.autoFillScheduleRemoveStep');
-const addButton = () =>
-    Array.from(document.querySelectorAll('button')).find((b) => b.textContent.includes('app.autoFillScheduleAddStep'));
+const hoursInput = (count) => screen.getByLabelText(`app.autoFillScheduleImage ${count} app.hours`);
+const minutesInput = (count) => screen.getByLabelText(`app.autoFillScheduleImage ${count} app.minutes`);
+const allHoursInputs = () => screen.queryAllByLabelText(/^app\.autoFillScheduleImage \d+ app\.hours$/);
 
-describe('SettingInput type=schedule — row rendering', () => {
-    test('renders one row per entry in array order (no live re-sort under the cursor)', () => {
-        renderSchedule([
-            { count: 4, seconds: 600 },
-            { count: 2, seconds: 1800 },
-        ]);
-        const counts = countInputs();
-        expect(counts).toHaveLength(2);
-        expect(counts.map((i) => i.value)).toEqual(['4', '2']);
-        // Hours/minutes fields carry the per-row seconds (600s → 0h 10m first).
-        const minutes = screen.getAllByLabelText('app.minutes');
-        expect(minutes.map((i) => i.value)).toEqual(['10', '30']);
+describe('SettingInput type=schedule — fixed three-row rendering', () => {
+    test('renders exactly the three fixed rows for an empty stored array', () => {
+        renderSchedule([]);
+        expect(allHoursInputs()).toHaveLength(3);
+        [2, 3, 4].forEach((count) => {
+            expect(hoursInput(count).value).toBe('0');
+            expect(minutesInput(count).value).toBe('0');
+        });
     });
 
-    test('renders hour + minute inputs per row with translated aria-labels', () => {
-        renderSchedule([{ count: 2, seconds: 3600 + 12 * 60 }]);
-        expect(screen.getAllByLabelText('app.hours')[0].value).toBe('1');
-        expect(screen.getAllByLabelText('app.minutes')[0].value).toBe('12');
+    test('renders exactly three rows for a sparse stored array, missing images shown as off', () => {
+        renderSchedule([{ count: 4, seconds: 900 }]);
+        expect(allHoursInputs()).toHaveLength(3);
+        expect(hoursInput(2).value).toBe('0');
+        expect(minutesInput(2).value).toBe('0');
+        expect(hoursInput(3).value).toBe('0');
+        expect(minutesInput(3).value).toBe('0');
+        expect(minutesInput(4).value).toBe('15');
+        // Images 2 and 3 carry the off hint; image 4 does not.
+        expect(screen.getAllByText('app.autoFillScheduleOff')).toHaveLength(2);
+    });
+
+    test('renders exactly three rows for a full stored array with per-row values', () => {
+        renderSchedule(config.default);
+        expect(allHoursInputs()).toHaveLength(3);
+        expect(minutesInput(2).value).toBe('30');
+        expect(minutesInput(3).value).toBe('20');
+        expect(minutesInput(4).value).toBe('10');
+        expect(screen.queryByText('app.autoFillScheduleOff')).toBeNull();
+    });
+
+    test('row labels and aria-labels carry the image identity', () => {
+        renderSchedule(config.default);
+        // Visible row label: "app.autoFillScheduleImage N ≤".
+        [2, 3, 4].forEach((count) => {
+            expect(screen.getByText(`app.autoFillScheduleImage ${count} ≤`)).toBeTruthy();
+            expect(screen.getByLabelText(`app.autoFillScheduleImage ${count} app.hours`)).toBeTruthy();
+            expect(screen.getByLabelText(`app.autoFillScheduleImage ${count} app.minutes`)).toBeTruthy();
+        });
     });
 });
 
-describe('SettingInput type=schedule — add / remove', () => {
-    test('add button appends the lowest unused count ≥ 2 with 3600 seconds', () => {
-        const onChange = renderSchedule([
-            { count: 2, seconds: 1800 },
-            { count: 3, seconds: 1200 },
+describe('SettingInput type=schedule — edits emit active rows sorted by count', () => {
+    test("editing a row's hours emits only seconds>0 rows sorted by count", () => {
+        const onChange = renderSchedule([{ count: 4, seconds: 900 }]);
+        fireEvent.change(hoursInput(2), { target: { value: '1' } });
+        expect(onChange).toHaveBeenCalledWith(KEY, [
+            { count: 2, seconds: 3600 },
+            { count: 4, seconds: 900 },
         ]);
-        fireEvent.click(addButton());
+    });
+
+    test('setting a row to 0h 0m drops it from the payload', () => {
+        // Image 3 is 0h 20m; zeroing the minutes turns it off entirely.
+        const onChange = renderSchedule(config.default);
+        fireEvent.change(minutesInput(3), { target: { value: '0' } });
         expect(onChange).toHaveBeenCalledWith(KEY, [
             { count: 2, seconds: 1800 },
-            { count: 3, seconds: 1200 },
-            { count: 4, seconds: 3600 },
+            { count: 4, seconds: 600 },
         ]);
     });
 
-    test('add button fills a gap and inserts at the sorted position (2 and 4 used → 3 before 4)', () => {
+    test('zeroing every row emits [] (the no-schedule opt-out)', () => {
+        const onChange = renderSchedule([{ count: 2, seconds: 1800 }]);
+        fireEvent.change(minutesInput(2), { target: { value: '0' } });
+        expect(onChange).toHaveBeenCalledWith(KEY, []);
+    });
+
+    test('a stored row with an unexpected count is dropped on the first edit of any row', () => {
         const onChange = renderSchedule([
+            { count: 7, seconds: 999 },
             { count: 2, seconds: 1800 },
-            { count: 4, seconds: 600 },
         ]);
-        fireEvent.click(addButton());
+        fireEvent.change(minutesInput(4), { target: { value: '10' } });
         expect(onChange).toHaveBeenCalledWith(KEY, [
             { count: 2, seconds: 1800 },
-            { count: 3, seconds: 3600 },
             { count: 4, seconds: 600 },
         ]);
     });
 
-    test('add button stays enabled while an unused count remains (counts 2..19 used → adds 20)', () => {
-        const rows = Array.from({ length: 18 }, (_, i) => ({ count: i + 2, seconds: 60 * (i + 1) }));
-        const onChange = renderSchedule(rows);
-        expect(addButton().disabled).toBe(false);
-        fireEvent.click(addButton());
-        expect(onChange).toHaveBeenCalledWith(KEY, [...rows, { count: 20, seconds: 3600 }]);
-    });
-
-    test('add button is disabled once every count 2..20 is in use', () => {
-        const rows = Array.from({ length: 19 }, (_, i) => ({ count: i + 2, seconds: 60 * (i + 1) }));
-        renderSchedule(rows);
-        expect(addButton().disabled).toBe(true);
-    });
-
-    test('add button is disabled at the 20-row cap even with a count still unused', () => {
-        // 19 rows with counts 2..19 plus a duplicate 19 → 20 rows, count 20 unused.
-        const rows = Array.from({ length: 18 }, (_, i) => ({ count: i + 2, seconds: 60 * (i + 1) }));
-        rows.push({ count: 19, seconds: 30 }, { count: 19, seconds: 60 });
-        renderSchedule(rows);
-        expect(addButton().disabled).toBe(true);
-    });
-
-    test('remove button removes the right underlying row (array order)', () => {
-        const onChange = renderSchedule([
-            { count: 4, seconds: 600 },
-            { count: 2, seconds: 1800 },
-        ]);
-        fireEvent.click(removeButtons()[0]);
-        expect(onChange).toHaveBeenCalledWith(KEY, [{ count: 2, seconds: 1800 }]);
+    test('emitted payload stays sorted by count when a later image is edited first', () => {
+        const onChange = renderSchedule([]);
+        fireEvent.change(minutesInput(4), { target: { value: '10' } });
+        expect(onChange).toHaveBeenCalledWith(KEY, [{ count: 4, seconds: 600 }]);
     });
 });
 
 describe('SettingInput type=schedule — inline diagnostics', () => {
-    test('duplicate counts flag both rows with the hint and the input-error class', () => {
-        renderSchedule([
-            { count: 2, seconds: 600 },
-            { count: 2, seconds: 1800 },
-        ]);
-        expect(screen.getAllByText('app.autoFillScheduleDuplicate')).toHaveLength(2);
-        countInputs().forEach((input) => expect(input.className).toMatch(/input-error/));
-    });
-
-    test('unique counts show neither the duplicate hint nor the error class', () => {
-        renderSchedule([
-            { count: 2, seconds: 1800 },
-            { count: 3, seconds: 1200 },
-        ]);
-        expect(screen.queryByText('app.autoFillScheduleDuplicate')).toBeNull();
-        countInputs().forEach((input) => expect(input.className).not.toMatch(/input-error/));
-    });
-
-    test('a dominated row (another row with count ≥ and seconds ≥, one strict) shows the badge', () => {
-        // {2, 600} is dead: {3, 1800} reaches a higher count no later.
-        renderSchedule([
-            { count: 3, seconds: 1800 },
-            { count: 2, seconds: 600 },
-        ]);
-        expect(screen.getAllByText('app.autoFillScheduleDominated')).toHaveLength(1);
-    });
-
-    test('no dominated badge when each row contributes (higher count, tighter deadline)', () => {
-        renderSchedule([
-            { count: 2, seconds: 1800 },
-            { count: 3, seconds: 1200 },
-            { count: 4, seconds: 600 },
-        ]);
-        expect(screen.queryByText('app.autoFillScheduleDominated')).toBeNull();
-    });
-
-    test('out-of-range values flag the row inline (count below 2)', () => {
-        renderSchedule([
-            { count: 0, seconds: 600 },
-            { count: 3, seconds: 1200 },
-        ]);
-        expect(screen.getAllByText('app.autoFillScheduleOutOfRange')).toHaveLength(1);
-        expect(countInputs()[0].className).toMatch(/input-error/);
-        expect(countInputs()[1].className).not.toMatch(/input-error/);
-    });
-
-    test('out-of-range values flag the row inline (seconds beyond the 30-day cap)', () => {
-        renderSchedule([{ count: 2, seconds: 31 * 24 * 3600 }]);
-        expect(screen.getAllByText('app.autoFillScheduleOutOfRange')).toHaveLength(1);
-    });
-
-    test('empty schedule renders the role="status" empty warning', () => {
+    test('all rows off shows the role="status" empty warning', () => {
         renderSchedule([]);
         const status = screen.getByRole('status');
         expect(status.textContent).toBe('app.autoFillScheduleEmpty');
-        expect(countInputs()).toHaveLength(0);
+    });
+
+    test('rows stored with seconds 0 also count as off for the empty warning', () => {
+        renderSchedule([
+            { count: 2, seconds: 0 },
+            { count: 3, seconds: 0 },
+        ]);
+        expect(screen.getByRole('status').textContent).toBe('app.autoFillScheduleEmpty');
+    });
+
+    test('no empty warning while at least one row is active', () => {
+        renderSchedule([{ count: 3, seconds: 600 }]);
+        expect(screen.queryByRole('status')).toBeNull();
+    });
+
+    test('time inversion marks the earlier image dominated (2 @ 10m vs 3 @ 3h)', () => {
+        // Image 3 reaches a higher count no later (3h ≥ 10m), so the
+        // image-2-at-10m step never fires under the max-based trigger.
+        renderSchedule([
+            { count: 2, seconds: 600 },
+            { count: 3, seconds: 10800 },
+        ]);
+        const badges = screen.getAllByText('app.autoFillScheduleDominated');
+        expect(badges).toHaveLength(1);
+        // The badge sits in image 2's hint span (aria-describedby wiring).
+        expect(badges[0].closest(`[id="${KEY}-row-2-hint"]`)).not.toBeNull();
+    });
+
+    test('a well-ordered schedule shows no dominated badge', () => {
+        renderSchedule(config.default);
+        expect(screen.queryByText('app.autoFillScheduleDominated')).toBeNull();
+    });
+
+    test('off rows never get the dominated badge — only the off hint', () => {
+        // Images 2 and 4 are off; an active row "covers" a 0-second row
+        // trivially, but off rows are excluded from the check by design.
+        renderSchedule([{ count: 3, seconds: 10800 }]);
+        expect(screen.queryByText('app.autoFillScheduleDominated')).toBeNull();
+        expect(screen.getAllByText('app.autoFillScheduleOff')).toHaveLength(2);
+    });
+
+    test('seconds above the 30-day cap flag the row out-of-range with the error class', () => {
+        renderSchedule([{ count: 2, seconds: MAX_SECONDS + 60 }]);
+        expect(screen.getByText('app.autoFillScheduleOutOfRange')).toBeTruthy();
+        expect(hoursInput(2).className).toMatch(/input-error/);
+        expect(minutesInput(2).className).toMatch(/input-error/);
+        // In-range rows carry no error class.
+        expect(hoursInput(3).className).not.toMatch(/input-error/);
+    });
+
+    test('a row exactly at the 30-day cap is not flagged out-of-range', () => {
+        renderSchedule([{ count: 2, seconds: MAX_SECONDS }]);
+        expect(screen.queryByText('app.autoFillScheduleOutOfRange')).toBeNull();
     });
 });

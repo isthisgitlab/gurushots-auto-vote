@@ -1,7 +1,8 @@
 /**
- * Validation rules for the autoFillSchedule setting: an array of at most 20
- * strict { count, seconds } rows — count an integer 2..20 (unique across the
- * array), seconds an integer 0..MAX_SCHEDULE_SECONDS (30 days). Mirrors the
+ * Validation rules for the autoFillSchedule setting: an array of at most 3
+ * strict { count, seconds } rows — count an integer 2..4 (unique across the
+ * array; GuruShots challenges allow at most 4 images and entry 1 always
+ * exists), seconds an integer 0..MAX_SCHEDULE_SECONDS (30 days). Mirrors the
  * tag-list-validation suite so the zod boundary itself is pinned, not just
  * the migration output that happens to pass it.
  */
@@ -26,11 +27,11 @@ describe('autoFillSchedule schema validation', () => {
         ).toBe(true);
     });
 
-    test('boundary values are valid (count 2 and 20, seconds 0 and the 30-day cap)', () => {
+    test('boundary values are valid (count 2 and 4, seconds 0 and the 30-day cap)', () => {
         expect(
             validateSetting(KEY, [
                 { count: 2, seconds: 0 },
-                { count: 20, seconds: MAX_SECONDS },
+                { count: 4, seconds: MAX_SECONDS },
             ]),
         ).toBe(true);
     });
@@ -50,9 +51,10 @@ describe('autoFillSchedule schema validation', () => {
         ).toBe(false);
     });
 
-    test('count below 2 or above 20 is invalid', () => {
+    test('count below 2 or above 4 is invalid', () => {
         expect(validateSetting(KEY, [{ count: 1, seconds: 600 }])).toBe(false);
         expect(validateSetting(KEY, [{ count: 0, seconds: 600 }])).toBe(false);
+        expect(validateSetting(KEY, [{ count: 5, seconds: 600 }])).toBe(false);
         expect(validateSetting(KEY, [{ count: 21, seconds: 600 }])).toBe(false);
     });
 
@@ -78,8 +80,15 @@ describe('autoFillSchedule schema validation', () => {
         expect(validateSetting(KEY, [{ count: 2, seconds: 600, __proto__constructor: 1 }])).toBe(false);
     });
 
-    test('more than 20 rows is invalid', () => {
-        const rows = Array.from({ length: 21 }, (_, i) => ({ count: 2 + (i % 19), seconds: i }));
+    test('more than 3 rows is invalid', () => {
+        // Four rows necessarily exceed the row cap (only counts 2..4 exist);
+        // this pins the .max(3) bound alongside the unique-count refinement.
+        const rows = [
+            { count: 2, seconds: 100 },
+            { count: 3, seconds: 200 },
+            { count: 4, seconds: 300 },
+            { count: 4, seconds: 400 },
+        ];
         expect(validateSetting(KEY, rows)).toBe(false);
     });
 });

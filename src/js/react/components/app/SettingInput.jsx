@@ -75,150 +75,90 @@ export function TagsField({ settingKey, value, onChange, onReset, placeholder, d
     );
 }
 
-// Bounds mirror the fillSchedule zod validator in settings/schema.js — the
-// editor blocks what the schema would reject so a Save rarely fails validation.
-const SCHEDULE_MIN_COUNT = 2;
-const SCHEDULE_MAX_COUNT = 20;
-const SCHEDULE_MAX_ROWS = 20;
-const SCHEDULE_MAX_SECONDS = 30 * 24 * 3600; // mirrors MAX_SCHEDULE_SECONDS in the schema
-
-const lowestUnusedScheduleCount = (rows) => {
-    const used = new Set(rows.map((row) => row?.count));
-    for (let count = SCHEDULE_MIN_COUNT; count <= SCHEDULE_MAX_COUNT; count++) {
-        if (!used.has(count)) return count;
-    }
-    return null;
-};
+// The schedule covers images 2–4: entry 1 always exists (joining a challenge
+// IS submitting a photo) and GuruShots challenges allow at most 4 images.
+// The seconds cap mirrors MAX_SCHEDULE_SECONDS in settings/schema.js.
+const SCHEDULE_COUNTS = [2, 3, 4];
+const SCHEDULE_MAX_SECONDS = 30 * 24 * 3600;
 
 /**
- * Auto-fill schedule editor: one row per { count, seconds } step, meaning
- * "have ≥ count entries once ≤ seconds remain". Rows render in array order —
- * NOT live-sorted — so a row never jumps position mid-keystroke while its
- * count is being edited; the add button inserts at the sorted position
- * instead, which keeps a normally-edited list ordered. Duplicate counts and
- * out-of-range values (rejected by the schema) and dominated rows (legal but
- * dead under the max-based trigger) are flagged inline as the user types.
+ * Auto-fill schedule editor: three FIXED rows — Image 2, Image 3, Image 4 —
+ * each just a time-before-close ("have ≥ N entries once ≤ this much time
+ * remains"). 0h 0m = off: that image gets no scheduled trigger of its own,
+ * though it may still be filled while catching up to a later step (the
+ * trigger is max-based). Emits only rows with seconds > 0, ordered by count,
+ * so "all off" emits [] — the runtime's 'no-schedule' state. Rebuilding from
+ * the three fixed slots is lossy by design: any stored row not keyed by
+ * counts 2/3/4 is dropped on the first edit (the load-time sanitizer in
+ * settings.js removes such rows anyway).
  */
 export function ScheduleField({ settingKey, value, onChange, onReset, disabled = false }) {
     const { t } = useTranslation();
     const rows = Array.isArray(value) ? value : [];
-
-    const updateRow = (index, patch) => {
-        onChange(
-            settingKey,
-            rows.map((row, i) => (i === index ? { ...row, ...patch } : row)),
-        );
-    };
-    const removeRow = (index) => {
-        onChange(
-            settingKey,
-            rows.filter((_, i) => i !== index),
-        );
+    const secondsFor = (count) => {
+        const row = rows.find((r) => r && typeof r === 'object' && r.count === count);
+        return Number.isFinite(row?.seconds) ? row.seconds : 0;
     };
 
-    const nextCount = lowestUnusedScheduleCount(rows);
-    const addDisabled = disabled || rows.length >= SCHEDULE_MAX_ROWS || nextCount === null;
-    const addRow = () => {
-        if (addDisabled) return;
-        // Insert at the sorted position (rows render in array order) so the
-        // list stays ordered without ever re-sorting under the user's cursor.
-        const insertAt = rows.findIndex((row) => (row?.count ?? 0) > nextCount);
-        const next = [...rows];
-        next.splice(insertAt === -1 ? rows.length : insertAt, 0, { count: nextCount, seconds: 3600 });
+    const emit = (count, seconds) => {
+        const next = SCHEDULE_COUNTS.map((c) => ({ count: c, seconds: c === count ? seconds : secondsFor(c) })).filter(
+            (row) => row.seconds > 0,
+        );
         onChange(settingKey, next);
     };
 
-    const isDuplicate = (index) => rows.some((other, i) => i !== index && other?.count === rows[index]?.count);
-    // Values the zod schema would reject at save time — flagged per-row so the
-    // user sees WHICH row blocks the save, not just the generic save error.
-    const isOutOfRange = (index) => {
-        const row = rows[index];
-        return (
-            !Number.isInteger(row?.count) ||
-            row.count < SCHEDULE_MIN_COUNT ||
-            row.count > SCHEDULE_MAX_COUNT ||
-            !Number.isInteger(row?.seconds) ||
-            row.seconds < 0 ||
-            row.seconds > SCHEDULE_MAX_SECONDS
-        );
-    };
-    // A row is dead when another row reaches at least the same count no later
-    // (larger-or-equal threshold): the max-based trigger then never needs it.
-    const isDominated = (index) =>
-        rows.some(
-            (other, i) =>
-                i !== index &&
-                other?.count >= rows[index]?.count &&
-                other?.seconds >= rows[index]?.seconds &&
-                (other?.count > rows[index]?.count || other?.seconds > rows[index]?.seconds),
+    const activeRows = SCHEDULE_COUNTS.map((c) => ({ count: c, seconds: secondsFor(c) })).filter(
+        (row) => row.seconds > 0,
+    );
+    // A row is dead when another ACTIVE row reaches at least the same count no
+    // later (larger-or-equal threshold): the max-based trigger never needs it.
+    // Off rows are excluded entirely — they show only the off hint, never a
+    // dominated badge on top (a deliberate off state is not a mistake).
+    const isDominated = (count, seconds) =>
+        activeRows.some(
+            (other) =>
+                other.count >= count && other.seconds >= seconds && (other.count > count || other.seconds > seconds),
         );
 
     return (
         <div className="space-y-2">
-            {rows.map((row, index) => {
-                const { hours, minutes } = secondsToHoursMinutes(row?.seconds);
-                const duplicate = isDuplicate(index);
-                const outOfRange = !duplicate && isOutOfRange(index);
-                const dominated = !duplicate && !outOfRange && isDominated(index);
-                const hintId = duplicate || outOfRange || dominated ? `${settingKey}-row-${index}-hint` : undefined;
+            {SCHEDULE_COUNTS.map((count) => {
+                const seconds = secondsFor(count);
+                const { hours, minutes } = secondsToHoursMinutes(seconds);
+                const off = seconds === 0;
+                const outOfRange = seconds > SCHEDULE_MAX_SECONDS;
+                const dominated = !off && !outOfRange && isDominated(count, seconds);
+                const hintId = `${settingKey}-row-${count}-hint`;
+                const rowLabel = `${t('app.autoFillScheduleImage')} ${count}`;
                 return (
-                    <div key={index} className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm">{t('app.autoFillScheduleImage')}</span>
-                        <input
-                            type="number"
-                            className={`input input-bordered input-sm w-16 ${duplicate || outOfRange ? 'input-error' : ''}`}
-                            min={SCHEDULE_MIN_COUNT}
-                            max={SCHEDULE_MAX_COUNT}
-                            aria-label={t('app.autoFillScheduleImageCount')}
-                            aria-describedby={hintId}
-                            value={row?.count ?? SCHEDULE_MIN_COUNT}
-                            onChange={(e) => updateRow(index, { count: parseInt(e.target.value, 10) || 0 })}
-                            disabled={disabled}
-                        />
-                        <span className="text-sm">≤</span>
+                    <div key={count} className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm w-20">{rowLabel} ≤</span>
                         <input
                             type="number"
                             className={`input input-bordered input-sm w-16 ${outOfRange ? 'input-error' : ''}`}
                             min="0"
                             max={SCHEDULE_MAX_SECONDS / 3600}
-                            aria-label={t('app.hours')}
+                            aria-label={`${rowLabel} ${t('app.hours')}`}
                             aria-describedby={hintId}
                             value={hours}
-                            onChange={(e) =>
-                                updateRow(index, {
-                                    seconds: hoursMinutesToSeconds(parseInt(e.target.value, 10), minutes),
-                                })
-                            }
+                            onChange={(e) => emit(count, hoursMinutesToSeconds(parseInt(e.target.value, 10), minutes))}
                             disabled={disabled}
                         />
                         <span className="text-sm">{t('app.hours')}</span>
                         <input
                             type="number"
-                            className="input input-bordered input-sm w-16"
+                            className={`input input-bordered input-sm w-16 ${outOfRange ? 'input-error' : ''}`}
                             min="0"
                             max="59"
-                            aria-label={t('app.minutes')}
+                            aria-label={`${rowLabel} ${t('app.minutes')}`}
                             aria-describedby={hintId}
                             value={minutes}
-                            onChange={(e) =>
-                                updateRow(index, {
-                                    seconds: hoursMinutesToSeconds(hours, parseInt(e.target.value, 10)),
-                                })
-                            }
+                            onChange={(e) => emit(count, hoursMinutesToSeconds(hours, parseInt(e.target.value, 10)))}
                             disabled={disabled}
                         />
                         <span className="text-sm">{t('app.minutes')}</span>
-                        <button
-                            className="btn btn-ghost btn-sm text-error"
-                            title={t('app.autoFillScheduleRemoveStep')}
-                            aria-label={t('app.autoFillScheduleRemoveStep')}
-                            onClick={() => removeRow(index)}
-                            disabled={disabled}
-                        >
-                            ×
-                        </button>
                         <span aria-live="polite" id={hintId} className="text-xs">
-                            {duplicate && <span className="text-error">{t('app.autoFillScheduleDuplicate')}</span>}
+                            {off && <span className="opacity-60">{t('app.autoFillScheduleOff')}</span>}
                             {outOfRange && <span className="text-error">{t('app.autoFillScheduleOutOfRange')}</span>}
                             {dominated && (
                                 <span className="badge badge-warning badge-xs">
@@ -229,21 +169,13 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
                     </div>
                 );
             })}
-            {rows.length === 0 && (
+            {activeRows.length === 0 && (
                 <div role="status" className="text-xs text-warning">
                     {t('app.autoFillScheduleEmpty')}
                 </div>
             )}
-            <div className="flex items-center gap-2">
-                <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={addRow}
-                    disabled={addDisabled}
-                    title={addDisabled && !disabled ? t('app.autoFillScheduleAddDisabled') : undefined}
-                >
-                    + {t('app.autoFillScheduleAddStep')}
-                </button>
-                {onReset && (
+            {onReset && (
+                <div className="flex items-center gap-2">
                     <button
                         className="btn btn-ghost btn-sm"
                         title={t('app.resetToDefaultNotSaved')}
@@ -258,8 +190,8 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
                             />
                         </svg>
                     </button>
-                )}
-            </div>
+                </div>
+            )}
         </div>
     );
 }

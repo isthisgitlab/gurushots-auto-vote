@@ -61,14 +61,17 @@ const nonNegInt = z.number().int().min(0); // image index (1-indexed, 0 = last)
 const minute1to59 = z.number().min(1).max(59);
 
 // Auto-fill schedule: rows of { count, seconds } meaning "have ≥ count entries
-// once ≤ seconds remain before close". Counts start at 2 — entry 1 always
-// exists because joining a challenge IS submitting a photo (there is no
-// separate join flow). Counts must be unique (each target needs exactly one
-// threshold); row order is irrelevant at runtime (the trigger is max-based).
-// The caps are defense-in-depth against a corrupted settings file or
-// out-of-band write, same rationale as the tagsList caps below.
-const MAX_SCHEDULE_ROWS = 20;
-const MAX_SCHEDULE_COUNT = 20;
+// once ≤ seconds remain before close". Counts are 2–4: entry 1 always exists
+// (joining a challenge IS submitting a photo — there is no separate join
+// flow), and GuruShots challenges allow at most 4 images, so the schedule is
+// at most three rows (images 2, 3, 4). Counts must be unique (each target
+// needs exactly one threshold); row order is irrelevant at runtime (the
+// trigger is max-based) and the runtime additionally clamps to the live
+// max_photo_submits as a safety net. The seconds cap is defense-in-depth
+// against a corrupted settings file or out-of-band write, same rationale as
+// the tagsList caps below.
+const MAX_SCHEDULE_ROWS = 3;
+const MAX_SCHEDULE_COUNT = 4;
 const MAX_SCHEDULE_SECONDS = 30 * 24 * 3600; // 30 days
 const fillScheduleRow = z
     .object({
@@ -80,6 +83,50 @@ const fillSchedule = z
     .array(fillScheduleRow)
     .max(MAX_SCHEDULE_ROWS)
     .refine((rows) => new Set(rows.map((r) => r.count)).size === rows.length);
+
+/**
+ * Clamp a persisted autoFillSchedule array to the current bounds. Used by the
+ * load-time `_autoFillScheduleBoundsV1` sanitizer in settings.js: the Settings
+ * modal resubmits EVERY persisted key on save, so a stored schedule that
+ * violates the (tightened) validator would block saving unrelated settings
+ * until repaired — this heals such data on load instead. Keeps only strict
+ * { count, seconds } rows within bounds, dedupes by count (first wins), and
+ * sorts by count. Returns the sanitized array when anything changed, or null
+ * when the input already conforms (or isn't an array at all — non-array
+ * corruption is the read path's concern, mirroring getValidScheduleRows).
+ *
+ * @param {*} value
+ * @returns {Array<{count: number, seconds: number}>|null}
+ */
+const sanitizeFillSchedule = (value) => {
+    if (!Array.isArray(value)) return null;
+    /** @type {Set<number>} */
+    const seen = new Set();
+    const normalized = value
+        .filter((row) => {
+            if (!row || typeof row !== 'object') return false;
+            if (!Number.isInteger(row.count) || row.count < 2 || row.count > MAX_SCHEDULE_COUNT) return false;
+            if (!Number.isInteger(row.seconds) || row.seconds < 0 || row.seconds > MAX_SCHEDULE_SECONDS) return false;
+            if (seen.has(row.count)) return false;
+            seen.add(row.count);
+            return true;
+        })
+        .sort((a, b) => a.count - b.count)
+        .map((row) => ({ count: row.count, seconds: row.seconds }));
+    const unchanged =
+        normalized.length === value.length &&
+        normalized.every((row, i) => {
+            const orig = value[i];
+            return (
+                orig &&
+                typeof orig === 'object' &&
+                orig.count === row.count &&
+                orig.seconds === row.seconds &&
+                Object.keys(orig).length === 2
+            );
+        });
+    return unchanged ? null : normalized;
+};
 
 // Per-string and total-array caps for tag-list settings. A typical use is
 // a few words per tag, a handful of tags per challenge — the caps exist
@@ -562,4 +609,5 @@ module.exports = {
     validateSetting,
     getValidationError,
     getSettingsSchema,
+    sanitizeFillSchedule,
 };
