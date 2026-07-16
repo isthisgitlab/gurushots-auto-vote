@@ -167,9 +167,9 @@
             autoFillScheduleDesc:
                 'Iestati laiku uz 0h 0m, lai izslēgtu attiecīgo foto. Katra rinda nozīmē: kad līdz beigām atlicis šis laiks, jābūt vismaz šitik foto — "Foto 2 ≤ 48h" iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai laiks ir garāks par visu izaicinājumu), tā panāk grafiku, iesniedzot vienu foto katrā ciklā jau no sākuma. Rinda virs izaicinājuma foto limita tiek ierobežota līdz tam.',
             autoFillScheduleImage: 'Foto',
-            autoFillScheduleOff: 'laiks nav iestatīts — var tikt iesniegts, panākot vēlāku soli',
-            autoFillScheduleEmpty: 'Visi soļi ir izslēgti — auto-aizpilde neko neiesniegs.',
-            autoFillScheduleDominated: 'nekad nedarbosies (cits solis šo skaitu jau nosedz)',
+            autoFillScheduleOff: 'laiks nav iestatīts — var tikt iesniegts, panākot vēlāku foto',
+            autoFillScheduleEmpty: 'Visi foto ir izslēgti — auto-aizpilde neko neiesniegs.',
+            autoFillScheduleDominated: 'nekad nedarbosies (vēlākam foto jau ir tāds pats vai garāks laiks)',
             autoFillScheduleOutOfRange: 'laiks nedrīkst pārsniegt 30 dienas',
             settingsSaveError: 'Dažus iestatījumus neizdevās saglabāt — pārbaudi izceltās vērtības un mēģini vēlreiz.',
             autoFillBadge: 'auto-aizpilde',

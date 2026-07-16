@@ -243,7 +243,12 @@ const loadSettings = () => {
             // the Settings modal resubmits every persisted key on save, such a
             // value would fail the tightened validator and block saving ANY
             // setting. Runs after the interval→schedule migration above, whose
-            // output always conforms already.
+            // output always conforms already. Note this is a ONE-TIME pass
+            // (flag-gated like the migrations), not a standing invariant:
+            // every write path is zod-validated afterwards, so only an
+            // out-of-band file edit made after the flag is set could
+            // reintroduce bad rows — the same accepted risk as hand-editing
+            // any other setting, and the read path still clamps defensively.
             if (!mergedSettings._autoFillScheduleBoundsV1) {
                 const sanitizeScope = (scope, label) => {
                     if (!scope) return;

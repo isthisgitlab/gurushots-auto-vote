@@ -126,7 +126,12 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
                 const seconds = secondsFor(count);
                 const { hours, minutes } = secondsToHoursMinutes(seconds);
                 const off = seconds === 0;
-                const outOfRange = seconds > SCHEDULE_MAX_SECONDS;
+                // Full bounds check, not just the cap: a hand-corrupted negative
+                // or fractional value renders as 0h 0m (secondsToHoursMinutes
+                // clamps) yet isn't `off`, so without this it would show a
+                // spurious dominated badge instead of being flagged invalid.
+                const outOfRange =
+                    !off && (!Number.isInteger(seconds) || seconds < 0 || seconds > SCHEDULE_MAX_SECONDS);
                 const dominated = !off && !outOfRange && isDominated(count, seconds);
                 const hintId = `${settingKey}-row-${count}-hint`;
                 const rowLabel = `${t('app.autoFillScheduleImage')} ${count}`;

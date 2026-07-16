@@ -178,4 +178,22 @@ describe('SettingInput type=schedule — inline diagnostics', () => {
         renderSchedule([{ count: 2, seconds: MAX_SECONDS }]);
         expect(screen.queryByText('app.autoFillScheduleOutOfRange')).toBeNull();
     });
+
+    test('a corrupted negative seconds value is flagged out-of-range, never dominated', () => {
+        // A hand-corrupted -5 renders as 0h 0m (secondsToHoursMinutes clamps)
+        // but is NOT the off state; without the full bounds check it would
+        // show a spurious dominated badge (any active row "covers" -5s).
+        renderSchedule([
+            { count: 2, seconds: -5 },
+            { count: 3, seconds: 10800 },
+        ]);
+        expect(screen.getByText('app.autoFillScheduleOutOfRange')).toBeTruthy();
+        expect(screen.queryByText('app.autoFillScheduleDominated')).toBeNull();
+        expect(screen.queryByText('app.autoFillScheduleOff')).not.toBeNull(); // image 4 is off
+    });
+
+    test('a corrupted fractional seconds value is flagged out-of-range', () => {
+        renderSchedule([{ count: 2, seconds: 600.5 }]);
+        expect(screen.getByText('app.autoFillScheduleOutOfRange')).toBeTruthy();
+    });
 });
