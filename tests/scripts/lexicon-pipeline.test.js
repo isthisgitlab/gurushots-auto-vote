@@ -10,7 +10,9 @@
  * the build; a silent pass here means degraded vectors ship undetected.
  */
 
+const crypto = require('node:crypto');
 const { buildAsset } = require('../../scripts/build-lexicon');
+const { percentile, validateConfigRefs } = require('../../scripts/validate-lexicon');
 const {
     collectAuthoredWords,
     parseGloveLine,
@@ -18,10 +20,65 @@ const {
     retrofit,
     assignStems,
     quantizePack,
+    streamEntryLines,
     GENERIC_TOKEN_RE,
+    ENTRY_NAME,
 } = require('../../scripts/fetch-embeddings');
 
 const vec = (...xs) => Float64Array.from(xs);
+
+// Minimal STORED (uncompressed) zip builder — just enough structure for yauzl
+// to read entries, so the extraction guards can be exercised with no fs and no
+// network. `usizeOverride` lets a test lie about the declared inflated size in
+// the central directory (what a decompression bomb would do).
+const crc32 = (buf) => {
+    let crc = 0xffffffff;
+    for (let i = 0; i < buf.length; i++) {
+        crc ^= buf[i];
+        for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+};
+const makeStoredZip = (entries, { usizeOverride } = {}) => {
+    const locals = [];
+    const centrals = [];
+    let offset = 0;
+    for (const [name, content] of entries) {
+        const nameBuf = Buffer.from(name, 'utf8');
+        const data = Buffer.from(content, 'utf8');
+        const crc = crc32(data);
+        const local = Buffer.alloc(30);
+        local.writeUInt32LE(0x04034b50, 0);
+        local.writeUInt16LE(20, 4); // version needed
+        local.writeUInt32LE(crc, 14);
+        local.writeUInt32LE(data.length, 18); // compressed size (stored)
+        local.writeUInt32LE(data.length, 22); // uncompressed size
+        local.writeUInt16LE(nameBuf.length, 26);
+        const central = Buffer.alloc(46);
+        central.writeUInt32LE(0x02014b50, 0);
+        central.writeUInt16LE(20, 4); // version made by
+        central.writeUInt16LE(20, 6); // version needed
+        central.writeUInt32LE(crc, 16);
+        // A stored entry must declare equal compressed/uncompressed sizes, so
+        // a bomb lies about both — mirror that or yauzl's own consistency
+        // check fires before the guard under test.
+        central.writeUInt32LE(usizeOverride ?? data.length, 20);
+        central.writeUInt32LE(usizeOverride ?? data.length, 24);
+        central.writeUInt16LE(nameBuf.length, 28);
+        central.writeUInt32LE(offset, 42); // local header offset
+        locals.push(local, nameBuf, data);
+        centrals.push(Buffer.concat([central, nameBuf]));
+        offset += local.length + nameBuf.length + data.length;
+    }
+    const centralDir = Buffer.concat(centrals);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(entries.length, 8);
+    eocd.writeUInt16LE(entries.length, 10);
+    eocd.writeUInt32LE(centralDir.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    return Buffer.concat([...locals, centralDir, eocd]);
+};
 
 describe('build-lexicon buildAsset', () => {
     const intermediate = {
@@ -180,5 +237,73 @@ describe('fetch-embeddings pure pipeline', () => {
         };
         expect(Array.from(decode(packed.pos))).toEqual([127, 64]);
         expect(Array.from(decode(packed.neg))).toEqual([-127, -32]);
+    });
+});
+
+describe('streamEntryLines — zip extraction guards (no fs, via Buffer source)', () => {
+    const CONTENT = 'cat 0.5 0.25\ndog 1 2\n';
+
+    test('streams the pinned entry line-by-line and returns its SHA-256', async () => {
+        const zip = makeStoredZip([
+            ['other.txt', 'ignore me'],
+            [ENTRY_NAME, CONTENT],
+        ]);
+        const lines = [];
+        const sha = await streamEntryLines(zip, (l) => lines.push(l));
+        expect(lines).toEqual(['cat 0.5 0.25', 'dog 1 2']);
+        expect(sha).toBe(crypto.createHash('sha256').update(CONTENT).digest('hex'));
+    });
+
+    test('rejects when the pinned entry is absent from the archive', async () => {
+        const zip = makeStoredZip([['other.txt', 'nope']]);
+        await expect(streamEntryLines(zip, () => {})).rejects.toThrow(/not found/);
+    });
+
+    test('rejects a corrupt archive instead of hanging or throwing raw', async () => {
+        await expect(streamEntryLines(Buffer.from('this is not a zip'), () => {})).rejects.toThrow();
+    });
+
+    test('rejects a decompression bomb by its declared inflated size before reading any data', async () => {
+        const zip = makeStoredZip([[ENTRY_NAME, CONTENT]], { usizeOverride: 0x7fffffff }); // ~2 GiB declared
+        const onLine = jest.fn();
+        await expect(streamEntryLines(zip, onLine)).rejects.toThrow(/declares/);
+        expect(onLine).not.toHaveBeenCalled();
+    });
+});
+
+describe('validate-lexicon pure helpers', () => {
+    const config = {
+        organizationalParents: ['object'],
+        unrelatedParents: [['pet', 'object']],
+        nearMissPairs: [['cat', 'toy']],
+        concepts: [
+            { id: 'cat', parent: 'pet', words: ['cat'] },
+            { id: 'toy', parent: 'object', words: ['toy'] },
+        ],
+    };
+
+    test('a consistent eval config produces no errors', () => {
+        expect(validateConfigRefs(config)).toEqual([]);
+    });
+
+    test('flags unknown parents and concept ids that would silently match nothing', () => {
+        const broken = {
+            ...config,
+            organizationalParents: ['objct'],
+            unrelatedParents: [['pet', 'objects']],
+            nearMissPairs: [['cat', 'toys']],
+        };
+        const errors = validateConfigRefs(broken);
+        expect(errors).toHaveLength(3);
+        expect(errors.join('\n')).toContain('objct');
+        expect(errors.join('\n')).toContain('objects');
+        expect(errors.join('\n')).toContain('toys');
+    });
+
+    test('percentile picks by rank on a sorted array (and is undefined on empty — main guards that)', () => {
+        expect(percentile([1, 2, 3, 4], 50)).toBe(3);
+        expect(percentile([1, 2, 3, 4], 99)).toBe(4);
+        expect(percentile([7], 5)).toBe(7);
+        expect(percentile([], 50)).toBeUndefined();
     });
 });

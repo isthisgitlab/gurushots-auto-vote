@@ -41,9 +41,13 @@
  *
  * If the gate fails, do NOT just move SEMANTIC_MATCH_FLOOR until it passes:
  *   1. read the printed distributions — is one eval pair dishonest (an
- *      `unrelatedParents` entry that real embeddings consider related)?
- *   2. if the whole unrelated distribution sits high, flip MEAN_CENTER in
- *      scripts/fetch-embeddings.js (anisotropy correction) and regenerate;
+ *      `unrelatedParents` entry that real embeddings consider related, or a
+ *      grab-bag parent missing from `organizationalParents`)?
+ *   2. if the whole related distribution sits low, raise RETROFIT_BETA in
+ *      scripts/fetch-embeddings.js (tightens the curated clusters) and
+ *      regenerate — offline once the archive is cached. (MEAN_CENTER is
+ *      already on; turning it OFF trades noise rejection for related-pair
+ *      similarity and historically failed the farm-vs-sea case.)
  *   3. only then consider whether the floor itself is misplaced, and keep it
  *      inside the pre-committed percentile gate above.
  */
@@ -61,9 +65,48 @@ const MAX_CHALLENGE_KEYWORDS = 2;
 
 const percentile = (sorted, p) => sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
 
+/**
+ * Referential integrity of the eval config. A typo'd parent in
+ * `unrelatedParents`/`organizationalParents` (or a concept id in
+ * `nearMissPairs`) would not misbehave — it would silently match NOTHING,
+ * quietly shrinking the very distribution the gate depends on. That is the one
+ * failure mode reading the printed distributions cannot surface, so it is
+ * checked structurally. Pure; returns error strings (empty = valid).
+ *
+ * @param {object} config - parsed lexicon-concepts.json
+ * @returns {Array<string>}
+ */
+const validateConfigRefs = (config) => {
+    const errors = [];
+    const concepts = (config.concepts || []).filter((c) => c && c.id && c.parent);
+    const ids = new Set(concepts.map((c) => c.id));
+    const parents = new Set(concepts.map((c) => c.parent));
+    for (const parent of config.organizationalParents || []) {
+        if (!parents.has(parent)) errors.push(`organizationalParents references unknown parent "${parent}"`);
+    }
+    for (const pair of config.unrelatedParents || []) {
+        for (const parent of pair) {
+            if (!parents.has(parent)) errors.push(`unrelatedParents references unknown parent "${parent}"`);
+        }
+    }
+    for (const pair of config.nearMissPairs || []) {
+        for (const id of pair) {
+            if (!ids.has(id)) errors.push(`nearMissPairs references unknown concept id "${id}"`);
+        }
+    }
+    return errors;
+};
+
 const main = async () => {
     if (!(await lexicon.init())) {
         console.error('❌ lexicon asset unavailable — run `pnpm build:lexicon` first');
+        process.exit(1);
+    }
+
+    const refErrors = validateConfigRefs(CONFIG);
+    if (refErrors.length) {
+        console.error(`❌ scripts/lexicon-concepts.json eval config is inconsistent:`);
+        for (const e of refErrors) console.error(`   - ${e}`);
         process.exit(1);
     }
 
@@ -123,6 +166,17 @@ const main = async () => {
 
     related.sort((a, b) => a - b);
     unrelated.sort((a, b) => a - b);
+
+    // An empty distribution means the gate would be comparing percentiles of
+    // nothing (and percentile() would return undefined) — that is a broken
+    // eval config, not a passing one.
+    if (related.length === 0 || unrelated.length === 0) {
+        console.error(
+            `❌ eval distributions are empty (n_related=${related.length}, n_unrelated=${unrelated.length}) — ` +
+                'the concepts/unrelatedParents config no longer produces comparable pairs.',
+        );
+        process.exit(1);
+    }
 
     // Mirror the runtime boundary EXACTLY. photoPicker buckets a score with
     // Math.round(raw * 100) and matches on `bucket >= SEMANTIC_MATCH_FLOOR`, so
@@ -193,9 +247,11 @@ const main = async () => {
         console.error(
             '\n   Read the distributions above before touching anything. In order:\n' +
                 '   1. audit scripts/lexicon-concepts.json — an `unrelatedParents` pair real embeddings\n' +
-                '      consider related poisons the noise distribution; fix the eval set, not the floor.\n' +
-                '   2. if the WHOLE unrelated distribution sits high, set MEAN_CENTER = true in\n' +
+                '      consider related poisons the noise distribution, and a grab-bag parent missing from\n' +
+                '      `organizationalParents` drags the related side down; fix the eval set, not the floor.\n' +
+                '   2. if the WHOLE related distribution sits low, raise RETROFIT_BETA in\n' +
                 '      scripts/fetch-embeddings.js and re-run fetch + build (offline once cached).\n' +
+                '      MEAN_CENTER is already on — do not turn it off to inflate related scores.\n' +
                 '   3. only then adjust SEMANTIC_MATCH_FLOOR (src/js/services/photoPicker.js), keeping it\n' +
                 '      strictly inside p99(unrelated) < FLOOR < p25(related). Do NOT widen the gate itself.',
         );
@@ -205,4 +261,6 @@ const main = async () => {
     console.log(`\n✅ Floor sits in the gap: ${fmt(unrelP99)} < ${fmt(floor)} < ${fmt(relP25)}`);
 };
 
-main();
+module.exports = { percentile, validateConfigRefs };
+
+if (require.main === module) main();

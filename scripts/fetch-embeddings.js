@@ -46,12 +46,19 @@ const yauzl = require('yauzl');
 const { stem } = require('../src/js/services/photoPicker');
 
 const GLOVE_URL = 'https://nlp.stanford.edu/data/glove.6B.zip';
+// SHA-256 of the whole archive as served by the pinned URL. The entry hash
+// below is the actual trust anchor for the data used; this outer pin just
+// catches a swapped/truncated download one step earlier.
+const ZIP_SHA256 = '617afb2fe6cbd085c235baf7a465b96f4112bd7f7ccb2b2cbd649fed9cbcf2fb';
 const ENTRY_NAME = 'glove.6B.100d.txt';
 // SHA-256 of the extracted glove.6B.100d.txt — the exact bytes this pipeline
 // consumes. Verified on every run, cached or fresh; a mismatch aborts before
 // anything is written. (Matches the independently published hash of the file,
 // e.g. github.com/tsajed/data.)
 const ENTRY_SHA256 = '95dde4dfd627ab26608d33e76d1195ec059734bd29089ea52cadb08d07c64544';
+// Refuse to write more than this to the cache — a swapped/looping source
+// should fail fast, not fill the disk. The real archive is ~822 MB.
+const MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024;
 const DIMS = 100;
 // Top-N frequency-ranked generic tokens (counted AFTER the filter below, so the
 // stored generic vocab really is ~TOP_N stems, not "top lines minus rejects").
@@ -107,6 +114,8 @@ const sha256OfFile = (filePath) =>
             .on('data', (chunk) => hash.update(chunk))
             .on('end', () => resolve(hash.digest('hex')));
     });
+
+const sha256OfString = (str) => crypto.createHash('sha256').update(str).digest('hex');
 
 /**
  * Authored vocabulary: surface word -> owning concept id (or 'extraWords'),
@@ -291,7 +300,19 @@ const download = async () => {
     }
     const tmpPath = `${ZIP_PATH}.partial`;
     try {
-        await pipeline(res.body, fs.createWriteStream(tmpPath));
+        // Cap the bytes written before any hash check can run — a wrong or
+        // malicious source must not be able to fill the disk first.
+        let written = 0;
+        const capped = async function* (source) {
+            for await (const chunk of source) {
+                written += chunk.length;
+                if (written > MAX_DOWNLOAD_BYTES) {
+                    throw new Error(`download exceeded ${MAX_DOWNLOAD_BYTES} bytes — not the pinned archive`);
+                }
+                yield chunk;
+            }
+        };
+        await pipeline(res.body, capped, fs.createWriteStream(tmpPath));
         fs.renameSync(tmpPath, ZIP_PATH);
     } catch (err) {
         fs.rmSync(tmpPath, { force: true });
@@ -303,10 +324,18 @@ const download = async () => {
  * Stream the single pinned entry out of the zip, hash it, and hand each line to
  * onLine. Never writes any entry to disk; caps inflated size. Resolves with the
  * entry's SHA-256 once fully consumed.
+ *
+ * @param {string|Buffer} zipSource - path to the archive, or its bytes (the
+ *   Buffer form exists so tests can exercise this path without any fs)
+ * @param {(line: string) => void} onLine
+ * @returns {Promise<string>} SHA-256 hex of the entry's inflated bytes
  */
-const streamEntryLines = (onLine) =>
+const streamEntryLines = (zipSource, onLine) =>
     new Promise((resolve, reject) => {
-        yauzl.open(ZIP_PATH, { lazyEntries: true }, (err, zipfile) => {
+        const opener = Buffer.isBuffer(zipSource)
+            ? (opts, cb) => yauzl.fromBuffer(zipSource, opts, cb)
+            : (opts, cb) => yauzl.open(zipSource, opts, cb);
+        opener({ lazyEntries: true }, (err, zipfile) => {
             if (err) return reject(new Error(`cannot open zip: ${err.message}`));
             let found = false;
             zipfile.on('entry', (entry) => {
@@ -361,6 +390,15 @@ const main = async () => {
     }
     await download();
     const zipSha256 = await sha256OfFile(ZIP_PATH);
+    if (zipSha256 !== ZIP_SHA256) {
+        fail([
+            `SHA-256 mismatch for the archive:`,
+            `expected ${ZIP_SHA256}`,
+            `got      ${zipSha256}`,
+            'Delete scripts/.cache/glove.6B.zip and re-run; if the mismatch persists, do not commit —',
+            'the pinned URL is serving different bytes than it did when this pin was recorded.',
+        ]);
+    }
 
     // Single frequency-ordered scan. `rows` keeps encounter order (= GloVe
     // frequency order), which assignStems' precedence relies on.
@@ -385,7 +423,7 @@ const main = async () => {
     console.log(`🔍 Scanning ${ENTRY_NAME} for top ${TOP_N} tokens + ${authored.size} authored words…`);
     let entrySha256;
     try {
-        entrySha256 = await streamEntryLines(onLine);
+        entrySha256 = await streamEntryLines(ZIP_PATH, onLine);
     } catch (err) {
         fail([
             `extraction failed: ${err.message || err}`,
@@ -459,6 +497,12 @@ const main = async () => {
         packed,
     };
     fs.writeFileSync(OUT_PATH, JSON.stringify(output));
+    // Sidecar payload hash: the intermediate itself is an unreviewable
+    // multi-MB blob, so a hand-edit to its vectors would be invisible in a
+    // diff. This one-line file makes any payload change show up as a
+    // human-readable hunk, and build-lexicon.js refuses to build if the
+    // committed payload no longer matches it.
+    fs.writeFileSync(`${OUT_PATH.replace(/\.json$/, '')}.sha256`, `${sha256OfString(JSON.stringify(packed))}\n`);
     const bytes = fs.statSync(OUT_PATH).size;
     console.log(
         `✅ Intermediate: ${stems.size} word-stems, ${DIMS}d, ${(bytes / 1024 / 1024).toFixed(2)} MB ` +
@@ -474,7 +518,10 @@ module.exports = {
     retrofit,
     assignStems,
     quantizePack,
+    streamEntryLines,
+    sha256OfString,
     GENERIC_TOKEN_RE,
+    ENTRY_NAME,
 };
 
 if (require.main === module) {

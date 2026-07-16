@@ -47,6 +47,7 @@
 - **Lint/format/types**: `pnpm lint` · `lint:fix` · `format` (Prettier) · `typecheck` (tsc, checker-only — see **Dependencies & Type Checking**)
 - **Code hygiene**: `pnpm knip` (unused files/deps/types — config in `knip.json`; the `exports`/`nsExports` rules are off because they misfire on this codebase's CJS namespace-access pattern) · `pnpm size` (renderer bundle brotli budgets via size-limit, config in `.size-limit.json`) · `pnpm size:cli` (coarse SEA binary / `cli-bundled.js` size guard, `scripts/check-cli-size.js`)
 - **README version sync**: `pnpm verify:readme` ensures README version strings match `package.json`. `pnpm update:readme` rewrites them. The release workflow enforces this — drift will fail CI.
+- **Semantic lexicon**: `pnpm fetch:embeddings` (manual, network — downloads the pinned GloVe archive once into gitignored `scripts/.cache/`, then prunes/quantizes it into the committed `scripts/lexicon-embeddings.json`; MUST be re-run after editing `scripts/lexicon-concepts.json`, offline once cached) · `pnpm build:lexicon` (offline, deterministic — intermediate → `src/assets/semantic-vectors.json`; CI diffs the output) · `pnpm verify:lexicon` (statistical gate for `SEMANTIC_MATCH_FLOOR`)
 
 ## Dependencies & Type Checking
 

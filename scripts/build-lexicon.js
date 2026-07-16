@@ -30,9 +30,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { stem } = require('../src/js/services/photoPicker');
+// The collision/vocab rules are shared with the fetch step ON PURPOSE — two
+// hand-rolled copies of "stem -> owner, fail on cross-cluster collision"
+// would drift apart silently.
+const { collectAuthoredWords, sha256OfString } = require('./fetch-embeddings');
 
 const ROOT = path.join(__dirname, '..');
 const EMBEDDINGS_PATH = path.join(__dirname, 'lexicon-embeddings.json');
+const EMBEDDINGS_SHA_PATH = path.join(__dirname, 'lexicon-embeddings.sha256');
 const CONCEPTS_PATH = path.join(__dirname, 'lexicon-concepts.json');
 const OUT_ASSET = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const DIST_DIR = path.join(ROOT, 'dist');
@@ -49,24 +54,15 @@ const OUT_DIST = path.join(DIST_DIR, 'semantic-vectors.json');
  */
 const buildAsset = (intermediate, concepts) => {
     const packed = (intermediate && intermediate.packed) || {};
-    const stemOwner = new Map();
-    const collisions = [];
+    const { bySurface, collisions } = collectAuthoredWords(concepts);
     const missing = [];
-    const claim = (word, owner) => {
-        const key = stem(String(word).toLowerCase());
-        if (!key || key.length < 2) return;
-        if (stemOwner.has(key) && stemOwner.get(key) !== owner) {
-            collisions.push(`${key} (${stemOwner.get(key)} -> ${owner})`);
-        }
-        stemOwner.set(key, owner);
+    for (const [surface, owner] of bySurface) {
+        const key = stem(surface);
+        if (!key || key.length < 2) continue;
         if (!Object.prototype.hasOwnProperty.call(packed, key)) {
-            missing.push(`${word} (stem "${key}", ${owner})`);
+            missing.push(`${surface} (stem "${key}", ${owner})`);
         }
-    };
-    for (const concept of (concepts && concepts.concepts) || []) {
-        for (const word of concept.words || []) claim(word, concept.id);
     }
-    for (const word of (concepts && concepts.extraWords) || []) claim(word, 'extraWords');
 
     const output = {
         version: 2,
@@ -75,6 +71,7 @@ const buildAsset = (intermediate, concepts) => {
         dims: intermediate ? intermediate.dims : undefined,
         scale: intermediate ? intermediate.scale : undefined,
         meanCentered: intermediate ? Boolean(intermediate.meanCentered) : false,
+        retrofitBeta: intermediate && Number.isFinite(intermediate.retrofitBeta) ? intermediate.retrofitBeta : 0,
         packed,
     };
     return { output, missing, collisions };
@@ -89,6 +86,24 @@ const main = () => {
     }
     const intermediate = JSON.parse(fs.readFileSync(EMBEDDINGS_PATH, 'utf8'));
     const concepts = JSON.parse(fs.readFileSync(CONCEPTS_PATH, 'utf8'));
+
+    // Tamper check: the intermediate is a multi-MB base64 blob nobody can
+    // review line-by-line, so its payload hash lives in a one-line sidecar
+    // file that IS reviewable. A payload edit that doesn't update the sidecar
+    // (or vice versa) fails here instead of shipping.
+    const expectedSha = fs.readFileSync(EMBEDDINGS_SHA_PATH, 'utf8').trim();
+    const actualSha = sha256OfString(JSON.stringify(intermediate.packed));
+    if (actualSha !== expectedSha) {
+        console.error('❌ scripts/lexicon-embeddings.json does not match scripts/lexicon-embeddings.sha256:');
+        console.error(`   sidecar  ${expectedSha}`);
+        console.error(`   payload  ${actualSha}`);
+        console.error(
+            '   The committed intermediate was modified without regenerating it. Re-run\n' +
+                '   `pnpm fetch:embeddings` (which rewrites both files) — never hand-edit either one.',
+        );
+        process.exit(1);
+    }
+
     const { output, missing, collisions } = buildAsset(intermediate, concepts);
 
     if (collisions.length) {

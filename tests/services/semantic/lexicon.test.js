@@ -123,6 +123,8 @@ describe('buildTable — v2 packed asset decode', () => {
     const SCALE = 0.01;
     const INT8 = Int8Array.from([127, -127, 5, 0]);
     const packedOf = (int8) => Buffer.from(int8.buffer, int8.byteOffset, int8.byteLength).toString('base64');
+    // Buffer-free encoder for tests that run with global.Buffer removed.
+    const packedViaCharCodes = (int8) => btoa(String.fromCharCode(...Array.from(int8, (b) => (b + 256) % 256)));
     const asset = (packed) => ({ version: 2, dims: DIMS, scale: SCALE, packed });
 
     test('round-trips values, including negative components', () => {
@@ -166,6 +168,19 @@ describe('buildTable — v2 packed asset decode', () => {
         expect(lexicon.buildTable({})).toBeNull();
         expect(lexicon.buildTable({ version: 1, dims: 4, scale: 1, words: {} })).toBeNull();
         expect(lexicon.buildTable({ version: 2, dims: NaN, scale: 1, packed: {} })).toBeNull();
+        expect(lexicon.buildTable({ version: 2, dims: 4, scale: NaN, packed: {} })).toBeNull();
         expect(lexicon.buildTable({ version: 2, dims: 4, scale: 1, packed: {} })).toBeNull();
+    });
+
+    test('an entry that makes atob throw is skipped, not fatal (no-Buffer path)', () => {
+        const originalBuffer = global.Buffer;
+        try {
+            delete global.Buffer;
+            const table = lexicon.buildTable(asset({ ok: packedViaCharCodes(INT8), bad: '!!!not-base64!!!' }));
+            expect(table.words.size).toBe(1);
+            expect(table.words.has('ok')).toBe(true);
+        } finally {
+            global.Buffer = originalBuffer;
+        }
     });
 });
