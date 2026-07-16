@@ -1,21 +1,125 @@
 {
-    "$comment": "Source vocabulary for scripts/build-lexicon.js. Each concept is a synonym cluster: all words in `words` get an identical vector (cosine 1 between them), so e.g. a 'feline' challenge keyword matches a 'cat' photo label. `parent` blends a hypernym component so siblings under the same parent (cat vs dog under animal) get a mild positive similarity. Add/edit clusters here and re-run `pnpm build:lexicon`. Words are stemmed at build time with the same stemmer the matcher uses, so list natural forms.",
-    "dims": 128,
-    "conceptWeight": 0.6,
-    "parentWeight": 0.8,
+    "$comment": "Evaluation/calibration fixture for the semantic lexicon (vectors themselves come from pretrained GloVe embeddings — see scripts/fetch-embeddings.js). Roles: (1) vocab guarantee — every word in `concepts` and `extraWords` MUST have a GloVe vector; fetch-embeddings.js and build-lexicon.js both fail loudly if one doesn't. (2) related pairs for scripts/validate-lexicon.js — words in one cluster are synonyms/co-labels of a theme; clusters sharing a `parent` are siblings. Put the most canonical words FIRST in each cluster (the validator embeds the front of the list as the 'challenge title'). (3) `unrelatedParents` — parent pairs that are honestly unrelated in embedding space; the validator's noise distribution is built ONLY from concept pairs across these, because real embeddings legitimately relate e.g. vehicle<->urban. (4) `nearMissPairs` — concept-id pairs that are moderately related but wrong-theme (reported by the validator with a warning threshold, not gated). Words are stemmed at build time with the matcher's own stemmer; a stem collision between two clusters is a fatal authoring error, so check the build output after editing. Re-run `pnpm fetch:embeddings` (offline once the GloVe zip is cached) then `pnpm build:lexicon && pnpm verify:lexicon` after any edit.",
+    "extraWords": [
+        "furniture",
+        "sofa",
+        "chair",
+        "desk",
+        "bed",
+        "bedroom",
+        "office",
+        "interior",
+        "bottle",
+        "cup",
+        "glass",
+        "plate",
+        "bowl",
+        "vase",
+        "curtain"
+    ],
+    "organizationalParents": ["structure", "object", "work", "style", "activity"],
+    "unrelatedParents": [
+        ["marine", "urban"],
+        ["insect", "vehicle"],
+        ["emotion", "vehicle"],
+        ["bodypart", "weather"],
+        ["food", "wintersport"],
+        ["tech", "plant"],
+        ["art", "farm"],
+        ["reptile", "light"],
+        ["holiday", "marine"],
+        ["fashion", "nature"],
+        ["fire", "sport"],
+        ["pet", "sky"],
+        ["marine", "sport"],
+        ["reptile", "urban"],
+        ["farm", "tech"],
+        ["emotion", "structure"],
+        ["bodypart", "plant"],
+        ["wild", "event"],
+        ["tech", "event"]
+    ],
+    "nearMissPairs": [
+        ["car", "street"],
+        ["boat", "harbor"],
+        ["snow", "mountain"],
+        ["smoke", "fog"],
+        ["bird", "butterfly"],
+        ["dog", "wolf"],
+        ["cat", "bigcat"],
+        ["sunset", "beach"],
+        ["rain", "umbrella"],
+        ["wedding", "flower"]
+    ],
     "concepts": [
-        { "id": "cat", "parent": "animal", "words": ["cat", "kitten", "kitty", "feline", "tabby", "tomcat"] },
-        { "id": "dog", "parent": "animal", "words": ["dog", "puppy", "canine", "hound", "doggo", "pup"] },
-        { "id": "bird", "parent": "animal", "words": ["bird", "avian", "fowl", "songbird", "seabird", "bluebird"] },
-        { "id": "horse", "parent": "animal", "words": ["horse", "equine", "pony", "stallion", "mare", "foal"] },
-        { "id": "fish", "parent": "animal", "words": ["fish", "fishes", "goldfish"] },
+        { "id": "cat", "parent": "pet", "words": ["cat", "kitten", "feline", "kitty", "tabby"] },
+        { "id": "dog", "parent": "pet", "words": ["dog", "puppy", "canine", "hound", "pup"] },
+        { "id": "pet", "parent": "pet", "words": ["pet", "pets"] },
+
+        { "id": "bigcat", "parent": "wild", "words": ["lion", "tiger", "leopard", "cheetah", "panther"] },
+        { "id": "bear", "parent": "wild", "words": ["bear", "grizzly", "cub"] },
+        { "id": "wolf", "parent": "wild", "words": ["wolf", "coyote", "fox"] },
+        { "id": "deer", "parent": "wild", "words": ["deer", "stag", "elk", "moose", "reindeer"] },
+        { "id": "elephant", "parent": "wild", "words": ["elephant"] },
+        { "id": "monkey", "parent": "wild", "words": ["monkey", "ape", "gorilla", "chimp"] },
+        { "id": "safari", "parent": "wild", "words": ["giraffe", "zebra", "antelope", "gazelle", "rhino", "hippo"] },
+        { "id": "smallwild", "parent": "wild", "words": ["rabbit", "bunny", "hare", "squirrel", "hedgehog"] },
+        { "id": "wildlife", "parent": "wild", "words": ["wildlife", "animal", "creature", "fauna", "mammal"] },
+
+        { "id": "bird", "parent": "bird", "words": ["bird", "avian", "songbird"] },
+        { "id": "raptor", "parent": "bird", "words": ["eagle", "hawk", "falcon", "owl"] },
         {
-            "id": "insect",
-            "parent": "animal",
-            "words": ["insect", "bug", "beetle", "butterfly", "moth", "bee", "dragonfly"]
+            "id": "waterbird",
+            "parent": "bird",
+            "words": ["swan", "heron", "flamingo", "pelican", "gull", "seagull", "seabird"]
         },
-        { "id": "wildlife", "parent": "animal", "words": ["wildlife", "animal", "creature", "fauna", "mammal"] },
-        { "id": "pet", "parent": "animal", "words": ["pet", "pets"] },
+        { "id": "exoticbird", "parent": "bird", "words": ["parrot", "peacock", "hummingbird"] },
+
+        { "id": "fish", "parent": "marine", "words": ["fish", "goldfish", "trout", "salmon"] },
+        { "id": "whale", "parent": "marine", "words": ["whale", "orca"] },
+        { "id": "dolphin", "parent": "marine", "words": ["dolphin", "porpoise"] },
+        { "id": "shark", "parent": "marine", "words": ["shark"] },
+        { "id": "seal", "parent": "marine", "words": ["seal", "walrus", "otter"] },
+        { "id": "octopus", "parent": "marine", "words": ["octopus", "squid", "jellyfish", "starfish"] },
+        { "id": "crab", "parent": "marine", "words": ["crab", "lobster", "shrimp"] },
+        { "id": "coral", "parent": "marine", "words": ["coral", "reef"] },
+
+        { "id": "turtle", "parent": "reptile", "words": ["turtle", "tortoise"] },
+        { "id": "snake", "parent": "reptile", "words": ["snake", "serpent", "python", "cobra"] },
+        { "id": "lizard", "parent": "reptile", "words": ["lizard", "gecko", "iguana", "chameleon"] },
+        { "id": "frog", "parent": "reptile", "words": ["frog", "toad", "amphibian"] },
+        { "id": "crocodile", "parent": "reptile", "words": ["crocodile", "alligator"] },
+
+        { "id": "butterfly", "parent": "insect", "words": ["butterfly", "moth", "caterpillar"] },
+        { "id": "bee", "parent": "insect", "words": ["bee", "bumblebee", "wasp"] },
+        { "id": "beetle", "parent": "insect", "words": ["insect", "bug", "beetle", "ladybug", "ant"] },
+        { "id": "dragonfly", "parent": "insect", "words": ["dragonfly", "grasshopper"] },
+        { "id": "spider", "parent": "insect", "words": ["spider", "cobweb"] },
+
+        {
+            "id": "farm",
+            "parent": "farm",
+            "words": ["farm", "farmhouse", "farming", "agriculture", "agricultural", "farmland", "ranch", "homestead"]
+        },
+        { "id": "barn", "parent": "farm", "words": ["barn", "silo", "stable", "coop", "shed"] },
+        {
+            "id": "livestock",
+            "parent": "farm",
+            "words": ["cow", "cattle", "calf", "bull", "ox", "sheep", "lamb", "goat", "pig", "swine", "hog", "donkey"]
+        },
+        {
+            "id": "poultry",
+            "parent": "farm",
+            "words": ["chicken", "hen", "rooster", "duck", "goose", "turkey", "poultry"]
+        },
+        {
+            "id": "field",
+            "parent": "farm",
+            "words": ["field", "meadow", "pasture", "grassland", "prairie", "paddock", "hay", "crop", "wheat", "corn"]
+        },
+        { "id": "tractor", "parent": "farm", "words": ["tractor", "plow", "plough", "harvester"] },
+        { "id": "countryside", "parent": "nature", "words": ["countryside", "rural"] },
+        { "id": "horse", "parent": "farm", "words": ["horse", "equine", "pony", "stallion", "mare", "foal"] },
 
         {
             "id": "flower",
@@ -24,42 +128,110 @@
         },
         { "id": "tree", "parent": "plant", "words": ["tree", "forest", "woodland", "woods", "foliage"] },
         { "id": "plant", "parent": "plant", "words": ["plant", "flora", "greenery", "leaf", "leaves"] },
+        { "id": "garden", "parent": "plant", "words": ["garden", "park"] },
+        { "id": "mushroom", "parent": "plant", "words": ["mushroom", "fungus"] },
+        { "id": "fern", "parent": "plant", "words": ["fern", "moss", "ivy"] },
+        { "id": "cactus", "parent": "plant", "words": ["cactus"] },
 
         {
             "id": "water",
-            "parent": "nature",
+            "parent": "water",
             "words": ["water", "aquatic", "wet", "underwater", "undersea", "submerged"]
         },
         {
             "id": "ocean",
-            "parent": "nature",
+            "parent": "water",
             "words": ["ocean", "sea", "marine", "seascape", "coastal", "coast", "shore"]
         },
-        { "id": "lake", "parent": "nature", "words": ["lake", "pond", "lagoon", "reservoir"] },
-        { "id": "river", "parent": "nature", "words": ["river", "stream", "creek", "waterfall", "cascade"] },
-        { "id": "beach", "parent": "nature", "words": ["beach", "sand", "seashore", "shoreline"] },
+        { "id": "lake", "parent": "water", "words": ["lake", "pond", "lagoon", "reservoir"] },
+        { "id": "river", "parent": "water", "words": ["river", "stream", "creek", "waterfall", "cascade"] },
+        { "id": "beach", "parent": "water", "words": ["beach", "sand", "seashore", "shoreline"] },
+        { "id": "harbor", "parent": "water", "words": ["harbor", "port", "pier", "dock", "marina"] },
+        { "id": "wave", "parent": "water", "words": ["wave", "tide"] },
+        { "id": "island", "parent": "water", "words": ["island"] },
+
         { "id": "mountain", "parent": "nature", "words": ["mountain", "peak", "summit", "alpine", "hill", "highland"] },
         { "id": "desert", "parent": "nature", "words": ["desert", "dune", "arid"] },
+        {
+            "id": "landscape",
+            "parent": "nature",
+            "words": ["landscape", "scenery", "scenic", "vista", "panorama"]
+        },
+        { "id": "cave", "parent": "nature", "words": ["cave", "cavern", "grotto"] },
+        { "id": "canyon", "parent": "nature", "words": ["canyon", "cliff", "valley", "gorge"] },
+        { "id": "volcano", "parent": "nature", "words": ["volcano", "lava"] },
+
         { "id": "snow", "parent": "weather", "words": ["snow", "snowy", "winter", "frost", "ice", "icy", "frozen"] },
         { "id": "rain", "parent": "weather", "words": ["rain", "rainy", "storm", "stormy", "drizzle", "downpour"] },
         { "id": "fog", "parent": "weather", "words": ["fog", "foggy", "mist", "misty", "haze"] },
+        { "id": "autumn", "parent": "weather", "words": ["autumn", "fall", "harvest"] },
+        { "id": "spring", "parent": "weather", "words": ["spring", "springtime"] },
+        { "id": "summer", "parent": "weather", "words": ["summer", "summertime", "tropical"] },
+        { "id": "wind", "parent": "weather", "words": ["wind", "windy", "breeze"] },
+        { "id": "rainbow", "parent": "rainbow", "words": ["rainbow"] },
+        { "id": "lightning", "parent": "weather", "words": ["lightning", "thunder", "thunderstorm"] },
+
         { "id": "cloud", "parent": "sky", "words": ["cloud", "cloudy", "overcast"] },
-        { "id": "sky", "parent": "sky", "words": ["sky", "skies", "heaven"] },
+        { "id": "sky", "parent": "sky", "words": ["sky", "heaven"] },
+        { "id": "star", "parent": "sky", "words": ["star", "starry", "galaxy", "constellation", "astrophotography"] },
+        { "id": "moon", "parent": "sky", "words": ["moon", "lunar", "crescent"] },
+        { "id": "sun", "parent": "sky", "words": ["sun", "solar", "sunshine", "sunlight", "sunny"] },
+        { "id": "aurora", "parent": "sky", "words": ["aurora"] },
+
         { "id": "sunset", "parent": "light", "words": ["sunset", "sundown", "dusk", "twilight", "golden"] },
         { "id": "sunrise", "parent": "light", "words": ["sunrise", "dawn", "daybreak", "morning"] },
         { "id": "night", "parent": "light", "words": ["night", "nocturnal", "midnight", "nighttime"] },
-        {
-            "id": "star",
-            "parent": "sky",
-            "words": ["star", "starry", "astrophotography", "galaxy", "milkyway", "constellation"]
-        },
+        { "id": "silhouette", "parent": "light", "words": ["silhouette", "backlit", "shadow"] },
+        { "id": "neon", "parent": "light", "words": ["neon", "glow", "glowing"] },
+        { "id": "lamp", "parent": "light", "words": ["lamp", "lantern", "bulb"] },
+
+        { "id": "fire", "parent": "fire", "words": ["fire", "flame", "blaze", "bonfire", "campfire"] },
+        { "id": "candle", "parent": "fire", "words": ["candle"] },
+        { "id": "smoke", "parent": "fire", "words": ["smoke", "steam", "vapor"] },
+        { "id": "fireworks", "parent": "fire", "words": ["fireworks"] },
 
         { "id": "person", "parent": "person", "words": ["person", "people", "human", "portrait", "face", "model"] },
         { "id": "child", "parent": "person", "words": ["child", "kid", "baby", "infant", "toddler", "children"] },
         { "id": "woman", "parent": "person", "words": ["woman", "female", "lady", "girl"] },
         { "id": "man", "parent": "person", "words": ["man", "male", "guy", "boy"] },
-        { "id": "crowd", "parent": "person", "words": ["crowd", "group", "gathering"] },
-        { "id": "selfie", "parent": "person", "words": ["selfie", "selfportrait"] },
+        { "id": "crowd", "parent": "crowd", "words": ["crowd", "group", "gathering"] },
+        { "id": "couple", "parent": "person", "words": ["couple", "lovers"] },
+        {
+            "id": "family",
+            "parent": "person",
+            "words": ["family", "mother", "father", "parents", "grandmother", "grandfather"]
+        },
+
+        { "id": "eye", "parent": "bodypart", "words": ["eye"] },
+        { "id": "hand", "parent": "bodypart", "words": ["hand", "finger"] },
+        { "id": "hair", "parent": "bodypart", "words": ["hair", "beard"] },
+
+        { "id": "love", "parent": "emotion", "words": ["love", "romance", "romantic", "affection"] },
+        { "id": "joy", "parent": "emotion", "words": ["joy", "happiness", "happy", "joyful", "cheerful"] },
+        { "id": "smile", "parent": "emotion", "words": ["smile", "laugh", "laughter", "smiling"] },
+        { "id": "sad", "parent": "emotion", "words": ["sad", "sadness", "sorrow", "melancholy"] },
+        { "id": "calm", "parent": "emotion", "words": ["calm", "peaceful", "serene", "tranquil", "peace"] },
+
+        { "id": "wedding", "parent": "event", "words": ["wedding", "bride", "groom", "bridal", "marriage"] },
+        { "id": "birthday", "parent": "event", "words": ["birthday", "celebration", "party", "anniversary"] },
+        { "id": "festival", "parent": "event", "words": ["festival", "carnival", "parade"] },
+
+        { "id": "christmas", "parent": "holiday", "words": ["christmas", "santa"] },
+        { "id": "halloween", "parent": "holiday", "words": ["halloween", "pumpkin", "spooky", "ghost"] },
+        { "id": "easter", "parent": "holiday", "words": ["easter"] },
+
+        { "id": "red", "parent": "color", "words": ["red", "crimson", "scarlet"] },
+        { "id": "blue", "parent": "color", "words": ["blue", "azure", "navy"] },
+        { "id": "green", "parent": "color", "words": ["green", "emerald"] },
+        { "id": "yellow", "parent": "color", "words": ["yellow", "amber", "gold"] },
+        { "id": "orange", "parent": "color", "words": ["orange"] },
+        { "id": "purple", "parent": "color", "words": ["purple", "violet", "magenta"] },
+        { "id": "pink", "parent": "color", "words": ["pink"] },
+        { "id": "black", "parent": "color", "words": ["black", "dark", "darkness"] },
+        { "id": "white", "parent": "color", "words": ["white", "pale"] },
+        { "id": "brown", "parent": "color", "words": ["brown", "beige"] },
+        { "id": "gray", "parent": "color", "words": ["gray", "grey", "silver"] },
+        { "id": "colorful", "parent": "color", "words": ["colorful", "colourful", "vibrant"] },
 
         { "id": "car", "parent": "vehicle", "words": ["car", "automobile", "vehicle", "auto", "sedan"] },
         { "id": "motorcycle", "parent": "vehicle", "words": ["motorcycle", "motorbike", "bike", "scooter"] },
@@ -71,6 +243,7 @@
         },
         { "id": "train", "parent": "vehicle", "words": ["train", "railway", "railroad", "locomotive"] },
         { "id": "plane", "parent": "vehicle", "words": ["plane", "airplane", "aircraft", "aviation", "jet"] },
+        { "id": "truck", "parent": "vehicle", "words": ["truck", "van", "bus", "lorry"] },
 
         {
             "id": "city",
@@ -78,6 +251,9 @@
             "words": ["city", "cityscape", "urban", "downtown", "metropolis", "skyline"]
         },
         { "id": "street", "parent": "urban", "words": ["street", "road", "alley", "sidewalk", "avenue"] },
+        { "id": "market", "parent": "urban", "words": ["market", "bazaar", "shop", "store"] },
+        { "id": "cafe", "parent": "urban", "words": ["cafe", "restaurant", "diner"] },
+
         { "id": "building", "parent": "structure", "words": ["building", "skyscraper", "tower", "highrise"] },
         {
             "id": "architecture",
@@ -87,63 +263,93 @@
         { "id": "bridge", "parent": "structure", "words": ["bridge", "viaduct", "overpass"] },
         { "id": "house", "parent": "structure", "words": ["house", "home", "cottage", "cabin", "dwelling"] },
         { "id": "window", "parent": "structure", "words": ["window", "doorway", "door"] },
+        { "id": "church", "parent": "structure", "words": ["church", "cathedral", "chapel", "temple", "mosque"] },
+        { "id": "castle", "parent": "structure", "words": ["castle", "palace", "fortress"] },
+        { "id": "lighthouse", "parent": "structure", "words": ["lighthouse"] },
+        { "id": "statue", "parent": "structure", "words": ["statue", "monument", "sculpture"] },
+        { "id": "fountain", "parent": "structure", "words": ["fountain"] },
+        { "id": "stairs", "parent": "structure", "words": ["stairs", "staircase", "stairway"] },
+        { "id": "ruins", "parent": "structure", "words": ["ruins", "ruin", "ancient"] },
 
         { "id": "food", "parent": "food", "words": ["food", "meal", "dish", "cuisine", "culinary", "foodie"] },
         { "id": "fruit", "parent": "food", "words": ["fruit", "apple", "berry", "citrus"] },
         { "id": "drink", "parent": "food", "words": ["drink", "beverage", "coffee", "tea", "cocktail", "wine"] },
         { "id": "dessert", "parent": "food", "words": ["dessert", "cake", "sweet", "pastry", "chocolate"] },
+        { "id": "vegetable", "parent": "food", "words": ["vegetable", "salad"] },
+        { "id": "bread", "parent": "food", "words": ["bread", "bakery", "toast"] },
+        { "id": "savory", "parent": "food", "words": ["pizza", "pasta", "burger", "sandwich"] },
+        { "id": "meat", "parent": "food", "words": ["meat", "steak", "barbecue", "grill"] },
+        { "id": "breakfast", "parent": "food", "words": ["breakfast", "brunch"] },
+        { "id": "cheese", "parent": "food", "words": ["cheese"] },
 
         { "id": "macro", "parent": "style", "words": ["macro", "closeup", "detail", "miniature"] },
-        {
-            "id": "monochrome",
-            "parent": "style",
-            "words": ["monochrome", "blackandwhite", "grayscale", "greyscale", "bw", "noir"]
-        },
+        { "id": "monochrome", "parent": "style", "words": ["monochrome", "grayscale", "greyscale", "noir"] },
         { "id": "minimal", "parent": "style", "words": ["minimal", "minimalist", "simple", "clean"] },
         { "id": "abstract", "parent": "style", "words": ["abstract", "geometric", "pattern", "texture"] },
         { "id": "vintage", "parent": "style", "words": ["vintage", "retro", "antique", "old", "nostalgic"] },
-        { "id": "longexposure", "parent": "style", "words": ["longexposure", "motion", "blur", "lighttrail"] },
-        { "id": "silhouette", "parent": "light", "words": ["silhouette", "backlit", "shadow"] },
+        { "id": "longexposure", "parent": "style", "words": ["motion", "blur"] },
         { "id": "reflection", "parent": "style", "words": ["reflection", "mirror", "reflective"] },
 
-        {
-            "id": "landscape",
-            "parent": "nature",
-            "words": ["landscape", "scenery", "scenic", "vista", "panorama"]
-        },
-        { "id": "sport", "parent": "activity", "words": ["sport", "athletic", "athlete", "fitness", "competition"] },
         { "id": "running", "parent": "activity", "words": ["running", "runner", "sprint", "jog", "marathon"] },
         { "id": "dance", "parent": "activity", "words": ["dance", "dancer", "dancing", "ballet"] },
         { "id": "travel", "parent": "activity", "words": ["travel", "journey", "adventure", "explore", "wanderlust"] },
-        { "id": "music", "parent": "activity", "words": ["music", "musician", "concert", "instrument", "guitar"] },
+        {
+            "id": "music",
+            "parent": "activity",
+            "words": ["music", "musician", "concert", "instrument", "guitar", "piano", "violin", "drum"]
+        },
+        { "id": "yoga", "parent": "activity", "words": ["yoga", "meditation"] },
 
-        { "id": "flowergarden", "parent": "plant", "words": ["garden", "park"] },
-        { "id": "autumn", "parent": "weather", "words": ["autumn", "fall", "harvest"] },
-        { "id": "spring", "parent": "weather", "words": ["spring", "springtime"] },
-        { "id": "summer", "parent": "weather", "words": ["summer", "summertime", "tropical"] },
+        { "id": "sport", "parent": "sport", "words": ["sport", "athletic", "athlete", "fitness", "competition"] },
+        { "id": "soccer", "parent": "sport", "words": ["soccer", "football"] },
+        { "id": "basketball", "parent": "sport", "words": ["basketball"] },
+        { "id": "baseball", "parent": "sport", "words": ["baseball", "softball"] },
+        { "id": "tennis", "parent": "sport", "words": ["tennis", "badminton"] },
+        { "id": "golf", "parent": "sport", "words": ["golf"] },
+        { "id": "hockey", "parent": "sport", "words": ["hockey"] },
+        { "id": "boxing", "parent": "sport", "words": ["boxer", "wrestler", "wrestling"] },
+        { "id": "gym", "parent": "sport", "words": ["gym", "workout"] },
 
-        {
-            "id": "farm",
-            "parent": "rural",
-            "words": ["farm", "farmhouse", "farming", "agriculture", "agricultural", "farmland", "ranch", "homestead"]
-        },
-        { "id": "barn", "parent": "rural", "words": ["barn", "silo", "stable", "coop", "shed"] },
-        {
-            "id": "livestock",
-            "parent": "rural",
-            "words": ["cow", "cattle", "calf", "bull", "ox", "sheep", "lamb", "goat", "pig", "swine", "hog", "donkey"]
-        },
-        {
-            "id": "poultry",
-            "parent": "rural",
-            "words": ["chicken", "hen", "rooster", "duck", "goose", "turkey", "poultry"]
-        },
-        {
-            "id": "field",
-            "parent": "rural",
-            "words": ["field", "meadow", "pasture", "grassland", "prairie", "paddock", "hay", "crop", "wheat", "corn"]
-        },
-        { "id": "tractor", "parent": "rural", "words": ["tractor", "plow", "plough", "harvester"] },
-        { "id": "countryside", "parent": "rural", "words": ["countryside", "rural"] }
+        { "id": "surfing", "parent": "watersport", "words": ["surfing", "surfer", "surfboard"] },
+        { "id": "swimming", "parent": "watersport", "words": ["swimming", "swimmer", "swim"] },
+        { "id": "diving", "parent": "watersport", "words": ["diving", "diver", "snorkeling", "scuba"] },
+        { "id": "sailing", "parent": "watersport", "words": ["sailing", "sail"] },
+
+        { "id": "skiing", "parent": "wintersport", "words": ["skiing", "ski", "skier"] },
+        { "id": "snowboarding", "parent": "wintersport", "words": ["snowboarding", "snowboard"] },
+        { "id": "skating", "parent": "wintersport", "words": ["skating", "skate", "skater"] },
+
+        { "id": "climbing", "parent": "outdoor", "words": ["climbing", "climber", "mountaineering"] },
+        { "id": "hiking", "parent": "outdoor", "words": ["hiking", "hike", "trekking", "trek", "backpacking"] },
+        { "id": "camping", "parent": "outdoor", "words": ["camping", "tent", "campsite"] },
+        { "id": "fishing", "parent": "outdoor", "words": ["angler", "angling", "fisherman"] },
+        { "id": "hunting", "parent": "outdoor", "words": ["hunter", "hunting"] },
+
+        { "id": "computer", "parent": "tech", "words": ["computer", "laptop", "keyboard"] },
+        { "id": "phone", "parent": "tech", "words": ["phone", "smartphone", "telephone"] },
+        { "id": "robot", "parent": "tech", "words": ["robot", "robotic"] },
+        { "id": "drone", "parent": "tech", "words": ["drone"] },
+        { "id": "camera", "parent": "tech", "words": ["camera", "lens"] },
+
+        { "id": "art", "parent": "art", "words": ["art", "artwork", "painting", "canvas", "paint"] },
+        { "id": "graffiti", "parent": "art", "words": ["graffiti", "mural"] },
+        { "id": "museum", "parent": "art", "words": ["museum", "gallery", "exhibition"] },
+
+        { "id": "book", "parent": "object", "words": ["book", "books", "library", "novel"] },
+        { "id": "toy", "parent": "object", "words": ["toy", "toys", "doll", "teddy"] },
+        { "id": "clock", "parent": "object", "words": ["clock", "watch"] },
+        { "id": "umbrella", "parent": "object", "words": ["umbrella"] },
+        { "id": "balloon", "parent": "object", "words": ["balloon", "balloons"] },
+        { "id": "kite", "parent": "object", "words": ["kite"] },
+
+        { "id": "fashion", "parent": "fashion", "words": ["fashion", "clothing", "outfit", "apparel"] },
+        { "id": "hat", "parent": "fashion", "words": ["hat", "cap"] },
+        { "id": "shoes", "parent": "fashion", "words": ["shoe", "shoes", "boot", "boots", "sneakers"] },
+        { "id": "dress", "parent": "fashion", "words": ["dress", "gown", "skirt"] },
+        { "id": "jewelry", "parent": "fashion", "words": ["jewelry", "necklace", "bracelet"] },
+
+        { "id": "chef", "parent": "work", "words": ["chef", "cook", "cooking", "kitchen"] },
+        { "id": "doctor", "parent": "work", "words": ["doctor", "nurse", "hospital"] },
+        { "id": "worker", "parent": "work", "words": ["worker", "labor", "construction", "factory"] }
     ]
 }

@@ -12,6 +12,7 @@
         "build:cli:mac": "node scripts/build-cli.js gurucli-mac",
         "build:css": "tailwindcss -i ./src/styles/styles.css -o ./dist/styles.css --minify",
         "build:lexicon": "node scripts/build-lexicon.js",
+        "fetch:embeddings": "node scripts/fetch-embeddings.js",
         "verify:lexicon": "node scripts/validate-lexicon.js",
         "build:react": "node scripts/build-react.js",
         "build:prep": "pnpm run build:css && pnpm run build:lexicon && pnpm run build:react",
@@ -131,7 +132,8 @@
         "prettier": "4.0.0-alpha.13",
         "size-limit": "^12.1.0",
         "tailwindcss": "^4.3.2",
-        "typescript": "^7.0.2"
+        "typescript": "^7.0.2",
+        "yauzl": "^3.4.0"
     },
     "electronmon": {
         "patterns": [

@@ -318,7 +318,8 @@ const MAX_STEM_PREFIX_DELTA = 2;
  * floor low enough to catch "goldfish" (4) it also admits "rain"→"train",
  * "rain"→"brain" and "hair"→"chair", which is worse than what it fixes.
  * Character comparison simply cannot express "is a kind of" — the word-vector
- * lexicon can, so those compounds live in scripts/lexicon-concepts.json and get
+ * lexicon (pretrained GloVe embeddings, with the curated clusters in
+ * scripts/lexicon-concepts.json retrofitted in) can, so those compounds get
  * caught by the semantic tier instead.
  */
 const matches = (labelStem, keywordStem) => {
@@ -355,17 +356,20 @@ const tokeniseTagList = (tags) => {
 /**
  * Below this the semantic tier is treated as "no match at all" (see
  * pickPhotosForChallenge). Expressed on the same 0..100 bucket scale as the tier
- * itself, so 40 means cosine 0.40.
+ * itself, so 43 means cosine 0.43.
  *
- * This is a measured value, not a guess. The lexicon's word vectors are seeded
- * pseudo-random, so two UNRELATED concepts still land at some non-zero cosine;
- * with the shipped lexicon config that noise band reaches ~0.28 at its maximum,
- * while genuinely related concepts (siblings under a shared parent) start around
- * ~0.56. The floor sits in the gap. scripts/validate-lexicon.js re-derives both
- * distributions from the real asset on every build and fails if the gap closes,
- * so this constant can never quietly drift out of the valid range.
+ * This is a measured value, not a guess. The lexicon's vectors are real
+ * pretrained GloVe embeddings (mean-centered, cluster-retrofitted — see
+ * scripts/fetch-embeddings.js), whose related and unrelated cosine
+ * distributions genuinely overlap in the tails: corpus artifacts put a few
+ * unrelated theme pairs (snake↔lamp via zodiac/lantern co-occurrence) near
+ * 0.49, while a few honestly-related sibling pairs sit low. The floor is
+ * placed by the pre-committed gate p99(unrelated) < FLOOR < p25(related),
+ * which scripts/validate-lexicon.js re-derives from the real asset on every
+ * build (measured at 0.406 < 0.425 < 0.445) and fails if the gap closes, so
+ * this constant can never quietly drift out of the valid range.
  */
-const SEMANTIC_MATCH_FLOOR = 40;
+const SEMANTIC_MATCH_FLOOR = 43;
 
 // Issue at most a few server-side searches per fill: a title rarely has more
 // than two or three subject nouns, and tag lists are short. The cap bounds the
@@ -672,7 +676,7 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
     // a genuine keyword hit. The floor is what makes "nothing matched the theme"
     // an honest, testable state instead of a fuzzy one. Its value is not
     // hand-picked: scripts/validate-lexicon.js gates the build on
-    // p99.9(unrelated) < FLOOR < p05(related) against the real lexicon.
+    // p99(unrelated) < FLOOR < p25(related) against the real lexicon.
     const semanticScores = opts.semanticScores instanceof Map ? opts.semanticScores : null;
     const semanticTier = (id) => {
         if (!semanticScores) return 0;

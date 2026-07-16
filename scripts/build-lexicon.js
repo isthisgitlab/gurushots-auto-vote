@@ -1,20 +1,26 @@
 #!/usr/bin/env node
 
 /**
- * Static word-vector lexicon generator.
+ * Static word-vector lexicon builder — the OFFLINE, DETERMINISTIC half of the
+ * pipeline. Reads the committed intermediate scripts/lexicon-embeddings.json
+ * (pruned + int8-quantized GloVe vectors, produced by the manual, network-
+ * touching `pnpm fetch:embeddings` step) and emits the runtime asset
+ * src/assets/semantic-vectors.json that the semantic matcher
+ * (src/js/services/semantic/lexicon.js) loads on every platform. The asset is
+ * NEVER imported into a JS bundle, so the renderer / headless / capacitor
+ * size-limit budgets are untouched.
  *
- * Reads scripts/lexicon-concepts.json (curated synonym clusters) and emits a
- * compact int8-quantized vector table to src/assets/semantic-vectors.json. The
- * semantic matcher (src/js/services/semantic/lexicon.js) loads that file as a
- * runtime asset — it is NEVER imported into a JS bundle, so the renderer /
- * headless / capacitor size-limit budgets are untouched.
+ * Same input -> byte-identical output, which is what lets CI verify the
+ * committed asset with `pnpm build:lexicon && git diff --exit-code`.
  *
- * Each concept gets a deterministic pseudo-random unit vector (seeded by its
- * id, so output is reproducible across runs and machines). Every word in a
- * concept maps to the SAME blended vector — conceptWeight * conceptVector +
- * parentWeight * parentVector — so exact synonyms score cosine 1 and siblings
- * sharing a parent (cat vs dog under "animal") score a mild positive. Words are
- * stemmed with the matcher's own stemmer so runtime lookups line up.
+ * Gates enforced here (both fatal):
+ *   - vocab guarantee: every word in scripts/lexicon-concepts.json (concepts +
+ *     extraWords) must resolve to a stem present in the intermediate. A miss
+ *     means the intermediate is STALE — someone edited the concepts file
+ *     without re-running `pnpm fetch:embeddings`.
+ *   - authored stem collisions: two clusters claiming the same stem is an
+ *     authoring mistake that would silently corrupt the validator's eval
+ *     pairs (last-wins), so it fails instead.
  *
  * Run: `pnpm build:lexicon` (also invoked by build:prep so dist/ gets a copy
  * for the Android webDir). The committed src/assets copy ships in the Electron
@@ -26,137 +32,95 @@ const path = require('node:path');
 const { stem } = require('../src/js/services/photoPicker');
 
 const ROOT = path.join(__dirname, '..');
-const SOURCE = path.join(__dirname, 'lexicon-concepts.json');
+const EMBEDDINGS_PATH = path.join(__dirname, 'lexicon-embeddings.json');
+const CONCEPTS_PATH = path.join(__dirname, 'lexicon-concepts.json');
 const OUT_ASSET = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const DIST_DIR = path.join(ROOT, 'dist');
 const OUT_DIST = path.join(DIST_DIR, 'semantic-vectors.json');
 
-// Deterministic string hash → 32-bit seed (cyrb53-lite). Same id → same seed →
-// same vector on every run and every machine, so the asset is reproducible.
-const seedOf = (str) => {
-    let h = 1779033703 ^ str.length;
-    for (let i = 0; i < str.length; i++) {
-        h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-        h = (h << 13) | (h >>> 19);
+/**
+ * Validate the authored vocabulary against the intermediate and assemble the
+ * runtime asset object. Pure — no fs, no process.exit — so the fatal paths are
+ * unit-testable against small fixtures.
+ *
+ * @param {object} intermediate - parsed scripts/lexicon-embeddings.json
+ * @param {object} concepts - parsed scripts/lexicon-concepts.json
+ * @returns {{output: object, missing: Array<string>, collisions: Array<string>}}
+ */
+const buildAsset = (intermediate, concepts) => {
+    const packed = (intermediate && intermediate.packed) || {};
+    const stemOwner = new Map();
+    const collisions = [];
+    const missing = [];
+    const claim = (word, owner) => {
+        const key = stem(String(word).toLowerCase());
+        if (!key || key.length < 2) return;
+        if (stemOwner.has(key) && stemOwner.get(key) !== owner) {
+            collisions.push(`${key} (${stemOwner.get(key)} -> ${owner})`);
+        }
+        stemOwner.set(key, owner);
+        if (!Object.prototype.hasOwnProperty.call(packed, key)) {
+            missing.push(`${word} (stem "${key}", ${owner})`);
+        }
+    };
+    for (const concept of (concepts && concepts.concepts) || []) {
+        for (const word of concept.words || []) claim(word, concept.id);
     }
-    return h >>> 0;
-};
+    for (const word of (concepts && concepts.extraWords) || []) claim(word, 'extraWords');
 
-// mulberry32 — tiny seeded PRNG; deterministic given the seed.
-const mulberry32 = (seed) => () => {
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-};
-
-const randomUnitVector = (id, dims) => {
-    const rand = mulberry32(seedOf(id));
-    const v = new Array(dims);
-    let norm = 0;
-    for (let i = 0; i < dims; i++) {
-        // Box–Muller for a roughly Gaussian spread → uniform direction.
-        const u1 = Math.max(rand(), 1e-9);
-        const u2 = rand();
-        v[i] = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-        norm += v[i] * v[i];
-    }
-    norm = Math.sqrt(norm) || 1;
-    for (let i = 0; i < dims; i++) v[i] /= norm;
-    return v;
-};
-
-const normalize = (v) => {
-    let norm = 0;
-    for (const x of v) norm += x * x;
-    norm = Math.sqrt(norm) || 1;
-    return v.map((x) => x / norm);
+    const output = {
+        version: 2,
+        generator: 'build-lexicon.js',
+        source: intermediate ? intermediate.source : undefined,
+        dims: intermediate ? intermediate.dims : undefined,
+        scale: intermediate ? intermediate.scale : undefined,
+        meanCentered: intermediate ? Boolean(intermediate.meanCentered) : false,
+        packed,
+    };
+    return { output, missing, collisions };
 };
 
 const main = () => {
-    const config = JSON.parse(fs.readFileSync(SOURCE, 'utf8'));
-    const dims = config.dims || 48;
-    const cWeight = config.conceptWeight ?? 0.75;
-    const pWeight = config.parentWeight ?? 0.28;
-    const concepts = config.concepts || [];
-
-    // 1. A unit vector per concept id and per distinct parent id.
-    const conceptIds = new Set();
-    const parentIds = new Set();
-    for (const c of concepts) {
-        if (c.id) conceptIds.add(c.id);
-        if (c.parent) parentIds.add(c.parent);
+    if (!fs.existsSync(EMBEDDINGS_PATH)) {
+        console.error(
+            '❌ scripts/lexicon-embeddings.json is missing — run `pnpm fetch:embeddings` first (network, one-time).',
+        );
+        process.exit(1);
     }
-    const vecOf = new Map();
-    for (const id of [...conceptIds, ...parentIds]) {
-        if (!vecOf.has(id)) vecOf.set(id, randomUnitVector(`concept:${id}`, dims));
-    }
+    const intermediate = JSON.parse(fs.readFileSync(EMBEDDINGS_PATH, 'utf8'));
+    const concepts = JSON.parse(fs.readFileSync(CONCEPTS_PATH, 'utf8'));
+    const { output, missing, collisions } = buildAsset(intermediate, concepts);
 
-    // 2. Each word → normalized blend of its concept and parent vectors.
-    const floatWords = new Map();
-    const collisions = [];
-    for (const c of concepts) {
-        const conceptVec = vecOf.get(c.id);
-        const parentVec = c.parent ? vecOf.get(c.parent) : null;
-        const blended = new Array(dims);
-        for (let i = 0; i < dims; i++) {
-            blended[i] = cWeight * conceptVec[i] + (parentVec ? pWeight * parentVec[i] : 0);
-        }
-        const wordVec = normalize(blended);
-        for (const raw of c.words || []) {
-            const key = stem(String(raw).toLowerCase());
-            if (!key || key.length < 2) continue;
-            if (floatWords.has(key) && floatWords.get(key).concept !== c.id) {
-                collisions.push(`${key} (${floatWords.get(key).concept} -> ${c.id})`);
-            }
-            floatWords.set(key, { concept: c.id, vec: wordVec });
-        }
-    }
-
-    // 3. Quantize to int8 with one global scale (values are unit vectors, so
-    //    the max magnitude is ~1). dequant at runtime is value * scale.
-    let maxAbs = 0;
-    for (const { vec } of floatWords.values()) {
-        for (const x of vec) maxAbs = Math.max(maxAbs, Math.abs(x));
-    }
-    const scale = maxAbs / 127 || 1 / 127;
-    const words = {};
-    for (const [key, { vec }] of floatWords) {
-        words[key] = vec.map((x) => Math.max(-127, Math.min(127, Math.round(x / scale))));
-    }
-
-    const output = {
-        version: 1,
-        generator: 'build-lexicon.js',
-        dims,
-        scale,
-        words,
-    };
-
-    // A word claimed by two concepts silently resolved "last wins", which
-    // degrades that word's vector to whichever cluster happened to be listed
-    // later — invisible in the output and undetectable at runtime. Fail instead:
-    // the source is a hand-edited file, so a collision is always an authoring
-    // mistake, and the asset is committed, so a silent degradation would ship.
     if (collisions.length) {
-        console.error(`❌ ${collisions.length} word(s) claimed by more than one concept:`);
+        console.error(`❌ ${collisions.length} stem(s) claimed by more than one concept:`);
         for (const c of collisions) console.error(`   - ${c}`);
-        console.error('   Each word must belong to exactly one concept. Fix scripts/lexicon-concepts.json.');
+        console.error('   Each stem must belong to exactly one concept. Fix scripts/lexicon-concepts.json.');
+        process.exit(1);
+    }
+    if (missing.length) {
+        console.error(`❌ ${missing.length} authored word(s) missing from the intermediate:`);
+        for (const m of missing) console.error(`   - ${m}`);
+        console.error(
+            '   The intermediate is stale for the current concepts file — re-run `pnpm fetch:embeddings`\n' +
+                '   (offline once scripts/.cache/ holds the archive), then build again.',
+        );
         process.exit(1);
     }
 
-    fs.writeFileSync(OUT_ASSET, JSON.stringify(output));
+    const json = JSON.stringify(output);
+    fs.writeFileSync(OUT_ASSET, json);
     let copied = '';
     if (fs.existsSync(DIST_DIR)) {
-        fs.writeFileSync(OUT_DIST, JSON.stringify(output));
+        fs.writeFileSync(OUT_DIST, json);
         copied = ` (+ dist copy)`;
     }
-
     const bytes = fs.statSync(OUT_ASSET).size;
     console.log(
-        `✅ Lexicon: ${Object.keys(words).length} word-stems, ${concepts.length} concepts, ${dims}d, ` +
-            `${(bytes / 1024).toFixed(1)} KB → src/assets/semantic-vectors.json${copied}`,
+        `✅ Lexicon: ${Object.keys(output.packed).length} word-stems, ${output.dims}d, ` +
+            `${(bytes / 1024 / 1024).toFixed(2)} MB → src/assets/semantic-vectors.json${copied}`,
     );
 };
 
-main();
+module.exports = { buildAsset };
+
+if (require.main === module) main();
