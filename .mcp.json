@@ -1,0 +1,8 @@
+{
+    "mcpServers": {
+        "ttsc-graph": {
+            "command": "pnpm",
+            "args": ["exec", "ttsc-graph"]
+        }
+    }
+}

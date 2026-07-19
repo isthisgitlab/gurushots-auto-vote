@@ -26,6 +26,17 @@ updates:
       labels:
           - 'dependencies'
       groups:
+          # ttsc + @ttsc/* release in lockstep and must bump together —
+          # @ttsc/graph peer-depends on the EXACT ttsc version, and @ttsc/lint
+          # has no peer pin at all, so a partial bump would install cleanly and
+          # only fail later inside the typecheck gate. One PR for all of them;
+          # listed before the catch-all groups so this match wins. Review the
+          # release diff before merging (devDeps are outside the --prod audit
+          # gate — see CLAUDE.md "Dependencies & Type Checking").
+          ttsc-toolchain:
+              patterns:
+                  - 'ttsc'
+                  - '@ttsc/*'
           # Batch low-risk dev-dependency minor/patch bumps into one PR.
           dev-minor-patch:
               dependency-type: 'development'
