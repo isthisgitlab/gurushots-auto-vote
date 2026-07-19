@@ -15,7 +15,7 @@ const { updateChallengeVoteMetadata } = require('../metadata');
  *
  * @param {object} challenge - Challenge object containing title and URL
  * @param {string} token - Authentication token
- * @returns {object|null} - Response containing images to vote on, or null if request failed
+ * @returns {Promise<object|null>} - Response containing images to vote on, or null if request failed
  */
 const getVoteImages = async (challenge, token) => {
     const operationId = `get-vote-images-${challenge.id}`;
@@ -54,7 +54,7 @@ const getVoteImages = async (challenge, token) => {
  * @param {object} voteImages - Object containing challenge, voting, and images data
  * @param {string} token - Authentication token
  * @param {number} targetExposure - Target exposure percentage (default: 100)
- * @returns {object|undefined} - API response or undefined if submission failed
+ * @returns {Promise<object|undefined>} - API response or undefined if submission failed
  */
 const submitVotes = async (voteImages, token, targetExposure = 100) => {
     const { challenge, voting, images } = voteImages;

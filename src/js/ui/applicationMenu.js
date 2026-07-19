@@ -184,7 +184,7 @@ async function checkForUpdatesFromMenu() {
             logger.withCategory('update').info('Update available from menu check:', updateInfo.latestVersion);
         } else {
             // No update available - show dialog
-            dialog.showMessageBox({
+            void dialog.showMessageBox({
                 type: 'info',
                 title: t('menu.noUpdates') || 'No Updates',
                 message: t('menu.noUpdatesMessage') || 'You are using the latest version.',
@@ -193,7 +193,7 @@ async function checkForUpdatesFromMenu() {
         }
     } catch (error) {
         logger.withCategory('update').error('Error checking for updates from menu:', error);
-        dialog.showMessageBox({
+        void dialog.showMessageBox({
             type: 'error',
             title: t('menu.updateError') || 'Update Error',
             message: t('menu.updateErrorMessage') || 'Failed to check for updates.',
@@ -207,7 +207,7 @@ async function checkForUpdatesFromMenu() {
 function showAbout() {
     const packageInfo = require('../../../package.json');
 
-    dialog.showMessageBox({
+    void dialog.showMessageBox({
         type: 'info',
         title: t('menu.aboutTitle'),
         message: `${packageInfo.name} v${packageInfo.version}`,
@@ -247,7 +247,9 @@ function openLogsWindow() {
         show: false,
     });
 
-    logsWindow.loadFile(path.join(__dirname, '../../html/logs.html'));
+    logsWindow.loadFile(path.join(__dirname, '../../html/logs.html')).catch((error) => {
+        logger.withCategory('ui').error('Failed to load logs window content:', error);
+    });
 
     logsWindow.once('ready-to-show', () => {
         logsWindow.show();

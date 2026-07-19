@@ -192,7 +192,9 @@ class BaseMiddleware {
                                 `Voted on challenge: ${challenge.title} (target: ${result.targetExposure}%)`,
                                 null,
                             );
-                        await new Promise((resolve) => setTimeout(resolve, STAGGER_MS));
+                        await new Promise((resolve) => {
+                            setTimeout(resolve, STAGGER_MS);
+                        });
                     } else if (result.outcome === 'no-images') {
                         skipped++;
                         logger

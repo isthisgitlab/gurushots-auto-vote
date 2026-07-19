@@ -205,7 +205,9 @@ const buildHandlers = () => ({
                                 `✅ ${logger.challengeTag(challenge)} Voted (target: ${result.targetExposure}%)`,
                                 null,
                             );
-                        await new Promise((resolve) => setTimeout(resolve, STAGGER_MS));
+                        await new Promise((resolve) => {
+                            setTimeout(resolve, STAGGER_MS);
+                        });
                     } else if (result.outcome === 'no-images') {
                         logger
                             .withCategory('voting')

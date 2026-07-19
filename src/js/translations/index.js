@@ -19,7 +19,7 @@
         constructor() {
             this.currentLanguage = 'en'; // Default language
             this.initialized = false;
-            this.init();
+            void this.init();
         }
 
         async init() {
@@ -28,7 +28,9 @@
                 // Wait for window.api to be available
                 let attempts = 0;
                 while (!window.api && attempts < 50) {
-                    await new Promise((resolve) => setTimeout(resolve, 100));
+                    await new Promise((resolve) => {
+                        setTimeout(resolve, 100);
+                    });
                     attempts++;
                 }
             }
