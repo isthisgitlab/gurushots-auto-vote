@@ -38,10 +38,20 @@ jobs:
 
             # ttsc runs the type-check (JSDoc + checkJs opt-in) AND the
             # @ttsc/lint pass (lint.config.ts) in one compile — a red run here
-            # can be either a type error or an error-severity lint rule
-            # (TS9000–TS17999 band = lint, everything else = compiler).
-            - name: Type-check + lint (ttsc)
+            # can be either a type error or an error-severity lint rule. The
+            # band hint lives in the step name because Actions never shows
+            # YAML comments in the log.
+            - name: Type-check + lint via ttsc (TS9000-TS17999 = lint rule, see lint.config.ts)
               run: pnpm typecheck
+
+            # Informational only (continue-on-error) — pnpm audit --prod above
+            # is the blocking gate for shipped deps; this surfaces CVEs in the
+            # devDependency tree (ttsc toolchain, build tooling) that the
+            # --prod gate deliberately excludes, without letting an unfixable
+            # dev-only advisory block PRs.
+            - name: Audit dev dependencies (informational)
+              continue-on-error: true
+              run: pnpm audit --audit-level=high
 
             - name: Run tests with coverage
               run: pnpm test:coverage
