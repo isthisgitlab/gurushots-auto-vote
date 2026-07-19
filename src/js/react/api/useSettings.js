@@ -84,7 +84,7 @@ export function useEnvironmentInfo() {
                 setLoading(false);
             }
         }
-        fetchEnvInfo();
+        void fetchEnvInfo();
     }, []);
 
     return { envInfo, loading };

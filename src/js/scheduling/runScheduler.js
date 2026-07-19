@@ -107,21 +107,23 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
             return;
         }
 
-        timer = setTimeout(async () => {
-            if (!isRunning) {
-                timer = null;
-                return;
-            }
-            const cycleStartMs = Date.now();
-            let cycleResult;
-            try {
-                cycleResult = await runVotingCycle(++cycleCount);
-            } catch (error) {
-                logger.withCategory('voting').error('Error in scheduled voting cycle');
-                logger.withCategory('voting').debug('Full voting cycle error details:', error);
-            } finally {
-                await scheduleNext(cycleResult?.challenges, cycleStartMs);
-            }
+        timer = setTimeout(() => {
+            void (async () => {
+                if (!isRunning) {
+                    timer = null;
+                    return;
+                }
+                const cycleStartMs = Date.now();
+                let cycleResult;
+                try {
+                    cycleResult = await runVotingCycle(++cycleCount);
+                } catch (error) {
+                    logger.withCategory('voting').error('Error in scheduled voting cycle');
+                    logger.withCategory('voting').debug('Full voting cycle error details:', error);
+                } finally {
+                    await scheduleNext(cycleResult?.challenges, cycleStartMs);
+                }
+            })();
         }, waitMs);
     };
 

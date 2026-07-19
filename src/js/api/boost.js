@@ -52,7 +52,7 @@ const _pickBoostEntry = (entries, challengeId) => {
  *
  * @param {object} challenge - Challenge object containing id and member data
  * @param {string} token - Authentication token
- * @returns {object|null} - API response or null if boost failed
+ * @returns {Promise<object|null>} - API response or null if boost failed
  */
 const applyBoost = async (challenge, token) => {
     const { id, member } = challenge;
@@ -98,7 +98,7 @@ const applyBoost = async (challenge, token) => {
  * @param {number} challengeId - Challenge ID
  * @param {string} imageId - Image ID to boost
  * @param {string} token - Authentication token
- * @returns {object|null} - API response or null if boost failed
+ * @returns {Promise<object|null>} - API response or null if boost failed
  */
 const applyBoostToEntry = async (challengeId, imageId, token) => {
     const cid = String(challengeId ?? '');

@@ -11,7 +11,10 @@
  * @param {number} ms - Milliseconds to sleep
  * @returns {Promise} - Promise that resolves after the specified time
  */
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms) =>
+    new Promise((resolve) => {
+        setTimeout(resolve, ms);
+    });
 
 /**
  * Generates a random delay between min and max milliseconds

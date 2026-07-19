@@ -660,7 +660,9 @@ const mockApiClient = {
                 }
 
                 // Simulate delay between challenges
-                await new Promise((resolve) => setTimeout(resolve, 500));
+                await new Promise((resolve) => {
+                    setTimeout(resolve, 500);
+                });
             }
 
             logger.withCategory('voting').info('Mock Voting Process Completed', null);

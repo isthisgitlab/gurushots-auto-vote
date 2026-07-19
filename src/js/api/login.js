@@ -19,7 +19,7 @@ const logger = require('../logger');
  *
  * @param {string} email - User's email address
  * @param {string} password - User's password
- * @returns {object|null} - Response data containing token or null if login failed
+ * @returns {Promise<object|null>} - Response data containing token or null if login failed
  */
 const authenticate = async (email, password) => {
     logger.withCategory('authentication').info('Starting authentication...', null);

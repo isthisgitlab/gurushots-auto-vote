@@ -72,7 +72,7 @@ export function useLogStream() {
             }
         }
 
-        connect();
+        void connect();
 
         return () => {
             mountedRef.current = false;

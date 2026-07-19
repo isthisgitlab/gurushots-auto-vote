@@ -15,25 +15,29 @@
 // program) plus correctness rules that eslint:recommended does not enable, so
 // the two gates never report the same finding twice.
 //
-// Ratchet plan: "warning" severities are provisional. Promote a rule to
-// "error" once `pnpm typecheck` prints zero warnings for it — fix the
-// remaining hits first (`pnpm typecheck:fix` autofixes what it can), then
-// flip the severity in the same commit.
+// All rules are at "error" — the warning ratchet completed once the program
+// hit zero warnings. Two gotchas for anyone adding code under this gate:
+//  1. On an `async` function, JSDoc `@returns` must be `Promise<...>`. A bare
+//     `@returns {object|null}` makes the checker type the function as
+//     returning a non-Promise, so EVERY `await` of it fails
+//     typescript/await-thenable (one such annotation once caused 16 hits).
+//  2. `void` satisfies typescript/no-floating-promises at compile time only —
+//     it adds no runtime handling. Pair it with `.catch`/try-catch wherever
+//     the ignored rejection carries operationally meaningful failure
+//     information; bare `void` is only for genuinely inconsequential
+//     fire-and-forget calls (dialogs, window loads, useEffect kick-offs).
 import type { ITtscLintConfig } from '@ttsc/lint';
 
 export default {
     rules: {
-        // Clear-cut correctness — fail the gate.
         'no-var': 'error',
-
-        // Provisional warnings — promote per the ratchet plan above.
-        'prefer-const': 'warning',
-        'no-throw-literal': 'warning',
-        'no-promise-executor-return': 'warning',
+        'prefer-const': 'error',
+        'no-throw-literal': 'error',
+        'no-promise-executor-return': 'error',
 
         // Type-aware (Checker-backed) — the rules ESLint cannot provide.
-        'typescript/await-thenable': 'warning',
-        'typescript/no-floating-promises': 'warning',
-        'typescript/no-misused-promises': 'warning',
+        'typescript/await-thenable': 'error',
+        'typescript/no-floating-promises': 'error',
+        'typescript/no-misused-promises': 'error',
     },
 } satisfies ITtscLintConfig;

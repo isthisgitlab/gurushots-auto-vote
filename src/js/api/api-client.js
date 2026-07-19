@@ -8,6 +8,7 @@
 const axios = require('axios');
 const logger = require('../logger');
 const { generateRandomHeaders } = require('./randomizer');
+const { sleep } = require('./utils');
 const settings = require('../settings');
 const runtime = require('../runtime');
 const { FORM_CONTENT_TYPE } = require('./constants');
@@ -137,8 +138,6 @@ const getHeadlessHttpAdapter = () => {
 // stalling the current one.
 const MAX_RETRY_DELAY_MS = 30_000;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 // Smallest delay we'll wait before a retry, even if the server asks for
 // less (or 0) — guards against a misbehaving server spinning the loop.
 const MIN_RETRY_DELAY_MS = 100;
@@ -200,7 +199,7 @@ const getRetryAfterMs = (error) => {
  * @param {string} url - The API endpoint URL
  * @param {object} headers - Request headers including authentication token
  * @param {string} data - URL-encoded form data (default: empty string)
- * @returns {object|null} - Response data or null if request failed
+ * @returns {Promise<object|null>} - Response data or null if request failed
  */
 const makePostRequest = async (url, headers, data = '') => {
     const maxRetries = coerceNonNegInt(settings.getSetting('apiMaxRetries'), 3);
