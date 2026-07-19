@@ -15,7 +15,16 @@
         "@/*": ["src/js/react/*"]
     },
     "ignore": [".cache/**"],
-    "ignoreDependencies": ["react", "react-dom", "tailwindcss", "daisyui", "@tailwindcss/typography", "postject"],
+    "ignoreDependencies": [
+        "react",
+        "react-dom",
+        "tailwindcss",
+        "daisyui",
+        "@tailwindcss/typography",
+        "postject",
+        "@ttsc/lint",
+        "@ttsc/graph"
+    ],
     "rules": {
         "exports": "off",
         "nsExports": "off"

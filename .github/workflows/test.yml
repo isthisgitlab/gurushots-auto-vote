@@ -36,7 +36,11 @@ jobs:
             - name: Run linter
               run: pnpm lint
 
-            - name: Type-check (JSDoc + checkJs opt-in)
+            # ttsc runs the type-check (JSDoc + checkJs opt-in) AND the
+            # @ttsc/lint pass (lint.config.ts) in one compile — a red run here
+            # can be either a type error or an error-severity lint rule
+            # (TS9000–TS17999 band = lint, everything else = compiler).
+            - name: Type-check + lint (ttsc)
               run: pnpm typecheck
 
             - name: Run tests with coverage
