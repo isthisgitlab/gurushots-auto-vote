@@ -80,6 +80,8 @@ export function useEnvironmentInfo() {
             try {
                 const data = await window.api.getEnvironmentInfo();
                 setEnvInfo(data);
+            } catch {
+                // Env info is optional UI garnish — leave envInfo null on failure.
             } finally {
                 setLoading(false);
             }

@@ -25,7 +25,7 @@
 //     it adds no runtime handling. Pair it with `.catch`/try-catch wherever
 //     the ignored rejection carries operationally meaningful failure
 //     information; bare `void` is only for genuinely inconsequential
-//     fire-and-forget calls (dialogs, window loads, useEffect kick-offs).
+//     fire-and-forget calls (dialogs, useEffect kick-offs).
 import type { ITtscLintConfig } from '@ttsc/lint';
 
 export default {

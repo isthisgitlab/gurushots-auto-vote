@@ -143,7 +143,9 @@ function createLoginWindow() {
     });
 
     // Load the login HTML file
-    void loginWindow.loadFile(path.join(__dirname, '../html/login.html'));
+    loginWindow.loadFile(path.join(__dirname, '../html/login.html')).catch((error) => {
+        logger.withCategory('ui').error('Failed to load login window content:', error);
+    });
 
     // Open DevTools in development mode (optional)
     // loginWindow.webContents.openDevTools();
@@ -197,7 +199,9 @@ function createMainWindow() {
     });
 
     // Load the main application HTML file
-    void mainWindow.loadFile(path.join(__dirname, '../html/app.html'));
+    mainWindow.loadFile(path.join(__dirname, '../html/app.html')).catch((error) => {
+        logger.withCategory('ui').error('Failed to load main window content:', error);
+    });
 
     // Set main window reference for AutoUpdater IPC events
     if (autoUpdater) {
@@ -388,6 +392,7 @@ app.whenReady()
             }
         }
 
+        // Synchronous — the window exists before the handlers below are registered.
         checkAutoLogin();
 
         // If not auto-login, check for updates after login window is shown

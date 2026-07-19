@@ -247,7 +247,9 @@ function openLogsWindow() {
         show: false,
     });
 
-    void logsWindow.loadFile(path.join(__dirname, '../../html/logs.html'));
+    logsWindow.loadFile(path.join(__dirname, '../../html/logs.html')).catch((error) => {
+        logger.withCategory('ui').error('Failed to load logs window content:', error);
+    });
 
     logsWindow.once('ready-to-show', () => {
         logsWindow.show();
