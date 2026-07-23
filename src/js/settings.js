@@ -762,6 +762,10 @@ const setTitleRules = (rules) => {
 // entries; 500 is far above anything GuruShots returns.
 const MAX_TITLE_PINS = 500;
 
+// One warning while the cap stays saturated (cleared once the map drops back
+// under it) — an anomalous response would otherwise re-log every fetch cycle.
+let titlePinCapWarned = false;
+
 /**
  * Get the persisted first-seen challenge-title pins as `{ [id]: title }`.
  * Returns a defensive copy so callers can't mutate stored state around
@@ -778,7 +782,10 @@ const getTitlePins = () => {
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
         for (const id of Object.keys(stored)) {
             const title = stored[id];
-            if (typeof title === 'string' && title.length > 0) {
+            // Mirror mergeTitlePins' write-side trim check so a whitespace-only
+            // value in a hand-edited/corrupted blob can't become a "pin" that
+            // blanks a real incoming title.
+            if (typeof title === 'string' && title.trim() !== '') {
                 pins[id] = title;
             }
         }
@@ -807,11 +814,11 @@ const mergeTitlePins = (adds, removeIds) => {
     }
     const stored = settings.challengeSettings.titlePins;
     // Rebuild via own-property copy (drops prototype-named keys and any
-    // non-string values a corrupted blob might carry).
+    // non-string/whitespace-only values a corrupted blob might carry).
     const pins = {};
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
         for (const id of Object.keys(stored)) {
-            if (typeof stored[id] === 'string' && stored[id].length > 0) {
+            if (typeof stored[id] === 'string' && stored[id].trim() !== '') {
                 pins[id] = stored[id];
             }
         }
@@ -823,12 +830,28 @@ const mergeTitlePins = (adds, removeIds) => {
     for (const [id, title] of addEntries) {
         if (Object.prototype.hasOwnProperty.call(pins, id)) continue; // first-seen wins
         if (Object.keys(pins).length >= MAX_TITLE_PINS) {
-            logger
-                .withCategory('settings')
-                .warning(`mergeTitlePins: pin cap of ${MAX_TITLE_PINS} reached — not pinning challenge ${id}`, null);
+            // The id originates from the untrusted API response — strip CR/LF
+            // and bound it before it reaches a log line (log-injection guard,
+            // same treatment as logger.challengeTag). Warn once until the map
+            // drops back under the cap, not on every fetch cycle.
+            if (!titlePinCapWarned) {
+                titlePinCapWarned = true;
+                const safeId = String(id)
+                    .replace(/[\r\n\t]/g, ' ')
+                    .slice(0, 80);
+                logger
+                    .withCategory('settings')
+                    .warning(
+                        `mergeTitlePins: pin cap of ${MAX_TITLE_PINS} reached — not pinning challenge ${safeId}`,
+                        null,
+                    );
+            }
             break;
         }
         pins[id] = title.slice(0, MAX_TITLE_LENGTH);
+    }
+    if (Object.keys(pins).length < MAX_TITLE_PINS) {
+        titlePinCapWarned = false;
     }
 
     settings.challengeSettings.titlePins = pins;
@@ -1122,9 +1145,14 @@ module.exports = {
     setTitleRules,
     getEffectiveTagSetting,
 
-    // First-seen challenge-title pins (internal cache — no IPC wiring)
+    // First-seen challenge-title pins (internal cache — no IPC wiring).
+    // MAX_TITLE_LENGTH is exported so challengeTitlePin.js bounds incoming
+    // titles with the SAME cap mergeTitlePins stores with — two drifting
+    // literals would make an over-length title permanently mismatch its own
+    // truncated pin (warn + overwrite on every fetch).
     getTitlePins,
     mergeTitlePins,
+    MAX_TITLE_LENGTH,
 
     // Cleanup functions
     cleanupStaleChallengeSetting,

@@ -27,7 +27,10 @@ const sanitizeForLog = (/** @type {unknown} */ value) =>
         .replace(/[\r\n\t]/g, ' ')
         .slice(0, 200);
 
-const MAX_TITLE_LENGTH = 200;
+// Shared with mergeTitlePins' storage cap — the compare below only prevents
+// perpetual mismatch on over-length titles if both sides bound with the same
+// number, so never redeclare this locally.
+const MAX_TITLE_LENGTH = /** @type {number} */ (settings.MAX_TITLE_LENGTH);
 
 // Warn once per distinct incoming title per id — repeated confirmations of
 // the same mismatch on every poll stay silent. In-memory only: durability
@@ -70,7 +73,10 @@ const pinChallengeTitles = (challenges) => {
         const pinned = Object.prototype.hasOwnProperty.call(pins, id) ? pins[id] : null;
 
         if (pinned === null) {
-            if (hasIncoming) {
+            // First occurrence wins even within a single batch — a malformed
+            // response repeating an id must not let the later entry override
+            // the earlier one's first-seen title.
+            if (hasIncoming && !Object.prototype.hasOwnProperty.call(adds, id)) {
                 adds[id] = incoming;
             }
             continue;
@@ -96,7 +102,11 @@ const pinChallengeTitles = (challenges) => {
         }
     }
 
-    const removeIds = Object.keys(pins).filter((id) => !activeIds.has(id));
+    // Prune only when at least one entry carried a usable id — a non-empty
+    // list where every entry is malformed is the same degraded-payload state
+    // the empty-list guard above protects against, and pruning on it would
+    // wipe every pin.
+    const removeIds = activeIds.size > 0 ? Object.keys(pins).filter((id) => !activeIds.has(id)) : [];
     if (Object.keys(adds).length > 0 || removeIds.length > 0) {
         settings.mergeTitlePins(adds, removeIds);
     }

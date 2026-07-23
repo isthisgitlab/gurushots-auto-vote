@@ -13,6 +13,7 @@
 let pinStore = {};
 
 jest.mock('../../src/js/settings', () => ({
+    MAX_TITLE_LENGTH: 200,
     getTitlePins: jest.fn(() => ({ ...pinStore })),
     mergeTitlePins: jest.fn((adds, removeIds) => {
         for (const id of removeIds || []) {
@@ -134,6 +135,27 @@ describe('pinChallengeTitles', () => {
         pinChallengeTitles(reappeared);
         expect(pinStore).toEqual({ 1: 'Keep Me', 2: 'Fresh Title' });
         expect(reappeared[1].title).toBe('Fresh Title');
+    });
+
+    test('non-empty list where every entry lacks a usable id prunes nothing', () => {
+        pinChallengeTitles([{ id: '1', title: 'Pink In Nature' }]);
+        settings.mergeTitlePins.mockClear();
+
+        // Malformed-but-non-empty payload: same degraded state as an empty
+        // list — must not wipe the stored pins.
+        pinChallengeTitles([{ title: 'No Id' }, { id: null, title: 'Null Id' }]);
+
+        expect(settings.mergeTitlePins).not.toHaveBeenCalled();
+        expect(pinStore).toEqual({ 1: 'Pink In Nature' });
+    });
+
+    test('duplicate ids within one batch keep the first title (first-seen even intra-batch)', () => {
+        pinChallengeTitles([
+            { id: '1', title: 'First Seen' },
+            { id: '1', title: 'Second Seen' },
+        ]);
+
+        expect(pinStore).toEqual({ 1: 'First Seen' });
     });
 
     test('empty list and non-array input prune nothing and touch nothing', () => {

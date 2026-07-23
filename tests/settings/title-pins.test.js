@@ -101,6 +101,17 @@ describe('settings facade — first-seen title pins', () => {
         expect(settings.getTitlePins()).toEqual({ 4: 'Real' });
     });
 
+    test('whitespace-only stored value (corrupted blob) is filtered on read', () => {
+        settings.mergeTitlePins({ 1: 'Real' }, []);
+        // Simulate external tampering: inject a whitespace-only pin directly
+        // into the persisted blob, bypassing mergeTitlePins' validation.
+        const blob = JSON.parse(store.value);
+        blob.challengeSettings.titlePins['2'] = '   ';
+        store.value = JSON.stringify(blob);
+
+        expect(settings.getTitlePins()).toEqual({ 1: 'Real' });
+    });
+
     test('entry count is capped at 500', () => {
         const adds = {};
         for (let i = 0; i < 510; i++) {
