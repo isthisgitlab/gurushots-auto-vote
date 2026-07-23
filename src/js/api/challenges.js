@@ -7,6 +7,7 @@
 const { makePostRequest, createCommonHeaders } = require('./api-client');
 const { ENDPOINTS } = require('./constants');
 const logger = require('../logger');
+const { pinChallengeTitles } = require('../services/challengeTitlePin');
 
 const fetchActiveChallenges = async (token) => {
     const operationId = 'get-active-challenges';
@@ -24,6 +25,14 @@ const fetchActiveChallenges = async (token) => {
     if (!response) {
         logger.withCategory('api').endOperation(operationId, null, 'API request failed');
         return { challenges: [] }; // Return empty challenges to avoid crashing
+    }
+
+    // Pin first-seen titles AFTER the failed-request guard above — a network
+    // blip must never reach the pin/prune logic (it would wipe pins). The
+    // server mutates `title` while an event (turbo) is active; pinning keeps
+    // display and title-rule matching stable (see services/challengeTitlePin).
+    if (Array.isArray(response.challenges)) {
+        pinChallengeTitles(response.challenges);
     }
 
     const challengeCount = response.challenges ? response.challenges.length : 0;

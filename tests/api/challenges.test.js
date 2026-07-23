@@ -16,6 +16,14 @@ jest.mock('../../src/js/api/api-client', () => ({
     })),
 }));
 
+// Mock the title-pin module as an identity pass-through so this file keeps
+// testing fetch/coalescing behavior in isolation (pin behavior is unit-tested
+// in tests/services/challengeTitlePin.test.js). Wiring is still asserted:
+// success responses must reach the pin hook, failed fetches must not.
+jest.mock('../../src/js/services/challengeTitlePin', () => ({
+    pinChallengeTitles: jest.fn((challenges) => challenges),
+}));
+
 // Mock the logger module
 jest.mock('../../src/js/logger', () => {
     const mockDebugFn = jest.fn();
@@ -47,6 +55,7 @@ jest.mock('../../src/js/logger', () => {
 describe('challenges', () => {
     const mockToken = 'test-token-123';
     const { makePostRequest, createCommonHeaders } = require('../../src/js/api/api-client');
+    const { pinChallengeTitles } = require('../../src/js/services/challengeTitlePin');
     const logger = require('../../src/js/logger');
 
     beforeEach(() => {
@@ -97,6 +106,9 @@ describe('challenges', () => {
             );
 
             expect(result).toEqual(mockResponse);
+            // Positive wiring: the fetched list must pass through the pin hook
+            // (the identity mock would hide a dropped or mis-arged call).
+            expect(pinChallengeTitles).toHaveBeenCalledWith(mockResponse.challenges);
             expect(logger.withCategory).toHaveBeenCalledWith('api');
             expect(logger.__mockDebugFn).toHaveBeenCalledWith('Requesting active challenges from API', {
                 hasToken: true,
@@ -193,6 +205,17 @@ describe('challenges', () => {
 
             expect(result).toEqual({ challenges: [] });
             // The logger module handles the error message, not console.error
+        });
+
+        test('failed fetch never reaches the title-pin hook', async () => {
+            makePostRequest.mockResolvedValueOnce(null);
+
+            const result = await getActiveChallenges(mockToken);
+
+            expect(result).toEqual({ challenges: [] });
+            // The early return on a failed request must keep the pin/prune
+            // logic from ever seeing the synthetic empty payload.
+            expect(pinChallengeTitles).not.toHaveBeenCalled();
         });
 
         test('should handle falsy response object', async () => {

@@ -757,6 +757,84 @@ const setTitleRules = (rules) => {
     return saveSettings(settings);
 };
 
+// Defensive cap on the pin map size so an anomalously large challenge list
+// can't bloat the shared settings blob. Real active lists are tens of
+// entries; 500 is far above anything GuruShots returns.
+const MAX_TITLE_PINS = 500;
+
+/**
+ * Get the persisted first-seen challenge-title pins as `{ [id]: title }`.
+ * Returns a defensive copy so callers can't mutate stored state around
+ * mergeTitlePins' validation. Copies via own-property iteration so an id
+ * named `__proto__`/`constructor` can never surface a prototype member.
+ *
+ * No IPC wiring — deliberate asymmetry with titleRules (which has a
+ * user-facing editor): pins are an internal, automatically-maintained cache.
+ */
+const getTitlePins = () => {
+    const settings = loadSettings();
+    const stored = settings.challengeSettings?.titlePins;
+    const pins = {};
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+        for (const id of Object.keys(stored)) {
+            const title = stored[id];
+            if (typeof title === 'string' && title.length > 0) {
+                pins[id] = title;
+            }
+        }
+    }
+    return pins;
+};
+
+/**
+ * Merge title pins into the persisted map — never a wholesale replace. Inside
+ * the write the stored map is re-read; `adds` apply only to ids with no
+ * existing pin (first-seen wins, so a concurrent writer's fresh pin is never
+ * clobbered) and `removeIds` are deleted. Titles are truncated to
+ * MAX_TITLE_LENGTH and the map is capped at MAX_TITLE_PINS entries.
+ */
+const mergeTitlePins = (adds, removeIds) => {
+    const addEntries =
+        adds && typeof adds === 'object' && !Array.isArray(adds)
+            ? Object.entries(adds).filter(([, title]) => typeof title === 'string' && title.trim() !== '')
+            : [];
+    const removeList = Array.isArray(removeIds) ? removeIds.filter((id) => typeof id === 'string') : [];
+    if (addEntries.length === 0 && removeList.length === 0) return true;
+
+    const settings = loadSettings();
+    if (!settings.challengeSettings) {
+        settings.challengeSettings = getDefaultSettings().challengeSettings;
+    }
+    const stored = settings.challengeSettings.titlePins;
+    // Rebuild via own-property copy (drops prototype-named keys and any
+    // non-string values a corrupted blob might carry).
+    const pins = {};
+    if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+        for (const id of Object.keys(stored)) {
+            if (typeof stored[id] === 'string' && stored[id].length > 0) {
+                pins[id] = stored[id];
+            }
+        }
+    }
+
+    for (const id of removeList) {
+        delete pins[id];
+    }
+    for (const [id, title] of addEntries) {
+        if (Object.prototype.hasOwnProperty.call(pins, id)) continue; // first-seen wins
+        if (Object.keys(pins).length >= MAX_TITLE_PINS) {
+            logger
+                .withCategory('settings')
+                .warning(`mergeTitlePins: pin cap of ${MAX_TITLE_PINS} reached — not pinning challenge ${id}`, null);
+            break;
+        }
+        pins[id] = title.slice(0, MAX_TITLE_LENGTH);
+    }
+
+    settings.challengeSettings.titlePins = pins;
+    return saveSettings(settings);
+};
+
 /**
  * Effective value for one of the title-scoped tag lists. Starts from the
  * id-keyed effective value (per-challenge override or global default) and, when
@@ -1043,6 +1121,10 @@ module.exports = {
     getTitleRules,
     setTitleRules,
     getEffectiveTagSetting,
+
+    // First-seen challenge-title pins (internal cache — no IPC wiring)
+    getTitlePins,
+    mergeTitlePins,
 
     // Cleanup functions
     cleanupStaleChallengeSetting,
