@@ -136,7 +136,7 @@
         "prettier": "4.0.0-alpha.13",
         "size-limit": "^12.1.0",
         "tailwindcss": "^4.3.3",
-        "ttsc": "0.19.3",
+        "ttsc": "0.20.0",
         "typescript": "7.1.0-dev.20260717.1",
         "yauzl": "^3.4.0"
     },
