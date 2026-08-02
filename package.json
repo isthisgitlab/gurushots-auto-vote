@@ -96,7 +96,7 @@
         "@capacitor/preferences": "^8.0.1",
         "@capawesome-team/capacitor-android-foreground-service": "^8.1.0",
         "@preact/signals": "^2.10.0",
-        "axios": "^1.18.1",
+        "axios": "^1.19.0",
         "electron-updater": "^6.8.9",
         "preact": "^10.29.7",
         "zod": "^4.4.3"
