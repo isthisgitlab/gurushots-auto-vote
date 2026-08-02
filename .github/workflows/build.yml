@@ -234,7 +234,7 @@ jobs:
                   download-bumped: 'true'
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
-              uses: actions/setup-java@v5
+              uses: actions/setup-java@v5.6.0
               with:
                   distribution: 'temurin'
                   java-version: '21'
