@@ -19,8 +19,16 @@
  */
 
 // Mirror of schema.js MAX_SCHEDULE_COUNT (GuruShots hard limit of 4 images).
-// Not imported: schema.js isn't renderer-bundle-safe (zod) and doesn't export it.
+// Not imported: schema.js isn't renderer-bundle-safe (zod) and doesn't export
+// it. schema.js carries a back-reference comment; keep the two in sync.
 const MAX_SCHEDULE_COUNT = 4;
+
+// Mirror of autoFill.js MAX_SCHEDULE_ROWS_READ, applied here as well because
+// the renderer calls this module directly on the raw settings value — without
+// autoFill.js's getValidScheduleRows cap on the path — and re-runs it on every
+// modal render. A corrupted, hand-edited blob with a pathologically long array
+// must not walk in full per keystroke.
+const MAX_ROWS_READ = 100;
 
 const isSaneCount = (c) => Number.isInteger(c) && c >= 2 && c <= MAX_SCHEDULE_COUNT;
 
@@ -41,16 +49,19 @@ const isSaneCount = (c) => Number.isInteger(c) && c >= 2 && c <= MAX_SCHEDULE_CO
  * @returns {Array<{count: number, seconds: number}>}
  */
 const getSaneScheduleRows = (rows) =>
-    (Array.isArray(rows) ? rows : []).filter(
-        (r) => r && typeof r === 'object' && isSaneCount(r.count) && Number.isFinite(r.seconds),
-    );
+    (Array.isArray(rows) ? rows : [])
+        .slice(0, MAX_ROWS_READ)
+        .filter((r) => r && typeof r === 'object' && isSaneCount(r.count) && Number.isFinite(r.seconds));
 
 /**
  * How far the schedule shifts toward the end for a given challenge: the
  * schedule's active span minus the challenge's photo limit, floored at 0
  * (never stretch, only compress). Span = highest image number with a real
  * (non-off) time; seconds === 0 is the GUI's "off" sentinel and must not
- * extend the span. Bounded to ≤ MAX_SCHEDULE_COUNT − 2 by construction.
+ * extend the span. For any real challenge (max ≥ 2) the shift is bounded to
+ * ≤ MAX_SCHEDULE_COUNT − 2; a smaller/garbage max can push it up to
+ * MAX_SCHEDULE_COUNT, where every row shifts away and the schedule goes
+ * inert — fail-closed either way.
  *
  * @param {*} rows - schedule rows (untrusted shape)
  * @param {*} maxPhotoSubmits - challenge.max_photo_submits (untrusted shape)

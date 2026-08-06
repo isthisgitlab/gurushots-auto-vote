@@ -361,6 +361,57 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).not.toHaveBeenCalled();
     });
 
+    test('shifted fill logs the row that set the TARGET, even when the entry sits on an off row', async () => {
+        // Schedule {2 @ 30m, 3 off, 4 @ 10m} on a 3-image challenge: shift 1,
+        // effective rows {2 off, 3 @ 600s}. At T-~8m the target 3 comes from
+        // the original Image-4 row; entry 2 fills only as catch-up (its own
+        // remapped row is off). The log must attribute Image 4 — naming
+        // "Image 3" (the arithmetic entry+shift) would point at a disabled row.
+        const success = jest.fn();
+        const logger = {
+            withCategory: () => ({ info: jest.fn(), warning: jest.fn(), success, error: jest.fn(), debug: jest.fn() }),
+            challengeTag: (c) => `[Challenge ${c.id}]`,
+        };
+        const challenge = makeChallenge({ maxSubmits: 3, entries: [{ id: 'e1' }], closeIn: 500 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({
+                autoFill: true,
+                schedule: [
+                    { count: 2, seconds: 1800 },
+                    { count: 3, seconds: 0 },
+                    { count: 4, seconds: 600 },
+                ],
+            }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(success).toHaveBeenCalledWith(
+            expect.stringContaining('3-image challenge — target 3 entries follows the Image 4 time'),
+            null,
+        );
+    });
+
+    test('unshifted fill logs no schedule-shift note', async () => {
+        const success = jest.fn();
+        const logger = {
+            withCategory: () => ({ info: jest.fn(), warning: jest.fn(), success, error: jest.fn(), debug: jest.fn() }),
+            challengeTag: (c) => `[Challenge ${c.id}]`,
+        };
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }], closeIn: 5 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(success).toHaveBeenCalledWith(expect.not.stringContaining('-image challenge'), null);
+    });
+
     test('catch-up: entries far below the current target still submit one per call', async () => {
         // T-5m → target 4, but only 1 entry exists (the app was behind
         // schedule). One photo goes in now; the next cycle catches up further.

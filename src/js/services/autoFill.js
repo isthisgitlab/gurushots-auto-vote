@@ -443,12 +443,18 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
             // — the resolved mapping, not a bare shift count. Success-level on
             // purpose: debug/info are compiled out of packaged builds, and the
             // remapped timing is exactly what a user checking "why did it fill
-            // now?" needs to see.
-            const shift = getScheduleShift(getValidScheduleRows(schedule), challenge.max_photo_submits);
-            const entryNumber = getEntries(challenge).length;
+            // now?" needs to see. Attribute the TARGET's row (`desired + shift`
+            // maps back to the original image number that set the current
+            // target), not the entry number: during catch-up the entry being
+            // submitted may sit on an off row and was never scheduled itself.
+            // Sanitize max before it reaches the log line: the challenge object
+            // is untrusted API shape, and interpolating the raw field would let
+            // a malformed value (e.g. a string with newlines) forge log lines.
+            const maxSubmits = Number.isFinite(challenge.max_photo_submits) ? challenge.max_photo_submits : 0;
+            const shift = getScheduleShift(getValidScheduleRows(schedule), maxSubmits);
             const shiftNote =
                 shift > 0
-                    ? `; ${challenge.max_photo_submits}-image challenge — entry ${entryNumber} used the Image ${entryNumber + shift} time`
+                    ? `; ${maxSubmits}-image challenge — target ${desired} entries follows the Image ${desired + shift} time`
                     : '';
             // `slotsRemaining` is the pre-reflect snapshot from above, so `- 1` is
             // the post-submit count — keep this log after the reflect, not before.

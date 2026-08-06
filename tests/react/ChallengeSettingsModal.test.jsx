@@ -333,4 +333,28 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
         });
         expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
     });
+
+    test('null challenge (dropped off the live poll mid-session): no crash, no hint', async () => {
+        // App.jsx derives challenge as challenges.find(...) ?? null on every
+        // 60s tick, so it goes null while the modal stays open — the hint
+        // must not render (and must not dereference null).
+        renderWithChallenge(null);
+
+        await waitFor(() => {
+            expect(document.body.textContent).toContain('app.autoFillSchedule');
+        });
+        expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
+    });
+
+    test('single-photo challenge: no hint (the remapped schedule is empty, no row applies)', async () => {
+        renderWithChallenge({
+            max_photo_submits: 1,
+            member: { boost: { state: 'LOCKED' }, ranking: { entries: [] } },
+        });
+
+        await waitFor(() => {
+            expect(document.body.textContent).toContain('app.autoFillSchedule');
+        });
+        expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
+    });
 });
