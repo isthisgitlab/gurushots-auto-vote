@@ -270,3 +270,67 @@ describe('ChallengeSettingsModal group applicability', () => {
         expect(resetButton()).toBeNull();
     });
 });
+
+describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
+    const DEFAULT_SCHEDULE = [
+        { count: 2, seconds: 1800 },
+        { count: 3, seconds: 1200 },
+        { count: 4, seconds: 600 },
+    ];
+
+    // Extend the shared mock schema with the schedule setting for this suite
+    // only; restore afterwards so the other suites keep their single-field view.
+    beforeEach(() => {
+        mockApi.getChallengeOverride.mockReset().mockResolvedValue(null);
+        mockSchemaState.schema.autoFillSchedule = {
+            type: 'schedule',
+            default: DEFAULT_SCHEDULE,
+            perChallenge: true,
+            group: 'autoFill',
+            label: 'app.autoFillSchedule',
+            description: 'app.autoFillScheduleDesc',
+        };
+        mockSchemaState.defaults.autoFillSchedule = DEFAULT_SCHEDULE;
+        mockSchemaState.groups.push({ id: 'autoFill', label: 'app.groupAutoFill' });
+    });
+    afterEach(() => {
+        delete mockSchemaState.schema.autoFillSchedule;
+        delete mockSchemaState.defaults.autoFillSchedule;
+        mockSchemaState.groups = mockSchemaState.groups.filter((g) => g.id !== 'autoFill');
+    });
+
+    const renderWithChallenge = (challenge) =>
+        render(
+            <ChallengeSettingsModal
+                isOpen={true}
+                onClose={jest.fn()}
+                challengeId="1"
+                challengeTitle="Challenge 1"
+                challenge={challenge}
+            />,
+        );
+
+    test('visible when the challenge allows fewer images than the schedule covers', async () => {
+        renderWithChallenge({
+            max_photo_submits: 2,
+            member: { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: 'e1' }] } },
+        });
+
+        await waitFor(() => {
+            expect(document.body.textContent).toContain('app.autoFillSchedule');
+        });
+        expect(document.body.textContent).toContain('app.autoFillScheduleShiftHint');
+    });
+
+    test('absent when the challenge allows the full schedule span', async () => {
+        renderWithChallenge({
+            max_photo_submits: 4,
+            member: { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: 'e1' }] } },
+        });
+
+        await waitFor(() => {
+            expect(document.body.textContent).toContain('app.autoFillSchedule');
+        });
+        expect(document.body.textContent).not.toContain('app.autoFillScheduleShiftHint');
+    });
+});

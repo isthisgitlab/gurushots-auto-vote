@@ -165,7 +165,9 @@
                 'Submit additional photos as a challenge approaches its deadline, following the schedule below. Fills one slot per check cycle.',
             autoFillSchedule: 'Auto-Fill Schedule',
             autoFillScheduleDesc:
-                'Set a time to 0h 0m to turn that image off. Each row means: have at least this many entries once this much time remains before close — "Image 2 ≤ 48h" submits your 2nd photo when 48 hours remain. If you are behind schedule (the app started late, or a time is longer than the whole challenge), it catches up one photo per cycle from the start. A row above the challenge photo limit is capped to it.',
+                'Set a time to 0h 0m to turn that image off. Each row means: have at least this many entries once this much time remains before close — "Image 2 ≤ 48h" submits your 2nd photo when 48 hours remain. If you are behind schedule (the app started late, or a time is longer than the whole challenge), it catches up one photo per cycle from the start. If a challenge allows fewer images than the schedule covers, the whole schedule shifts toward the end so the last image’s time applies to the challenge’s final photo — e.g. in a 2-image challenge the 2nd photo uses the Image 4 time; in a 3-image challenge the 2nd photo uses the Image 3 time and the 3rd the Image 4 time.',
+            autoFillScheduleShiftHint:
+                'This challenge allows {0} photos, fewer than the schedule covers — times shift toward the end: the final photo uses the Image {1} time.',
             autoFillScheduleImage: 'Image',
             autoFillScheduleOff: 'no time set — may still be submitted while catching up to a later image',
             autoFillScheduleEmpty: 'All images are off — auto-fill will never submit anything.',

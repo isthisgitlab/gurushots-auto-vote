@@ -608,8 +608,10 @@ const shouldApplyTurbo = (challenge, now, options = {}) => {
  * Effective seconds-before-close at which the next auto-fill becomes due:
  * the largest autoFillSchedule threshold whose target count hasn't been met
  * yet, straight from autoFill.getNextScheduleThresholdSec (single source of
- * truth — it does the clamping and defensive parsing). With every row
- * satisfied, clamped away, or no schedule, the window never opens (0).
+ * truth — it does the end-alignment shift for challenges allowing fewer
+ * images than the schedule covers, plus the clamping and defensive parsing).
+ * With every row satisfied, shifted/clamped away, or no schedule, the window
+ * never opens (0).
  * Note: the entry count is read live, so this is a snapshot at call time
  * (orderDeadlineActions is called once per challenge before the runners
  * execute).

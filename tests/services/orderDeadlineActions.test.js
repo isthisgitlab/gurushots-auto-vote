@@ -6,8 +6,10 @@
  * turbo). Each action's own handler still decides whether to actually act.
  *
  * The auto-fill threshold comes from the autoFillSchedule setting (rows of
- * { count, seconds }): the largest threshold among rows whose (clamped) count
- * exceeds the current entry count — see autoFill.getNextScheduleThresholdSec.
+ * { count, seconds }): the largest threshold among rows whose count exceeds
+ * the current entry count, after the schedule end-aligns to the challenge's
+ * photo limit (a 2-image challenge follows the Image-4 row's time for its
+ * final photo) — see autoFill.getNextScheduleThresholdSec / scheduleRemap.js.
  */
 
 const settings = require('../../src/js/settings');
@@ -95,8 +97,9 @@ describe('orderDeadlineActions', () => {
     });
 
     test('no free slots: auto-fill threshold is 0 but still ranks above an absent boost', () => {
-        // maxSubmits 1 with 1 entry → every schedule row clamps to 1, none is
-        // above the entry count → auto-fill 0s; no boost → -Infinity.
+        // maxSubmits 1 with 1 entry → the end-aligned schedule shifts every row
+        // below count 2 (entry 1 always exists), none is above the entry
+        // count → auto-fill 0s; no boost → -Infinity.
         mockSettings({ turboTime: 720, emergencyFill: 300 });
         const challenge = buildChallenge({ maxSubmits: 1, entries: [{ id: 'e1' }] });
         expect(order(challenge)).toEqual(['turbo', 'emergencyFill', 'autoFill', 'boost']);
@@ -108,6 +111,19 @@ describe('orderDeadlineActions', () => {
         const challenge = buildChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { id: 'e2' }] });
         const result = VotingLogic.orderDeadlineActions(challenge);
         expect(result[0]).toEqual({ action: 'autoFill', thresholdSec: 1200 });
+    });
+
+    test('2-image challenge end-aligns the default schedule: fill due at 600s, not 1800s', () => {
+        // The reported bug through the real wiring (getAutoFillThresholdSec →
+        // orderDeadlineActions): 1 entry of max 2 with the full default schedule
+        // used to open the fill window at the Image-2 row (1800s). End-aligned,
+        // the 2nd (final) photo follows the Image-4 row → 600s, so turbo (720s)
+        // now sorts first.
+        mockSettings({ turboTime: 720, emergencyFill: 300 });
+        const result = VotingLogic.orderDeadlineActions(buildChallenge());
+        const autoFill = result.find((a) => a.action === 'autoFill');
+        expect(autoFill.thresholdSec).toBe(600);
+        expect(result.map((a) => a.action)).toEqual(['turbo', 'autoFill', 'emergencyFill', 'boost']);
     });
 
     test('emergency fill off (0) sorts to the bottom of the threshold band', () => {

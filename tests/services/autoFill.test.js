@@ -405,6 +405,34 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(warning).toHaveBeenCalledWith(expect.stringContaining('allows 6'), null);
     });
 
+    test('2-image challenge: no fill at the Image-2 time and no coverage-gap warning', async () => {
+        // The reported bug, end-to-end: at T-15m a 2-image challenge with one
+        // entry used to fill its 2nd (final) photo via the Image-2 row @ 30m.
+        // End-aligned, the 2nd photo follows the Image-4 row @ 10m, so this
+        // cycle must skip — and the coverage-gap warning must stay silent (the
+        // end-aligned top target equals the challenge limit; there is no gap).
+        const warning = jest.fn();
+        const logger = {
+            withCategory: () => ({ info: jest.fn(), warning, success: jest.fn(), error: jest.fn(), debug: jest.fn() }),
+            challengeTag: (c) => `[Challenge ${c.id}]`,
+        };
+        const challenge = makeChallenge({
+            maxSubmits: 2,
+            entries: [{ id: 'e1' }],
+            closeIn: 15 * 60,
+        });
+        const submitToChallenge = jest.fn();
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos: jest.fn(),
+            submitToChallenge,
+        });
+        expect(result).toBe('skipped');
+        expect(submitToChallenge).not.toHaveBeenCalled();
+        expect(warning).not.toHaveBeenCalled();
+    });
+
     test('mustIncludeTags hard-filters: with fillWithoutTagMatch off, no-match photo is not submitted', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 5 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
@@ -1802,9 +1830,28 @@ describe('resolveScheduleTarget — target entry count for the time remaining', 
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1801, 4)).toBe(0);
     });
 
-    test('row counts clamp to max_photo_submits', () => {
+    test('schedule end-aligns to max_photo_submits (final row → final slot)', () => {
+        // max 3: shift 1 → rows become {2 @ 1200s, 3 @ 600s}; at T-5m both apply.
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 300, 3)).toBe(3);
+        // max 2: shift 2 → single row {2 @ 600s}; at T-5m it applies.
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 300, 2)).toBe(2);
+    });
+
+    test('2-image challenge no longer fills at the Image-2 time (the reported bug)', () => {
+        // T-25m: old behavior targeted 2 via the (clamped) Image-2 row @ 30m.
+        // End-aligned, the 2nd photo follows the Image-4 row @ 10m instead.
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1500, 2)).toBe(0);
+        // Inside the remapped 10m window the fill becomes due.
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 500, 2)).toBe(2);
+    });
+
+    test('3-image challenge shifts by one (images 2/3 use the Image-3/4 times)', () => {
+        // T-~18m: only the remapped Image-3 row (1200s → count 2) applies.
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1100, 3)).toBe(2);
+        // T-~8m: the remapped Image-4 row (600s → count 3) applies too.
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 500, 3)).toBe(3);
+        // Above the shifted span nothing is due yet (old Image-2 row @ 30m is gone).
+        expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1500, 3)).toBe(0);
     });
 
     test('undefined / NaN max_photo_submits → finite result, never NaN', () => {
@@ -1855,9 +1902,52 @@ describe('getNextScheduleThresholdSec — when the next fill becomes due', () =>
         expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, 4, 4)).toBe(0);
     });
 
-    test('returns 0 when the remaining rows are clamped away by max_photo_submits', () => {
-        // max 2: rows 3 and 4 clamp to 2, which is not above entryCount 2.
+    test('returns 0 when the end-aligned schedule is already satisfied', () => {
+        // max 2: the schedule end-aligns to a single row {2 @ 600s}, which is
+        // not above entryCount 2 — nothing further is ever due.
         expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, 2, 2)).toBe(0);
+    });
+
+    test('2-image challenge: next fill due at the Image-4 time, not the Image-2 time', () => {
+        expect(getNextScheduleThresholdSec(DEFAULT_SCHEDULE, 1, 2)).toBe(600);
+    });
+
+    test('off rows shift positionally but do not extend the active span', () => {
+        // Image 4 is off → active span is 3 → shift 1 for max 2: the 2nd photo
+        // follows the Image-3 time.
+        const withOffTail = [
+            { count: 2, seconds: 1800 },
+            { count: 3, seconds: 1200 },
+            { count: 4, seconds: 0 },
+        ];
+        expect(getNextScheduleThresholdSec(withOffTail, 1, 2)).toBe(1200);
+        // A single-row schedule spans only image 2 → no shift for max 2: no
+        // behavior change for users who configured just "Image 2".
+        expect(getNextScheduleThresholdSec([{ count: 2, seconds: 1800 }], 1, 2)).toBe(1800);
+    });
+
+    test('sparse schedule shifts positionally (gap rows fall off the front)', () => {
+        // Rows {2, 4} with max 3: shift 1 maps Image-4 → image 3 and drops the
+        // Image-2 row (its position lands on count 1, which always exists).
+        const sparse = [
+            { count: 2, seconds: 1800 },
+            { count: 4, seconds: 600 },
+        ];
+        expect(getNextScheduleThresholdSec(sparse, 1, 3)).toBe(600);
+        expect(resolveScheduleTarget(sparse, 500, 3)).toBe(3);
+    });
+
+    test('an out-of-band corrupted count neither inflates the shift nor fires itself', () => {
+        // The count:999999 row must be dropped entirely: were it kept, the
+        // Math.min clamp downstream would let it fire at its own 1800s; were it
+        // counted into the span, the shift would wipe the legitimate rows (0).
+        const poisoned = [
+            { count: 999999, seconds: 1800 },
+            { count: 2, seconds: 1800 },
+            { count: 3, seconds: 1200 },
+            { count: 4, seconds: 600 },
+        ];
+        expect(getNextScheduleThresholdSec(poisoned, 1, 2)).toBe(600);
     });
 
     test('unordered rows: still picks the largest applicable threshold', () => {
