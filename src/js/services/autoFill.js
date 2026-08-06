@@ -454,7 +454,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
             const shift = getScheduleShift(getValidScheduleRows(schedule), maxSubmits);
             const shiftNote =
                 shift > 0
-                    ? `; ${maxSubmits}-image challenge — target ${desired} entries follows the Image ${desired + shift} time`
+                    ? `; ${maxSubmits}-image challenge — the target of ${desired} entries follows the Image ${desired + shift} time`
                     : '';
             // `slotsRemaining` is the pre-reflect snapshot from above, so `- 1` is
             // the post-submit count — keep this log after the reflect, not before.

@@ -389,7 +389,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         });
         expect(result).toBe('submitted');
         expect(success).toHaveBeenCalledWith(
-            expect.stringContaining('3-image challenge — target 3 entries follows the Image 4 time'),
+            expect.stringContaining('3-image challenge — the target of 3 entries follows the Image 4 time'),
             null,
         );
     });
