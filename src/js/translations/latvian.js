@@ -165,7 +165,9 @@
                 'Iesniegt papildu foto, kad izaicinājuma termiņš tuvojas, sekojot zemāk norādītajam grafikam. Aizpilda vienu vietu katrā pārbaudes ciklā.',
             autoFillSchedule: 'Auto-aizpildes grafiks',
             autoFillScheduleDesc:
-                'Iestati laiku uz 0h 0m, lai izslēgtu attiecīgo foto. Katra rinda nozīmē: kad līdz beigām atlicis šis laiks, jābūt vismaz šitik foto — "Foto 2 ≤ 48h" iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai laiks ir garāks par visu izaicinājumu), tā panāk grafiku, iesniedzot vienu foto katrā ciklā jau no sākuma. Rinda virs izaicinājuma foto limita tiek ierobežota līdz tam.',
+                'Iestati laiku uz 0h 0m, lai izslēgtu attiecīgo foto. Katra rinda nozīmē: kad līdz beigām atlicis šis laiks, jābūt vismaz šitik foto — "Foto 2 ≤ 48h" iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai laiks ir garāks par visu izaicinājumu), tā panāk grafiku, iesniedzot vienu foto katrā ciklā jau no sākuma. Ja izaicinājums atļauj mazāk foto, nekā grafiks aptver, viss grafiks nobīdās uz beigām, lai pēdējā foto laiks attiektos uz izaicinājuma pēdējo foto — piemēram, 2 foto izaicinājumā 2. foto izmanto Foto 4 laiku, bet 3 foto izaicinājumā 2. foto izmanto Foto 3 laiku un 3. foto — Foto 4 laiku.',
+            autoFillScheduleShiftHint:
+                'Šis izaicinājums atļauj {0} foto — mazāk, nekā grafiks aptver, tāpēc laiki nobīdās uz beigām: pēdējais foto izmanto Foto {1} laiku.',
             autoFillScheduleImage: 'Foto',
             autoFillScheduleOff: 'laiks nav iestatīts — var tikt iesniegts, panākot vēlāku foto',
             autoFillScheduleEmpty: 'Visi foto ir izslēgti — auto-aizpilde neko neiesniegs.',

@@ -4,6 +4,7 @@ import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { groupSchemaEntries } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
+import { getScheduleShift } from '../../../services/scheduleRemap';
 import { SettingInput } from './SettingInput';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -227,6 +228,24 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                         const hasOverride = key in overrides;
                                         const globalDefault = defaults?.[key] ?? config.default;
                                         const currentValue = hasOverride ? overrides[key] : globalDefault;
+                                        // Live, render-time hint (same spirit as getGroupApplicability):
+                                        // when this challenge allows fewer photos than the schedule
+                                        // covers, the schedule end-aligns at runtime (scheduleRemap) —
+                                        // say so here, where a user puzzled by a fill time would look.
+                                        // The `>= 2` gate does double duty. Null guard: `challenge`
+                                        // goes null when it drops off the live 60s poll while the
+                                        // modal is open (App.jsx derives it as find(...) ?? null), and
+                                        // without the gate getScheduleShift would treat max as 0 and
+                                        // render the hint into a null dereference. Accuracy guard: on
+                                        // a single-photo challenge every remapped row lands below
+                                        // count 2 and is dropped, so no image time governs anything —
+                                        // a "final photo uses the Image N time" hint would be false.
+                                        const scheduleShift =
+                                            key === 'autoFillSchedule' &&
+                                            Number.isInteger(challenge?.max_photo_submits) &&
+                                            challenge.max_photo_submits >= 2
+                                                ? getScheduleShift(currentValue, challenge.max_photo_submits)
+                                                : 0;
 
                                         return (
                                             <div key={key} className="form-control">
@@ -255,6 +274,16 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                     onReset={applicable && hasOverride ? handleClearOverride : null}
                                                     disabled={!applicable}
                                                 />
+                                                {scheduleShift > 0 && (
+                                                    <p className="text-xs text-info mt-1">
+                                                        {t('app.autoFillScheduleShiftHint')
+                                                            .replace('{0}', String(challenge.max_photo_submits))
+                                                            .replace(
+                                                                '{1}',
+                                                                String(challenge.max_photo_submits + scheduleShift),
+                                                            )}
+                                                    </p>
+                                                )}
                                                 <p className="text-xs text-base-content/40 mt-1">
                                                     {t('app.globalDefault')}:{' '}
                                                     {formatSettingDefault(globalDefault, config, t)}

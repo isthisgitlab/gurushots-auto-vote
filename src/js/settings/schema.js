@@ -71,6 +71,8 @@ const minute1to59 = z.number().min(1).max(59);
 // against a corrupted settings file or out-of-band write, same rationale as
 // the tagsList caps below.
 const MAX_SCHEDULE_ROWS = 3;
+// Mirrored in services/scheduleRemap.js (renderer-bundle-safe module that
+// can't import this zod-carrying file) — change both together.
 const MAX_SCHEDULE_COUNT = 4;
 const MAX_SCHEDULE_SECONDS = 30 * 24 * 3600; // 30 days
 const fillScheduleRow = z
