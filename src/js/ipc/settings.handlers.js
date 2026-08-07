@@ -35,6 +35,11 @@ const THIN_HANDLERS = [
     ['get-effective-setting', 'getEffectiveSetting', null, 'getting effective setting'],
     ['get-title-rules', 'getTitleRules', null, 'getting title rules'],
     ['set-title-rules', 'setTitleRules', false, 'setting title rules'],
+    ['get-challenge-overrides', 'getChallengeOverrides', null, 'getting challenge overrides'],
+    ['get-challenge-profiles', 'getChallengeProfiles', null, 'getting challenge profiles'],
+    ['save-challenge-profile', 'saveChallengeProfile', false, 'saving challenge profile'],
+    ['delete-challenge-profile', 'deleteChallengeProfile', false, 'deleting challenge profile'],
+    ['apply-challenge-profile', 'applyChallengeProfile', false, 'applying challenge profile'],
     ['cleanup-stale-challenge-setting', 'cleanupStaleChallengeSetting', false, 'cleaning up stale challenge settings'],
     ['cleanup-obsolete-settings', 'cleanupObsoleteSettings', false, 'cleaning up obsolete settings'],
     ['reset-setting', 'resetSetting', false, 'resetting setting'],
@@ -172,7 +177,18 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                     };
                     defaults[key] = settings.getGlobalDefault(key);
                 });
-                return { schema: serializableSchema, defaults, groups: settings.SETTINGS_GROUPS };
+                return {
+                    schema: serializableSchema,
+                    defaults,
+                    groups: settings.SETTINGS_GROUPS,
+                    // Profile caps travel with the schema so the renderer's
+                    // client-side pre-validation never hardcodes the literals
+                    // the facade enforces.
+                    profileLimits: {
+                        maxChallengeProfiles: settings.MAX_CHALLENGE_PROFILES,
+                        maxProfileNameLength: settings.MAX_PROFILE_NAME_LENGTH,
+                    },
+                };
             } catch (error) {
                 logger.withCategory('settings').error('Error getting settings schema:', error);
                 return { schema: {}, defaults: {} };

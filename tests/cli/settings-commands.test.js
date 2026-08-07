@@ -24,7 +24,15 @@ jest.mock('../../src/js/logger.js', () => {
 });
 
 const settings = require('../../src/js/settings');
-const { getSetting, setSetting, resetSetting } = require('../../src/js/cli/commands/settings');
+const {
+    getSetting,
+    setSetting,
+    resetSetting,
+    listProfiles,
+    saveProfileFromChallenge,
+    applyProfile,
+    deleteProfile,
+} = require('../../src/js/cli/commands/settings');
 
 describe('CLI settings commands — per-challenge support', () => {
     beforeEach(() => {
@@ -65,5 +73,50 @@ describe('CLI settings commands — per-challenge support', () => {
         settings.removeChallengeOverride.mockReturnValue(true);
         resetSetting('exposure', '12345');
         expect(settings.removeChallengeOverride).toHaveBeenCalledWith('exposure', '12345');
+    });
+});
+
+describe('CLI settings commands — challenge profiles', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('listProfiles reads the facade profiles map', () => {
+        settings.getChallengeProfiles.mockReturnValue({ tactic: { exposure: 80 } });
+        listProfiles();
+        expect(settings.getChallengeProfiles).toHaveBeenCalled();
+    });
+
+    test("saveProfileFromChallenge snapshots that challenge's overrides", () => {
+        settings.getChallengeOverrides.mockReturnValue({ exposure: 80, autoFill: true });
+        settings.saveChallengeProfile.mockReturnValue(true);
+        saveProfileFromChallenge('2-pic tactic', '12345');
+        expect(settings.getChallengeOverrides).toHaveBeenCalledWith('12345');
+        expect(settings.saveChallengeProfile).toHaveBeenCalledWith('2-pic tactic', {
+            exposure: 80,
+            autoFill: true,
+        });
+    });
+
+    test('applyProfile delegates to applyChallengeProfile', () => {
+        settings.applyChallengeProfile.mockReturnValue(true);
+        applyProfile('2-pic tactic', '12345');
+        expect(settings.applyChallengeProfile).toHaveBeenCalledWith('2-pic tactic', '12345');
+    });
+
+    test('deleteProfile delegates to deleteChallengeProfile', () => {
+        settings.deleteChallengeProfile.mockReturnValue(true);
+        deleteProfile('2-pic tactic');
+        expect(settings.deleteChallengeProfile).toHaveBeenCalledWith('2-pic tactic');
+    });
+
+    test('command functions survive facade failures without throwing', () => {
+        settings.getChallengeOverrides.mockReturnValue({});
+        settings.saveChallengeProfile.mockReturnValue(false);
+        settings.applyChallengeProfile.mockReturnValue(false);
+        settings.deleteChallengeProfile.mockReturnValue(false);
+        expect(() => saveProfileFromChallenge('p', '1')).not.toThrow();
+        expect(() => applyProfile('ghost', '1')).not.toThrow();
+        expect(() => deleteProfile('ghost')).not.toThrow();
     });
 });
