@@ -86,10 +86,9 @@
     },
     "homepage": "https://github.com/isthisgitlab/gurushots-auto-vote#readme",
     "engines": {
-        "node": ">=26.0.0",
-        "pnpm": ">=11.9.0 <11.11.0"
+        "node": ">=26.0.0"
     },
-    "packageManager": "pnpm@11.10.0",
+    "packageManager": "pnpm@11.20.0",
     "dependencies": {
         "@capacitor/android": "^8.5.0",
         "@capacitor/core": "^8.5.0",
@@ -106,14 +105,14 @@
         "@eslint/js": "^10.0.1",
         "@happy-dom/jest-environment": "^20.11.1",
         "@jest/globals": "^30.4.1",
-        "@size-limit/file": "^12.1.0",
+        "@size-limit/file": "^13.0.3",
         "@swc/jest": "^0.2.39",
         "@tailwindcss/cli": "^4.3.3",
         "@tailwindcss/typography": "^0.5.20",
         "@testing-library/dom": "^10.4.1",
         "@testing-library/preact": "^3.2.4",
-        "@ttsc/graph": "0.24.0",
-        "@ttsc/lint": "0.24.0",
+        "@ttsc/graph": "0.25.0",
+        "@ttsc/lint": "0.25.0",
         "@types/node": "^26.1.2",
         "concurrently": "10.0.4",
         "cross-env": "^10.1.0",
@@ -134,9 +133,9 @@
         "only-allow": "^1.2.2",
         "postject": "1.0.0-alpha.6",
         "prettier": "4.0.0-alpha.13",
-        "size-limit": "^12.1.0",
+        "size-limit": "^13.0.3",
         "tailwindcss": "^4.3.3",
-        "ttsc": "0.24.0",
+        "ttsc": "0.25.0",
         "typescript": "7.1.0-dev.20260717.1",
         "yauzl": "^3.4.0"
     },

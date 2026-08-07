@@ -32,6 +32,8 @@ Automated voting for GuruShots challenges. The same voting engine ships three wa
 
 If you hit a rate-limit error: stop every instance, wait 5–10 minutes, then start a single one.
 
+The desktop app now enforces this for GUI instances: launching it a second time focuses the already-running window instead of starting a new copy. This does not cover running the CLI or the Android app alongside the GUI — the warning above still applies to those combinations.
+
 ## 🚀 Features
 
 - **Automated voting** — votes your active challenges up to a configurable exposure target.
@@ -394,6 +396,8 @@ From the CLI, tail any of them with `logs [--error|--api|--settings] [--lines=<n
 **Auto-vote runs but nothing happens** — confirm you have active challenges, that your exposure isn't already at the trigger (default 100%), and that `voteOnlyInLastMinute` isn't on while challenges are still outside their last-minute window. Check the logs for the per-challenge skip reason.
 
 **Window opens off-screen** — restart the app; from the CLI run `reset-windows`.
+
+**Launching the app appears to do nothing (no window)** — a stale or frozen instance may still be running; a second launch defers to it and exits. Quit or kill the old process (Activity Monitor / `pkill -f GuruShotsAutoVote`) and launch again.
 
 **Android: voting stops in the background** — set the app's battery usage to **Unrestricted** and whitelist it in your vendor's battery manager; on Android 12 grant the exact-alarm permission for the 1-minute last-minute cadence.
 

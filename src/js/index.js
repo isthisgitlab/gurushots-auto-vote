@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, session } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const settings = require('./settings');
@@ -11,15 +11,27 @@ const miscIpc = require('./ipc/misc.handlers');
 const settingsIpc = require('./ipc/settings.handlers');
 const votingIpc = require('./ipc/voting.handlers');
 const actionsIpc = require('./ipc/actions.handlers');
-const { ensureExit } = require('./windows/lifecycle');
+const { ensureExit, focusExistingWindow, clearTokenOnQuit } = require('./windows/lifecycle');
 const { createApplicationMenu } = require('./ui/applicationMenu');
 const { translationManager } = require('./translations/index');
 
 // Initialize global translation manager for menu module access
 global.translationManager = translationManager;
 
-// Disable service workers at the application level
+// Disable service workers at the application level. Kept deliberately:
+// with contextIsolation on, the preload.js register() patch only covers
+// the isolated world — this switch is the only main-world-and-subframe-
+// effective service worker block.
 app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
+
+// Enforce a single running instance. A second launch would share the same
+// userData dir and fight over Chromium's LevelDB locks (the source of the
+// "Failed to delete the database: Database IO error" startup error).
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+    logger.withCategory('ui').info('Another instance is already running — exiting this one.', null);
+    app.quit();
+}
 
 // ensureExit (force-exit safety net) lives in windows/lifecycle.js.
 
@@ -356,99 +368,119 @@ function checkAutoLogin() {
     return false;
 }
 
-// When Electron has finished initialization
-app.whenReady()
-    .then(async () => {
-        // Log userData path for verification
-        logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
-
-        // Clear cache to prevent service worker database errors
-        await session.defaultSession.clearCache();
-        logger.withCategory('ui').info('[App] Browser cache cleared to prevent service worker database errors', null);
-
-        // Initialize API headers on app startup
-        initializeHeaders();
-
-        // Run log cleanup on app startup
-        logger.cleanup();
-
-        // Create application menu
-        createApplicationMenu();
-
-        // Check if we should auto-login and run update check before creating main window
-        const userSettings = settings.loadSettings();
-        const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
-
-        // Initialize global AutoUpdater instance
-        autoUpdater = new AutoUpdater();
-
-        // If auto-login is enabled, check for updates before creating the main window
-        if (shouldAutoLogin) {
-            // Check for updates immediately (no delay) to prevent double challenge loading
-            try {
-                await autoUpdater.checkForUpdates(false);
-            } catch (error) {
-                logger.withCategory('update').error('Error during update check:', error);
-            }
+if (gotSingleInstanceLock) {
+    // Registered synchronously, not inside whenReady: second-instance can
+    // fire while the primary is still booting, and an event emitted before
+    // a listener exists is lost, not queued.
+    app.on('second-instance', () => {
+        const windowToFocus = mainWindow ?? loginWindow;
+        if (windowToFocus) {
+            logger.withCategory('ui').info('Second instance launch blocked — focusing existing window.', null);
+        } else {
+            logger
+                .withCategory('ui')
+                .info('Second instance launch blocked — no window to focus yet (still starting up).', null);
         }
-
-        // Synchronous — the window exists before the handlers below are registered.
-        checkAutoLogin();
-
-        // If not auto-login, check for updates after login window is shown
-        if (!shouldAutoLogin) {
-            // Check for updates after a short delay to not block app startup
-            setTimeout(() => {
-                void (async () => {
-                    try {
-                        await autoUpdater.checkForUpdates(false);
-                    } catch (error) {
-                        logger.withCategory('update').error('Error during update check:', error);
-                    }
-                })();
-            }, 3000); // 3 second delay
+        if (process.platform === 'darwin') {
+            // Cmd+H hides at the NSApplication level; win.show() alone can't undo it.
+            app.show();
         }
-
-        // On macOS, re-create a window when dock icon is clicked and no windows are open
-        app.on('activate', () => {
-            if (BrowserWindow.getAllWindows().length === 0) {
-                checkAutoLogin();
-            }
-        });
-
-        // Handle SIGINT and SIGTERM signals to ensure clean exit
-        process.on('SIGINT', () => {
-            logger.withCategory('ui').info('Received SIGINT signal. Exiting...', null);
-            app.quit();
-            // Use the global force exit handler to ensure the process terminates
-            ensureExit('SIGINT');
-        });
-
-        process.on('SIGTERM', () => {
-            logger.withCategory('ui').info('Received SIGTERM signal. Exiting...', null);
-            app.quit();
-            // Use the global force exit handler to ensure the process terminates
-            ensureExit('SIGTERM');
-        });
-
-        // Set up a global force exit handler to ensure the process always terminates
-        process.on('exit', (code) => {
-            logger.withCategory('ui').info(`Process exiting with code: ${code}`, null);
-        });
-    })
-    .catch((error) => {
-        // The main process has no global unhandledRejection handler (unlike the
-        // CLI), so a throw anywhere in the bootstrap above would otherwise vanish.
-        logger.withCategory('ui').error('Startup failed:', error);
+        focusExistingWindow(windowToFocus);
     });
 
-// Clear token when app is about to quit if stay logged in is not enabled
-app.on('before-quit', () => {
-    const userSettings = settings.loadSettings();
+    // When Electron has finished initialization
+    app.whenReady()
+        .then(async () => {
+            // Log userData path for verification
+            logger.withCategory('ui').info(`[App] UserData path: ${settings.getUserDataPath()}`, null);
 
-    // If stay logged in is not enabled, clear the token
-    if (!userSettings.stayLoggedIn && userSettings.token) {
-        settings.setSetting('token', '');
+            // Initialize API headers on app startup
+            initializeHeaders();
+
+            // Run log cleanup on app startup
+            logger.cleanup();
+
+            // Create application menu
+            createApplicationMenu();
+
+            // Check if we should auto-login and run update check before creating main window
+            const userSettings = settings.loadSettings();
+            const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
+
+            // Initialize global AutoUpdater instance
+            autoUpdater = new AutoUpdater();
+
+            // If auto-login is enabled, check for updates before creating the main window
+            if (shouldAutoLogin) {
+                // Check for updates immediately (no delay) to prevent double challenge loading
+                try {
+                    await autoUpdater.checkForUpdates(false);
+                } catch (error) {
+                    logger.withCategory('update').error('Error during update check:', error);
+                }
+            }
+
+            // Synchronous — the window exists before the handlers below are registered.
+            checkAutoLogin();
+
+            // If not auto-login, check for updates after login window is shown
+            if (!shouldAutoLogin) {
+                // Check for updates after a short delay to not block app startup
+                setTimeout(() => {
+                    void (async () => {
+                        try {
+                            await autoUpdater.checkForUpdates(false);
+                        } catch (error) {
+                            logger.withCategory('update').error('Error during update check:', error);
+                        }
+                    })();
+                }, 3000); // 3 second delay
+            }
+
+            // On macOS, re-create a window when dock icon is clicked and no windows are open
+            app.on('activate', () => {
+                if (BrowserWindow.getAllWindows().length === 0) {
+                    checkAutoLogin();
+                }
+            });
+
+            // Handle SIGINT and SIGTERM signals to ensure clean exit
+            process.on('SIGINT', () => {
+                logger.withCategory('ui').info('Received SIGINT signal. Exiting...', null);
+                app.quit();
+                // Use the global force exit handler to ensure the process terminates
+                ensureExit('SIGINT');
+            });
+
+            process.on('SIGTERM', () => {
+                logger.withCategory('ui').info('Received SIGTERM signal. Exiting...', null);
+                app.quit();
+                // Use the global force exit handler to ensure the process terminates
+                ensureExit('SIGTERM');
+            });
+
+            // Set up a global force exit handler to ensure the process always terminates
+            process.on('exit', (code) => {
+                logger.withCategory('ui').info(`Process exiting with code: ${code}`, null);
+            });
+        })
+        .catch((error) => {
+            // The main process has no global unhandledRejection handler (unlike the
+            // CLI), so a throw anywhere in the bootstrap above would otherwise vanish.
+            logger.withCategory('ui').error('Startup failed:', error);
+        });
+}
+
+// Clear token when app is about to quit if stay logged in is not enabled.
+// Gated on the lock inside the helper — a losing second instance must not
+// touch the shared settings.json and wipe the primary's session.
+app.on('before-quit', () => {
+    // A throw here must never skip ensureExit — the force-exit net below is
+    // the guarantee that quit always terminates the process.
+    try {
+        clearTokenOnQuit(gotSingleInstanceLock, settings);
+    } catch (error) {
+        logger.withCategory('ui').error('Failed to clear token on quit:', error);
     }
 
     logger.withCategory('ui').info('Application is about to quit. Forcing exit...', null);
