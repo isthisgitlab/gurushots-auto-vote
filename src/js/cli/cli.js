@@ -38,6 +38,10 @@ const {
     resetAllSettings,
     helpSettings,
     resetWindows,
+    listProfiles,
+    saveProfileFromChallenge,
+    applyProfile,
+    deleteProfile,
 } = require('./commands/settings');
 const { showLogs } = require('./commands/logs');
 
@@ -89,7 +93,11 @@ Commands:
   list-settings [--challenge=<id>] - Show all settings (per-challenge view with --challenge)
   reset-setting <key> [--challenge=<id>] - Reset a setting to default (clear a challenge override with --challenge)
   reset-all-settings - Reset all settings to defaults
-  help-settings - Show detailed settings help
+  list-profiles - Show saved challenge-settings profiles
+  save-profile "<name>" --challenge=<id> - Save a challenge's overrides as a named profile
+  apply-profile "<name>" --challenge=<id> - Replace a challenge's overrides with a profile
+  delete-profile "<name>" - Delete a saved profile
+  help-settings - Show detailed settings help (includes profile details)
   logs [--error|--api|--settings] [--lines=<n>] - Print the tail of a log file
   reset-windows  - Reset window positions to default
   help     - Show this help message
@@ -265,6 +273,85 @@ const main = async () => {
                 resetAllSettings();
                 process.exit(0);
                 break;
+            case 'list-profiles': {
+                const { rest } = extractChallenge(args.slice(1));
+                if (rest.length > 0) {
+                    logger.withCategory('ui').error(`Unexpected arguments: ${rest.join(' ')}`);
+                    logger.withCategory('ui').info('Usage: list-profiles');
+                    process.exit(1);
+                }
+                listProfiles();
+                process.exit(0);
+                break;
+            }
+            case 'save-profile': {
+                const { challengeId, rest } = extractChallenge(args.slice(1));
+                if (!rest[0]) {
+                    logger.withCategory('ui').error('Please specify a profile name');
+                    logger.withCategory('ui').info('Usage: save-profile "<name>" --challenge=<id>');
+                    process.exit(1);
+                }
+                if (rest.length > 1) {
+                    // An unquoted multi-word name splits into several argv
+                    // tokens — fail loudly rather than saving the first word.
+                    logger.withCategory('ui').error(`Unexpected extra arguments: ${rest.slice(1).join(' ')}`);
+                    logger
+                        .withCategory('ui')
+                        .info('Quote profile names containing spaces: save-profile "2-pic tactic" --challenge=<id>');
+                    process.exit(1);
+                }
+                if (!challengeId) {
+                    logger
+                        .withCategory('ui')
+                        .error("Please specify --challenge=<id> to snapshot that challenge's overrides");
+                    logger.withCategory('ui').info('Usage: save-profile "<name>" --challenge=<id>');
+                    process.exit(1);
+                }
+                saveProfileFromChallenge(rest[0], challengeId);
+                process.exit(0);
+                break;
+            }
+            case 'apply-profile': {
+                const { challengeId, rest } = extractChallenge(args.slice(1));
+                if (!rest[0]) {
+                    logger.withCategory('ui').error('Please specify a profile name');
+                    logger.withCategory('ui').info('Usage: apply-profile "<name>" --challenge=<id>');
+                    process.exit(1);
+                }
+                if (rest.length > 1) {
+                    logger.withCategory('ui').error(`Unexpected extra arguments: ${rest.slice(1).join(' ')}`);
+                    logger
+                        .withCategory('ui')
+                        .info('Quote profile names containing spaces: apply-profile "2-pic tactic" --challenge=<id>');
+                    process.exit(1);
+                }
+                if (!challengeId) {
+                    logger.withCategory('ui').error('Please specify --challenge=<id> to apply the profile to');
+                    logger.withCategory('ui').info('Usage: apply-profile "<name>" --challenge=<id>');
+                    process.exit(1);
+                }
+                applyProfile(rest[0], challengeId);
+                process.exit(0);
+                break;
+            }
+            case 'delete-profile': {
+                const { rest } = extractChallenge(args.slice(1));
+                if (!rest[0]) {
+                    logger.withCategory('ui').error('Please specify a profile name');
+                    logger.withCategory('ui').info('Usage: delete-profile "<name>"');
+                    process.exit(1);
+                }
+                if (rest.length > 1) {
+                    logger.withCategory('ui').error(`Unexpected extra arguments: ${rest.slice(1).join(' ')}`);
+                    logger
+                        .withCategory('ui')
+                        .info('Quote profile names containing spaces: delete-profile "2-pic tactic"');
+                    process.exit(1);
+                }
+                deleteProfile(rest[0]);
+                process.exit(0);
+                break;
+            }
             case 'logs': {
                 const rest = args.slice(1);
                 let category = 'app';

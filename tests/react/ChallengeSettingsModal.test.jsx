@@ -64,7 +64,7 @@ describe('ChallengeSettingsModal load cancellation', () => {
         // resolves until we say so; the second (for challenge "2") likewise.
         let resolveForOne;
         let resolveForTwo;
-        mockApi.getChallengeOverride
+        mockApi.getChallengeOverrides
             .mockImplementationOnce(
                 () =>
                     new Promise((r) => {
@@ -91,12 +91,12 @@ describe('ChallengeSettingsModal load cancellation', () => {
         // Now land challenge 1's late response. Because the first run is
         // cancelled, this value must not show up in the modal.
         await act(async () => {
-            resolveForOne(999);
+            resolveForOne({ boostTime: 999 });
         });
 
         // Land challenge 2's response — this is the one that should win.
         await act(async () => {
-            resolveForTwo(7);
+            resolveForTwo({ boostTime: 7 });
         });
 
         await waitFor(() => {
@@ -111,7 +111,7 @@ describe('ChallengeSettingsModal load cancellation', () => {
 
     test('discards a stale load when the modal closes mid-fetch', async () => {
         let resolveForOne;
-        mockApi.getChallengeOverride.mockImplementationOnce(
+        mockApi.getChallengeOverrides.mockImplementationOnce(
             () =>
                 new Promise((r) => {
                     resolveForOne = r;
@@ -133,7 +133,7 @@ describe('ChallengeSettingsModal load cancellation', () => {
         // closed modal and produce a console warning.
         const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
         await act(async () => {
-            resolveForOne(42);
+            resolveForOne({ boostTime: 42 });
         });
         expect(consoleError).not.toHaveBeenCalled();
         consoleError.mockRestore();
@@ -144,7 +144,7 @@ describe('ChallengeSettingsModal group applicability', () => {
     // Drain any leftover one-shot impls from the cancellation suite so loads
     // resolve to "no override" and the inputs render.
     beforeEach(() => {
-        mockApi.getChallengeOverride.mockReset().mockResolvedValue(null);
+        mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
     });
 
     const renderWithChallenge = (challenge) =>
@@ -238,8 +238,8 @@ describe('ChallengeSettingsModal group applicability', () => {
     });
 
     test('applicable group with a stored override → per-field reset button is shown', async () => {
-        // A stored override on boostTime (load returns a non-null value).
-        mockApi.getChallengeOverride.mockResolvedValue(45);
+        // A stored override on boostTime (load returns a non-empty map).
+        mockApi.getChallengeOverrides.mockResolvedValue({ boostTime: 45 });
         renderWithChallenge({ member: { boost: { state: 'AVAILABLE' } } });
 
         await waitFor(() => {
@@ -256,7 +256,7 @@ describe('ChallengeSettingsModal group applicability', () => {
         // Same stored override, but the group is now inert (boost USED). The
         // onReset gate (`applicable && hasOverride`) must drop the reset button
         // while the override itself stays loaded (the "Overridden" badge proves it).
-        mockApi.getChallengeOverride.mockResolvedValue(45);
+        mockApi.getChallengeOverrides.mockResolvedValue({ boostTime: 45 });
         renderWithChallenge({ member: { boost: { state: 'USED' } } });
 
         await waitFor(() => {
@@ -281,7 +281,7 @@ describe('ChallengeSettingsModal auto-fill schedule shift hint', () => {
     // Extend the shared mock schema with the schedule setting for this suite
     // only; restore afterwards so the other suites keep their single-field view.
     beforeEach(() => {
-        mockApi.getChallengeOverride.mockReset().mockResolvedValue(null);
+        mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
         mockSchemaState.schema.autoFillSchedule = {
             type: 'schedule',
             default: DEFAULT_SCHEDULE,

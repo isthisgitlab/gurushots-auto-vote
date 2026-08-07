@@ -53,6 +53,7 @@ const mockApi = {
 
     // Per-challenge overrides
     getChallengeOverride: jest.fn().mockResolvedValue(null),
+    getChallengeOverrides: jest.fn().mockResolvedValue({}),
     setChallengeOverride: jest.fn().mockResolvedValue(true),
     removeChallengeOverride: jest.fn().mockResolvedValue(true),
     cleanupStaleChallengeSetting: jest.fn().mockResolvedValue(true),
@@ -102,6 +103,12 @@ const mockApi = {
     // Title-keyed tag rules
     getTitleRules: jest.fn().mockResolvedValue([]),
     setTitleRules: jest.fn().mockResolvedValue(true),
+
+    // Challenge profiles
+    getChallengeProfiles: jest.fn().mockResolvedValue({}),
+    saveChallengeProfile: jest.fn().mockResolvedValue(true),
+    deleteChallengeProfile: jest.fn().mockResolvedValue(true),
+    applyChallengeProfile: jest.fn().mockResolvedValue(true),
 };
 
 // Mock window.translationManager

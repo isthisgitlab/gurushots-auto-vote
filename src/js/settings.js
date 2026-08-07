@@ -879,6 +879,277 @@ const getEffectiveTagSetting = (settingKey, challenge) => {
     return unionTags(base, ruleTags);
 };
 
+// Named challenge-settings profiles ("save this tactic, recall it later").
+// Stored as challengeSettings.profiles = { [displayName]: { [settingKey]: value } }
+// — name-keyed, NOT challenge-id-keyed, because ids rotate and id-keyed state
+// gets pruned by cleanupStaleChallengeSetting. A profile holds only the sparse
+// overrides that differ from global defaults, so later global-default tuning
+// flows through every profile.
+const MAX_CHALLENGE_PROFILES = 50;
+const MAX_PROFILE_NAME_LENGTH = 60;
+
+// A bare `profiles['__proto__'] = …` assignment reassigns the map's prototype
+// instead of storing data (silent data loss + corrupted lookups), so these
+// names are rejected on write and skipped on read — same guard family as
+// getTitlePins' own-property iteration.
+const RESERVED_PROFILE_NAMES = new Set(['__proto__', 'constructor', 'prototype']);
+
+// Identity key for a profile name: trimmed + lowercased (the normalizeTitle
+// contract) so "Portrait" and "portrait" are one profile, latest casing wins.
+const _normalizeProfileName = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : '');
+
+// Bound a user-supplied profile name before it reaches a log line
+// (log-injection guard, same treatment as setTitleRules' forLog).
+const _profileNameForLog = (name) =>
+    String(name)
+        .replace(/[\r\n\t]/g, ' ')
+        .slice(0, 80);
+
+/**
+ * Returns the stored profiles map when it is a plain object, else `{}`.
+ * Never returns arrays or primitives from a corrupted blob.
+ */
+const _readProfilesMap = (settings) => {
+    const stored = settings.challengeSettings?.profiles;
+    return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
+};
+
+/**
+ * Sanitize a profile's values map. Keeps only keys that are perChallenge in
+ * SETTINGS_SCHEMA (unknown keys validate as true in validateSetting, so the
+ * whitelist is mandatory) and validates each value with the full batch as
+ * context so cross-field rules (e.g. exposureTarget >= exposure) hold.
+ *
+ * failClosed=true (save/apply): returns null on any invalid value, logging the
+ * failing key. failClosed=false (read): drops invalid values silently — the
+ * schema may have evolved since the profile was saved.
+ */
+const _sanitizeProfileValues = (values, failClosed, globalDefaults) => {
+    const rejected = failClosed ? null : {};
+    if (!values || typeof values !== 'object' || Array.isArray(values)) {
+        return rejected;
+    }
+    const rawKeys = Object.keys(values);
+    // Coarse ceiling far above the schema's perChallenge key count — bounds
+    // the work an oversized IPC payload can force before per-key validation.
+    if (rawKeys.length > 100) {
+        return rejected;
+    }
+
+    const whitelisted = {};
+    for (const key of rawKeys) {
+        // Prototype-shaped keys fall out here too: SETTINGS_SCHEMA['__proto__']
+        // resolves to Object.prototype, whose .perChallenge is undefined.
+        if (SETTINGS_SCHEMA[key]?.perChallenge) {
+            whitelisted[key] = values[key];
+        }
+    }
+
+    const contextSettings = { ...globalDefaults, ...whitelisted };
+    const sanitized = {};
+    for (const [key, value] of Object.entries(whitelisted)) {
+        if (validateSetting(key, value, contextSettings)) {
+            sanitized[key] = value;
+        } else if (failClosed) {
+            logger.withCategory('settings').error(`Invalid profile value for setting ${key}:`, value);
+            return null;
+        }
+    }
+    return sanitized;
+};
+
+/**
+ * Find the stored key of the profile matching a normalized name, skipping
+ * reserved/prototype-shaped stored keys. Returns null when absent.
+ */
+const _findProfileKey = (stored, normalizedName) => {
+    for (const name of Object.keys(stored)) {
+        const key = _normalizeProfileName(name);
+        if (RESERVED_PROFILE_NAMES.has(key)) continue;
+        if (key === normalizedName) return name;
+    }
+    return null;
+};
+
+/**
+ * Batch reader for one challenge's sparse override map. Own-property-safe
+ * copy filtered to schema-known perChallenge keys — shared by the GUI modal
+ * load and the CLI save-profile snapshot.
+ */
+const getChallengeOverrides = (challengeId) => {
+    const settings = loadSettings();
+    const perChallenge = settings.challengeSettings?.perChallenge;
+    const overrides = {};
+    if (
+        perChallenge &&
+        typeof perChallenge === 'object' &&
+        Object.prototype.hasOwnProperty.call(perChallenge, challengeId)
+    ) {
+        const stored = perChallenge[challengeId];
+        if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+            for (const key of Object.keys(stored)) {
+                if (SETTINGS_SCHEMA[key]?.perChallenge) {
+                    overrides[key] = stored[key];
+                }
+            }
+        }
+    }
+    return overrides;
+};
+
+/**
+ * Get the saved profiles as `{ [displayName]: { [settingKey]: value } }`.
+ * Defensive copy; values are sanitized drop-silently (stale schema keys and
+ * now-invalid values disappear from the view without rewriting storage — the
+ * next save of that profile persists the sanitized form).
+ */
+const getChallengeProfiles = () => {
+    const settings = loadSettings();
+    const stored = _readProfilesMap(settings);
+    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const profiles = {};
+    for (const name of Object.keys(stored)) {
+        if (RESERVED_PROFILE_NAMES.has(_normalizeProfileName(name))) continue;
+        profiles[name] = _sanitizeProfileValues(stored[name], false, globalDefaults);
+    }
+    return profiles;
+};
+
+/**
+ * Save (or overwrite) a named profile. Fail-closed: rejects a bad/reserved
+ * name, the profile-count cap (new names only — overwriting an existing name
+ * always succeeds), a non-plain-object values payload, or any invalid value.
+ * An empty values map is allowed — it's a useful "all global defaults" preset.
+ */
+const saveChallengeProfile = (name, values) => {
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    const normalized = _normalizeProfileName(trimmed);
+    if (!trimmed || trimmed.length > MAX_PROFILE_NAME_LENGTH || RESERVED_PROFILE_NAMES.has(normalized)) {
+        logger.withCategory('settings').error(`Invalid profile name: "${_profileNameForLog(name)}"`, null);
+        return false;
+    }
+
+    const settings = loadSettings();
+    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const sanitized = _sanitizeProfileValues(values, true, globalDefaults);
+    if (sanitized === null) {
+        return false;
+    }
+
+    if (!settings.challengeSettings) {
+        settings.challengeSettings = getDefaultSettings().challengeSettings;
+    }
+    const stored = _readProfilesMap(settings);
+    // Rebuild via own-property copy: drops prototype-named keys a corrupted
+    // blob might carry, and lets a same-normalized-name save replace the old
+    // casing in place.
+    const profiles = {};
+    let existed = false;
+    for (const existingName of Object.keys(stored)) {
+        const key = _normalizeProfileName(existingName);
+        if (RESERVED_PROFILE_NAMES.has(key)) continue;
+        if (key === normalized) {
+            existed = true;
+            continue;
+        }
+        profiles[existingName] = stored[existingName];
+    }
+    if (!existed && Object.keys(profiles).length >= MAX_CHALLENGE_PROFILES) {
+        logger
+            .withCategory('settings')
+            .error(`saveChallengeProfile rejected: profile cap of ${MAX_CHALLENGE_PROFILES} reached`, null);
+        return false;
+    }
+    profiles[trimmed] = sanitized;
+    settings.challengeSettings.profiles = profiles;
+    return saveSettings(settings);
+};
+
+/**
+ * Delete a profile by name (case-insensitive on the normalized name).
+ * Returns false when no such profile exists.
+ */
+const deleteChallengeProfile = (name) => {
+    const normalized = _normalizeProfileName(name);
+    if (!normalized || RESERVED_PROFILE_NAMES.has(normalized)) {
+        return false;
+    }
+    const settings = loadSettings();
+    const stored = _readProfilesMap(settings);
+    const storedKey = _findProfileKey(stored, normalized);
+    if (storedKey === null) {
+        return false;
+    }
+    delete stored[storedKey];
+    settings.challengeSettings.profiles = stored;
+    return saveSettings(settings);
+};
+
+/**
+ * Apply a profile to a challenge: atomically REPLACE the challenge's whole
+ * override container with the profile's sanitized values in one
+ * load-modify-save.
+ *
+ * Deliberately NOT setChallengeOverrides + removeChallengeOverride sweeps:
+ * that path validates each profile key against a context still containing the
+ * challenge's stale, about-to-be-removed overrides (so e.g. a stale
+ * exposure=95 override rejects a profile's exposureTarget=80), silently
+ * swallows 'invalid' results, and leaves a multi-write window a running vote
+ * loop could observe half-applied. Here every value is validated against
+ * {globalDefaults + profile} — the same context the profile was saved under —
+ * and nothing is written unless all of it passes.
+ */
+const applyChallengeProfile = (name, challengeId) => {
+    const id = challengeId === null || challengeId === undefined ? '' : String(challengeId).trim();
+    if (!id) {
+        logger.withCategory('settings').error('applyChallengeProfile requires a challenge id', null);
+        return false;
+    }
+
+    const normalized = _normalizeProfileName(name);
+    if (!normalized || RESERVED_PROFILE_NAMES.has(normalized)) {
+        logger.withCategory('settings').error(`Invalid profile name: "${_profileNameForLog(name)}"`, null);
+        return false;
+    }
+
+    const settings = loadSettings();
+    const stored = _readProfilesMap(settings);
+    const storedKey = _findProfileKey(stored, normalized);
+    if (storedKey === null) {
+        logger.withCategory('settings').error(`Profile not found: "${_profileNameForLog(name)}"`, null);
+        return false;
+    }
+
+    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+    // Fail-closed: _sanitizeProfileValues logs the failing key, so a
+    // schema-drifted profile's failure is diagnosable from the log.
+    const sanitized = _sanitizeProfileValues(stored[storedKey], true, globalDefaults);
+    if (sanitized === null) {
+        return false;
+    }
+
+    if (!settings.challengeSettings.perChallenge) {
+        settings.challengeSettings.perChallenge = {};
+    }
+    const container = {};
+    for (const [settingKey, value] of Object.entries(sanitized)) {
+        // Same pruning rule as _applyChallengeOverride: a value strictly equal
+        // to its effective global default is redundant as an override.
+        const defaultValue = Object.prototype.hasOwnProperty.call(globalDefaults, settingKey)
+            ? globalDefaults[settingKey]
+            : SETTINGS_SCHEMA[settingKey]?.default;
+        if (value !== defaultValue) {
+            container[settingKey] = value;
+        }
+    }
+    if (Object.keys(container).length > 0) {
+        settings.challengeSettings.perChallenge[id] = container;
+    } else {
+        delete settings.challengeSettings.perChallenge[id];
+    }
+    return saveSettings(settings);
+};
+
 /**
  * Cleanup stale challenge settings for challenges that no longer exist
  */
@@ -1144,6 +1415,17 @@ module.exports = {
     getTitleRules,
     setTitleRules,
     getEffectiveTagSetting,
+
+    // Named challenge-settings profiles (survive challenge rotation).
+    // The caps are exported so tests and the get-settings-schema handler
+    // share the same literals the facade enforces.
+    getChallengeOverrides,
+    getChallengeProfiles,
+    saveChallengeProfile,
+    deleteChallengeProfile,
+    applyChallengeProfile,
+    MAX_CHALLENGE_PROFILES,
+    MAX_PROFILE_NAME_LENGTH,
 
     // First-seen challenge-title pins (internal cache — no IPC wiring).
     // MAX_TITLE_LENGTH is exported so challengeTitlePin.js bounds incoming

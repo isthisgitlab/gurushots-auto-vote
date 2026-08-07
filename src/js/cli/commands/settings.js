@@ -204,6 +204,81 @@ const resetAllSettings = () => {
     }
 };
 
+const listProfiles = () => {
+    try {
+        const profiles = settings.getChallengeProfiles();
+        const names = Object.keys(profiles).sort((a, b) => a.localeCompare(b));
+        if (names.length === 0) {
+            logger.withCategory('settings').info('No saved challenge profiles');
+            logger.withCategory('ui').info('💡 Save one with: save-profile "<name>" --challenge=<id>');
+            return;
+        }
+        logger.withCategory('settings').info('=== Challenge Profiles ===');
+        names.forEach((name) => {
+            const values = profiles[name];
+            const keys = Object.keys(values).sort();
+            const summary =
+                keys.length === 0
+                    ? '(no overrides — applying it resets the challenge to global defaults)'
+                    : keys.map((key) => `${key}=${formatSettingForLog(key, values[key])}`).join(', ');
+            logger.withCategory('settings').info(`${name} (${keys.length}): ${summary}`);
+        });
+    } catch (error) {
+        logger.withCategory('settings').error('Error listing profiles', error);
+    }
+};
+
+const saveProfileFromChallenge = (name, challengeId) => {
+    try {
+        const overrides = settings.getChallengeOverrides(challengeId);
+        if (settings.saveChallengeProfile(name, overrides)) {
+            const count = Object.keys(overrides).length;
+            logger
+                .withCategory('settings')
+                .success(`Saved profile "${name}" with ${count} override(s) from challenge ${challengeId}`);
+        } else {
+            logger
+                .withCategory('settings')
+                .error(
+                    'Failed to save profile — the name is empty/too long/reserved, the profile cap is reached, or a value failed validation (see the settings log)',
+                );
+        }
+    } catch (error) {
+        logger.withCategory('settings').error('Error saving profile', error);
+    }
+};
+
+const applyProfile = (name, challengeId) => {
+    try {
+        if (settings.applyChallengeProfile(name, challengeId)) {
+            logger.withCategory('settings').success(`Applied profile "${name}" to challenge ${challengeId}`);
+            logger
+                .withCategory('ui')
+                .info(`💡 Run "list-settings --challenge=${challengeId}" to review the applied overrides`);
+        } else {
+            logger
+                .withCategory('settings')
+                .error(
+                    `Failed to apply profile "${name}" — no such profile, or a value failed validation (see the settings log)`,
+                );
+        }
+    } catch (error) {
+        logger.withCategory('settings').error('Error applying profile', error);
+    }
+};
+
+const deleteProfile = (name) => {
+    try {
+        if (settings.deleteChallengeProfile(name)) {
+            logger.withCategory('settings').success(`Deleted profile "${name}"`);
+        } else {
+            logger.withCategory('settings').error(`No profile named "${name}"`);
+        }
+    } catch (error) {
+        logger.withCategory('settings').error('Error deleting profile', error);
+    }
+};
+
 const helpSettings = () => {
     logger.withCategory('ui').info(`
 === Settings Management Help ===
@@ -225,6 +300,20 @@ Per-challenge overrides:
     set-setting exposure 80 --challenge=12345
     get-setting exposure --challenge=12345
     reset-setting exposure --challenge=12345   (clears the override)
+
+Challenge profiles (named override presets — save a tactic once, recall it):
+  list-profiles                              - Show saved profiles and their values
+  save-profile <name> --challenge=<id>       - Save that challenge's current overrides as a named profile
+  apply-profile <name> --challenge=<id>      - Replace that challenge's overrides with the profile's values
+  delete-profile <name>                      - Delete a saved profile
+  Profile names with spaces MUST be quoted, e.g.:
+    save-profile "2-pic tactic" --challenge=12345
+    apply-profile "2-pic tactic" --challenge=67890
+  Saving an existing name overwrites it (names match case-insensitively).
+  Applying replaces ALL of the challenge's overrides — settings the profile
+  doesn't include revert to the global defaults. Profiles are name-keyed, so
+  they survive challenge rotation; overrides applied to an id that later
+  leaves the active challenge list are cleaned up automatically.
 
 Common Settings:
   apiTimeout           - API request timeout in seconds (default: 30)
@@ -299,4 +388,8 @@ module.exports = {
     resetAllSettings,
     helpSettings,
     resetWindows,
+    listProfiles,
+    saveProfileFromChallenge,
+    applyProfile,
+    deleteProfile,
 };

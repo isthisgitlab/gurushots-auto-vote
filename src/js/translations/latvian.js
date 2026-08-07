@@ -382,6 +382,22 @@
             naFlashNoTurbo: 'Flash izaicinājumi neatbalsta Turbo.',
             naExhibitionNoTurbo: 'Izstādes izaicinājumi neatbalsta Turbo.',
             naBoostSinglePhoto: 'Viena foto izaicinājumi nekad neatbloķē Boost — šie iestatījumi nedarbosies.',
+            challengeProfiles: 'Profili',
+            applyProfile: 'Pielietot',
+            deleteProfile: 'Dzēst',
+            confirmDelete: 'Apstiprināt dzēšanu?',
+            confirmOverwrite: 'Pārrakstīt?',
+            saveAsProfile: 'Saglabāt pašreizējo kā profilu',
+            profileNamePlaceholder: 'Profila nosaukums (piem., "2 bilžu taktika")',
+            noProfiles: 'Nav saglabātu profilu',
+            profileSaveError: 'Neizdevās saglabāt profilu — kāda vērtība neizturēja validāciju.',
+            profileNameRequired: 'Vispirms ievadiet profila nosaukumu.',
+            profileNameTooLong: 'Profila nosaukums ir par garu (maks. {0} rakstzīmes).',
+            profileLimitReached: 'Sasniegts profilu limits ({0}) — vispirms izdzēsiet kādu.',
+            profileAppliedHint: 'Pielietots — pārskatiet vērtības zemāk un tad Saglabāt.',
+            profileApplyHint:
+                'Profila pielietošana aizstāj pašreizējās formas vērtības (arī nesaglabātās izmaiņas); iestatījumi, kas profilā nav iekļauti, atgriežas uz "Izmanto globālo".',
+            profileOverwriteHint: 'Saglabājot ar esošu nosaukumu, tas tiek pārrakstīts.',
         },
         // Logs page specific
         logs: {

@@ -6,6 +6,7 @@ import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
 import { getScheduleShift } from '../../../services/scheduleRemap';
 import { SettingInput } from './SettingInput';
+import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
@@ -14,7 +15,14 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
  */
 export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challengeTitle, challenge = null }) {
     const { t } = useTranslation();
-    const { schema, defaults, groups, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
+    const {
+        schema,
+        defaults,
+        groups,
+        profileLimits,
+        refetch: refetchSchema,
+        loading: schemaLoading,
+    } = useSettingsSchema();
 
     // Local state for override values
     const [overrides, setOverrides] = useState({});
@@ -61,15 +69,15 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         let cancelled = false;
         const load = async () => {
             setLoading(true);
-            const loaded = {};
             try {
-                for (const key of Object.keys(schema)) {
-                    if (!schema[key].perChallenge) continue;
-                    const value = await window.api.getChallengeOverride(key, challengeId.toString());
-                    if (cancelled) return;
-                    if (value !== null) loaded[key] = value;
-                }
+                // Single batch IPC call (the facade's own-property-safe sparse
+                // map) instead of one round-trip per schema key.
+                const stored = await window.api.getChallengeOverrides(challengeId.toString());
                 if (cancelled) return;
+                const loaded = {};
+                for (const [key, value] of Object.entries(stored || {})) {
+                    if (schema[key]?.perChallenge) loaded[key] = value;
+                }
                 setOverrides(loaded);
                 loadedForChallengeRef.current = challengeId;
             } catch (err) {
@@ -177,6 +185,21 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                         </svg>
                         <span>{t('app.challengeOverrideInfo')}</span>
                     </div>
+
+                    {/* Named profiles: apply loads a saved tactic into the form
+                        state below (schema-filtered, belt-and-braces on top of
+                        the facade's whitelist); the Save button persists it. */}
+                    <ChallengeProfilesBar
+                        overrides={overrides}
+                        profileLimits={profileLimits}
+                        onApply={(values) => {
+                            const next = {};
+                            for (const [key, value] of Object.entries(values || {})) {
+                                if (schema[key]?.perChallenge) next[key] = value;
+                            }
+                            setOverrides(next);
+                        }}
+                    />
 
                     {/* Settings grouped into static sections. Groups whose
                         action can no longer apply to this challenge (boost/turbo

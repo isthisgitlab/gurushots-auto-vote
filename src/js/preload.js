@@ -74,6 +74,11 @@ contextBridge.exposeInMainWorld('api', {
         ipcRenderer.invoke('get-effective-setting', settingKey, challengeId),
     getTitleRules: () => ipcRenderer.invoke('get-title-rules'),
     setTitleRules: (rules) => ipcRenderer.invoke('set-title-rules', rules),
+    getChallengeOverrides: (challengeId) => ipcRenderer.invoke('get-challenge-overrides', challengeId),
+    getChallengeProfiles: () => ipcRenderer.invoke('get-challenge-profiles'),
+    saveChallengeProfile: (name, values) => ipcRenderer.invoke('save-challenge-profile', name, values),
+    deleteChallengeProfile: (name) => ipcRenderer.invoke('delete-challenge-profile', name),
+    applyChallengeProfile: (name, challengeId) => ipcRenderer.invoke('apply-challenge-profile', name, challengeId),
     cleanupStaleChallengeSetting: (activeChallengeIds) =>
         ipcRenderer.invoke('cleanup-stale-challenge-setting', activeChallengeIds),
     cleanupStaleMetadata: (activeChallengeIds) => ipcRenderer.invoke('cleanup-stale-metadata', activeChallengeIds),
