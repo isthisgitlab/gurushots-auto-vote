@@ -250,6 +250,33 @@ describe('createScheduler — threshold-aware cadence', () => {
         await startPromise;
     };
 
+    test('caps the next delay to an upcoming scheduled-fill window start (mode: scheduled)', async () => {
+        // Scheduled-fill window opens 90s out (before-end form); the random
+        // delay is 3 min and the last-minute boundary is far away. The next
+        // cycle must land on the window start, exercising the CLI resolver
+        // wiring and the mode === 'scheduled' log branch.
+        settings.getEffectiveSetting.mockImplementation((key) => {
+            if (key === 'lastMinuteThreshold') return 5;
+            if (key === 'lastMinuteCheckFrequency') return lastMinuteCheckFrequencyValue;
+            if (key === 'useScheduledFill') return true;
+            if (key === 'scheduledFillTime') return '';
+            if (key === 'scheduledFillBeforeEnd') return 3600 - 90;
+            return 1;
+        });
+        const challenge = { id: 7, title: 'Scheduled', type: 'regular', close_time: now + 3600 };
+        await startWith({ success: true, challenges: [challenge] });
+
+        expect(runVotingCycle).toHaveBeenCalledTimes(1);
+
+        await jest.advanceTimersByTimeAsync(90_000 - 1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(1); // window not open yet
+
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(runVotingCycle).toHaveBeenCalledTimes(2); // fired at the window start
+    });
+
     test('caps the next delay to an upcoming boundary instead of the random delay', async () => {
         // Boundary is 60s out; the random delay is 3 min. The next cycle must
         // land on the 60s boundary, not overshoot to 3 min. This is the

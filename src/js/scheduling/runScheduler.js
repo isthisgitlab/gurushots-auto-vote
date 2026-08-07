@@ -24,6 +24,13 @@ const { computeNextCycleDelayMs } = require('./thresholdWindow');
 // straight from the settings facade (synchronous on Electron/CLI/Android-node).
 const resolveThreshold = (challengeId) => settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
 
+// Node resolver for the scheduled-fill cadence cap (scheduling/scheduledFill.js).
+const resolveScheduledFill = (challengeId) => ({
+    enabled: settings.getEffectiveSetting('useScheduledFill', challengeId) === true,
+    timeOfDay: settings.getEffectiveSetting('scheduledFillTime', challengeId),
+    beforeEndSec: Number(settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId)) || 0,
+});
+
 /**
  * Create a continuous voting scheduler.
  *
@@ -66,6 +73,8 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 normalDelayMs,
                 lastMinuteCheckMinutes,
                 minGapMs: MIN_CYCLE_GAP_MS,
+                resolveScheduledFill,
+                timezone: fresh.timezone || 'Europe/Riga',
             });
 
             if (decision.mode === 'normal') {
@@ -86,6 +95,12 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                     logger
                         .withCategory('voting')
                         .info(`⏰ Last-minute cadence — next cycle in ${(waitMs / 60_000).toFixed(2)} min`);
+                } else if (decision.mode === 'scheduled') {
+                    logger
+                        .withCategory('voting')
+                        .info(
+                            `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" (${decision.nextScheduled?.form}) — next cycle in ${Math.round(waitMs / 1000)}s`,
+                        );
                 } else {
                     logger
                         .withCategory('voting')

@@ -209,6 +209,7 @@
             groupTurbo: 'Turbo',
             groupLastHour: 'Last Hour Exposure',
             groupLastMinute: 'Last Minute',
+            groupScheduledFill: 'Scheduled Fill',
             groupAutoFill: 'Auto Fill',
             challengeName: 'Challenge',
             challengeOverrides: 'Challenge Overrides',
@@ -336,6 +337,32 @@
             lastMinuteCheckFrequency: 'Last Minute Check Frequency',
             lastMinuteCheckFrequencyDesc:
                 'How often (in minutes) to re-check a challenge once it is inside the Last Minute Threshold. The default 1 checks every minute so the final push is not missed.',
+            useScheduledFill: 'Use Scheduled Fill',
+            useScheduledFillDesc:
+                "Fill exposure at chosen times instead of only when it drops below the Exposure threshold. Two triggers are available and can be combined: a daily Fill Time and a one-shot Fill Before End offset — when both are set, each opens its own fill window. During a window the challenge is voted up to 100% and held there; times are interpreted in the app Timezone setting (not this device's clock). Has no effect until at least one trigger below is set, and never applies to flash challenges or challenges in Boost Only mode. If the app is not running during a whole window, that fill is skipped — there is no catch-up.",
+            scheduledFillTime: 'Fill Time',
+            scheduledFillTimeDesc:
+                "Daily wall-clock time (24h) at which a fill window opens, in the app Timezone setting — not this device's clock. Leave empty to turn this trigger off. Around a daylight-saving switch the actual instant can shift by up to an hour on the changeover day.",
+            scheduledFillTimeOff: 'no time set — this trigger is off',
+            scheduledFillBeforeEnd: 'Fill Before End',
+            scheduledFillBeforeEndDesc:
+                "Open a one-shot fill window this long before the challenge closes. Entered as hours and minutes in the GUI; set to 0h 0m to turn this trigger off. This is relative to each challenge's own deadline — re-check it when reusing a saved profile on a challenge with a different timeline.",
+            scheduledFillWindowMinutes: 'Fill Window (minutes)',
+            scheduledFillWindowMinutesDesc:
+                'How long each fill window stays open after its start time. Within the window the challenge is topped up to 100% and held there; after it closes, normal rules apply again. Keep it longer than your Check Frequency so a voting cycle is guaranteed to land inside the window.',
+            scheduledFillReplaces: 'Scheduled Fill Only',
+            scheduledFillReplacesDesc:
+                'When on, normal and last-hour exposure voting are blocked outside the scheduled fill windows — the scheduled times become the only automatic fills. Flash challenges and the Last Minute rules still vote as usual, manual voting is unaffected, and Vote Only in Last Minute takes precedence over this setting. Warning: if the app is not running during a whole window, that fill is skipped with no catch-up and no threshold fallback, so the challenge can close under-filled.',
+            scheduledFillNextHint: 'Next fill window: {0}–{1} ({2})',
+            scheduledFillNoTimesHint: 'No fill time configured — scheduled fill is inactive until you set one below.',
+            scheduledFillWastedWindowHint:
+                'This window extends past the challenge deadline — only the part before the close is usable.',
+            scheduledFillShortWindowHint:
+                'This window is shorter than your maximum Check Frequency ({0} min) — a whole window could fall between voting cycles while the app is running unattended.',
+            scheduledFillUnreachableHint:
+                'Scheduled Fill Only is on, but no fill window can still occur before this challenge closes — normal and last-hour voting stay blocked, so only the Last Minute rules will vote.',
+            scheduledFillProfileReplacesWarning:
+                'Applying this profile turns on Scheduled Fill Only for this challenge — review the fill times before saving.',
             lastHourExposure: 'Last Hour Exposure',
             lastHourExposureDesc:
                 'The exposure level that triggers voting during the final hour (only when Use Last Hour Exposure is on). Must be at or below your Exposure setting.',
@@ -379,6 +406,7 @@
             naTurboUsed: "Turbo already used for this challenge — these settings won't take effect.",
             naSlotsFull: 'All entry slots are full — auto-fill has nothing to add.',
             naFlashNoBoost: "Flash challenges don't support Boost.",
+            naFlashNoScheduledFill: 'Flash challenges always vote to 100% — scheduled fill never applies.',
             naFlashNoTurbo: "Flash challenges don't support Turbo.",
             challengeProfiles: 'Profiles',
             applyProfile: 'Apply',

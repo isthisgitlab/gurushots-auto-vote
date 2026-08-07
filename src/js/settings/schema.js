@@ -147,6 +147,20 @@ const tagsList = z
     )
     .max(MAX_TAGS_PER_LIST);
 
+// Scheduled fill: a strict 24h 'HH:MM' wall-clock string ('' = off sentinel,
+// mirroring skipUpdateVersion's empty-string convention), a seconds-before-close
+// offset (0 = off, mirroring emergencyFill), and the fill-window length in
+// minutes. The window floor keeps a window from being shorter than one
+// last-minute check cycle; the 12h ceiling keeps "hold at 100%" from silently
+// becoming an all-day threshold override. The message on the time validator is
+// surfaced verbatim by getValidationError (CLI settings:set feedback).
+const MAX_BEFORE_END_SECONDS = MAX_SCHEDULE_SECONDS; // same 30-day defense-in-depth cap
+const timeOfDayOrOff = z
+    .string()
+    .refine((v) => v === '' || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), 'expected 24h HH:MM or empty');
+const beforeEndSeconds = z.number().int().min(0).max(MAX_BEFORE_END_SECONDS);
+const windowMinutes = z.number().int().min(5).max(720);
+
 // Entries are grouped by their `group` field (see SETTINGS_GROUPS below) and
 // declared in group order so the file reads top-to-bottom the way the
 // settings modals render. Object key order has no runtime effect —
@@ -422,6 +436,65 @@ const SETTINGS_SCHEMA = {
         description: 'app.lastMinuteCheckFrequencyDesc',
     },
 
+    // --- Scheduled Fill ---
+    // Fill exposure at configured wall-clock instants instead of (or on top
+    // of) the threshold rules. Two independent time forms — a recurring
+    // time-of-day (interpreted in the app `timezone` setting via
+    // scheduling/wallClock.js, NOT device-local time) and a one-shot
+    // seconds-before-close offset — OR'd when both are set. The decision-side
+    // consumer is getScheduledFillState in services/VotingLogic.js; the
+    // cadence-side consumer is scheduling/scheduledFill.js.
+    useScheduledFill: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'scheduledFill',
+        label: 'app.useScheduledFill',
+        description: 'app.useScheduledFillDesc',
+    },
+    scheduledFillTime: {
+        type: 'timeOfDay',
+        default: '', // '' = this form off
+        perChallenge: true,
+        validation: timeOfDayOrOff,
+        validationOrder: 1,
+        group: 'scheduledFill',
+        label: 'app.scheduledFillTime',
+        description: 'app.scheduledFillTimeDesc',
+    },
+    scheduledFillBeforeEnd: {
+        type: 'time', // hours/minutes input, stored as seconds (emergencyFill precedent)
+        default: 0, // 0 = this form off
+        perChallenge: true,
+        validation: beforeEndSeconds,
+        validationOrder: 1,
+        group: 'scheduledFill',
+        label: 'app.scheduledFillBeforeEnd',
+        description: 'app.scheduledFillBeforeEndDesc',
+    },
+    scheduledFillWindowMinutes: {
+        type: 'number',
+        default: 60,
+        perChallenge: true,
+        validation: windowMinutes,
+        validationOrder: 1,
+        group: 'scheduledFill',
+        label: 'app.scheduledFillWindowMinutes',
+        description: 'app.scheduledFillWindowMinutesDesc',
+    },
+    scheduledFillReplaces: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'scheduledFill',
+        label: 'app.scheduledFillReplaces',
+        description: 'app.scheduledFillReplacesDesc',
+    },
+
     // --- Auto Fill ---
     autoFill: {
         type: 'boolean',
@@ -539,6 +612,7 @@ const SETTINGS_GROUPS = [
     { id: 'turbo', label: 'app.groupTurbo' },
     { id: 'lastHour', label: 'app.groupLastHour' },
     { id: 'lastMinute', label: 'app.groupLastMinute' },
+    { id: 'scheduledFill', label: 'app.groupScheduledFill' },
     { id: 'autoFill', label: 'app.groupAutoFill' },
 ];
 
@@ -582,8 +656,16 @@ const getValidationError = (settingKey, value, allSettings = null, challengeId =
         return null; // No schema config, assume valid
     }
 
-    if (schemaConfig.validation && !schemaConfig.validation.safeParse(value).success) {
-        return 'Invalid value';
+    if (schemaConfig.validation) {
+        const parsed = schemaConfig.validation.safeParse(value);
+        if (!parsed.success) {
+            // Prefer zod's own issue message when it carries real information
+            // (custom refine messages, "expected number" type mismatches);
+            // zod's generic refine fallback "Invalid input" adds nothing over
+            // the historical constant, so keep 'Invalid value' there.
+            const issueMessage = parsed.error?.issues?.[0]?.message;
+            return issueMessage && issueMessage !== 'Invalid input' ? issueMessage : 'Invalid value';
+        }
     }
 
     if (schemaConfig.contextValidation && allSettings) {

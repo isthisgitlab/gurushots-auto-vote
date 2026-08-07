@@ -249,6 +249,40 @@ describe('settings facade — challenge profiles', () => {
             expect(settings.getEffectiveSetting('exposure', '123')).toBe(80);
         });
 
+        test('scheduled-fill keys ride along automatically (dynamic perChallenge whitelist)', () => {
+            expect(
+                settings.saveChallengeProfile('night tactic', {
+                    useScheduledFill: true,
+                    scheduledFillTime: '21:30',
+                    scheduledFillReplaces: true,
+                }),
+            ).toBe(true);
+
+            expect(settings.applyChallengeProfile('night tactic', '123')).toBe(true);
+            expect(settings.getChallengeOverrides('123')).toEqual({
+                useScheduledFill: true,
+                scheduledFillTime: '21:30',
+                scheduledFillReplaces: true,
+            });
+            expect(settings.getEffectiveSetting('scheduledFillTime', '123')).toBe('21:30');
+        });
+
+        test('rejects a profile carrying an invalid scheduledFillTime fail-closed', () => {
+            // The zod validator runs through the same validateSetting path as
+            // direct per-challenge writes — an invalid value must abort the
+            // whole save/apply, not slip through the profile side door.
+            expect(settings.saveChallengeProfile('bad', { scheduledFillTime: '25:99' })).toBe(false);
+            expect(settings.saveChallengeProfile('bad', { scheduledFillTime: 2130 })).toBe(false);
+
+            // And a profile corrupted in place after saving is rejected at apply.
+            settings.saveChallengeProfile('was-fine', { scheduledFillTime: '21:30' });
+            const raw = settings.loadSettings();
+            raw.challengeSettings.profiles['was-fine'].scheduledFillTime = '25:99';
+            settings.saveSettings(raw);
+            expect(settings.applyChallengeProfile('was-fine', '123')).toBe(false);
+            expect(settings.getChallengeOverrides('123')).toEqual({});
+        });
+
         test('writes nothing when a stored value has become invalid (schema drift)', () => {
             settings.setChallengeOverride('autoFill', '123', true);
             settings.saveChallengeProfile('p', { exposure: 80 });

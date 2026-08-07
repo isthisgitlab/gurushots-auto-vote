@@ -5,6 +5,7 @@ import { groupSchemaEntries } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
 import { getScheduleShift } from '../../../services/scheduleRemap';
+import { occurrencesOf } from '../../../scheduling/wallClock';
 import { SettingInput } from './SettingInput';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
@@ -31,6 +32,15 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     // True when a setChallengeOverride write was rejected by validation —
     // shown as an alert and the modal stays open so the edit isn't lost.
     const [saveError, setSaveError] = useState(false);
+    // Top-level (non-schema) settings the scheduled-fill hints need: the app
+    // timezone (the time input looks device-local but is interpreted in this
+    // zone) and checkFrequencyMax (short-window warning). Fetched per open —
+    // the schema-defaults map only covers SETTINGS_SCHEMA keys.
+    const [appSettings, setAppSettings] = useState(null);
+    // Set when a profile Apply flips scheduledFillReplaces on for a challenge
+    // that didn't have it — that one field can silently cost a challenge its
+    // fills, so it gets a highlighted warning the generic apply-hint lacks.
+    const [profileReplacesWarning, setProfileReplacesWarning] = useState(false);
 
     // Refresh global defaults each time the modal opens so the
     // "Global default: …" hint reflects current persisted state.
@@ -38,8 +48,25 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         if (isOpen) {
             refetchSchema();
             setSaveError(false);
+            setProfileReplacesWarning(false);
         }
     }, [isOpen, refetchSchema]);
+
+    useEffect(() => {
+        if (!isOpen) return undefined;
+        let cancelled = false;
+        (async () => {
+            try {
+                const loaded = await window.api.getSettings();
+                if (!cancelled) setAppSettings(loaded || {});
+            } catch {
+                if (!cancelled) setAppSettings({});
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen]);
 
     // Load existing overrides once per (open, challengeId) session.
     //
@@ -162,6 +189,92 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
 
     const title = `${t('app.challengeSettings')}: ${challengeTitle}`;
 
+    // Scheduled-fill hint state, derived fresh per render from the effective
+    // (override-or-global) values — same render-time spirit as the
+    // scheduleShift hint below. A failing wall-clock computation must never
+    // break the modal, so the Intl math is guarded.
+    const effectiveOf = (key) => (key in overrides ? overrides[key] : (defaults?.[key] ?? schema?.[key]?.default));
+    const appTimezone = appSettings?.timezone || 'Europe/Riga';
+    const checkFrequencyMax = Number(appSettings?.checkFrequencyMax) || 0;
+    const sfTime = effectiveOf('scheduledFillTime');
+    const sfTimeSet = typeof sfTime === 'string' && sfTime !== '';
+    const sfBeforeEnd = Number(effectiveOf('scheduledFillBeforeEnd')) || 0;
+    const sfWindowMin = Number(effectiveOf('scheduledFillWindowMinutes')) || 60;
+    const sfWindowSec = sfWindowMin * 60;
+    const sfEnabled = effectiveOf('useScheduledFill') === true;
+    const sfReplaces = effectiveOf('scheduledFillReplaces') === true;
+    const sfActive = sfEnabled && (sfTimeSet || sfBeforeEnd > 0);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const closeTime = Number(challenge?.close_time) || 0;
+    let sfOcc = null;
+    try {
+        sfOcc = sfTimeSet ? occurrencesOf(sfTime, appTimezone, nowSec) : null;
+    } catch {
+        sfOcc = null;
+    }
+    const formatInTz = (epochSec) => {
+        try {
+            return new Intl.DateTimeFormat(undefined, {
+                timeZone: appTimezone,
+                hour: '2-digit',
+                minute: '2-digit',
+                hourCycle: 'h23',
+            }).format(epochSec * 1000);
+        } catch {
+            return new Date(epochSec * 1000).toISOString().slice(11, 16);
+        }
+    };
+    // With replace mode on, is any fill window still reachable for THIS
+    // challenge? Unreachable means replace mode keeps blocking threshold
+    // voting with no fill ever coming (e.g. a "5h before end" profile applied
+    // to a challenge with 2h left).
+    let sfUnreachable = false;
+    if (sfActive && sfReplaces && closeTime > nowSec) {
+        const beforeEndReachable = sfBeforeEnd > 0 && nowSec <= closeTime - sfBeforeEnd + sfWindowSec;
+        const timeOfDayReachable = !!sfOcc && (nowSec - sfOcc.prev <= sfWindowSec || sfOcc.next < closeTime);
+        sfUnreachable = !beforeEndReachable && !timeOfDayReachable;
+    }
+    /** Conditional inline hints for the scheduled-fill keys; [] for other keys. */
+    const scheduledFillHints = (key) => {
+        const hints = [];
+        if (key === 'useScheduledFill' && sfEnabled && !sfTimeSet && sfBeforeEnd <= 0) {
+            hints.push({ tone: 'text-warning', text: t('app.scheduledFillNoTimesHint') });
+        }
+        if (key === 'scheduledFillTime' && sfOcc) {
+            const start = nowSec - sfOcc.prev <= sfWindowSec ? sfOcc.prev : sfOcc.next;
+            hints.push({
+                tone: 'text-info',
+                text: t('app.scheduledFillNextHint')
+                    .replace('{0}', formatInTz(start))
+                    .replace('{1}', formatInTz(start + sfWindowSec))
+                    .replace('{2}', appTimezone),
+            });
+        }
+        if (key === 'scheduledFillBeforeEnd' && sfBeforeEnd > 0 && sfBeforeEnd < sfWindowSec) {
+            hints.push({ tone: 'text-warning', text: t('app.scheduledFillWastedWindowHint') });
+        }
+        if (
+            key === 'scheduledFillWindowMinutes' &&
+            sfActive &&
+            checkFrequencyMax > 0 &&
+            sfWindowMin < checkFrequencyMax
+        ) {
+            hints.push({
+                tone: 'text-warning',
+                text: t('app.scheduledFillShortWindowHint').replace('{0}', String(checkFrequencyMax)),
+            });
+        }
+        if (key === 'scheduledFillReplaces') {
+            if (profileReplacesWarning) {
+                hints.push({ tone: 'text-warning font-medium', text: t('app.scheduledFillProfileReplacesWarning') });
+            }
+            if (sfUnreachable) {
+                hints.push({ tone: 'text-warning', text: t('app.scheduledFillUnreachableHint') });
+            }
+        }
+        return hints;
+    };
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={title}>
             {schemaLoading || loading ? (
@@ -197,6 +310,11 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                             for (const [key, value] of Object.entries(values || {})) {
                                 if (schema[key]?.perChallenge) next[key] = value;
                             }
+                            const replacesWasOn =
+                                ('scheduledFillReplaces' in overrides
+                                    ? overrides.scheduledFillReplaces
+                                    : defaults?.scheduledFillReplaces) === true;
+                            setProfileReplacesWarning(next.scheduledFillReplaces === true && !replacesWasOn);
                             setOverrides(next);
                         }}
                     />
@@ -307,6 +425,11 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                             )}
                                                     </p>
                                                 )}
+                                                {scheduledFillHints(key).map((hint) => (
+                                                    <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
+                                                        {hint.text}
+                                                    </p>
+                                                ))}
                                                 <p className="text-xs text-base-content/40 mt-1">
                                                     {t('app.globalDefault')}:{' '}
                                                     {formatSettingDefault(globalDefault, config, t)}

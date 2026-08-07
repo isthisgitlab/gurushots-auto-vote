@@ -209,6 +209,7 @@
             groupTurbo: 'Turbo',
             groupLastHour: 'Pēdējās stundas ekspozīcija',
             groupLastMinute: 'Pēdējā minūte',
+            groupScheduledFill: 'Plānotā aizpilde',
             groupAutoFill: 'Automātiskā aizpilde',
             challengeName: 'Izaicinājums',
             challengeOverrides: 'Specifiskie iestatījumi izaicinājumiem',
@@ -335,6 +336,33 @@
             lastMinuteCheckFrequency: 'Pēdējās minūtes pārbaudes biežums',
             lastMinuteCheckFrequencyDesc:
                 'Cik bieži (minūtēs) pārbaudīt izaicinājumu, kad tas ir pēdējās minūtes sliekšņa robežās. Noklusējums 1 pārbauda katru minūti, lai nepalaistu garām beigu grūdienu.',
+            useScheduledFill: 'Izmantot plānoto aizpildi',
+            useScheduledFillDesc:
+                'Aizpildīt ekspozīciju izvēlētos laikos, nevis tikai tad, kad tā nokrītas zem Redzamības sliekšņa. Pieejami divi palaidēji, kurus var apvienot: ikdienas Aizpildes laiks un vienreizējs Aizpildīt pirms beigām intervāls — ja iestatīti abi, katrs atver savu aizpildes logu. Loga laikā izaicinājums tiek balsots līdz 100% un tur noturēts; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens palaidējs zemāk, un nekad neattiecas uz zibens izaicinājumiem vai izaicinājumiem režīmā "Tikai Boost". Ja lietotne nedarbojas visa loga laikā, šī aizpilde tiek izlaista — atgūšanas nav.',
+            scheduledFillTime: 'Aizpildes laiks',
+            scheduledFillTimeDesc:
+                'Ikdienas pulksteņa laiks (24h), kurā atveras aizpildes logs, lietotnes Laika joslas iestatījumā — nevis šīs ierīces pulkstenī. Atstājiet tukšu, lai izslēgtu šo palaidēju. Ap vasaras/ziemas laika maiņu faktiskais brīdis maiņas dienā var nobīdīties līdz pat stundai.',
+            scheduledFillTimeOff: 'laiks nav iestatīts — šis palaidējs ir izslēgts',
+            scheduledFillBeforeEnd: 'Aizpildīt pirms beigām',
+            scheduledFillBeforeEndDesc:
+                'Atvērt vienreizēju aizpildes logu tik ilgi pirms izaicinājuma beigām. GUI ievada stundās un minūtēs; iestatiet 0h 0m, lai izslēgtu šo palaidēju. Tas ir relatīvs pret katra izaicinājuma termiņu — pārbaudiet to vēlreiz, kad izmantojat saglabātu profilu izaicinājumam ar citu laika grafiku.',
+            scheduledFillWindowMinutes: 'Aizpildes logs (minūtes)',
+            scheduledFillWindowMinutesDesc:
+                'Cik ilgi katrs aizpildes logs paliek atvērts pēc sava sākuma laika. Loga laikā izaicinājums tiek uzpildīts līdz 100% un tur noturēts; pēc tā aizvēršanās atkal darbojas parastie noteikumi. Turiet to garāku par Pārbaudes biežumu, lai balsošanas cikls garantēti trāpītu logā.',
+            scheduledFillReplaces: 'Tikai plānotā aizpilde',
+            scheduledFillReplacesDesc:
+                'Kad ieslēgts, parastā un pēdējās stundas ekspozīcijas balsošana ārpus plānotajiem aizpildes logiem tiek bloķēta — plānotie laiki kļūst par vienīgajām automātiskajām aizpildēm. Zibens izaicinājumi un Pēdējās minūtes noteikumi joprojām balso kā parasti, manuālā balsošana netiek ietekmēta, un "Balsot tikai pēdējās minūtes laikā" ir pārāks par šo iestatījumu. Brīdinājums: ja lietotne nedarbojas visa loga laikā, šī aizpilde tiek izlaista bez atgūšanas un bez sliekšņa rezerves, tāpēc izaicinājums var noslēgties nepilnīgi aizpildīts.',
+            scheduledFillNextHint: 'Nākamais aizpildes logs: {0}–{1} ({2})',
+            scheduledFillNoTimesHint:
+                'Nav iestatīts aizpildes laiks — plānotā aizpilde nedarbojas, kamēr nav iestatīts kāds zemāk.',
+            scheduledFillWastedWindowHint:
+                'Šis logs sniedzas pāri izaicinājuma termiņam — izmantojama ir tikai daļa pirms beigām.',
+            scheduledFillShortWindowHint:
+                'Šis logs ir īsāks par jūsu maksimālo Pārbaudes biežumu ({0} min) — vesels logs var iekrist starp balsošanas cikliem, kamēr lietotne darbojas bez uzraudzības.',
+            scheduledFillUnreachableHint:
+                '"Tikai plānotā aizpilde" ir ieslēgta, bet pirms šī izaicinājuma beigām vairs nevar notikt neviens aizpildes logs — parastā un pēdējās stundas balsošana paliek bloķēta, tāpēc balsos tikai Pēdējās minūtes noteikumi.',
+            scheduledFillProfileReplacesWarning:
+                'Šī profila piemērošana ieslēgs "Tikai plānotā aizpilde" šim izaicinājumam — pirms saglabāšanas pārskatiet aizpildes laikus.',
             lastHourExposure: 'Pēdējās stundas ekspozīcija',
             lastHourExposureDesc:
                 'Redzamības līmenis, kas iedarbina balsošanu pēdējā stundā (tikai kad ieslēgts "Izmantot pēdējās stundas ekspozīciju"). Jābūt vienādam vai mazākam par Redzamības iestatījumu.',
@@ -379,6 +407,7 @@
             naTurboUsed: 'Turbo šim izaicinājumam jau izmantots — šie iestatījumi nedarbosies.',
             naSlotsFull: 'Visas bilžu vietas ir aizpildītas — automātiskajai aizpildei nav ko pievienot.',
             naFlashNoBoost: 'Flash izaicinājumi neatbalsta Boost.',
+            naFlashNoScheduledFill: 'Flash izaicinājumi vienmēr balso līdz 100% — plānotā aizpilde nekad nedarbojas.',
             naFlashNoTurbo: 'Flash izaicinājumi neatbalsta Turbo.',
             naExhibitionNoTurbo: 'Izstādes izaicinājumi neatbalsta Turbo.',
             naBoostSinglePhoto: 'Viena foto izaicinājumi nekad neatbloķē Boost — šie iestatījumi nedarbosies.',

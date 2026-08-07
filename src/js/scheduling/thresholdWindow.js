@@ -22,6 +22,8 @@
  * @returns {number|Promise<number>} The effective lastMinuteThreshold (minutes).
  */
 
+const { soonestScheduledStart } = require('./scheduledFill');
+
 // Non-flash challenges that are still open at `now`. Flash challenges never
 // enter last-minute mode, and closed ones can't.
 const eligibleChallenges = (challenges, now) => challenges.filter((c) => c.type !== 'flash' && c.close_time > now);
@@ -119,6 +121,11 @@ async function isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold
  * Thresholds are resolved in a single pass and both questions (in-window? next
  * entry?) are answered from that one snapshot — no double resolution.
  *
+ * When the host opts in (both `resolveScheduledFill` and `timezone` passed),
+ * the delay is additionally capped to the soonest upcoming scheduled-fill
+ * window start (scheduling/scheduledFill.js) — whichever boundary is sooner
+ * wins. Hosts that don't pass the new opts get byte-identical behavior.
+ *
  * @param {Array} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {object} opts
@@ -126,28 +133,50 @@ async function isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold
  * @param {number} opts.normalDelayMs - the random delay already rolled by the host
  * @param {number} opts.lastMinuteCheckMinutes - fixed last-minute cadence (minutes)
  * @param {number} opts.minGapMs - hard floor on the returned delay
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'normal', nextEntry:(object|null)}>}
+ * @param {import('./scheduledFill').ResolveScheduledFill|null} [opts.resolveScheduledFill] - per-challenge scheduled-fill config resolver (sync or async)
+ * @param {string|null} [opts.timezone] - IANA zone for the time-of-day form
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'normal', nextEntry:(object|null), nextScheduled:(object|null)}>}
  */
 async function computeNextCycleDelayMs(
     challenges,
     now,
-    { resolveThreshold, normalDelayMs, lastMinuteCheckMinutes, minGapMs },
+    { resolveThreshold, normalDelayMs, lastMinuteCheckMinutes, minGapMs, resolveScheduledFill = null, timezone = null },
 ) {
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
 
     if (anyInWindow(eligible, thresholds, now)) {
-        return { delayMs: Math.max(minGapMs, lastMinuteCheckMinutes * 60_000), mode: 'last-minute', nextEntry: null };
+        return {
+            delayMs: Math.max(minGapMs, lastMinuteCheckMinutes * 60_000),
+            mode: 'last-minute',
+            nextEntry: null,
+            nextScheduled: null,
+        };
     }
 
     const nextEntry = soonestThresholdEntry(eligible, thresholds, now);
+    let delayMs = normalDelayMs;
+    let mode = 'normal';
     if (nextEntry) {
         const msUntilEntry = (nextEntry.entryTime - now) * 1000;
-        if (msUntilEntry < normalDelayMs) {
-            return { delayMs: Math.max(minGapMs, msUntilEntry), mode: 'approaching', nextEntry };
+        if (msUntilEntry < delayMs) {
+            delayMs = Math.max(minGapMs, msUntilEntry);
+            mode = 'approaching';
         }
     }
 
-    return { delayMs: normalDelayMs, mode: 'normal', nextEntry };
+    let nextScheduled = null;
+    if (resolveScheduledFill && timezone) {
+        nextScheduled = await soonestScheduledStart(eligible, now, resolveScheduledFill, timezone);
+        if (nextScheduled) {
+            const msUntilStart = (nextScheduled.startTime - now) * 1000;
+            if (msUntilStart < delayMs) {
+                delayMs = Math.max(minGapMs, msUntilStart);
+                mode = 'scheduled';
+            }
+        }
+    }
+
+    return { delayMs, mode, nextEntry, nextScheduled };
 }
 
 module.exports = { calculateNextThresholdEntry, isAnyChallengeInThresholdWindow, computeNextCycleDelayMs };
