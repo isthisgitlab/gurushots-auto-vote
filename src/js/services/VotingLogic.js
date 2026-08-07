@@ -17,7 +17,8 @@ const settings = /** @type {any} */ (require('../settings'));
 // boundary reason as settings above — autoFill.js isn't `// @ts-check`ed yet.
 const { getNextScheduleThresholdSec } = /** @type {any} */ (require('./autoFill'));
 // Pure wall-clock math for the scheduled-fill feature (no import cycle:
-// wallClock.js imports nothing).
+// wallClock.js imports nothing). Cast for the same boundary reason as the
+// two imports above — wallClock.js isn't `// @ts-check`ed yet.
 const { occurrencesOf } = /** @type {any} */ (require('../scheduling/wallClock'));
 
 /**
@@ -38,6 +39,12 @@ const { occurrencesOf } = /** @type {any} */ (require('../scheduling/wallClock')
  * a corrupt hand-edited override must degrade this one challenge's scheduled
  * fill to "off" rather than abort voting for every remaining challenge.
  *
+ * Unlike isWithinLastHour/isWithinLastMinuteThreshold, the time-of-day form
+ * doesn't compare against close_time — callers only iterate the API's active
+ * (still-open) challenge list, so a stale in-window verdict for a closed
+ * challenge can't occur there. A future caller feeding a broader list should
+ * pre-filter on `close_time > now` (as soonestScheduledStart does).
+ *
  * @param {any} challenge
  * @param {string} challengeId
  * @param {number} now - Current time (Unix timestamp, seconds)
@@ -51,6 +58,9 @@ const getScheduledFillState = (challenge, challengeId, now) => {
         // Corrupt window minutes fail soft to the schema default rather than
         // to "never in window" — with replace mode on, a NaN window would
         // otherwise silently block all threshold voting for the challenge.
+        // Deliberately no schema-floor clamp: a hand-edited finite positive
+        // value below the schema's min(5) is honored as typed (it's out of
+        // range, not corrupt) — only non-numeric/non-positive values fall back.
         const windowMin = Number(settings.getEffectiveSetting('scheduledFillWindowMinutes', challengeId));
         const windowSec = (Number.isFinite(windowMin) && windowMin > 0 ? windowMin : 60) * 60;
         const timezone = settings.getSetting('timezone') || 'Europe/Riga';

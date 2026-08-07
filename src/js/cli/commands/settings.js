@@ -341,7 +341,7 @@ set-global-default or set-setting --challenge=<id>):
   scheduledFillTime          - Daily 24h "HH:MM" in the app timezone setting,
                                NOT the device clock ("" = off). e.g. "21:30"
   scheduledFillBeforeEnd     - One-shot window this many SECONDS before the
-                               challenge closes (default: 0 = off)
+                               challenge closes (default: 0 = off; max 30 days)
   scheduledFillWindowMinutes - How long each fill window stays open
                                (default: 60, range 5-720)
   scheduledFillReplaces      - true = scheduled windows become the ONLY

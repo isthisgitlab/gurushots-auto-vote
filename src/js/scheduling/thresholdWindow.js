@@ -125,6 +125,11 @@ async function isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold
  * the delay is additionally capped to the soonest upcoming scheduled-fill
  * window start (scheduling/scheduledFill.js) — whichever boundary is sooner
  * wins. Hosts that don't pass the new opts get byte-identical behavior.
+ * The in-window last-minute branch above takes priority over this cap on
+ * purpose: while any challenge is in its final stretch the fixed fast
+ * cadence (default 1 min) already re-checks far more often than the
+ * scheduled-fill window floor (5 min), so a window start can slip by at
+ * most one fast tick — never be missed.
  *
  * @param {Array} challenges
  * @param {number} now - Unix timestamp (seconds)

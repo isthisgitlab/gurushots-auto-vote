@@ -262,17 +262,24 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
     // Handle timeOfDay type: a wall-clock 'HH:MM' string, '' = off. The native
     // time picker looks device-local, but the value is interpreted in the app
     // timezone setting — the surrounding modal renders a hint naming the zone.
+    // The off-hint follows ScheduleField's inline-hint convention above:
+    // aria-describedby ties it to the input and aria-live announces the
+    // off/on flip to assistive tech when the value is cleared or set.
     if (config.type === 'timeOfDay') {
+        const hintId = `${settingKey}-off-hint`;
         return (
             <div className="flex items-center gap-2">
                 <input
                     type="time"
                     className="input input-bordered input-sm w-32"
+                    aria-describedby={hintId}
                     value={normalizedValue}
                     onChange={(e) => onChange(settingKey, e.target.value)}
                     disabled={disabled}
                 />
-                {normalizedValue === '' && <span className="text-sm opacity-70">{t('app.scheduledFillTimeOff')}</span>}
+                <span aria-live="polite" id={hintId} className="text-sm">
+                    {normalizedValue === '' && <span className="opacity-70">{t('app.scheduledFillTimeOff')}</span>}
+                </span>
                 {onReset && (
                     <button
                         className="btn btn-ghost btn-sm"

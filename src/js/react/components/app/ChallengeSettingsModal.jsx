@@ -240,7 +240,11 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         if (key === 'useScheduledFill' && sfEnabled && !sfTimeSet && sfBeforeEnd <= 0) {
             hints.push({ tone: 'text-warning', text: t('app.scheduledFillNoTimesHint') });
         }
-        if (key === 'scheduledFillTime' && sfOcc) {
+        // Both value-derived hints gate on sfEnabled like their siblings: a
+        // time typed in while the master toggle is still off must not render
+        // an "active schedule" status — getScheduledFillState is fully
+        // inactive without useScheduledFill, so nothing would actually fill.
+        if (key === 'scheduledFillTime' && sfEnabled && sfOcc) {
             const start = nowSec - sfOcc.prev <= sfWindowSec ? sfOcc.prev : sfOcc.next;
             hints.push({
                 tone: 'text-info',
@@ -250,7 +254,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                     .replace('{2}', appTimezone),
             });
         }
-        if (key === 'scheduledFillBeforeEnd' && sfBeforeEnd > 0 && sfBeforeEnd < sfWindowSec) {
+        if (key === 'scheduledFillBeforeEnd' && sfEnabled && sfBeforeEnd > 0 && sfBeforeEnd < sfWindowSec) {
             hints.push({ tone: 'text-warning', text: t('app.scheduledFillWastedWindowHint') });
         }
         if (

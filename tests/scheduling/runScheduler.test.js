@@ -109,6 +109,10 @@ describe('createScheduler — normal-mode cycle spacing', () => {
         expect(gap).toBe(FIXED_DELAY_MS);
     });
 
+    // Deliberately no separate forward-wall-clock-jump test: a forward jump
+    // during a cycle drives remainingMs negative exactly like this overrun
+    // case, hitting the identical Math.max(MIN_CYCLE_GAP_MS, remainingMs)
+    // clamp — the backward-jump test below covers the other (Math.min) branch.
     test('overrun: next cycle starts MIN_CYCLE_GAP_MS after the slow cycle ends', async () => {
         const OVERRUN_MS = 5 * MS_PER_MINUTE; // 5 min cycle vs 3 min budget
         const cycleStarts = [];

@@ -438,6 +438,23 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
         expect(document.body.textContent).not.toContain('app.scheduledFillNextHint');
     });
 
+    test('(b) a fill time with the master toggle OFF → no next-window hint (nothing would fill)', async () => {
+        // Regression lock: a time typed in before flipping Use Scheduled Fill
+        // on must not render an "active schedule" status — the decision path
+        // is fully inactive without the master toggle.
+        mockApi.getChallengeOverrides.mockResolvedValue({ scheduledFillTime: '21:30' });
+        renderWithChallenge();
+        await awaitRendered();
+        expect(document.body.textContent).not.toContain('app.scheduledFillNextHint');
+    });
+
+    test('(c) before-end shorter than the window with the master toggle OFF → no wasted-window hint', async () => {
+        mockApi.getChallengeOverrides.mockResolvedValue({ scheduledFillBeforeEnd: 600 });
+        renderWithChallenge();
+        await awaitRendered();
+        expect(document.body.textContent).not.toContain('app.scheduledFillWastedWindowHint');
+    });
+
     test('(c) before-end shorter than the window → wasted-window hint', async () => {
         // 10-minute before-end offset with the default 60-minute window: the
         // window's tail extends past the close.
