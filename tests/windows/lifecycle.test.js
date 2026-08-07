@@ -2,7 +2,6 @@
 // controllable app object instead of Jest's node-env path string.
 const mockApp = {
     exit: jest.fn(),
-    show: jest.fn(),
 };
 
 jest.mock('electron', () => ({
@@ -19,17 +18,17 @@ jest.mock('../../src/js/logger', () => ({
     })),
 }));
 
-const {
-    ensureExit,
-    focusExistingWindow,
-    clearTokenOnQuit,
-    FORCE_EXIT_GRACE_MS,
-} = require('../../src/js/windows/lifecycle');
+const { focusExistingWindow, clearTokenOnQuit, FORCE_EXIT_GRACE_MS } = require('../../src/js/windows/lifecycle');
 
 describe('ensureExit', () => {
+    let ensureExit;
     let processExitSpy;
 
     beforeEach(() => {
+        // The module keeps its pending timer in module-level state; a fresh
+        // require per test keeps that state from bleeding across tests.
+        jest.resetModules();
+        ({ ensureExit } = require('../../src/js/windows/lifecycle'));
         jest.useFakeTimers();
         processExitSpy = jest.spyOn(process, 'exit').mockImplementation(() => {});
         mockApp.exit.mockReset();
@@ -195,5 +194,12 @@ describe('clearTokenOnQuit', () => {
         clearTokenOnQuit(true, facade);
 
         expect(facade.setSetting).not.toHaveBeenCalled();
+    });
+
+    test('treats a missing stayLoggedIn key like false and clears the token', () => {
+        const facade = settingsFacade({ token: 'abc' });
+        clearTokenOnQuit(true, facade);
+
+        expect(facade.setSetting).toHaveBeenCalledWith('token', '');
     });
 });

@@ -397,7 +397,7 @@ From the CLI, tail any of them with `logs [--error|--api|--settings] [--lines=<n
 
 **Window opens off-screen** — restart the app; from the CLI run `reset-windows`.
 
-**Launching the app appears to do nothing (no window)** — a stale or frozen instance may still be running; a second launch defers to it and exits. Quit or kill the old process (Activity Monitor / `pkill GuruShotsAutoVote`) and launch again.
+**Launching the app appears to do nothing (no window)** — a stale or frozen instance may still be running; a second launch defers to it and exits. Quit or kill the old process (Activity Monitor / `pkill -f GuruShotsAutoVote`) and launch again.
 
 **Android: voting stops in the background** — set the app's battery usage to **Unrestricted** and whitelist it in your vendor's battery manager; on Android 12 grant the exact-alarm permission for the 1-minute last-minute cadence.
 

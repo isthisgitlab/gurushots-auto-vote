@@ -373,12 +373,19 @@ if (gotSingleInstanceLock) {
     // fire while the primary is still booting, and an event emitted before
     // a listener exists is lost, not queued.
     app.on('second-instance', () => {
-        logger.withCategory('ui').info('Second instance launch blocked — focusing existing window.', null);
+        const windowToFocus = mainWindow ?? loginWindow;
+        if (windowToFocus) {
+            logger.withCategory('ui').info('Second instance launch blocked — focusing existing window.', null);
+        } else {
+            logger
+                .withCategory('ui')
+                .info('Second instance launch blocked — no window to focus yet (still starting up).', null);
+        }
         if (process.platform === 'darwin') {
             // Cmd+H hides at the NSApplication level; win.show() alone can't undo it.
             app.show();
         }
-        focusExistingWindow(mainWindow ?? loginWindow);
+        focusExistingWindow(windowToFocus);
     });
 
     // When Electron has finished initialization
@@ -468,7 +475,13 @@ if (gotSingleInstanceLock) {
 // Gated on the lock inside the helper — a losing second instance must not
 // touch the shared settings.json and wipe the primary's session.
 app.on('before-quit', () => {
-    clearTokenOnQuit(gotSingleInstanceLock, settings);
+    // A throw here must never skip ensureExit — the force-exit net below is
+    // the guarantee that quit always terminates the process.
+    try {
+        clearTokenOnQuit(gotSingleInstanceLock, settings);
+    } catch (error) {
+        logger.withCategory('ui').error('Failed to clear token on quit:', error);
+    }
 
     logger.withCategory('ui').info('Application is about to quit. Forcing exit...', null);
 
