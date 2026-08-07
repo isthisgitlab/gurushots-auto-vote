@@ -129,6 +129,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                     normalDelayMs,
                     lastMinuteCheckMinutes,
                     minGapMs: MIN_CYCLE_GAP_MS,
+                    timezone: settings.timezone || 'Europe/Riga',
                 });
 
                 if (decision.mode === 'normal') {
@@ -142,7 +143,9 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                     await window.api.logDebug?.(
                         decision.mode === 'last-minute'
                             ? `⏰ Last-minute cadence — next cycle in ${Math.round(waitMs / 1000)}s`
-                            : `⏰ Approaching last-minute window for "${decision.nextEntry?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s`,
+                            : decision.mode === 'scheduled'
+                              ? `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s`
+                              : `⏰ Approaching last-minute window for "${decision.nextEntry?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s`,
                     );
                 }
             } catch (err) {

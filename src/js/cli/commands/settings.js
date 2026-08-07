@@ -333,6 +333,24 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
   emergencyFill        - Seconds before close to fill empty slots as a last resort
                          (default: 300 = 5 min; 0 = off). NOTE: this used to be minutes.
 
+Scheduled fill (fill exposure at chosen times — per-challenge, set with
+set-global-default or set-setting --challenge=<id>):
+  useScheduledFill           - Master switch (default: false). Inert until a
+                               time below is set; never applies to flash or
+                               boost-only challenges.
+  scheduledFillTime          - Daily 24h "HH:MM" in the app timezone setting,
+                               NOT the device clock ("" = off). e.g. "21:30"
+  scheduledFillBeforeEnd     - One-shot window this many SECONDS before the
+                               challenge closes (default: 0 = off; max 30 days)
+  scheduledFillWindowMinutes - How long each fill window stays open
+                               (default: 60, range 5-720)
+  scheduledFillReplaces      - true = scheduled windows become the ONLY
+                               automatic fills (normal + last-hour voting are
+                               blocked outside them; flash/last-minute rules
+                               and manual voting still apply). A window missed
+                               while the app is not running is skipped with no
+                               catch-up. (default: false)
+
 Auto-fill schedule (JSON array of {count, seconds} rows; replaces the old
 autoFillIntervalMinutes — existing values are migrated automatically):
   autoFillSchedule     - Each row: have at least <count> entries once <seconds>

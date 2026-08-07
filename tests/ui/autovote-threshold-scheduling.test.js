@@ -143,5 +143,38 @@ describe('autovoteScheduler helpers', () => {
             expect(result.mode).toBe('last-minute');
             expect(result.delayMs).toBe(2 * 60_000);
         });
+
+        it('caps the delay to a scheduled-fill window start resolved over IPC when timezone is passed', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            // Per-key async resolution: threshold far away, scheduled-fill
+            // before-end window opening 120s out.
+            getEffectiveSetting.mockImplementation((key) =>
+                Promise.resolve(
+                    {
+                        lastMinuteThreshold: 5,
+                        useScheduledFill: true,
+                        scheduledFillTime: '',
+                        scheduledFillBeforeEnd: 3600 - 120,
+                    }[key],
+                ),
+            );
+            const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 3600 }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts({ timezone: 'UTC' }));
+            expect(result.mode).toBe('scheduled');
+            expect(result.delayMs).toBe(120_000);
+            expect(result.nextScheduled).toMatchObject({ challengeId: 9, form: 'before-end' });
+        });
+
+        it('omitting timezone keeps the legacy behavior (no scheduled-fill IPC reads)', async () => {
+            const now = Math.floor(Date.now() / 1000);
+            getEffectiveSetting.mockResolvedValue(5);
+            const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 3600 }];
+            const result = await computeNextCycleDelayMs(challenges, now, opts());
+            expect(result.mode).toBe('normal');
+            expect(result.nextScheduled).toBeNull();
+            // Only the threshold key is resolved — no scheduled-fill keys over IPC.
+            const keysRead = getEffectiveSetting.mock.calls.map(([key]) => key);
+            expect(keysRead).toEqual(['lastMinuteThreshold']);
+        });
     });
 });

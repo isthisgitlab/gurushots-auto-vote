@@ -45,12 +45,19 @@ const computeNextDelayMs = async (token, prefetched = null) => {
             : (await apiFactory.getApiStrategy().getActiveChallenges(token))?.challenges || [];
         const now = Math.floor(Date.now() / 1000);
         const resolveThreshold = (id) => settings.getEffectiveSetting('lastMinuteThreshold', id);
+        const resolveScheduledFill = (id) => ({
+            enabled: settings.getEffectiveSetting('useScheduledFill', id) === true,
+            timeOfDay: settings.getEffectiveSetting('scheduledFillTime', id),
+            beforeEndSec: Number(settings.getEffectiveSetting('scheduledFillBeforeEnd', id)) || 0,
+        });
         const lastMinuteCheckMinutes = Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
         const { delayMs } = await computeNextCycleDelayMs(list, now, {
             resolveThreshold,
             normalDelayMs: getRandomCheckFrequencyMs(userSettings),
             lastMinuteCheckMinutes,
             minGapMs: MIN_CYCLE_GAP_MS,
+            resolveScheduledFill,
+            timezone: userSettings.timezone || 'Europe/Riga',
         });
         return delayMs;
     } catch (err) {

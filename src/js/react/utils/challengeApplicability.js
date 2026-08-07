@@ -19,6 +19,8 @@
  *                      challenge and can never reach AVAILABLE.
  *   - turbo group    → flash or exhibition challenge (no turbo); turbo already USED
  *   - autoFill group → all entry slots full
+ *   - scheduledFill group → flash challenge (the flash voting rule intercepts
+ *                      before the scheduled-fill check ever runs)
  * Deliberately NOT boost/turbo UNAVAILABLE/LOCKED on multi-photo challenges, where
  * those states are transient ("not unlocked yet") and can still flip to AVAILABLE
  * later, so the user must remain able to pre-configure them. The single-photo and
@@ -64,6 +66,11 @@ export function getGroupApplicability(groupId, challenge) {
 
         case 'autoFill':
             return slotsFull ? { applicable: false, reasonKey: 'app.naSlotsFull' } : applicable;
+
+        case 'scheduledFill':
+            return challenge.type === 'flash'
+                ? { applicable: false, reasonKey: 'app.naFlashNoScheduledFill' }
+                : applicable;
 
         default:
             return applicable;

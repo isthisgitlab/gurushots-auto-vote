@@ -119,6 +119,31 @@ describe('headless runOneCycle', () => {
         expect(lastPayload().nextDelayMs).toBe(60000);
     });
 
+    test('caps the next delay to an upcoming scheduled-fill window start', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        // Challenge closes in 1h; scheduled-fill before-end window opens 90s
+        // out — sooner than the 2-min random delay and the 50-min threshold
+        // boundary, so the reported delay must be the 90s cap.
+        const scheduled = { id: 7, type: 'default', close_time: now + 3600 };
+        const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, challenges: [scheduled] });
+        const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
+        apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges });
+        settings.getEffectiveSetting.mockImplementation(
+            (key) =>
+                ({
+                    lastMinuteThreshold: 10,
+                    lastMinuteCheckFrequency: 1,
+                    useScheduledFill: true,
+                    scheduledFillTime: '',
+                    scheduledFillBeforeEnd: 3600 - 90,
+                })[key],
+        );
+
+        await globalThis.GS.runOneCycle();
+
+        expect(lastPayload().nextDelayMs).toBe(90_000);
+    });
+
     test('reports ok:false and a fallback delay when the cycle throws', async () => {
         const fetchChallengesAndVote = jest.fn().mockRejectedValue(new Error('boom'));
         apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges: jest.fn() });

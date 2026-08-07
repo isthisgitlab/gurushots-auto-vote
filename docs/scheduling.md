@@ -11,13 +11,17 @@ re-introducing a separate boundary-switch timer per host.
 ## The shared cadence decision
 
 `computeNextCycleDelayMs(challenges, now, { resolveThreshold, normalDelayMs,
-lastMinuteCheckMinutes, minGapMs })` returns `{ delayMs, mode, nextEntry }`:
+lastMinuteCheckMinutes, minGapMs, resolveScheduledFill?, timezone? })`
+returns `{ delayMs, mode, nextEntry, nextScheduled }`:
 
 - **last-minute**: a challenge is already inside its `lastMinuteThreshold`
   window → fixed `lastMinuteCheckMinutes` cadence.
 - **approaching**: the soonest upcoming threshold boundary is closer than
   the rolled random delay → wait is capped to that boundary so the next
   cycle lands on it instead of overshooting.
+- **scheduled**: the soonest upcoming scheduled-fill window start
+  (see below) is closer than both the random delay and any threshold
+  boundary → wait is capped to that start.
 - **normal**: otherwise the random delay in `[checkFrequencyMin,
 checkFrequencyMax]`.
 
@@ -26,6 +30,51 @@ delay and resolves `lastMinuteCheckFrequency`/per-challenge thresholds with
 its own resolver (sync settings read on Node, async IPC in the WebView).
 This is what fixed the bug where the next cycle could sleep past a
 challenge's last-minute boundary and start the final voting push late.
+
+### Scheduled fill
+
+Per-challenge scheduled fill (issue #26) lets a challenge be voted to 100%
+at chosen wall-clock instants instead of (or on top of) the exposure
+threshold. Two time forms, OR'd when both are configured: a recurring
+time-of-day (`scheduledFillTime`, interpreted in the app `timezone`
+setting via `src/js/scheduling/wallClock.js`, **not** device-local time)
+and a one-shot seconds-before-close offset (`scheduledFillBeforeEnd`).
+
+The decision side lives in `getScheduledFillState`
+(`src/js/services/VotingLogic.js`): during a window
+`[start, start + scheduledFillWindowMinutes]` the challenge votes to
+100/100 like the last-minute rule; with `scheduledFillReplaces` on, the
+normal and last-hour threshold rules are blocked outside the windows
+(flash and last-minute always win, manual voting is unaffected).
+
+The cadence side lives in `soonestScheduledStart`
+(`src/js/scheduling/scheduledFill.js`), fed to `computeNextCycleDelayMs`
+through a second injected resolver (`resolveScheduledFill`, sync on Node /
+async IPC on the WebView) plus the `timezone` scalar — both optional, so
+hosts that don't pass them keep byte-identical behavior. The cap lands a
+cycle exactly at the next window start; inside the window the normal
+cadence covers decay top-ups (once at 100%, eligibility turns off by
+itself).
+
+Deliberate semantics and caveats:
+
+- **Stateless**: there is no persisted "already ran" flag. A restart
+  inside a window still fills; a window fully missed while the app was
+  not running is skipped with **no catch-up** — in replace mode there is
+  no threshold fallback either, which the setting description warns about.
+- **DST**: around a daylight-saving switch the actual instant of a
+  time-of-day fill can shift by up to an hour on the changeover day
+  (spring-forward nonexistent times resolve nearby; fall-back ambiguity
+  resolves deterministically). Documented in `wallClock.js`.
+- **Timezone changes mid-run** take effect on the next cycle: the decision
+  path re-reads `settings.getSetting('timezone')` every evaluation, and
+  `timezone` is already in the renderer's reload-required list.
+- **Fail-soft**: corrupt persisted values (hand-edited settings.json)
+  degrade that one challenge's scheduled fill to "off" — the string key is
+  type-guarded, numeric corruption coerces to `NaN`-false, an unknown
+  timezone falls back to UTC inside `wallClock.js`, and
+  `getScheduledFillState` is wrapped in try/catch so the per-challenge
+  voting loop can never be aborted by one bad override.
 
 ## CLI — runScheduler (single setTimeout chain)
 

@@ -16,6 +16,83 @@ const settings = /** @type {any} */ (require('../settings'));
 // cycle: autoFill.js does not require VotingLogic). Cast for the same
 // boundary reason as settings above — autoFill.js isn't `// @ts-check`ed yet.
 const { getNextScheduleThresholdSec } = /** @type {any} */ (require('./autoFill'));
+// Pure wall-clock math for the scheduled-fill feature (no import cycle:
+// wallClock.js imports nothing). Cast for the same boundary reason as the
+// two imports above — wallClock.js isn't `// @ts-check`ed yet.
+const { occurrencesOf } = /** @type {any} */ (require('../scheduling/wallClock'));
+
+/**
+ * Scheduled-fill state for a challenge at `now`.
+ *
+ * `active` is true only when useScheduledFill is on AND at least one time
+ * form is actually configured (a parseable scheduledFillTime, or
+ * scheduledFillBeforeEnd > 0). This is what keeps "enabled with no times" a
+ * harmless no-op: an `active = useScheduledFill` shortcut would let replace
+ * mode permanently block all threshold voting with no window ever opening.
+ *
+ * Both forms configured → OR semantics: `inWindow` is true when `now` sits
+ * inside either form's `[start, start + window]` interval.
+ *
+ * The whole body is wrapped in try/catch returning the inactive state — the
+ * same posture (and reason) as getExposureResolver in settings.js: this runs
+ * inside the per-challenge voting loop, which has no per-iteration catch, so
+ * a corrupt hand-edited override must degrade this one challenge's scheduled
+ * fill to "off" rather than abort voting for every remaining challenge.
+ *
+ * Unlike isWithinLastHour/isWithinLastMinuteThreshold, the time-of-day form
+ * doesn't compare against close_time — callers only iterate the API's active
+ * (still-open) challenge list, so a stale in-window verdict for a closed
+ * challenge can't occur there. A future caller feeding a broader list should
+ * pre-filter on `close_time > now` (as soonestScheduledStart does).
+ *
+ * @param {any} challenge
+ * @param {string} challengeId
+ * @param {number} now - Current time (Unix timestamp, seconds)
+ * @returns {{active: boolean, inWindow: boolean, replaces: boolean}}
+ */
+const getScheduledFillState = (challenge, challengeId, now) => {
+    const inactive = { active: false, inWindow: false, replaces: false };
+    try {
+        if (settings.getEffectiveSetting('useScheduledFill', challengeId) !== true) return inactive;
+
+        // Corrupt window minutes fail soft to the schema default rather than
+        // to "never in window" — with replace mode on, a NaN window would
+        // otherwise silently block all threshold voting for the challenge.
+        // Deliberately no schema-floor clamp: a hand-edited finite positive
+        // value below the schema's min(5) is honored as typed (it's out of
+        // range, not corrupt) — only non-numeric/non-positive values fall back.
+        const windowMin = Number(settings.getEffectiveSetting('scheduledFillWindowMinutes', challengeId));
+        const windowSec = (Number.isFinite(windowMin) && windowMin > 0 ? windowMin : 60) * 60;
+        const timezone = settings.getSetting('timezone') || 'Europe/Riga';
+        const timeOfDay = settings.getEffectiveSetting('scheduledFillTime', challengeId);
+        const beforeEndSec = Number(settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId));
+
+        let active = false;
+        let inWindow = false;
+
+        // Time-of-day form: unparseable/empty values yield null → form off.
+        const occ = occurrencesOf(timeOfDay, timezone, now);
+        if (occ) {
+            active = true;
+            inWindow = now - occ.prev <= windowSec;
+        }
+        // Before-end form: 0 (off sentinel), NaN and negatives all fail the > 0 gate.
+        if (beforeEndSec > 0) {
+            active = true;
+            const start = Number(challenge.close_time) - beforeEndSec;
+            if (now >= start && now - start <= windowSec) inWindow = true;
+        }
+
+        if (!active) return inactive;
+        return {
+            active,
+            inWindow,
+            replaces: settings.getEffectiveSetting('scheduledFillReplaces', challengeId) === true,
+        };
+    } catch {
+        return inactive;
+    }
+};
 
 /**
  * Intermediate result from the shared rule engine (`_runVotingRules`); the
@@ -203,6 +280,20 @@ const _runVotingRules = (challenge, now, mode) => {
         return decided('lastminute', 100, 100, sharedThresholdInfo);
     }
 
+    // Scheduled fill sits below flash/last-minute (which always win) and above
+    // the threshold rules (which it can replace). Computed lazily here so the
+    // extra settings reads and Intl work only happen when they can matter.
+    const sched = getScheduledFillState(challenge, challengeId, now);
+    if (sched.active && sched.inWindow) {
+        return decided('scheduled', 100, 100, sharedThresholdInfo);
+    }
+    // Replace mode blocks the threshold rules (normal AND last-hour) outside
+    // the window — auto only, mirroring onlyBoost: a manual vote is explicit
+    // user intent and is never refused just because a schedule exists.
+    if (mode === 'auto' && sched.active && sched.replaces) {
+        return blocked('scheduled-fill-only: outside scheduled fill window');
+    }
+
     if (withinLastHour && useLastHourExposure) {
         return decided('last-hour', effectiveLastHourExposure, effectiveLastHourExposureTarget, sharedThresholdInfo);
     }
@@ -236,6 +327,9 @@ const evaluateVotingDecision = (challenge, now) => {
         lastminute: r.atTarget
             ? `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`
             : `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure ${currentExposure}% < 100%`,
+        scheduled: r.atTarget
+            ? 'scheduled fill: exposure already at 100%'
+            : `scheduled fill window: exposure ${currentExposure}% < 100%`,
         'last-hour': r.eligible
             ? `last hour threshold: exposure ${currentExposure}% < ${effectiveLastHourExposure}%${targetSuffix(effectiveLastHourExposure, effectiveLastHourExposureTarget)}`
             : `last hour threshold: exposure ${currentExposure}% >= ${effectiveLastHourExposure}%`,
@@ -276,6 +370,7 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
         const messages = {
             flash: `Challenge "${challengeTitle}" already has 100% exposure (flash type)`,
             lastminute: `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`,
+            scheduled: `Challenge "${challengeTitle}" already has 100% exposure (scheduled fill window)`,
             'last-hour': `Challenge "${challengeTitle}" already has ${effectiveLastHourExposure}% exposure (last hour threshold)`,
             normal: `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`,
         };
@@ -703,6 +798,7 @@ module.exports = {
     getEffectiveLastHourExposureThreshold,
     getEffectiveExposureTarget,
     getEffectiveLastHourExposureTarget,
+    getScheduledFillState,
     evaluateVotingDecision,
     evaluateManualVotingDecision,
     evaluateManualVotingToHundred,

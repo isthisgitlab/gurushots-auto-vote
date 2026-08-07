@@ -46,6 +46,9 @@ export const formatSettingDefault = (value, config, t) => {
     if (config?.type === 'time') {
         return formatSecondsAsHoursMinutes(value, t('app.hours'), t('app.minutes'));
     }
+    if (config?.type === 'timeOfDay') {
+        return value === '' || value == null ? t('app.none') : String(value);
+    }
     if (config?.type === 'number' && config.unit) {
         return `${value} ${t(config.unit)}`;
     }
