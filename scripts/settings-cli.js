@@ -2,6 +2,7 @@
 
 const settings = require('../src/js/settings');
 const { parseSettingValue } = require('../src/js/cli/parseValue');
+const { dumpSchema, listGlobalDefaults } = require('../src/js/cli/commands/settings');
 const { spawn } = require('node:child_process');
 
 /**
@@ -27,21 +28,6 @@ function getNestedProperty(obj, path) {
     return path.split('.').reduce((current, key) => {
         return current && current[key] !== undefined ? current[key] : undefined;
     }, obj);
-}
-
-// Helper function to set nested property value
-function setNestedProperty(obj, path, value) {
-    const keys = path.split('.');
-    const lastKey = keys.pop();
-    const target = keys.reduce((current, key) => {
-        if (!current[key] || typeof current[key] !== 'object') {
-            current[key] = {};
-        }
-        return current[key];
-    }, obj);
-
-    target[lastKey] = parseSettingValue(value);
-    return obj;
 }
 
 // Helper function to format output
@@ -164,28 +150,15 @@ async function main() {
                         process.exit(1);
                     }
                 } else if (key.includes('.')) {
-                    // Handle other nested keys by modifying the settings object directly
-                    const allSettings = settings.loadSettings();
-                    setNestedProperty(allSettings, key, parsedValue);
-                    const success = settings.saveSettings(allSettings);
-                    if (success) {
-                        console.log(`✅ Set ${key} = ${formatValue(getNestedProperty(allSettings, key))}`);
-
-                        // Inform about GUI reload for certain settings
-                        const uiSettings = ['theme', 'language', 'timezone'];
-                        const mainKey = key.split('.')[0];
-                        if (
-                            uiSettings.includes(mainKey) ||
-                            key.includes('theme') ||
-                            key.includes('language') ||
-                            key.includes('timezone')
-                        ) {
-                            await informAboutGuiReload();
-                        }
-                    } else {
-                        console.error(`❌ Failed to save setting '${key}' - validation failed`);
-                        process.exit(1);
-                    }
+                    // Arbitrary nested writes used to poke raw JSON into the
+                    // settings blob, bypassing schema validation entirely —
+                    // removed. Only the supported forms remain.
+                    console.error(`❌ Unsupported nested key '${key}'`);
+                    console.error('   Supported forms:');
+                    console.error('     pnpm settings:set <topLevelKey> <value>');
+                    console.error('     pnpm settings:set challengeSettings.globalDefaults.<schemaKey> <value>');
+                    console.error('     pnpm settings:set-global <schemaKey> <value>');
+                    process.exit(1);
                 } else {
                     // Handle top-level settings
                     const success = settings.setSetting(key, parsedValue);
@@ -206,34 +179,14 @@ async function main() {
             }
 
             case 'schema': {
-                // Show settings schema information
-                const schema = settings.SETTINGS_SCHEMA;
-                console.log('Settings Schema:');
-                console.log('================');
-
-                Object.entries(schema).forEach(([key, config]) => {
-                    console.log(`\n${key}:`);
-                    console.log(`  Type: ${config.type}`);
-                    console.log(`  Default: ${formatValue(config.default)}`);
-                    console.log(`  Per-Challenge: ${config.perChallenge ? 'Yes' : 'No'}`);
-                    if (config.label) console.log(`  Label: ${config.label}`);
-                    if (config.description) console.log(`  Description: ${config.description}`);
-                });
+                // Shared with the main CLI (src/js/cli/commands/settings.js).
+                dumpSchema();
                 break;
             }
 
             case 'global-defaults': {
-                // Show current global defaults for schema-based settings
-                const allSettings = settings.loadSettings();
-                const globalDefaults = allSettings.challengeSettings?.globalDefaults || {};
-
-                console.log('Global Defaults for Schema Settings:');
-                console.log('===================================');
-
-                Object.entries(settings.SETTINGS_SCHEMA).forEach(([key, config]) => {
-                    const currentValue = globalDefaults[key] !== undefined ? globalDefaults[key] : config.default;
-                    console.log(`${key}: ${formatValue(currentValue)}`);
-                });
+                // Shared with the main CLI (src/js/cli/commands/settings.js).
+                listGlobalDefaults();
                 break;
             }
 

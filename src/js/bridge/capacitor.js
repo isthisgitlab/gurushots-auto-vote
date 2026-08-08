@@ -94,10 +94,9 @@ const buildAllHandlers = () => {
                     assetSuffix: '.apk',
                 });
                 if (result.updateAvailable) {
-                    // Honor a user-skipped version. Electron tracks this in
-                    // metadata.json (fs); the bridge has no fs, so it reads
-                    // the version from the settings facade (set by
-                    // skip-update-version below).
+                    // Honor a user-skipped version — the settings facade is
+                    // the single skip-version store on every platform
+                    // (Electron's AutoUpdater reads the same key).
                     const skipped = settings.getSetting('skipUpdateVersion');
                     if (skipped && skipped === result.version) {
                         lastUpdateInfo = null;
