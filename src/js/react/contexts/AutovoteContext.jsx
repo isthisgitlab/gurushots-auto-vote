@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
-import { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } from '../../scheduling/randomDelay';
+import { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS } from '../../scheduling/randomDelay';
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
@@ -133,9 +133,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                 });
 
                 if (decision.mode === 'normal') {
-                    const anchorMs = previousCycleStartMs ?? Date.now();
-                    const remainingMs = anchorMs + decision.delayMs - Date.now();
-                    waitMs = Math.min(decision.delayMs, Math.max(MIN_CYCLE_GAP_MS, remainingMs));
+                    waitMs = anchoredWaitMs(decision.delayMs, previousCycleStartMs);
                 } else {
                     waitMs = decision.delayMs;
                     // Best-effort parity log (optional-chained so a host without

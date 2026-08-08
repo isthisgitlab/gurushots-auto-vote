@@ -1,4 +1,10 @@
-const { getRandomCheckFrequencyMs, DEFAULT_MINUTES, MS_PER_MINUTE } = require('../../src/js/scheduling/randomDelay');
+const {
+    getRandomCheckFrequencyMs,
+    anchoredWaitMs,
+    DEFAULT_MINUTES,
+    MS_PER_MINUTE,
+    MIN_CYCLE_GAP_MS,
+} = require('../../src/js/scheduling/randomDelay');
 
 describe('getRandomCheckFrequencyMs', () => {
     test('returns a fixed delay when min === max', () => {
@@ -57,5 +63,35 @@ describe('getRandomCheckFrequencyMs', () => {
     test('coerces numeric strings (handy for CLI input that lands in JSON)', () => {
         const settings = { checkFrequencyMin: '4', checkFrequencyMax: '4' };
         expect(getRandomCheckFrequencyMs(settings)).toBe(4 * MS_PER_MINUTE);
+    });
+});
+
+describe('anchoredWaitMs', () => {
+    // The normal-mode anchoring formula previously lived as identical inline
+    // copies in runScheduler.js and AutovoteContext.jsx — these cases pin the
+    // shared implementation to the exact semantics both hosts relied on.
+    const DELAY = 5 * MS_PER_MINUTE;
+
+    test('standalone (re)arm with no anchor waits the full delay', () => {
+        const now = 1_000_000;
+        expect(anchoredWaitMs(DELAY, null, now)).toBe(DELAY);
+    });
+
+    test('anchors to the previous cycle start: cycle duration is subtracted', () => {
+        const start = 1_000_000;
+        const now = start + 90_000; // cycle took 90s
+        expect(anchoredWaitMs(DELAY, start, now)).toBe(DELAY - 90_000);
+    });
+
+    test('an overrun floors at MIN_CYCLE_GAP_MS instead of firing immediately', () => {
+        const start = 1_000_000;
+        const now = start + DELAY + 60_000; // cycle overran the whole delay
+        expect(anchoredWaitMs(DELAY, start, now)).toBe(MIN_CYCLE_GAP_MS);
+    });
+
+    test('a wall-clock jump backward is ceiled at delayMs instead of inflating the wait', () => {
+        const start = 1_000_000;
+        const now = start - 120_000; // clock jumped back 2 min
+        expect(anchoredWaitMs(DELAY, start, now)).toBe(DELAY);
     });
 });
