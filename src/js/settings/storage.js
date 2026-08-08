@@ -102,7 +102,10 @@ const storage = {
         if (!fs.existsSync(settingsDir)) {
             fs.mkdirSync(settingsDir, { recursive: true });
         }
-        fs.writeFileSync(settingsPath, data, 'utf8');
+        // 0o600: the settings blob carries the auth token — no reason for
+        // other local users to be able to read it. (Only applies on create;
+        // pre-existing files keep their mode.)
+        fs.writeFileSync(settingsPath, data, { encoding: 'utf8', mode: 0o600 });
     },
 };
 
@@ -218,6 +221,82 @@ const getEnvironmentInfo = () => {
     };
 };
 
+/**
+ * Generic platform-aware JSON store — the same transport pattern the
+ * settings store above uses, packaged for other stores (metadata.js).
+ *
+ *   - Electron/CLI: synchronous fs at userData/<fileName>, written with
+ *     mode 0o600 (userData JSON can carry tokens/state that other local
+ *     users have no business reading).
+ *   - Capacitor app WebView: hydrate-once cache (initializeAsync) +
+ *     ordered async write-behind to @capacitor/preferences under prefKey.
+ *   - Android headless service: in-memory only. The native
+ *     AndroidHeadlessStore bridge is a keyless single blob owned by the
+ *     settings store, so other stores keep per-cycle state in memory —
+ *     same effective behavior the raw-fs implementation had there
+ *     (every fs call threw and fell back to defaults), minus the noise.
+ *
+ * @param {{fileName: string, prefKey: string}} opts
+ */
+const createJsonStore = ({ fileName, prefKey }) => {
+    let initialized = false;
+    let cachedJson = null;
+    let chain = Promise.resolve();
+
+    const filePath = () => path.join(path.dirname(getSettingsPath()), fileName);
+
+    return {
+        /** Raw JSON string, or null when never written. */
+        readRaw: () => {
+            if (runtime.isHeadlessService() || runtime.isCapacitor()) {
+                return cachedJson;
+            }
+            const p = filePath();
+            if (!fs.existsSync(p)) return null;
+            return fs.readFileSync(p, 'utf8');
+        },
+        /** Sync on Electron/CLI; cache + ordered write-behind on Capacitor; memory-only on headless. */
+        writeRaw: (data) => {
+            if (runtime.isHeadlessService()) {
+                cachedJson = data;
+                return;
+            }
+            if (runtime.isCapacitor()) {
+                cachedJson = data;
+                chain = chain
+                    .then(() => getCapacitorPreferences().set({ key: prefKey, value: data }))
+                    .catch((err) => {
+                        logger.withCategory('settings').error(`Capacitor ${prefKey} write failed:`, err);
+                    });
+                return;
+            }
+            const p = filePath();
+            const dir = path.dirname(p);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.writeFileSync(p, data, { encoding: 'utf8', mode: 0o600 });
+        },
+        /** Hydrate the Capacitor cache once at boot. No-op elsewhere. */
+        initializeAsync: async () => {
+            if (!runtime.isCapacitor() || runtime.isHeadlessService() || initialized) return;
+            try {
+                const { value } = await getCapacitorPreferences().get({ key: prefKey });
+                cachedJson = value;
+            } catch (err) {
+                logger.withCategory('settings').error(`Capacitor ${prefKey} read failed:`, err);
+                cachedJson = null;
+            } finally {
+                initialized = true;
+            }
+        },
+        /** Await to guarantee the write-behind queue has drained. */
+        flushPendingWrites: () => chain,
+        /** fs path (Electron/CLI) — for debug/info surfaces. */
+        getFilePath: filePath,
+    };
+};
+
 module.exports = {
     storage,
     initializeAsync,
@@ -227,6 +306,7 @@ module.exports = {
     getDefaultMockSetting,
     getUserDataPath,
     getEnvironmentInfo,
+    createJsonStore,
     // electronApp is exposed for the rare caller (test harness, CLI scripts)
     // that needs the raw electron app handle.
     electronApp,

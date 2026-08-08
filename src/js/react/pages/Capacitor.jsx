@@ -15,6 +15,7 @@ globalThis.__capacitorBootstrap = true;
 
 import { installBridge, subscribe } from '../../bridge/capacitor';
 import { initializeAsync as initSettings, flushPendingWrites, getSetting } from '../../settings';
+import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
 import { mountApp } from './App';
@@ -73,6 +74,9 @@ const bootstrap = async () => {
     if (isCapacitor()) {
         installBridge();
         await initSettings();
+        // Metadata rides the same platform-aware transport now — hydrate its
+        // cache too so per-challenge vote metadata survives relaunches.
+        await initializeMetadataAsync();
 
         // Settings writes are write-behind (cache now, persist async). When
         // the OS backgrounds or tears down the WebView, push the latest
@@ -81,6 +85,7 @@ const bootstrap = async () => {
         const flush = () => {
             try {
                 flushPendingWrites();
+                flushMetadataWrites();
             } catch {
                 // never let a teardown handler throw
             }

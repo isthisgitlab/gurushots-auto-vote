@@ -2,7 +2,40 @@ const { app } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const logger = require('../logger');
 const metadata = require('../metadata');
+const settings = require('../settings');
 const { getReleasesUrl: releasesPageUrl } = require('./UpdateChecker');
+
+/**
+ * One-shot skip-version migration: the canonical store is the settings blob
+ * (skipUpdateVersion — schema-validated, platform-aware, already what the
+ * Capacitor bridge uses); older Electron/CLI builds wrote it into
+ * metadata.json. Ordering is write-new -> verify-persisted -> clear-old so a
+ * crash mid-migration can never lose the user's "skip this version" choice.
+ * Settings wins on conflict (a value already in settings is kept and the
+ * stale metadata copy just cleared). Idempotent: once the legacy field is
+ * null this is a no-op.
+ */
+const migrateLegacySkipVersion = () => {
+    try {
+        const legacy = metadata.getLegacySkipVersion();
+        if (!legacy) return;
+        if (!settings.getSetting('skipUpdateVersion')) {
+            settings.setSetting('skipUpdateVersion', legacy);
+            if (settings.getSetting('skipUpdateVersion') !== legacy) {
+                // Write did not stick (validation/persistence failure) —
+                // keep the legacy copy so the preference is not lost.
+                logger
+                    .withCategory('update')
+                    .warning('skip-version migration could not persist; keeping legacy value', null);
+                return;
+            }
+        }
+        metadata.clearLegacySkipVersion();
+        logger.withCategory('update').info(`Migrated skip-version preference to settings: ${legacy}`, null);
+    } catch (error) {
+        logger.withCategory('update').error('skip-version migration failed:', error);
+    }
+};
 
 /**
  * AutoUpdater service wrapping electron-updater with platform detection,
@@ -15,6 +48,11 @@ class AutoUpdater {
         this.downloadProgress = null;
         this.isDownloading = false;
         this.isUpdateDownloaded = false;
+
+        // Land any metadata-resident skip preference in settings before the
+        // first update-available event can read either store (no dialog
+        // flash for an already-skipped version).
+        migrateLegacySkipVersion();
 
         // Configure autoUpdater
         autoUpdater.autoDownload = false; // We control download manually
@@ -57,9 +95,9 @@ class AutoUpdater {
             logger.withCategory('update').info('Update available:', info.version);
             this.updateInfo = this.formatUpdateInfo(info);
 
-            // Check if user has skipped this version
-            const updateCheckData = metadata.getUpdateCheckData();
-            if (updateCheckData.skipVersion === info.version) {
+            // Check if user has skipped this version (canonical store:
+            // settings.skipUpdateVersion; '' means no skip)
+            if (settings.getSetting('skipUpdateVersion') === info.version) {
                 logger.withCategory('update').info('Update skipped by user:', info.version);
                 return;
             }
@@ -271,7 +309,7 @@ class AutoUpdater {
             return false;
         }
 
-        metadata.setSkipUpdateVersion(versionToSkip);
+        settings.setSetting('skipUpdateVersion', versionToSkip);
         logger.withCategory('update').info('Marked version to skip:', versionToSkip);
         return true;
     }
@@ -280,7 +318,7 @@ class AutoUpdater {
      * Clear skip version setting
      */
     clearSkipVersion() {
-        metadata.clearSkipUpdateVersion();
+        settings.setSetting('skipUpdateVersion', '');
         logger.withCategory('update').info('Cleared skip version setting', null);
     }
 
