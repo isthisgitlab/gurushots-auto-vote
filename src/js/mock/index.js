@@ -10,10 +10,8 @@ const voting = require('./voting');
 const boost = require('./boost');
 const errors = require('./errors');
 const settings = require('../settings');
-const votingLogic = require('../services/VotingLogic');
-const autoFill = require('../services/autoFill');
 const logger = require('../logger');
-const cancellation = require('../voting/cancellation');
+const { runVotingPass } = require('../services/votingOrchestrator');
 
 // Session-stable mock data cache to prevent regeneration within same app run
 let sessionMockCache = {
@@ -548,179 +546,40 @@ const mockApiClient = {
     ),
 
     /**
-     * Simulate the main voting process (fetchChallengesAndVote)
+     * Simulate the main voting process — runs the SAME orchestration as the
+     * real strategy (services/votingOrchestrator.js) over the mock
+     * endpoints, so mock mode exercises auto-fill, emergency fill,
+     * turbo-earn, timer-ordered deadline actions, and the shared
+     * cancellation/logging path instead of a hand-maintained fork.
+     *
+     * cleanupStaleMetadata is deliberately null: the metadata store is
+     * shared and un-namespaced, and mock challenge ids never match real
+     * ones — running cleanup here would purge the user's real voting
+     * metadata.
      */
-    fetchChallengesAndVote: async (
-        token,
-        exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default,
-        challengeIdFilter = null,
-    ) => {
-        logger.withCategory('voting').info('Mock Voting Process Started', null);
+    fetchChallengesAndVote: async (token, _exposureThreshold = null, challengeIdFilter = null) => {
+        logger.withCategory('voting').api('Mock fetchChallengesAndVote', null);
         logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
-        logger.withCategory('voting').debug(`Exposure threshold type: ${typeof exposureThreshold}`, null);
-
-        // In mock mode, accept any token (including real ones)
-        if (token) {
-            // Simulate getting challenges
-            const challengesResponse = await simulateApiResponse(challenges.mockActiveChallenges, 800);
-            // Keep the full active list (parity with real main.js): callers reuse
-            // it for threshold scheduling, so it must not be the filtered subset.
-            const allChallenges = challengesResponse.challenges;
-            let challengeList = allChallenges;
-            if (challengeIdFilter != null) {
-                const idStr = String(challengeIdFilter);
-                challengeList = challengeList.filter((c) => String(c.id) === idStr);
-                if (challengeList.length === 0) {
-                    return { success: false, error: `Challenge ${idStr} is not active`, challenges: allChallenges };
-                }
-            }
-            logger.withCategory('challenges').info(`Found ${challengeList.length} active challenges`, null);
-
-            // Simulate processing each challenge
-            for (const challenge of challengeList) {
-                // Check for cancellation before processing each challenge
-                if (cancellation.isCancelled()) {
-                    logger.withCategory('voting').info('Mock voting cancelled by user', null);
-                    return { success: false, message: 'Mock voting cancelled by user', challenges: allChallenges };
-                }
-
-                logger.withCategory('challenges').debug(`Processing challenge: ${challenge.title}`, null);
-
-                // Get the effective exposure threshold for this challenge
-                const effectiveThreshold =
-                    typeof exposureThreshold === 'function'
-                        ? exposureThreshold(challenge.id.toString())
-                        : exposureThreshold;
-
-                logger
-                    .withCategory('voting')
-                    .debug(`Challenge ${challenge.id} exposure threshold: ${effectiveThreshold}`, null);
-
-                const now = Math.floor(Date.now() / 1000);
-
-                // Deps for the shared fill-new helper, wired to the mock photo API.
-                const fillDeps = {
-                    settings,
-                    logger,
-                    getEligiblePhotos: mockApiClient.getEligiblePhotos,
-                    submitToChallenge: mockApiClient.submitToChallenge,
-                };
-
-                // Simulate boost application when due (mirrors real main.js,
-                // including the emergency override that applies an available
-                // boost near the deadline even when Auto-Apply Boost is off).
-                if (votingLogic.shouldApplyBoost(challenge, now, { emergency: true })) {
-                    // Check for cancellation before boost
-                    if (cancellation.isCancelled()) {
-                        logger.withCategory('voting').info('Mock voting cancelled by user before boost', null);
-                        return { success: false, message: 'Mock voting cancelled by user', challenges: allChallenges };
-                    }
-
-                    logger.withCategory('voting').debug(`Applying boost to challenge: ${challenge.title}`, null);
-                    const cid = challenge.id.toString();
-                    if (settings.getEffectiveSetting('boostFillNew', cid) === true) {
-                        // Fill-new: submit a fresh photo and boost that entry instead
-                        // of an existing one; fall back to the configured entry when
-                        // no fresh photo can be submitted (full / none / failed).
-                        const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
-                        if (filled.ok) {
-                            autoFill.reflectNewEntry(challenge, filled.imageId);
-                            await mockApiClient.applyBoostToEntry(cid, filled.imageId, token);
-                        } else {
-                            await mockApiClient.applyBoost(challenge, token);
-                        }
-                    } else {
-                        await mockApiClient.applyBoost(challenge, token);
-                    }
-                }
-
-                // Auto-apply a won turbo when eligible (mirrors real main.js,
-                // including the emergency override that applies near the deadline
-                // even when Auto-Apply Turbo is off).
-                const turboApply = votingLogic.shouldApplyTurbo(challenge, now, { emergency: true });
-                if (turboApply.apply) {
-                    let imageId = turboApply.imageId;
-                    if (turboApply.fillNew) {
-                        const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
-                        if (filled.ok) {
-                            autoFill.reflectNewEntry(challenge, filled.imageId);
-                            imageId = filled.imageId;
-                        }
-                    }
-                    if (imageId) {
-                        logger.withCategory('voting').debug(`Applying turbo to entry ${imageId}`, null);
-                        await mockApiClient.applyTurbo(challenge.id, imageId, token);
-                    } else {
-                        // Parity with real main.js: log why turbo was skipped so a
-                        // dev reading mock-mode logs can tell a fill-new miss from
-                        // a turbo that simply wasn't eligible.
-                        logger
-                            .withCategory('turbo')
-                            .info(
-                                `${logger.challengeTag(challenge)} turbo fill-new could not submit a photo and there is no existing entry — skipped`,
-                                null,
-                            );
-                    }
-                }
-
-                // Use the centralized voting logic service
-                const { shouldVote, voteReason } = votingLogic.evaluateVotingDecision(challenge, now);
-
-                // Simulate voting if conditions are met
-                if (shouldVote) {
-                    // Check for cancellation before voting
-                    if (cancellation.isCancelled()) {
-                        logger.withCategory('voting').info('Mock voting cancelled by user before voting', null);
-                        return { success: false, message: 'Mock voting cancelled by user', challenges: allChallenges };
-                    }
-
-                    logger.withCategory('voting').debug(`Voting on challenge: ${challenge.title}`, null);
-                    const challengeUrl = challenge.url;
-                    if (voting.mockVoteImagesByChallenge[challengeUrl]) {
-                        const voteImages = await simulateApiResponse(
-                            voting.mockVoteImagesByChallenge[challengeUrl],
-                            1200,
-                        );
-                        if (voteImages && voteImages.images && voteImages.images.length > 0) {
-                            // Check for cancellation before vote submission
-                            if (cancellation.isCancelled()) {
-                                logger
-                                    .withCategory('voting')
-                                    .info('Mock voting cancelled by user before vote submission', null);
-                                return {
-                                    success: false,
-                                    message: 'Mock voting cancelled by user',
-                                    challenges: allChallenges,
-                                };
-                            }
-
-                            await simulateApiResponse(voting.mockVoteSubmissionSuccess, 2000);
-                        }
-                    }
-                } else {
-                    // Log why voting was skipped
-                    logger
-                        .withCategory('voting')
-                        .debug(`Skipping voting on challenge: ${challenge.title} - ${voteReason}`, null);
-                }
-
-                // Check for cancellation before delay
-                if (cancellation.isCancelled()) {
-                    logger.withCategory('voting').info('Mock voting cancelled by user before delay', null);
-                    return { success: false, message: 'Mock voting cancelled by user', challenges: allChallenges };
-                }
-
-                // Simulate delay between challenges
-                await new Promise((resolve) => {
-                    setTimeout(resolve, 500);
-                });
-            }
-
-            logger.withCategory('voting').info('Mock Voting Process Completed', null);
-            return { success: true, message: 'Mock voting process completed', challenges: allChallenges };
-        } else {
+        if (!token) {
+            logger.withCategory('authentication').error('No token provided, returning error', null);
             return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
         }
+        return runVotingPass(token, challengeIdFilter, {
+            api: {
+                getActiveChallenges: mockApiClient.getActiveChallenges,
+                getVoteImages: mockApiClient.getVoteImages,
+                submitVotes: mockApiClient.submitVotes,
+                applyBoost: mockApiClient.applyBoost,
+                applyBoostToEntry: mockApiClient.applyBoostToEntry,
+                applyTurbo: mockApiClient.applyTurbo,
+                getEligiblePhotos: mockApiClient.getEligiblePhotos,
+                submitToChallenge: mockApiClient.submitToChallenge,
+                runTurboMiniGame: mockApiClient.runTurboMiniGame,
+            },
+            cleanupStaleMetadata: null,
+            // Short fixed spacing — mock cycles should stay fast.
+            interChallengeDelay: () => 500,
+        });
     },
 };
 
