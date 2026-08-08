@@ -246,18 +246,6 @@ class AutoUpdater {
     }
 
     /**
-     * Cancel ongoing download
-     */
-    cancelDownload() {
-        if (this.isDownloading) {
-            // electron-updater doesn't have a cancel method
-            // but we can prevent install
-            this.isDownloading = false;
-            logger.withCategory('update').info('Download cancelled', null);
-        }
-    }
-
-    /**
      * Install downloaded update and restart
      */
     quitAndInstall() {

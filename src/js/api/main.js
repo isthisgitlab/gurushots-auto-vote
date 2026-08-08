@@ -81,11 +81,6 @@ const runTurboMiniGame = async (challenge, token) => {
     return { played, correct, flipped, doubleFailed, won };
 };
 
-// Thin delegate kept for backward compatibility with index.js callers.
-const setCancellationFlag = (cancel) => {
-    cancellation.setCancelled(cancel);
-};
-
 /**
  * Main function that fetches active challenges and processes them
  *
@@ -521,7 +516,6 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
 
 module.exports = {
     fetchChallengesAndVote,
-    setCancellationFlag,
     applyBoostToEntry,
     runTurboMiniGame,
 };

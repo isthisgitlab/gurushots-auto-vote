@@ -5,6 +5,7 @@
  */
 
 const mockIndex = require('../../src/js/mock/index');
+const cancellation = require('../../src/js/voting/cancellation');
 
 // Mock the individual mock modules
 jest.mock('../../src/js/mock/auth', () => ({
@@ -24,7 +25,7 @@ jest.mock('../../src/js/mock/voting', () => ({
     mockEmptyVoteImages: { images: [] },
     mockVoteSubmissionSuccess: { success: true, votes: 5 },
     mockVoteSubmissionFailure: { error: 'Vote submission failed' },
-    generateMockVoteImages: jest.fn((url, challenge) => ({ images: [{ id: 'generated-img', ratio: 30 }] })),
+    generateMockVoteImages: jest.fn(() => ({ images: [{ id: 'generated-img', ratio: 30 }] })),
 }));
 
 jest.mock('../../src/js/mock/boost', () => ({
@@ -100,7 +101,7 @@ describe('mock/index', () => {
         logger.__mockErrorFn.mockClear();
         logger.__mockApiFn.mockClear();
         // Reset cancellation flag
-        mockIndex.setCancellationFlag(false);
+        cancellation.setCancelled(false);
     });
 
     describe('module exports', () => {
@@ -127,7 +128,6 @@ describe('mock/index', () => {
             expect(typeof mockIndex.simulateApiResponse).toBe('function');
             expect(typeof mockIndex.simulateApiError).toBe('function');
             expect(typeof mockIndex.mockApiClient).toBe('object');
-            expect(typeof mockIndex.setCancellationFlag).toBe('function');
         });
     });
 
@@ -202,15 +202,6 @@ describe('mock/index', () => {
 
             const endTime = Date.now();
             expect(endTime - startTime).toBeGreaterThanOrEqual(490); // Allow 10ms tolerance for CI timing precision
-        });
-    });
-
-    describe('setCancellationFlag', () => {
-        test('should set cancellation flag', () => {
-            mockIndex.setCancellationFlag(true);
-
-            expect(() => mockIndex.setCancellationFlag(true)).not.toThrow();
-            expect(() => mockIndex.setCancellationFlag(false)).not.toThrow();
         });
     });
 
@@ -483,7 +474,7 @@ describe('mock/index', () => {
             });
 
             test('should handle cancellation during voting process', async () => {
-                mockIndex.setCancellationFlag(true);
+                cancellation.setCancelled(true);
 
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 

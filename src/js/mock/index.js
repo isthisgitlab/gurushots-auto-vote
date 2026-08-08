@@ -15,16 +15,10 @@ const autoFill = require('../services/autoFill');
 const logger = require('../logger');
 const cancellation = require('../voting/cancellation');
 
-// Thin delegate kept for backward compatibility with index.js + tests.
-const setCancellationFlag = (cancel) => {
-    cancellation.setCancelled(cancel);
-};
-
 // Session-stable mock data cache to prevent regeneration within same app run
 let sessionMockCache = {
     challenges: null,
     voteImages: new Map(), // challengeUrl -> voteImages
-    lastCacheTime: null,
 };
 
 // Function to clear session cache (for testing)
@@ -32,7 +26,6 @@ const clearSessionCache = () => {
     sessionMockCache = {
         challenges: null,
         voteImages: new Map(),
-        lastCacheTime: null,
     };
 };
 
@@ -147,7 +140,6 @@ const mockApiClient = {
                         .withCategory('challenges')
                         .info(`Using static mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
                 }
-                sessionMockCache.lastCacheTime = Date.now();
             } else {
                 logger
                     .withCategory('challenges')
@@ -693,7 +685,6 @@ module.exports = {
     mockApiClient,
 
     // Cancellation control
-    setCancellationFlag,
 
     // Session cache control
     clearSessionCache,
