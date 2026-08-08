@@ -35,11 +35,24 @@ jest.mock('../../src/js/logger', () => ({
 const mockMetadata = {
     getUpdateCheckData: jest.fn(() => ({ lastCheck: null, skipVersion: null })),
     setLastUpdateCheck: jest.fn(),
-    setSkipUpdateVersion: jest.fn(),
-    clearSkipUpdateVersion: jest.fn(),
+    getLegacySkipVersion: jest.fn(() => null),
+    clearLegacySkipVersion: jest.fn(() => true),
 };
 
 jest.mock('../../src/js/metadata', () => mockMetadata);
+
+// Mock settings — the canonical skip-version store. A tiny in-memory map so
+// the write->verify->clear migration ordering is observable.
+const settingsState = { skipUpdateVersion: '' };
+const mockSettings = {
+    getSetting: jest.fn((key) => settingsState[key]),
+    setSetting: jest.fn((key, value) => {
+        settingsState[key] = value;
+        return true;
+    }),
+};
+
+jest.mock('../../src/js/settings', () => mockSettings);
 
 describe('AutoUpdater', () => {
     let AutoUpdater;
@@ -51,6 +64,14 @@ describe('AutoUpdater', () => {
 
         // Reset mock implementations
         mockMetadata.getUpdateCheckData.mockReturnValue({ lastCheck: null, skipVersion: null });
+        mockMetadata.getLegacySkipVersion.mockReturnValue(null);
+        mockMetadata.clearLegacySkipVersion.mockReturnValue(true);
+        settingsState.skipUpdateVersion = '';
+        mockSettings.getSetting.mockImplementation((key) => settingsState[key]);
+        mockSettings.setSetting.mockImplementation((key, value) => {
+            settingsState[key] = value;
+            return true;
+        });
         mockAutoUpdater.checkForUpdates.mockResolvedValue({
             updateInfo: {
                 version: '0.7.0',
@@ -196,10 +217,10 @@ describe('AutoUpdater', () => {
     });
 
     describe('skipVersion', () => {
-        it('should skip specified version', () => {
+        it('should skip specified version (canonical store: settings)', () => {
             autoUpdater.skipVersion('0.7.0');
 
-            expect(mockMetadata.setSkipUpdateVersion).toHaveBeenCalledWith('0.7.0');
+            expect(mockSettings.setSetting).toHaveBeenCalledWith('skipUpdateVersion', '0.7.0');
         });
 
         it('should skip current update version if none specified', () => {
@@ -207,7 +228,7 @@ describe('AutoUpdater', () => {
 
             autoUpdater.skipVersion();
 
-            expect(mockMetadata.setSkipUpdateVersion).toHaveBeenCalledWith('0.8.0');
+            expect(mockSettings.setSetting).toHaveBeenCalledWith('skipUpdateVersion', '0.8.0');
         });
 
         it('should return false if no version to skip', () => {
@@ -216,15 +237,62 @@ describe('AutoUpdater', () => {
             const result = autoUpdater.skipVersion();
 
             expect(result).toBe(false);
-            expect(mockMetadata.setSkipUpdateVersion).not.toHaveBeenCalled();
+            expect(mockSettings.setSetting).not.toHaveBeenCalled();
         });
     });
 
     describe('clearSkipVersion', () => {
-        it('should clear skip version setting', () => {
+        it('should clear skip version via the settings sentinel', () => {
             autoUpdater.clearSkipVersion();
 
-            expect(mockMetadata.clearSkipUpdateVersion).toHaveBeenCalled();
+            expect(mockSettings.setSetting).toHaveBeenCalledWith('skipUpdateVersion', '');
+        });
+    });
+
+    describe('legacy skip-version migration (constructor one-shot)', () => {
+        // On Android the AutoUpdater is never constructed (the Capacitor
+        // bridge writes settings.skipUpdateVersion directly) and no
+        // metadata.json ever existed, so the migration is structurally a
+        // no-op there; these cases cover the Electron/CLI paths.
+
+        it('moves a metadata-resident value into settings and clears the legacy copy', () => {
+            mockMetadata.getLegacySkipVersion.mockReturnValue('1.2.3');
+
+            new AutoUpdater();
+
+            expect(settingsState.skipUpdateVersion).toBe('1.2.3');
+            expect(mockMetadata.clearLegacySkipVersion).toHaveBeenCalled();
+        });
+
+        it('settings wins on conflict: existing settings value is kept, legacy copy cleared', () => {
+            settingsState.skipUpdateVersion = '2.0.0';
+            mockMetadata.getLegacySkipVersion.mockReturnValue('1.2.3');
+
+            new AutoUpdater();
+
+            expect(settingsState.skipUpdateVersion).toBe('2.0.0');
+            expect(mockSettings.setSetting).not.toHaveBeenCalledWith('skipUpdateVersion', '1.2.3');
+            expect(mockMetadata.clearLegacySkipVersion).toHaveBeenCalled();
+        });
+
+        it('is idempotent: once the legacy field is null, nothing is touched', () => {
+            settingsState.skipUpdateVersion = '3.0.0'; // user set later
+            mockMetadata.getLegacySkipVersion.mockReturnValue(null);
+
+            new AutoUpdater();
+
+            expect(settingsState.skipUpdateVersion).toBe('3.0.0');
+            expect(mockSettings.setSetting).not.toHaveBeenCalled();
+            expect(mockMetadata.clearLegacySkipVersion).not.toHaveBeenCalled();
+        });
+
+        it('keeps the legacy copy when the settings write does not persist (write-new-verify-clear-old)', () => {
+            mockMetadata.getLegacySkipVersion.mockReturnValue('1.2.3');
+            mockSettings.setSetting.mockImplementation(() => false); // write rejected, state unchanged
+
+            new AutoUpdater();
+
+            expect(mockMetadata.clearLegacySkipVersion).not.toHaveBeenCalled();
         });
     });
 

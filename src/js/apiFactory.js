@@ -23,8 +23,11 @@ const { mockApiClient } = require('./mock');
 
 /**
  * The API surface that both the real and mock strategies must implement.
- * Annotating `realApi` and `mockApi` against this keeps the two in lockstep:
- * drop, rename, or mistype a method on one and `pnpm typecheck` fails.
+ * `realApi` is structurally checked against this typedef by `pnpm typecheck`;
+ * `mockApi` mirrors realApi BY CONSTRUCTION (built from its key list below),
+ * so real/mock parity is a construction-time invariant enforced by the
+ * missing-method guard in the builder plus the key-parity unit test — not by
+ * the compiler.
  *
  * @typedef {object} ApiStrategy
  * @property {(...args: any[]) => any} authenticate
@@ -71,24 +74,39 @@ const withMockDebug =
         return fn(...args);
     };
 
+/**
+ * The mock surface is derived from realApi's key list — every method
+ * except getStrategyType is the matching mockApiClient method wrapped
+ * in the debug preamble — so the two surfaces can never drift at
+ * runtime. (The `authenticate` log label stays 'authentication' for
+ * log compatibility.) The Object.fromEntries construction is opaque to
+ * the checker, hence the cast: realApi keeps the typedef lockstep, and
+ * mockApi mirrors realApi by construction.
+ */
+const mockClient = /** @type {Record<string, (...args: any[]) => any>} */ (/** @type {any} */ (mockApiClient));
+
 /** @type {ApiStrategy} */
-const mockApi = {
-    authenticate: withMockDebug('authentication', mockApiClient.authenticate.bind(mockApiClient)),
-    fetchChallengesAndVote: withMockDebug(
-        'fetchChallengesAndVote',
-        mockApiClient.fetchChallengesAndVote.bind(mockApiClient),
+const mockApi = /** @type {any} */ ({
+    ...Object.fromEntries(
+        Object.keys(realApi)
+            .filter((name) => name !== 'getStrategyType')
+            .map((name) => {
+                if (typeof mockClient[name] !== 'function') {
+                    // Fail fast with a self-diagnosing message: a new realApi
+                    // method needs a same-named mockApiClient counterpart.
+                    throw new Error(`mockApiClient is missing a '${name}' implementation for the realApi surface`);
+                }
+                return [
+                    name,
+                    withMockDebug(
+                        name === 'authenticate' ? 'authentication' : name,
+                        mockClient[name].bind(mockApiClient),
+                    ),
+                ];
+            }),
     ),
-    runTurboMiniGame: withMockDebug('runTurboMiniGame', mockApiClient.runTurboMiniGame.bind(mockApiClient)),
-    getActiveChallenges: withMockDebug('getActiveChallenges', mockApiClient.getActiveChallenges.bind(mockApiClient)),
-    getVoteImages: withMockDebug('getVoteImages', mockApiClient.getVoteImages.bind(mockApiClient)),
-    submitVotes: withMockDebug('submitVotes', mockApiClient.submitVotes.bind(mockApiClient)),
-    applyBoost: withMockDebug('applyBoost', mockApiClient.applyBoost.bind(mockApiClient)),
-    applyBoostToEntry: withMockDebug('applyBoostToEntry', mockApiClient.applyBoostToEntry.bind(mockApiClient)),
-    applyTurbo: withMockDebug('applyTurbo', mockApiClient.applyTurbo.bind(mockApiClient)),
-    getEligiblePhotos: withMockDebug('getEligiblePhotos', mockApiClient.getEligiblePhotos.bind(mockApiClient)),
-    submitToChallenge: withMockDebug('submitToChallenge', mockApiClient.submitToChallenge.bind(mockApiClient)),
     getStrategyType: () => 'MockAPI',
-};
+});
 
 /** @type {ApiStrategy | null} */
 let currentStrategy = null;

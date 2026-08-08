@@ -6,7 +6,7 @@
  * caller can rely on the contract.
  */
 
-const { submitVotesForChallenge, STAGGER_MS } = require('../../src/js/services/manualVote');
+const { submitVotesForChallenge, voteAllChallengesManual, STAGGER_MS } = require('../../src/js/services/manualVote');
 
 jest.mock('../../src/js/settings');
 
@@ -101,5 +101,47 @@ describe('submitVotesForChallenge', () => {
 
         expect(result.outcome).toBe('not-eligible');
         expect(result.errorMessage).toContain('has not started');
+    });
+});
+
+describe('voteAllChallengesManual', () => {
+    test('aggregates voted/skipped counts and staggers successful votes', async () => {
+        const challenges = [challengeWithExposure(50), challengeWithExposure(100), challengeWithExposure(50)];
+        const strategy = {
+            // First eligible challenge has images, the last has none.
+            getVoteImages: jest
+                .fn()
+                .mockResolvedValueOnce({ images: [{ id: 'i1' }] })
+                .mockResolvedValueOnce({ images: [] }),
+            submitVotes: jest.fn().mockResolvedValue({ ok: true }),
+        };
+        const progress = jest.fn();
+
+        const result = await voteAllChallengesManual(challenges, strategy, 'tok', {
+            onProgress: progress,
+            staggerMs: 0,
+        });
+
+        // challenge 1: voted; challenge 2: not-eligible (100%); challenge 3: no-images.
+        expect(result).toEqual({ voted: 1, skipped: 2, total: 3 });
+        expect(strategy.submitVotes).toHaveBeenCalledTimes(1);
+        expect(progress).toHaveBeenCalledTimes(3);
+        expect(progress).toHaveBeenNthCalledWith(1, 1, 3, challenges[0]);
+    });
+
+    test('continues processing remaining challenges after one throws', async () => {
+        const challenges = [challengeWithExposure(50), challengeWithExposure(50)];
+        const strategy = {
+            getVoteImages: jest
+                .fn()
+                .mockRejectedValueOnce(new Error('boom'))
+                .mockResolvedValueOnce({ images: [{ id: 'i1' }] }),
+            submitVotes: jest.fn().mockResolvedValue({ ok: true }),
+        };
+
+        const result = await voteAllChallengesManual(challenges, strategy, 'tok', { staggerMs: 0 });
+
+        expect(result).toEqual({ voted: 1, skipped: 1, total: 2 });
+        expect(strategy.submitVotes).toHaveBeenCalledTimes(1);
     });
 });

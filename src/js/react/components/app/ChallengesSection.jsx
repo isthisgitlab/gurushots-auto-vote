@@ -6,6 +6,8 @@ import { ChallengeCard } from './ChallengeCard';
 import { BoostWindowBanner } from './BoostWindowBanner';
 import { ChallengeNav } from './ChallengeNav';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
+import { ResetIcon } from '@/components/ui/ResetButton';
 
 /**
  * Challenges section with Vote All, Refresh buttons, and challenge cards
@@ -14,8 +16,6 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
     const { t } = useTranslation();
     const { challenges, loading, error, refetch } = useChallenges();
     const times = useTimers(challenges);
-    const [votingAll, setVotingAll] = useState(false);
-    const [runningCycle, setRunningCycle] = useState(false);
     const [globalCompact, setGlobalCompact] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
 
@@ -55,37 +55,8 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
         }
     }, [globalCompact]);
 
-    const handleVoteAll = useCallback(async () => {
-        setVotingAll(true);
-        try {
-            const result = await window.api.voteAllChallengesManual();
-            if (result?.success) {
-                await refetch(true);
-            } else {
-                await window.api.logError(`Vote All failed: ${result?.error || 'Unknown error'}`);
-            }
-        } catch (err) {
-            await window.api.logError(`Error during Vote All: ${err.message || err}`);
-        } finally {
-            setVotingAll(false);
-        }
-    }, [refetch]);
-
-    const handleRun = useCallback(async () => {
-        setRunningCycle(true);
-        try {
-            const result = await window.api.runVotingCycle();
-            if (result?.success) {
-                await refetch(true);
-            } else {
-                await window.api.logError(`Run failed: ${result?.error || 'Unknown error'}`);
-            }
-        } catch (err) {
-            await window.api.logError(`Error during Run: ${err.message || err}`);
-        } finally {
-            setRunningCycle(false);
-        }
-    }, [refetch]);
+    // Shared success path for the Vote All / Run buttons below.
+    const refetchAfterAction = useCallback(() => refetch(true), [refetch]);
 
     const handleRefresh = useCallback(() => {
         refetch();
@@ -140,13 +111,14 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
             <div className="flex flex-wrap gap-2 mb-4 items-center">
                 {!autovoteRunning && (
                     <>
-                        <button className="btn btn-latvian btn-sm" onClick={handleVoteAll} disabled={votingAll}>
-                            {votingAll ? (
-                                <>
-                                    <span className="loading loading-spinner loading-xs" />
-                                    {t('app.votingAll')}
-                                </>
-                            ) : (
+                        <AsyncActionButton
+                            className="btn btn-latvian btn-sm"
+                            action={() => window.api.voteAllChallengesManual()}
+                            onSuccess={refetchAfterAction}
+                            failureLogPrefix="Vote All failed"
+                            errorLogPrefix="Error during Vote All"
+                            loadingLabel={t('app.votingAll')}
+                            idleContent={
                                 <>
                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path
@@ -158,15 +130,16 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                                     </svg>
                                     {t('app.voteAll')}
                                 </>
-                            )}
-                        </button>
-                        <button className="btn btn-latvian btn-sm" onClick={handleRun} disabled={runningCycle}>
-                            {runningCycle ? (
-                                <>
-                                    <span className="loading loading-spinner loading-xs" />
-                                    {t('app.running')}
-                                </>
-                            ) : (
+                            }
+                        />
+                        <AsyncActionButton
+                            className="btn btn-latvian btn-sm"
+                            action={() => window.api.runVotingCycle()}
+                            onSuccess={refetchAfterAction}
+                            failureLogPrefix="Run failed"
+                            errorLogPrefix="Error during Run"
+                            loadingLabel={t('app.running')}
+                            idleContent={
                                 <>
                                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path
@@ -178,21 +151,10 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                                     </svg>
                                     {t('app.run')}
                                 </>
-                            )}
-                        </button>
+                            }
+                        />
                         <button className="btn btn-ghost btn-sm" onClick={handleRefresh} disabled={loading}>
-                            {loading ? (
-                                <span className="loading loading-spinner loading-xs" />
-                            ) : (
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth="2"
-                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                    />
-                                </svg>
-                            )}
+                            {loading ? <span className="loading loading-spinner loading-xs" /> : <ResetIcon />}
                             {t('app.refresh')}
                         </button>
                     </>

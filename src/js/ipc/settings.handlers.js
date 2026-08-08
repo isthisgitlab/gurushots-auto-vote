@@ -19,6 +19,7 @@ try {
     // Capacitor / CLI: register() in this module is never reached.
 }
 const settings = require('../settings');
+const { registerHandlers } = require('./registerHandlers');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 
@@ -226,10 +227,7 @@ const register = (ipcMain) => {
             win.webContents.send('settings-changed', newSettings);
         });
     };
-    const handlers = buildHandlers({ broadcastSettingsChange });
-    for (const [channel, impl] of Object.entries(handlers)) {
-        ipcMain.handle(channel, impl);
-    }
+    registerHandlers(ipcMain, buildHandlers({ broadcastSettingsChange }));
 };
 
 module.exports = { register, buildHandlers };

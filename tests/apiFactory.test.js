@@ -190,6 +190,17 @@ describe('apiFactory', () => {
         });
     });
 
+    describe('real/mock surface parity', () => {
+        test('mockApi exposes exactly the realApi key set', () => {
+            // Parity is a construction-time invariant (mockApi is built from
+            // realApi's key list, with a throwing guard for missing mock
+            // counterparts) — this pins it so a rename/removal on either side
+            // fails loudly here, since typecheck can no longer see through
+            // the Object.fromEntries construction.
+            expect(Object.keys(mockApi).sort()).toEqual(Object.keys(realApi).sort());
+        });
+    });
+
     describe('mock surface debug wrapper', () => {
         test('logs the mock label and forwards args/result to the wrapped client', async () => {
             const { mockApiClient } = require('../src/js/mock');

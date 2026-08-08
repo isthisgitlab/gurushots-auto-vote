@@ -1,50 +1,19 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useIpcQuery } from './useIpcQuery';
+
+const fetchSettingsSchema = () => window.api.getSettingsSchema();
 
 /**
  * Hook for fetching settings schema and defaults via IPC
  * @returns {{ schema: Object|null, defaults: Object|null, groups: Array|null, profileLimits: Object|null, loading: boolean, error: Error|null, refetch: function }}
  */
 export function useSettingsSchema() {
-    const [schema, setSchema] = useState(null);
-    const [defaults, setDefaults] = useState(null);
-    const [groups, setGroups] = useState(null);
-    const [profileLimits, setProfileLimits] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    const refetch = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            const result = await window.api.getSettingsSchema();
-            setSchema(result?.schema || null);
-            setDefaults(result?.defaults || null);
-            setGroups(result?.groups || null);
-            setProfileLimits(result?.profileLimits || null);
-        } catch (err) {
-            setError(err);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        refetch();
-    }, [refetch]);
-
-    useEffect(() => {
-        if (!window.api?.onSettingsChanged) return undefined;
-        return window.api.onSettingsChanged(() => {
-            refetch();
-        });
-    }, [refetch]);
+    const { data, loading, error, refetch } = useIpcQuery(fetchSettingsSchema, { subscribe: true });
 
     return {
-        schema,
-        defaults,
-        groups,
-        profileLimits,
+        schema: data?.schema || null,
+        defaults: data?.defaults || null,
+        groups: data?.groups || null,
+        profileLimits: data?.profileLimits || null,
         loading,
         error,
         refetch,

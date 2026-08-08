@@ -10,12 +10,15 @@ import { SettingInput } from './SettingInput';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ModalActionRow } from '@/components/ui/ModalActionRow';
+import { useAutovote } from '@/contexts/AutovoteContext';
 
 /**
  * Per-challenge settings modal
  */
 export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challengeTitle, challenge = null }) {
     const { t } = useTranslation();
+    const { rearmSchedule } = useAutovote();
     const {
         schema,
         defaults,
@@ -172,10 +175,9 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                 }
             }
 
-            // Notify threshold scheduling update
-            if (window.handleThresholdSettingsChange) {
-                await window.handleThresholdSettingsChange();
-            }
+            // Re-arm the cadence timer so a changed per-challenge threshold /
+            // scheduled fill takes effect now, not after the current wait.
+            await rearmSchedule();
 
             onClose();
         } catch (err) {
@@ -183,7 +185,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         } finally {
             setSaving(false);
         }
-    }, [challengeId, overrides, schema, onClose]);
+    }, [challengeId, overrides, schema, rearmSchedule, onClose]);
 
     if (!isOpen) return null;
 
@@ -447,29 +449,15 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                     })}
 
                     {/* Action Buttons */}
-                    <div className="flex justify-end gap-2 pt-4 border-t border-base-300">
-                        <button className="btn btn-latvian" onClick={handleSave} disabled={saving}>
-                            {saving && <span className="loading loading-spinner loading-xs" />}
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                            {t('app.save')}
-                        </button>
-                        <button className="btn btn-warning" onClick={handleClearAll}>
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2"
-                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                />
-                            </svg>
-                            {t('app.clearAll')}
-                        </button>
-                        <button className="btn" onClick={onClose}>
-                            {t('app.cancel')}
-                        </button>
-                    </div>
+                    <ModalActionRow
+                        bordered
+                        onSave={handleSave}
+                        saving={saving}
+                        onSecondary={handleClearAll}
+                        secondaryLabel={t('app.clearAll')}
+                        secondaryIcon="trash"
+                        onCancel={onClose}
+                    />
                 </div>
             )}
         </Modal>

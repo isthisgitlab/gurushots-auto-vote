@@ -5,6 +5,7 @@ const settings = require('./settings');
 const { initializeHeaders } = require('./api/randomizer');
 const logger = require('./logger');
 const AutoUpdater = require('./services/AutoUpdater');
+const { clearAuthToken } = require('./services/auth');
 const logIpc = require('./ipc/log.handlers');
 const updateIpc = require('./ipc/update.handlers');
 const miscIpc = require('./ipc/misc.handlers');
@@ -510,29 +511,37 @@ ipcMain.on('login-success', () => {
     createMainWindow();
 });
 
-// Handle logout
+// Handle logout. ipcMain.on expects a void listener, so the async flow runs
+// in a caught IIFE — a failed token flush is logged, and the window teardown
+// still proceeds so the user is never stuck on a dead main window.
 ipcMain.on('logout', () => {
     if (!mainWindow) return;
 
-    // Always clear the token on logout (regardless of stay logged in setting)
-    settings.setSetting('token', '');
+    void (async () => {
+        // Always clear the token on logout (regardless of stay logged in setting)
+        await clearAuthToken();
+    })()
+        .catch((err) => {
+            logger.withCategory('authentication').error('Logout failed to clear token', err);
+        })
+        .finally(() => {
+            // Reset mock value to environment default while preserving theme and remember me settings
+            const envInfo = settings.getEnvironmentInfo();
+            settings.setSetting('mock', envInfo.defaultMock);
 
-    // Reset mock value to environment default while preserving theme and remember me settings
-    const envInfo = settings.getEnvironmentInfo();
-    settings.setSetting('mock', envInfo.defaultMock);
+            // Open the login window only after the main window is fully closed
+            mainWindow.once('closed', () => {
+                // If a login window is already open, just focus it instead of creating a second one
+                if (loginWindow) {
+                    loginWindow.focus();
+                } else {
+                    createLoginWindow();
+                }
+            });
 
-    // Open the login window only after the main window is fully closed
-    mainWindow.once('closed', () => {
-        // If a login window is already open, just focus it instead of creating a second one
-        if (loginWindow) {
-            loginWindow.focus();
-        } else {
-            createLoginWindow();
-        }
-    });
-
-    // Close main window
-    mainWindow.close();
+            // Close main window
+            mainWindow.close();
+        });
 });
 
 // Settings IPC handlers live in ipc/settings.handlers.js — that

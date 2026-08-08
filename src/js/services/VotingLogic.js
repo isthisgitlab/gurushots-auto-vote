@@ -20,6 +20,7 @@ const { getNextScheduleThresholdSec } = /** @type {any} */ (require('./autoFill'
 // wallClock.js imports nothing). Cast for the same boundary reason as the
 // two imports above — wallClock.js isn't `// @ts-check`ed yet.
 const { occurrencesOf } = /** @type {any} */ (require('../scheduling/wallClock'));
+const { isBoostWindowOpen: boostWindowOpen } = require('../voting/boostWindow');
 
 /**
  * Scheduled-fill state for a challenge at `now`.
@@ -530,19 +531,12 @@ const shouldApplyBoost = (challenge, now, options = {}) => {
  * with an active timer, or AVAILABLE_KEY / AVAILABLE without timeout).
  * Used by both shouldApplyBoost (for its own decision) and shouldApplyTurbo
  * (to optionally skip turbo while a boost is queued for the same challenge).
+ * Predicate itself is shared with the renderer (voting/boostWindow.js).
  * @param {any} challenge
  * @param {number} now - Unix timestamp in seconds
  * @returns {boolean}
  */
-const isBoostWindowOpen = (challenge, now) => {
-    const boost = challenge?.member?.boost || {};
-    const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
-    if (boost.state === 'AVAILABLE_KEY') return true;
-    if (boost.state === 'AVAILABLE') {
-        return hasTimeout ? boost.timeout > now : true;
-    }
-    return false;
-};
+const isBoostWindowOpen = (challenge, now) => boostWindowOpen(challenge?.member?.boost, now);
 
 /**
  * @param {string} challengeId

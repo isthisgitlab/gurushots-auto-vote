@@ -10,9 +10,9 @@
  */
 
 const logger = require('../logger');
+const { registerHandlers } = require('./registerHandlers');
 const AutoUpdater = require('../services/AutoUpdater');
-
-const RELEASES_FALLBACK_URL = 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest';
+const { getReleasesUrl } = require('../services/UpdateChecker');
 
 const buildHandlers = (deps) => {
     const { getAutoUpdater, setAutoUpdater, getMainWindow } = deps;
@@ -46,7 +46,7 @@ const buildHandlers = (deps) => {
                 return {
                     success: false,
                     error: error.message,
-                    fallbackUrl: autoUpdater ? autoUpdater.getReleasesUrl() : RELEASES_FALLBACK_URL,
+                    fallbackUrl: getReleasesUrl(),
                 };
             }
         },
@@ -99,11 +99,7 @@ const buildHandlers = (deps) => {
         },
 
         'get-releases-url': () => {
-            const autoUpdater = getAutoUpdater();
-            if (autoUpdater) {
-                return { success: true, url: autoUpdater.getReleasesUrl() };
-            }
-            return { success: true, url: RELEASES_FALLBACK_URL };
+            return { success: true, url: getReleasesUrl() };
         },
 
         'can-auto-update': () => {
@@ -117,10 +113,7 @@ const buildHandlers = (deps) => {
 };
 
 const register = (ipcMain, deps) => {
-    const handlers = buildHandlers(deps);
-    for (const [channel, impl] of Object.entries(handlers)) {
-        ipcMain.handle(channel, impl);
-    }
+    registerHandlers(ipcMain, buildHandlers(deps));
 };
 
 module.exports = { register, buildHandlers };

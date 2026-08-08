@@ -17,19 +17,9 @@
 
 const logger = require('../logger');
 const settings = require('../settings');
-const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } = require('./randomDelay');
+const { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS } = require('./randomDelay');
 const { computeNextCycleDelayMs } = require('./thresholdWindow');
-
-// Node resolver for the shared threshold math: per-challenge lastMinuteThreshold
-// straight from the settings facade (synchronous on Electron/CLI/Android-node).
-const resolveThreshold = (challengeId) => settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
-
-// Node resolver for the scheduled-fill cadence cap (scheduling/scheduledFill.js).
-const resolveScheduledFill = (challengeId) => ({
-    enabled: settings.getEffectiveSetting('useScheduledFill', challengeId) === true,
-    timeOfDay: settings.getEffectiveSetting('scheduledFillTime', challengeId),
-    beforeEndSec: Number(settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId)) || 0,
-});
+const { resolveThreshold, resolveScheduledFill } = require('./nodeResolvers');
 
 /**
  * Create a continuous voting scheduler.
@@ -78,12 +68,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
             });
 
             if (decision.mode === 'normal') {
-                // Anchor to the previous cycle start: floor handles an overrun
-                // (cycle took longer than the delay); the delayMs ceiling handles
-                // a wall-clock jump backward that would otherwise inflate the wait.
-                const anchorMs = previousCycleStartMs ?? Date.now();
-                const remainingMs = anchorMs + decision.delayMs - Date.now();
-                waitMs = Math.min(decision.delayMs, Math.max(MIN_CYCLE_GAP_MS, remainingMs));
+                waitMs = anchoredWaitMs(decision.delayMs, previousCycleStartMs);
                 logger
                     .withCategory('voting')
                     .info(

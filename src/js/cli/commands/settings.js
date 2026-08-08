@@ -204,6 +204,38 @@ const resetAllSettings = () => {
     }
 };
 
+/**
+ * Print the full settings schema (type, default, per-challenge flag, label,
+ * description per key). Shared by `pnpm settings:schema` and available to
+ * the main CLI.
+ */
+const dumpSchema = () => {
+    logger.withCategory('ui').info('Settings Schema:');
+    logger.withCategory('ui').info('================');
+    Object.entries(settings.SETTINGS_SCHEMA).forEach(([key, config]) => {
+        logger.withCategory('ui').info(`\n${key}:`);
+        logger.withCategory('ui').info(`  Type: ${config.type}`);
+        logger.withCategory('ui').info(`  Default: ${JSON.stringify(config.default)}`);
+        logger.withCategory('ui').info(`  Per-Challenge: ${config.perChallenge ? 'Yes' : 'No'}`);
+        if (config.label) logger.withCategory('ui').info(`  Label: ${config.label}`);
+        if (config.description) logger.withCategory('ui').info(`  Description: ${config.description}`);
+    });
+};
+
+/**
+ * Print the effective global default for every schema key (stored override
+ * or schema default). Shared by `pnpm settings:global-defaults`.
+ */
+const listGlobalDefaults = () => {
+    const stored = settings.loadSettings().challengeSettings?.globalDefaults || {};
+    logger.withCategory('ui').info('Global Defaults for Schema Settings:');
+    logger.withCategory('ui').info('===================================');
+    Object.entries(settings.SETTINGS_SCHEMA).forEach(([key, config]) => {
+        const currentValue = stored[key] !== undefined ? stored[key] : config.default;
+        logger.withCategory('ui').info(`${key}: ${JSON.stringify(currentValue)}`);
+    });
+};
+
 const listProfiles = () => {
     try {
         const profiles = settings.getChallengeProfiles();
@@ -404,6 +436,8 @@ module.exports = {
     listSettings,
     resetSetting,
     resetAllSettings,
+    dumpSchema,
+    listGlobalDefaults,
     helpSettings,
     resetWindows,
     listProfiles,

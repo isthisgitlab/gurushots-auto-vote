@@ -239,9 +239,25 @@ describe('update-check helpers', () => {
         expect(metadata.setLastUpdateCheck('123')).toBe(false);
     });
 
-    test('setSkipUpdateVersion rejects empty / non-string versions', () => {
-        expect(metadata.setSkipUpdateVersion('')).toBe(false);
-        expect(metadata.setSkipUpdateVersion(null)).toBe(false);
-        expect(metadata.setSkipUpdateVersion(123)).toBe(false);
+    test('getLegacySkipVersion reads the metadata-resident skip preference', () => {
+        setStoredMetadata({ updateCheck: { lastCheck: 1, skipVersion: '9.9.9' } });
+        expect(metadata.getLegacySkipVersion()).toBe('9.9.9');
+        setStoredMetadata({ updateCheck: { lastCheck: 1, skipVersion: null } });
+        expect(metadata.getLegacySkipVersion()).toBeNull();
+    });
+
+    test('clearLegacySkipVersion nulls the legacy field and persists', () => {
+        setStoredMetadata({ updateCheck: { lastCheck: 1, skipVersion: '9.9.9' } });
+        const writes = captureWrites();
+        expect(metadata.clearLegacySkipVersion()).toBe(true);
+        expect(writes.at(-1).updateCheck.skipVersion).toBeNull();
+        expect(writes.at(-1).updateCheck.lastCheck).toBe(1);
+    });
+
+    test('clearLegacySkipVersion is a no-op (no write) when nothing is stored', () => {
+        setStoredMetadata({ updateCheck: { lastCheck: 1, skipVersion: null } });
+        const writes = captureWrites();
+        expect(metadata.clearLegacySkipVersion()).toBe(true);
+        expect(writes).toHaveLength(0);
     });
 });

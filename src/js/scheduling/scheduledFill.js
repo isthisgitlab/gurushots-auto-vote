@@ -18,6 +18,11 @@
 
 const { occurrencesOf } = require('./wallClock');
 
+// Non-flash challenges that are still open at `now`. Flash challenges never
+// enter last-minute/scheduled-fill mode, and closed ones can't. Shared with
+// thresholdWindow.js so the two cadence paths agree on eligibility.
+const eligibleChallenges = (challenges, now) => challenges.filter((c) => c.type !== 'flash' && c.close_time > now);
+
 /**
  * Soonest upcoming scheduled-fill window start strictly after `now` across
  * still-open, non-flash challenges. Per challenge:
@@ -38,7 +43,7 @@ const { occurrencesOf } = require('./wallClock');
  * @returns {Promise<{challengeId, challengeTitle, startTime: number, form: 'time-of-day'|'before-end'}|null>}
  */
 async function soonestScheduledStart(challenges, now, resolveScheduledFill, timezone) {
-    const eligible = challenges.filter((c) => c.type !== 'flash' && c.close_time > now);
+    const eligible = eligibleChallenges(challenges, now);
     // One resolution pass for the same reason resolveEligibleThresholds does it:
     // per-question resolution would double the IPC cost on the WebView.
     const configs = await Promise.all(
@@ -88,4 +93,4 @@ async function soonestScheduledStart(challenges, now, resolveScheduledFill, time
     return best;
 }
 
-module.exports = { soonestScheduledStart };
+module.exports = { soonestScheduledStart, eligibleChallenges };

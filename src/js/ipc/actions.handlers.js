@@ -9,6 +9,7 @@
  */
 
 const settings = require('../settings');
+const { registerHandlers } = require('./registerHandlers');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
@@ -262,10 +263,7 @@ const buildHandlers = () => ({
 });
 
 const register = (ipcMain) => {
-    const handlers = buildHandlers();
-    for (const [channel, impl] of Object.entries(handlers)) {
-        ipcMain.handle(channel, impl);
-    }
+    registerHandlers(ipcMain, buildHandlers());
 };
 
 module.exports = { register, buildHandlers };

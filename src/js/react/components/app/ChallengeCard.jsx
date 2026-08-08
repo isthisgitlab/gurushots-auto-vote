@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus } from '@/utils/formatters';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
+import { useTick } from '@/hooks/useTick';
+import { useAutoClear } from '@/hooks/useAutoClear';
 import { VoteButton } from './VoteButton';
 import { RunButton } from './RunButton';
 import { EntryBadge } from './EntryBadge';
@@ -34,11 +36,7 @@ export function ChallengeCard({
     // Tick once a second — only meaningful when this challenge is in TIMER
     // state and we want canPlayAutoTurbo to flip to true the moment the
     // cooldown elapses without waiting for an external poll.
-    const [now, setNow] = useState(Math.floor(Date.now() / 1000));
-    useEffect(() => {
-        const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
-        return () => clearInterval(id);
-    }, []);
+    const now = useTick(1000);
 
     // timeRemaining is a Signal<string> from useTimers — reading .value here
     // subscribes this card so the countdown text stays live. The badges smoke
@@ -61,17 +59,8 @@ export function ChallengeCard({
     const canPlayAutoTurbo =
         challengeStillOpen && (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
 
-    useEffect(() => {
-        if (!turboError) return undefined;
-        const id = setTimeout(clearTurboError, TURBO_ERROR_DISPLAY_MS);
-        return () => clearTimeout(id);
-    }, [turboError, clearTurboError]);
-
-    useEffect(() => {
-        if (!fillError) return undefined;
-        const id = setTimeout(clearFillError, FILL_ERROR_DISPLAY_MS);
-        return () => clearTimeout(id);
-    }, [fillError, clearFillError]);
+    useAutoClear(turboError, clearTurboError, TURBO_ERROR_DISPLAY_MS);
+    useAutoClear(fillError, clearFillError, FILL_ERROR_DISPLAY_MS);
 
     const handlePlayAutoTurbo = async () => {
         const result = await playAutoTurbo(challenge.id, challenge.title);

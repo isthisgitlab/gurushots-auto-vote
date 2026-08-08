@@ -5,6 +5,7 @@
  */
 
 const mockIndex = require('../../src/js/mock/index');
+const cancellation = require('../../src/js/voting/cancellation');
 
 // Mock the individual mock modules
 jest.mock('../../src/js/mock/auth', () => ({
@@ -24,7 +25,7 @@ jest.mock('../../src/js/mock/voting', () => ({
     mockEmptyVoteImages: { images: [] },
     mockVoteSubmissionSuccess: { success: true, votes: 5 },
     mockVoteSubmissionFailure: { error: 'Vote submission failed' },
-    generateMockVoteImages: jest.fn((url, challenge) => ({ images: [{ id: 'generated-img', ratio: 30 }] })),
+    generateMockVoteImages: jest.fn(() => ({ images: [{ id: 'generated-img', ratio: 30 }] })),
 }));
 
 jest.mock('../../src/js/mock/boost', () => ({
@@ -79,6 +80,9 @@ jest.mock('../../src/js/logger', () => {
         success: mockSuccessFn,
         warning: jest.fn(),
         api: mockApiFn,
+        progress: jest.fn(),
+        startOperation: jest.fn(),
+        endOperation: jest.fn(),
     }));
 
     return mock;
@@ -100,7 +104,7 @@ describe('mock/index', () => {
         logger.__mockErrorFn.mockClear();
         logger.__mockApiFn.mockClear();
         // Reset cancellation flag
-        mockIndex.setCancellationFlag(false);
+        cancellation.setCancelled(false);
     });
 
     describe('module exports', () => {
@@ -127,7 +131,6 @@ describe('mock/index', () => {
             expect(typeof mockIndex.simulateApiResponse).toBe('function');
             expect(typeof mockIndex.simulateApiError).toBe('function');
             expect(typeof mockIndex.mockApiClient).toBe('object');
-            expect(typeof mockIndex.setCancellationFlag).toBe('function');
         });
     });
 
@@ -202,15 +205,6 @@ describe('mock/index', () => {
 
             const endTime = Date.now();
             expect(endTime - startTime).toBeGreaterThanOrEqual(490); // Allow 10ms tolerance for CI timing precision
-        });
-    });
-
-    describe('setCancellationFlag', () => {
-        test('should set cancellation flag', () => {
-            mockIndex.setCancellationFlag(true);
-
-            expect(() => mockIndex.setCancellationFlag(true)).not.toThrow();
-            expect(() => mockIndex.setCancellationFlag(false)).not.toThrow();
         });
     });
 
@@ -451,6 +445,14 @@ describe('mock/index', () => {
         });
 
         describe('fetchChallengesAndVote', () => {
+            beforeEach(() => {
+                // The shared orchestration fetches through
+                // mockApiClient.getActiveChallenges (session-cached, prefers
+                // generateMockChallenges) — route it at the per-test fixture.
+                mockIndex.clearSessionCache();
+                challenges.generateMockChallenges.mockImplementation(() => challenges.mockActiveChallenges);
+            });
+
             test('should complete voting process successfully', async () => {
                 // Mock challenges with proper structure for the voting process
                 challenges.mockActiveChallenges = {
@@ -475,24 +477,23 @@ describe('mock/index', () => {
                 // so callers can reuse it for threshold scheduling.
                 expect(result).toEqual({
                     success: true,
-                    message: 'Mock voting process completed',
+                    message: 'Voting process completed successfully',
                     challenges: expect.any(Array),
                 });
-                expect(logger.__mockInfoFn).toHaveBeenCalledWith('Mock Voting Process Started', null);
-                expect(logger.__mockInfoFn).toHaveBeenCalledWith('Mock Voting Process Completed', null);
+                // The mock binder logs its preamble, then runs the SHARED path.
+                expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock fetchChallengesAndVote', null);
             });
 
             test('should handle cancellation during voting process', async () => {
-                mockIndex.setCancellationFlag(true);
+                cancellation.setCancelled(true);
 
                 const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 
                 expect(result).toEqual({
                     success: false,
-                    message: 'Mock voting cancelled by user',
+                    message: 'Voting cancelled by user',
                     challenges: expect.any(Array),
                 });
-                // Note: Cancellation messages were not migrated to logger
             });
 
             test('should return error for missing token', async () => {
@@ -500,10 +501,29 @@ describe('mock/index', () => {
                     errors.mockAuthErrors.invalidToken,
                 );
             });
+
+            test('never runs stale-metadata cleanup (shared un-namespaced store)', async () => {
+                // Mock ids never match real challenge ids, so a mock cycle
+                // running cleanupStaleMetadata would purge the user's REAL
+                // voting metadata. The binder must inject null for it.
+                const metadata = require('../../src/js/metadata');
+                const cleanupSpy = jest.spyOn(metadata, 'cleanupStaleMetadata');
+
+                const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
+
+                expect(result.success).toBe(true);
+                expect(cleanupSpy).not.toHaveBeenCalled();
+                cleanupSpy.mockRestore();
+            });
         });
 
         describe('fetchChallengesAndVote — fill-new options', () => {
             const settings = require('../../src/js/settings');
+
+            beforeEach(() => {
+                mockIndex.clearSessionCache();
+                challenges.generateMockChallenges.mockImplementation(() => challenges.mockActiveChallenges);
+            });
 
             const fillableChallenge = (over = {}) => {
                 const now = Math.floor(Date.now() / 1000);
@@ -615,15 +635,21 @@ describe('mock/index', () => {
                 });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');
+                const boostSpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoost');
                 const turboSpy = jest.spyOn(mockIndex.mockApiClient, 'applyTurbo');
 
                 await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
 
-                // Boost consumed the only free slot (reflectNewEntry updated the local
-                // entries), so turbo saw no-slots and fell back to the existing entry.
+                // Deadline actions run in timer order (largest window first) on the
+                // shared path — with default timers (turboTime 7200 > boostTime 3600)
+                // TURBO acts first and consumes the only free slot (reflectNewEntry
+                // updates the local entries), so boost fill-new sees no-slots and
+                // falls back to boosting via applyBoost. Exactly one submit total.
                 expect(submitSpy).toHaveBeenCalledTimes(1);
-                expect(boostEntrySpy).toHaveBeenCalledTimes(1);
-                expect(turboSpy).toHaveBeenCalledWith('1', 'e1', 'test-token');
+                const submittedId = submitSpy.mock.calls[0][1][0];
+                expect(turboSpy).toHaveBeenCalledWith('1', submittedId, 'test-token');
+                expect(boostEntrySpy).not.toHaveBeenCalled();
+                expect(boostSpy).toHaveBeenCalledTimes(1);
             });
         });
     });

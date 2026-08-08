@@ -68,4 +68,25 @@ const extractAuthResult = (response) => {
     };
 };
 
-module.exports = { requireAuthToken, extractAuthResult };
+/**
+ * Core logout shared by every shell (Electron main, CLI, Capacitor bridge,
+ * BaseMiddleware): clear the token and make sure the cleared value is
+ * DURABLY persisted before resolving. The flush await is the load-bearing
+ * part on Capacitor — settings writes go through a write-behind cache to
+ * @capacitor/preferences, so without it an OS kill right after logout can
+ * leave the old token persisted and silently restore the session on next
+ * launch. On Electron/CLI the write is synchronous and the flush no-ops.
+ *
+ * Shell-specific behavior (window teardown, mock reset, event emission,
+ * logging wording) stays with each caller.
+ *
+ * @returns {Promise<boolean>} true when a token was actually cleared.
+ */
+const clearAuthToken = async () => {
+    const hadToken = !!settings.getSetting('token');
+    settings.setSetting('token', '');
+    await settings.flushPendingWrites?.();
+    return hadToken;
+};
+
+module.exports = { requireAuthToken, extractAuthResult, clearAuthToken };

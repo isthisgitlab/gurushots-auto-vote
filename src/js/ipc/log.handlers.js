@@ -13,6 +13,7 @@
  */
 
 const logger = require('../logger');
+const { registerHandlers } = require('./registerHandlers');
 
 const logStreamWindows = new Set();
 
@@ -91,10 +92,7 @@ const buildHandlers = () => ({
 });
 
 const register = (ipcMain) => {
-    const handlers = buildHandlers();
-    for (const [channel, impl] of Object.entries(handlers)) {
-        ipcMain.handle(channel, impl);
-    }
+    registerHandlers(ipcMain, buildHandlers());
     // logger.js looks up this function via the global to push log
     // events from any module without a back-reference.
     global.sendLogToGUI = sendLogToGUI;

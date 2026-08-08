@@ -3,8 +3,28 @@
  * Mocks browser globals and window.api
  */
 
-// Mock window.api for IPC calls
-const mockApi = {
+const { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } = require('../../ipc/manifest');
+
+// Mock window.api for IPC calls. The base surface is GENERATED from the
+// shared channel manifest so every method preload/capacitor would expose
+// exists here too (a hook calling a brand-new channel can never hit
+// `undefined is not a function` in tests). The literal object below then
+// overrides the methods whose tests need tailored resolved values.
+const mockApi = {};
+for (const channel of invokeChannels) {
+    mockApi[kebabToCamel(channel)] = jest.fn().mockResolvedValue(undefined);
+}
+for (const method of Object.keys(aliases)) {
+    mockApi[method] = jest.fn().mockResolvedValue(undefined);
+}
+for (const method of Object.keys(sendMethods)) {
+    mockApi[method] = jest.fn().mockResolvedValue(undefined);
+}
+for (const method of Object.keys(eventMethods)) {
+    mockApi[method] = jest.fn();
+}
+
+Object.assign(mockApi, {
     // Settings
     getSettings: jest.fn().mockResolvedValue({}),
     getSetting: jest.fn().mockResolvedValue(null),
@@ -109,7 +129,7 @@ const mockApi = {
     saveChallengeProfile: jest.fn().mockResolvedValue(true),
     deleteChallengeProfile: jest.fn().mockResolvedValue(true),
     applyChallengeProfile: jest.fn().mockResolvedValue(true),
-};
+});
 
 // Mock window.translationManager
 const mockTranslationManager = {

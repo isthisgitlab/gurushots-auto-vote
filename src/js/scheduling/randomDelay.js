@@ -31,4 +31,27 @@ const getRandomCheckFrequencyMs = (settings) => {
     return Math.round(minutes * MS_PER_MINUTE);
 };
 
-module.exports = { getRandomCheckFrequencyMs, DEFAULT_MINUTES, MS_PER_MINUTE, MIN_CYCLE_GAP_MS };
+/**
+ * Normal-mode wait until the next cycle, anchored to the previous cycle's
+ * START so the gap between cycle starts ≈ the rolled delay regardless of how
+ * long the cycle itself took. The minGap floor handles an overrun (cycle ran
+ * longer than the delay — recover after a short pause instead of re-firing
+ * immediately); the delayMs ceiling handles a wall-clock jump backward that
+ * would otherwise inflate the wait. Shared by the CLI scheduler
+ * (runScheduler.js) and the GUI cadence chain (AutovoteContext.jsx) — this
+ * formula drifting between the two is exactly the bug class the extraction
+ * prevents.
+ *
+ * @param {number} delayMs - the rolled normal-mode delay
+ * @param {number|null} previousCycleStartMs - anchor; null on a standalone (re)arm
+ * @param {number} [nowMs]
+ * @param {number} [minGapMs]
+ * @returns {number}
+ */
+const anchoredWaitMs = (delayMs, previousCycleStartMs, nowMs = Date.now(), minGapMs = MIN_CYCLE_GAP_MS) => {
+    const anchorMs = previousCycleStartMs ?? nowMs;
+    const remainingMs = anchorMs + delayMs - nowMs;
+    return Math.min(delayMs, Math.max(minGapMs, remainingMs));
+};
+
+module.exports = { getRandomCheckFrequencyMs, anchoredWaitMs, DEFAULT_MINUTES, MS_PER_MINUTE, MIN_CYCLE_GAP_MS };

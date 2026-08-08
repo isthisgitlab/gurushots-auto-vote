@@ -3,17 +3,21 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
+import { useAutovote } from '@/contexts/AutovoteContext';
 import { groupSchemaEntries } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { ResetButton } from '@/components/ui/ResetButton';
+import { ModalActionRow } from '@/components/ui/ModalActionRow';
 
 /**
  * Global settings modal
  */
 export function SettingsModal({ isOpen, onClose }) {
     const { t, language, setLanguage } = useTranslation();
+    const { rearmSchedule } = useAutovote();
     const { settings, updateSetting, refetch: refetchSettings } = useSettings();
     const { schema, defaults, groups, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
@@ -161,14 +165,14 @@ export function SettingsModal({ isOpen, onClose }) {
             if (uiValues.language !== language) {
                 setLanguage(uiValues.language);
             }
-            if (window.handleThresholdSettingsChange) {
-                await window.handleThresholdSettingsChange();
-            }
+            // Re-arm the cadence timer so a changed threshold / scheduled-fill
+            // setting takes effect now, not after the current wait elapses.
+            await rearmSchedule();
             onClose();
         } catch (err) {
             await window.api.logError(`Error saving settings: ${err.message || err}`);
         }
-    }, [commit, titleRules, uiValues.language, language, setLanguage, onClose]);
+    }, [commit, titleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);
 
     if (!isOpen) return null;
 
@@ -184,29 +188,13 @@ export function SettingsModal({ isOpen, onClose }) {
                         </div>
                     )}
                     {/* Top Action Buttons */}
-                    <div className="flex justify-end gap-2">
-                        <button className="btn btn-latvian" onClick={handleSave} disabled={saving}>
-                            {saving && <span className="loading loading-spinner loading-xs" />}
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                            {t('app.save')}
-                        </button>
-                        <button className="btn btn-warning" onClick={handleResetAll}>
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2"
-                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                />
-                            </svg>
-                            {t('app.resetAll')}
-                        </button>
-                        <button className="btn" onClick={handleCancel}>
-                            {t('app.cancel')}
-                        </button>
-                    </div>
+                    <ModalActionRow
+                        onSave={handleSave}
+                        saving={saving}
+                        onSecondary={handleResetAll}
+                        secondaryLabel={t('app.resetAll')}
+                        onCancel={handleCancel}
+                    />
 
                     {/* Application Settings Section */}
                     <div>
@@ -230,16 +218,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                         onChange={(e) => handleUiChange('theme', e.target.checked ? 'dark' : 'light')}
                                     />
                                     <span className="text-sm">{t('common.dark')}</span>
-                                    <button className="btn btn-ghost btn-sm" onClick={() => handleResetUi('theme')}>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth="2"
-                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                            />
-                                        </svg>
-                                    </button>
+                                    <ResetButton onClick={() => handleResetUi('theme')} />
                                 </div>
                             </div>
 
@@ -259,16 +238,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                         <option value="en">{t('app.english')}</option>
                                         <option value="lv">{t('app.latvian')}</option>
                                     </select>
-                                    <button className="btn btn-ghost btn-sm" onClick={() => handleResetUi('language')}>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth="2"
-                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                            />
-                                        </svg>
-                                    </button>
+                                    <ResetButton onClick={() => handleResetUi('language')} />
                                 </div>
                             </div>
 
@@ -313,16 +283,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                     >
                                         ×
                                     </button>
-                                    <button className="btn btn-ghost btn-sm" onClick={() => handleResetUi('timezone')}>
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth="2"
-                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                            />
-                                        </svg>
-                                    </button>
+                                    <ResetButton onClick={() => handleResetUi('timezone')} />
                                 </div>
                                 {tzInputVisible && (
                                     <input
@@ -387,22 +348,12 @@ export function SettingsModal({ isOpen, onClose }) {
                                         }}
                                     />
                                     <span className="text-sm">{t('app.minutes')}</span>
-                                    <button
-                                        className="btn btn-ghost btn-sm"
+                                    <ResetButton
                                         onClick={() => {
                                             handleResetUi('checkFrequencyMin');
                                             handleResetUi('checkFrequencyMax');
                                         }}
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth="2"
-                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                            />
-                                        </svg>
-                                    </button>
+                                    />
                                 </div>
                             </div>
 
@@ -439,22 +390,12 @@ export function SettingsModal({ isOpen, onClose }) {
                                             handleUiChange('apiRetryBaseDelayMs', parseInt(e.target.value, 10) || 1000)
                                         }
                                     />
-                                    <button
-                                        className="btn btn-ghost btn-sm"
+                                    <ResetButton
                                         onClick={() => {
                                             handleResetUi('apiMaxRetries');
                                             handleResetUi('apiRetryBaseDelayMs');
                                         }}
-                                    >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path
-                                                strokeLinecap="round"
-                                                strokeLinejoin="round"
-                                                strokeWidth="2"
-                                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                            />
-                                        </svg>
-                                    </button>
+                                    />
                                 </div>
                             </div>
                         </div>
@@ -513,29 +454,14 @@ export function SettingsModal({ isOpen, onClose }) {
                     </div>
 
                     {/* Bottom Action Buttons */}
-                    <div className="flex justify-end gap-2 pt-4 border-t border-base-300">
-                        <button className="btn btn-latvian" onClick={handleSave} disabled={saving}>
-                            {saving && <span className="loading loading-spinner loading-xs" />}
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                            {t('app.save')}
-                        </button>
-                        <button className="btn btn-warning" onClick={handleResetAll}>
-                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2"
-                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                                />
-                            </svg>
-                            {t('app.resetAll')}
-                        </button>
-                        <button className="btn" onClick={handleCancel}>
-                            {t('app.cancel')}
-                        </button>
-                    </div>
+                    <ModalActionRow
+                        bordered
+                        onSave={handleSave}
+                        saving={saving}
+                        onSecondary={handleResetAll}
+                        secondaryLabel={t('app.resetAll')}
+                        onCancel={handleCancel}
+                    />
                 </div>
             )}
         </Modal>

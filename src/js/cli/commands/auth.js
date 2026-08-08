@@ -7,6 +7,7 @@
 const logger = require('../../logger');
 const settings = require('../../settings');
 const { refreshApi, getMiddleware } = require('../../apiFactory');
+const { clearAuthToken } = require('../../services/auth');
 const { createReadlineInterface, askYesNo, askInput, askSecret } = require('../prompts');
 
 const handleLogin = async () => {
@@ -82,9 +83,8 @@ const handleLogin = async () => {
  * (both just blank the token in settings); the next vote/run reports
  * "Not authenticated" until the user logs in again.
  */
-const handleLogout = () => {
-    const hadToken = !!settings.getSetting('token');
-    settings.setSetting('token', '');
+const handleLogout = async () => {
+    const hadToken = await clearAuthToken();
     if (hadToken) {
         logger.withCategory('authentication').success('Logged out — token cleared');
     } else {

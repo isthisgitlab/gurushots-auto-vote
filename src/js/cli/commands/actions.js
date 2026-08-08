@@ -9,6 +9,7 @@
  */
 
 const logger = require('../../logger');
+const { ensureAuthenticated } = require('../guards');
 const settings = require('../../settings');
 const { getMiddleware } = require('../../apiFactory');
 const { applyBoost } = require('../../api/boost');
@@ -30,9 +31,7 @@ const handlers = () => (_handlers ??= require('../../ipc/actions.handlers').buil
  * check — don't remove the handlers' own fetch on the assumption this covers it.
  */
 const resolveChallenge = async (challengeId) => {
-    if (!getMiddleware().isAuthenticated()) {
-        logger.withCategory('authentication').error('No authentication token found. Please login first');
-        logger.withCategory('ui').info('Run: login');
+    if (!ensureAuthenticated()) {
         return null;
     }
     try {

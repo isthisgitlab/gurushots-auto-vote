@@ -15,6 +15,7 @@
  */
 
 const logger = require('../logger');
+const { requireProfileArgs } = require('./guards');
 logger.withCategory('api').debug('CLI module loaded, starting initialization', null);
 
 const settings = require('../settings');
@@ -138,7 +139,7 @@ const main = async () => {
                 process.exit(0);
                 break;
             case 'logout':
-                handleLogout();
+                await handleLogout();
                 process.exit(0);
                 break;
             case 'vote': {
@@ -285,70 +286,29 @@ const main = async () => {
                 break;
             }
             case 'save-profile': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                if (!rest[0]) {
-                    logger.withCategory('ui').error('Please specify a profile name');
-                    logger.withCategory('ui').info('Usage: save-profile "<name>" --challenge=<id>');
-                    process.exit(1);
-                }
-                if (rest.length > 1) {
-                    // An unquoted multi-word name splits into several argv
-                    // tokens — fail loudly rather than saving the first word.
-                    logger.withCategory('ui').error(`Unexpected extra arguments: ${rest.slice(1).join(' ')}`);
-                    logger
-                        .withCategory('ui')
-                        .info('Quote profile names containing spaces: save-profile "2-pic tactic" --challenge=<id>');
-                    process.exit(1);
-                }
-                if (!challengeId) {
-                    logger
-                        .withCategory('ui')
-                        .error("Please specify --challenge=<id> to snapshot that challenge's overrides");
-                    logger.withCategory('ui').info('Usage: save-profile "<name>" --challenge=<id>');
-                    process.exit(1);
-                }
-                saveProfileFromChallenge(rest[0], challengeId);
+                const parsed = extractChallenge(args.slice(1));
+                const name = requireProfileArgs('save-profile', parsed, {
+                    needsChallenge: true,
+                    challengeHint: "Please specify --challenge=<id> to snapshot that challenge's overrides",
+                });
+                saveProfileFromChallenge(name, parsed.challengeId);
                 process.exit(0);
                 break;
             }
             case 'apply-profile': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                if (!rest[0]) {
-                    logger.withCategory('ui').error('Please specify a profile name');
-                    logger.withCategory('ui').info('Usage: apply-profile "<name>" --challenge=<id>');
-                    process.exit(1);
-                }
-                if (rest.length > 1) {
-                    logger.withCategory('ui').error(`Unexpected extra arguments: ${rest.slice(1).join(' ')}`);
-                    logger
-                        .withCategory('ui')
-                        .info('Quote profile names containing spaces: apply-profile "2-pic tactic" --challenge=<id>');
-                    process.exit(1);
-                }
-                if (!challengeId) {
-                    logger.withCategory('ui').error('Please specify --challenge=<id> to apply the profile to');
-                    logger.withCategory('ui').info('Usage: apply-profile "<name>" --challenge=<id>');
-                    process.exit(1);
-                }
-                applyProfile(rest[0], challengeId);
+                const parsed = extractChallenge(args.slice(1));
+                const name = requireProfileArgs('apply-profile', parsed, {
+                    needsChallenge: true,
+                    challengeHint: 'Please specify --challenge=<id> to apply the profile to',
+                });
+                applyProfile(name, parsed.challengeId);
                 process.exit(0);
                 break;
             }
             case 'delete-profile': {
-                const { rest } = extractChallenge(args.slice(1));
-                if (!rest[0]) {
-                    logger.withCategory('ui').error('Please specify a profile name');
-                    logger.withCategory('ui').info('Usage: delete-profile "<name>"');
-                    process.exit(1);
-                }
-                if (rest.length > 1) {
-                    logger.withCategory('ui').error(`Unexpected extra arguments: ${rest.slice(1).join(' ')}`);
-                    logger
-                        .withCategory('ui')
-                        .info('Quote profile names containing spaces: delete-profile "2-pic tactic"');
-                    process.exit(1);
-                }
-                deleteProfile(rest[0]);
+                const parsed = extractChallenge(args.slice(1));
+                const name = requireProfileArgs('delete-profile', parsed);
+                deleteProfile(name);
                 process.exit(0);
                 break;
             }

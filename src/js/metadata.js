@@ -1,18 +1,17 @@
-const fs = require('node:fs');
-const path = require('node:path');
-
-// Import path utilities from settings to maintain consistency
-const { getUserDataPath } = require('./settings');
 const logger = require('./logger');
 const { formatTimeHMS } = require('./dateFormat');
+const { createJsonStore } = require('./settings/storage');
+
+// Platform-aware transport (fs on Electron/CLI, @capacitor/preferences on
+// the Android app WebView, in-memory on the headless service). Replaces the
+// old raw-fs access that threw on every call under Capacitor.
+const metadataStore = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
 
 /**
- * Get the metadata file path
+ * Get the metadata file path (fs platforms; debug/info surfaces).
  * @returns {string} - Path to metadata.json file
  */
-const getMetadataPath = () => {
-    return path.join(getUserDataPath(), 'metadata.json');
-};
+const getMetadataPath = () => metadataStore.getFilePath();
 
 /**
  * Default metadata structure
@@ -164,10 +163,9 @@ const validateMetadata = (metadata) => {
  */
 const loadMetadata = () => {
     try {
-        const metadataPath = getMetadataPath();
+        const metadataData = metadataStore.readRaw();
 
-        if (fs.existsSync(metadataPath)) {
-            const metadataData = fs.readFileSync(metadataPath, 'utf8');
+        if (metadataData) {
             const metadata = JSON.parse(metadataData);
 
             // Validate metadata
@@ -175,13 +173,13 @@ const loadMetadata = () => {
 
             // If validation changed anything, save the corrected metadata
             if (hasChanges) {
-                fs.writeFileSync(metadataPath, JSON.stringify(validatedMetadata, null, 2), 'utf8');
+                metadataStore.writeRaw(JSON.stringify(validatedMetadata, null, 2));
             }
 
             return validatedMetadata;
         }
 
-        // Return empty metadata if file doesn't exist
+        // Return empty metadata if the store has never been written
         return getDefaultMetadata();
     } catch (error) {
         logger.withCategory('api').error('Error loading metadata:', error);
@@ -196,19 +194,10 @@ const loadMetadata = () => {
  */
 const saveMetadata = (metadata) => {
     try {
-        const metadataPath = getMetadataPath();
-
-        // Ensure directory exists
-        const metadataDir = path.dirname(metadataPath);
-        if (!fs.existsSync(metadataDir)) {
-            fs.mkdirSync(metadataDir, { recursive: true });
-        }
-
         // Validate metadata before saving
         const { validatedMetadata } = validateMetadata(metadata);
 
-        // Write validated metadata to file
-        fs.writeFileSync(metadataPath, JSON.stringify(validatedMetadata, null, 2), 'utf8');
+        metadataStore.writeRaw(JSON.stringify(validatedMetadata, null, 2));
         return true;
     } catch (error) {
         logger.withCategory('api').error('Error saving metadata:', error);
@@ -430,35 +419,26 @@ const setLastUpdateCheck = (timestamp) => {
 };
 
 /**
- * Set version to skip for updates
- * @param {string} version - Version string to skip
- * @returns {boolean} - True if successful, false otherwise
+ * Read the legacy metadata-resident skipVersion (pre-consolidation store).
+ * The canonical store is now the settings blob (skipUpdateVersion);
+ * AutoUpdater's one-shot migration reads this, persists it into settings,
+ * verifies, and then calls clearLegacySkipVersion(). The field stays
+ * accepted by validation so an old metadata.json round-trips untouched
+ * until the migration has safely landed the value in settings.
+ * @returns {string|null}
  */
-const setSkipUpdateVersion = (version) => {
-    if (typeof version !== 'string' || version.length === 0) {
-        logger.withCategory('update').error('Invalid version provided for skip update', null);
-        return false;
-    }
-
+const getLegacySkipVersion = () => {
     const metadata = loadMetadata();
-    if (!metadata.updateCheck) {
-        metadata.updateCheck = { lastCheck: null, skipVersion: null };
-    }
-
-    metadata.updateCheck.skipVersion = version;
-    return saveMetadata(metadata);
+    return metadata.updateCheck?.skipVersion || null;
 };
 
 /**
- * Clear skip update version
- * @returns {boolean} - True if successful, false otherwise
+ * Clear the legacy metadata-resident skipVersion after migration.
+ * @returns {boolean}
  */
-const clearSkipUpdateVersion = () => {
+const clearLegacySkipVersion = () => {
     const metadata = loadMetadata();
-    if (!metadata.updateCheck) {
-        metadata.updateCheck = { lastCheck: null, skipVersion: null };
-    }
-
+    if (!metadata.updateCheck?.skipVersion) return true;
     metadata.updateCheck.skipVersion = null;
     return saveMetadata(metadata);
 };
@@ -480,8 +460,10 @@ module.exports = {
     // Update check functions
     getUpdateCheckData,
     setLastUpdateCheck,
-    setSkipUpdateVersion,
-    clearSkipUpdateVersion,
+    getLegacySkipVersion,
+    clearLegacySkipVersion,
+    initializeMetadataAsync: metadataStore.initializeAsync,
+    flushMetadataWrites: metadataStore.flushPendingWrites,
 
     // Utility functions
     getAllMetadata,

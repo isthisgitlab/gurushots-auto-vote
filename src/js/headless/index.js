@@ -23,6 +23,7 @@ const apiFactory = require('../apiFactory');
 const logger = require('../logger');
 const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } = require('../scheduling/randomDelay');
 const { computeNextCycleDelayMs } = require('../scheduling/thresholdWindow');
+const { resolveThreshold, resolveScheduledFill } = require('../scheduling/nodeResolvers');
 
 const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
 
@@ -44,12 +45,6 @@ const computeNextDelayMs = async (token, prefetched = null) => {
             ? prefetched
             : (await apiFactory.getApiStrategy().getActiveChallenges(token))?.challenges || [];
         const now = Math.floor(Date.now() / 1000);
-        const resolveThreshold = (id) => settings.getEffectiveSetting('lastMinuteThreshold', id);
-        const resolveScheduledFill = (id) => ({
-            enabled: settings.getEffectiveSetting('useScheduledFill', id) === true,
-            timeOfDay: settings.getEffectiveSetting('scheduledFillTime', id),
-            beforeEndSec: Number(settings.getEffectiveSetting('scheduledFillBeforeEnd', id)) || 0,
-        });
         const lastMinuteCheckMinutes = Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
         const { delayMs } = await computeNextCycleDelayMs(list, now, {
             resolveThreshold,

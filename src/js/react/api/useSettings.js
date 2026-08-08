@@ -1,4 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useIpcQuery } from './useIpcQuery';
+
+const fetchSettings = () => window.api.getSettings();
 
 /**
  * Hook for managing settings via IPC
@@ -6,22 +9,14 @@ import { useState, useCallback, useEffect } from 'react';
  * @returns {{ settings: object|null, loading: boolean, error: Error|null, updateSetting: function, refetch: function }}
  */
 export function useSettings() {
-    const [settings, setSettings] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-
-    const refetch = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await window.api.getSettings();
-            setSettings(data);
-        } catch (err) {
-            setError(err);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const {
+        data: settings,
+        setData: setSettings,
+        loading,
+        error,
+        setError,
+        refetch,
+    } = useIpcQuery(fetchSettings, { subscribe: true });
 
     const updateSetting = useCallback(
         async (key, value) => {
@@ -36,7 +31,7 @@ export function useSettings() {
                 throw err;
             }
         },
-        [refetch],
+        [setSettings, setError, refetch],
     );
 
     const getSetting = useCallback(
@@ -45,17 +40,6 @@ export function useSettings() {
         },
         [settings],
     );
-
-    useEffect(() => {
-        refetch();
-    }, [refetch]);
-
-    useEffect(() => {
-        if (!window.api?.onSettingsChanged) return undefined;
-        return window.api.onSettingsChanged(() => {
-            refetch();
-        });
-    }, [refetch]);
 
     return {
         settings,
