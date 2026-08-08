@@ -4271,8 +4271,8 @@ packages:
       ttsc:
         optional: true
 
-  unbash@4.0.7:
-    resolution: {integrity: sha512-P3NODenm+qh2PwrP3gzJBx7a541oRtrUTRCyMH8K53P27oZjstMwf7A3CqwWtLLLOIUigRqjdEHSn2UHBQlASA==}
+  unbash@4.0.8:
+    resolution: {integrity: sha512-gGRSq/2OXbvqC8vY23OY4tUpr66Fyzk+PmwVlUX4/lRsOBLX4pixwcRW1vLT5kZ98iWTbfcvXRgxBdKxy5E0XA==}
     engines: {node: '>=14'}
 
   undici-types@7.18.2:
@@ -7870,7 +7870,7 @@ snapshots:
       smol-toml: 1.7.1
       strip-json-comments: 5.0.3
       tinyglobby: 0.2.17
-      unbash: 4.0.7
+      unbash: 4.0.8
       yaml: 2.9.0
       zod: 4.4.3
 
@@ -8946,7 +8946,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  unbash@4.0.7: {}
+  unbash@4.0.8: {}
 
   undici-types@7.18.2: {}
 

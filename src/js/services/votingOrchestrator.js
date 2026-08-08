@@ -197,10 +197,23 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                                 logger,
                                 getEligiblePhotos: api.getEligiblePhotos,
                                 submitToChallenge: api.submitToChallenge,
+                                getActiveChallenges: api.getActiveChallenges,
                             });
                             if (filled.ok) {
                                 autoFill.reflectNewEntry(challenge, filled.imageId);
                                 boostResult = await api.applyBoostToEntry(cid, filled.imageId, token);
+                            } else if (filled.reason === 'challenge-gone') {
+                                // The live re-check confirmed the challenge left the
+                                // active list — boosting an existing entry on it would
+                                // just be a second failing call and a confusing log.
+                                logger
+                                    .withCategory('boost')
+                                    .endOperation(
+                                        `boost-${challenge.id}`,
+                                        null,
+                                        'challenge left the active list — boost skipped',
+                                    );
+                                return;
                             } else {
                                 logger
                                     .withCategory('boost')
@@ -267,10 +280,22 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                         logger,
                         getEligiblePhotos: api.getEligiblePhotos,
                         submitToChallenge: api.submitToChallenge,
+                        getActiveChallenges: api.getActiveChallenges,
                     });
                     if (filled.ok) {
                         autoFill.reflectNewEntry(challenge, filled.imageId);
                         imageId = filled.imageId;
+                    } else if (filled.reason === 'challenge-gone') {
+                        // The live re-check confirmed the challenge left the active
+                        // list — applying turbo to an existing entry on it would just
+                        // be a second failing call and a confusing log.
+                        logger
+                            .withCategory('turbo')
+                            .info(
+                                `${logger.challengeTag(challenge)} turbo fill-new: challenge left the active list — turbo skipped`,
+                                null,
+                            );
+                        return;
                     } else if (imageId) {
                         logger
                             .withCategory('turbo')
@@ -322,6 +347,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                     logger,
                     getEligiblePhotos: api.getEligiblePhotos,
                     submitToChallenge: api.submitToChallenge,
+                    getActiveChallenges: api.getActiveChallenges,
                 });
                 if (fillResult === 'submitted') {
                     logger
@@ -342,6 +368,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                     logger,
                     getEligiblePhotos: api.getEligiblePhotos,
                     submitToChallenge: api.submitToChallenge,
+                    getActiveChallenges: api.getActiveChallenges,
                 });
                 if (emergencyResult === 'submitted') {
                     logger
