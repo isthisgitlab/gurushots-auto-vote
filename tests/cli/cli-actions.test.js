@@ -228,19 +228,19 @@ describe('CLI vote --challenge (single-challenge manual)', () => {
 });
 
 describe('CLI logout command', () => {
-    test('clears the stored token when one is present', () => {
+    test('clears the stored token when one is present', async () => {
         settings.getSetting.mockReturnValue('tok');
 
-        handleLogout();
+        await handleLogout();
 
         expect(settings.setSetting).toHaveBeenCalledWith('token', '');
         expect(contains(msgsAt('success'), 'Logged out')).toBe(true);
     });
 
-    test('reports already-logged-out when no token was set', () => {
+    test('reports already-logged-out when no token was set', async () => {
         settings.getSetting.mockReturnValue('');
 
-        handleLogout();
+        await handleLogout();
 
         expect(settings.setSetting).toHaveBeenCalledWith('token', '');
         expect(contains(allMsgs(), 'Already logged out')).toBe(true);

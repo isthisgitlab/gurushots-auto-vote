@@ -22,11 +22,7 @@
  * @returns {number|Promise<number>} The effective lastMinuteThreshold (minutes).
  */
 
-const { soonestScheduledStart } = require('./scheduledFill');
-
-// Non-flash challenges that are still open at `now`. Flash challenges never
-// enter last-minute mode, and closed ones can't.
-const eligibleChallenges = (challenges, now) => challenges.filter((c) => c.type !== 'flash' && c.close_time > now);
+const { soonestScheduledStart, eligibleChallenges } = require('./scheduledFill');
 
 /**
  * Resolve each eligible challenge's per-challenge threshold ONCE. Every

@@ -19,17 +19,7 @@ const logger = require('../logger');
 const settings = require('../settings');
 const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } = require('./randomDelay');
 const { computeNextCycleDelayMs } = require('./thresholdWindow');
-
-// Node resolver for the shared threshold math: per-challenge lastMinuteThreshold
-// straight from the settings facade (synchronous on Electron/CLI/Android-node).
-const resolveThreshold = (challengeId) => settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
-
-// Node resolver for the scheduled-fill cadence cap (scheduling/scheduledFill.js).
-const resolveScheduledFill = (challengeId) => ({
-    enabled: settings.getEffectiveSetting('useScheduledFill', challengeId) === true,
-    timeOfDay: settings.getEffectiveSetting('scheduledFillTime', challengeId),
-    beforeEndSec: Number(settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId)) || 0,
-});
+const { resolveThreshold, resolveScheduledFill } = require('./nodeResolvers');
 
 /**
  * Create a continuous voting scheduler.

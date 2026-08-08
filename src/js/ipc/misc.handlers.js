@@ -5,6 +5,7 @@
  */
 
 const { shell } = require('electron');
+const { registerHandlers } = require('./registerHandlers');
 const logger = require('../logger');
 const { updateMenuTranslations } = require('../ui/applicationMenu');
 
@@ -14,6 +15,14 @@ const buildHandlers = (deps) => {
     return {
         'open-external-url': async (event, url) => {
             try {
+                // Scheme allow-list: every legitimate call site opens an
+                // https page (gurushots.com, GitHub releases). Refusing
+                // anything else keeps this from ever becoming an
+                // open-any-scheme primitive (file:, shell handlers, ...).
+                if (typeof url !== 'string' || !url.startsWith('https://')) {
+                    logger.withCategory('api').warning(`Refused open-external-url for non-https URL: ${url}`, null);
+                    return { success: false, error: 'Only https:// URLs can be opened' };
+                }
                 await shell.openExternal(url);
                 return { success: true };
             } catch (error) {
@@ -57,10 +66,7 @@ const buildHandlers = (deps) => {
 };
 
 const register = (ipcMain, deps) => {
-    const handlers = buildHandlers(deps);
-    for (const [channel, impl] of Object.entries(handlers)) {
-        ipcMain.handle(channel, impl);
-    }
+    registerHandlers(ipcMain, buildHandlers(deps));
 };
 
 module.exports = { register, buildHandlers };

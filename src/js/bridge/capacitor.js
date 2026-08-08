@@ -31,6 +31,7 @@ const actionsHandlers = require('../ipc/actions.handlers');
 
 const settings = require('../settings');
 const logger = require('../logger');
+const { clearAuthToken } = require('../services/auth');
 const updateChecker = require('../services/UpdateChecker');
 const androidUpdateInstaller = require('../services/AndroidUpdateInstaller');
 const pkg = require('../../../package.json');
@@ -203,14 +204,11 @@ const installBridge = () => {
     api.login = () => emit('login-success');
     api.logout = async () => {
         try {
-            settings.setSetting('token', '');
-            // The cleared token is written behind a cache. Await the flush so
-            // it reaches @capacitor/preferences before we navigate away —
+            // clearAuthToken awaits the write-behind flush so the cleared
+            // token reaches @capacitor/preferences before we navigate away —
             // otherwise an OS kill right after logout could leave the old
             // token persisted and silently restore the session on next launch.
-            // The app stays alive through logout, so this await is effective
-            // (unlike the best-effort flush on background/pagehide).
-            await settings.flushPendingWrites?.();
+            await clearAuthToken();
         } catch (err) {
             logger.withCategory('authentication').error('Logout failed to clear token', err);
         }

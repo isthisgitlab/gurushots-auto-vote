@@ -14,7 +14,8 @@ jest.mock('../../src/js/apiFactory');
 jest.mock('../../src/js/voting/cancellation');
 jest.mock('../../src/js/services/manualVote', () => ({
     submitVotesForChallenge: jest.fn(),
-    STAGGER_MS: 0, // make the manual-vote-all loop not actually wait
+    voteAllChallengesManual: jest.fn(),
+    STAGGER_MS: 0,
 }));
 
 const settings = require('../../src/js/settings');
@@ -232,32 +233,27 @@ describe('vote-all-challenges-manual', () => {
         expect(result).toEqual({ success: false, error: 'Failed to fetch challenges' });
     });
 
-    test('aggregates voted/skipped counts across multiple challenges', async () => {
+    test('reports the shared loop counts and forwards a progress callback', async () => {
+        // The per-challenge loop semantics (stagger, continue-after-throw,
+        // outcome mapping) are covered in tests/services/manualVoteHelper.
         setToken('tok');
-        stubStrategy([
+        const challengeList = [
             buildChallenge({ id: 1, title: 'A' }),
             buildChallenge({ id: 2, title: 'B' }),
             buildChallenge({ id: 3, title: 'C' }),
-        ]);
-        manualVote.submitVotesForChallenge
-            .mockResolvedValueOnce({ outcome: 'voted', targetExposure: 100, imageCount: 2 })
-            .mockResolvedValueOnce({ outcome: 'no-images', targetExposure: 100 })
-            .mockResolvedValueOnce({ outcome: 'not-eligible', errorMessage: 'closed' });
+        ];
+        stubStrategy(challengeList);
+        manualVote.voteAllChallengesManual.mockResolvedValue({ voted: 1, skipped: 2, total: 3 });
         const handlers = buildHandlers();
         const result = await handlers['vote-all-challenges-manual']();
         expect(result.success).toBe(true);
         expect(result.stats).toEqual({ total: 3, voted: 1, skipped: 2 });
-    });
-
-    test('continues processing remaining challenges after one throws', async () => {
-        setToken('tok');
-        stubStrategy([buildChallenge({ id: 1, title: 'A' }), buildChallenge({ id: 2, title: 'B' })]);
-        manualVote.submitVotesForChallenge
-            .mockRejectedValueOnce(new Error('boom'))
-            .mockResolvedValueOnce({ outcome: 'voted', targetExposure: 100, imageCount: 1 });
-        const handlers = buildHandlers();
-        const result = await handlers['vote-all-challenges-manual']();
-        expect(result.stats).toEqual({ total: 2, voted: 1, skipped: 1 });
+        expect(manualVote.voteAllChallengesManual).toHaveBeenCalledWith(
+            challengeList,
+            expect.anything(),
+            'tok',
+            expect.objectContaining({ onProgress: expect.any(Function) }),
+        );
     });
 });
 

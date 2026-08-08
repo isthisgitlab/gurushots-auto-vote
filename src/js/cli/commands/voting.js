@@ -7,12 +7,13 @@
  */
 
 const logger = require('../../logger');
+const { ensureAuthenticated } = require('../guards');
 const settings = require('../../settings');
 const { getMiddleware } = require('../../apiFactory');
 const { createScheduler } = require('../../scheduling/runScheduler');
 const { formatDateTime } = require('../../dateFormat');
 const { formatDuration } = require('../../format/duration');
-const { isBoostWindowOpen } = require('../../services/VotingLogic');
+const { openBoostWindows } = require('../../voting/boostWindow');
 
 // Reuse the GUI's single-challenge manual-vote handler (votes to 100%,
 // bypassing thresholds). Built lazily on first use so loading this module for
@@ -47,9 +48,7 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
             logger.withCategory('voting').info('Mode: Manual (votes to 100% regardless of threshold settings)');
         }
 
-        if (!getMiddleware().isAuthenticated()) {
-            logger.withCategory('authentication').error('No authentication token found. Please login first');
-            logger.withCategory('ui').info('Run: login');
+        if (!ensureAuthenticated()) {
             return { success: false, challenges: null };
         }
 
@@ -88,9 +87,7 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
  * @returns {Promise<{success:boolean, message?:string, error?:string}>}
  */
 const voteChallengeManual = async (challengeId) => {
-    if (!getMiddleware().isAuthenticated()) {
-        logger.withCategory('authentication').error('No authentication token found. Please login first');
-        logger.withCategory('ui').info('Run: login');
+    if (!ensureAuthenticated()) {
         return { success: false, error: 'Not authenticated' };
     }
 
@@ -155,9 +152,7 @@ const startContinuousVoting = async () => {
         .withCategory('voting')
         .info(`=== Starting Continuous Voting Mode (${isMockMode ? 'MOCK' : 'REAL'} MODE) ===`);
 
-    if (!getMiddleware().isAuthenticated()) {
-        logger.withCategory('authentication').error('No authentication token found. Please login first');
-        logger.withCategory('ui').info('Run: login');
+    if (!ensureAuthenticated()) {
         return;
     }
 
@@ -235,24 +230,7 @@ const showStatus = async () => {
             const resp = await getMiddleware().getActiveChallenges();
             const challenges = Array.isArray(resp?.challenges) ? resp.challenges : [];
             const now = Math.floor(Date.now() / 1000);
-            const open = challenges
-                .filter((c) => isBoostWindowOpen(c, now))
-                .map((c) => {
-                    const boost = c.member?.boost;
-                    // Only timed windows carry a countdown; key-unlocked
-                    // (AVAILABLE_KEY) boosts never expire.
-                    const remaining =
-                        boost?.state === 'AVAILABLE' && typeof boost.timeout === 'number' && boost.timeout > 0
-                            ? boost.timeout - now
-                            : null;
-                    return { title: c.title, remaining };
-                })
-                // Soonest-expiring first; key-unlocked (no timer) sort last.
-                .sort((a, b) => {
-                    if (a.remaining == null) return b.remaining == null ? 0 : 1;
-                    if (b.remaining == null) return -1;
-                    return a.remaining - b.remaining;
-                });
+            const open = openBoostWindows(challenges, now);
 
             if (open.length === 0) {
                 logger.withCategory('ui').info('  None');

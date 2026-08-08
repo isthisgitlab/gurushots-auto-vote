@@ -10,8 +10,8 @@
 const settings = require('../settings');
 const logger = require('../logger');
 const cancellation = require('../voting/cancellation');
-const { extractAuthResult } = require('./auth');
-const { submitVotesForChallenge, STAGGER_MS } = require('./manualVote');
+const { extractAuthResult, clearAuthToken } = require('./auth');
+const { voteAllChallengesManual } = require('./manualVote');
 
 const requireToken = () => {
     const token = settings.getSetting('token');
@@ -159,11 +159,10 @@ class BaseMiddleware {
 
     /**
      * Manual voting cycle for the CLI: vote every active challenge to 100%
-     * regardless of threshold settings. Mirrors the IPC handler's
-     * `vote-all-challenges-manual` mechanic — both routes share
-     * `submitVotesForChallenge` so eligibility + image fetch + submit lives
-     * in one place. Successful votes are spaced by `STAGGER_MS` to honor
-     * the per-cycle stagger contract (don't batch submissions).
+     * regardless of threshold settings. Shares the whole per-challenge loop
+     * (`voteAllChallengesManual`) with the IPC `vote-all-challenges-manual`
+     * handler, so eligibility, image fetch, submit, stagger, and outcome
+     * logging live in one place.
      */
     async cliVoteManual() {
         logger.withCategory('voting').info('=== GuruShots Auto Voter - CLI Manual Voting (vote-to-100%) ===', null);
@@ -178,39 +177,7 @@ class BaseMiddleware {
                 return;
             }
             const challenges = challengesResponse.challenges;
-            const now = Math.floor(Date.now() / 1000);
-            let voted = 0;
-            let skipped = 0;
-            for (const challenge of challenges) {
-                try {
-                    const result = await submitVotesForChallenge(challenge, this.apiStrategy, token, now);
-                    if (result.outcome === 'voted') {
-                        voted++;
-                        logger
-                            .withCategory('voting')
-                            .success(
-                                `Voted on challenge: ${challenge.title} (target: ${result.targetExposure}%)`,
-                                null,
-                            );
-                        await new Promise((resolve) => {
-                            setTimeout(resolve, STAGGER_MS);
-                        });
-                    } else if (result.outcome === 'no-images') {
-                        skipped++;
-                        logger
-                            .withCategory('voting')
-                            .warning(`${logger.challengeTag(challenge)} No vote images available`, null);
-                    } else {
-                        skipped++;
-                        logger
-                            .withCategory('voting')
-                            .info(`${logger.challengeTag(challenge)} Skipping - ${result.errorMessage}`, null);
-                    }
-                } catch (error) {
-                    skipped++;
-                    logger.withCategory('voting').error(`${logger.challengeTag(challenge)} Error voting:`, error);
-                }
-            }
+            const { voted, skipped } = await voteAllChallengesManual(challenges, this.apiStrategy, token);
             const summary = `Manual vote: ${voted} voted, ${skipped} skipped of ${challenges.length}`;
             logger.withCategory('voting').endOperation('cli-vote-manual', summary);
         } catch (error) {
@@ -229,9 +196,9 @@ class BaseMiddleware {
         return !!(token && token.trim() !== '');
     }
 
-    logout(clearToken = true) {
+    async logout(clearToken = true) {
         if (clearToken) {
-            settings.setSetting('token', '');
+            await clearAuthToken();
             logger.withCategory('authentication').success('Logged out successfully', null, null);
         }
     }

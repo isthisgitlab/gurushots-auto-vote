@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { isBoostWindowOpen, formatDuration } from '@/utils/formatters';
+import { formatDuration } from '@/utils/formatters';
+import { openBoostWindows } from '../../../voting/boostWindow';
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
 
 /**
@@ -14,25 +15,7 @@ export function BoostWindowBanner({ challenges }) {
 
     const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
 
-    const open = (challenges || [])
-        .filter((c) => isBoostWindowOpen(c.member?.boost, now))
-        .map((c) => {
-            const boost = c.member?.boost;
-            // Only timed windows (state AVAILABLE with a future timeout) carry a
-            // countdown. Key-unlocked boosts (AVAILABLE_KEY) never expire, so
-            // they show no countdown even if a stray timeout is present.
-            const remaining =
-                boost?.state === 'AVAILABLE' && typeof boost.timeout === 'number' && boost.timeout > 0
-                    ? boost.timeout - now
-                    : null;
-            return { id: c.id, title: c.title, remaining };
-        })
-        // Soonest-expiring first; key-unlocked (no countdown) sort last.
-        .sort((a, b) => {
-            if (a.remaining == null) return b.remaining == null ? 0 : 1;
-            if (b.remaining == null) return -1;
-            return a.remaining - b.remaining;
-        });
+    const open = openBoostWindows(challenges, now);
 
     // Tick every second only while at least one chip has a live countdown — a
     // window closing drops its chip the moment it expires, and timed chips

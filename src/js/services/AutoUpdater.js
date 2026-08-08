@@ -2,6 +2,7 @@ const { app } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const logger = require('../logger');
 const metadata = require('../metadata');
+const { getReleasesUrl: releasesPageUrl } = require('./UpdateChecker');
 
 /**
  * AutoUpdater service wrapping electron-updater with platform detection,
@@ -312,7 +313,7 @@ class AutoUpdater {
      * @returns {string}
      */
     getReleasesUrl() {
-        return 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest';
+        return releasesPageUrl();
     }
 }
 

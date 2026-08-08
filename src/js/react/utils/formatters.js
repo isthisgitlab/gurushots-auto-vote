@@ -135,27 +135,12 @@ export const getBoostStatus = (boost) => {
 };
 
 /**
- * Whether a challenge's boost window is currently open (boost can be applied
- * right now). Mirrors the voting engine's predicate
- * (services/VotingLogic.js:isBoostWindowOpen) but takes the boost object +
- * `now` so it stays a pure renderer util with no Node/service dependency:
- *   - AVAILABLE_KEY (key-unlocked) → open, no expiry
- *   - AVAILABLE → open while a positive timeout is still in the future;
- *     AVAILABLE without a timeout is treated as key-unlocked (open)
- *   - anything else → closed
- * @param {object} boost - Boost object from API (challenge.member.boost)
- * @param {number} now - Current time (Unix seconds)
- * @returns {boolean}
+ * Whether a boost window is currently open (boost can be applied right now).
+ * Re-exported from the shared predicate (voting/boostWindow.js) that the
+ * voting engine (services/VotingLogic.js) uses too, so the two hosts can
+ * never drift on what "open" means.
  */
-export const isBoostWindowOpen = (boost, now) => {
-    if (!boost || !boost.state) return false;
-    if (boost.state === 'AVAILABLE_KEY') return true;
-    if (boost.state === 'AVAILABLE') {
-        const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
-        return hasTimeout ? boost.timeout > now : true;
-    }
-    return false;
-};
+export { isBoostWindowOpen } from '../../voting/boostWindow';
 
 /**
  * Get turbo status with display text and color class

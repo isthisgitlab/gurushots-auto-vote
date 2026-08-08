@@ -13,10 +13,11 @@
  */
 
 const settings = require('../settings');
+const { registerHandlers } = require('./registerHandlers');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 const cancellation = require('../voting/cancellation');
-const { submitVotesForChallenge, STAGGER_MS } = require('../services/manualVote');
+const { submitVotesForChallenge, voteAllChallengesManual } = require('../services/manualVote');
 
 // Run one full strategy pass — global when challengeId is null, scoped
 // to a single card otherwise. Delegates to BaseMiddleware so the
@@ -178,60 +179,27 @@ const buildHandlers = () => ({
             }
 
             const challenges = challengesResponse.challenges;
-            const now = Math.floor(Date.now() / 1000);
-            let processedCount = 0;
-            let votedCount = 0;
-            let skippedCount = 0;
 
             logger.withCategory('voting').info(`📋 Found ${challenges.length} challenges to process`, null);
 
-            for (const challenge of challenges) {
-                processedCount++;
-                logger
-                    .withCategory('voting')
-                    .progress(
-                        `Processing challenge ${processedCount}/${challenges.length}: ${challenge.title}`,
-                        processedCount,
-                        challenges.length,
-                    );
+            const { voted, skipped, total } = await voteAllChallengesManual(challenges, strategy, userSettings.token, {
+                onProgress: (current, totalCount, challenge) =>
+                    logger
+                        .withCategory('voting')
+                        .progress(
+                            `Processing challenge ${current}/${totalCount}: ${challenge.title}`,
+                            current,
+                            totalCount,
+                        ),
+            });
 
-                try {
-                    const result = await submitVotesForChallenge(challenge, strategy, userSettings.token, now);
-                    if (result.outcome === 'voted') {
-                        votedCount++;
-                        logger
-                            .withCategory('voting')
-                            .success(
-                                `✅ ${logger.challengeTag(challenge)} Voted (target: ${result.targetExposure}%)`,
-                                null,
-                            );
-                        await new Promise((resolve) => {
-                            setTimeout(resolve, STAGGER_MS);
-                        });
-                    } else if (result.outcome === 'no-images') {
-                        logger
-                            .withCategory('voting')
-                            .warning(`⚠️ ${logger.challengeTag(challenge)} No vote images available`, null);
-                        skippedCount++;
-                    } else {
-                        logger
-                            .withCategory('voting')
-                            .info(`⏭️ ${logger.challengeTag(challenge)} Skipping - ${result.errorMessage}`, null);
-                        skippedCount++;
-                    }
-                } catch (error) {
-                    logger.withCategory('voting').error(`❌ ${logger.challengeTag(challenge)} Error voting:`, error);
-                    skippedCount++;
-                }
-            }
-
-            const message = `Manual vote all completed: ${votedCount} voted, ${skippedCount} skipped out of ${challenges.length} challenges`;
+            const message = `Manual vote all completed: ${voted} voted, ${skipped} skipped out of ${total} challenges`;
             logger.withCategory('voting').success(message, null);
 
             return {
                 success: true,
                 message,
-                stats: { total: challenges.length, voted: votedCount, skipped: skippedCount },
+                stats: { total, voted, skipped },
             };
         } catch (error) {
             logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
@@ -266,10 +234,7 @@ const buildHandlers = () => ({
 });
 
 const register = (ipcMain) => {
-    const handlers = buildHandlers();
-    for (const [channel, impl] of Object.entries(handlers)) {
-        ipcMain.handle(channel, impl);
-    }
+    registerHandlers(ipcMain, buildHandlers());
 };
 
 module.exports = { register, buildHandlers };
