@@ -59,8 +59,9 @@ const emit = (channel, payload) => {
     }
 };
 
-// kebab-case channel name → camelCase renderer method name
-const kebabToCamel = (channel) => channel.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+// kebab-case channel name → camelCase renderer method name — shared with
+// preload.js via the channel manifest so both shells derive identically.
+const { kebabToCamel, aliases, sendMethods, eventMethods } = require('../ipc/manifest');
 
 // Wrap a handler that originally received (event, ...args) so the
 // renderer can call it as (...args). The first parameter (event) is
@@ -190,10 +191,11 @@ const installBridge = () => {
         api[kebabToCamel(channel)] = wrap(impl);
     }
 
-    // Preload exposes a couple of channels under both their literal
-    // camel-case name and a friendlier alias. Mirror those here.
-    api.applyBoost = api.applyBoostToEntry;
-    api.applyTurbo = api.applyTurboToEntry;
+    // Preload exposes a couple of channels under friendlier aliases —
+    // mirror them from the shared manifest so the two shells can't drift.
+    for (const [method, channel] of Object.entries(aliases)) {
+        api[method] = api[kebabToCamel(channel)];
+    }
     api.guiVote = api.guiVote || api.runVotingCycle;
 
     // Send-style methods (login-success / logout) are window-control
@@ -201,7 +203,7 @@ const installBridge = () => {
     // local React state; the bridge emits an event the app can listen
     // to (or just no-ops, since the React app already drives navigation
     // off the token in settings).
-    api.login = () => emit('login-success');
+    api.login = () => emit(sendMethods.login);
     api.logout = async () => {
         try {
             // clearAuthToken awaits the write-behind flush so the cleared
@@ -212,7 +214,7 @@ const installBridge = () => {
         } catch (err) {
             logger.withCategory('authentication').error('Logout failed to clear token', err);
         }
-        emit('logout');
+        emit(sendMethods.logout);
     };
 
     // Route logger fan-out into the in-process emitter so the Logs page
@@ -221,17 +223,12 @@ const installBridge = () => {
     // global.sendLogToGUI; the WebView has no `global`, so use globalThis.
     globalThis.sendLogToGUI = (entry) => emit('log-message', entry);
 
-    // Event listeners. The Electron contract returns nothing (or an
-    // unsubscribe for the settings-changed listener); preserve that
-    // shape so React code does not branch.
-    api.onSettingsChanged = (cb) => subscribe('settings-changed', cb);
-    api.onLogMessage = (cb) => subscribe('log-message', cb);
-    api.onUpdateChecking = (cb) => subscribe('update-checking', cb);
-    api.onUpdateAvailable = (cb) => subscribe('update-available', cb);
-    api.onUpdateNotAvailable = (cb) => subscribe('update-not-available', cb);
-    api.onDownloadProgress = (cb) => subscribe('update-download-progress', cb);
-    api.onUpdateDownloaded = (cb) => subscribe('update-downloaded', cb);
-    api.onUpdateError = (cb) => subscribe('update-error', cb);
+    // Event listeners, generated from the shared manifest. Each returns
+    // subscribe()'s unsubscribe, matching the Electron preload contract so
+    // React code does not branch per platform.
+    for (const [method, channel] of Object.entries(eventMethods)) {
+        api[method] = (cb) => subscribe(channel, cb);
+    }
 
     // Window controls the React app sometimes asks for. On mobile,
     // reload-window is the WebView reloading itself; refresh-menu and
