@@ -184,6 +184,23 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     );
 
     /**
+     * Re-arm the cadence timer after a settings change while running. The
+     * armed timer was computed from the old settings, so a newly-configured
+     * threshold or scheduled-fill window could otherwise be slept past until
+     * the current (possibly hours-long normal-mode) wait elapses. No-op when
+     * autovote is stopped. Clearing the timer first makes the old timeout
+     * stale under scheduleNext's generation guard.
+     */
+    const rearmSchedule = useCallback(async () => {
+        if (!runningRef.current) return;
+        if (cycleTimerRef.current) {
+            clearTimeout(cycleTimerRef.current);
+            cycleTimerRef.current = null;
+        }
+        await scheduleNext();
+    }, [scheduleNext]);
+
+    /**
      * Start autovote
      */
     const start = useCallback(async () => {
@@ -322,6 +339,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         start,
         stop,
         toggle,
+        rearmSchedule,
     };
 
     return <AutovoteContext.Provider value={value}>{children}</AutovoteContext.Provider>;

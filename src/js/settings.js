@@ -394,6 +394,13 @@ const getWindowBounds = (windowType) => {
  */
 
 /**
+ * Value equality for settings comparisons. JSON-based so reference types
+ * (arrays like mustIncludeTags, plain objects) compare by content — a bare
+ * !== would treat every array override as "differs from default" forever.
+ */
+const valuesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
  * Get global default value for a setting
  */
 const getGlobalDefault = (settingKey) => {
@@ -507,10 +514,7 @@ const _applyChallengeOverride = (settings, settingKey, challengeId, value, batch
     }
 
     const container = _ensureChallengeContainer(settings, challengeId);
-    // TODO: this is reference-equality so any reference type (e.g. array
-    // defaults like mustIncludeTags) never matches and never auto-clears.
-    // Out of scope for the tag-rules feature; touches all setting types.
-    if (value !== getGlobalDefault(settingKey)) {
+    if (!valuesEqual(value, getGlobalDefault(settingKey))) {
         container[settingKey] = value;
         return 'set';
     }
@@ -1133,12 +1137,12 @@ const applyChallengeProfile = (name, challengeId) => {
     }
     const container = {};
     for (const [settingKey, value] of Object.entries(sanitized)) {
-        // Same pruning rule as _applyChallengeOverride: a value strictly equal
-        // to its effective global default is redundant as an override.
+        // Same pruning rule as _applyChallengeOverride: a value equal to its
+        // effective global default is redundant as an override.
         const defaultValue = Object.prototype.hasOwnProperty.call(globalDefaults, settingKey)
             ? globalDefaults[settingKey]
             : SETTINGS_SCHEMA[settingKey]?.default;
-        if (value !== defaultValue) {
+        if (!valuesEqual(value, defaultValue)) {
             container[settingKey] = value;
         }
     }
@@ -1359,7 +1363,7 @@ const isSettingModified = (key) => {
         const currentValue = currentSettings[key];
         const defaultValue = defaultSettings[key];
 
-        return JSON.stringify(currentValue) !== JSON.stringify(defaultValue);
+        return !valuesEqual(currentValue, defaultValue);
     } catch (error) {
         logger.withCategory('settings').error(`Error checking if setting ${key} is modified:`, error);
         return false;
@@ -1378,7 +1382,7 @@ const isGlobalDefaultModified = (settingKey) => {
         const currentValue = getGlobalDefault(settingKey);
         const schemaDefault = SETTINGS_SCHEMA[settingKey].default;
 
-        return JSON.stringify(currentValue) !== JSON.stringify(schemaDefault);
+        return !valuesEqual(currentValue, schemaDefault);
     } catch (error) {
         logger.withCategory('settings').error(`Error checking if global default ${settingKey} is modified:`, error);
         return false;

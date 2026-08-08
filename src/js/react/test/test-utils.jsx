@@ -1,6 +1,7 @@
 import { render, fireEvent as preactFireEvent } from '@testing-library/preact';
 import { fireEvent as domFireEvent } from '@testing-library/dom';
 import { TranslationProvider } from '@/contexts/TranslationContext';
+import { AutovoteProvider } from '@/contexts/AutovoteContext';
 
 // preact/compat rewrites onBlur/onFocus to listen on focusout/focusin
 // (which bubble). @testing-library/preact's fireEvent wrapper miscases
@@ -17,10 +18,16 @@ const fireEvent = new Proxy(preactFireEvent, {
 });
 
 /**
- * Wrapper component that provides all necessary context providers
+ * Wrapper component that provides all necessary context providers.
+ * AutovoteProvider mirrors the production tree (App.jsx wraps the modals in
+ * it); its mount-time auto-resume no-ops under the mocked window.api.
  */
 function AllProviders({ children }) {
-    return <TranslationProvider>{children}</TranslationProvider>;
+    return (
+        <TranslationProvider>
+            <AutovoteProvider>{children}</AutovoteProvider>
+        </TranslationProvider>
+    );
 }
 
 /**

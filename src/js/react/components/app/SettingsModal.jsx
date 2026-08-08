@@ -3,6 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
+import { useAutovote } from '@/contexts/AutovoteContext';
 import { groupSchemaEntries } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
@@ -14,6 +15,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
  */
 export function SettingsModal({ isOpen, onClose }) {
     const { t, language, setLanguage } = useTranslation();
+    const { rearmSchedule } = useAutovote();
     const { settings, updateSetting, refetch: refetchSettings } = useSettings();
     const { schema, defaults, groups, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
@@ -161,14 +163,14 @@ export function SettingsModal({ isOpen, onClose }) {
             if (uiValues.language !== language) {
                 setLanguage(uiValues.language);
             }
-            if (window.handleThresholdSettingsChange) {
-                await window.handleThresholdSettingsChange();
-            }
+            // Re-arm the cadence timer so a changed threshold / scheduled-fill
+            // setting takes effect now, not after the current wait elapses.
+            await rearmSchedule();
             onClose();
         } catch (err) {
             await window.api.logError(`Error saving settings: ${err.message || err}`);
         }
-    }, [commit, titleRules, uiValues.language, language, setLanguage, onClose]);
+    }, [commit, titleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);
 
     if (!isOpen) return null;
 

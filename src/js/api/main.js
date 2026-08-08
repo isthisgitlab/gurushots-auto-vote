@@ -96,15 +96,14 @@ const setCancellationFlag = (cancel) => {
  *    - Votes on images if exposure factor is less than the exposure threshold
  *
  * @param {string} token - Authentication token
- * @param {number|function} [getExposureThreshold] - Optional exposure-threshold resolver kept for caller backward-compat; unused internally (the voting-logic service reads settings directly).
+ * @param {number|function} [_getExposureThreshold] - Optional exposure-threshold resolver kept for caller backward-compat; unused internally (the voting-logic service reads settings directly).
  * @param {string|number} [challengeIdFilter] - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
  * @returns {Promise<{success:boolean, message?:string, error?:string, challenges?:Array}>}
  *   `challenges` is the *full* active list this cycle fetched (not the per-challenge
  *   filtered subset), so callers can reuse it for threshold scheduling instead of
  *   re-fetching. Absent only when the fetch itself threw before a list was obtained.
  */
-// eslint-disable-next-line no-unused-vars
-const fetchChallengesAndVote = async (token, getExposureThreshold = null, challengeIdFilter = null) => {
+const fetchChallengesAndVote = async (token, _getExposureThreshold = null, challengeIdFilter = null) => {
     logger.withCategory('voting').startOperation('voting-process', 'Voting process');
 
     try {

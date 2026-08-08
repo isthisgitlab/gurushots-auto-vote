@@ -10,12 +10,14 @@ import { SettingInput } from './SettingInput';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { useAutovote } from '@/contexts/AutovoteContext';
 
 /**
  * Per-challenge settings modal
  */
 export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challengeTitle, challenge = null }) {
     const { t } = useTranslation();
+    const { rearmSchedule } = useAutovote();
     const {
         schema,
         defaults,
@@ -172,10 +174,9 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                 }
             }
 
-            // Notify threshold scheduling update
-            if (window.handleThresholdSettingsChange) {
-                await window.handleThresholdSettingsChange();
-            }
+            // Re-arm the cadence timer so a changed per-challenge threshold /
+            // scheduled fill takes effect now, not after the current wait.
+            await rearmSchedule();
 
             onClose();
         } catch (err) {
@@ -183,7 +184,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         } finally {
             setSaving(false);
         }
-    }, [challengeId, overrides, schema, onClose]);
+    }, [challengeId, overrides, schema, rearmSchedule, onClose]);
 
     if (!isOpen) return null;
 

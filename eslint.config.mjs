@@ -24,6 +24,15 @@ export default [
         },
     },
     pluginJs.configs.recommended,
+    // Underscore-prefixed args/catch bindings are intentionally unused (e.g.
+    // params kept for caller positional backward-compat). Lets those sites
+    // drop `eslint-disable no-unused-vars` comments, which @ttsc/lint would
+    // otherwise warn about as unknown-rule directives on every typecheck run.
+    {
+        rules: {
+            'no-unused-vars': ['error', { argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
+        },
+    },
     // logger.js owns the console — it is the only module allowed to call
     // console.log/debug directly (file-write fallback + format output).
     {
