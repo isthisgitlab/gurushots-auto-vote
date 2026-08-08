@@ -334,9 +334,11 @@ const reflectNewEntry = (challenge, imageId) => {
 const refreshChallengeState = async (challenge, token, { getActiveChallenges, logger }, label) => {
     if (typeof getActiveChallenges !== 'function') return 'unavailable';
     const log = logger.withCategory('autoFill');
+    // Collapse CR/LF in the cause before interpolation (same forgery guard
+    // challengeTag applies): the message can carry server-influenced text.
     const staleWarning = (cause) =>
         log.warning(
-            `${label}: could not refresh live challenge state for ${logger.challengeTag(challenge)}${cause ? ` (${cause})` : ''}; ` +
+            `${label}: could not refresh live challenge state for ${logger.challengeTag(challenge)}${cause ? ` (${String(cause).replace(/[\r\n]+/g, ' ')})` : ''}; ` +
                 'proceeding with pass-start data — a manually submitted entry may not be seen and could be duplicated',
             null,
         );
@@ -354,15 +356,26 @@ const refreshChallengeState = async (challenge, token, { getActiveChallenges, lo
     const fresh = response.challenges.find((c) => String(c?.id) === String(challenge.id));
     if (!fresh) {
         log.info(
-            `${label}: ${logger.challengeTag(challenge)} is no longer in the active challenge list — skipping submit`,
+            `${label}: ${logger.challengeTag(challenge)} is no longer in the active challenge list — not submitting a new photo to it`,
             null,
         );
         return 'gone';
     }
-    // Adopt only a well-formed member shape: downstream consumers this cycle
-    // (runBoost destructures challenge.member without guards) would crash the
-    // whole pass on a partial payload.
-    if (!fresh.member || typeof fresh.member !== 'object' || !Array.isArray(fresh.member?.ranking?.entries)) {
+    // Adopt only a member shape every later consumer of THIS challenge object
+    // can survive: the entries array (the guards here), member.boost (runBoost
+    // destructures it without a guard and reads .timeout), and ranking.exposure
+    // (evaluateVotingDecision reads .exposure_factor off it unguarded). A
+    // partial payload would otherwise crash the whole voting pass, not just
+    // this challenge — stale beats crashed.
+    const member = fresh.member;
+    if (
+        !member ||
+        typeof member !== 'object' ||
+        !Array.isArray(member.ranking?.entries) ||
+        member.ranking?.exposure == null ||
+        !member.boost ||
+        typeof member.boost !== 'object'
+    ) {
         staleWarning('malformed challenge payload');
         return 'unavailable';
     }
@@ -372,13 +385,21 @@ const refreshChallengeState = async (challenge, token, { getActiveChallenges, lo
     // very double-submit this refresh exists to prevent. Union by id only
     // grows the entry count, which errs toward fewer submits. prevEntries is
     // sliced because in mock mode `fresh` can be the identical cached object,
-    // making prev and fresh the same array.
+    // making prev and fresh the same array. An id-less prev entry (malformed)
+    // can't be matched, so it is kept — again the fewer-submits direction.
     const prevEntries = getEntries(challenge).slice();
-    challenge.member = fresh.member;
-    const freshEntries = fresh.member.ranking.entries;
-    const freshIds = new Set(freshEntries.map((entry) => (entry ? String(entry.id) : null)));
+    challenge.member = member;
+    const freshEntries = member.ranking.entries;
+    const freshIds = new Set(
+        freshEntries.filter((entry) => entry && entry.id != null).map((entry) => String(entry.id)),
+    );
     for (const entry of prevEntries) {
-        if (entry && !freshIds.has(String(entry.id))) {
+        // An id-less entry (malformed upstream data) can't be matched by id;
+        // dedupe it by object identity instead so a repeated refresh — or the
+        // mock-mode case where prev and fresh are the same array — never
+        // appends a second copy of it.
+        const isDuplicate = entry?.id == null ? freshEntries.includes(entry) : freshIds.has(String(entry.id));
+        if (entry && !isDuplicate) {
             freshEntries.push(entry);
         }
     }
@@ -527,7 +548,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
             logger
                 .withCategory('autoFill')
                 .info(
-                    `autoFill: live re-check shows ${logger.challengeTag(challenge)} already has ${entryCount} entries (target ${desired}) — an entry was added outside this run (e.g. manual submission); standing down`,
+                    `autoFill: live re-check shows ${logger.challengeTag(challenge)} already has ${entryCount} entries (target ${desired}) — an entry was added outside this run (e.g. a manual submission); standing down`,
                     null,
                 );
             return 'skipped';
@@ -707,7 +728,7 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
             logger
                 .withCategory('autoFill')
                 .info(
-                    `emergencyFill: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. manual submission); standing down`,
+                    `emergencyFill: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. a manual submission); standing down`,
                     null,
                 );
             return 'skipped';
@@ -977,7 +998,7 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
         logger
             .withCategory('autoFill')
             .info(
-                `fillNew: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. manual submission); falling back to an existing entry`,
+                `fillNew: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. a manual submission); not submitting a new photo`,
                 null,
             );
         return { ok: false, imageId: null, reason: 'no-slots' };

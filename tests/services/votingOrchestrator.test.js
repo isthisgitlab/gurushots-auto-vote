@@ -259,6 +259,43 @@ describe('mock-parity behaviors on the shared path', () => {
             }),
         );
     });
+
+    // When the live re-check says the challenge left the active list, the
+    // fill-new callers must NOT fire the fallback apply — it is a known-doomed
+    // call that would only add a second failure log.
+    test('boost fill-new challenge-gone → no fallback applyBoost call', async () => {
+        const settings = require('../../src/js/settings');
+        const challenge = makeChallenge({
+            member: {
+                boost: { state: 'AVAILABLE', timeout: NOW + 600 },
+                ranking: { entries: [], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'boost' }]);
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: false, imageId: null, reason: 'challenge-gone' });
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        try {
+            const result = await runVotingPass('tok', null, deps(api));
+            expect(result.success).toBe(true);
+            expect(api.applyBoost).not.toHaveBeenCalled();
+            expect(api.applyBoostToEntry).not.toHaveBeenCalled();
+        } finally {
+            settings.getEffectiveSetting.mockImplementation(() => false);
+        }
+    });
+
+    test('turbo fill-new challenge-gone → no fallback applyTurbo call', async () => {
+        const challenge = makeChallenge();
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'turbo' }]);
+        votingLogic.shouldApplyTurbo.mockReturnValue({ apply: true, fillNew: true, imageId: 'existing-1' });
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: false, imageId: null, reason: 'challenge-gone' });
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result.success).toBe(true);
+        expect(api.applyTurbo).not.toHaveBeenCalled();
+    });
 });
 
 describe('cancellation checkpoints', () => {

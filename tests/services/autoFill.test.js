@@ -2052,7 +2052,20 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         return { logger, lines };
     };
 
-    const freshList = (id, entries) => ({ challenges: [{ id, member: { ranking: { entries } } }] });
+    // Full member shape: the adoption guard requires entries (array), boost
+    // (object), and ranking.exposure — the fields unguarded downstream
+    // consumers (runBoost, evaluateVotingDecision) read off the challenge.
+    const freshList = (id, entries) => ({
+        challenges: [
+            {
+                id,
+                member: {
+                    boost: { state: 'LOCKED', timeout: 0 },
+                    ranking: { entries, exposure: { exposure_factor: 100 } },
+                },
+            },
+        ],
+    });
 
     // A due fill: 1 entry at T-9m with a single {2 @ T-10m} row → target 2.
     const dueChallenge = () => makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 9 * 60 });
@@ -2116,6 +2129,17 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         ['challenges undefined', { challenges: undefined }],
         ['entries not an array', { challenges: [{ id: 'c1', member: { ranking: { entries: null } } }] }],
         ['member missing', { challenges: [{ id: 'c1' }] }],
+        ['member not an object', { challenges: [{ id: 'c1', member: 'oops' }] }],
+        // Entries valid but a field an unguarded downstream consumer needs is
+        // absent — adopting these would crash the pass later in the cycle.
+        [
+            'boost missing',
+            { challenges: [{ id: 'c1', member: { ranking: { entries: [], exposure: { exposure_factor: 1 } } } }] },
+        ],
+        [
+            'ranking.exposure missing',
+            { challenges: [{ id: 'c1', member: { boost: { state: 'LOCKED' }, ranking: { entries: [] } } }] },
+        ],
     ])('malformed refresh payload (%s) → submit proceeds, no adoption, no throw', async (_label, payload) => {
         const challenge = dueChallenge();
         const originalMember = challenge.member;
@@ -2174,6 +2198,95 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         const challenge = makeChallenge();
         const result = await refreshChallengeState(challenge, 'tok', { logger: makeLogger() }, 'autoFill');
         expect(result).toBe('unavailable');
+    });
+
+    test('mock-mode aliasing: fresh IS the same cached object → refreshed, entries untouched', async () => {
+        // Mock getActiveChallenges returns the identical session-cached
+        // objects, so prev and fresh entries are the SAME array. The merge
+        // must not drop, duplicate, or endlessly grow it.
+        const challenge = {
+            id: 'c1',
+            max_photo_submits: 4,
+            close_time: NOW + 600,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [{ id: 'e1' }, { id: 'e2' }], exposure: { exposure_factor: 100 } },
+            },
+        };
+        const result = await refreshChallengeState(
+            challenge,
+            'tok',
+            { getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }), logger: makeLogger() },
+            'autoFill',
+        );
+        expect(result).toBe('refreshed');
+        expect(challenge.member.ranking.entries.map((e) => e.id)).toEqual(['e1', 'e2']);
+    });
+
+    test('an id-less local entry survives the merge (kept once, never dropped or duplicated)', async () => {
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }, { votes: 3 }] });
+        const deps = {
+            getActiveChallenges: jest.fn().mockResolvedValue(freshList('c1', [{ id: 'e1' }])),
+            logger: makeLogger(),
+        };
+        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoFill')).toBe('refreshed');
+        expect(challenge.member.ranking.entries).toHaveLength(2);
+        // A second refresh in the same pass must not append another copy —
+        // id-less entries are deduped by object identity, not by id.
+        deps.getActiveChallenges.mockResolvedValue(freshList('c1', [{ id: 'e1' }]));
+        expect(await refreshChallengeState(challenge, 'tok', deps, 'autoFill')).toBe('refreshed');
+        expect(challenge.member.ranking.entries).toHaveLength(2);
+    });
+
+    test('mock-mode aliasing with an id-less entry → no self-duplication', async () => {
+        // prev and fresh are the SAME array here; the id-less entry is already
+        // present in freshEntries, so identity-dedupe must not re-append it.
+        const idless = { votes: 3 };
+        const challenge = {
+            id: 'c1',
+            max_photo_submits: 4,
+            close_time: NOW + 600,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [{ id: 'e1' }, idless], exposure: { exposure_factor: 100 } },
+            },
+        };
+        const result = await refreshChallengeState(
+            challenge,
+            'tok',
+            { getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [challenge] }), logger: makeLogger() },
+            'autoFill',
+        );
+        expect(result).toBe('refreshed');
+        expect(challenge.member.ranking.entries).toHaveLength(2);
+    });
+
+    test('emergencyFill: challenge gone from a non-empty fresh list → skipped, no submit', async () => {
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 200 });
+        const deps = {
+            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn(),
+            getActiveChallenges: jest.fn().mockResolvedValue(freshList('some-other-id', [])),
+        };
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, deps);
+        expect(result).toBe('skipped');
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('emergencyFill: refresh rejects → batch proceeds on pass-start data', async () => {
+        const challenge = makeChallenge({ maxSubmits: 2, entries: [], closeIn: 200 });
+        const deps = {
+            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+            getActiveChallenges: jest.fn().mockRejectedValue(new Error('boom')),
+        };
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, deps);
+        expect(result).toBe('submitted');
+        expect(deps.submitToChallenge.mock.calls[0][1]).toHaveLength(2);
     });
 
     test('emergencyFill: refreshed entries shrink the batch → picked truncated to the free slots', async () => {
