@@ -148,7 +148,9 @@ function createLoginWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            preload: path.join(__dirname, 'preload.js'),
+            // Bundled by scripts/build-react.js — the sandboxed preload cannot
+            // require() the relative channel manifest, so it ships pre-bundled.
+            preload: path.join(__dirname, '..', '..', 'dist', 'preload-bundle.js'),
             webSecurity: true,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',
@@ -204,7 +206,9 @@ function createMainWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            preload: path.join(__dirname, 'preload.js'),
+            // Bundled by scripts/build-react.js — the sandboxed preload cannot
+            // require() the relative channel manifest, so it ships pre-bundled.
+            preload: path.join(__dirname, '..', '..', 'dist', 'preload-bundle.js'),
             webSecurity: true,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',

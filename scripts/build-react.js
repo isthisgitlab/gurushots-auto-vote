@@ -17,6 +17,12 @@ const entryPoints = {
     // Android background service entry — runs in a bare WebView (no
     // Capacitor runtime) owned by AutoVoteService. Not a React page.
     headless: path.join(jsDir, 'headless', 'index.js'),
+    // Electron preload. Electron sandboxes preloads by default, and a
+    // sandboxed preload's require() shim only resolves 'electron' + a few
+    // builtins — NOT relative modules — so the shared channel manifest
+    // (src/js/ipc/manifest.js) must be BUNDLED into the preload file the
+    // BrowserWindows load (dist/preload.js).
+    preload: path.join(jsDir, 'preload.js'),
 };
 
 // Capacitor entry point. Capacitor copies dist/ wholesale into the
@@ -226,6 +232,10 @@ async function buildReact() {
         // uses the native AndroidHeadless* @JavascriptInterfaces), so the
         // require shim's empty object is never accessed.
         headless: { external: [...RENDERER_EXTERNALS, ...CAPACITOR_EXTERNALS], banner: REQUIRE_SHIM },
+        // Electron preload: CJS with only 'electron' external — exactly what
+        // the sandboxed preload require shim can resolve. No banner shim and
+        // no browser aliasing needed; the manifest it pulls in is pure data.
+        preload: { platform: 'node', format: 'cjs', external: ['electron'], banner: {} },
     };
 
     try {
