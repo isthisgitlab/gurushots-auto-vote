@@ -1,40 +1,22 @@
-import { useState, useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
 
 /**
  * Vote button for a single challenge
  */
 export function VoteButton({ challengeId, challengeTitle, onVoteComplete }) {
     const { t } = useTranslation();
-    const [loading, setLoading] = useState(false);
-
-    const handleVote = useCallback(async () => {
-        setLoading(true);
-        try {
-            const result = await window.api.voteOnChallengeManual(challengeId, challengeTitle);
-
-            if (result?.success) {
-                if (onVoteComplete) {
-                    onVoteComplete();
-                }
-            } else {
-                await window.api.logError(`Voting failed: ${result?.error || 'Unknown error'}`);
-            }
-        } catch (err) {
-            await window.api.logError(`Error voting on challenge: ${err.message || err}`);
-        } finally {
-            setLoading(false);
-        }
-    }, [challengeId, challengeTitle, onVoteComplete]);
 
     return (
-        <button className="btn btn-latvian btn-sm" onClick={handleVote} disabled={loading} title={t('app.voteTitle')}>
-            {loading ? (
-                <>
-                    <span className="loading loading-spinner loading-xs" />
-                    {t('app.voting')}
-                </>
-            ) : (
+        <AsyncActionButton
+            className="btn btn-latvian btn-sm"
+            title={t('app.voteTitle')}
+            action={() => window.api.voteOnChallengeManual(challengeId, challengeTitle)}
+            onSuccess={onVoteComplete}
+            failureLogPrefix="Voting failed"
+            errorLogPrefix="Error voting on challenge"
+            loadingLabel={t('app.voting')}
+            idleContent={
                 <>
                     <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -46,7 +28,7 @@ export function VoteButton({ challengeId, challengeTitle, onVoteComplete }) {
                     </svg>
                     {t('app.vote')}
                 </>
-            )}
-        </button>
+            }
+        />
     );
 }

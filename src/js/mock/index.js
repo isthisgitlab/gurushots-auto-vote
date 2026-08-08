@@ -93,6 +93,39 @@ const simulateApiError = (error, delay = 500) => {
 };
 
 /**
+ * Shared preamble + token guard for the mock API methods. Logs
+ * `Mock <name>` on the category's api channel, runs the per-method
+ * debug lines, and — when the token argument is missing — emits the
+ * standard authentication error log and short-circuits with the
+ * method's no-token result. The wrapped `fn` therefore only ever runs
+ * with a token present (mock mode accepts any token, including real ones).
+ *
+ * @param {object} spec
+ * @param {string} spec.name - method name for the "Mock <name>" preamble
+ * @param {string} [spec.category] - preamble logger category (default 'api')
+ * @param {number} spec.tokenArg - index of the token in the call args
+ * @param {Function} [spec.debug] - extra per-method debug logging (gets the raw args)
+ * @param {string} [spec.noTokenMessage] - authentication error line
+ * @param {Function} spec.onNoToken - produces the no-token return value
+ * @param {Function} fn - the method body
+ * @returns {(...args: any[]) => Promise<any>}
+ */
+const mockMethod = (
+    { name, category = 'api', tokenArg, debug, noTokenMessage = 'No token provided, returning error', onNoToken },
+    fn,
+) => {
+    return async (...args) => {
+        logger.withCategory(category).api(`Mock ${name}`, null);
+        if (debug) debug(...args);
+        if (!args[tokenArg]) {
+            logger.withCategory('authentication').error(noTokenMessage, null);
+            return onNoToken();
+        }
+        return fn(...args);
+    };
+};
+
+/**
  * Mock API client that can be used for testing
  */
 const mockApiClient = {
@@ -117,13 +150,19 @@ const mockApiClient = {
     /**
      * Simulate getting active challenges
      */
-    getActiveChallenges: async (token) => {
-        logger.withCategory('api').api('Mock getActiveChallenges', null);
-        logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
-        logger.withCategory('api').debug(`Token starts with mock_: ${token ? token.startsWith('mock_') : false}`, null);
-
-        // In mock mode, accept any token (including real ones)
-        if (token) {
+    getActiveChallenges: mockMethod(
+        {
+            name: 'getActiveChallenges',
+            tokenArg: 0,
+            debug: (token) => {
+                logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
+                logger
+                    .withCategory('api')
+                    .debug(`Token starts with mock_: ${token ? token.startsWith('mock_') : false}`, null);
+            },
+            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+        },
+        async () => {
             // Use cached challenges for session stability, generate only once per session
             if (!sessionMockCache.challenges) {
                 if (challenges.generateMockChallenges) {
@@ -146,22 +185,23 @@ const mockApiClient = {
                     .info(`Using cached mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
             }
             return simulateApiResponse(sessionMockCache.challenges, 800);
-        } else {
-            logger.withCategory('authentication').error('No token provided, returning error', null);
-            return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
-        }
-    },
+        },
+    ),
 
     /**
      * Simulate getting vote images
      */
-    getVoteImages: async (challenge, token) => {
-        logger.withCategory('api').api('Mock getVoteImages', null);
-        logger.withCategory('challenges').debug(`Challenge: ${challenge.title}`, null);
-        logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
-
-        // In mock mode, accept any token (including real ones)
-        if (token) {
+    getVoteImages: mockMethod(
+        {
+            name: 'getVoteImages',
+            tokenArg: 1,
+            debug: (challenge, token) => {
+                logger.withCategory('challenges').debug(`Challenge: ${challenge.title}`, null);
+                logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
+            },
+            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+        },
+        async (challenge) => {
             const challengeUrl = challenge.url;
             const cacheKey = `${challengeUrl}-${challenge.id}`;
 
@@ -190,25 +230,26 @@ const mockApiClient = {
             const cachedVoteImages = sessionMockCache.voteImages.get(cacheKey);
             logger.withCategory('voting').debug(`Returning mock vote images: ${cachedVoteImages.images.length}`, null);
             return simulateApiResponse(cachedVoteImages, 1200);
-        } else {
-            logger.withCategory('authentication').error('No token provided, returning error', null);
-            return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
-        }
-    },
+        },
+    ),
 
     /**
      * Simulate submitting votes
      */
-    submitVotes: async (voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
-        logger.withCategory('api').api('Mock submitVotes', null);
-        logger
-            .withCategory('voting')
-            .debug(`Vote images count: ${voteImages.images ? voteImages.images.length : 0}`, null);
-        logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
-        logger.withCategory('voting').debug(`Exposure threshold: ${exposureThreshold}`, null);
-
-        // In mock mode, accept any token (including real ones)
-        if (token) {
+    submitVotes: mockMethod(
+        {
+            name: 'submitVotes',
+            tokenArg: 1,
+            debug: (voteImages, token, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) => {
+                logger
+                    .withCategory('voting')
+                    .debug(`Vote images count: ${voteImages.images ? voteImages.images.length : 0}`, null);
+                logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
+                logger.withCategory('voting').debug(`Exposure threshold: ${exposureThreshold}`, null);
+            },
+            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+        },
+        async (voteImages) => {
             if (voteImages.images && voteImages.images.length > 0) {
                 logger.withCategory('voting').info('Submitting mock votes successfully', null);
 
@@ -270,23 +311,24 @@ const mockApiClient = {
                 logger.withCategory('voting').error('No vote images, returning error', null);
                 return simulateApiError(voting.mockVoteSubmissionFailure, 1000);
             }
-        } else {
-            logger.withCategory('authentication').error('No token provided, returning error', null);
-            return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
-        }
-    },
+        },
+    ),
 
     /**
      * Simulate applying boost
      */
-    applyBoost: async (challenge, token) => {
-        logger.withCategory('api').api('Mock applyBoost', null);
-        logger.withCategory('challenges').debug(`Challenge: ${challenge.title}`, null);
-        logger.withCategory('voting').debug(`Boost state: ${challenge.member.boost.state}`, null);
-        logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
-
-        // In mock mode, accept any token (including real ones)
-        if (token) {
+    applyBoost: mockMethod(
+        {
+            name: 'applyBoost',
+            tokenArg: 1,
+            debug: (challenge, token) => {
+                logger.withCategory('challenges').debug(`Challenge: ${challenge.title}`, null);
+                logger.withCategory('voting').debug(`Boost state: ${challenge.member.boost.state}`, null);
+                logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
+            },
+            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+        },
+        async (challenge) => {
             const boostState = challenge.member.boost.state;
             if (boostState === 'AVAILABLE' || boostState === 'AVAILABLE_KEY') {
                 logger.withCategory('voting').debug('Applying boost successfully', null);
@@ -298,46 +340,48 @@ const mockApiClient = {
                 logger.withCategory('voting').info('Boost not available', null);
                 return simulateApiError(boost.mockBoostFailure, 800);
             }
-        } else {
-            logger.withCategory('authentication').error('No token provided, returning error', null);
-            return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
-        }
-    },
+        },
+    ),
 
     /**
      * Simulate applying boost to a specific entry
      */
-    applyBoostToEntry: async (challengeId, imageId, token) => {
-        logger.withCategory('api').api('Mock applyBoostToEntry', null);
-        logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
-        logger.withCategory('voting').debug(`Image ID: ${imageId}`, null);
-        logger.withCategory('general').debug(`Token provided: ${token ? `${token.substring(0, 10)}...` : 'none'}`);
-
-        // In mock mode, accept any token (including real ones)
-        if (token) {
+    applyBoostToEntry: mockMethod(
+        {
+            name: 'applyBoostToEntry',
+            tokenArg: 2,
+            debug: (challengeId, imageId, token) => {
+                logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
+                logger.withCategory('voting').debug(`Image ID: ${imageId}`, null);
+                logger.withCategory('general').debug(`Token provided: ${token ? 'yes' : 'none'}`);
+            },
+            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+        },
+        async () => {
             logger.withCategory('voting').debug('Applying boost to specific entry successfully', null);
             return simulateApiResponse(boost.mockBoostSuccess, 1500);
-        } else {
-            logger.withCategory('authentication').error('No token provided, returning error', null);
-            return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
-        }
-    },
+        },
+    ),
 
     /**
      * Simulate applying a won Turbo to a specific entry. The shape mirrors
      * the live /rest/set_challenge_turbo response: { ok, raw }.
      */
-    applyTurbo: async (challengeId, imageId, token) => {
-        logger.withCategory('api').api('Mock applyTurbo', null);
-        logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
-        logger.withCategory('voting').debug(`Image ID: ${imageId}`, null);
-        if (!token) {
-            logger.withCategory('authentication').error('No token provided, returning error', null);
-            return { ok: false, raw: null };
-        }
-        await simulateApiResponse({}, 800);
-        return { ok: true, raw: { success: true } };
-    },
+    applyTurbo: mockMethod(
+        {
+            name: 'applyTurbo',
+            tokenArg: 2,
+            debug: (challengeId, imageId) => {
+                logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
+                logger.withCategory('voting').debug(`Image ID: ${imageId}`, null);
+            },
+            onNoToken: () => ({ ok: false, raw: null }),
+        },
+        async () => {
+            await simulateApiResponse({}, 800);
+            return { ok: true, raw: { success: true } };
+        },
+    ),
 
     /**
      * Simulate playing the Turbo mini-game. Mirrors the real
@@ -345,16 +389,22 @@ const mockApiClient = {
      * doubleFailed, won }) so the manual-turbo IPC handler behaves the same
      * in mock mode instead of reaching the live battle endpoints.
      */
-    runTurboMiniGame: async (challenge, token) => {
-        logger.withCategory('turbo').api('Mock runTurboMiniGame', null);
-        logger.withCategory('challenges').debug(`Challenge ID: ${challenge?.id}`, null);
-        if (!token) {
-            logger.withCategory('authentication').error('No token provided, no battles played', null);
-            return { played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false };
-        }
-        await simulateApiResponse({}, 800);
-        return { played: 1, correct: 1, flipped: 0, doubleFailed: 0, won: true };
-    },
+    runTurboMiniGame: mockMethod(
+        {
+            name: 'runTurboMiniGame',
+            category: 'turbo',
+            tokenArg: 1,
+            debug: (challenge) => {
+                logger.withCategory('challenges').debug(`Challenge ID: ${challenge?.id}`, null);
+            },
+            noTokenMessage: 'No token provided, no battles played',
+            onNoToken: () => ({ played: 0, correct: 0, flipped: 0, doubleFailed: 0, won: false }),
+        },
+        async () => {
+            await simulateApiResponse({}, 800);
+            return { played: 1, correct: 1, flipped: 0, doubleFailed: 0, won: true };
+        },
+    ),
 
     /**
      * Simulate fetching the user's challenge-eligible photo library.
@@ -370,123 +420,132 @@ const mockApiClient = {
      * term (case-insensitive substring) — so the auto-fill search path
      * and its unfiltered fallback can both be exercised in mock mode.
      */
-    getEligiblePhotos: async (challengeId, token, options = {}) => {
-        logger.withCategory('api').api('Mock getEligiblePhotos', null);
-        logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
-        if (!token) {
-            logger.withCategory('authentication').error('No token provided, returning empty', null);
-            return [];
-        }
-        const now = Math.floor(Date.now() / 1000);
-        const items = [
-            {
-                id: 'photo_pink_flower_001',
-                labels: ['Pink', 'Flower', 'Petal', 'Plant'],
-                votes: 312,
-                views: 1820,
-                upload_date: now - 86400 * 2,
-                permission: { allowed: true, message: null },
+    getEligiblePhotos: mockMethod(
+        {
+            name: 'getEligiblePhotos',
+            tokenArg: 1,
+            debug: (challengeId) => {
+                logger.withCategory('challenges').debug(`Challenge ID: ${challengeId}`, null);
             },
-            {
-                id: 'photo_nature_landscape_002',
-                labels: ['Nature', 'Landscape', 'Tree', 'Sky'],
-                votes: 178,
-                views: 1110,
-                upload_date: now - 86400 * 5,
-                permission: { allowed: true, message: null },
-            },
-            {
-                id: 'photo_urban_003',
-                labels: ['Architecture', 'Building', 'Urban'],
-                votes: 89,
-                views: 640,
-                upload_date: now - 86400 * 7,
-                permission: { allowed: true, message: null },
-            },
-            {
-                id: 'photo_recent_004',
-                labels: ['Portrait', 'Person'],
-                votes: 24,
-                views: 95,
-                upload_date: now - 3600,
-                permission: { allowed: true, message: null },
-            },
-            {
-                id: 'photo_pink_petal_005',
-                labels: ['Pink', 'Petal', 'Macro'],
-                votes: 401,
-                views: 2230,
-                upload_date: now - 86400 * 4,
-                permission: { allowed: true, message: null },
-            },
-            {
-                id: 'photo_animal_006',
-                labels: ['Animal', 'Wildlife', 'Bird'],
-                votes: 156,
-                views: 980,
-                upload_date: now - 86400 * 10,
-                permission: { allowed: true, message: null },
-            },
-            {
-                id: 'photo_blocked_007',
-                labels: ['Pink', 'Flower'],
-                votes: 999,
-                views: 5000,
-                upload_date: now - 86400 * 1,
-                permission: { allowed: false, message: 'Already used in another challenge' },
-            },
-            {
-                id: 'photo_old_008',
-                labels: ['Misc'],
-                votes: 12,
-                views: 70,
-                upload_date: now - 86400 * 30,
-                permission: { allowed: true, message: null },
-            },
-        ];
-        await simulateApiResponse({}, 400);
-        const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
-        if (search === '') {
-            return items;
-        }
-        return items.filter((item) =>
-            (Array.isArray(item.labels) ? item.labels : []).some((label) =>
-                String(label).toLowerCase().includes(search),
-            ),
-        );
-    },
+            noTokenMessage: 'No token provided, returning empty',
+            onNoToken: () => [],
+        },
+        async (challengeId, token, options = {}) => {
+            const now = Math.floor(Date.now() / 1000);
+            const items = [
+                {
+                    id: 'photo_pink_flower_001',
+                    labels: ['Pink', 'Flower', 'Petal', 'Plant'],
+                    votes: 312,
+                    views: 1820,
+                    upload_date: now - 86400 * 2,
+                    permission: { allowed: true, message: null },
+                },
+                {
+                    id: 'photo_nature_landscape_002',
+                    labels: ['Nature', 'Landscape', 'Tree', 'Sky'],
+                    votes: 178,
+                    views: 1110,
+                    upload_date: now - 86400 * 5,
+                    permission: { allowed: true, message: null },
+                },
+                {
+                    id: 'photo_urban_003',
+                    labels: ['Architecture', 'Building', 'Urban'],
+                    votes: 89,
+                    views: 640,
+                    upload_date: now - 86400 * 7,
+                    permission: { allowed: true, message: null },
+                },
+                {
+                    id: 'photo_recent_004',
+                    labels: ['Portrait', 'Person'],
+                    votes: 24,
+                    views: 95,
+                    upload_date: now - 3600,
+                    permission: { allowed: true, message: null },
+                },
+                {
+                    id: 'photo_pink_petal_005',
+                    labels: ['Pink', 'Petal', 'Macro'],
+                    votes: 401,
+                    views: 2230,
+                    upload_date: now - 86400 * 4,
+                    permission: { allowed: true, message: null },
+                },
+                {
+                    id: 'photo_animal_006',
+                    labels: ['Animal', 'Wildlife', 'Bird'],
+                    votes: 156,
+                    views: 980,
+                    upload_date: now - 86400 * 10,
+                    permission: { allowed: true, message: null },
+                },
+                {
+                    id: 'photo_blocked_007',
+                    labels: ['Pink', 'Flower'],
+                    votes: 999,
+                    views: 5000,
+                    upload_date: now - 86400 * 1,
+                    permission: { allowed: false, message: 'Already used in another challenge' },
+                },
+                {
+                    id: 'photo_old_008',
+                    labels: ['Misc'],
+                    votes: 12,
+                    views: 70,
+                    upload_date: now - 86400 * 30,
+                    permission: { allowed: true, message: null },
+                },
+            ];
+            await simulateApiResponse({}, 400);
+            const search = typeof options.search === 'string' ? options.search.trim().toLowerCase() : '';
+            if (search === '') {
+                return items;
+            }
+            return items.filter((item) =>
+                (Array.isArray(item.labels) ? item.labels : []).some((label) =>
+                    String(label).toLowerCase().includes(search),
+                ),
+            );
+        },
+    ),
 
     /**
      * Simulate submitting one or more photos to a challenge. Mirrors
      * /rest/submit_to_challenge; returns { ok, raw }.
      */
-    submitToChallenge: async (challengeId, imageIds, token) => {
-        logger.withCategory('api').api('Mock submitToChallenge', null);
-        logger
-            .withCategory('challenges')
-            .debug(
-                `Challenge ID: ${challengeId}, photos: ${Array.isArray(imageIds) ? imageIds.join(',') : 'invalid'}`,
-                null,
-            );
-        if (!token) {
-            logger.withCategory('authentication').error('No token provided, returning error', null);
-            return { ok: false, raw: null };
-        }
-        if (!Array.isArray(imageIds) || imageIds.length === 0) {
-            return { ok: false, raw: { success: false, error: 'No image_ids provided' } };
-        }
-        await simulateApiResponse({}, 600);
-        return {
-            ok: true,
-            raw: {
-                success: true,
-                challenge_id: Number(challengeId),
-                member_challenge_count: 5,
-                join: false,
-                show_join_message: false,
+    submitToChallenge: mockMethod(
+        {
+            name: 'submitToChallenge',
+            tokenArg: 2,
+            debug: (challengeId, imageIds) => {
+                logger
+                    .withCategory('challenges')
+                    .debug(
+                        `Challenge ID: ${challengeId}, photos: ${Array.isArray(imageIds) ? imageIds.join(',') : 'invalid'}`,
+                        null,
+                    );
             },
-        };
-    },
+            onNoToken: () => ({ ok: false, raw: null }),
+        },
+        async (challengeId, imageIds) => {
+            if (!Array.isArray(imageIds) || imageIds.length === 0) {
+                return { ok: false, raw: { success: false, error: 'No image_ids provided' } };
+            }
+            await simulateApiResponse({}, 600);
+            return {
+                ok: true,
+                raw: {
+                    success: true,
+                    challenge_id: Number(challengeId),
+                    member_challenge_count: 5,
+                    join: false,
+                    show_join_message: false,
+                },
+            };
+        },
+    ),
 
     /**
      * Simulate the main voting process (fetchChallengesAndVote)

@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useBoost } from '@/api/useBoost';
 import { useTurbo } from '@/api/useTurbo';
+import { useAutoClear } from '@/hooks/useAutoClear';
 
 /**
  * Entry badge component showing entry details and per-entry action buttons.
@@ -34,16 +34,8 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
 
     // Auto-clear errors after a few seconds so a stuck red button doesn't
     // block the user from retrying without page state reset.
-    useEffect(() => {
-        if (!boostError) return undefined;
-        const id = setTimeout(clearBoostError, 5000);
-        return () => clearTimeout(id);
-    }, [boostError, clearBoostError]);
-    useEffect(() => {
-        if (!turboError) return undefined;
-        const id = setTimeout(clearTurboError, 5000);
-        return () => clearTimeout(id);
-    }, [turboError, clearTurboError]);
+    useAutoClear(boostError, clearBoostError, 5000);
+    useAutoClear(turboError, clearTurboError, 5000);
 
     const getEntryStyle = () => {
         if (isEntryBoosted) {

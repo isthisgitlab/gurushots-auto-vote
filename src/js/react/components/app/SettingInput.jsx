@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
+import { ResetButton } from '@/components/ui/ResetButton';
 
 // Used only to fingerprint a tag array for the draft-sync effect. A comma is
 // fine here: tagsTextToArray splits user input on commas before storage, so a
@@ -55,22 +56,7 @@ export function TagsField({ settingKey, value, onChange, onReset, placeholder, d
                 onChange={handleChange}
                 disabled={disabled}
             />
-            {onReset && (
-                <button
-                    className="btn btn-ghost btn-sm"
-                    title={t('app.resetToDefaultNotSaved')}
-                    onClick={() => onReset(settingKey)}
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                        />
-                    </svg>
-                </button>
-            )}
+            {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
         </div>
     );
 }
@@ -181,20 +167,7 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
             )}
             {onReset && (
                 <div className="flex items-center gap-2">
-                    <button
-                        className="btn btn-ghost btn-sm"
-                        title={t('app.resetToDefaultNotSaved')}
-                        onClick={() => onReset(settingKey)}
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                            />
-                        </svg>
-                    </button>
+                    <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />
                 </div>
             )}
         </div>
@@ -280,22 +253,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
                 <span aria-live="polite" id={hintId} className="text-sm">
                     {normalizedValue === '' && <span className="opacity-70">{t('app.scheduledFillTimeOff')}</span>}
                 </span>
-                {onReset && (
-                    <button
-                        className="btn btn-ghost btn-sm"
-                        title={t('app.resetToDefaultNotSaved')}
-                        onClick={() => onReset(settingKey)}
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                            />
-                        </svg>
-                    </button>
-                )}
+                {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
             </div>
         );
     }
@@ -333,22 +291,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
                     disabled={disabled}
                 />
                 <span className="text-sm">{t('app.minutes')}</span>
-                {onReset && (
-                    <button
-                        className="btn btn-ghost btn-sm"
-                        title={t('app.resetToDefaultNotSaved')}
-                        onClick={() => onReset(settingKey)}
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                            />
-                        </svg>
-                    </button>
-                )}
+                {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
             </div>
         );
     }
@@ -364,22 +307,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
                     onChange={(e) => onChange(settingKey, e.target.checked)}
                     disabled={disabled}
                 />
-                {onReset && (
-                    <button
-                        className="btn btn-ghost btn-sm"
-                        title={t('app.resetToDefaultNotSaved')}
-                        onClick={() => onReset(settingKey)}
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                            />
-                        </svg>
-                    </button>
-                )}
+                {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
             </div>
         );
     }
@@ -398,22 +326,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
                     disabled={disabled}
                 />
                 {config.unit && <span className="text-sm">{t(config.unit)}</span>}
-                {onReset && (
-                    <button
-                        className="btn btn-ghost btn-sm"
-                        title={t('app.resetToDefaultNotSaved')}
-                        onClick={() => onReset(settingKey)}
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                            />
-                        </svg>
-                    </button>
-                )}
+                {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
             </div>
         );
     }
@@ -428,22 +341,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
                 onChange={(e) => onChange(settingKey, e.target.value)}
                 disabled={disabled}
             />
-            {onReset && (
-                <button
-                    className="btn btn-ghost btn-sm"
-                    title={t('app.resetToDefaultNotSaved')}
-                    onClick={() => onReset(settingKey)}
-                >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                        />
-                    </svg>
-                </button>
-            )}
+            {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
         </div>
     );
 }

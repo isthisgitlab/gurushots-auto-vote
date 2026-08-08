@@ -16,6 +16,7 @@ const {
     getSettingsSchema,
     sanitizeFillSchedule,
 } = require('./settings/schema');
+const { getUiDefaultSettings } = require('./settings/uiDefaults');
 const {
     storage,
     initializeAsync,
@@ -35,21 +36,14 @@ const getDefaultSettings = () => {
     });
 
     return {
-        theme: 'light',
-        stayLoggedIn: false,
+        // UI-form settings (theme/language/timezone/timing/retry) come from
+        // the shared uiDefaults module — single source of truth with the
+        // renderer's settings form.
+        ...getUiDefaultSettings(),
         lastUsername: '',
         mock: getDefaultMockSetting(),
         token: '',
-        timezone: 'Europe/Riga',
-        customTimezones: [],
-        language: 'en', // Default language
         onboardingCompleted: false, // First-run welcome dismissed? (app-level flag, same class as apiTimeout)
-        // Timing settings (stored in user-friendly units)
-        apiTimeout: 30, // API request timeout in seconds (default: 30 seconds)
-        apiMaxRetries: 3, // Retries for transient API failures (network/timeout/429/5xx). 0 disables.
-        apiRetryBaseDelayMs: 1000, // Base for exponential backoff between retries (ms).
-        checkFrequencyMin: 3, // Lower bound (minutes). Equal to max → fixed-cadence behavior.
-        checkFrequencyMax: 3, // Upper bound (minutes). Each cycle picks a random delay in [min, max].
         // Window position and size settings
         windowBounds: {
             login: { x: undefined, y: undefined, width: 800, height: 960 },

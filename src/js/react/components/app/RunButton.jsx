@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
 
 /**
  * Run button for a single challenge — fires one full auto-strategy
@@ -8,32 +8,16 @@ import { useTranslation } from '@/contexts/TranslationContext';
  */
 export function RunButton({ challengeId, onVoteComplete }) {
     const { t } = useTranslation();
-    const [loading, setLoading] = useState(false);
-
-    const handleRun = useCallback(async () => {
-        setLoading(true);
-        try {
-            const result = await window.api.runVotingCycleForChallenge(challengeId);
-            if (result?.success) {
-                if (onVoteComplete) onVoteComplete();
-            } else {
-                await window.api.logError(`Run failed: ${result?.error || 'Unknown error'}`);
-            }
-        } catch (err) {
-            await window.api.logError(`Error running cycle: ${err.message || err}`);
-        } finally {
-            setLoading(false);
-        }
-    }, [challengeId, onVoteComplete]);
 
     return (
-        <button className="btn btn-latvian btn-xs px-1" onClick={handleRun} disabled={loading}>
-            {loading ? (
-                <>
-                    <span className="loading loading-spinner loading-xs" />
-                    {t('app.running')}
-                </>
-            ) : (
+        <AsyncActionButton
+            className="btn btn-latvian btn-xs px-1"
+            action={() => window.api.runVotingCycleForChallenge(challengeId)}
+            onSuccess={onVoteComplete}
+            failureLogPrefix="Run failed"
+            errorLogPrefix="Error running cycle"
+            loadingLabel={t('app.running')}
+            idleContent={
                 <>
                     <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
@@ -45,7 +29,7 @@ export function RunButton({ challengeId, onVoteComplete }) {
                     </svg>
                     {t('app.run')}
                 </>
-            )}
-        </button>
+            }
+        />
     );
 }

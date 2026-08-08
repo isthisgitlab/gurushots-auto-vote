@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { TranslationProvider, useTranslation } from '@/contexts/TranslationContext';
 import { useLogStream } from '@/hooks/useLogStream';
 import { LogsNavbar } from '@/components/logs/LogsNavbar';
-import { LogEntry, LogsEmptyState } from '@/components/logs/LogEntry';
+import { LogViewerBody } from '@/components/logs/LogViewerBody';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 
 /**
@@ -24,17 +24,7 @@ function LogsPageContent() {
             <div className="container mx-auto p-6">
                 <div className="card bg-base-100 shadow-md">
                     <div className="card-body p-4">
-                        <div className="h-[600px] overflow-y-auto bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg">
-                            <div className="space-y-1">
-                                {entries.length === 0 ? (
-                                    <LogsEmptyState text={t('logs.empty')} />
-                                ) : (
-                                    entries.map((entry, index) => (
-                                        <LogEntry key={`${entry.timestamp}-${index}`} entry={entry} />
-                                    ))
-                                )}
-                            </div>
-                        </div>
+                        <LogViewerBody entries={entries} heightClass="h-[600px]" />
                     </div>
                 </div>
             </div>

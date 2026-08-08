@@ -1,7 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { Modal } from '@/components/ui/Modal';
 import { useLogStream } from '@/hooks/useLogStream';
-import { LogEntry, LogsEmptyState } from '@/components/logs/LogEntry';
+import { LogViewerBody } from '@/components/logs/LogViewerBody';
 import { ConnectionBadge } from '@/components/ui/StatusBadge';
 
 /**
@@ -19,15 +19,7 @@ function LogsViewer() {
                 <span className="text-sm">{t('logs.status')}</span>
                 <ConnectionBadge connected={connected} />
             </div>
-            <div className="h-[60vh] overflow-y-auto bg-gray-900 text-green-400 font-mono text-sm p-4 rounded-lg">
-                <div className="space-y-1">
-                    {entries.length === 0 ? (
-                        <LogsEmptyState text={t('logs.empty')} />
-                    ) : (
-                        entries.map((entry, index) => <LogEntry key={`${entry.timestamp}-${index}`} entry={entry} />)
-                    )}
-                </div>
-            </div>
+            <LogViewerBody entries={entries} heightClass="h-[60vh]" />
         </div>
     );
 }

@@ -1,12 +1,29 @@
 import { useState, useCallback } from 'react';
+import { useAsyncIpcAction } from './useAsyncIpcAction';
+
+const invokeAuthenticate = (username, password, isMock = false) => window.api.authenticate(username, password, isMock);
 
 /**
- * Hook for authentication via IPC
- * @returns {{ authenticate: function, login: function, logout: function, loading: boolean, error: string|null }}
+ * Hook for authentication via IPC.
+ *
+ * `authenticate` rides the shared useAsyncIpcAction envelope; the
+ * login/logout transitions keep their own error channel (they never
+ * toggle `loading`), and the exposed `error` is whichever channel wrote
+ * last — matching the original single-error behavior.
+ *
+ * @returns {{ authenticate: function, login: function, logout: function, loading: boolean, error: string|null, clearError: function }}
  */
 export function useAuth() {
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
+    const {
+        run,
+        loading,
+        error: authError,
+        clearError: clearAuthError,
+    } = useAsyncIpcAction(invokeAuthenticate, {
+        failureMessage: 'Authentication failed',
+        errorMessage: 'Authentication error',
+    });
+    const [flowError, setFlowError] = useState(null);
 
     /**
      * Authenticate user with username/password
@@ -15,26 +32,13 @@ export function useAuth() {
      * @param {boolean} isMock - Whether to use mock authentication
      * @returns {Promise<{success: boolean, token?: string, error?: string}>}
      */
-    const authenticate = useCallback(async (username, password, isMock = false) => {
-        setLoading(true);
-        setError(null);
-
-        try {
-            const result = await window.api.authenticate(username, password, isMock);
-
-            if (!result.success) {
-                setError(result.error || 'Authentication failed');
-            }
-
-            return result;
-        } catch (err) {
-            const error = err.message || 'Authentication error';
-            setError(error);
-            return { success: false, error };
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    const authenticate = useCallback(
+        (username, password, isMock = false) => {
+            setFlowError(null);
+            return run(username, password, isMock);
+        },
+        [run],
+    );
 
     /**
      * Signal successful login to main process (transitions to main window)
@@ -43,9 +47,10 @@ export function useAuth() {
         try {
             await window.api.login();
         } catch (err) {
-            setError(err.message || 'Login transition failed');
+            clearAuthError();
+            setFlowError(err.message || 'Login transition failed');
         }
-    }, []);
+    }, [clearAuthError]);
 
     /**
      * Logout the current user
@@ -54,23 +59,25 @@ export function useAuth() {
         try {
             await window.api.logout();
         } catch (err) {
-            setError(err.message || 'Logout failed');
+            clearAuthError();
+            setFlowError(err.message || 'Logout failed');
         }
-    }, []);
+    }, [clearAuthError]);
 
     /**
      * Clear any authentication error
      */
     const clearError = useCallback(() => {
-        setError(null);
-    }, []);
+        clearAuthError();
+        setFlowError(null);
+    }, [clearAuthError]);
 
     return {
         authenticate,
         login,
         logout,
         loading,
-        error,
+        error: authError ?? flowError,
         clearError,
     };
 }

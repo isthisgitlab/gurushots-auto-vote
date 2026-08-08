@@ -1,27 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getUiDefaultSettings } from '../../settings/uiDefaults';
 
 /**
- * Module-scope defaults for the UI settings half of the modal. Kept out
- * of the hook body so per-setting reset and reset-all share one source of
- * truth (the original component duplicated this object three times).
+ * Module-scope defaults for the UI settings half of the modal. Sourced
+ * from the same module settings.js getDefaultSettings() spreads
+ * (settings/uiDefaults), so the form can never drift from the storage
+ * layer; kept out of the hook body so per-setting reset and reset-all
+ * share one object.
  */
-export const DEFAULT_UI_VALUES = {
-    theme: 'light',
-    language: 'en',
-    timezone: 'Europe/Riga',
-    customTimezones: [],
-    stayLoggedIn: false,
-    // Stored as seconds — settings.js sets default 30 and api-client.js
-    // multiplies by 1000 before handing to axios. The pre-refactor modal
-    // used 30000 here, which silently corrupted the stored timeout to
-    // ~8h on the first Save. Aligned with the storage layer.
-    apiTimeout: 30,
-    checkFrequencyMin: 3,
-    checkFrequencyMax: 3,
-    // Resilience: retries on transient API failures (network/timeout/429/5xx)
-    // with exponential backoff. Mirror src/js/settings.js getDefaultSettings.
-    apiMaxRetries: 3,
-    apiRetryBaseDelayMs: 1000,
+export const DEFAULT_UI_VALUES = getUiDefaultSettings();
+
+/**
+ * Per-key fallback with the same semantics the hand-written init used:
+ * arrays keep the Array.isArray guard, strings treat '' as unset (||),
+ * and numeric/boolean keys use ?? so an explicit 0 / false from settings
+ * is preserved rather than silently replaced by the default.
+ */
+const withFallback = (value, defaultValue) => {
+    if (Array.isArray(defaultValue)) return Array.isArray(value) ? value : defaultValue;
+    if (typeof defaultValue === 'string') return value || defaultValue;
+    return value ?? defaultValue;
 };
 
 /**
@@ -77,21 +75,10 @@ export function useSettingsForm({
             formInitForOpenRef.current = true;
         }
         if (!uiInitForOpenRef.current && settings) {
-            const initialUiValues = {
-                theme: settings.theme || 'light',
-                language: settings.language || 'en',
-                timezone: settings.timezone || 'Europe/Riga',
-                customTimezones: Array.isArray(settings.customTimezones) ? settings.customTimezones : [],
-                // Use ?? for numeric / boolean fields so an explicit
-                // 0 / false from settings is preserved rather than
-                // silently replaced by the default.
-                stayLoggedIn: settings.stayLoggedIn ?? false,
-                apiTimeout: settings.apiTimeout ?? 30,
-                checkFrequencyMin: settings.checkFrequencyMin ?? 3,
-                checkFrequencyMax: settings.checkFrequencyMax ?? 3,
-                apiMaxRetries: settings.apiMaxRetries ?? 3,
-                apiRetryBaseDelayMs: settings.apiRetryBaseDelayMs ?? 1000,
-            };
+            const initialUiValues = {};
+            for (const [key, defaultValue] of Object.entries(DEFAULT_UI_VALUES)) {
+                initialUiValues[key] = withFallback(settings[key], defaultValue);
+            }
             setUiValues(initialUiValues);
             setOriginalUiValues(initialUiValues);
             uiInitForOpenRef.current = true;
