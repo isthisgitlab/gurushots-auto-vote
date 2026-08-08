@@ -305,6 +305,87 @@ const reflectNewEntry = (challenge, imageId) => {
 };
 
 /**
+ * Re-fetch live challenge state right before a submit so an entry added
+ * outside this pass (e.g. a manual submission made while autorun was working
+ * through earlier challenges) is seen before we consume a slot. The
+ * pass-start snapshot can be minutes old by the time a fill fires; there is
+ * no single-challenge endpoint, so this re-fetches the full active list.
+ *
+ * Returns:
+ *   'refreshed'   – fresh member state merged into `challenge` (in place)
+ *   'gone'        – fetch succeeded with a non-empty list that does not
+ *                   contain this challenge → caller must skip the submit
+ *   'unavailable' – dep not wired, fetch threw, payload malformed, or the
+ *                   challenges list came back empty → caller proceeds with
+ *                   the pass-start data (stale-over-skip policy)
+ *
+ * An empty list is 'unavailable', NOT 'gone': makePostRequest never rejects
+ * on transport failure — it returns null and getActiveChallenges resolves
+ * with { challenges: [] } — so an empty list is exactly what a network blip
+ * looks like. Treating it as 'gone' would silently skip legitimate fills on
+ * every API hiccup.
+ *
+ * @param {object} challenge
+ * @param {string} token
+ * @param {{getActiveChallenges?: function, logger: object}} deps
+ * @param {string} label - calling flow (autoFill/emergencyFill/fillNew)
+ * @returns {Promise<'refreshed'|'gone'|'unavailable'>}
+ */
+const refreshChallengeState = async (challenge, token, { getActiveChallenges, logger }, label) => {
+    if (typeof getActiveChallenges !== 'function') return 'unavailable';
+    const log = logger.withCategory('autoFill');
+    const staleWarning = (cause) =>
+        log.warning(
+            `${label}: could not refresh live challenge state for ${logger.challengeTag(challenge)}${cause ? ` (${cause})` : ''}; ` +
+                'proceeding with pass-start data — a manually submitted entry may not be seen and could be duplicated',
+            null,
+        );
+    let response;
+    try {
+        response = await getActiveChallenges(token);
+    } catch (error) {
+        staleWarning((error && error.message) || error);
+        return 'unavailable';
+    }
+    if (!Array.isArray(response?.challenges) || response.challenges.length === 0) {
+        staleWarning('empty challenge list — likely a transport failure');
+        return 'unavailable';
+    }
+    const fresh = response.challenges.find((c) => String(c?.id) === String(challenge.id));
+    if (!fresh) {
+        log.info(
+            `${label}: ${logger.challengeTag(challenge)} is no longer in the active challenge list — skipping submit`,
+            null,
+        );
+        return 'gone';
+    }
+    // Adopt only a well-formed member shape: downstream consumers this cycle
+    // (runBoost destructures challenge.member without guards) would crash the
+    // whole pass on a partial payload.
+    if (!fresh.member || typeof fresh.member !== 'object' || !Array.isArray(fresh.member?.ranking?.entries)) {
+        staleWarning('malformed challenge payload');
+        return 'unavailable';
+    }
+    // Merge, don't blindly replace: entries reflected locally earlier this
+    // cycle (reflectNewEntry after a fill-new submit) may not have propagated
+    // into get_my_active_challenges yet — dropping them would resurrect the
+    // very double-submit this refresh exists to prevent. Union by id only
+    // grows the entry count, which errs toward fewer submits. prevEntries is
+    // sliced because in mock mode `fresh` can be the identical cached object,
+    // making prev and fresh the same array.
+    const prevEntries = getEntries(challenge).slice();
+    challenge.member = fresh.member;
+    const freshEntries = fresh.member.ranking.entries;
+    const freshIds = new Set(freshEntries.map((entry) => (entry ? String(entry.id) : null)));
+    for (const entry of prevEntries) {
+        if (entry && !freshIds.has(String(entry.id))) {
+            freshEntries.push(entry);
+        }
+    }
+    return 'refreshed';
+};
+
+/**
  * Build the pickPhotosForChallenge onFallback callback for a submission-bound
  * pick. Logs at WARNING level — the debug/info channels are compiled out of
  * packaged builds (logger gates them on isSourceCode), so anything quieter
@@ -348,7 +429,9 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
  *   logger: object,
  *   getEligiblePhotos: function,
  *   submitToChallenge: function,
- * }} deps
+ *   getActiveChallenges?: function,
+ * }} deps - getActiveChallenges enables the pre-submit live re-check; when
+ *   absent the fill proceeds on pass-start data (legacy behavior).
  * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-schedule'|'no-eligible-photos'|'error'>}
  */
 const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
@@ -364,7 +447,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     const secondsRemaining = closeTime - now;
     if (secondsRemaining <= 0) return 'skipped';
 
-    const slotsRemaining = getSlotsRemaining(challenge);
+    let slotsRemaining = getSlotsRemaining(challenge);
     if (slotsRemaining <= 0) return 'skipped';
 
     const schedule = settings.getEffectiveSetting('autoFillSchedule', String(challengeId));
@@ -430,6 +513,25 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
             .withCategory('autoFill')
             .info(`autoFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
         return 'no-eligible-photos';
+    }
+
+    // Live re-check just before consuming a slot: the pass-start snapshot can
+    // be minutes old, and an entry added outside this run (e.g. a manual
+    // submission) must stand the fill down instead of over-submitting.
+    const refresh = await refreshChallengeState(challenge, token, deps, 'autoFill');
+    if (refresh === 'gone') return 'skipped';
+    if (refresh === 'refreshed') {
+        slotsRemaining = getSlotsRemaining(challenge);
+        const entryCount = getEntries(challenge).length;
+        if (slotsRemaining <= 0 || entryCount >= desired) {
+            logger
+                .withCategory('autoFill')
+                .info(
+                    `autoFill: live re-check shows ${logger.challengeTag(challenge)} already has ${entryCount} entries (target ${desired}) — an entry was added outside this run (e.g. manual submission); standing down`,
+                    null,
+                );
+            return 'skipped';
+        }
     }
 
     try {
@@ -505,7 +607,9 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
  *   logger: object,
  *   getEligiblePhotos: function,
  *   submitToChallenge: function,
- * }} deps
+ *   getActiveChallenges?: function,
+ * }} deps - getActiveChallenges enables the pre-submit live re-check; when
+ *   absent the fill proceeds on pass-start data (legacy behavior).
  * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-eligible-photos'|'error'>}
  */
 const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
@@ -522,7 +626,7 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
     if (secondsRemaining <= 0) return 'skipped';
     if (secondsRemaining > emergencySeconds) return 'skipped'; // not in the emergency window yet
 
-    const slotsRemaining = getSlotsRemaining(challenge);
+    let slotsRemaining = getSlotsRemaining(challenge);
     if (slotsRemaining <= 0) return 'skipped';
 
     const autoFillEnabled = settings.getEffectiveSetting('autoFill', String(challengeId)) === true;
@@ -578,7 +682,7 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
     // photos still win when they exist) but force fillWithoutTagMatch on so
     // a missing match never leaves a slot empty at the deadline — that
     // override is the whole point of emergency fill.
-    const picked = pickPhotosForChallenge(challenge, eligible, slotsRemaining, {
+    let picked = pickPhotosForChallenge(challenge, eligible, slotsRemaining, {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch: true,
@@ -590,6 +694,27 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
             .withCategory('autoFill')
             .info(`emergencyFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
         return 'no-eligible-photos';
+    }
+
+    // Live re-check just before the batch submit: an entry added outside this
+    // run (e.g. a manual submission) shrinks the free-slot count, and the
+    // batch must never over-fill past it.
+    const refresh = await refreshChallengeState(challenge, token, deps, 'emergencyFill');
+    if (refresh === 'gone') return 'skipped';
+    if (refresh === 'refreshed') {
+        slotsRemaining = getSlotsRemaining(challenge);
+        if (slotsRemaining <= 0) {
+            logger
+                .withCategory('autoFill')
+                .info(
+                    `emergencyFill: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. manual submission); standing down`,
+                    null,
+                );
+            return 'skipped';
+        }
+        if (picked.length > slotsRemaining) {
+            picked = picked.slice(0, slotsRemaining);
+        }
     }
 
     try {
@@ -776,9 +901,11 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
  *   logger: object,
  *   getEligiblePhotos: function,
  *   submitToChallenge: function,
- * }} deps
+ *   getActiveChallenges?: function,
+ * }} deps - getActiveChallenges enables the pre-submit live re-check; when
+ *   absent the fill proceeds on pass-start data (legacy behavior).
  * @returns {Promise<{ok: boolean, imageId: string|null, reason: string}>}
- *   reason ∈ 'submitted'|'no-slots'|'no-eligible'|'fetch-error'|'submit-failed'|'invalid-challenge'
+ *   reason ∈ 'submitted'|'no-slots'|'challenge-gone'|'no-eligible'|'fetch-error'|'submit-failed'|'invalid-challenge'
  */
 const submitNewEntryForAction = async (challenge, token, deps) => {
     const { settings, logger, getEligiblePhotos, submitToChallenge } = deps;
@@ -838,6 +965,24 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
             .info(`fillNew: picked an empty photo id for ${logger.challengeTag(challenge)}`, null);
         return { ok: false, imageId: null, reason: 'no-eligible' };
     }
+
+    // Live re-check just before consuming a slot: an entry added outside this
+    // run (e.g. a manual submission) may have filled the challenge since the
+    // pass-start snapshot; callers fall back to acting on an existing entry.
+    const refresh = await refreshChallengeState(challenge, token, deps, 'fillNew');
+    if (refresh === 'gone') {
+        return { ok: false, imageId: null, reason: 'challenge-gone' };
+    }
+    if (refresh === 'refreshed' && getSlotsRemaining(challenge) <= 0) {
+        logger
+            .withCategory('autoFill')
+            .info(
+                `fillNew: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. manual submission); falling back to an existing entry`,
+                null,
+            );
+        return { ok: false, imageId: null, reason: 'no-slots' };
+    }
+
     try {
         const result = await submitToChallenge(challengeId, [imageId], token);
         if (result && result.ok) {
@@ -875,4 +1020,5 @@ module.exports = {
     fetchCandidatesForChallenge,
     resolveSemanticScores,
     describeSubmitFailure,
+    refreshChallengeState,
 };

@@ -2,9 +2,9 @@
  * GuruShots Auto Voter - Submissions Module
  *
  * Web-API endpoints captured from gurushots.com browser session for the
- * auto-fill feature: list eligible photos, submit photos to a challenge,
- * and re-fetch a single challenge's live state. Uses the same WEB header
- * profile as the turbo flow (x-env: WEB, x-api-version: 13).
+ * auto-fill feature: list eligible photos and submit photos to a challenge.
+ * Uses the same WEB header profile as the turbo flow (x-env: WEB,
+ * x-api-version: 13).
  */
 
 const { makePostRequest, FORM_CONTENT_TYPE } = require('./api-client');

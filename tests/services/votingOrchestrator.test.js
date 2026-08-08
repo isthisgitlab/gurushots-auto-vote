@@ -190,6 +190,7 @@ describe('mock-parity behaviors on the shared path', () => {
             expect.objectContaining({
                 getEligiblePhotos: api.getEligiblePhotos,
                 submitToChallenge: api.submitToChallenge,
+                getActiveChallenges: api.getActiveChallenges,
             }),
         );
     });
@@ -206,6 +207,55 @@ describe('mock-parity behaviors on the shared path', () => {
             expect.objectContaining({
                 getEligiblePhotos: api.getEligiblePhotos,
                 submitToChallenge: api.submitToChallenge,
+                getActiveChallenges: api.getActiveChallenges,
+            }),
+        );
+    });
+
+    // The two fill-new sites had no deps-shape coverage at all — a forgotten
+    // getActiveChallenges there would silently keep boost/turbo fill-new on
+    // stale pass-start data (no pre-submit live re-check).
+    test('boost fill-new passes getActiveChallenges for the pre-submit live re-check', async () => {
+        const settings = require('../../src/js/settings');
+        const challenge = makeChallenge({
+            member: {
+                boost: { state: 'AVAILABLE', timeout: NOW + 600 },
+                ranking: { entries: [], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'boost' }]);
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        try {
+            await runVotingPass('tok', null, deps(api));
+            expect(autoFill.submitNewEntryForAction).toHaveBeenCalledWith(
+                challenge,
+                'tok',
+                expect.objectContaining({
+                    getEligiblePhotos: api.getEligiblePhotos,
+                    submitToChallenge: api.submitToChallenge,
+                    getActiveChallenges: api.getActiveChallenges,
+                }),
+            );
+        } finally {
+            settings.getEffectiveSetting.mockImplementation(() => false);
+        }
+    });
+
+    test('turbo fill-new passes getActiveChallenges for the pre-submit live re-check', async () => {
+        const challenge = makeChallenge();
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'turbo' }]);
+        votingLogic.shouldApplyTurbo.mockReturnValue({ apply: true, fillNew: true, imageId: null });
+        await runVotingPass('tok', null, deps(api));
+        expect(autoFill.submitNewEntryForAction).toHaveBeenCalledWith(
+            challenge,
+            'tok',
+            expect.objectContaining({
+                getEligiblePhotos: api.getEligiblePhotos,
+                submitToChallenge: api.submitToChallenge,
+                getActiveChallenges: api.getActiveChallenges,
             }),
         );
     });

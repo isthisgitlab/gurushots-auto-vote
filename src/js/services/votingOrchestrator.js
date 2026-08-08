@@ -197,6 +197,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                                 logger,
                                 getEligiblePhotos: api.getEligiblePhotos,
                                 submitToChallenge: api.submitToChallenge,
+                                getActiveChallenges: api.getActiveChallenges,
                             });
                             if (filled.ok) {
                                 autoFill.reflectNewEntry(challenge, filled.imageId);
@@ -267,6 +268,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                         logger,
                         getEligiblePhotos: api.getEligiblePhotos,
                         submitToChallenge: api.submitToChallenge,
+                        getActiveChallenges: api.getActiveChallenges,
                     });
                     if (filled.ok) {
                         autoFill.reflectNewEntry(challenge, filled.imageId);
@@ -322,6 +324,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                     logger,
                     getEligiblePhotos: api.getEligiblePhotos,
                     submitToChallenge: api.submitToChallenge,
+                    getActiveChallenges: api.getActiveChallenges,
                 });
                 if (fillResult === 'submitted') {
                     logger
@@ -342,6 +345,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                     logger,
                     getEligiblePhotos: api.getEligiblePhotos,
                     submitToChallenge: api.submitToChallenge,
+                    getActiveChallenges: api.getActiveChallenges,
                 });
                 if (emergencyResult === 'submitted') {
                     logger
