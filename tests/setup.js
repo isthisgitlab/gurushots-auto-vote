@@ -18,8 +18,11 @@ jest.mock('fs', () => ({
     mkdirSync: jest.fn(),
 }));
 
-// Mock path operations
+// Mock path operations. Spread the real module first so less-common
+// methods (basename, extname, sep, …) keep working — a partial mock here
+// silently returns undefined for anything it omits.
 jest.mock('path', () => ({
+    ...jest.requireActual('path'),
     join: jest.fn((...args) => args.join('/')),
     dirname: jest.fn(),
     resolve: jest.fn(),

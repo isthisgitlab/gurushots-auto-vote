@@ -39,8 +39,8 @@
         "format:check": "prettier --check .",
         "gui:refresh": "echo 'If the GUI is running, refresh it manually (Cmd+R / Ctrl+R) to apply CLI settings changes.'",
         "knip": "knip",
-        "lint": "pnpm run syntax:check && eslint src/ scripts/",
-        "lint:fix": "eslint src/ scripts/ --fix",
+        "lint": "pnpm run syntax:check && eslint src/ scripts/ tests/ eslint.config.mjs",
+        "lint:fix": "eslint src/ scripts/ tests/ eslint.config.mjs --fix",
         "syntax:check": "node scripts/syntax-check.js",
         "preinstall": "only-allow pnpm",
         "prebuild": "pnpm run build:prep",
@@ -214,7 +214,6 @@
                 "displayName": "node",
                 "testEnvironment": "node",
                 "roots": [
-                    "<rootDir>/src",
                     "<rootDir>/tests"
                 ],
                 "setupFilesAfterEnv": [
@@ -250,7 +249,10 @@
                     "^react-dom/client$": "preact/compat/client",
                     "^react/jsx-runtime$": "preact/jsx-runtime",
                     "^react/jsx-dev-runtime$": "preact/jsx-dev-runtime"
-                }
+                },
+                "testPathIgnorePatterns": [
+                    "<rootDir>/tests/react/"
+                ]
             },
             {
                 "displayName": "happy-dom",
@@ -268,6 +270,7 @@
                     "<rootDir>/src/js/react/test/setup.js"
                 ],
                 "testMatch": [
+                    "**/?(*.)+(spec|test).js",
                     "**/?(*.)+(spec|test).jsx"
                 ],
                 "transform": {

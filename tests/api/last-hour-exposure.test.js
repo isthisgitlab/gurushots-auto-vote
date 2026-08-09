@@ -208,7 +208,6 @@ describe('lastHourExposure', () => {
             challenge.id.toString(),
         );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
-        const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
 
         const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 

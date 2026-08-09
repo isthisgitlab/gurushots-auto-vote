@@ -3,55 +3,34 @@
 /**
  * Node.js Syntax Check Script
  *
- * This script runs 'node -c' (syntax check) on all appropriate JavaScript files
- * in the project. It handles both Node.js and mixed environments by:
- *
- * - Including: CLI files, API files, services, utilities, tests, build scripts
- * - Excluding: Electron main process files, preload scripts, files with ES6 imports
- * - Providing clear feedback on syntax errors
+ * Runs `node --check` on every CommonJS .js file in the project by WALKING
+ * src/js, scripts, and tests — an explicit exclude list below removes the
+ * ES-module/JSX islands. (The previous allowlist silently covered fewer
+ * than half of src/js's directories and referenced files that no longer
+ * exist.)
  */
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { execSync } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
 
-// Colors for console output
+// Colors for console output (failure output only)
 const colors = {
-    green: '\x1b[32m',
     red: '\x1b[31m',
-    yellow: '\x1b[33m',
-    blue: '\x1b[34m',
     reset: '\x1b[0m',
     bold: '\x1b[1m',
 };
 
-// Files to exclude from syntax checking (Electron-specific or problematic)
-const excludeFiles = [
+// Roots to walk for .js files.
+const includeDirs = ['src/js', 'scripts', 'tests'];
+
+// Excluded paths (relative, forward-slash): ESM/JSX islands and Electron
+// entry points the check has always skipped.
+const excludePaths = [
     'src/js/index.js', // Electron main process
     'src/js/preload.js', // Electron preload
-    'src/js/app.js', // Uses ES6 imports
-];
-
-// Directories to include for syntax checking
-const includeDirs = [
-    'src/js/api',
-    'src/js/cli',
-    'src/js/services',
-    'src/js/strategies',
-    'src/js/mock',
-    'src/js/translations',
-    'src/js/interfaces',
-    'scripts',
-    'tests',
-];
-
-// Individual files to include
-const includeFiles = [
-    'src/js/apiFactory.js',
-    'src/js/logger.js',
-    'src/js/login.js',
-    'src/js/metadata.js',
-    'src/js/settings.js',
+    'src/js/react/', // renderer tree — ESM/JSX, checked by eslint + esbuild
+    'scripts/site/', // static-site sources, not Node CJS
 ];
 
 /**
@@ -83,15 +62,17 @@ function getJsFiles(dir) {
  * Check if a file should be excluded
  */
 function shouldExclude(filePath) {
-    return excludeFiles.some((excluded) => filePath.includes(excluded.replace(/\//g, path.sep)));
+    const normalized = filePath.split(path.sep).join('/');
+    return excludePaths.some((excluded) => normalized === excluded || normalized.startsWith(excluded));
 }
 
 /**
- * Run syntax check on a single file
+ * Run syntax check on a single file. execFileSync (no shell) so the path
+ * is passed as an argument, never interpolated into a command string.
  */
 function checkFileSyntax(filePath) {
     try {
-        execSync(`node -c "${filePath}"`, { stdio: 'pipe' });
+        execFileSync(process.execPath, ['--check', filePath], { stdio: 'pipe' });
         return { success: true };
     } catch (error) {
         return {
@@ -105,41 +86,25 @@ function checkFileSyntax(filePath) {
  * Main execution
  */
 function main() {
-    // Collect all files to check
     const filesToCheck = [];
-
-    // Add files from included directories
     for (const dir of includeDirs) {
-        const dirFiles = getJsFiles(dir);
-        filesToCheck.push(...dirFiles.filter((file) => !shouldExclude(file)));
+        filesToCheck.push(...getJsFiles(dir).filter((file) => !shouldExclude(file)));
     }
 
-    // Add individual files
-    for (const file of includeFiles) {
-        if (fs.existsSync(file) && !shouldExclude(file)) {
-            filesToCheck.push(file);
-        }
-    }
-
-    // Remove duplicates and sort
     const uniqueFiles = [...new Set(filesToCheck)].sort();
 
     let failCount = 0;
-    const failures = [];
 
-    // Check each file
     for (const filePath of uniqueFiles) {
         const result = checkFileSyntax(filePath);
 
         if (!result.success) {
             console.log(`${colors.red}✗${colors.reset} ${filePath}`);
             console.log(`  ${colors.red}${result.error.trim()}${colors.reset}`);
-            failures.push({ file: filePath, error: result.error.trim() });
             failCount++;
         }
     }
 
-    // Only output if there are errors
     if (failCount > 0) {
         console.log(`\n${colors.bold}${colors.red}${failCount} syntax error(s) found:${colors.reset}`);
         process.exit(1);

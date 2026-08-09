@@ -24,9 +24,10 @@ jobs:
     build:
         runs-on: ubuntu-slim
         timeout-minutes: 15
+        # configure-pages/upload-pages-artifact only need read here — the
+        # deploy job below carries pages:write + id-token:write.
         permissions:
             contents: read
-            pages: write
         steps:
             - name: Checkout code
               uses: actions/checkout@v7

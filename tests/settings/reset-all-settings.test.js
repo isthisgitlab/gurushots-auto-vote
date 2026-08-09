@@ -9,7 +9,6 @@
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
  */
 
-const { storage } = require('../../src/js/settings/storage');
 const settings = require('../../src/js/settings');
 
 jest.mock('../../src/js/logger', () => ({

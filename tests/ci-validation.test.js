@@ -5,24 +5,12 @@
  */
 
 describe('CI Environment Validation', () => {
-    test('Node.js version should be compatible with Jest', () => {
-        const nodeVersion = process.version;
-        const majorVersion = parseInt(nodeVersion.slice(1).split('.')[0]);
+    test('Node.js version satisfies the engines requirement (>=26)', () => {
+        // Keep in sync with package.json "engines" and .nvmrc — this is the
+        // project's own floor, not Jest's broader support matrix.
+        const majorVersion = parseInt(process.version.slice(1).split('.')[0], 10);
 
-        // Jest 30.x requires Node.js ^18.14.0 || ^20.0.0 || ^22.0.0 || >=24.0.0
-        const isCompatible =
-            (majorVersion === 18 && process.version >= 'v18.14.0') ||
-            majorVersion === 20 ||
-            majorVersion === 22 ||
-            majorVersion >= 24;
-
-        expect(isCompatible).toBe(true);
-        console.log(`✅ Node.js version: ${nodeVersion} (compatible with Jest 30.x)`);
-    });
-
-    test('npm version should be 8.0.0 or higher', () => {
-        // This test relies on the CI environment having npm available
-        expect(process.env.npm_version || '8.0.0').toMatch(/^\d+\.\d+\.\d+$/);
+        expect(majorVersion).toBeGreaterThanOrEqual(26);
     });
 
     test('all required test dependencies should be available', () => {
@@ -32,7 +20,10 @@ describe('CI Environment Validation', () => {
         expect(() => require('jest-environment-node')).not.toThrow();
     });
 
-    test('test environment should be node', () => {
-        expect(process.env.NODE_ENV || 'test').toBeDefined();
+    test('test environment is node with NODE_ENV=test', () => {
+        // Jest sets NODE_ENV=test when nothing else did — assert the actual
+        // value (the old `|| 'test'` fallback could never fail).
+        expect(process.env.NODE_ENV).toBe('test');
+        expect(typeof process.versions.node).toBe('string');
     });
 });
