@@ -22,10 +22,7 @@ const { findActiveChallenge } = require('../services/findActiveChallenge');
 // autovote cycle racing with a manual click.
 const turboMiniGameInFlight = new Set();
 
-const sanitizeForLog = (value) =>
-    String(value ?? '')
-        .replace(/[\r\n\t]/g, ' ')
-        .slice(0, 200);
+const sanitizeForLog = logger.sanitizeLogString;
 
 const buildHandlers = () => ({
     'get-active-challenges': async (event, token) => {

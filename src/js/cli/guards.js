@@ -1,8 +1,9 @@
 /**
  * Small CLI guard helpers shared across commands: the auth gate every
- * networked command starts with, and the profile-argument validation the
- * three profile commands repeat. Each caller keeps its own return shape;
- * only the check + user-facing guidance live here.
+ * networked command starts with, the profile-argument validation the
+ * three profile commands repeat, and the --challenge requirement the
+ * challenge-scoped action commands share. Each caller keeps its own
+ * return shape; only the check + user-facing guidance live here.
  */
 
 const logger = require('../logger');
@@ -55,4 +56,22 @@ const requireProfileArgs = (command, { challengeId, rest }, { needsChallenge = f
     return rest[0];
 };
 
-module.exports = { ensureAuthenticated, requireProfileArgs };
+/**
+ * Require the --challenge=<id> argument the challenge-scoped action commands
+ * (boost / turbo / fill) share. Exits the process with the command's usage
+ * guidance on a miss; returns the challenge id otherwise.
+ *
+ * @param {{challengeId: (string|null)}} parsed - extractChallenge() output
+ * @param {string} usage - the command's usage string
+ * @returns {string} the challenge id
+ */
+const requireChallenge = ({ challengeId }, usage) => {
+    if (challengeId == null) {
+        logger.withCategory('ui').error('Please specify a challenge');
+        logger.withCategory('ui').info(usage);
+        process.exit(1);
+    }
+    return challengeId;
+};
+
+module.exports = { ensureAuthenticated, requireProfileArgs, requireChallenge };

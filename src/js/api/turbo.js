@@ -8,27 +8,12 @@
  * via x-token works the same as the mobile flow.
  */
 
-const { makePostRequest, FORM_CONTENT_TYPE } = require('./api-client');
-const { ENDPOINTS } = require('./constants');
+const { makePostRequest } = require('./api-client');
+const { ENDPOINTS, createWebHeaders, makeRequireValue } = require('./constants');
 
 const TURBO_SELECTION_DELAY_MS = 1200;
 
-const requireValue = (value, label) => {
-    if (value === null || value === undefined || value === '') {
-        throw new Error(`turbo: ${label} is required`);
-    }
-    return value;
-};
-
-const createWebHeaders = (token) => ({
-    host: 'api.gurushots.com',
-    accept: '*/*',
-    'content-type': FORM_CONTENT_TYPE,
-    'x-api-version': '13',
-    'x-env': 'WEB',
-    'x-requested-with': 'XMLHttpRequest',
-    'x-token': token,
-});
+const requireValue = makeRequireValue('turbo');
 
 /**
  * Fetches the current Turbo battle set for a challenge.

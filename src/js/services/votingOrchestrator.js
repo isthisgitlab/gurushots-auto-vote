@@ -53,6 +53,15 @@ const { sleep } = require('../timing');
 
 const runVotingPass = async (token, challengeIdFilter, deps) => {
     const { api, cleanupStaleMetadata, interChallengeDelay } = deps;
+    // Shared dependency bundle for every auto-fill entry point this pass
+    // (fill-new on boost/turbo, staggered auto-fill, emergency fill).
+    const fillDeps = {
+        settings,
+        logger,
+        getEligiblePhotos: api.getEligiblePhotos,
+        submitToChallenge: api.submitToChallenge,
+        getActiveChallenges: api.getActiveChallenges,
+    };
     logger.withCategory('voting').startOperation('voting-process', 'Voting process');
 
     try {
@@ -63,6 +72,15 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         const now = Math.floor(Date.now() / 1000);
 
         logger.withCategory('challenges').info(`📋 Found ${allChallenges.length} active challenges`, null);
+
+        // Standard cancelled-pass exit shared by the per-challenge and
+        // per-action cancellation checks: one warn, close the operation,
+        // surface the full active list.
+        const cancelledResult = () => {
+            logger.withCategory('voting').warning('🛑 Voting cancelled by user', null);
+            logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
+            return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
+        };
 
         if (allChallenges.length === 0) {
             logger.withCategory('challenges').warning('No active challenges found', null);
@@ -109,9 +127,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
 
             // Check for cancellation before processing each challenge
             if (cancellation.isCancelled()) {
-                logger.withCategory('voting').warning('🛑 Voting cancelled by user', null);
-                logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
-                return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
+                return cancelledResult();
             }
 
             // Log progress
@@ -192,13 +208,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                             // Fill-new: submit a fresh photo and boost that entry instead
                             // of an existing one. Falls back to the configured Boost Entry
                             // when no fresh photo can be submitted (full / none / failed).
-                            const filled = await autoFill.submitNewEntryForAction(challenge, token, {
-                                settings,
-                                logger,
-                                getEligiblePhotos: api.getEligiblePhotos,
-                                submitToChallenge: api.submitToChallenge,
-                                getActiveChallenges: api.getActiveChallenges,
-                            });
+                            const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
                             if (filled.ok) {
                                 autoFill.reflectNewEntry(challenge, filled.imageId);
                                 boostResult = await api.applyBoostToEntry(cid, filled.imageId, token);
@@ -275,13 +285,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                     // Fill-new: submit a fresh photo and turbo that entry instead of an
                     // existing one. Falls back to the configured Turbo Entry (if any)
                     // when no fresh photo can be submitted (full / none / failed).
-                    const filled = await autoFill.submitNewEntryForAction(challenge, token, {
-                        settings,
-                        logger,
-                        getEligiblePhotos: api.getEligiblePhotos,
-                        submitToChallenge: api.submitToChallenge,
-                        getActiveChallenges: api.getActiveChallenges,
-                    });
+                    const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
                     if (filled.ok) {
                         autoFill.reflectNewEntry(challenge, filled.imageId);
                         imageId = filled.imageId;
@@ -342,13 +346,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 // Auto-fill missing entries near deadline (one slot per cycle, staggered).
                 // On submit it reflects the new entry locally, so a turbo/boost that runs
                 // later this cycle (timer order) acts on it instead of waiting a cycle.
-                const fillResult = await autoFill.maybeAutoFillChallenge(challenge, token, now, {
-                    settings,
-                    logger,
-                    getEligiblePhotos: api.getEligiblePhotos,
-                    submitToChallenge: api.submitToChallenge,
-                    getActiveChallenges: api.getActiveChallenges,
-                });
+                const fillResult = await autoFill.maybeAutoFillChallenge(challenge, token, now, fillDeps);
                 if (fillResult === 'submitted') {
                     logger
                         .withCategory('voting')
@@ -363,13 +361,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 // Emergency fill: net for slots that staggered auto-fill leaves
                 // empty (auto-fill off, or tags set with no match) — fills all
                 // remaining slots once the challenge is inside the emergency window.
-                const emergencyResult = await autoFill.maybeEmergencyFillChallenge(challenge, token, now, {
-                    settings,
-                    logger,
-                    getEligiblePhotos: api.getEligiblePhotos,
-                    submitToChallenge: api.submitToChallenge,
-                    getActiveChallenges: api.getActiveChallenges,
-                });
+                const emergencyResult = await autoFill.maybeEmergencyFillChallenge(challenge, token, now, fillDeps);
                 if (emergencyResult === 'submitted') {
                     logger
                         .withCategory('voting')
@@ -386,9 +378,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
             for (const { action } of votingLogic.orderDeadlineActions(challenge)) {
                 // Honor cancellation between actions, same as the per-challenge guard.
                 if (cancellation.isCancelled()) {
-                    logger.withCategory('voting').warning('🛑 Voting cancelled by user', null);
-                    logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
-                    return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
+                    return cancelledResult();
                 }
                 // Defensive: orderDeadlineActions only emits the four known keys, but
                 // guard the dispatch so a future action added there without a matching

@@ -15,7 +15,7 @@
  */
 
 const logger = require('../logger');
-const { requireProfileArgs } = require('./guards');
+const { requireProfileArgs, requireChallenge } = require('./guards');
 logger.withCategory('api').debug('CLI module loaded, starting initialization', null);
 
 const settings = require('../settings');
@@ -173,12 +173,7 @@ const main = async () => {
             }
             case 'boost': {
                 const { challengeId, rest } = extractChallenge(args.slice(1));
-                if (challengeId == null) {
-                    logger.withCategory('ui').error('Please specify a challenge');
-                    logger.withCategory('ui').info('Usage: boost --challenge=<id> [--image=<id>]');
-                    process.exit(1);
-                    break;
-                }
+                requireChallenge({ challengeId }, 'Usage: boost --challenge=<id> [--image=<id>]');
                 const imageArg = rest.find((a) => a.startsWith('--image='));
                 const imageId = imageArg ? imageArg.slice('--image='.length) || null : null;
                 await boostChallenge(challengeId, { imageId });
@@ -187,24 +182,14 @@ const main = async () => {
             }
             case 'turbo': {
                 const { challengeId } = extractChallenge(args.slice(1));
-                if (challengeId == null) {
-                    logger.withCategory('ui').error('Please specify a challenge');
-                    logger.withCategory('ui').info('Usage: turbo --challenge=<id>');
-                    process.exit(1);
-                    break;
-                }
+                requireChallenge({ challengeId }, 'Usage: turbo --challenge=<id>');
                 await turboChallenge(challengeId);
                 process.exit(0);
                 break;
             }
             case 'fill': {
                 const { challengeId, rest } = extractChallenge(args.slice(1));
-                if (challengeId == null) {
-                    logger.withCategory('ui').error('Please specify a challenge');
-                    logger.withCategory('ui').info('Usage: fill --challenge=<id> [--all]');
-                    process.exit(1);
-                    break;
-                }
+                requireChallenge({ challengeId }, 'Usage: fill --challenge=<id> [--all]');
                 await fillChallenge(challengeId, { all: rest.includes('--all') });
                 process.exit(0);
                 break;

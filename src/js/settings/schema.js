@@ -43,6 +43,22 @@ const { z } = require('zod');
  */
 const getSchemaDefault = (key) => SETTINGS_SCHEMA[key]?.default;
 
+/**
+ * The exposure value the exposure-dependent validators compare against:
+ * the live `exposure` from allSettings when it is a valid 1–100 number,
+ * otherwise the schema default. Shared by the exposureTarget and
+ * lastHourExposure context validators/error builders.
+ *
+ * @param {any} allSettings
+ * @returns {number}
+ */
+const effectiveExposureOf = (allSettings) => {
+    const exposureValue = allSettings.exposure;
+    return typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
+        ? exposureValue
+        : getSchemaDefault('exposure');
+};
+
 // Reusable zod validators. Each SETTINGS_SCHEMA entry's `validation` field
 // holds one of these schemas; validateSetting / getValidationError run it via
 // safeParse. Centralizing the shapes keeps the per-entry declarations
@@ -188,21 +204,10 @@ const SETTINGS_SCHEMA = {
         validation: percentageOrZero,
         contextValidation: (value, allSettings) => {
             if (value === 0) return true; // sentinel — always ok
-            const exposureValue = allSettings.exposure;
-            const effectiveExposure =
-                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
-                    ? exposureValue
-                    : getSchemaDefault('exposure');
-            return value >= effectiveExposure;
+            return value >= effectiveExposureOf(allSettings);
         },
-        getContextError: (value, allSettings) => {
-            const exposureValue = allSettings.exposure;
-            const effectiveExposure =
-                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
-                    ? exposureValue
-                    : getSchemaDefault('exposure');
-            return `VALIDATION_GREATER_OR_EQUAL|app.exposure|${effectiveExposure}`;
-        },
+        getContextError: (value, allSettings) =>
+            `VALIDATION_GREATER_OR_EQUAL|app.exposure|${effectiveExposureOf(allSettings)}`,
         dependsOn: ['exposure'],
         validationOrder: 2, // Validate after dependencies
         group: 'general',
@@ -350,24 +355,12 @@ const SETTINGS_SCHEMA = {
         default: 100,
         perChallenge: true,
         validation: percentage,
-        contextValidation: (value, allSettings) => {
-            const exposureValue = allSettings.exposure;
-            // If exposure is not set or invalid, use the exposure default for comparison
-            const effectiveExposure =
-                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
-                    ? exposureValue
-                    : getSchemaDefault('exposure');
-            return value <= effectiveExposure;
-        },
-        getContextError: (value, allSettings) => {
-            const exposureValue = allSettings.exposure;
-            const effectiveExposure =
-                typeof exposureValue === 'number' && exposureValue >= 1 && exposureValue <= 100
-                    ? exposureValue
-                    : getSchemaDefault('exposure');
-            // Return a string that the UI will translate
-            return `VALIDATION_LESS_OR_EQUAL|app.exposure|${effectiveExposure}`;
-        },
+        // If exposure is not set or invalid, effectiveExposureOf falls back to
+        // the exposure default for comparison.
+        contextValidation: (value, allSettings) => value <= effectiveExposureOf(allSettings),
+        // Return a string that the UI will translate
+        getContextError: (value, allSettings) =>
+            `VALIDATION_LESS_OR_EQUAL|app.exposure|${effectiveExposureOf(allSettings)}`,
         dependsOn: ['exposure'],
         validationOrder: 2, // Validate after dependencies
         group: 'lastHour',

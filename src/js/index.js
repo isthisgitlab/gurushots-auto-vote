@@ -413,17 +413,28 @@ if (gotSingleInstanceLock) {
             const userSettings = settings.loadSettings();
             const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
 
-            // Initialize global AutoUpdater instance
+            // Initialize global AutoUpdater instance. Deliberately constructed
+            // WITHOUT a window — unlike the windowed constructions in
+            // ipc/update.handlers.js and ui/applicationMenu.js — because the
+            // startup check below runs before any window exists (pre-window so
+            // an update prompt can't race the main window's challenge load and
+            // double-load challenges).
             autoUpdater = new AutoUpdater();
 
-            // If auto-login is enabled, check for updates before creating the main window
-            if (shouldAutoLogin) {
-                // Check for updates immediately (no delay) to prevent double challenge loading
+            // Background update check shared by both startup paths — never
+            // lets an update-check failure break app startup.
+            const safeCheckForUpdates = async () => {
                 try {
                     await autoUpdater.checkForUpdates(false);
                 } catch (error) {
                     logger.withCategory('update').error('Error during update check:', error);
                 }
+            };
+
+            // If auto-login is enabled, check for updates before creating the main window
+            if (shouldAutoLogin) {
+                // Check for updates immediately (no delay) to prevent double challenge loading
+                await safeCheckForUpdates();
             }
 
             // Synchronous — the window exists before the handlers below are registered.
@@ -433,13 +444,7 @@ if (gotSingleInstanceLock) {
             if (!shouldAutoLogin) {
                 // Check for updates after a short delay to not block app startup
                 setTimeout(() => {
-                    void (async () => {
-                        try {
-                            await autoUpdater.checkForUpdates(false);
-                        } catch (error) {
-                            logger.withCategory('update').error('Error during update check:', error);
-                        }
-                    })();
+                    void safeCheckForUpdates();
                 }, 3000); // 3 second delay
             }
 

@@ -16,6 +16,40 @@ const TURBO_ERROR_DISPLAY_MS = 5000;
 const FILL_ERROR_DISPLAY_MS = 5000;
 
 /**
+ * "Earn turbo" mini-game button shared by the compact summary row and the
+ * detailed turbo cell. `withMargin` adds the detailed cell's mt-1 spacing;
+ * `disabled` stays a prop because the two branches lock on different
+ * conditions (compact: playing only; detailed: playing or autovote running).
+ */
+function EarnTurboButton({ withMargin = false, turboError, playingTurbo, disabled, onPlay, label }) {
+    return (
+        <button
+            className={`btn btn-xs${withMargin ? ' mt-1' : ''} ${turboError ? 'btn-error' : 'btn-info'}`}
+            onClick={onPlay}
+            disabled={disabled}
+        >
+            {playingTurbo ? <span className="loading loading-spinner loading-xs" /> : <>🎯 {label}</>}
+        </button>
+    );
+}
+
+/**
+ * "+1" fill button shared by the compact summary row and the detailed
+ * entries cell — identical in both branches.
+ */
+function FillOneButton({ fillError, filling, autovoteRunning, onFill }) {
+    return (
+        <button
+            className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
+            onClick={onFill}
+            disabled={filling || autovoteRunning}
+        >
+            {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
+        </button>
+    );
+}
+
+/**
  * Challenge card component displaying all challenge details
  */
 export function ChallengeCard({
@@ -335,26 +369,21 @@ export function ChallengeCard({
                             🖼 {entries.length}/{challenge.max_photo_submits}
                         </span>
                         {canPlayAutoTurbo && (
-                            <button
-                                className={`btn btn-xs ${turboError ? 'btn-error' : 'btn-info'}`}
-                                onClick={handlePlayAutoTurbo}
+                            <EarnTurboButton
+                                turboError={turboError}
+                                playingTurbo={playingTurbo}
                                 disabled={playingTurbo}
-                            >
-                                {playingTurbo ? (
-                                    <span className="loading loading-spinner loading-xs" />
-                                ) : (
-                                    `🎯 ${t('app.earnTurbo')}`
-                                )}
-                            </button>
+                                onPlay={handlePlayAutoTurbo}
+                                label={t('app.earnTurbo')}
+                            />
                         )}
                         {canFill && (
-                            <button
-                                className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
-                                onClick={() => handleFill('one')}
-                                disabled={filling || autovoteRunning}
-                            >
-                                {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
-                            </button>
+                            <FillOneButton
+                                fillError={fillError}
+                                filling={filling}
+                                autovoteRunning={autovoteRunning}
+                                onFill={() => handleFill('one')}
+                            />
                         )}
                         {(turboError || fillError) && <span className="text-error">⚠ {turboError || fillError}</span>}
                     </div>
@@ -383,17 +412,14 @@ export function ChallengeCard({
                             <div className="font-medium">{t('app.turbo')}</div>
                             <div className={turboStatus.colorClass}>{turboStatus.text}</div>
                             {canPlayAutoTurbo && (
-                                <button
-                                    className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
-                                    onClick={handlePlayAutoTurbo}
+                                <EarnTurboButton
+                                    withMargin
+                                    turboError={turboError}
+                                    playingTurbo={playingTurbo}
                                     disabled={playingTurbo || autovoteRunning}
-                                >
-                                    {playingTurbo ? (
-                                        <span className="loading loading-spinner loading-xs" />
-                                    ) : (
-                                        <>🎯 {t('app.earnTurbo')}</>
-                                    )}
-                                </button>
+                                    onPlay={handlePlayAutoTurbo}
+                                    label={t('app.earnTurbo')}
+                                />
                             )}
                             {turboError && <div className="text-error text-xs mt-1">{turboError}</div>}
                             {!turboError && canPlayAutoTurbo && autovoteRunning && (
@@ -409,13 +435,12 @@ export function ChallengeCard({
                             </div>
                             {canFill && (
                                 <div className="flex gap-1 mt-1 justify-center">
-                                    <button
-                                        className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
-                                        onClick={() => handleFill('one')}
-                                        disabled={filling || autovoteRunning}
-                                    >
-                                        {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
-                                    </button>
+                                    <FillOneButton
+                                        fillError={fillError}
+                                        filling={filling}
+                                        autovoteRunning={autovoteRunning}
+                                        onFill={() => handleFill('one')}
+                                    />
                                     {slotsRemaining > 1 && (
                                         <button
                                             className="btn btn-xs btn-warning"

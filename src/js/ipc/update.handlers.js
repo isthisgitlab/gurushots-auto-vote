@@ -17,15 +17,32 @@ const { getReleasesUrl } = require('../services/UpdateChecker');
 const buildHandlers = (deps) => {
     const { getAutoUpdater, setAutoUpdater, getMainWindow } = deps;
 
+    // Lazily construct the shared instance on first use (windowed — unlike
+    // index.js's deliberate pre-window startup construction) and register it
+    // back through the accessor so index.js keeps lifecycle ownership.
+    const ensureUpdater = () => {
+        let autoUpdater = getAutoUpdater();
+        if (!autoUpdater) {
+            autoUpdater = new AutoUpdater(getMainWindow());
+            setAutoUpdater(autoUpdater);
+        }
+        return autoUpdater;
+    };
+
+    // Guard for handlers that must NOT lazily construct: yields either the
+    // existing instance or the standard "not initialized" failure result.
+    const requireUpdater = () => {
+        const autoUpdater = getAutoUpdater();
+        return {
+            autoUpdater,
+            failure: autoUpdater ? null : { success: false, error: 'AutoUpdater not initialized' },
+        };
+    };
+
     return {
         'check-for-updates': async () => {
             try {
-                let autoUpdater = getAutoUpdater();
-                if (!autoUpdater) {
-                    autoUpdater = new AutoUpdater(getMainWindow());
-                    setAutoUpdater(autoUpdater);
-                }
-                const updateInfo = await autoUpdater.checkForUpdates(true);
+                const updateInfo = await ensureUpdater().checkForUpdates(true);
                 return { success: true, updateInfo };
             } catch (error) {
                 logger.withCategory('update').error('Error checking for updates:', error);
@@ -34,10 +51,10 @@ const buildHandlers = (deps) => {
         },
 
         'download-update': async () => {
-            const autoUpdater = getAutoUpdater();
+            const { autoUpdater, failure } = requireUpdater();
             try {
-                if (!autoUpdater) {
-                    return { success: false, error: 'AutoUpdater not initialized' };
+                if (failure) {
+                    return failure;
                 }
                 await autoUpdater.downloadUpdate();
                 return { success: true };
@@ -53,9 +70,9 @@ const buildHandlers = (deps) => {
 
         'install-update': async () => {
             try {
-                const autoUpdater = getAutoUpdater();
-                if (!autoUpdater) {
-                    return { success: false, error: 'AutoUpdater not initialized' };
+                const { autoUpdater, failure } = requireUpdater();
+                if (failure) {
+                    return failure;
                 }
                 autoUpdater.quitAndInstall();
                 return { success: true };
@@ -67,9 +84,9 @@ const buildHandlers = (deps) => {
 
         'skip-update-version': async () => {
             try {
-                const autoUpdater = getAutoUpdater();
-                if (!autoUpdater) {
-                    return { success: false, error: 'AutoUpdater not initialized' };
+                const { autoUpdater, failure } = requireUpdater();
+                if (failure) {
+                    return failure;
                 }
                 const updateInfo = autoUpdater.getUpdateInfo();
                 if (updateInfo) {
@@ -85,12 +102,7 @@ const buildHandlers = (deps) => {
 
         'clear-skip-version': async () => {
             try {
-                let autoUpdater = getAutoUpdater();
-                if (!autoUpdater) {
-                    autoUpdater = new AutoUpdater(getMainWindow());
-                    setAutoUpdater(autoUpdater);
-                }
-                autoUpdater.clearSkipVersion();
+                ensureUpdater().clearSkipVersion();
                 return { success: true };
             } catch (error) {
                 logger.withCategory('update').error('Error clearing skip version:', error);

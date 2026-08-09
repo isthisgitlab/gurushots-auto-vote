@@ -53,6 +53,13 @@ jest.mock('../src/js/logger.js', () => ({
             : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
     ),
     getRecentLogs: jest.fn(() => []),
+    // Faithful implementation — production code interpolates its return value
+    // into log/messages, so a bare jest.fn() would break those call sites.
+    sanitizeLogString: jest.fn((value, maxLength = 200) =>
+        String(value ?? '')
+            .replace(/[\r\n\t]/g, ' ')
+            .slice(0, maxLength),
+    ),
     CATEGORIES: {
         SETTINGS: 'settings',
         AUTHENTICATION: 'authentication',

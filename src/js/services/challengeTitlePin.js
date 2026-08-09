@@ -20,12 +20,9 @@ const settings = require('../settings');
 const logger = require('../logger');
 
 // Bound a server-supplied title before it reaches a log line (CR/LF-stripped
-// and truncated). Local re-implementation — shared core must not import the
-// IPC shell's sanitizeForLog.
-const sanitizeForLog = (/** @type {unknown} */ value) =>
-    String(value ?? '')
-        .replace(/[\r\n\t]/g, ' ')
-        .slice(0, 200);
+// and truncated). The sanitizer now lives in the core logger — shared with
+// the IPC shell's handlers — so both sides bound strings identically.
+const sanitizeForLog = logger.sanitizeLogString;
 
 // Shared with mergeTitlePins' storage cap — the compare below only prevents
 // perpetual mismatch on over-length titles if both sides bound with the same

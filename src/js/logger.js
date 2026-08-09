@@ -351,6 +351,16 @@ const sanitizeForLog = (value, depth = 0, seen = new WeakSet()) => {
     return out;
 };
 
+// Bounds an untrusted string before it is interpolated into a log line:
+// CR/LF/tab collapse to spaces (a newline would otherwise forge a synthetic
+// log line in the plain-text file) and the result is truncated. Shared by the
+// IPC shell (actions.handlers) and the core services (challengeTitlePin) so
+// both sides sanitize identically.
+const sanitizeLogString = (value, maxLength = 200) =>
+    String(value ?? '')
+        .replace(/[\r\n\t]/g, ' ')
+        .slice(0, maxLength);
+
 // Message-level counterpart to sanitizeForLog. sanitizeForLog only sees the
 // structured `data` object; it never touches the free-form message string.
 // Callers that fold a credential into the message via positional args (the
@@ -649,6 +659,10 @@ module.exports = {
     // Test seam: redacts sensitive keys before disk write. Exported so the
     // contract is unit-testable; production callers don't need to call it.
     sanitizeForLog,
+
+    // Bounds an untrusted string (CR/LF/tab-stripped + truncated) before it
+    // reaches a log line. Shared by IPC handlers and core services.
+    sanitizeLogString,
 
     // Test seam: redacts credentials folded into a message string. Applied
     // automatically by writeLog; exported so the contract is unit-testable.
