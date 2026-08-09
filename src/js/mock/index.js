@@ -12,6 +12,11 @@ const errors = require('./errors');
 const settings = require('../settings');
 const logger = require('../logger');
 const { runVotingPass } = require('../services/votingOrchestrator');
+const { createMemoryEntryTracker } = require('../services/newEntryTracker');
+
+// Module-level so snapshots survive across mock cycles within a run — a per-call
+// tracker would look like "first sight" every cycle and never detect anything.
+const mockEntryTracker = createMemoryEntryTracker();
 
 // Session-stable mock data cache to prevent regeneration within same app run
 let sessionMockCache = {
@@ -597,6 +602,11 @@ const mockApiClient = {
                 runTurboMiniGame: mockApiClient.runTurboMiniGame,
             },
             cleanupStaleMetadata: null,
+            // In-memory for the same reason cleanupStaleMetadata is null: the
+            // metadata store is shared and un-namespaced, and mock challenge ids
+            // never match real ones, so persisting mock entry snapshots would
+            // accumulate junk in the user's real metadata.json that nothing prunes.
+            entryTracker: mockEntryTracker,
             // Short fixed spacing — mock cycles should stay fast.
             interChallengeDelay: () => 500,
         });

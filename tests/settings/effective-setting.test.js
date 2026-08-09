@@ -68,6 +68,17 @@ describe('settings facade re-exports the schema module', () => {
         // 0 means "follow the trigger" — load-bearing for legacy behavior.
         expect(settings.SETTINGS_SCHEMA.exposureTarget.default).toBe(0);
     });
+
+    test('voteOnNewEntry is an opt-in per-challenge boolean', () => {
+        // Default false is the contract: enabling tracking for everyone would make
+        // every user pay whole-file metadata.json I/O on every cycle.
+        const entry = settings.SETTINGS_SCHEMA.voteOnNewEntry;
+        expect(entry).toBeDefined();
+        expect(entry.type).toBe('boolean');
+        expect(entry.default).toBe(false);
+        expect(entry.perChallenge).toBe(true);
+        expect(entry.group).toBe('general');
+    });
 });
 
 describe('settings facade re-exports the storage module', () => {

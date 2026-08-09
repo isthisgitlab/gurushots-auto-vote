@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const runtime = require('./runtime');
 const { formatTimeHMS } = require('./dateFormat');
+const { oneLine } = require('./format/logSafe');
 
 // ANSI color codes for CLI output (referenced via bracket notation in formatConsoleMessage)
 const colors = {
@@ -548,11 +549,7 @@ module.exports = {
     // Formats a challenge object as the standard log prefix
     // `[Challenge {id}: {title}]`. Pass the whole challenge object or
     // (id, title) directly; missing fields render as 'unknown'.
-    // id/title originate from the GuruShots API (untrusted), so collapse any
-    // CR/LF before interpolation — a newline in a title would otherwise forge a
-    // synthetic log line (log injection) in the plain-text log file.
     challengeTag: (challengeOrId, title) => {
-        const oneLine = (v) => String(v).replace(/[\r\n]+/g, ' ');
         if (challengeOrId && typeof challengeOrId === 'object') {
             const id = challengeOrId.id ?? 'unknown';
             const t = challengeOrId.title ?? 'unknown';

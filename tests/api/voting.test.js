@@ -135,6 +135,26 @@ describe('voting', () => {
             expect(result).toEqual(mockResponse);
         });
 
+        test('should not POST an image-less vote when exposure already meets the target', async () => {
+            // Reachable most easily via voteOnNewEntry, which deliberately votes when
+            // the challenge-list exposure sits at/above the trigger. If the vote-images
+            // endpoint agrees, the selection loop never runs — and submitting anyway
+            // would send a vote with no image_ids and log a clean "voted" cycle for
+            // zero actual votes, while the caller marks the entry as handled.
+            const mockVoteImages = {
+                challenge: { id: '123', title: 'Test Challenge' },
+                voting: { exposure: { exposure_factor: 100 } },
+                images: [{ id: 'img1', ratio: 25 }],
+            };
+
+            const result = await submitVotes(mockVoteImages, 'test-token', 90);
+
+            expect(makePostRequest).not.toHaveBeenCalled();
+            expect(updateChallengeVoteMetadata).not.toHaveBeenCalled();
+            expect(result).toBeUndefined();
+            expect(mockWarningFn).toHaveBeenCalledWith(expect.stringContaining('No vote submitted'), null);
+        });
+
         test('should return undefined when no images', async () => {
             const mockVoteImages = {
                 challenge: { id: '123', title: 'Test Challenge' },
@@ -189,25 +209,22 @@ describe('voting', () => {
                 ],
             };
             const mockToken = 'test-token';
-            const mockResponse = { success: true };
 
-            makePostRequest.mockResolvedValueOnce(mockResponse);
-
-            // Test with a function that returns a threshold
+            // A function target is a legacy caller shape — the orchestrator has passed
+            // a resolved number since the exposure-threshold resolver was retired
+            // (see the _getExposureThreshold note in api/main.js). `exposure_factor <
+            // someFunction` is always false, so no image is ever selected.
             const thresholdFunction = (challengeId) => {
                 return challengeId === '123' ? 80 : 100;
             };
 
             const result = await submitVotes(mockVoteImages, mockToken, thresholdFunction);
 
-            expect(makePostRequest).toHaveBeenCalledWith(
-                'https://api.gurushots.com/rest_mobile/submit_vote',
-                expect.objectContaining({
-                    'content-type': 'application/x-www-form-urlencoded',
-                }),
-                expect.stringContaining('c_id=123'),
-            );
-            expect(result).toEqual(mockResponse);
+            // Previously this submitted a vote carrying no image_ids at all. Sending
+            // nothing is the honest outcome for an unusable target.
+            expect(makePostRequest).not.toHaveBeenCalled();
+            expect(result).toBeUndefined();
+            expect(mockWarningFn).toHaveBeenCalledWith(expect.stringContaining('No vote submitted'), null);
         });
 
         test('should handle insufficient images for target exposure', async () => {
