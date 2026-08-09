@@ -642,6 +642,95 @@ describe('voteOnNewEntry — gate, arm, record', () => {
         expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
     });
 
+    test('a transient empty entries array does not overwrite a good baseline', async () => {
+        // A partial/degraded poll must not poison the snapshot: recording [] would
+        // make the unchanged entries look brand new on the very next poll.
+        enableSetting();
+        const tracker = makeTracker({ 101: ['a', 'b'] });
+
+        await runVotingPass('tok', null, deps(makeApi([withEntries([])]), { entryTracker: tracker }));
+        expect(tracker.set).not.toHaveBeenCalled();
+        expect(tracker.store.get('101')).toEqual(['a', 'b']);
+
+        // Next poll returns the same entries as before — nothing new.
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('a brand-new challenge with zero entries still records an empty baseline', async () => {
+        enableSetting();
+        const tracker = makeTracker();
+
+        await runVotingPass('tok', null, deps(makeApi([withEntries([])]), { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledWith('101', []);
+    });
+
+    test('cancellation right after a successful forced vote still records', async () => {
+        // The vote landed, so the trigger is spent. Bailing without recording would
+        // re-force the identical vote on the next pass.
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'new entry detected',
+            targetExposure: 100,
+            forcedByNewEntry: true,
+        });
+        // false at: per-challenge, pre-vote, pre-submit; then true after submission.
+        cancellation.isCancelled
+            .mockReturnValueOnce(false)
+            .mockReturnValueOnce(false)
+            .mockReturnValueOnce(false)
+            .mockReturnValue(true);
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(api.submitVotes).toHaveBeenCalled();
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('tracks each challenge in a multi-challenge pass independently', async () => {
+        enableSetting();
+        const first = withEntries(['a']);
+        const second = makeChallenge({
+            id: 202,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [{ id: 'x' }, { id: 'y' }], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([first, second]);
+        const tracker = makeTracker({ 101: ['a'], 202: ['x'] });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        // 101 unchanged, 202 gained an entry — the decisions must not bleed together.
+        const options = votingLogic.evaluateVotingDecision.mock.calls.map((c) => c[2]);
+        expect(options).toEqual([{ hasNewEntry: false }, { hasNewEntry: true }]);
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a']);
+        expect(tracker.set).toHaveBeenCalledWith('202', ['x', 'y']);
+    });
+
+    test('a single-challenge filtered run tracks only the filtered challenge', async () => {
+        enableSetting();
+        const first = withEntries(['a', 'b']);
+        const second = makeChallenge({
+            id: 202,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [{ id: 'x' }], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const tracker = makeTracker({ 101: ['a'], 202: ['x'] });
+
+        await runVotingPass('tok', 101, deps(makeApi([first, second]), { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledTimes(1);
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
     test('a per-challenge override behaves the same as the global default', async () => {
         // The gate reads the EFFECTIVE value, so an override flip must be equivalent.
         const tracker = makeTracker({ 101: ['a'] });

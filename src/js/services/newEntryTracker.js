@@ -20,6 +20,34 @@
  */
 
 const metadata = require('../metadata');
+const logger = require('../logger');
+
+// metadata owns these (it enforces them at persistence time); read them here so the
+// pre-persistence bound can't drift from the write-side one.
+//
+// The fallback exists because `id.length <= undefined` is false for EVERY id, so a
+// missing import would silently discard whole snapshots rather than bound them. It
+// falls back to a real number rather than Infinity: this bound is the DoS guard for
+// an oversized remote response, and failing open would quietly undo it. Only a
+// broken import can reach this (both values are static literals in metadata), so it
+// also warns — a silent degrade here would be invisible until it mattered.
+const FALLBACK_ENTRY_ID_CAP = 64;
+/** @param {*} value @param {string} name @returns {number} */
+const finiteCap = (value, name) => {
+    if (Number.isFinite(value)) return value;
+    logger
+        .withCategory('challenges')
+        .warning(`metadata.${name} is not a finite number; falling back to ${FALLBACK_ENTRY_ID_CAP}`, null);
+    return FALLBACK_ENTRY_ID_CAP;
+};
+const MAX_TRACKED_ENTRY_IDS = finiteCap(metadata.MAX_TRACKED_ENTRY_IDS, 'MAX_TRACKED_ENTRY_IDS');
+const MAX_ENTRY_ID_LENGTH = finiteCap(metadata.MAX_ENTRY_ID_LENGTH, 'MAX_ENTRY_ID_LENGTH');
+
+// Challenge ids come from the API, so every bare-id interpolation below is
+// CR/LF-collapsed first. Imported from format/logSafe rather than taken off the
+// logger: the logger is mocked in much of the suite, and a sanitizer that vanishes
+// under a mock stops being exercised exactly where it is asserted.
+const { oneLine: oneLineId } = require('../format/logSafe');
 
 /**
  * Extract the current entry ids from a challenge.
@@ -35,9 +63,16 @@ const metadata = require('../metadata');
 const readEntryIds = (challenge) => {
     const entries = challenge?.member?.ranking?.entries;
     if (!Array.isArray(entries)) return null;
+    // Bound the work BEFORE doing it, not just at persistence time. This runs every
+    // poll on the Electron main process, and metadata's write-side caps would reject
+    // an oversized payload only after the map/filter/Set traversal had already
+    // happened — and reject it every cycle, since a rejected snapshot never settles.
+    // Real max_photo_submits is single-digit, so the caps are far above anything
+    // legitimate; they only bound a malformed or hostile response.
     return entries
+        .slice(0, MAX_TRACKED_ENTRY_IDS)
         .map((entry) => (entry?.id == null ? '' : String(entry.id)))
-        .filter((id) => id.length > 0 && id !== 'undefined' && id !== 'null');
+        .filter((id) => id.length > 0 && id.length <= MAX_ENTRY_ID_LENGTH && id !== 'undefined' && id !== 'null');
 };
 
 /**
@@ -63,6 +98,31 @@ const hasNewEntries = (previousIds, currentIds) => {
 };
 
 /**
+ * Whether the current ids are safe to persist as the new baseline.
+ *
+ * Guards one specific corruption: a poll that returns an EMPTY entries array for a
+ * challenge that previously had entries. Nothing upstream distinguishes "the user
+ * really removed every photo" from a partial/degraded API response, and recording
+ * the empty array would poison the baseline — the unchanged entries would come back
+ * looking brand new on the very next poll and force a spurious vote.
+ *
+ * Keeping the older, non-empty baseline is strictly safer in both readings: after a
+ * transient blip the same ids reappear and correctly read as "nothing new", and
+ * after a genuine deletion any photo added later is still genuinely absent from the
+ * stored set, so it fires exactly as it should.
+ *
+ * @param {string[]|null} previousIds
+ * @param {string[]} currentIds
+ * @returns {boolean}
+ */
+const shouldRecordSnapshot = (previousIds, currentIds) => {
+    if (!Array.isArray(currentIds)) return false;
+    if (currentIds.length > 0) return true;
+    // currentIds is empty — only trust it when there is nothing better stored.
+    return !Array.isArray(previousIds) || previousIds.length === 0;
+};
+
+/**
  * @typedef {{get: (challengeId: string) => string[]|null, set: (challengeId: string, ids: string[]) => void}} EntryTracker
  */
 
@@ -73,7 +133,14 @@ const hasNewEntries = (previousIds, currentIds) => {
 const createMetadataEntryTracker = () => ({
     get: (challengeId) => metadata.getChallengeEntryIds(challengeId),
     set: (challengeId, ids) => {
-        metadata.setChallengeEntryIds(challengeId, ids);
+        // A dropped write leaves the trigger armed, so the next pass re-fires the
+        // same forced vote — worth a line rather than swallowing the boolean, even
+        // though saveMetadata logs its own errors.
+        if (!metadata.setChallengeEntryIds(challengeId, ids)) {
+            logger
+                .withCategory('challenges')
+                .warning(`Could not persist entry snapshot for challenge ${oneLineId(challengeId)}`, null);
+        }
     },
 });
 
@@ -102,6 +169,7 @@ const createMemoryEntryTracker = () => {
 module.exports = {
     readEntryIds,
     hasNewEntries,
+    shouldRecordSnapshot,
     createMetadataEntryTracker,
     createMemoryEntryTracker,
 };

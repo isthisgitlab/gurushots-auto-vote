@@ -238,7 +238,9 @@ Each challenge has an exposure **trigger** ("vote while my exposure is below thi
 
 For triggers with a separate target, the app votes only when you're below the trigger, then keeps going up to the target. A target of `0` means "stop at the trigger" (target = trigger).
 
-**Vote on new entry** (`voteOnNewEntry`, off by default) adds one exception to steps 3–7: when a new photo appears in a challenge — added by you on the website, or by auto-fill, emergency fill, or a boost/turbo fill — the app votes once even if your exposure already reads at or above the trigger, up to whichever target the winning rule above resolved. Adding a photo dilutes exposure immediately, but the reported figure doesn't always catch up on the same poll, so without this the fresh entry can sit unexposed for a cycle or more. It does **not** override steps 1, 2, or 4: if only-boost, not-started, or vote-only-in-last-minute is blocking, no vote happens. If the vote fails, the trigger stays armed and the next cycle retries it.
+**Vote on new entry** (`voteOnNewEntry`, off by default) changes only the "am I already at target?" test. When a new photo appears in a challenge — added by you on the website, or by auto-fill, emergency fill, or a boost/turbo fill — the app votes once even if your exposure already reads at or above the trigger, up to whichever target the winning rule resolved (100% for flash, last-minute, and scheduled fill; `lastHourExposureTarget` in the last hour; `exposureTarget` otherwise). Adding a photo dilutes exposure immediately, but the reported figure doesn't always catch up on the same poll, so without this the fresh entry can sit unexposed for a cycle or more.
+
+It never unblocks a rule that skips voting: if **only-boost** (step 1), **not-started** (step 2), **vote-only-in-last-minute** (step 4), or **scheduled-fill-only** (`scheduledFillReplaces`, outside its window) is blocking, no vote happens and the trigger is spent. If the vote itself fails, the trigger stays armed and the next cycle retries it.
 
 ### Scheduling cadence
 
@@ -301,13 +303,13 @@ All of these support per-challenge overrides except where noted.
 
 **General**
 
-| Setting          | Default | Range / values                         | Description                                                                                                                                                                                         |
-| ---------------- | ------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `exposure`       | `100`   | 1–100 %                                | Normal-rule trigger: vote while your exposure is below this.                                                                                                                                        |
-| `exposureTarget` | `0`     | `0`, or 1–100 % (if set, ≥ `exposure`) | Vote up to this % when the normal rule fires. `0` = stop at the trigger.                                                                                                                            |
-| `onlyBoost`      | `false` | bool                                   | Skip normal voting; only apply boost/turbo.                                                                                                                                                         |
-| `voteOnNewEntry` | `false` | bool                                   | When a new photo appears, vote once even if exposure is already at/above the trigger, up to the normal target. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Fill Only. |
-| `compactCards`   | `false` | bool                                   | Compact challenge-card layout (GUI display only).                                                                                                                                                   |
+| Setting          | Default | Range / values                         | Description                                                                                                                                                                                                                  |
+| ---------------- | ------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exposure`       | `100`   | 1–100 %                                | Normal-rule trigger: vote while your exposure is below this.                                                                                                                                                                 |
+| `exposureTarget` | `0`     | `0`, or 1–100 % (if set, ≥ `exposure`) | Vote up to this % when the normal rule fires. `0` = stop at the trigger.                                                                                                                                                     |
+| `onlyBoost`      | `false` | bool                                   | Skip normal voting; only apply boost/turbo.                                                                                                                                                                                  |
+| `voteOnNewEntry` | `false` | bool                                   | When a new photo appears, vote once even if exposure is already at/above the trigger, up to whichever target the winning rule resolves. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Fill Only. |
+| `compactCards`   | `false` | bool                                   | Compact challenge-card layout (GUI display only).                                                                                                                                                                            |
 
 **Boost**
 

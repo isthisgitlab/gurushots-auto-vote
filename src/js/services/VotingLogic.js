@@ -371,9 +371,15 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
             normal: 'normal threshold',
         };
         const labelText = forcedLabels[/** @type {string} */ (r.ruleLabel)];
+        // For the always-100 rules the trigger equals the exposure by construction,
+        // so "exposure 100% >= 100%" would be a tautology rather than information.
+        const state =
+            currentExposure === trigger
+                ? `exposure already at ${trigger}%`
+                : `exposure ${currentExposure}% >= ${trigger}%`;
         return {
             shouldVote: true,
-            voteReason: `${labelText}: new entry detected (exposure ${currentExposure}% >= ${trigger}%) — voting up to ${r.targetExposure}%`,
+            voteReason: `${labelText}: new entry detected (${state}) — voting up to ${r.targetExposure}%`,
             targetExposure: r.targetExposure,
             forcedByNewEntry: true,
         };

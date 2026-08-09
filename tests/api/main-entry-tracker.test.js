@@ -23,6 +23,10 @@ jest.mock('../../src/js/metadata', () => ({
     cleanupStaleMetadata: jest.fn(() => true),
     getChallengeEntryIds: jest.fn(() => null),
     setChallengeEntryIds: jest.fn(() => true),
+    // newEntryTracker reads its pre-persistence bounds from here; omitting them
+    // would leave the caps undefined.
+    MAX_TRACKED_ENTRY_IDS: 64,
+    MAX_ENTRY_ID_LENGTH: 64,
 }));
 jest.mock('../../src/js/services/VotingLogic', () => ({
     shouldApplyBoost: jest.fn(() => false),

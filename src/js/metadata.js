@@ -37,6 +37,21 @@ const getDefaultMetadata = () => {
 const MAX_TRACKED_ENTRY_IDS = 64;
 const MAX_ENTRY_ID_LENGTH = 64;
 
+// Challenge ids come from the GuruShots API, so collapse CR/LF before interpolating
+// one into a message. These carry a bare id rather than the full `[Challenge …]`
+// tag, so they use the shared helper directly instead of logger.challengeTag.
+const { oneLine: oneLineId } = require('./format/logSafe');
+
+/**
+ * Reject the three keys that address Object.prototype instead of creating an own
+ * property. Challenge ids are numeric in practice, so this never fires today — but
+ * the id is remote-controlled and every write path here uses it as a bracket key.
+ * @param {*} challengeId
+ * @returns {boolean}
+ */
+const isUnsafeChallengeKey = (challengeId) =>
+    challengeId === '__proto__' || challengeId === 'constructor' || challengeId === 'prototype';
+
 /**
  * Validate an entryIds snapshot.
  * @param {*} entryIds
@@ -221,7 +236,7 @@ const validateMetadata = (metadata) => {
                 logger
                     .withCategory('challenges')
                     .warning(
-                        `Dropping invalid entryIds snapshot for challenge ${challengeId}: ${validation.repairReason}`,
+                        `Dropping invalid entryIds snapshot for challenge ${oneLineId(challengeId)}: ${validation.repairReason}`,
                     );
                 hasChanges = true;
             }
@@ -418,8 +433,10 @@ const getChallengeEntryIds = (challengeId) => {
 
 /**
  * Persist the entry-id snapshot for a challenge (voteOnNewEntry).
- * No-ops when the stored snapshot already holds the same set, so a server-side
- * reorder costs no file I/O.
+ * Skips the WRITE when the stored snapshot already holds the same set, so a
+ * server-side reorder costs no serialization or disk write. Note the read still
+ * happens — loadMetadata parses and re-validates the whole file — so callers
+ * should not treat an unchanged snapshot as entirely free.
  * @param {string} challengeId - Challenge ID
  * @param {string[]} entryIds - Current entry ids
  * @returns {boolean} - True if successful (including the skipped-write case)
@@ -429,11 +446,17 @@ const setChallengeEntryIds = (challengeId, entryIds) => {
         logger.withCategory('challenges').error('Challenge ID is required', null);
         return false;
     }
+    if (isUnsafeChallengeKey(challengeId)) {
+        logger
+            .withCategory('challenges')
+            .warning(`Refusing to store entryIds under reserved key "${oneLineId(challengeId)}"`, null);
+        return false;
+    }
     const failure = entryIdsFailureReason(entryIds);
     if (failure) {
         logger
             .withCategory('challenges')
-            .warning(`Refusing to store entryIds for challenge ${challengeId}: ${failure}`, null);
+            .warning(`Refusing to store entryIds for challenge ${oneLineId(challengeId)}: ${failure}`, null);
         return false;
     }
 

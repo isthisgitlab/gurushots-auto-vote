@@ -11,6 +11,7 @@
 const {
     readEntryIds,
     hasNewEntries,
+    shouldRecordSnapshot,
     createMemoryEntryTracker,
     createMetadataEntryTracker,
 } = require('../../src/js/services/newEntryTracker');
@@ -42,6 +43,18 @@ describe('readEntryIds', () => {
         ['undefined challenge', undefined],
     ])('returns null when %s', (_label, challenge) => {
         expect(readEntryIds(challenge)).toBeNull();
+    });
+
+    test('bounds an oversized entries array before doing the work', () => {
+        // The write-side caps in metadata would reject this only AFTER the traversal,
+        // and reject it again every cycle since a rejected snapshot never settles.
+        const huge = Array.from({ length: 500 }, (_, i) => ({ id: `id${i}` }));
+        expect(readEntryIds(challengeWithEntries(huge))).toHaveLength(64);
+    });
+
+    test('drops ids longer than the per-id cap', () => {
+        const ids = readEntryIds(challengeWithEntries([{ id: 'ok' }, { id: 'x'.repeat(65) }]));
+        expect(ids).toEqual(['ok']);
     });
 
     test('drops malformed ids instead of stringifying them', () => {
@@ -89,6 +102,25 @@ describe('hasNewEntries', () => {
     test('an empty baseline is a real baseline, not a missing one', () => {
         expect(hasNewEntries([], [])).toBe(false);
         expect(hasNewEntries([], ['a'])).toBe(true);
+    });
+});
+
+describe('shouldRecordSnapshot', () => {
+    test('records a normal non-empty snapshot', () => {
+        expect(shouldRecordSnapshot(['a'], ['a', 'b'])).toBe(true);
+        expect(shouldRecordSnapshot(null, ['a'])).toBe(true);
+    });
+
+    test('records an empty snapshot when there is no better baseline', () => {
+        expect(shouldRecordSnapshot(null, [])).toBe(true);
+        expect(shouldRecordSnapshot([], [])).toBe(true);
+    });
+
+    test('refuses to overwrite a non-empty baseline with an empty one', () => {
+        // A poll returning [] for a challenge that had entries is indistinguishable
+        // from a partial API response. Recording it would poison the baseline and
+        // make the unchanged entries look brand new on the next poll.
+        expect(shouldRecordSnapshot(['a', 'b'], [])).toBe(false);
     });
 });
 

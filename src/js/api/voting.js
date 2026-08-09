@@ -104,6 +104,23 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
         }
     }
 
+    // The loop above never ran, so there is nothing to submit. This happens when
+    // the exposure the vote-images endpoint reports is ALREADY at/above the target
+    // — most easily reached via voteOnNewEntry, which deliberately votes when the
+    // challenge-list exposure sits at/above the trigger, but any caller can hit it
+    // when the two endpoints disagree. Posting an image_ids-less vote request
+    // achieves nothing, and letting it through would log a clean "voted" cycle for
+    // zero actual votes.
+    if (uniqueImageIds.size === 0) {
+        logger
+            .withCategory('voting')
+            .warning(
+                `${logger.challengeTag(challenge)} No vote submitted: exposure already ${exposure_factor}% (target ${targetExposure}%)`,
+                null,
+            );
+        return;
+    }
+
     // Prepare final request data
     const data = `c_id=${challenge.id}${votedImages}&layout=scroll${viewedImages}`;
     const headers = {

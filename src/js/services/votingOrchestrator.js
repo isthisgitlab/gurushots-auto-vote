@@ -420,9 +420,8 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 entryTracker && settings.getEffectiveSetting('voteOnNewEntry', challengeId) === true
                     ? newEntryTracker.readEntryIds(challenge)
                     : null;
-            const hasNewEntry = tracking
-                ? newEntryTracker.hasNewEntries(entryTracker.get(challengeId), tracking)
-                : false;
+            const previousIds = tracking ? entryTracker.get(challengeId) : null;
+            const hasNewEntry = tracking ? newEntryTracker.hasNewEntries(previousIds, tracking) : false;
             if (hasNewEntry) {
                 logger
                     .withCategory('voting')
@@ -436,6 +435,29 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 { hasNewEntry },
             );
             let voteThrew = false;
+
+            // Record the entry snapshot, which disarms the trigger. Called from the
+            // end of this block, and additionally from the post-submit cancellation
+            // return — that one bails out of the whole pass after the vote already
+            // landed, so skipping the record there would re-force the identical vote
+            // next pass. The two earlier cancellation returns deliberately do NOT
+            // record: no vote went out yet, so the trigger must stay armed.
+            //
+            // Skipped only when a vote this trigger FORCED threw, so the next cycle
+            // retries it — that is the whole retry contract. Deliberately NOT skipped
+            // for:
+            //   - "no vote images available", which is not a throw; treating it as a
+            //     failure would force a getVoteImages call every cycle forever on a
+            //     challenge that never has any.
+            //   - a blocked decision (onlyBoost / vote-only-in-last-minute /
+            //     scheduled-fill-only / not started), which consumes the trigger.
+            //     Every block that can later lift, lifts into a rule that already
+            //     votes to 100% or re-reads exposure from scratch, so nothing is lost.
+            const recordEntrySnapshot = () => {
+                if (!tracking || (forcedByNewEntry && voteThrew)) return;
+                if (!newEntryTracker.shouldRecordSnapshot(previousIds, tracking)) return;
+                entryTracker.set(challengeId, tracking);
+            };
 
             // Vote on challenge if conditions are met
             if (shouldVote) {
@@ -483,6 +505,9 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
 
                         // Check for cancellation before delay
                         if (cancellation.isCancelled()) {
+                            // The vote already went through, so the trigger is spent —
+                            // record before bailing or the next pass re-votes it.
+                            recordEntrySnapshot();
                             logger
                                 .withCategory('voting')
                                 .warning('🛑 Voting cancelled by user after vote submission', null);
@@ -517,19 +542,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                     .info(`${logger.challengeTag(challenge)} Skipping voting - ${voteReason}`, null);
             }
 
-            // Record the entry snapshot, which disarms the trigger. Skipped only when
-            // a vote this trigger FORCED threw, so the next cycle retries it — that is
-            // the whole retry contract. Deliberately NOT skipped for:
-            //   - "no vote images available", which is not a throw; treating it as a
-            //     failure would force a getVoteImages call every cycle forever on a
-            //     challenge that never has any.
-            //   - a blocked decision (onlyBoost / vote-only-in-last-minute /
-            //     scheduled-fill-only / not started), which consumes the trigger.
-            //     Every block that can later lift, lifts into a rule that already
-            //     votes to 100% or re-reads exposure from scratch, so nothing is lost.
-            if (tracking && !(forcedByNewEntry && voteThrew)) {
-                entryTracker.set(challengeId, tracking);
-            }
+            recordEntrySnapshot();
         }
 
         // Complete the voting process
