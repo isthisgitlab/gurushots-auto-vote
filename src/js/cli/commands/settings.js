@@ -41,16 +41,18 @@ const getSetting = (key, challengeId = null) => {
             logger
                 .withCategory('settings')
                 .info(`${key} [challenge ${challengeId}]: ${formatSettingForLog(key, effective)} (${status})`);
-            return;
+            return true;
         }
         const value = settings.getSetting(key);
         if (value === undefined) {
             logger.withCategory('settings').error(`Setting '${key}' not found`);
-            return;
+            return false;
         }
         logger.withCategory('settings').info(`${key}: ${formatSettingForLog(key, value)}`);
+        return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error getting setting '${key}'`, error);
+        return false;
     }
 };
 
@@ -58,22 +60,27 @@ const setSetting = (key, value, challengeId = null) => {
     try {
         const parsedValue = parseSettingValue(value);
         if (challengeId) {
-            if (!requirePerChallenge(key)) return;
+            if (!requirePerChallenge(key)) return false;
             if (settings.setChallengeOverride(key, challengeId, parsedValue)) {
                 logger
                     .withCategory('settings')
                     .success(`Set ${key} = ${JSON.stringify(parsedValue)} for challenge ${challengeId}`);
-            } else {
-                logger
-                    .withCategory('settings')
-                    .error(`Failed to set ${key} for challenge ${challengeId} — validation failed`);
+                return true;
             }
-            return;
+            logger
+                .withCategory('settings')
+                .error(`Failed to set ${key} for challenge ${challengeId} — validation failed`);
+            return false;
         }
-        settings.setSetting(key, parsedValue);
+        if (!settings.setSetting(key, parsedValue)) {
+            logger.withCategory('settings').error(`Failed to save setting '${key}' - validation failed`);
+            return false;
+        }
         logger.withCategory('settings').success(`Set ${key} = ${JSON.stringify(parsedValue)}`);
+        return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error setting '${key}'`, error);
+        return false;
     }
 };
 
@@ -88,24 +95,26 @@ const setGlobalDefault = (key, value) => {
             Object.keys(schema).forEach((settingKey) => {
                 logger.withCategory('settings').info(`  ${settingKey}`);
             });
-            return;
+            return false;
         }
 
         const success = settings.setGlobalDefault(key, parsedValue);
         if (success) {
             const actualValue = settings.getGlobalDefault(key);
             logger.withCategory('settings').success(`Set global default ${key} = ${JSON.stringify(actualValue)}`);
-        } else {
-            logger.withCategory('settings').error(`Failed to set global default '${key}' - validation failed`);
-            logger.withCategory('settings').error(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
-
-            const config = schema[key];
-            logger
-                .withCategory('settings')
-                .info(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
+            return true;
         }
+        logger.withCategory('settings').error(`Failed to set global default '${key}' - validation failed`);
+        logger.withCategory('settings').error(`Value ${JSON.stringify(parsedValue)} is invalid for this setting`);
+
+        const config = schema[key];
+        logger
+            .withCategory('settings')
+            .info(`Setting info: ${config.type} type, default: ${JSON.stringify(config.default)}`);
+        return false;
     } catch (error) {
         logger.withCategory('settings').error(`Error setting global default '${key}'`, error);
+        return false;
     }
 };
 
@@ -163,25 +172,47 @@ const listSettings = (challengeId = null) => {
 const resetSetting = (key, challengeId = null) => {
     try {
         if (challengeId) {
-            if (!requirePerChallenge(key)) return;
+            if (!requirePerChallenge(key)) return false;
             settings.removeChallengeOverride(key, challengeId);
             logger
                 .withCategory('settings')
                 .success(`Reset ${key} for challenge ${challengeId} (now inherits the global default)`);
-            return;
+            return true;
         }
         const defaultSettings = getDefaultSettings();
         const defaultValue = defaultSettings[key];
 
         if (defaultValue === undefined) {
             logger.withCategory('settings').error(`Setting '${key}' not found in defaults`);
-            return;
+            return false;
         }
 
         settings.setSetting(key, defaultValue);
         logger.withCategory('settings').success(`Reset ${key} to default: ${JSON.stringify(defaultValue)}`);
+        return true;
     } catch (error) {
         logger.withCategory('settings').error(`Error resetting setting '${key}'`, error);
+        return false;
+    }
+};
+
+const resetGlobalDefault = (key) => {
+    try {
+        if (!settings.SETTINGS_SCHEMA[key]) {
+            logger.withCategory('settings').error(`Unknown schema setting '${key}'`);
+            logger.withCategory('settings').info('Run "settings-schema" to see available settings');
+            return false;
+        }
+        if (!settings.resetGlobalDefault(key)) {
+            logger.withCategory('settings').error(`Failed to reset global default '${key}'`);
+            return false;
+        }
+        const defaultValue = settings.SETTINGS_SCHEMA[key].default;
+        logger.withCategory('settings').success(`Reset global default ${key} to: ${JSON.stringify(defaultValue)}`);
+        return true;
+    } catch (error) {
+        logger.withCategory('settings').error(`Error resetting global default '${key}'`, error);
+        return false;
     }
 };
 
@@ -196,11 +227,13 @@ const resetAllSettings = () => {
                 .withCategory('settings')
                 .success('All settings reset to defaults (token, mock flag, and API headers preserved)');
             logger.withCategory('ui').info('💡 Run "list-settings" to see all current values');
-        } else {
-            logger.withCategory('settings').error('Failed to reset all settings');
+            return true;
         }
+        logger.withCategory('settings').error('Failed to reset all settings');
+        return false;
     } catch (error) {
         logger.withCategory('settings').error('Error resetting all settings', error);
+        return false;
     }
 };
 
@@ -435,6 +468,7 @@ module.exports = {
     setGlobalDefault,
     listSettings,
     resetSetting,
+    resetGlobalDefault,
     resetAllSettings,
     dumpSchema,
     listGlobalDefaults,

@@ -93,6 +93,82 @@ const getUserDataDir = (appName) => {
     }
 };
 
+// --- App identity + resolved user-data path (single source of truth) ---
+// logger.js and settings/storage.js previously carried their OWN copies of
+// this resolution, and their Electron dev branches disagreed (`<userData>-dev`
+// vs `<parent>/gurushots-auto-vote-dev`) — logs and settings could land in
+// different directories whenever the userData basename differs from the
+// package name. This module is the one implementation; logger re-exports
+// isSourceCode/getAppName for compatibility (tests mock the logger seam).
+
+const APP_BASE_NAME = 'gurushots-auto-vote';
+
+/**
+ * Detect running-from-source vs a built app (packaged Electron, SEA CLI,
+ * or asar). Drives the -dev suffix so dev state never pollutes prod state.
+ */
+const isSourceCode = () => {
+    if (isElectron()) {
+        try {
+            if (require('electron').app?.isPackaged) return false;
+        } catch {
+            // Electron module unavailable despite the version flag — treat as source.
+        }
+    }
+    try {
+        if (require('node:sea').isSea()) return false;
+    } catch {
+        // node:sea unavailable — fall through to other detection
+    }
+    if (__dirname.includes('.asar')) return false;
+    return true;
+};
+
+const getAppName = () => (isSourceCode() ? `${APP_BASE_NAME}-dev` : APP_BASE_NAME);
+
+/**
+ * The app's user-data directory, resolved identically for every consumer
+ * (logger, settings storage, scripts):
+ *   - Electron: app.getPath('userData'), with `-dev` appended when running
+ *     from source (canonical dev form).
+ *   - CLI/SEA: the platform-native dir for getAppName(), created on first
+ *     use with a cwd fallback.
+ * Bootstrap-safe: no logger import (console.warn is the only channel here).
+ */
+const getAppUserDataPath = () => {
+    if (isElectron()) {
+        try {
+            const app = require('electron').app;
+            if (app && app.getPath) {
+                const base = app.getPath('userData');
+                return isSourceCode() ? `${base}-dev` : base;
+            }
+        } catch {
+            // fall through to the CLI resolution
+        }
+    }
+    let userDataPath = getUserDataDir(getAppName());
+    try {
+        const fs = require('node:fs');
+        if (!fs.existsSync(userDataPath)) {
+            try {
+                fs.mkdirSync(userDataPath, { recursive: true });
+            } catch (mkdirError) {
+                console.warn(
+                    `[runtime] failed to create userData dir ${userDataPath} (${mkdirError.code || mkdirError.message}); falling back to cwd/userData`,
+                );
+                userDataPath = path.join(process.cwd(), 'userData');
+                if (!fs.existsSync(userDataPath)) {
+                    fs.mkdirSync(userDataPath, { recursive: true });
+                }
+            }
+        }
+    } catch {
+        // No fs (Capacitor WebView) — return the stub path; writers fail-soft.
+    }
+    return userDataPath;
+};
+
 module.exports = {
     isElectron,
     isCapacitor,
@@ -106,4 +182,7 @@ module.exports = {
     isTest,
     getEnvSnapshot,
     getUserDataDir,
+    isSourceCode,
+    getAppName,
+    getAppUserDataPath,
 };

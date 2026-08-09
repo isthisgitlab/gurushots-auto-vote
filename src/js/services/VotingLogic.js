@@ -21,6 +21,7 @@ const { getNextScheduleThresholdSec } = /** @type {any} */ (require('./autoFill'
 // two imports above — wallClock.js isn't `// @ts-check`ed yet.
 const { occurrencesOf } = /** @type {any} */ (require('../scheduling/wallClock'));
 const { isBoostWindowOpen: boostWindowOpen } = require('../voting/boostWindow');
+const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 
 /**
  * Scheduled-fill state for a challenge at `now`.
@@ -64,7 +65,7 @@ const getScheduledFillState = (challenge, challengeId, now) => {
         // range, not corrupt) — only non-numeric/non-positive values fall back.
         const windowMin = Number(settings.getEffectiveSetting('scheduledFillWindowMinutes', challengeId));
         const windowSec = (Number.isFinite(windowMin) && windowMin > 0 ? windowMin : 60) * 60;
-        const timezone = settings.getSetting('timezone') || 'Europe/Riga';
+        const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
         const timeOfDay = settings.getEffectiveSetting('scheduledFillTime', challengeId);
         const beforeEndSec = Number(settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId));
 

@@ -296,6 +296,47 @@ describe('mock-parity behaviors on the shared path', () => {
         expect(result.success).toBe(true);
         expect(api.applyTurbo).not.toHaveBeenCalled();
     });
+
+    // Exactly-once reflection contract: submitNewEntryForAction deliberately
+    // does NOT reflect internally (pinned in tests/services/autoFill.test.js)
+    // — the orchestrator is the one and only place that reflects a successful
+    // fill-new. If reflection ever moved inside submitNewEntryForAction these
+    // sites would reflect twice, duplicating the entry in
+    // challenge.member.ranking.entries and corrupting getSlotsRemaining plus
+    // boost/turbo entry selection for the rest of the pass.
+    test('boost fill-new success → reflectNewEntry called exactly once with the submitted id', async () => {
+        const settings = require('../../src/js/settings');
+        const challenge = makeChallenge({
+            member: {
+                boost: { state: 'AVAILABLE', timeout: NOW + 600 },
+                ranking: { entries: [], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'boost' }]);
+        votingLogic.shouldApplyBoost.mockReturnValue(true);
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: true, imageId: 'fresh-1', reason: 'submitted' });
+        settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
+        try {
+            await runVotingPass('tok', null, deps(api));
+            expect(autoFill.reflectNewEntry).toHaveBeenCalledTimes(1);
+            expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(challenge, 'fresh-1');
+            expect(api.applyBoostToEntry).toHaveBeenCalledWith('101', 'fresh-1', 'tok');
+        } finally {
+            settings.getEffectiveSetting.mockImplementation(() => false);
+        }
+    });
+
+    test('turbo fill-new success → reflectNewEntry called exactly once with the submitted id', async () => {
+        const challenge = makeChallenge();
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'turbo' }]);
+        votingLogic.shouldApplyTurbo.mockReturnValue({ apply: true, fillNew: true, imageId: null });
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: true, imageId: 'fresh-2', reason: 'submitted' });
+        await runVotingPass('tok', null, deps(api));
+        expect(autoFill.reflectNewEntry).toHaveBeenCalledTimes(1);
+        expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(challenge, 'fresh-2');
+    });
 });
 
 describe('cancellation checkpoints', () => {

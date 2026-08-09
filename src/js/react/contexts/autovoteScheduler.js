@@ -1,19 +1,20 @@
 /**
- * Thin GUI wrapper over the shared last-minute threshold math
- * (src/js/scheduling/thresholdWindow.js). The only GUI-specific piece is the
- * threshold resolver: in the WebView per-challenge thresholds come back
- * asynchronously over IPC (window.api.getEffectiveSetting). The math itself is
- * shared with runScheduler.js (CLI/Android) so a cadence change is made once.
+ * GUI-side (WebView) resolvers for the shared cadence math
+ * (src/js/scheduling/thresholdWindow.js), the async-IPC counterpart of
+ * src/js/scheduling/nodeResolvers.js: per-challenge values come back over
+ * window.api.getEffectiveSetting instead of the synchronous settings facade.
+ * AutovoteContext injects these into the shared cadence chain
+ * (src/js/scheduling/cadenceChain.js) so the loop and math are written once.
  */
 
 import { computeNextCycleDelayMs as computeNextDelayMs } from '../../scheduling/thresholdWindow';
 
 // WebView resolver: per-challenge lastMinuteThreshold over IPC (Promise).
-const resolveThreshold = (challengeId) => window.api.getEffectiveSetting('lastMinuteThreshold', challengeId);
+export const resolveThreshold = (challengeId) => window.api.getEffectiveSetting('lastMinuteThreshold', challengeId);
 
 // WebView resolver for the scheduled-fill cadence cap: the three per-challenge
 // keys over the same key-agnostic IPC channel, batched per challenge.
-const resolveScheduledFill = async (challengeId) => {
+export const resolveScheduledFill = async (challengeId) => {
     const [enabled, timeOfDay, beforeEndSec] = await Promise.all([
         window.api.getEffectiveSetting('useScheduledFill', challengeId),
         window.api.getEffectiveSetting('scheduledFillTime', challengeId),

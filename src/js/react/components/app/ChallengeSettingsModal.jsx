@@ -6,6 +6,7 @@ import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
 import { getScheduleShift } from '../../../services/scheduleRemap';
 import { occurrencesOf } from '../../../scheduling/wallClock';
+import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { SettingInput } from './SettingInput';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
@@ -196,7 +197,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     // scheduleShift hint below. A failing wall-clock computation must never
     // break the modal, so the Intl math is guarded.
     const effectiveOf = (key) => (key in overrides ? overrides[key] : (defaults?.[key] ?? schema?.[key]?.default));
-    const appTimezone = appSettings?.timezone || 'Europe/Riga';
+    const appTimezone = appSettings?.timezone || DEFAULT_TIMEZONE;
     const checkFrequencyMax = Number(appSettings?.checkFrequencyMax) || 0;
     const sfTime = effectiveOf('scheduledFillTime');
     const sfTimeSet = typeof sfTime === 'string' && sfTime !== '';

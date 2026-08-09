@@ -16,6 +16,7 @@ import { WelcomeModal } from '@/components/app/WelcomeModal';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
+import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 
 /**
  * Main app content (inside all providers)
@@ -136,7 +137,7 @@ function AppContent() {
         return <PageLoader text={t('common.loading')} />;
     }
 
-    const timezone = settings?.timezone || 'Europe/Riga';
+    const timezone = settings?.timezone || DEFAULT_TIMEZONE;
     const isMock = settings?.mock || false;
     const isLoggedIn = !!settings?.token;
 

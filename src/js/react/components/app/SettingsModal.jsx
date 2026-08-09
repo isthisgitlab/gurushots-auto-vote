@@ -6,6 +6,7 @@ import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { useAutovote } from '@/contexts/AutovoteContext';
 import { groupSchemaEntries } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
+import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -124,7 +125,7 @@ export function SettingsModal({ isOpen, onClose }) {
     const handleTimezoneRemove = useCallback(() => {
         const filtered = (uiValues.customTimezones || []).filter((tz) => tz !== uiValues.timezone);
         handleUiChange('customTimezones', filtered);
-        handleUiChange('timezone', 'Europe/Riga');
+        handleUiChange('timezone', DEFAULT_TIMEZONE);
     }, [uiValues.customTimezones, uiValues.timezone, handleUiChange]);
 
     const handleCancel = useCallback(() => {
@@ -255,13 +256,13 @@ export function SettingsModal({ isOpen, onClose }) {
                                         value={uiValues.timezone}
                                         onChange={(e) => handleUiChange('timezone', e.target.value)}
                                     >
-                                        <option value="Europe/Riga">Europe/Riga</option>
+                                        <option value={DEFAULT_TIMEZONE}>{DEFAULT_TIMEZONE}</option>
                                         {(uiValues.customTimezones || []).map((tz) => (
                                             <option key={tz} value={tz}>
                                                 {tz}
                                             </option>
                                         ))}
-                                        {uiValues.timezone !== 'Europe/Riga' &&
+                                        {uiValues.timezone !== DEFAULT_TIMEZONE &&
                                             !(uiValues.customTimezones || []).includes(uiValues.timezone) && (
                                                 <option value={uiValues.timezone}>{uiValues.timezone}</option>
                                             )}
@@ -277,7 +278,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                         +
                                     </button>
                                     <button
-                                        className={`btn btn-ghost btn-sm text-error ${uiValues.timezone !== 'Europe/Riga' ? '' : 'invisible'}`}
+                                        className={`btn btn-ghost btn-sm text-error ${uiValues.timezone !== DEFAULT_TIMEZONE ? '' : 'invisible'}`}
                                         title={t('app.removeCurrentTimezone')}
                                         onClick={handleTimezoneRemove}
                                     >

@@ -12,6 +12,13 @@
  */
 
 /**
+ * Canonical default timezone. Every `settings.timezone || <fallback>`
+ * site must use this constant — changing the default means changing
+ * exactly one line.
+ */
+const DEFAULT_TIMEZONE = 'Europe/Riga';
+
+/**
  * Fresh object per call so callers can never share (and mutate) the
  * same nested array reference.
  *
@@ -31,7 +38,7 @@
 const getUiDefaultSettings = () => ({
     theme: 'light',
     language: 'en',
-    timezone: 'Europe/Riga',
+    timezone: DEFAULT_TIMEZONE,
     customTimezones: [],
     stayLoggedIn: false,
     // Stored as seconds — api-client.js multiplies by 1000 before handing
@@ -46,4 +53,4 @@ const getUiDefaultSettings = () => ({
     apiRetryBaseDelayMs: 1000, // Base for exponential backoff between retries (ms).
 });
 
-module.exports = { getUiDefaultSettings };
+module.exports = { getUiDefaultSettings, DEFAULT_TIMEZONE };

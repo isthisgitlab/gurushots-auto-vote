@@ -2,8 +2,15 @@
 
 const settings = require('../src/js/settings');
 const logger = require('../src/js/logger');
-const { parseSettingValue } = require('../src/js/cli/parseValue');
-const { dumpSchema, listGlobalDefaults } = require('../src/js/cli/commands/settings');
+const {
+    dumpSchema,
+    listGlobalDefaults,
+    setSetting,
+    setGlobalDefault,
+    resetSetting,
+    resetGlobalDefault,
+    resetAllSettings,
+} = require('../src/js/cli/commands/settings');
 const { spawn } = require('node:child_process');
 
 /**
@@ -32,6 +39,9 @@ const reveal = process.argv.includes('--reveal');
 const command = cliArgs[0];
 const key = cliArgs[1];
 const value = cliArgs[2];
+
+// Settings whose change only takes effect after a GUI reload.
+const UI_SETTINGS = ['theme', 'language', 'timezone'];
 
 // Helper function to get nested property value
 function getNestedProperty(obj, path) {
@@ -73,20 +83,23 @@ function formatValue(value, indent = 0) {
 // Function to check if Electron GUI is running
 function isElectronRunning() {
     return new Promise((resolve) => {
-        const process = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], { stdio: 'pipe' });
+        // Named `child`, NOT `process` — shadowing the global here would make
+        // any future `process.*` reference in this function silently hit the
+        // child process instead.
+        const child = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], { stdio: 'pipe' });
 
         // Add timeout to prevent hanging
         const timeout = setTimeout(() => {
-            process.kill();
+            child.kill();
             resolve(false);
         }, 2000); // 2 second timeout
 
-        process.on('close', (code) => {
+        child.on('close', (code) => {
             clearTimeout(timeout);
             resolve(code === 0);
         });
 
-        process.on('error', () => {
+        child.on('error', () => {
             clearTimeout(timeout);
             resolve(false);
         });
@@ -146,30 +159,14 @@ async function main() {
                     process.exit(1);
                 }
 
-                const parsedValue = parseSettingValue(value);
-
-                // Handle nested keys for schema-based global defaults
+                // Delegate to the shared CLI command module — this script owns
+                // only argv semantics, GUI-reload notice, and exit codes.
                 if (key.startsWith('challengeSettings.globalDefaults.')) {
                     const settingKey = key.replace('challengeSettings.globalDefaults.', '');
-                    const schema = settings.SETTINGS_SCHEMA;
-
-                    if (schema[settingKey]) {
-                        // Use schema-based validation for global defaults
-                        const success = settings.setGlobalDefault(settingKey, parsedValue);
-                        if (success) {
-                            const actualValue = settings.getGlobalDefault(settingKey);
-                            console.log(`✅ Set global default ${settingKey} = ${formatValue(actualValue)}`);
-                            await informAboutGuiReload();
-                        } else {
-                            console.error(`❌ Failed to set global default '${settingKey}' - validation failed`);
-                            console.error(`   Value ${formatValue(parsedValue)} is invalid for this setting`);
-                            process.exit(1);
-                        }
-                    } else {
-                        console.error(`❌ Unknown schema setting '${settingKey}'`);
-                        console.error('   Run "pnpm settings:schema" to see available settings');
+                    if (!setGlobalDefault(settingKey, value)) {
                         process.exit(1);
                     }
+                    await informAboutGuiReload();
                 } else if (key.includes('.')) {
                     // Arbitrary nested writes used to poke raw JSON into the
                     // settings blob, bypassing schema validation entirely —
@@ -181,19 +178,11 @@ async function main() {
                     console.error('     pnpm settings:set-global <schemaKey> <value>');
                     process.exit(1);
                 } else {
-                    // Handle top-level settings
-                    const success = settings.setSetting(key, parsedValue);
-                    if (success) {
-                        console.log(`✅ Set ${key} = ${formatValue(parsedValue)}`);
-
-                        // Inform about GUI reload for certain settings
-                        const uiSettings = ['theme', 'language', 'timezone'];
-                        if (uiSettings.includes(key)) {
-                            await informAboutGuiReload();
-                        }
-                    } else {
-                        console.error(`❌ Failed to save setting '${key}' - validation failed`);
+                    if (!setSetting(key, value)) {
                         process.exit(1);
+                    }
+                    if (UI_SETTINGS.includes(key)) {
+                        await informAboutGuiReload();
                     }
                 }
                 break;
@@ -218,19 +207,11 @@ async function main() {
                     process.exit(1);
                 }
 
-                const success = settings.resetSetting(key);
-                if (success) {
-                    const defaultSettings = settings.getDefaultSettings();
-                    console.log(`✅ Reset ${key} to default value: ${formatValue(defaultSettings[key])}`);
-
-                    // Check if GUI is running and inform about reload
-                    const uiSettings = ['theme', 'language', 'timezone'];
-                    if (uiSettings.includes(key)) {
-                        await informAboutGuiReload();
-                    }
-                } else {
-                    console.error(`❌ Failed to reset setting '${key}'`);
+                if (!resetSetting(key)) {
                     process.exit(1);
+                }
+                if (UI_SETTINGS.includes(key)) {
+                    await informAboutGuiReload();
                 }
                 break;
             }
@@ -242,16 +223,10 @@ async function main() {
                     process.exit(1);
                 }
 
-                const success = settings.resetGlobalDefault(key);
-                if (success) {
-                    const schema = settings.SETTINGS_SCHEMA;
-                    const defaultValue = schema[key]?.default;
-                    console.log(`✅ Reset global default ${key} to: ${formatValue(defaultValue)}`);
-                    await informAboutGuiReload();
-                } else {
-                    console.error(`❌ Failed to reset global default '${key}'`);
+                if (!resetGlobalDefault(key)) {
                     process.exit(1);
                 }
+                await informAboutGuiReload();
                 break;
             }
 
@@ -263,32 +238,10 @@ async function main() {
                     process.exit(1);
                 }
 
-                const parsedValue = parseSettingValue(value);
-
-                const schema = settings.SETTINGS_SCHEMA;
-                if (!schema[key]) {
-                    console.error(`❌ Unknown schema setting '${key}'`);
-                    console.error('   Run "pnpm settings:schema" to see available settings');
+                if (!setGlobalDefault(key, value)) {
                     process.exit(1);
                 }
-
-                // Use schema-based validation for global defaults
-                const success = settings.setGlobalDefault(key, parsedValue);
-                if (success) {
-                    const actualValue = settings.getGlobalDefault(key);
-                    console.log(`✅ Set global default ${key} = ${formatValue(actualValue)}`);
-                    await informAboutGuiReload();
-                } else {
-                    console.error(`❌ Failed to set global default '${key}' - validation failed`);
-                    console.error(`   Value ${formatValue(parsedValue)} is invalid for this setting`);
-
-                    // Show validation constraints
-                    const config = schema[key];
-                    if (config.validation) {
-                        console.error(`   Constraints: ${config.type} type, valid range varies by setting`);
-                    }
-                    process.exit(1);
-                }
+                await informAboutGuiReload();
                 break;
             }
 
@@ -304,16 +257,15 @@ async function main() {
                     process.exit(0);
                 }
 
-                const uiSuccess = settings.resetAllSettings();
-                const globalSuccess = settings.resetAllGlobalDefaults();
-
-                if (uiSuccess && globalSuccess) {
-                    console.log('✅ Successfully reset all settings to defaults');
-                    await informAboutGuiReload();
-                } else {
-                    console.error('❌ Failed to reset some settings');
+                // The facade's resetAllSettings already restores the schema
+                // global defaults too (it rebuilds from getDefaultSettings and
+                // preserves token/mock/apiHeaders) — the extra
+                // resetAllGlobalDefaults call this script used to make was
+                // redundant.
+                if (!resetAllSettings()) {
                     process.exit(1);
                 }
+                await informAboutGuiReload();
                 break;
             }
 

@@ -437,6 +437,177 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
 };
 
 /**
+ * The one fill pipeline all four public entry points share:
+ *
+ *   fetch candidates → semantic scores → (optional probe) → pick →
+ *   (optional pick guard) → (optional pre-submit live re-check) → submit
+ *
+ * maybeAutoFillChallenge / maybeEmergencyFillChallenge / fillChallengeNow /
+ * submitNewEntryForAction all run this exact sequence and differ only in
+ * their entry guards, their per-path hooks, and how they map the outcome to
+ * their own return shape — so the sequence lives here once, parameterized by
+ * `label` (the log prefix: autoFill/emergencyFill/manualFill/fillNew, which
+ * also names the refresh flow) and the hooks below. Every log line the
+ * pipeline emits keeps the exact wording the four paths always had.
+ *
+ * IMPORTANT — reflectNewEntry is deliberately NOT called here. The four
+ * paths disagree about it:
+ *   - maybeAutoFillChallenge and maybeEmergencyFillChallenge reflect
+ *     internally after a successful submit;
+ *   - fillChallengeNow never reflects;
+ *   - submitNewEntryForAction leaves the reflect to its orchestrator
+ *     callers, which call autoFill.reflectNewEntry(challenge, imageId)
+ *     after a successful return.
+ * Reflecting in this helper would make those orchestrator callers reflect
+ * TWICE, silently duplicating the entry in challenge.member.ranking.entries
+ * and corrupting getSlotsRemaining plus boost/turbo entry selection for the
+ * rest of the voting pass. The helper only returns the submitted `picked`
+ * ids; each entry point owns its reflect behavior.
+ *
+ * Hooks (each used by exactly one path; all optional):
+ *   - probeStandDown({ eligible, semanticScores }) → truthy to stand down
+ *     before the real pick (emergency fill's dry-run "would the staggered
+ *     path have filled this?" probe — it must not emit fallback warnings,
+ *     so the hook runs its own picker call without onFallback).
+ *   - onEmptyPick(eligible) → replaces the default
+ *     "`label`: no eligible photos" info line; its return value comes back
+ *     as `detail` (manual fill derives its user-facing error string here).
+ *   - guardPick(picked) → truthy to abort after the pick but before the
+ *     refresh/submit (fill-new's defensive empty-image-id check).
+ *   - onRefreshed(picked) → runs after refreshChallengeState returns
+ *     'refreshed'; return { standDown: true } to abort, { picked } to
+ *     replace the batch (emergency fill truncates to the fresh free-slot
+ *     count), or null to proceed. When the hook is absent the live
+ *     re-check is skipped entirely (manual fill).
+ *
+ * @param {{
+ *   label: 'autoFill'|'emergencyFill'|'manualFill'|'fillNew',
+ *   challenge: object,
+ *   token: string,
+ *   deps: object,
+ *   wantCount: number,
+ *   mustIncludeTags: string[]|null,
+ *   shouldIncludeTags: string[]|null,
+ *   fillWithoutTagMatch: *,
+ *   probeStandDown?: (function({eligible: Array<object>, semanticScores: Map<string, number>|null}): boolean)|null,
+ *   onEmptyPick?: (function(Array<object>): *)|null,
+ *   guardPick?: (function(Array<string>): boolean)|null,
+ *   onRefreshed?: (function(Array<string>): ({standDown?: boolean, picked?: Array<string>}|null))|null,
+ * }} params
+ * @returns {Promise<
+ *   {status: 'fetch-error', error: *}
+ *   | {status: 'probe-stand-down'}
+ *   | {status: 'no-pick', detail: *}
+ *   | {status: 'bad-pick'}
+ *   | {status: 'gone'}
+ *   | {status: 'refresh-stand-down'}
+ *   | {status: 'submitted', picked: Array<string>}
+ *   | {status: 'submit-rejected', reason: string}
+ *   | {status: 'submit-threw', error: *}
+ * >}
+ */
+const runFillAttempt = async ({
+    label,
+    challenge,
+    token,
+    deps,
+    wantCount,
+    mustIncludeTags,
+    shouldIncludeTags,
+    fillWithoutTagMatch,
+    probeStandDown = null,
+    onEmptyPick = null,
+    guardPick = null,
+    onRefreshed = null,
+}) => {
+    const { logger, getEligiblePhotos, submitToChallenge } = deps;
+
+    let eligible;
+    try {
+        eligible = await fetchCandidatesForChallenge(
+            challenge,
+            token,
+            { mustIncludeTags, shouldIncludeTags },
+            { getEligiblePhotos, logger },
+        );
+    } catch (error) {
+        logger
+            .withCategory('autoFill')
+            .warning(
+                `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
+                null,
+            );
+        return { status: 'fetch-error', error };
+    }
+
+    // Score once and reuse for every picker call in this fill (the emergency
+    // probe and its actual pick rank the same eligible set, so they must see
+    // the same map).
+    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
+
+    if (probeStandDown && probeStandDown({ eligible, semanticScores })) {
+        return { status: 'probe-stand-down' };
+    }
+
+    let picked = pickPhotosForChallenge(challenge, eligible, wantCount, {
+        mustIncludeTags,
+        shouldIncludeTags,
+        fillWithoutTagMatch,
+        semanticScores,
+        onFallback: makeFallbackLogger(label, challenge, logger),
+    });
+    if (picked.length === 0) {
+        if (onEmptyPick) {
+            return { status: 'no-pick', detail: onEmptyPick(eligible) };
+        }
+        logger
+            .withCategory('autoFill')
+            .info(`${label}: no eligible photos for ${logger.challengeTag(challenge)}`, null);
+        return { status: 'no-pick', detail: null };
+    }
+
+    if (guardPick && guardPick(picked)) {
+        return { status: 'bad-pick' };
+    }
+
+    // Live re-check just before consuming a slot: the pass-start snapshot can
+    // be minutes old, and an entry added outside this run (e.g. a manual
+    // submission) must stand the fill down instead of over-submitting.
+    if (onRefreshed) {
+        const refresh = await refreshChallengeState(challenge, token, deps, label);
+        if (refresh === 'gone') {
+            return { status: 'gone' };
+        }
+        if (refresh === 'refreshed') {
+            const verdict = onRefreshed(picked);
+            if (verdict && verdict.standDown) {
+                return { status: 'refresh-stand-down' };
+            }
+            if (verdict && Array.isArray(verdict.picked)) {
+                picked = verdict.picked;
+            }
+        }
+    }
+
+    try {
+        const result = await submitToChallenge(challenge.id, picked, token);
+        if (result && result.ok) {
+            return { status: 'submitted', picked };
+        }
+        const reason = describeSubmitFailure(result && result.raw);
+        logger
+            .withCategory('autoFill')
+            .warning(`${label}: submit rejected for ${logger.challengeTag(challenge)}: ${reason}`, null);
+        return { status: 'submit-rejected', reason };
+    } catch (error) {
+        logger
+            .withCategory('autoFill')
+            .warning(`${label}: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
+        return { status: 'submit-threw', error };
+    }
+};
+
+/**
  * Cycle-driven, schedule-based auto-fill. Submits at most one photo per
  * call; the next call (next scheduler cycle) will see the updated
  * entries.length and either skip (target met) or submit again — so a
@@ -456,7 +627,7 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
  * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-schedule'|'no-eligible-photos'|'error'>}
  */
 const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
-    const { settings, logger, getEligiblePhotos, submitToChallenge } = deps;
+    const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) return 'skipped';
 
@@ -503,105 +674,65 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
 
-    let eligible;
-    try {
-        eligible = await fetchCandidatesForChallenge(
-            challenge,
-            token,
-            { mustIncludeTags, shouldIncludeTags },
-            { getEligiblePhotos, logger },
-        );
-    } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `autoFill: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
-                null,
-            );
-        return 'error';
-    }
-
-    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
-    const picked = pickPhotosForChallenge(challenge, eligible, 1, {
+    const attempt = await runFillAttempt({
+        label: 'autoFill',
+        challenge,
+        token,
+        deps,
+        wantCount: 1,
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
-        semanticScores,
-        onFallback: makeFallbackLogger('autoFill', challenge, logger),
+        onRefreshed: () => {
+            slotsRemaining = getSlotsRemaining(challenge);
+            const entryCount = getEntries(challenge).length;
+            if (slotsRemaining <= 0 || entryCount >= desired) {
+                logger
+                    .withCategory('autoFill')
+                    .info(
+                        `autoFill: live re-check shows ${logger.challengeTag(challenge)} already has ${entryCount} entries (target ${desired}) — an entry was added outside this run (e.g. a manual submission); standing down`,
+                        null,
+                    );
+                return { standDown: true };
+            }
+            return null;
+        },
     });
-    if (picked.length === 0) {
-        logger
-            .withCategory('autoFill')
-            .info(`autoFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
-        return 'no-eligible-photos';
-    }
+    if (attempt.status === 'no-pick') return 'no-eligible-photos';
+    if (attempt.status === 'gone' || attempt.status === 'refresh-stand-down') return 'skipped';
+    if (attempt.status !== 'submitted') return 'error';
 
-    // Live re-check just before consuming a slot: the pass-start snapshot can
-    // be minutes old, and an entry added outside this run (e.g. a manual
-    // submission) must stand the fill down instead of over-submitting.
-    const refresh = await refreshChallengeState(challenge, token, deps, 'autoFill');
-    if (refresh === 'gone') return 'skipped';
-    if (refresh === 'refreshed') {
-        slotsRemaining = getSlotsRemaining(challenge);
-        const entryCount = getEntries(challenge).length;
-        if (slotsRemaining <= 0 || entryCount >= desired) {
-            logger
-                .withCategory('autoFill')
-                .info(
-                    `autoFill: live re-check shows ${logger.challengeTag(challenge)} already has ${entryCount} entries (target ${desired}) — an entry was added outside this run (e.g. a manual submission); standing down`,
-                    null,
-                );
-            return 'skipped';
-        }
-    }
-
-    try {
-        const result = await submitToChallenge(challengeId, picked, token);
-        if (result && result.ok) {
-            // Reflect the consumed slot locally so a due turbo/boost later this
-            // cycle (timer order) sees the new entry and correct slot count.
-            reflectNewEntry(challenge, picked[0]);
-            // When the schedule was end-aligned (challenge allows fewer images
-            // than the schedule's span), say which row's time governed this fill
-            // — the resolved mapping, not a bare shift count. Success-level on
-            // purpose: debug/info are compiled out of packaged builds, and the
-            // remapped timing is exactly what a user checking "why did it fill
-            // now?" needs to see. Attribute the TARGET's row (`desired + shift`
-            // maps back to the original image number that set the current
-            // target), not the entry number: during catch-up the entry being
-            // submitted may sit on an off row and was never scheduled itself.
-            // Sanitize max before it reaches the log line: the challenge object
-            // is untrusted API shape, and interpolating the raw field would let
-            // a malformed value (e.g. a string with newlines) forge log lines.
-            const maxSubmits = Number.isFinite(challenge.max_photo_submits) ? challenge.max_photo_submits : 0;
-            const shift = getScheduleShift(getValidScheduleRows(schedule), maxSubmits);
-            const shiftNote =
-                shift > 0
-                    ? `; ${maxSubmits}-image challenge — the target of ${desired} entries follows the Image ${desired + shift} time`
-                    : '';
-            // `slotsRemaining` is the pre-reflect snapshot from above, so `- 1` is
-            // the post-submit count — keep this log after the reflect, not before.
-            logger
-                .withCategory('autoFill')
-                .success(
-                    `autoFill: submitted 1 entry for ${logger.challengeTag(challenge)} (${slotsRemaining - 1} slots remain${shiftNote})`,
-                    null,
-                );
-            return 'submitted';
-        }
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `autoFill: submit rejected for ${logger.challengeTag(challenge)}: ${describeSubmitFailure(result && result.raw)}`,
-                null,
-            );
-        return 'error';
-    } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(`autoFill: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
-        return 'error';
-    }
+    // Reflect the consumed slot locally so a due turbo/boost later this
+    // cycle (timer order) sees the new entry and correct slot count.
+    reflectNewEntry(challenge, attempt.picked[0]);
+    // When the schedule was end-aligned (challenge allows fewer images
+    // than the schedule's span), say which row's time governed this fill
+    // — the resolved mapping, not a bare shift count. Success-level on
+    // purpose: debug/info are compiled out of packaged builds, and the
+    // remapped timing is exactly what a user checking "why did it fill
+    // now?" needs to see. Attribute the TARGET's row (`desired + shift`
+    // maps back to the original image number that set the current
+    // target), not the entry number: during catch-up the entry being
+    // submitted may sit on an off row and was never scheduled itself.
+    // Sanitize max before it reaches the log line: the challenge object
+    // is untrusted API shape, and interpolating the raw field would let
+    // a malformed value (e.g. a string with newlines) forge log lines.
+    const maxSubmits = Number.isFinite(challenge.max_photo_submits) ? challenge.max_photo_submits : 0;
+    const shift = getScheduleShift(getValidScheduleRows(schedule), maxSubmits);
+    const shiftNote =
+        shift > 0
+            ? `; ${maxSubmits}-image challenge — the target of ${desired} entries follows the Image ${desired + shift} time`
+            : '';
+    // `slotsRemaining` is the pre-reflect snapshot (updated by onRefreshed when
+    // the live re-check merged fresh state), so `- 1` is the post-submit count
+    // — keep this log after the reflect, not before.
+    logger
+        .withCategory('autoFill')
+        .success(
+            `autoFill: submitted 1 entry for ${logger.challengeTag(challenge)} (${slotsRemaining - 1} slots remain${shiftNote})`,
+            null,
+        );
+    return 'submitted';
 };
 
 /**
@@ -634,7 +765,7 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
  * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-eligible-photos'|'error'>}
  */
 const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
-    const { settings, logger, getEligiblePhotos, submitToChallenge } = deps;
+    const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) return 'skipped';
 
@@ -663,111 +794,69 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
     const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
     if (autoFillEnabled && !mustActive) return 'skipped';
 
-    let eligible;
-    try {
-        eligible = await fetchCandidatesForChallenge(
-            challenge,
-            token,
-            { mustIncludeTags, shouldIncludeTags },
-            { getEligiblePhotos, logger },
-        );
-    } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `emergencyFill: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
-                null,
-            );
-        return 'error';
-    }
-
-    // Score once and reuse for both picker calls below (the probe and the
-    // actual fill rank the same eligible set, so they must see the same map).
-    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
-
-    // With auto-fill on and a must-include filter set, only step in if that
-    // filter would leave the slot empty (a non-empty result means the normal
-    // staggered path can still fill it, so stand down). With auto-fill off,
-    // always step in — nothing else will fill the slot.
-    if (autoFillEnabled) {
-        const wouldPick = pickPhotosForChallenge(challenge, eligible, 1, {
-            mustIncludeTags,
-            shouldIncludeTags,
-            fillWithoutTagMatch,
-            semanticScores,
-        });
-        if (wouldPick.length > 0) return 'skipped';
-    }
-
-    // Fill every remaining slot. Keep the user's tag preferences (must
-    // photos still win when they exist) but force fillWithoutTagMatch on so
-    // a missing match never leaves a slot empty at the deadline — that
-    // override is the whole point of emergency fill.
-    let picked = pickPhotosForChallenge(challenge, eligible, slotsRemaining, {
+    const attempt = await runFillAttempt({
+        label: 'emergencyFill',
+        challenge,
+        token,
+        deps,
+        // Fill every remaining slot. Keep the user's tag preferences (must
+        // photos still win when they exist) but force fillWithoutTagMatch on so
+        // a missing match never leaves a slot empty at the deadline — that
+        // override is the whole point of emergency fill.
+        wantCount: slotsRemaining,
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch: true,
-        semanticScores,
-        onFallback: makeFallbackLogger('emergencyFill', challenge, logger),
+        // With auto-fill on and a must-include filter set, only step in if that
+        // filter would leave the slot empty (a non-empty result means the normal
+        // staggered path can still fill it, so stand down). With auto-fill off,
+        // always step in — nothing else will fill the slot. Dry-run probe: no
+        // onFallback, and the user's real fillWithoutTagMatch setting applies.
+        probeStandDown: autoFillEnabled
+            ? ({ eligible, semanticScores }) =>
+                  pickPhotosForChallenge(challenge, eligible, 1, {
+                      mustIncludeTags,
+                      shouldIncludeTags,
+                      fillWithoutTagMatch,
+                      semanticScores,
+                  }).length > 0
+            : null,
+        // Live re-check just before the batch submit: an entry added outside
+        // this run (e.g. a manual submission) shrinks the free-slot count, and
+        // the batch must never over-fill past it.
+        onRefreshed: (picked) => {
+            slotsRemaining = getSlotsRemaining(challenge);
+            if (slotsRemaining <= 0) {
+                logger
+                    .withCategory('autoFill')
+                    .info(
+                        `emergencyFill: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. a manual submission); standing down`,
+                        null,
+                    );
+                return { standDown: true };
+            }
+            if (picked.length > slotsRemaining) {
+                return { picked: picked.slice(0, slotsRemaining) };
+            }
+            return null;
+        },
     });
-    if (picked.length === 0) {
-        logger
-            .withCategory('autoFill')
-            .info(`emergencyFill: no eligible photos for ${logger.challengeTag(challenge)}`, null);
-        return 'no-eligible-photos';
+    if (attempt.status === 'no-pick') return 'no-eligible-photos';
+    if (attempt.status === 'probe-stand-down' || attempt.status === 'gone' || attempt.status === 'refresh-stand-down') {
+        return 'skipped';
     }
+    if (attempt.status !== 'submitted') return 'error';
 
-    // Live re-check just before the batch submit: an entry added outside this
-    // run (e.g. a manual submission) shrinks the free-slot count, and the
-    // batch must never over-fill past it.
-    const refresh = await refreshChallengeState(challenge, token, deps, 'emergencyFill');
-    if (refresh === 'gone') return 'skipped';
-    if (refresh === 'refreshed') {
-        slotsRemaining = getSlotsRemaining(challenge);
-        if (slotsRemaining <= 0) {
-            logger
-                .withCategory('autoFill')
-                .info(
-                    `emergencyFill: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. a manual submission); standing down`,
-                    null,
-                );
-            return 'skipped';
-        }
-        if (picked.length > slotsRemaining) {
-            picked = picked.slice(0, slotsRemaining);
-        }
-    }
-
-    try {
-        const result = await submitToChallenge(challengeId, picked, token);
-        if (result && result.ok) {
-            // Reflect every consumed slot locally so a due turbo/boost later this
-            // cycle (timer order) sees the new entries and correct slot count.
-            for (const id of picked) reflectNewEntry(challenge, id);
-            logger
-                .withCategory('autoFill')
-                .success(
-                    `emergencyFill: submitted ${picked.length} entr${picked.length === 1 ? 'y' : 'ies'} for ${logger.challengeTag(challenge)} near deadline`,
-                    null,
-                );
-            return 'submitted';
-        }
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `emergencyFill: submit rejected for ${logger.challengeTag(challenge)}: ${describeSubmitFailure(result && result.raw)}`,
-                null,
-            );
-        return 'error';
-    } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `emergencyFill: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`,
-                null,
-            );
-        return 'error';
-    }
+    // Reflect every consumed slot locally so a due turbo/boost later this
+    // cycle (timer order) sees the new entries and correct slot count.
+    for (const id of attempt.picked) reflectNewEntry(challenge, id);
+    logger
+        .withCategory('autoFill')
+        .success(
+            `emergencyFill: submitted ${attempt.picked.length} entr${attempt.picked.length === 1 ? 'y' : 'ies'} for ${logger.challengeTag(challenge)} near deadline`,
+            null,
+        );
+    return 'submitted';
 };
 
 /**
@@ -791,7 +880,7 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
  * @returns {Promise<{success: boolean, submitted: number, skipped: number, error?: string}>}
  */
 const fillChallengeNow = async (challenge, token, mode, deps) => {
-    const { settings, logger, getEligiblePhotos, submitToChallenge } = deps;
+    const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) {
         return { success: false, submitted: 0, skipped: 0, error: 'Invalid challenge' };
@@ -822,86 +911,75 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
             );
     }
 
-    let eligible;
-    try {
-        eligible = await fetchCandidatesForChallenge(
-            challenge,
-            token,
-            { mustIncludeTags, shouldIncludeTags },
-            { getEligiblePhotos, logger },
-        );
-    } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `manualFill: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
-                null,
-            );
-        return {
-            success: false,
-            submitted: 0,
-            skipped: slotsRemaining,
-            error: error.message || 'Failed to fetch photos',
-        };
-    }
-
-    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
-    const wantCount = mode === 'all' ? slotsRemaining : 1;
-    const picked = pickPhotosForChallenge(challenge, eligible, wantCount, {
+    const attempt = await runFillAttempt({
+        label: 'manualFill',
+        challenge,
+        token,
+        deps,
+        wantCount: mode === 'all' ? slotsRemaining : 1,
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
-        semanticScores,
-        onFallback: makeFallbackLogger('manualFill', challenge, logger),
-    });
-    if (picked.length === 0) {
-        // When the "must include" filter is active and there were photos to
-        // consider, it's the most likely reason nothing was picked — say so,
-        // otherwise the user sees a generic message and can't tell their own
-        // tag filter is the cause.
-        const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
-        const hadCandidates = Array.isArray(eligible) && eligible.length > 0;
-        const error =
-            mustActive && hadCandidates ? 'No photos matched the Must Include Tags filter' : 'No eligible photos found';
-        logger
-            .withCategory('autoFill')
-            .info(`manualFill: ${error.toLowerCase()} for ${logger.challengeTag(challenge)}`, null);
-        return { success: false, submitted: 0, skipped: slotsRemaining, error };
-    }
-
-    try {
-        const result = await submitToChallenge(challengeId, picked, token);
-        if (result && result.ok) {
+        // No onRefreshed hook: manual fill is explicit user intent acting on
+        // the state the user is looking at — it never ran the pre-submit live
+        // re-check, and keeps not running it.
+        onEmptyPick: (eligible) => {
+            // When the "must include" filter is active and there were photos to
+            // consider, it's the most likely reason nothing was picked — say so,
+            // otherwise the user sees a generic message and can't tell their own
+            // tag filter is the cause.
+            const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
+            const hadCandidates = Array.isArray(eligible) && eligible.length > 0;
+            const error =
+                mustActive && hadCandidates
+                    ? 'No photos matched the Must Include Tags filter'
+                    : 'No eligible photos found';
             logger
                 .withCategory('autoFill')
-                .success(`manualFill: submitted ${picked.length} entries for ${logger.challengeTag(challenge)}`, null);
-            return {
-                success: true,
-                submitted: picked.length,
-                skipped: Math.max(0, slotsRemaining - picked.length),
-            };
-        }
-        const reason = describeSubmitFailure(result && result.raw);
-        logger
-            .withCategory('autoFill')
-            .warning(`manualFill: submit rejected for ${logger.challengeTag(challenge)}: ${reason}`, null);
+                .info(`manualFill: ${error.toLowerCase()} for ${logger.challengeTag(challenge)}`, null);
+            return error;
+        },
+    });
+    if (attempt.status === 'fetch-error') {
         return {
             success: false,
             submitted: 0,
             skipped: slotsRemaining,
-            error: `Submit rejected: ${reason}`,
-        };
-    } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(`manualFill: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
-        return {
-            success: false,
-            submitted: 0,
-            skipped: slotsRemaining,
-            error: error.message || 'Submit failed',
+            error: attempt.error.message || 'Failed to fetch photos',
         };
     }
+    if (attempt.status === 'no-pick') {
+        return { success: false, submitted: 0, skipped: slotsRemaining, error: attempt.detail };
+    }
+    if (attempt.status === 'submit-rejected') {
+        return {
+            success: false,
+            submitted: 0,
+            skipped: slotsRemaining,
+            error: `Submit rejected: ${attempt.reason}`,
+        };
+    }
+    if (attempt.status !== 'submitted') {
+        // Only 'submit-threw' can reach here — manual fill wires no probe,
+        // pick-guard, or refresh hook, so those statuses cannot occur.
+        return {
+            success: false,
+            submitted: 0,
+            skipped: slotsRemaining,
+            error: attempt.error.message || 'Submit failed',
+        };
+    }
+
+    // No reflectNewEntry here: manual fill has always left the local challenge
+    // object untouched (the GUI re-fetches state after the IPC call returns).
+    logger
+        .withCategory('autoFill')
+        .success(`manualFill: submitted ${attempt.picked.length} entries for ${logger.challengeTag(challenge)}`, null);
+    return {
+        success: true,
+        submitted: attempt.picked.length,
+        skipped: Math.max(0, slotsRemaining - attempt.picked.length),
+    };
 };
 
 /**
@@ -929,7 +1007,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
  *   reason ∈ 'submitted'|'no-slots'|'challenge-gone'|'no-eligible'|'fetch-error'|'submit-failed'|'invalid-challenge'
  */
 const submitNewEntryForAction = async (challenge, token, deps) => {
-    const { settings, logger, getEligiblePhotos, submitToChallenge } = deps;
+    const { settings, logger } = deps;
     const challengeId = challenge?.id;
     if (challengeId === undefined || challengeId === null) {
         return { ok: false, imageId: null, reason: 'invalid-challenge' };
@@ -945,86 +1023,59 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
 
-    let eligible;
-    try {
-        eligible = await fetchCandidatesForChallenge(
-            challenge,
-            token,
-            { mustIncludeTags, shouldIncludeTags },
-            { getEligiblePhotos, logger },
-        );
-    } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `fillNew: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
-                null,
-            );
-        return { ok: false, imageId: null, reason: 'fetch-error' };
-    }
-
-    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
-    const picked = pickPhotosForChallenge(challenge, eligible, 1, {
+    const attempt = await runFillAttempt({
+        label: 'fillNew',
+        challenge,
+        token,
+        deps,
+        wantCount: 1,
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
-        semanticScores,
-        onFallback: makeFallbackLogger('fillNew', challenge, logger),
-    });
-    if (picked.length === 0) {
-        logger.withCategory('autoFill').info(`fillNew: no eligible photos for ${logger.challengeTag(challenge)}`, null);
-        return { ok: false, imageId: null, reason: 'no-eligible' };
-    }
-
-    const imageId = picked[0];
-    if (!imageId) {
-        // Defensive: pickPhotosForChallenge only returns truthy ids, but guard
-        // so an empty value never propagates to the boost/turbo image_id —
-        // applyBoostToEntry has no own null-guard (unlike applyTurbo).
-        logger
-            .withCategory('autoFill')
-            .info(`fillNew: picked an empty photo id for ${logger.challengeTag(challenge)}`, null);
-        return { ok: false, imageId: null, reason: 'no-eligible' };
-    }
-
-    // Live re-check just before consuming a slot: an entry added outside this
-    // run (e.g. a manual submission) may have filled the challenge since the
-    // pass-start snapshot; callers fall back to acting on an existing entry.
-    const refresh = await refreshChallengeState(challenge, token, deps, 'fillNew');
-    if (refresh === 'gone') {
-        return { ok: false, imageId: null, reason: 'challenge-gone' };
-    }
-    if (refresh === 'refreshed' && getSlotsRemaining(challenge) <= 0) {
-        logger
-            .withCategory('autoFill')
-            .info(
-                `fillNew: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. a manual submission); not submitting a new photo`,
-                null,
-            );
-        return { ok: false, imageId: null, reason: 'no-slots' };
-    }
-
-    try {
-        const result = await submitToChallenge(challengeId, [imageId], token);
-        if (result && result.ok) {
+        guardPick: (picked) => {
+            if (picked[0]) return false;
+            // Defensive: pickPhotosForChallenge only returns truthy ids, but guard
+            // so an empty value never propagates to the boost/turbo image_id —
+            // applyBoostToEntry has no own null-guard (unlike applyTurbo).
             logger
                 .withCategory('autoFill')
-                .success(`fillNew: submitted entry ${imageId} for ${logger.challengeTag(challenge)}`, null);
-            return { ok: true, imageId, reason: 'submitted' };
-        }
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `fillNew: submit rejected for ${logger.challengeTag(challenge)}: ${describeSubmitFailure(result && result.raw)}`,
-                null,
-            );
-        return { ok: false, imageId: null, reason: 'submit-failed' };
-    } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(`fillNew: submit threw for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
-        return { ok: false, imageId: null, reason: 'submit-failed' };
+                .info(`fillNew: picked an empty photo id for ${logger.challengeTag(challenge)}`, null);
+            return true;
+        },
+        // Live re-check just before consuming a slot: an entry added outside
+        // this run (e.g. a manual submission) may have filled the challenge
+        // since the pass-start snapshot; callers fall back to acting on an
+        // existing entry.
+        onRefreshed: () => {
+            if (getSlotsRemaining(challenge) <= 0) {
+                logger
+                    .withCategory('autoFill')
+                    .info(
+                        `fillNew: live re-check shows ${logger.challengeTag(challenge)} has no free slots — an entry was added outside this run (e.g. a manual submission); not submitting a new photo`,
+                        null,
+                    );
+                return { standDown: true };
+            }
+            return null;
+        },
+    });
+    if (attempt.status === 'fetch-error') return { ok: false, imageId: null, reason: 'fetch-error' };
+    if (attempt.status === 'no-pick' || attempt.status === 'bad-pick') {
+        return { ok: false, imageId: null, reason: 'no-eligible' };
     }
+    if (attempt.status === 'gone') return { ok: false, imageId: null, reason: 'challenge-gone' };
+    if (attempt.status === 'refresh-stand-down') return { ok: false, imageId: null, reason: 'no-slots' };
+    if (attempt.status !== 'submitted') return { ok: false, imageId: null, reason: 'submit-failed' };
+
+    // No reflectNewEntry here — on purpose. The orchestrator callers reflect
+    // the returned id themselves (autoFill.reflectNewEntry(challenge,
+    // filled.imageId) after a successful return); reflecting here too would
+    // duplicate the entry. See runFillAttempt's header.
+    const imageId = attempt.picked[0];
+    logger
+        .withCategory('autoFill')
+        .success(`fillNew: submitted entry ${imageId} for ${logger.challengeTag(challenge)}`, null);
+    return { ok: true, imageId, reason: 'submitted' };
 };
 
 module.exports = {
