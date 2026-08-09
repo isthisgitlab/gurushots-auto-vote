@@ -49,12 +49,12 @@ const buildHandlers = () => ({
                 logger.CATEGORIES.AUTHENTICATION,
             );
         try {
-            // Route through the factory's surfaces (no direct api/mock imports)
-            // and the shared token normalizer. The explicit isMock arg from the
-            // login screen still selects the surface — login happens before the
-            // mock setting is necessarily committed, so we honour the caller's
-            // choice rather than re-reading settings.mock here.
-            const strategy = isMock ? apiFactory.mockApi : apiFactory.realApi;
+            // Route through the factory (no direct api/mock imports) and the
+            // shared token normalizer. The explicit isMock arg from the login
+            // screen still selects the surface — login happens before the mock
+            // setting is necessarily committed, so we pass the caller's choice
+            // as an explicit override rather than re-reading settings.mock here.
+            const strategy = apiFactory.getApiStrategy({ mock: !!isMock });
             const response = await strategy.authenticate(username, password);
             const { ok, token, error } = auth.extractAuthResult(response);
 

@@ -24,6 +24,7 @@ const {
     isAutovoteRunning,
     getDefaultMockSetting,
     getUserDataPath,
+    getSettingsPath,
     getEnvironmentInfo,
 } = require('./settings/storage');
 
@@ -1393,6 +1394,7 @@ module.exports = {
     isReloadRequired,
     getDefaultSettings,
     getUserDataPath,
+    getSettingsPath,
     saveWindowBounds,
     getWindowBounds,
 

@@ -88,45 +88,54 @@ describe('get-active-challenges', () => {
 });
 
 describe('authenticate', () => {
+    // The handler selects the surface via getApiStrategy({ mock }) — the
+    // explicit-override seam — so the test injects both surfaces there
+    // instead of reaching for raw exports (which no longer exist).
+    let mockSurface;
+    let realSurface;
+
     beforeEach(() => {
         auth.extractAuthResult = realExtractAuthResult;
         settings.setSetting = jest.fn();
-        apiFactory.mockApi = { authenticate: jest.fn() };
-        apiFactory.realApi = { authenticate: jest.fn() };
+        mockSurface = { authenticate: jest.fn() };
+        realSurface = { authenticate: jest.fn() };
+        apiFactory.getApiStrategy = jest.fn(({ mock } = {}) => (mock ? mockSurface : realSurface));
     });
 
     test('mock path selects the mock surface and returns its token', async () => {
-        apiFactory.mockApi.authenticate.mockResolvedValue({ token: 'mock-token-xyz' });
+        mockSurface.authenticate.mockResolvedValue({ token: 'mock-token-xyz' });
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'user@example.com', 'pw', true);
-        expect(apiFactory.mockApi.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
-        expect(apiFactory.realApi.authenticate).not.toHaveBeenCalled();
+        expect(apiFactory.getApiStrategy).toHaveBeenCalledWith({ mock: true });
+        expect(mockSurface.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
+        expect(realSurface.authenticate).not.toHaveBeenCalled();
         expect(result).toEqual({ success: true, token: 'mock-token-xyz' });
         expect(settings.setSetting).toHaveBeenCalledWith('token', 'mock-token-xyz');
     });
 
     test('real path selects the real surface and persists the token', async () => {
-        apiFactory.realApi.authenticate.mockResolvedValue({
+        realSurface.authenticate.mockResolvedValue({
             token: 'real-token',
             member_id: 42,
             user_name: 'realuser',
         });
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'user@example.com', 'pw', false);
-        expect(apiFactory.realApi.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
+        expect(apiFactory.getApiStrategy).toHaveBeenCalledWith({ mock: false });
+        expect(realSurface.authenticate).toHaveBeenCalledWith('user@example.com', 'pw');
         expect(result).toEqual({ success: true, token: 'real-token' });
         expect(settings.setSetting).toHaveBeenCalledWith('token', 'real-token');
     });
 
     test('real path accepts a token under access_token (the _login parity fix)', async () => {
-        apiFactory.realApi.authenticate.mockResolvedValue({ access_token: 'alt-token' });
+        realSurface.authenticate.mockResolvedValue({ access_token: 'alt-token' });
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
         expect(result).toEqual({ success: true, token: 'alt-token' });
     });
 
     test('returns failure when API returns null', async () => {
-        apiFactory.realApi.authenticate.mockResolvedValue(null);
+        realSurface.authenticate.mockResolvedValue(null);
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
         expect(result).toEqual({ success: false, error: 'Authentication failed - no response from server' });
@@ -134,14 +143,14 @@ describe('authenticate', () => {
     });
 
     test('returns failure when API responds without a token', async () => {
-        apiFactory.realApi.authenticate.mockResolvedValue({ success: false, error: 'bad creds' });
+        realSurface.authenticate.mockResolvedValue({ success: false, error: 'bad creds' });
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
         expect(result).toEqual({ success: false, error: 'bad creds' });
     });
 
     test('catches network errors and returns formatted failure', async () => {
-        apiFactory.realApi.authenticate.mockRejectedValue(new Error('ECONNREFUSED'));
+        realSurface.authenticate.mockRejectedValue(new Error('ECONNREFUSED'));
         const handlers = buildHandlers();
         const result = await handlers.authenticate({}, 'u', 'p', false);
         expect(result).toEqual({ success: false, error: 'ECONNREFUSED' });

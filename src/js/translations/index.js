@@ -69,9 +69,17 @@
 
                 return translations;
             } catch (error) {
-                // Try to use the logger if available (browser context), fallback to console.warn
+                // Browser with the preload bridge ready → route through it.
+                // True Node (CLI / Electron main) → the real logger. Browser
+                // BEFORE window.api attaches must stay on console.warn: this
+                // file also loads via a raw <script> tag (src/html/*.html)
+                // where `require` does not exist.
                 if (typeof window !== 'undefined' && window.api && window.api.logDebug) {
                     window.api.logDebug(`Could not load translations for ${language}: ${error.message}`);
+                } else if (typeof window === 'undefined') {
+                    require('../logger')
+                        .withCategory('ui')
+                        .warning(`Could not load translations for ${language}: ${error.message}`, null);
                 } else {
                     console.warn(`Could not load translations for ${language}:`, error);
                 }
@@ -162,10 +170,16 @@
                     // Fallback to English if translation not found
                     value = translationCache.en;
                     if (!value && this.currentLanguage !== 'en') {
-                        // Try to load English as fallback
-                        // Try to use the logger if available (browser context), fallback to console.warn
+                        // Try to load English as fallback. Same three-way
+                        // routing as loadTranslations: bridge → logger (Node
+                        // only — the <script>-tag context has no require) →
+                        // console.warn.
                         if (typeof window !== 'undefined' && window.api && window.api.logDebug) {
                             window.api.logDebug(`Fallback to English for key: ${key}`);
+                        } else if (typeof window === 'undefined') {
+                            require('../logger')
+                                .withCategory('ui')
+                                .warning(`Fallback to English for key: ${key}`, null);
                         } else {
                             console.warn(`Fallback to English for key: ${key}`);
                         }

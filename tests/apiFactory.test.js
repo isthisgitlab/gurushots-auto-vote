@@ -65,7 +65,11 @@ jest.mock('../src/js/logger', () => {
     return mock;
 });
 
-const { getApiStrategy, getMiddleware, refreshApi, realApi, mockApi } = require('../src/js/apiFactory');
+const { getApiStrategy, getMiddleware, refreshApi } = require('../src/js/apiFactory');
+// The raw surfaces are no longer exported — the explicit override returns
+// the module-level singletons, so identity assertions still hold.
+const realApi = getApiStrategy({ mock: false });
+const mockApi = getApiStrategy({ mock: true });
 const settings = require('../src/js/settings');
 const BaseMiddleware = require('../src/js/services/BaseMiddleware');
 const mockLogger = require('../src/js/logger');
@@ -187,6 +191,22 @@ describe('apiFactory', () => {
             expect(getApiStrategy()).toBe(realApi);
             expect(mockLogger.debug).toHaveBeenCalledWith('Mock setting: undefined');
             expect(mockLogger.info).toHaveBeenCalledWith('🌐 Using REAL API strategy for production', null);
+        });
+    });
+
+    describe('explicit { mock } override', () => {
+        test('returns the requested surface without reading settings', () => {
+            expect(getApiStrategy({ mock: true })).toBe(mockApi);
+            expect(getApiStrategy({ mock: false })).toBe(realApi);
+            expect(settings.loadSettings).not.toHaveBeenCalled();
+        });
+
+        test('does not disturb the cached settings-driven selection', () => {
+            settings.loadSettings.mockReturnValue({ mock: false, token: 'tok' });
+            expect(getApiStrategy()).toBe(realApi);
+            expect(getApiStrategy({ mock: true })).toBe(mockApi);
+            // The settings-driven path still returns the cached real surface.
+            expect(getApiStrategy()).toBe(realApi);
         });
     });
 

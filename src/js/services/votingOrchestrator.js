@@ -49,7 +49,7 @@ const votingLogic = require('./VotingLogic');
 const autoFill = require('./autoFill');
 const cancellation = require('../voting/cancellation');
 const { formatDuration } = require('../format/duration');
-const { sleep } = require('../api/utils');
+const { sleep } = require('../timing');
 
 const runVotingPass = async (token, challengeIdFilter, deps) => {
     const { api, cleanupStaleMetadata, interChallengeDelay } = deps;

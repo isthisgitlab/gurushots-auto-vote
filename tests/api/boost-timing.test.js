@@ -41,13 +41,13 @@ const mockBoost = {
 
 jest.mock('../../src/js/api/boost', () => mockBoost);
 
-// Mock the utils module
+// Mock the timing module
 const mockUtils = {
     sleep: jest.fn(),
     getRandomDelay: jest.fn(),
 };
 
-jest.mock('../../src/js/api/utils', () => mockUtils);
+jest.mock('../../src/js/timing', () => mockUtils);
 
 // Mock the voting logic service
 const mockVotingLogic = {

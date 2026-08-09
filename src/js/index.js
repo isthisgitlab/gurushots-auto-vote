@@ -253,8 +253,9 @@ function createMainWindow() {
         }
     });
 
-    // Watch settings file for changes and auto-reload with debouncing
-    const settingsPath = path.join(settings.getUserDataPath(), 'settings.json');
+    // Watch settings file for changes and auto-reload with debouncing.
+    // The facade owns the path — never re-derive it here.
+    const settingsPath = settings.getSettingsPath();
     let previousSettings = null;
 
     // Store initial settings state

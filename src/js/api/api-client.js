@@ -8,7 +8,7 @@
 const axios = require('axios');
 const logger = require('../logger');
 const { generateRandomHeaders } = require('./randomizer');
-const { sleep } = require('./utils');
+const { sleep } = require('../timing');
 const settings = require('../settings');
 const runtime = require('../runtime');
 const { FORM_CONTENT_TYPE } = require('./constants');

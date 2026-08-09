@@ -11,7 +11,7 @@ const { applyBoost, applyBoostToEntry } = require('./boost');
 const { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } = require('./turbo');
 const { getEligiblePhotos, submitToChallenge } = require('./submissions');
 const { cleanupStaleMetadata } = require('../metadata');
-const { sleep, getRandomDelay } = require('./utils');
+const { sleep, getRandomDelay } = require('../timing');
 const logger = require('../logger');
 const { runVotingPass } = require('../services/votingOrchestrator');
 

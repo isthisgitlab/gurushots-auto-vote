@@ -1,8 +1,10 @@
 /**
- * GuruShots Auto Voter - Utility Functions
+ * GuruShots Auto Voter - Timing Primitives
  *
- * This module contains utility functions for managing delays and timing
- * to make the application behavior more human-like.
+ * Shared delay/timing helpers (sleep, randomized delays) used to make the
+ * application behavior more human-like. Lives in the shared core — NOT in
+ * api/ — so business logic (services, scheduling) can use it without
+ * importing from the swappable API surface.
  */
 
 /**
