@@ -14,6 +14,7 @@ const { createScheduler } = require('../../scheduling/runScheduler');
 const { formatDateTime } = require('../../dateFormat');
 const { formatDuration } = require('../../format/duration');
 const { openBoostWindows } = require('../../voting/boostWindow');
+const { findActiveChallenge } = require('../../services/findActiveChallenge');
 
 // Reuse the GUI's single-challenge manual-vote handler (votes to 100%,
 // bypassing thresholds). Built lazily on first use so loading this module for
@@ -94,8 +95,7 @@ const voteChallengeManual = async (challengeId) => {
     let title;
     try {
         const resp = await getMiddleware().getActiveChallenges();
-        const challenges = Array.isArray(resp?.challenges) ? resp.challenges : [];
-        const challenge = challenges.find((c) => String(c.id) === String(challengeId));
+        const challenge = findActiveChallenge(resp?.challenges, challengeId);
         if (!challenge) {
             logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
             return { success: false, error: `Challenge ${challengeId} not found` };

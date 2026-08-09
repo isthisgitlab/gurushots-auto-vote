@@ -15,6 +15,7 @@ const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
 const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
+const { findActiveChallenge } = require('../services/findActiveChallenge');
 
 // In-process guard that prevents two simultaneous mini-game runs on
 // the same challenge — defends against double-click and against an
@@ -94,7 +95,7 @@ const buildHandlers = () => ({
             try {
                 const strategy = apiFactory.getApiStrategy();
                 const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
-                const liveChallenge = challengesResponse?.challenges?.find((c) => String(c.id) === String(challengeId));
+                const liveChallenge = findActiveChallenge(challengesResponse?.challenges, challengeId);
                 if (!liveChallenge) {
                     return { success: false, error: 'Challenge no longer active' };
                 }
@@ -194,7 +195,7 @@ const buildHandlers = () => ({
 
             const strategy = apiFactory.getApiStrategy();
             const challengesResponse = await strategy.getActiveChallenges(guard.token);
-            const liveChallenge = challengesResponse?.challenges?.find((c) => String(c.id) === String(challengeId));
+            const liveChallenge = findActiveChallenge(challengesResponse?.challenges, challengeId);
             if (!liveChallenge) {
                 return { success: false, error: 'Challenge no longer active' };
             }

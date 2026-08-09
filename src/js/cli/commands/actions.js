@@ -1,18 +1,18 @@
 /**
  * CLI one-shot action commands — the parity of the GUI's per-card
  * buttons (boost / turbo / fill). Each reuses the exact code path the GUI
- * invokes: the index-resolving `applyBoost` from api/boost (honors
- * `boostImageIndex`), and the `play-auto-turbo` / `fill-challenge-now` IPC
- * handlers called with a null event — the same shape the Capacitor bridge
- * uses. All three target a single challenge identified by `--challenge=<id>`;
- * the dispatcher in cli.js enforces that the flag is present.
+ * invokes: the middleware's index-resolving `applyBoost` (honors
+ * `boostImageIndex` and the mock/real API swap), and the `play-auto-turbo`
+ * / `fill-challenge-now` IPC handlers called with a null event — the same
+ * shape the Capacitor bridge uses. All three target a single challenge
+ * identified by `--challenge=<id>`; the dispatcher in cli.js enforces that
+ * the flag is present.
  */
 
 const logger = require('../../logger');
 const { ensureAuthenticated } = require('../guards');
-const settings = require('../../settings');
 const { getMiddleware } = require('../../apiFactory');
-const { applyBoost } = require('../../api/boost');
+const { findActiveChallenge } = require('../../services/findActiveChallenge');
 
 // Built lazily on first use so simply requiring this module (e.g. when the
 // dispatcher loads it for `help` or `logout`) does not construct the handler
@@ -36,8 +36,7 @@ const resolveChallenge = async (challengeId) => {
     }
     try {
         const resp = await getMiddleware().getActiveChallenges();
-        const challenges = Array.isArray(resp?.challenges) ? resp.challenges : [];
-        const challenge = challenges.find((c) => String(c.id) === String(challengeId));
+        const challenge = findActiveChallenge(resp?.challenges, challengeId);
         if (!challenge) {
             logger.withCategory('challenges').error(`Challenge ${challengeId} not found among active challenges`);
             return null;
@@ -69,8 +68,9 @@ const boostChallenge = async (challengeId, { imageId = null } = {}) => {
             return;
         }
 
-        const token = settings.getSetting('token');
-        const response = await applyBoost(challenge, token);
+        // Route through the middleware so mock mode stays on the mock API
+        // surface — the middleware injects the token itself.
+        const response = await getMiddleware().applyBoost(challenge);
         if (response) {
             logger.withCategory('boost').success(`Boost applied to "${challenge.title}"`);
         } else {

@@ -24,11 +24,14 @@ const logger = require('../logger');
 const authenticate = async (email, password) => {
     logger.withCategory('authentication').info('Starting authentication...', null);
 
-    const data = `login=${encodeURIComponent(email)}&password=${password}`;
+    // URLSearchParams encodes BOTH fields RFC-compliantly — a password
+    // containing & = % + would otherwise be truncated or corrupted
+    // server-side. No manual content-length: axios computes the byte
+    // length itself (a UTF-16 .length count under-reports multibyte).
+    const data = new URLSearchParams({ login: email, password }).toString();
     const headers = {
         ...createCommonHeaders(undefined),
         'content-type': FORM_CONTENT_TYPE,
-        'content-length': data.length.toString(),
         'x-token': undefined,
     };
 

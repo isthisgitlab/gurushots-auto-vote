@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const settings = require('../src/js/settings');
+const logger = require('../src/js/logger');
 const { parseSettingValue } = require('../src/js/cli/parseValue');
 const { dumpSchema, listGlobalDefaults } = require('../src/js/cli/commands/settings');
 const { spawn } = require('node:child_process');
@@ -12,6 +13,9 @@ const { spawn } = require('node:child_process');
  *   pnpm settings:get [key]     - Get setting value (or all if no key provided)
  *   pnpm settings:set key value - Set setting value
  *
+ * Sensitive keys (token etc.) print as [REDACTED]; pass --reveal to `get`
+ * to print the raw value.
+ *
  * Examples:
  *   pnpm settings:get            # Get all settings
  *   pnpm settings:get theme      # Get theme setting
@@ -19,9 +23,15 @@ const { spawn } = require('node:child_process');
  *   pnpm settings:set challengeSettings.globalDefaults.boostTime 7200
  */
 
-const command = process.argv[2];
-const key = process.argv[3];
-const value = process.argv[4];
+// --reveal opts `get` out of sensitive-key redaction (the legitimate
+// read-my-own-token workflow). Strip it before positional parsing so it
+// can appear anywhere in the arg list.
+const cliArgs = process.argv.slice(2).filter((arg) => arg !== '--reveal');
+const reveal = process.argv.includes('--reveal');
+
+const command = cliArgs[0];
+const key = cliArgs[1];
+const value = cliArgs[2];
 
 // Helper function to get nested property value
 function getNestedProperty(obj, path) {
@@ -101,10 +111,20 @@ async function main() {
             case 'get': {
                 const allSettings = settings.loadSettings();
 
+                // Redact sensitive keys (token etc.) unless --reveal was
+                // passed — sanitizeForLog deep-masks by key name, so nested
+                // sensitive values inside objects are covered too.
+                const forDisplay = (val, keyName = null) => {
+                    if (reveal) return val;
+                    const wrapped = keyName === null ? val : { [keyName]: val };
+                    const masked = logger.sanitizeForLog(wrapped);
+                    return keyName === null ? masked : masked[keyName];
+                };
+
                 if (!key) {
                     // Show all settings
                     console.log('All Settings:');
-                    console.log(formatValue(allSettings));
+                    console.log(formatValue(forDisplay(allSettings)));
                 } else {
                     // Show specific setting
                     const value = getNestedProperty(allSettings, key);
@@ -112,7 +132,8 @@ async function main() {
                         console.error(`Setting '${key}' not found`);
                         process.exit(1);
                     } else {
-                        console.log(`${key}: ${formatValue(value)}`);
+                        const leafKey = key.split('.').pop();
+                        console.log(`${key}: ${formatValue(forDisplay(value, leafKey))}`);
                     }
                 }
                 break;
@@ -278,7 +299,7 @@ async function main() {
                 console.log(confirmMessage);
 
                 // In a real CLI, we'd use readline, but for pnpm scripts this is a simple confirmation
-                if (process.argv[3] !== 'yes') {
+                if (key !== 'yes') {
                     console.log('Reset cancelled. To confirm, run: pnpm settings:reset-all yes');
                     process.exit(0);
                 }
@@ -302,7 +323,9 @@ async function main() {
                 console.log('================');
                 console.log('');
                 console.log('Available commands:');
-                console.log('  pnpm settings:get [key]             - Get setting value (all if no key)');
+                console.log('  pnpm settings:get [key] [--reveal]  - Get setting value (all if no key)');
+                console.log('                                        Sensitive keys (token etc.) print as');
+                console.log('                                        [REDACTED] unless --reveal is passed');
                 console.log('  pnpm settings:set <key> <value>     - Set setting value');
                 console.log('  pnpm settings:set-global <key> <val> - Set global default (with validation)');
                 console.log('  pnpm settings:reset <key>           - Reset setting to default value');

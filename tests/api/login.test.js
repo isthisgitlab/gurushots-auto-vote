@@ -85,10 +85,13 @@ describe('login', () => {
                 expect.objectContaining({
                     'x-token': undefined,
                     'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
-                    'content-length': expect.any(String),
                 }),
-                `login=${encodeURIComponent(mockEmail)}&password=${mockPassword}`,
+                new URLSearchParams({ login: mockEmail, password: mockPassword }).toString(),
             );
+            // content-length is deliberately absent — axios computes the
+            // byte-accurate length itself.
+            const headers = makePostRequest.mock.calls[0][1];
+            expect(headers).not.toHaveProperty('content-length');
 
             expect(result).toEqual(mockData);
             expect(logger.withCategory).toHaveBeenCalledWith('authentication');
@@ -105,23 +108,35 @@ describe('login', () => {
             expect(makePostRequest).toHaveBeenCalledWith(
                 SIGNUP_URL,
                 expect.any(Object),
-                `login=${encodeURIComponent(emailWithSpecialChars)}&password=${mockPassword}`,
+                new URLSearchParams({ login: emailWithSpecialChars, password: mockPassword }).toString(),
             );
         });
 
-        test('should include correct content-length header', async () => {
+        test('should encode special characters in the password', async () => {
+            // Regression: the password used to be interpolated raw, so & = %
+            // + truncated or corrupted it server-side.
+            const trickyPassword = 'p&ss=w%rd+100%ä';
             makePostRequest.mockResolvedValueOnce({ token: 'test-token' });
 
-            await authenticate(mockEmail, mockPassword);
+            await authenticate(mockEmail, trickyPassword);
 
-            const expectedData = `login=${encodeURIComponent(mockEmail)}&password=${mockPassword}`;
-            expect(makePostRequest).toHaveBeenCalledWith(
-                SIGNUP_URL,
-                expect.objectContaining({
-                    'content-length': expectedData.length.toString(),
-                }),
-                expectedData,
-            );
+            const sentBody = makePostRequest.mock.calls[0][2];
+            expect(sentBody).toBe(new URLSearchParams({ login: mockEmail, password: trickyPassword }).toString());
+            // The password must round-trip exactly through form decoding.
+            expect(new URLSearchParams(sentBody).get('password')).toBe(trickyPassword);
+            // No ampersand from the password may leak as a field separator.
+            expect([...new URLSearchParams(sentBody).keys()]).toEqual(['login', 'password']);
+        });
+
+        test('should not send a manual content-length header', async () => {
+            makePostRequest.mockResolvedValueOnce({ token: 'test-token' });
+
+            await authenticate(mockEmail, 'pässword-ü');
+
+            // A UTF-16 .length count under-reports multibyte characters, so
+            // the header is left to axios entirely.
+            const headers = makePostRequest.mock.calls[0][1];
+            expect(headers).not.toHaveProperty('content-length');
         });
 
         test('should use correct API endpoint', async () => {
