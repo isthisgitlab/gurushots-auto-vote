@@ -2,11 +2,13 @@ version: 2
 
 # Automates the currency that was previously maintained by hand (`pnpm bump`).
 # Dependabot is pnpm-aware (updates pnpm-lock.yaml). The intentional version pins
-# survive its PRs two ways: prettier is a true pre-release (4.0.0-alpha) and
-# Dependabot only offers pre-release bumps for deps already on one; electron-builder
-# and electron-updater sit on versions published under the `next` dist-tag that are
-# AHEAD of the stable `latest` tag, and Dependabot never downgrades — it proposes
-# equal-or-higher versions only, so it won't pull them back to `latest`.
+# survive its PRs two ways: prettier (4.0.0-alpha) and typescript (7.1.0-dev
+# nightly, lockstep with ttsc) are pre-releases, and Dependabot only offers
+# pre-release bumps for deps already on one; electron-builder follows the `v26`
+# dist-tag (AHEAD of the stale `latest`), and Dependabot never downgrades — it
+# proposes equal-or-higher versions only, so it won't pull it back to `latest`.
+# CAVEAT: Dependabot compares against `latest` only, so new v26-tag patches are
+# invisible here — check `npm view electron-builder dist-tags` on manual bumps.
 updates:
     - package-ecosystem: 'npm'
       directory: '/'
