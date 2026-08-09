@@ -5,7 +5,7 @@
  * visually identical.
  */
 
-import { render, fireEvent } from '@/test/test-utils';
+import { render, fireEvent } from './helpers/test-utils';
 import { ResetButton, ResetIcon } from '@/components/ui/ResetButton';
 
 describe('ResetButton', () => {

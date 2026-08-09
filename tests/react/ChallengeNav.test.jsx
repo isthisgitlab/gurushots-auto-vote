@@ -7,7 +7,7 @@
  *   - clicking an entry scrolls the matching challenge-<id> element into view
  */
 
-import { render, screen, fireEvent } from '@/test/test-utils';
+import { render, screen, fireEvent } from './helpers/test-utils';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 
 const challenge = (id, title) => ({ id, title });

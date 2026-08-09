@@ -9,7 +9,7 @@
  * keys (row aria-labels read e.g. "app.autoFillScheduleImage 2 app.hours").
  */
 
-import { fireEvent, render, screen } from '@/test/test-utils';
+import { fireEvent, render, screen } from './helpers/test-utils';
 import { SettingInput } from '@/components/app/SettingInput';
 
 const KEY = 'autoFillSchedule';

@@ -11,7 +11,7 @@
  * mocked at module top with controllable state objects.
  */
 
-import { fireEvent, render, screen, waitFor } from '@/test/test-utils';
+import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
 
 const mockFormState = {

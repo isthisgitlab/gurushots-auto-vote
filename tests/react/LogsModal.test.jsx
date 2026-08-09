@@ -5,7 +5,7 @@
  * t() returns the key, so assertions match translation keys; the global
  * window.api mock makes useLogStream resolve with an empty backlog.
  */
-import { render, screen } from '@/test/test-utils';
+import { render, screen } from './helpers/test-utils';
 import { LogsModal } from '@/components/app/LogsModal';
 
 describe('LogsModal', () => {

@@ -3,9 +3,9 @@
  * focus moves into the dialog on open, Tab / Shift+Tab cycle within it (focus
  * trap), and focus returns to the triggering element when it closes.
  */
-import { fireEvent, render, screen } from '@/test/test-utils';
+import { fireEvent, render, screen } from './helpers/test-utils';
 import { Modal } from '@/components/ui/Modal';
-import { mockTranslationManager } from '../../src/js/react/test/setup';
+import { mockTranslationManager } from './helpers/setup';
 
 // Modal reads the close-button label from window.translationManager (so the
 // primitive works outside a provider). Pin it so the label resolves through

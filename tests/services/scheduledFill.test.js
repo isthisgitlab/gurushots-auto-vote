@@ -14,19 +14,21 @@
 
 const settings = require('../../src/js/settings');
 const VotingLogic = require('../../src/js/services/VotingLogic');
+const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');
 
 jest.mock('../../src/js/settings');
 
 const NOW = Math.floor(Date.UTC(2026, 0, 15, 12, 0, 0) / 1000);
 
-const buildChallenge = ({ exposureFactor = 50, closeInSeconds = 7200, type = 'regular' } = {}) => ({
-    id: '777',
-    title: 'Scheduled Fill Challenge',
-    type,
-    close_time: NOW + closeInSeconds,
-    start_time: NOW - 3600,
-    member: { ranking: { exposure: { exposure_factor: exposureFactor } } },
-});
+const buildChallenge = ({ exposureFactor = 50, closeInSeconds = 7200, type = 'regular' } = {}) =>
+    buildBaseChallenge({
+        id: '777',
+        title: 'Scheduled Fill Challenge',
+        type,
+        close_time: NOW + closeInSeconds,
+        start_time: NOW - 3600,
+        member: { ranking: { exposure: { exposure_factor: exposureFactor } } },
+    });
 
 const mockSettings = (overrides = {}) => {
     const defaults = {

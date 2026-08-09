@@ -3,10 +3,10 @@
  * into a blank page. Verifies the fallback renders, the dismiss button
  * restores the children, and componentDidCatch logs through window.api.
  */
-import { fireEvent, render, screen } from '@/test/test-utils';
+import { fireEvent, render, screen } from './helpers/test-utils';
 import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { mockApi, mockTranslationManager } from '../../src/js/react/test/setup';
+import { mockApi, mockTranslationManager } from './helpers/setup';
 
 // Pin window.api + window.translationManager per-test — the global test setup
 // occasionally loses them across files. ErrorBoundary reads translationManager

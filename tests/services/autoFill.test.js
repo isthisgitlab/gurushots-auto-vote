@@ -16,6 +16,7 @@ const {
     getNextScheduleThresholdSec,
     refreshChallengeState,
 } = require('../../src/js/services/autoFill');
+const { buildChallenge } = require('../helpers/challengeFixtures');
 
 // Mirrors the schema default: "have ≥2 entries at T-30m, ≥3 at T-20m, ≥4 at
 // T-10m" — the schedule equivalent of the old 10-minute interval on a 4-slot
@@ -33,14 +34,15 @@ const makeChallenge = ({
     entries = [],
     title = 'Pink In Nature',
     url = 'pink-in-nature23',
-} = {}) => ({
-    id,
-    title,
-    url,
-    max_photo_submits: maxSubmits,
-    close_time: 1_000_000 + closeIn,
-    member: { ranking: { entries } },
-});
+} = {}) =>
+    buildChallenge({
+        id,
+        title,
+        url,
+        max_photo_submits: maxSubmits,
+        close_time: 1_000_000 + closeIn,
+        member: { ranking: { entries } },
+    });
 
 const NOW = 1_000_000;
 const allowedPhoto = (id, labels = ['Pink'], uploadDate = 9000) => ({

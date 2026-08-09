@@ -6,7 +6,7 @@
  * manager mock returns keys verbatim.
  */
 
-import { fireEvent, render, screen } from '@/test/test-utils';
+import { fireEvent, render, screen } from './helpers/test-utils';
 import { SettingInput } from '@/components/app/SettingInput';
 
 const KEY = 'scheduledFillTime';

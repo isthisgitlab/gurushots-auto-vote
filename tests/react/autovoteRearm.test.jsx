@@ -12,7 +12,7 @@
 
 import { render, act } from '@testing-library/preact';
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
-import { mockApi } from '../../src/js/react/test/setup';
+import { mockApi } from './helpers/setup';
 
 jest.mock('../../src/js/services/ForegroundServiceController', () => ({
     __esModule: true,

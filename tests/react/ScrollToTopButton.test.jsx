@@ -8,7 +8,7 @@
  *   - hides again when the page returns to the top
  */
 
-import { render, screen, fireEvent } from '@/test/test-utils';
+import { render, screen, fireEvent } from './helpers/test-utils';
 import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
 
 const setScrollY = (value) => {

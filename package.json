@@ -267,7 +267,7 @@
                 ],
                 "setupFilesAfterEnv": [
                     "<rootDir>/tests/setup.js",
-                    "<rootDir>/src/js/react/test/setup.js"
+                    "<rootDir>/tests/react/helpers/setup.js"
                 ],
                 "testMatch": [
                     "**/?(*.)+(spec|test).js",

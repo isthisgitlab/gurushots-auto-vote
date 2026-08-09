@@ -4,7 +4,7 @@
  * with heading + count, and the scroll-to-card chip button.
  */
 
-import { render, screen, fireEvent } from '@/test/test-utils';
+import { render, screen, fireEvent } from './helpers/test-utils';
 import { ChipListPanel, ChallengeChip } from '@/components/app/ChallengeChips';
 
 describe('ChipListPanel', () => {

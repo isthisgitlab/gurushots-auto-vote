@@ -9,7 +9,7 @@
 
 import { render, act } from '@testing-library/preact';
 import { useAuth } from '@/api/useAuth';
-import { mockApi } from '../../src/js/react/test/setup';
+import { mockApi } from './helpers/setup';
 
 describe('useAuth error channels', () => {
     let hook;

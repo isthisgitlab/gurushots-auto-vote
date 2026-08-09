@@ -9,17 +9,18 @@
 
 const settings = require('../../src/js/settings');
 const VotingLogic = require('../../src/js/services/VotingLogic');
+const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');
 
 jest.mock('../../src/js/settings');
 
-const buildChallenge = (entries) => ({
-    id: 'c1',
-    close_time: 1_000_000,
-    member: {
-        turbo: { state: 'WON' },
-        ranking: { entries },
-    },
-});
+// Shared defaults already give id 'c1' and close_time 1_000_000.
+const buildChallenge = (entries) =>
+    buildBaseChallenge({
+        member: {
+            turbo: { state: 'WON' },
+            ranking: { entries },
+        },
+    });
 
 const mockSettings = (turboImageIndex) => {
     settings.getEffectiveSetting = jest.fn((key) => {

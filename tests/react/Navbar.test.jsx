@@ -3,7 +3,7 @@
  * (Android) platform, since Electron opens the Logs window from its menu. The
  * test mock's t() returns the key, so the button's title is 'logs.title'.
  */
-import { fireEvent, render, screen } from '@/test/test-utils';
+import { fireEvent, render, screen } from './helpers/test-utils';
 import { Navbar } from '@/components/layout/Navbar';
 
 describe('Navbar', () => {

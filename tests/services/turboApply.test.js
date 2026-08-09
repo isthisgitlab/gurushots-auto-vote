@@ -8,6 +8,7 @@
 
 const settings = require('../../src/js/settings');
 const VotingLogic = require('../../src/js/services/VotingLogic');
+const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');
 
 jest.mock('../../src/js/settings');
 
@@ -17,18 +18,16 @@ const buildChallenge = ({
     entries = [{ id: 'entry-1' }, { id: 'entry-2' }, { id: 'entry-3' }],
     boostState = 'NONE',
     boostTimeout = 0,
-}) => {
-    const now = Math.floor(Date.now() / 1000);
-    return {
+}) =>
+    buildBaseChallenge({
         id: '222',
-        close_time: now + closeInSeconds,
+        close_time: Math.floor(Date.now() / 1000) + closeInSeconds,
         member: {
             turbo: { state: turboState },
             boost: { state: boostState, timeout: boostTimeout },
             ranking: { entries },
         },
-    };
-};
+    });
 
 const mockSettings = (overrides = {}) => {
     const defaults = {

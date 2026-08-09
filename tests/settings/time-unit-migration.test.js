@@ -11,13 +11,7 @@
  *    values in (0, 60) by 60 under the `_emergencyFillTimeMigratedV1` flag.
  */
 
-const buildFixture = (overrides = {}) => ({
-    challengeSettings: {
-        globalDefaults: {},
-        perChallenge: {},
-        ...overrides,
-    },
-});
+const { buildSettingsFixture: buildFixture } = require('../helpers/challengeFixtures');
 
 describe('time-unit migration in loadSettings', () => {
     let settings;

@@ -18,10 +18,20 @@ import { useIpcQuery } from './useIpcQuery';
  *     repeatedly-failing 60s background refresh doesn't clear-then-
  *     re-raise the banner on every tick.
  *
+ * @param {boolean} [autovoteRunning=false] - whether the autovote loop is
+ *   currently running; stale-settings cleanup is skipped while it is (the
+ *   voting pass owns metadata cleanup then). Threaded down as a prop from
+ *   ChallengesProvider — no window.* side-channel.
  * @returns {{ data: Array, loading: boolean, error: Error|null, refetch: function }}
  */
-export function useActiveChallenges() {
+export function useActiveChallenges(autovoteRunning = false) {
     const lastKeyRef = useRef(null);
+
+    // Ref mirror so the async apply() below reads the current flag at
+    // cleanup time (post-await) instead of the value captured when the
+    // refetch started.
+    const autovoteRunningRef = useRef(autovoteRunning);
+    autovoteRunningRef.current = autovoteRunning;
 
     const queryFn = useCallback(async () => {
         const settings = await window.api.getSettings();
@@ -66,13 +76,10 @@ export function useActiveChallenges() {
         }
 
         // Cleanup stale settings and metadata unless skipped.
-        // TODO: thread autovoteRunning through context instead of
-        // reading window.autovoteRunning here — last side-channel
-        // consumer of the global.
         if (!skipCleanup && challenges.length > 0) {
             const activeChallengeIds = challenges.map((c) => c.id.toString());
 
-            if (!window.autovoteRunning) {
+            if (!autovoteRunningRef.current) {
                 await window.api.cleanupStaleChallengeSetting(activeChallengeIds);
             }
             await window.api.cleanupStaleMetadata(activeChallengeIds);

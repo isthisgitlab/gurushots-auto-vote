@@ -42,16 +42,21 @@ const votingLogic = require('../../src/js/services/VotingLogic');
 const autoFill = require('../../src/js/services/autoFill');
 const cancellation = require('../../src/js/voting/cancellation');
 const { runVotingPass } = require('../../src/js/services/votingOrchestrator');
+const { buildChallenge } = require('../helpers/challengeFixtures');
 
 const NOW = Math.floor(Date.now() / 1000);
 
-const makeChallenge = (over = {}) => ({
-    id: 101,
-    title: 'Orchestrated',
-    close_time: NOW + 3600,
-    member: { boost: { state: 'LOCKED', timeout: 0 }, ranking: { entries: [], exposure: { exposure_factor: 100 } } },
-    ...over,
-});
+const makeChallenge = (over = {}) =>
+    buildChallenge({
+        id: 101,
+        title: 'Orchestrated',
+        close_time: NOW + 3600,
+        member: {
+            boost: { state: 'LOCKED', timeout: 0 },
+            ranking: { entries: [], exposure: { exposure_factor: 100 } },
+        },
+        ...over,
+    });
 
 const makeApi = (challenges) => ({
     getActiveChallenges: jest.fn(async () => ({ challenges })),

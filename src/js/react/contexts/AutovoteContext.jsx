@@ -22,12 +22,13 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     const cycleTimerRef = useRef(null);
 
     // Keep runningRef in sync with state. Publishing through a window
-    // CustomEvent lets ChallengesProvider's sibling tree react without
-    // a 1-Hz polling timer. dispatchEvent + CustomEvent exist in every
-    // target (Electron Chromium, Capacitor WebView, happy-dom test env).
+    // CustomEvent lets the ancestor tree (AppWithChallenges, which feeds
+    // ChallengesProvider's autovoteRunning prop) react without a 1-Hz
+    // polling timer or a window.* global. dispatchEvent + CustomEvent
+    // exist in every target (Electron Chromium, Capacitor WebView,
+    // happy-dom test env).
     useEffect(() => {
         runningRef.current = state.running;
-        window.autovoteRunning = state.running;
         window.dispatchEvent(new CustomEvent('autovote:running-changed', { detail: state.running }));
     }, [state.running]);
 

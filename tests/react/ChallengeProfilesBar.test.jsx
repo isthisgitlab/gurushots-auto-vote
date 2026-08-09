@@ -6,9 +6,9 @@
  *     pre-validation surfaces specific errors using the IPC-provided limits.
  *   - Delete and same-name overwrite are two-step confirm buttons.
  */
-import { render, screen, fireEvent, waitFor, act } from '@/test/test-utils';
+import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { ChallengeProfilesBar } from '@/components/app/ChallengeProfilesBar';
-import { mockApi } from '../../src/js/react/test/setup';
+import { mockApi } from './helpers/setup';
 
 beforeEach(() => {
     window.api = mockApi;

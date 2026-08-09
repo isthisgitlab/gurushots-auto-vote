@@ -23,15 +23,16 @@ const apiFactory = require('../../src/js/apiFactory');
 const cancellation = require('../../src/js/voting/cancellation');
 const manualVote = require('../../src/js/services/manualVote');
 const { buildHandlers } = require('../../src/js/ipc/voting.handlers');
+const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');
 
 const buildChallenge = ({ id, title = 'C', startInPast = true } = {}) => {
     const now = Math.floor(Date.now() / 1000);
-    return {
+    return buildBaseChallenge({
         id,
         title,
         start_time: startInPast ? now - 3600 : now + 3600,
         close_time: now + 7200,
-    };
+    });
 };
 
 const setToken = (token) => {

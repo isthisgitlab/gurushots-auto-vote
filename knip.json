@@ -10,7 +10,7 @@
         "src/js/react/pages/Capacitor.jsx",
         "scripts/*.js"
     ],
-    "project": ["src/**/*.{js,jsx}", "scripts/**/*.js"],
+    "project": ["src/**/*.{js,jsx}", "scripts/**/*.js", "tests/**/*.{js,jsx}"],
     "paths": {
         "@/*": ["src/js/react/*"]
     },

@@ -14,6 +14,7 @@
 
 const settings = require('../../src/js/settings');
 const VotingLogic = require('../../src/js/services/VotingLogic');
+const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');
 
 jest.mock('../../src/js/settings');
 
@@ -39,12 +40,13 @@ const buildChallenge = ({
     maxSubmits = 2,
     entries = [{ id: 'e1' }], // 1 free slot by default (maxSubmits 2)
     boost = { state: 'NONE' },
-} = {}) => ({
-    id: '42',
-    close_time: closeTime,
-    max_photo_submits: maxSubmits,
-    member: { boost, ranking: { entries } },
-});
+} = {}) =>
+    buildBaseChallenge({
+        id: '42',
+        close_time: closeTime,
+        max_photo_submits: maxSubmits,
+        member: { boost, ranking: { entries } },
+    });
 
 const order = (challenge) => VotingLogic.orderDeadlineActions(challenge).map((a) => a.action);
 

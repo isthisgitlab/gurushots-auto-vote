@@ -228,17 +228,18 @@ function AppWithAutovote() {
  * App with Challenges provider
  */
 function AppWithChallenges() {
-    const [autovoteRunning, setAutovoteRunning] = useState(() => !!globalThis.window?.autovoteRunning);
+    const [autovoteRunning, setAutovoteRunning] = useState(false);
 
     // AutovoteProvider dispatches 'autovote:running-changed' whenever its
-    // state.running toggles, so we don't need to poll. After attaching
-    // the listener, re-read window.autovoteRunning once to absorb any
-    // event that may have fired between this component's render and
-    // commit (the auto-resume path on launch is the realistic case).
+    // state.running toggles, so we don't need to poll. The only event that
+    // can fire before this listener attaches is AutovoteProvider's initial
+    // running=false sync (child effects run before parent effects in the
+    // same commit), which matches the initial state here; the auto-resume
+    // path awaits IPC first, so its running=true event always lands after
+    // the listener is attached.
     useEffect(() => {
         const handler = (e) => setAutovoteRunning(!!e.detail);
         window.addEventListener('autovote:running-changed', handler);
-        setAutovoteRunning(!!window.autovoteRunning);
         return () => window.removeEventListener('autovote:running-changed', handler);
     }, []);
 

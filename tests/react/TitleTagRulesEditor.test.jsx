@@ -4,7 +4,7 @@
  * mock returns each key verbatim, so labels/placeholders are the i18n keys.
  */
 
-import { fireEvent, render, screen } from '@/test/test-utils';
+import { fireEvent, render, screen } from './helpers/test-utils';
 import { TitleTagRulesEditor } from '@/components/app/TitleTagRulesEditor';
 
 describe('TitleTagRulesEditor', () => {

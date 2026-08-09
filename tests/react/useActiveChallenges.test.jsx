@@ -7,12 +7,11 @@
  */
 import { renderHook, waitFor, act } from '@testing-library/preact';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
-import { mockApi } from '../../src/js/react/test/setup';
+import { mockApi } from './helpers/setup';
 
 describe('useActiveChallenges', () => {
     beforeEach(() => {
         window.api = mockApi;
-        window.autovoteRunning = false;
         mockApi.getSettings.mockReset().mockResolvedValue({ token: 'tok' });
         mockApi.getActiveChallenges.mockReset().mockResolvedValue({ challenges: [] });
     });
