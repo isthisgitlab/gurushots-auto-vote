@@ -12,8 +12,9 @@
  * hoisting.
  */
 
-import { render } from '@/test/test-utils';
+import { render } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
+import { buildChallenge } from '../helpers/challengeFixtures';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -40,7 +41,7 @@ jest.mock('@/components/app/EntryBadge', () => ({ EntryBadge: () => null }));
 
 const makeChallenge = ({ exposure = 50, started = true } = {}) => {
     const nowSec = Math.floor(Date.now() / 1000);
-    return {
+    return buildChallenge({
         id: 101,
         title: 'Sunset',
         url: 'sunset',
@@ -58,12 +59,11 @@ const makeChallenge = ({ exposure = 50, started = true } = {}) => {
             boost: { state: 'UNAVAILABLE', timeout: null },
             turbo: { state: 'UNAVAILABLE', time_to_open: null },
             ranking: {
-                entries: [],
                 exposure: { exposure_factor: exposure },
                 total: { votes: 0, rank: 0, level: 0, percent: 0, next_message: '' },
             },
         },
-    };
+    });
 };
 
 const renderCard = (challenge, autovoteRunning) =>

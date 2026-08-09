@@ -24,6 +24,7 @@ const {
     isAutovoteRunning,
     getDefaultMockSetting,
     getUserDataPath,
+    getSettingsPath,
     getEnvironmentInfo,
 } = require('./settings/storage');
 
@@ -70,208 +71,235 @@ const getDefaultSettings = () => {
 let migrationInProgress = false;
 let cleanupCompleted = false;
 
+/**
+ * Read the raw persisted settings JSON string via the storage adapter so
+ * the Capacitor cache path is exercised on Android. Electron/CLI hit fs
+ * synchronously. Returns the raw string, or a falsy value when no settings
+ * file exists.
+ */
+const readRawSettings = () => storage.readRaw();
+
+/**
+ * Merge parsed persisted settings over the defaults so all properties
+ * exist, and resolve the environment-aware mock default.
+ */
+const mergeWithDefaults = (settings) => {
+    // Merge with default settings to ensure all properties exist
+    const mergedSettings = { ...getDefaultSettings(), ...settings };
+
+    // Mock setting can be user-controlled, but default to environment if not set
+    if (mergedSettings.mock === undefined) {
+        mergedSettings.mock = getDefaultMockSetting();
+    }
+
+    return mergedSettings;
+};
+
+// Migrate buggy-GUI-encoded time values. Pre-fix (versions
+// v0.7.0 through v0.8.2), SettingInput stored boostTime /
+// turboTime as minutes (h*60+m) while the runtime treated
+// them as seconds. The buggy GUI could only write values in
+// [0, 1439] (max was 23h*60+59); schema defaults (3600, 7200)
+// are above that band, so untouched defaults pass through
+// unchanged.
+const migrateTimeUnits = (mergedSettings) => {
+    if (mergedSettings._timeUnitMigratedV1) return false;
+
+    const TIME_KEYS = ['boostTime', 'turboTime'];
+    const looksMinuteEncoded = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1440;
+
+    const globalDefaults = mergedSettings.challengeSettings?.globalDefaults || {};
+    for (const key of TIME_KEYS) {
+        if (looksMinuteEncoded(globalDefaults[key])) {
+            const before = globalDefaults[key];
+            globalDefaults[key] = before * 60;
+            logger
+                .withCategory('settings')
+                .info(`Migrated ${key} global default from minute-encoded ${before} to ${globalDefaults[key]}s`, null);
+        }
+    }
+
+    const perChallenge = mergedSettings.challengeSettings?.perChallenge || {};
+    for (const [challengeId, overrides] of Object.entries(perChallenge)) {
+        for (const key of TIME_KEYS) {
+            if (looksMinuteEncoded(overrides[key])) {
+                const before = overrides[key];
+                overrides[key] = before * 60;
+                logger
+                    .withCategory('settings')
+                    .info(
+                        `Migrated ${key} override on challenge ${challengeId} from ${before} to ${overrides[key]}s`,
+                        null,
+                    );
+            }
+        }
+    }
+
+    mergedSettings._timeUnitMigratedV1 = true;
+    return true;
+};
+
+// Migrate emergencyFill from minutes to seconds. It used to be a
+// plain `number` of minutes-before-close (1-59); it's now a `time`
+// setting stored in seconds (mirrors boostTime/turboTime). The old
+// GUI/CLI could only write 1-59, so a value in (0, 60) is a stale
+// minute encoding; 0 is the off sentinel and stays 0; legitimate new
+// seconds values from the time input start at 60, so the band
+// cleanly separates old-minutes from new-seconds. This is a separate
+// flag because _timeUnitMigratedV1 is already set for current users.
+const migrateEmergencyFillTime = (mergedSettings) => {
+    if (mergedSettings._emergencyFillTimeMigratedV1) return false;
+
+    const looksMinuteEncoded = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 60;
+
+    const globalDefaults = mergedSettings.challengeSettings?.globalDefaults || {};
+    if (looksMinuteEncoded(globalDefaults.emergencyFill)) {
+        const before = globalDefaults.emergencyFill;
+        globalDefaults.emergencyFill = before * 60;
+        logger
+            .withCategory('settings')
+            .info(
+                `Migrated emergencyFill global default from minute-encoded ${before} to ${globalDefaults.emergencyFill}s`,
+                null,
+            );
+    }
+
+    const perChallenge = mergedSettings.challengeSettings?.perChallenge || {};
+    for (const [challengeId, overrides] of Object.entries(perChallenge)) {
+        if (looksMinuteEncoded(overrides.emergencyFill)) {
+            const before = overrides.emergencyFill;
+            overrides.emergencyFill = before * 60;
+            logger
+                .withCategory('settings')
+                .info(
+                    `Migrated emergencyFill override on challenge ${challengeId} from ${before} to ${overrides.emergencyFill}s`,
+                    null,
+                );
+        }
+    }
+
+    mergedSettings._emergencyFillTimeMigratedV1 = true;
+    return true;
+};
+
+// Migrate autoFillIntervalMinutes into autoFillSchedule. The single
+// interval M is replaced by an explicit per-image schedule; the old
+// trigger (`secondsRemaining <= slotsRemaining * M*60`) maps, for the
+// common 4-slot challenge, to targets 2 @ 3M, 3 @ 2M, 4 @ 1M minutes
+// before close. Always derived from the USER'S persisted M (a 15m
+// user gets 45/30/15), never from the schema default; each scope is
+// migrated independently. Runs before cleanupObsoleteSettings, which
+// would otherwise just delete the now-schemaless legacy key.
+const migrateAutoFillSchedule = (mergedSettings) => {
+    if (mergedSettings._autoFillScheduleMigratedV1) return false;
+
+    const LEGACY_KEY = 'autoFillIntervalMinutes';
+    // Clamp to the old validator's 60-minute ceiling and round: a
+    // hand-edited non-integer or oversized legacy value must not
+    // migrate into a schedule the new int()/max() schema rejects.
+    const toSchedule = (minutes) => {
+        const m = Math.min(minutes, 60);
+        return [
+            { count: 2, seconds: Math.round(3 * m * 60) },
+            { count: 3, seconds: Math.round(2 * m * 60) },
+            { count: 4, seconds: Math.round(m * 60) },
+        ];
+    };
+    const migrateScope = (scope, label) => {
+        if (!scope) return;
+        const legacy = scope[LEGACY_KEY];
+        if (typeof legacy === 'number' && Number.isFinite(legacy) && legacy >= 1) {
+            if (scope.autoFillSchedule === undefined) {
+                scope.autoFillSchedule = toSchedule(legacy);
+                logger
+                    .withCategory('settings')
+                    .info(
+                        `Migrated ${LEGACY_KEY}=${legacy} ${label} to autoFillSchedule ${JSON.stringify(scope.autoFillSchedule)}`,
+                        null,
+                    );
+            }
+        }
+        if (Object.prototype.hasOwnProperty.call(scope, LEGACY_KEY)) {
+            delete scope[LEGACY_KEY];
+        }
+    };
+
+    migrateScope(mergedSettings.challengeSettings?.globalDefaults, 'global default');
+    const autoFillPerChallenge = mergedSettings.challengeSettings?.perChallenge || {};
+    for (const [challengeId, overrides] of Object.entries(autoFillPerChallenge)) {
+        migrateScope(overrides, `override on challenge ${challengeId}`);
+    }
+
+    mergedSettings._autoFillScheduleMigratedV1 = true;
+    return true;
+};
+
+// Sanitize persisted autoFillSchedule values to the current bounds
+// (counts 2-4, ≤3 rows, unique counts, seconds within cap). The
+// wide pre-tightening editor could store counts up to 20; because
+// the Settings modal resubmits every persisted key on save, such a
+// value would fail the tightened validator and block saving ANY
+// setting. Runs after the interval→schedule migration above, whose
+// output always conforms already. Note this is a ONE-TIME pass
+// (flag-gated like the migrations), not a standing invariant:
+// every write path is zod-validated afterwards, so only an
+// out-of-band file edit made after the flag is set could
+// reintroduce bad rows — the same accepted risk as hand-editing
+// any other setting, and the read path still clamps defensively.
+const migrateAutoFillScheduleBounds = (mergedSettings) => {
+    if (mergedSettings._autoFillScheduleBoundsV1) return false;
+
+    const sanitizeScope = (scope, label) => {
+        if (!scope) return;
+        const cleaned = sanitizeFillSchedule(scope.autoFillSchedule);
+        if (cleaned !== null) {
+            logger
+                .withCategory('settings')
+                .info(`Sanitized autoFillSchedule ${label} to current bounds: ${JSON.stringify(cleaned)}`, null);
+            scope.autoFillSchedule = cleaned;
+        }
+    };
+
+    sanitizeScope(mergedSettings.challengeSettings?.globalDefaults, 'global default');
+    const schedulePerChallenge = mergedSettings.challengeSettings?.perChallenge || {};
+    for (const [challengeId, overrides] of Object.entries(schedulePerChallenge)) {
+        sanitizeScope(overrides, `override on challenge ${challengeId}`);
+    }
+
+    mergedSettings._autoFillScheduleBoundsV1 = true;
+    return true;
+};
+
+/**
+ * Run every flag-gated migration over the merged settings (mutating them
+ * in place) and persist the result when anything changed. Order matters:
+ * the interval→schedule migration must precede the schedule-bounds pass,
+ * whose output always conforms already.
+ */
+const runMigrations = (mergedSettings) => {
+    let migrationChanges = false;
+
+    migrationChanges = migrateTimeUnits(mergedSettings) || migrationChanges;
+    migrationChanges = migrateEmergencyFillTime(mergedSettings) || migrationChanges;
+    migrationChanges = migrateAutoFillSchedule(mergedSettings) || migrationChanges;
+    migrationChanges = migrateAutoFillScheduleBounds(mergedSettings) || migrationChanges;
+
+    // If migration made changes, save the updated settings
+    if (migrationChanges) {
+        storage.writeRaw(JSON.stringify(mergedSettings, null, 2));
+    }
+};
+
 // Load settings from the userData directory
 const loadSettings = () => {
     try {
-        // Read raw settings via the storage adapter so the Capacitor cache
-        // path is exercised on Android. Electron/CLI hit fs synchronously.
-        const settingsData = storage.readRaw();
+        const settingsData = readRawSettings();
 
         // Check if the settings exist
         if (settingsData) {
-            const settings = JSON.parse(settingsData);
+            const mergedSettings = mergeWithDefaults(JSON.parse(settingsData));
 
-            // Merge with default settings to ensure all properties exist
-            const mergedSettings = { ...getDefaultSettings(), ...settings };
-
-            // Mock setting can be user-controlled, but default to environment if not set
-            if (mergedSettings.mock === undefined) {
-                mergedSettings.mock = getDefaultMockSetting();
-            }
-
-            let migrationChanges = false;
-
-            // Migrate buggy-GUI-encoded time values. Pre-fix (versions
-            // v0.7.0 through v0.8.2), SettingInput stored boostTime /
-            // turboTime as minutes (h*60+m) while the runtime treated
-            // them as seconds. The buggy GUI could only write values in
-            // [0, 1439] (max was 23h*60+59); schema defaults (3600, 7200)
-            // are above that band, so untouched defaults pass through
-            // unchanged.
-            if (!mergedSettings._timeUnitMigratedV1) {
-                const TIME_KEYS = ['boostTime', 'turboTime'];
-                const looksMinuteEncoded = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 1440;
-
-                const globalDefaults = mergedSettings.challengeSettings?.globalDefaults || {};
-                for (const key of TIME_KEYS) {
-                    if (looksMinuteEncoded(globalDefaults[key])) {
-                        const before = globalDefaults[key];
-                        globalDefaults[key] = before * 60;
-                        migrationChanges = true;
-                        logger
-                            .withCategory('settings')
-                            .info(
-                                `Migrated ${key} global default from minute-encoded ${before} to ${globalDefaults[key]}s`,
-                                null,
-                            );
-                    }
-                }
-
-                const perChallenge = mergedSettings.challengeSettings?.perChallenge || {};
-                for (const [challengeId, overrides] of Object.entries(perChallenge)) {
-                    for (const key of TIME_KEYS) {
-                        if (looksMinuteEncoded(overrides[key])) {
-                            const before = overrides[key];
-                            overrides[key] = before * 60;
-                            migrationChanges = true;
-                            logger
-                                .withCategory('settings')
-                                .info(
-                                    `Migrated ${key} override on challenge ${challengeId} from ${before} to ${overrides[key]}s`,
-                                    null,
-                                );
-                        }
-                    }
-                }
-
-                mergedSettings._timeUnitMigratedV1 = true;
-                migrationChanges = true;
-            }
-
-            // Migrate emergencyFill from minutes to seconds. It used to be a
-            // plain `number` of minutes-before-close (1-59); it's now a `time`
-            // setting stored in seconds (mirrors boostTime/turboTime). The old
-            // GUI/CLI could only write 1-59, so a value in (0, 60) is a stale
-            // minute encoding; 0 is the off sentinel and stays 0; legitimate new
-            // seconds values from the time input start at 60, so the band
-            // cleanly separates old-minutes from new-seconds. This is a separate
-            // flag because _timeUnitMigratedV1 is already set for current users.
-            if (!mergedSettings._emergencyFillTimeMigratedV1) {
-                const looksMinuteEncoded = (v) => typeof v === 'number' && Number.isFinite(v) && v > 0 && v < 60;
-
-                const globalDefaults = mergedSettings.challengeSettings?.globalDefaults || {};
-                if (looksMinuteEncoded(globalDefaults.emergencyFill)) {
-                    const before = globalDefaults.emergencyFill;
-                    globalDefaults.emergencyFill = before * 60;
-                    migrationChanges = true;
-                    logger
-                        .withCategory('settings')
-                        .info(
-                            `Migrated emergencyFill global default from minute-encoded ${before} to ${globalDefaults.emergencyFill}s`,
-                            null,
-                        );
-                }
-
-                const perChallenge = mergedSettings.challengeSettings?.perChallenge || {};
-                for (const [challengeId, overrides] of Object.entries(perChallenge)) {
-                    if (looksMinuteEncoded(overrides.emergencyFill)) {
-                        const before = overrides.emergencyFill;
-                        overrides.emergencyFill = before * 60;
-                        migrationChanges = true;
-                        logger
-                            .withCategory('settings')
-                            .info(
-                                `Migrated emergencyFill override on challenge ${challengeId} from ${before} to ${overrides.emergencyFill}s`,
-                                null,
-                            );
-                    }
-                }
-
-                mergedSettings._emergencyFillTimeMigratedV1 = true;
-                migrationChanges = true;
-            }
-
-            // Migrate autoFillIntervalMinutes into autoFillSchedule. The single
-            // interval M is replaced by an explicit per-image schedule; the old
-            // trigger (`secondsRemaining <= slotsRemaining * M*60`) maps, for the
-            // common 4-slot challenge, to targets 2 @ 3M, 3 @ 2M, 4 @ 1M minutes
-            // before close. Always derived from the USER'S persisted M (a 15m
-            // user gets 45/30/15), never from the schema default; each scope is
-            // migrated independently. Runs before cleanupObsoleteSettings, which
-            // would otherwise just delete the now-schemaless legacy key.
-            if (!mergedSettings._autoFillScheduleMigratedV1) {
-                const LEGACY_KEY = 'autoFillIntervalMinutes';
-                // Clamp to the old validator's 60-minute ceiling and round: a
-                // hand-edited non-integer or oversized legacy value must not
-                // migrate into a schedule the new int()/max() schema rejects.
-                const toSchedule = (minutes) => {
-                    const m = Math.min(minutes, 60);
-                    return [
-                        { count: 2, seconds: Math.round(3 * m * 60) },
-                        { count: 3, seconds: Math.round(2 * m * 60) },
-                        { count: 4, seconds: Math.round(m * 60) },
-                    ];
-                };
-                const migrateScope = (scope, label) => {
-                    if (!scope) return;
-                    const legacy = scope[LEGACY_KEY];
-                    if (typeof legacy === 'number' && Number.isFinite(legacy) && legacy >= 1) {
-                        if (scope.autoFillSchedule === undefined) {
-                            scope.autoFillSchedule = toSchedule(legacy);
-                            logger
-                                .withCategory('settings')
-                                .info(
-                                    `Migrated ${LEGACY_KEY}=${legacy} ${label} to autoFillSchedule ${JSON.stringify(scope.autoFillSchedule)}`,
-                                    null,
-                                );
-                        }
-                    }
-                    if (Object.prototype.hasOwnProperty.call(scope, LEGACY_KEY)) {
-                        delete scope[LEGACY_KEY];
-                    }
-                };
-
-                migrateScope(mergedSettings.challengeSettings?.globalDefaults, 'global default');
-                const autoFillPerChallenge = mergedSettings.challengeSettings?.perChallenge || {};
-                for (const [challengeId, overrides] of Object.entries(autoFillPerChallenge)) {
-                    migrateScope(overrides, `override on challenge ${challengeId}`);
-                }
-
-                mergedSettings._autoFillScheduleMigratedV1 = true;
-                migrationChanges = true;
-            }
-
-            // Sanitize persisted autoFillSchedule values to the current bounds
-            // (counts 2-4, ≤3 rows, unique counts, seconds within cap). The
-            // wide pre-tightening editor could store counts up to 20; because
-            // the Settings modal resubmits every persisted key on save, such a
-            // value would fail the tightened validator and block saving ANY
-            // setting. Runs after the interval→schedule migration above, whose
-            // output always conforms already. Note this is a ONE-TIME pass
-            // (flag-gated like the migrations), not a standing invariant:
-            // every write path is zod-validated afterwards, so only an
-            // out-of-band file edit made after the flag is set could
-            // reintroduce bad rows — the same accepted risk as hand-editing
-            // any other setting, and the read path still clamps defensively.
-            if (!mergedSettings._autoFillScheduleBoundsV1) {
-                const sanitizeScope = (scope, label) => {
-                    if (!scope) return;
-                    const cleaned = sanitizeFillSchedule(scope.autoFillSchedule);
-                    if (cleaned !== null) {
-                        logger
-                            .withCategory('settings')
-                            .info(
-                                `Sanitized autoFillSchedule ${label} to current bounds: ${JSON.stringify(cleaned)}`,
-                                null,
-                            );
-                        scope.autoFillSchedule = cleaned;
-                    }
-                };
-
-                sanitizeScope(mergedSettings.challengeSettings?.globalDefaults, 'global default');
-                const schedulePerChallenge = mergedSettings.challengeSettings?.perChallenge || {};
-                for (const [challengeId, overrides] of Object.entries(schedulePerChallenge)) {
-                    sanitizeScope(overrides, `override on challenge ${challengeId}`);
-                }
-
-                mergedSettings._autoFillScheduleBoundsV1 = true;
-                migrationChanges = true;
-            }
-
-            // If migration made changes, save the updated settings
-            if (migrationChanges) {
-                storage.writeRaw(JSON.stringify(mergedSettings, null, 2));
-            }
+            runMigrations(mergedSettings);
 
             // Run obsolete-settings cleanup once per process. The
             // re-entry guard exists because cleanupObsoleteSettings
@@ -1393,6 +1421,7 @@ module.exports = {
     isReloadRequired,
     getDefaultSettings,
     getUserDataPath,
+    getSettingsPath,
     saveWindowBounds,
     getWindowBounds,
 

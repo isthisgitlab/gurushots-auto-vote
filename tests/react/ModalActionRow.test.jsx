@@ -5,7 +5,7 @@
  * wiring match the previous inline copies.
  */
 
-import { render, fireEvent } from '@/test/test-utils';
+import { render, fireEvent } from './helpers/test-utils';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
 
 const renderRow = (over = {}) => {

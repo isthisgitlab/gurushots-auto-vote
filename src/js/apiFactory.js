@@ -115,7 +115,22 @@ let currentMiddleware = null;
 /** @type {boolean | null} */
 let lastMockSetting = null;
 
-const getApiStrategy = () => {
+/**
+ * Returns the active API surface.
+ *
+ * Without arguments the surface follows the persisted `mock` setting
+ * (cached until refreshApi or the setting changes). Passing an explicit
+ * boolean `mock` overrides the setting for THIS call only — used by the
+ * login flow, where the caller's choice pre-dates the committed setting —
+ * without touching the cached strategy state.
+ *
+ * @param {{ mock?: boolean }} [options]
+ * @returns {ApiStrategy}
+ */
+const getApiStrategy = ({ mock } = {}) => {
+    if (typeof mock === 'boolean') {
+        return mock ? mockApi : realApi;
+    }
     const userSettings = settings.loadSettings();
     if (lastMockSetting !== userSettings.mock || !currentStrategy) {
         logger.withCategory('api').debug('=== API Factory Debug ===', null);
@@ -152,10 +167,11 @@ const refreshApi = () => {
     lastMockSetting = null;
 };
 
+// The raw surfaces are deliberately NOT exported — every caller selects a
+// surface through getApiStrategy (optionally with the explicit { mock }
+// override) so the factory stays the single swap point.
 module.exports = {
     getApiStrategy,
     getMiddleware,
     refreshApi,
-    realApi,
-    mockApi,
 };

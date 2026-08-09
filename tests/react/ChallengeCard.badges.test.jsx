@@ -15,8 +15,9 @@
  * 'app.*' strings. Mock state object names start with "mock" for jest hoisting.
  */
 
-import { render } from '@/test/test-utils';
+import { render } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
+import { buildChallenge } from '../helpers/challengeFixtures';
 
 const mockChallengeSettings = {
     hasCustomSettings: false,
@@ -39,31 +40,32 @@ jest.mock('@/components/app/VoteButton', () => ({ VoteButton: () => null }));
 jest.mock('@/components/app/RunButton', () => ({ RunButton: () => null }));
 jest.mock('@/components/app/EntryBadge', () => ({ EntryBadge: () => null }));
 
-const makeChallenge = ({ type = 'flash', badge, maxPhotos = 4, entriesCount = 0 } = {}) => ({
-    id: 101,
-    title: 'Sunset',
-    url: 'sunset',
-    type,
-    badge,
-    max_photo_submits: maxPhotos,
-    start_time: 0,
-    close_time: Math.floor(Date.now() / 1000) + 3600,
-    entries: 100,
-    players: 50,
-    votes: 2000,
-    prizes_worth: '$100',
-    tags: [],
-    welcome_message: '',
-    member: {
-        boost: { state: 'UNAVAILABLE', timeout: null },
-        turbo: { state: 'UNAVAILABLE', time_to_open: null },
-        ranking: {
-            entries: Array.from({ length: entriesCount }, (_, i) => ({ id: `e${i}`, rank: i + 1, votes: 0 })),
-            exposure: { exposure_factor: 50 },
-            total: { votes: 0, rank: 0, level: 0, percent: 0, next_message: '' },
+const makeChallenge = ({ type = 'flash', badge, maxPhotos = 4, entriesCount = 0 } = {}) =>
+    buildChallenge({
+        id: 101,
+        title: 'Sunset',
+        url: 'sunset',
+        type,
+        badge,
+        max_photo_submits: maxPhotos,
+        start_time: 0,
+        close_time: Math.floor(Date.now() / 1000) + 3600,
+        entries: 100,
+        players: 50,
+        votes: 2000,
+        prizes_worth: '$100',
+        tags: [],
+        welcome_message: '',
+        member: {
+            boost: { state: 'UNAVAILABLE', timeout: null },
+            turbo: { state: 'UNAVAILABLE', time_to_open: null },
+            ranking: {
+                entries: Array.from({ length: entriesCount }, (_, i) => ({ id: `e${i}`, rank: i + 1, votes: 0 })),
+                exposure: { exposure_factor: 50 },
+                total: { votes: 0, rank: 0, level: 0, percent: 0, next_message: '' },
+            },
         },
-    },
-});
+    });
 
 const renderCard = (challenge) =>
     render(

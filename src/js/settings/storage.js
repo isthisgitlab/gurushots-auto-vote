@@ -141,40 +141,36 @@ const initializeAsync = async () => {
  */
 const flushPendingWrites = () => writeChain;
 
-// Define the settings file path in the userData directory
-const getSettingsPath = () => {
-    let userDataPath;
-
-    if (electronApp && electronApp.getPath) {
-        // Electron context - need to construct proper path based on source/built status
-        if (isSourceCode()) {
-            // Running from source code - use dev-specific directory
-            const basePath = path.dirname(electronApp.getPath('userData'));
-            userDataPath = path.join(basePath, 'gurushots-auto-vote-dev');
-        } else {
-            // Built app - use normal userData path
-            userDataPath = electronApp.getPath('userData');
+// One-shot notice if a pre-consolidation dev directory exists elsewhere.
+// Storage's old Electron dev branch hardcoded `<parent>/gurushots-auto-vote-dev`
+// while logger appended `-dev` to userData; runtime.getAppUserDataPath now
+// canonicalizes on the latter. When the two differ (userData basename ≠
+// package name) the old dir may still hold a settings.json.
+let legacyDevDirChecked = false;
+const warnIfLegacyDevDir = (userDataPath) => {
+    if (legacyDevDirChecked) return;
+    legacyDevDirChecked = true;
+    if (!(electronApp && electronApp.getPath) || !isSourceCode()) return;
+    try {
+        const legacy = path.join(path.dirname(electronApp.getPath('userData')), 'gurushots-auto-vote-dev');
+        if (legacy !== userDataPath && fs.existsSync(path.join(legacy, 'settings.json'))) {
+            logger
+                .withCategory('settings')
+                .warning(
+                    `Legacy dev settings found at ${legacy}; settings now live at ${userDataPath} — move settings.json there if your values look reset`,
+                );
         }
-    } else {
-        // CLI context - create fallback userData path
-        userDataPath = runtime.getUserDataDir(getAppName());
-
-        // Ensure the directory exists
-        if (!fs.existsSync(userDataPath)) {
-            try {
-                fs.mkdirSync(userDataPath, { recursive: true });
-                logger.withCategory('ui').info(`Created userData directory: ${userDataPath}`, null);
-            } catch (error) {
-                logger.withCategory('ui').error('Error creating userData directory:', error);
-                // Fallback to current directory if we can't create the proper path
-                userDataPath = path.join(process.cwd(), 'userData');
-                if (!fs.existsSync(userDataPath)) {
-                    fs.mkdirSync(userDataPath, { recursive: true });
-                }
-            }
-        }
+    } catch {
+        // Purely informational — never block settings resolution.
     }
+};
 
+// Define the settings file path in the userData directory. Resolution lives
+// in runtime.getAppUserDataPath — the ONE implementation shared with the
+// logger, so logs and settings can never land in different directories.
+const getSettingsPath = () => {
+    const userDataPath = runtime.getAppUserDataPath();
+    warnIfLegacyDevDir(userDataPath);
     return path.join(userDataPath, 'settings.json');
 };
 

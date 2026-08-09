@@ -7,29 +7,28 @@
 
 const settings = require('../../src/js/settings');
 const VotingLogic = require('../../src/js/services/VotingLogic');
+const { buildChallenge } = require('../helpers/challengeFixtures');
 
 jest.mock('../../src/js/settings');
 
 const NOW = () => Math.floor(Date.now() / 1000);
 
-const buildChallengeWithBoostExpiring = (now) => ({
-    id: '777',
-    close_time: now + 3600,
-    member: {
-        boost: { state: 'AVAILABLE', timeout: now + 60 },
-    },
-});
+const buildChallengeWithBoostExpiring = (now) =>
+    buildChallenge({
+        id: '777',
+        close_time: now + 3600,
+        member: { boost: { state: 'AVAILABLE', timeout: now + 60 } },
+    });
 
 // A boost is available (timer-based, far-future timeout) but the challenge is
 // seconds from closing — the normal boostTime window would not fire here, so
 // only the emergency override can apply it.
-const buildClosingChallengeWithBoost = (now, closeInSeconds = 120) => ({
-    id: '777',
-    close_time: now + closeInSeconds,
-    member: {
-        boost: { state: 'AVAILABLE', timeout: now + 1800 },
-    },
-});
+const buildClosingChallengeWithBoost = (now, closeInSeconds = 120) =>
+    buildChallenge({
+        id: '777',
+        close_time: now + closeInSeconds,
+        member: { boost: { state: 'AVAILABLE', timeout: now + 1800 } },
+    });
 
 const mockSettings = (overrides = {}) => {
     const defaults = {

@@ -5,7 +5,11 @@
  * in the CLI version, ensuring feature parity between the two interfaces.
  */
 
-const { getMiddleware, realApi, mockApi } = require('../../src/js/apiFactory');
+const { getMiddleware, getApiStrategy } = require('../../src/js/apiFactory');
+// The raw surfaces are no longer exported; the explicit override returns
+// the module-level singletons.
+const realApi = getApiStrategy({ mock: false });
+const mockApi = getApiStrategy({ mock: true });
 const settings = require('../../src/js/settings');
 const BaseMiddleware = require('../../src/js/services/BaseMiddleware');
 

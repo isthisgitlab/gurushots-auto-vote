@@ -101,13 +101,7 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
     let settings;
     let fs;
 
-    const buildFixture = (overrides = {}) => ({
-        challengeSettings: {
-            globalDefaults: {},
-            perChallenge: {},
-            ...overrides,
-        },
-    });
+    const { buildSettingsFixture: buildFixture } = require('../helpers/challengeFixtures');
 
     const setSettingsFile = (payload) => {
         fs.existsSync.mockReturnValue(true);

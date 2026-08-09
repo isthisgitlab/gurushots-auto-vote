@@ -7,7 +7,7 @@
  * badge row relies on it to show every chip as visible icon + text.
  */
 
-import { render } from '@/test/test-utils';
+import { render } from './helpers/test-utils';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 
 const badge = (container) => container.querySelector('span.badge');

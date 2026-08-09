@@ -18,6 +18,7 @@ const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 const cancellation = require('../voting/cancellation');
 const { submitVotesForChallenge, voteAllChallengesManual } = require('../services/manualVote');
+const { findActiveChallenge } = require('../services/findActiveChallenge');
 
 // Run one full strategy pass — global when challengeId is null, scoped
 // to a single card otherwise. Delegates to BaseMiddleware so the
@@ -68,7 +69,10 @@ const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) =>
         .debug(`📋 Found challenges: [${challengesResponse.challenges.map((c) => `${c.id}:"${c.title}"`).join(', ')}]`);
     logger.withCategory('challenges').debug('🔍 Looking for challenge ID:', challengeId);
 
-    const challenge = challengesResponse.challenges.find((c) => c.id === parseInt(challengeId, 10));
+    // String-to-String comparison via the shared helper — the API is not
+    // consistent about the id type, and parseInt-based equality misses
+    // string ids entirely.
+    const challenge = findActiveChallenge(challengesResponse.challenges, challengeId);
     logger
         .withCategory('general')
         .debug(

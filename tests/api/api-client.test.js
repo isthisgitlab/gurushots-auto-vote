@@ -87,7 +87,6 @@ describe('api-client', () => {
     const mockToken = 'test-token-123';
     const mockUrl = 'https://api.gurushots.com/test';
     const mockData = 'test=data';
-    const logger = require('../../src/js/logger');
     const settings = require('../../src/js/settings');
 
     beforeEach(() => {

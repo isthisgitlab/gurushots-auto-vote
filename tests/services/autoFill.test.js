@@ -16,6 +16,7 @@ const {
     getNextScheduleThresholdSec,
     refreshChallengeState,
 } = require('../../src/js/services/autoFill');
+const { buildChallenge } = require('../helpers/challengeFixtures');
 
 // Mirrors the schema default: "have ≥2 entries at T-30m, ≥3 at T-20m, ≥4 at
 // T-10m" — the schedule equivalent of the old 10-minute interval on a 4-slot
@@ -33,14 +34,15 @@ const makeChallenge = ({
     entries = [],
     title = 'Pink In Nature',
     url = 'pink-in-nature23',
-} = {}) => ({
-    id,
-    title,
-    url,
-    max_photo_submits: maxSubmits,
-    close_time: 1_000_000 + closeIn,
-    member: { ranking: { entries } },
-});
+} = {}) =>
+    buildChallenge({
+        id,
+        title,
+        url,
+        max_photo_submits: maxSubmits,
+        close_time: 1_000_000 + closeIn,
+        member: { ranking: { entries } },
+    });
 
 const NOW = 1_000_000;
 const allowedPhoto = (id, labels = ['Pink'], uploadDate = 9000) => ({
@@ -1428,6 +1430,30 @@ describe('reflect-on-submit — auto-fill consumes the slot it just used', () =>
         });
         expect(result).toBe('error');
         expect(challenge.member.ranking.entries).toHaveLength(0);
+    });
+
+    test('submitNewEntryForAction does NOT reflect on success — the orchestrator callers own that', async () => {
+        // Exactly-once contract, producer side: votingOrchestrator calls
+        // autoFill.reflectNewEntry(challenge, filled.imageId) after a
+        // successful fill-new. If submitNewEntryForAction ever reflected
+        // internally too, those callers would append the entry TWICE,
+        // corrupting getSlotsRemaining and boost/turbo entry selection for
+        // the rest of the pass. The caller side is pinned in
+        // tests/services/votingOrchestrator.test.js.
+        const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }] });
+        const result = await submitNewEntryForAction(challenge, 'tok', {
+            settings: makeSettings(),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1')]),
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+        expect(result).toEqual({ ok: true, imageId: 'p1', reason: 'submitted' });
+        // Entries untouched: still only the pre-existing entry.
+        expect(challenge.member.ranking.entries).toEqual([{ id: 'e1' }]);
+        // The caller's single reflect is what consumes the slot — exactly once.
+        reflectNewEntry(challenge, result.imageId);
+        expect(challenge.member.ranking.entries.filter((e) => e.id === 'p1')).toHaveLength(1);
+        expect(getSlotsRemaining(challenge)).toBe(2);
     });
 
     test('maybeEmergencyFillChallenge reflects every submitted entry', async () => {

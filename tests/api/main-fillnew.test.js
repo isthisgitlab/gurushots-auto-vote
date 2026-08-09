@@ -70,20 +70,21 @@ const votingLogic = require('../../src/js/services/VotingLogic');
 const autoFill = require('../../src/js/services/autoFill');
 const settings = require('../../src/js/settings');
 const { fetchChallengesAndVote } = require('../../src/js/api/main');
+const { buildChallenge } = require('../helpers/challengeFixtures');
 
 const NOW = () => Math.floor(Date.now() / 1000);
 const TOKEN = 'tok';
 
-const makeChallenge = ({ boostState = 'LOCKED', boostTimeout = 0, entries = [{ id: 'existing-1' }] } = {}) => ({
-    id: '12345',
-    title: 'Fill New Challenge',
-    close_time: NOW() + 600,
-    member: {
-        boost: { state: boostState, timeout: boostTimeout },
-        turbo: { state: 'NONE' },
-        ranking: { entries },
-    },
-});
+const makeChallenge = ({ boostState = 'LOCKED', boostTimeout = 0, entries = [{ id: 'existing-1' }] } = {}) =>
+    buildChallenge({
+        id: '12345',
+        title: 'Fill New Challenge',
+        close_time: NOW() + 600,
+        member: {
+            boost: { state: boostState, timeout: boostTimeout },
+            ranking: { entries },
+        },
+    });
 
 beforeEach(() => {
     jest.clearAllMocks();

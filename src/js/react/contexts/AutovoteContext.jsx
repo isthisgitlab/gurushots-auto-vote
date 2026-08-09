@@ -1,9 +1,9 @@
-import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
-import { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS } from '../../scheduling/randomDelay';
+import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
+import { createCadenceChain, DECISION_ERROR_MESSAGE } from '../../scheduling/cadenceChain';
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
-import { computeNextCycleDelayMs } from './autovoteScheduler';
+import { resolveThreshold, resolveScheduledFill } from './autovoteScheduler';
 
 const AutovoteContext = createContext(null);
 
@@ -22,12 +22,13 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     const cycleTimerRef = useRef(null);
 
     // Keep runningRef in sync with state. Publishing through a window
-    // CustomEvent lets ChallengesProvider's sibling tree react without
-    // a 1-Hz polling timer. dispatchEvent + CustomEvent exist in every
-    // target (Electron Chromium, Capacitor WebView, happy-dom test env).
+    // CustomEvent lets the ancestor tree (AppWithChallenges, which feeds
+    // ChallengesProvider's autovoteRunning prop) react without a 1-Hz
+    // polling timer or a window.* global. dispatchEvent + CustomEvent
+    // exist in every target (Electron Chromium, Capacitor WebView,
+    // happy-dom test env).
     useEffect(() => {
         runningRef.current = state.running;
-        window.autovoteRunning = state.running;
         window.dispatchEvent(new CustomEvent('autovote:running-changed', { detail: state.running }));
     }, [state.running]);
 
@@ -98,88 +99,47 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     }, [onChallengesRefresh]);
 
     /**
-     * Decide the delay until the next cycle and arm the single timer. Each cycle
-     * picks its own cadence: fixed fast cadence while a challenge is in-window,
-     * the rolled random delay capped to the soonest upcoming threshold entry
-     * otherwise. `prefetched` reuses a just-completed cycle's challenge list; a
-     * non-array (standalone re-arm or a cycle that surfaced no list) fetches
-     * fresh. In normal mode the wait is anchored to the previous cycle start so
-     * the gap between starts ≈ the delay; in approaching/last-minute mode it runs
-     * from cycle completion so the boundary is never undershot.
+     * The shared cadence chain (decide delay → arm the single timer → run cycle
+     * → re-arm) from src/js/scheduling/cadenceChain.js — the same loop the
+     * CLI/Android scheduler drives. This provider only supplies the WebView
+     * transport: settings + challenges over IPC, the per-challenge IPC
+     * resolvers, the timer slot (cycleTimerRef, whose identity doubles as the
+     * staleness guard for start()/rearmSchedule() takeovers), and best-effort
+     * IPC logging. Re-created when runVotingCycle changes identity, exactly
+     * like the previous useCallback-based scheduleNext.
      */
-    const scheduleNext = useCallback(
-        async (prefetched = null, previousCycleStartMs = null) => {
-            if (!runningRef.current) {
-                cycleTimerRef.current = null;
-                return;
-            }
-
-            let waitMs;
-            try {
-                const settings = await window.api.getSettings();
-                const normalDelayMs = getRandomCheckFrequencyMs(settings);
-                const challenges = Array.isArray(prefetched)
-                    ? prefetched
-                    : (await window.api.getActiveChallenges(settings.token))?.challenges || [];
-                const now = Math.floor(Date.now() / 1000);
-                const lastMinuteCheckMinutes =
-                    Number(await window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
-
-                const decision = await computeNextCycleDelayMs(challenges, now, {
-                    normalDelayMs,
-                    lastMinuteCheckMinutes,
-                    minGapMs: MIN_CYCLE_GAP_MS,
-                    timezone: settings.timezone || 'Europe/Riga',
-                });
-
-                if (decision.mode === 'normal') {
-                    waitMs = anchoredWaitMs(decision.delayMs, previousCycleStartMs);
-                } else {
-                    waitMs = decision.delayMs;
+    const cadenceChain = useMemo(
+        () =>
+            createCadenceChain({
+                isRunning: () => runningRef.current,
+                getTimer: () => cycleTimerRef.current,
+                setTimer: (handle) => {
+                    cycleTimerRef.current = handle;
+                },
+                loadSettings: () => window.api.getSettings(),
+                fetchChallenges: (settings) => window.api.getActiveChallenges(settings.token),
+                resolveLastMinuteCheckMinutes: () =>
+                    window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
+                resolveThreshold,
+                resolveScheduledFill,
+                runCycle: () => runVotingCycle(),
+                log: {
                     // Best-effort parity log (optional-chained so a host without
-                    // logDebug, e.g. a minimal Capacitor bridge, can't abort scheduling).
-                    await window.api.logDebug?.(
-                        decision.mode === 'last-minute'
-                            ? `⏰ Last-minute cadence — next cycle in ${Math.round(waitMs / 1000)}s`
-                            : decision.mode === 'scheduled'
-                              ? `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s`
-                              : `⏰ Approaching last-minute window for "${decision.nextEntry?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s`,
-                    );
-                }
-            } catch (err) {
-                await window.api.logWarning(
-                    `Error computing next cycle delay; using normal cadence: ${err.message || err}`,
-                );
-                try {
-                    waitMs = getRandomCheckFrequencyMs(await window.api.getSettings());
-                } catch {
-                    waitMs = getRandomCheckFrequencyMs({});
-                }
-            }
-
-            if (!runningRef.current) {
-                cycleTimerRef.current = null;
-                return;
-            }
-
-            const timeoutId = setTimeout(async () => {
-                // A newer chain may have taken over (e.g. start() re-armed); only
-                // the timer that is still current may run + reschedule.
-                if (!runningRef.current || cycleTimerRef.current !== timeoutId) return;
-                const cycleStartMs = Date.now();
-                let cycleChallenges;
-                try {
-                    cycleChallenges = await runVotingCycle();
-                } finally {
-                    if (cycleTimerRef.current === timeoutId) {
-                        await scheduleNext(cycleChallenges, cycleStartMs);
-                    }
-                }
-            }, waitMs);
-            cycleTimerRef.current = timeoutId;
-        },
+                    // logDebug, e.g. a minimal Capacitor bridge, can't abort
+                    // scheduling). Normal-mode lines stay CLI-only — no IPC spam
+                    // for the common case.
+                    cadence: (mode, message) => (mode === 'normal' ? undefined : window.api.logDebug?.(message)),
+                    decisionError: (err) => window.api.logWarning(`${DECISION_ERROR_MESSAGE}: ${err.message || err}`),
+                    // runVotingCycle catches internally and resolves false, so a
+                    // rejection here is a can't-happen TODAY — but that is an
+                    // invariant of a different module. Log best-effort instead
+                    // of swallowing so a future regression can't fail silently.
+                    cycleError: (err) => window.api.logWarning?.(`Voting cycle failed: ${err?.message || err}`),
+                },
+            }),
         [runVotingCycle],
     );
+    const scheduleNext = cadenceChain.scheduleNext;
 
     /**
      * Re-arm the cadence timer after a settings change while running. The

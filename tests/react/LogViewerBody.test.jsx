@@ -3,7 +3,7 @@
  * the terminal-style log list extracted from the Logs page and LogsModal.
  */
 
-import { render, screen } from '@/test/test-utils';
+import { render, screen } from './helpers/test-utils';
 import { LogViewerBody } from '@/components/logs/LogViewerBody';
 
 const entry = (message, over = {}) => ({

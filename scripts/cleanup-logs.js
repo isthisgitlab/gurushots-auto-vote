@@ -2,16 +2,12 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
+// The shared resolver — this script previously hand-rolled the userData
+// path a third way (and always targeted the non-dev dir even when run
+// from source, where the logs actually live under the -dev dir).
+const runtime = require('../src/js/runtime');
 
-const appName = 'gurushots-auto-vote';
-const userData =
-    {
-        darwin: path.join(os.homedir(), 'Library', 'Application Support', appName),
-        win32: path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), appName),
-    }[process.platform] ?? path.join(os.homedir(), '.config', appName);
-
-const logsDir = path.join(userData, 'logs');
+const logsDir = path.join(runtime.getAppUserDataPath(), 'logs');
 if (!fs.existsSync(logsDir)) {
     console.log(`No logs directory at ${logsDir}`);
     process.exit(0);

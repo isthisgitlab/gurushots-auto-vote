@@ -9,7 +9,7 @@
  *   - clicking a chip scrolls the matching challenge-<id> element into view
  */
 
-import { render, screen, fireEvent } from '@/test/test-utils';
+import { render, screen, fireEvent } from './helpers/test-utils';
 import { BoostWindowBanner } from '@/components/app/BoostWindowBanner';
 
 const now = () => Math.floor(Date.now() / 1000);

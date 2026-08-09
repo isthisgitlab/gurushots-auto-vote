@@ -7,7 +7,10 @@ const ChallengesContext = createContext(null);
  * Provider that wraps useActiveChallenges and provides challenge data with auto-refresh
  */
 export function ChallengesProvider({ children, autovoteRunning }) {
-    const { data, loading, error, refetch } = useActiveChallenges();
+    // The running flag is threaded into the hook so its cleanup pass can
+    // skip stale-settings cleanup while autovote runs — prop wiring, not
+    // the old window.autovoteRunning side-channel.
+    const { data, loading, error, refetch } = useActiveChallenges(autovoteRunning);
     const autoRefreshRef = useRef(null);
 
     // Start auto-refresh when autovote is not running (every 60 seconds)

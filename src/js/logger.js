@@ -18,91 +18,15 @@ const colors = {
     gray: '\x1b[90m',
 };
 
-// Try to get Electron app (same logic as settings.js)
-let electronApp;
-try {
-    electronApp = require('electron').app;
-} catch {
-    // Electron not available (CLI context)
-}
-
 // Check if we're actually running in an Electron app context
 // process.type will be 'renderer' or 'main' in Electron apps
 const isElectronApp = process.type === 'renderer' || process.type === 'main';
 
-/**
- * Detect if we're running from source code vs built app
- * @returns {boolean} - True if running from source, false if built
- */
-const isSourceCode = () => {
-    // If we're in Electron and it's packaged, we're definitely built
-    if (electronApp && electronApp.isPackaged) {
-        return false;
-    }
-
-    // For CLI: check if we're running inside a Node Single Executable App
-    try {
-        if (require('node:sea').isSea()) {
-            return false;
-        }
-    } catch {
-        // node:sea unavailable — fall through to other detection
-    }
-
-    // Check if __dirname contains .asar (Electron packaged but somehow not detected)
-    if (__dirname.includes('.asar')) {
-        return false;
-    }
-
-    // If none of the above, assume we're running from source
-    return true;
-};
-
-/**
- * Get the app name with environment suffix if needed
- * @returns {string} - App name with -dev suffix for source code
- */
-const getAppName = () => {
-    const baseAppName = 'gurushots-auto-vote';
-    return isSourceCode() ? `${baseAppName}-dev` : baseAppName;
-};
-
-// Get the same userData path that settings use
-const getUserDataPath = () => {
-    let userDataPath;
-
-    if (electronApp && electronApp.getPath) {
-        // Electron context - use app.getPath('userData')
-        // For source code, we need to modify the path to include -dev suffix
-        userDataPath = electronApp.getPath('userData');
-        if (isSourceCode()) {
-            // Running from source code - append -dev to the base userData path
-            userDataPath = userDataPath + '-dev';
-        }
-    } else {
-        // CLI context - create fallback userData path (same as settings.js)
-        userDataPath = runtime.getUserDataDir(getAppName());
-
-        // Ensure the directory exists
-        if (!fs.existsSync(userDataPath)) {
-            try {
-                fs.mkdirSync(userDataPath, { recursive: true });
-            } catch (mkdirError) {
-                // logger module isn't ready here (we're inside its bootstrap),
-                // so console.warn is the only safe channel.
-                console.warn(
-                    `[logger] failed to create userData dir ${userDataPath} (${mkdirError.code || mkdirError.message}); falling back to cwd/userData`,
-                );
-                userDataPath = path.join(process.cwd(), 'userData');
-                if (!fs.existsSync(userDataPath)) {
-                    fs.mkdirSync(userDataPath, { recursive: true });
-                }
-            }
-        }
-    }
-
-    return userDataPath;
-};
+// Runtime owns the single implementation of source-detection, app naming,
+// and user-data resolution — logger re-exports isSourceCode/getAppName for
+// compatibility (settings.js and tests consume them through this module).
+const { isSourceCode, getAppName } = runtime;
+const getUserDataPath = runtime.getAppUserDataPath;
 
 // Create logs directory in the same location as settings.
 // Wrapped in try/catch so the Capacitor WebView (no fs) can load the
@@ -350,6 +274,16 @@ const sanitizeForLog = (value, depth = 0, seen = new WeakSet()) => {
     }
     return out;
 };
+
+// Bounds an untrusted string before it is interpolated into a log line:
+// CR/LF/tab collapse to spaces (a newline would otherwise forge a synthetic
+// log line in the plain-text file) and the result is truncated. Shared by the
+// IPC shell (actions.handlers) and the core services (challengeTitlePin) so
+// both sides sanitize identically.
+const sanitizeLogString = (value, maxLength = 200) =>
+    String(value ?? '')
+        .replace(/[\r\n\t]/g, ' ')
+        .slice(0, maxLength);
 
 // Message-level counterpart to sanitizeForLog. sanitizeForLog only sees the
 // structured `data` object; it never touches the free-form message string.
@@ -649,6 +583,10 @@ module.exports = {
     // Test seam: redacts sensitive keys before disk write. Exported so the
     // contract is unit-testable; production callers don't need to call it.
     sanitizeForLog,
+
+    // Bounds an untrusted string (CR/LF/tab-stripped + truncated) before it
+    // reaches a log line. Shared by IPC handlers and core services.
+    sanitizeLogString,
 
     // Test seam: redacts credentials folded into a message string. Applied
     // automatically by writeLog; exported so the contract is unit-testable.

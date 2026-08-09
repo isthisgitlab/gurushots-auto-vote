@@ -10,15 +10,16 @@
  * a separate node-cron switch) whose independent boundary timer could race a
  * mid-run per-challenge threshold change and overshoot the boundary.
  *
- * The factory takes platform-agnostic dependencies; the host owns
- * signal/lifecycle (SIGINT on CLI, Service.onDestroy on Android) and
- * keeps the process alive.
+ * The loop itself (decide → arm → cycle → re-arm) is the shared
+ * `createCadenceChain` from ./cadenceChain — the same chain the GUI's
+ * AutovoteContext drives — so this module only supplies the Node transport:
+ * synchronous settings reads, the direct challenge fetcher, the logger, and
+ * the host lifecycle (SIGINT on CLI, Service.onDestroy on Android).
  */
 
 const logger = require('../logger');
 const settings = require('../settings');
-const { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS } = require('./randomDelay');
-const { computeNextCycleDelayMs } = require('./thresholdWindow');
+const { createCadenceChain, DECISION_ERROR_MESSAGE } = require('./cadenceChain');
 const { resolveThreshold, resolveScheduledFill } = require('./nodeResolvers');
 
 /**
@@ -34,98 +35,35 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
     let isRunning = false;
     let timer = null;
 
-    // Decide how long to wait before the next cycle and arm the single timer.
-    //
-    // `prefetched` lets a just-completed cycle hand over the active list it
-    // already fetched, so we skip a redundant getActiveChallenges request. A
-    // non-array (null/undefined, or a cycle that failed before fetching) falls
-    // back to a fresh fetch. In normal mode the wait is anchored to the *start*
-    // of the previous cycle so the gap between cycle starts ≈ the rolled delay
-    // regardless of how long the cycle took; in approaching/last-minute mode the
-    // wait runs from cycle completion so the boundary is never undershot.
-    const scheduleNext = async (prefetched = null, previousCycleStartMs = null) => {
-        if (!isRunning) {
-            timer = null;
-            return;
-        }
-
-        let waitMs;
-        try {
-            const fresh = settings.loadSettings();
-            const normalDelayMs = getRandomCheckFrequencyMs(fresh);
-            const challenges = Array.isArray(prefetched) ? prefetched : (await getActiveChallenges())?.challenges || [];
-            const now = Math.floor(Date.now() / 1000);
-            const lastMinuteCheckMinutes =
-                Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
-
-            const decision = await computeNextCycleDelayMs(challenges, now, {
-                resolveThreshold,
-                normalDelayMs,
-                lastMinuteCheckMinutes,
-                minGapMs: MIN_CYCLE_GAP_MS,
-                resolveScheduledFill,
-                timezone: fresh.timezone || 'Europe/Riga',
-            });
-
-            if (decision.mode === 'normal') {
-                waitMs = anchoredWaitMs(decision.delayMs, previousCycleStartMs);
-                logger
-                    .withCategory('voting')
-                    .info(
-                        `Next cycle in ${(waitMs / 60_000).toFixed(2)} min (target ${(decision.delayMs / 60_000).toFixed(2)} min between starts, range ${fresh.checkFrequencyMin}-${fresh.checkFrequencyMax})`,
-                    );
-            } else {
-                waitMs = decision.delayMs;
-                if (decision.mode === 'last-minute') {
-                    logger
-                        .withCategory('voting')
-                        .info(`⏰ Last-minute cadence — next cycle in ${(waitMs / 60_000).toFixed(2)} min`);
-                } else if (decision.mode === 'scheduled') {
-                    logger
-                        .withCategory('voting')
-                        .info(
-                            `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" (${decision.nextScheduled?.form}) — next cycle in ${Math.round(waitMs / 1000)}s`,
-                        );
-                } else {
-                    logger
-                        .withCategory('voting')
-                        .info(
-                            `⏰ Approaching last-minute window for "${decision.nextEntry?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextEntry?.lastMinuteThreshold}m boundary)`,
-                        );
-                }
-            }
-        } catch (error) {
-            // An error deciding the delay must never kill the loop — fall back to
-            // a plain random cadence; the next cycle re-reads on success.
-            logger.withCategory('voting').warning('Error computing next cycle delay; using normal cadence');
-            logger.withCategory('voting').debug('scheduleNext error details:', error);
-            waitMs = getRandomCheckFrequencyMs(settings.loadSettings());
-        }
-
-        if (!isRunning) {
-            timer = null;
-            return;
-        }
-
-        timer = setTimeout(() => {
-            void (async () => {
-                if (!isRunning) {
-                    timer = null;
-                    return;
-                }
-                const cycleStartMs = Date.now();
-                let cycleResult;
-                try {
-                    cycleResult = await runVotingCycle(++cycleCount);
-                } catch (error) {
-                    logger.withCategory('voting').error('Error in scheduled voting cycle');
-                    logger.withCategory('voting').debug('Full voting cycle error details:', error);
-                } finally {
-                    await scheduleNext(cycleResult?.challenges, cycleStartMs);
-                }
-            })();
-        }, waitMs);
-    };
+    const chain = createCadenceChain({
+        isRunning: () => isRunning,
+        getTimer: () => timer,
+        setTimer: (handle) => {
+            timer = handle;
+        },
+        loadSettings: () => settings.loadSettings(),
+        fetchChallenges: () => getActiveChallenges(),
+        resolveLastMinuteCheckMinutes: () => settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
+        resolveThreshold,
+        resolveScheduledFill,
+        // The chain hands the resolved value straight back to the next
+        // decision as the prefetched-list candidate, so unwrap `challenges`
+        // here; a cycle failure/legacy boolean yields a non-array → fresh fetch.
+        runCycle: async () => (await runVotingCycle(++cycleCount))?.challenges,
+        log: {
+            cadence: (mode, message) => {
+                logger.withCategory('voting').info(message);
+            },
+            decisionError: (error) => {
+                logger.withCategory('voting').warning(DECISION_ERROR_MESSAGE);
+                logger.withCategory('voting').debug('scheduleNext error details:', error);
+            },
+            cycleError: (error) => {
+                logger.withCategory('voting').error('Error in scheduled voting cycle');
+                logger.withCategory('voting').debug('Full voting cycle error details:', error);
+            },
+        },
+    });
 
     const start = async () => {
         if (isRunning) return;
@@ -141,7 +79,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 `Continuous voting started with check frequency range ${settings.getSetting('checkFrequencyMin')}-${settings.getSetting('checkFrequencyMax')} min`,
             );
 
-        await scheduleNext(initialCycle?.challenges, initialCycleStartMs);
+        await chain.scheduleNext(initialCycle?.challenges, initialCycleStartMs);
     };
 
     const stop = () => {

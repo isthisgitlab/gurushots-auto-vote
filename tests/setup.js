@@ -18,8 +18,11 @@ jest.mock('fs', () => ({
     mkdirSync: jest.fn(),
 }));
 
-// Mock path operations
+// Mock path operations. Spread the real module first so less-common
+// methods (basename, extname, sep, …) keep working — a partial mock here
+// silently returns undefined for anything it omits.
 jest.mock('path', () => ({
+    ...jest.requireActual('path'),
     join: jest.fn((...args) => args.join('/')),
     dirname: jest.fn(),
     resolve: jest.fn(),
@@ -53,6 +56,13 @@ jest.mock('../src/js/logger.js', () => ({
             : `[Challenge ${c ?? 'unknown'}: ${t ?? 'unknown'}]`,
     ),
     getRecentLogs: jest.fn(() => []),
+    // Faithful implementation — production code interpolates its return value
+    // into log/messages, so a bare jest.fn() would break those call sites.
+    sanitizeLogString: jest.fn((value, maxLength = 200) =>
+        String(value ?? '')
+            .replace(/[\r\n\t]/g, ' ')
+            .slice(0, maxLength),
+    ),
     CATEGORIES: {
         SETTINGS: 'settings',
         AUTHENTICATION: 'authentication',

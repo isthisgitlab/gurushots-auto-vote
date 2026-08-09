@@ -24,6 +24,7 @@ const settings = require('../../src/js/settings');
 const { applyBoost } = require('../../src/js/api/boost');
 const { resolveEntryIndex, pickEntryAvoidingConflict } = require('../../src/js/services/VotingLogic');
 const apiClient = require('../../src/js/api/api-client');
+const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');
 
 jest.mock('../../src/js/settings', () => ({
     getEffectiveSetting: jest.fn(),
@@ -56,11 +57,7 @@ const setBoostIndex = (value) => {
     settings.getEffectiveSetting.mockImplementation((key) => (key === 'boostImageIndex' ? value : undefined));
 };
 
-const buildChallenge = (entries) => ({
-    id: 'c1',
-    title: 'Test',
-    member: { ranking: { entries } },
-});
+const buildChallenge = (entries) => buildBaseChallenge({ title: 'Test', member: { ranking: { entries } } });
 
 const lastBoostedImageId = () => {
     const lastCall = apiClient.makePostRequest.mock.calls.at(-1);

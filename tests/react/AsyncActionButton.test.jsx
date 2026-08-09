@@ -4,7 +4,7 @@
  * RunButton, and the Vote All / Run buttons.
  */
 
-import { render, fireEvent, waitFor, screen } from '@/test/test-utils';
+import { render, fireEvent, waitFor, screen } from './helpers/test-utils';
 import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
 
 const renderButton = (over = {}) => {

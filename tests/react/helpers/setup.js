@@ -3,7 +3,7 @@
  * Mocks browser globals and window.api
  */
 
-const { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } = require('../../ipc/manifest');
+const { invokeChannels, aliases, sendMethods, eventMethods, kebabToCamel } = require('../../../src/js/ipc/manifest');
 
 // Mock window.api for IPC calls. The base surface is GENERATED from the
 // shared channel manifest so every method preload/capacitor would expose

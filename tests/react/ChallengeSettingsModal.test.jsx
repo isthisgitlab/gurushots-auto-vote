@@ -7,9 +7,9 @@
  * challenge B's title with challenge A's loaded overrides, and rapid
  * open/close cycles can blank the page.
  */
-import { act, fireEvent, render, screen, waitFor } from '@/test/test-utils';
+import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
-import { mockApi } from '../../src/js/react/test/setup';
+import { mockApi } from './helpers/setup';
 
 // Belt-and-suspenders: the global setup wires window.api, but the
 // test-env globals occasionally lose it between test files. Pin it

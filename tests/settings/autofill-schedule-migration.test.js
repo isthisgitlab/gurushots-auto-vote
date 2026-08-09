@@ -15,13 +15,7 @@
 
 const { validateSetting } = require('../../src/js/settings/schema');
 
-const buildFixture = (overrides = {}) => ({
-    challengeSettings: {
-        globalDefaults: {},
-        perChallenge: {},
-        ...overrides,
-    },
-});
+const { buildSettingsFixture: buildFixture } = require('../helpers/challengeFixtures');
 
 // Expected conversion for M=15 — deliberately NOT the schema default (M=10),
 // so a regression that substitutes the default for the user's value fails here.

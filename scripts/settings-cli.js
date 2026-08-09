@@ -1,8 +1,16 @@
 #!/usr/bin/env node
 
 const settings = require('../src/js/settings');
-const { parseSettingValue } = require('../src/js/cli/parseValue');
-const { dumpSchema, listGlobalDefaults } = require('../src/js/cli/commands/settings');
+const logger = require('../src/js/logger');
+const {
+    dumpSchema,
+    listGlobalDefaults,
+    setSetting,
+    setGlobalDefault,
+    resetSetting,
+    resetGlobalDefault,
+    resetAllSettings,
+} = require('../src/js/cli/commands/settings');
 const { spawn } = require('node:child_process');
 
 /**
@@ -12,6 +20,14 @@ const { spawn } = require('node:child_process');
  *   pnpm settings:get [key]     - Get setting value (or all if no key provided)
  *   pnpm settings:set key value - Set setting value
  *
+ * Sensitive keys (token etc.) print as [REDACTED]; pass --reveal to `get`
+ * to print the raw value.
+ *
+ * Output note (deliberate): `get` prints plain console lines (pipeable,
+ * no timestamps — it is the read/inspect path), while the mutating
+ * commands delegate to src/js/cli/commands/settings.js and emit through
+ * the shared logger (timestamped, colored) exactly like the main CLI.
+ *
  * Examples:
  *   pnpm settings:get            # Get all settings
  *   pnpm settings:get theme      # Get theme setting
@@ -19,9 +35,18 @@ const { spawn } = require('node:child_process');
  *   pnpm settings:set challengeSettings.globalDefaults.boostTime 7200
  */
 
-const command = process.argv[2];
-const key = process.argv[3];
-const value = process.argv[4];
+// --reveal opts `get` out of sensitive-key redaction (the legitimate
+// read-my-own-token workflow). Strip it before positional parsing so it
+// can appear anywhere in the arg list.
+const cliArgs = process.argv.slice(2).filter((arg) => arg !== '--reveal');
+const reveal = process.argv.includes('--reveal');
+
+const command = cliArgs[0];
+const key = cliArgs[1];
+const value = cliArgs[2];
+
+// Settings whose change only takes effect after a GUI reload.
+const UI_SETTINGS = ['theme', 'language', 'timezone'];
 
 // Helper function to get nested property value
 function getNestedProperty(obj, path) {
@@ -63,20 +88,23 @@ function formatValue(value, indent = 0) {
 // Function to check if Electron GUI is running
 function isElectronRunning() {
     return new Promise((resolve) => {
-        const process = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], { stdio: 'pipe' });
+        // Named `child`, NOT `process` — shadowing the global here would make
+        // any future `process.*` reference in this function silently hit the
+        // child process instead.
+        const child = spawn('pgrep', ['-f', 'electron.*gurushots-auto-vote'], { stdio: 'pipe' });
 
         // Add timeout to prevent hanging
         const timeout = setTimeout(() => {
-            process.kill();
+            child.kill();
             resolve(false);
         }, 2000); // 2 second timeout
 
-        process.on('close', (code) => {
+        child.on('close', (code) => {
             clearTimeout(timeout);
             resolve(code === 0);
         });
 
-        process.on('error', () => {
+        child.on('error', () => {
             clearTimeout(timeout);
             resolve(false);
         });
@@ -101,10 +129,20 @@ async function main() {
             case 'get': {
                 const allSettings = settings.loadSettings();
 
+                // Redact sensitive keys (token etc.) unless --reveal was
+                // passed — sanitizeForLog deep-masks by key name, so nested
+                // sensitive values inside objects are covered too.
+                const forDisplay = (val, keyName = null) => {
+                    if (reveal) return val;
+                    const wrapped = keyName === null ? val : { [keyName]: val };
+                    const masked = logger.sanitizeForLog(wrapped);
+                    return keyName === null ? masked : masked[keyName];
+                };
+
                 if (!key) {
                     // Show all settings
                     console.log('All Settings:');
-                    console.log(formatValue(allSettings));
+                    console.log(formatValue(forDisplay(allSettings)));
                 } else {
                     // Show specific setting
                     const value = getNestedProperty(allSettings, key);
@@ -112,7 +150,8 @@ async function main() {
                         console.error(`Setting '${key}' not found`);
                         process.exit(1);
                     } else {
-                        console.log(`${key}: ${formatValue(value)}`);
+                        const leafKey = key.split('.').pop();
+                        console.log(`${key}: ${formatValue(forDisplay(value, leafKey))}`);
                     }
                 }
                 break;
@@ -125,30 +164,14 @@ async function main() {
                     process.exit(1);
                 }
 
-                const parsedValue = parseSettingValue(value);
-
-                // Handle nested keys for schema-based global defaults
+                // Delegate to the shared CLI command module — this script owns
+                // only argv semantics, GUI-reload notice, and exit codes.
                 if (key.startsWith('challengeSettings.globalDefaults.')) {
                     const settingKey = key.replace('challengeSettings.globalDefaults.', '');
-                    const schema = settings.SETTINGS_SCHEMA;
-
-                    if (schema[settingKey]) {
-                        // Use schema-based validation for global defaults
-                        const success = settings.setGlobalDefault(settingKey, parsedValue);
-                        if (success) {
-                            const actualValue = settings.getGlobalDefault(settingKey);
-                            console.log(`✅ Set global default ${settingKey} = ${formatValue(actualValue)}`);
-                            await informAboutGuiReload();
-                        } else {
-                            console.error(`❌ Failed to set global default '${settingKey}' - validation failed`);
-                            console.error(`   Value ${formatValue(parsedValue)} is invalid for this setting`);
-                            process.exit(1);
-                        }
-                    } else {
-                        console.error(`❌ Unknown schema setting '${settingKey}'`);
-                        console.error('   Run "pnpm settings:schema" to see available settings');
+                    if (!setGlobalDefault(settingKey, value)) {
                         process.exit(1);
                     }
+                    await informAboutGuiReload();
                 } else if (key.includes('.')) {
                     // Arbitrary nested writes used to poke raw JSON into the
                     // settings blob, bypassing schema validation entirely —
@@ -160,19 +183,11 @@ async function main() {
                     console.error('     pnpm settings:set-global <schemaKey> <value>');
                     process.exit(1);
                 } else {
-                    // Handle top-level settings
-                    const success = settings.setSetting(key, parsedValue);
-                    if (success) {
-                        console.log(`✅ Set ${key} = ${formatValue(parsedValue)}`);
-
-                        // Inform about GUI reload for certain settings
-                        const uiSettings = ['theme', 'language', 'timezone'];
-                        if (uiSettings.includes(key)) {
-                            await informAboutGuiReload();
-                        }
-                    } else {
-                        console.error(`❌ Failed to save setting '${key}' - validation failed`);
+                    if (!setSetting(key, value)) {
                         process.exit(1);
+                    }
+                    if (UI_SETTINGS.includes(key)) {
+                        await informAboutGuiReload();
                     }
                 }
                 break;
@@ -197,19 +212,11 @@ async function main() {
                     process.exit(1);
                 }
 
-                const success = settings.resetSetting(key);
-                if (success) {
-                    const defaultSettings = settings.getDefaultSettings();
-                    console.log(`✅ Reset ${key} to default value: ${formatValue(defaultSettings[key])}`);
-
-                    // Check if GUI is running and inform about reload
-                    const uiSettings = ['theme', 'language', 'timezone'];
-                    if (uiSettings.includes(key)) {
-                        await informAboutGuiReload();
-                    }
-                } else {
-                    console.error(`❌ Failed to reset setting '${key}'`);
+                if (!resetSetting(key)) {
                     process.exit(1);
+                }
+                if (UI_SETTINGS.includes(key)) {
+                    await informAboutGuiReload();
                 }
                 break;
             }
@@ -221,16 +228,10 @@ async function main() {
                     process.exit(1);
                 }
 
-                const success = settings.resetGlobalDefault(key);
-                if (success) {
-                    const schema = settings.SETTINGS_SCHEMA;
-                    const defaultValue = schema[key]?.default;
-                    console.log(`✅ Reset global default ${key} to: ${formatValue(defaultValue)}`);
-                    await informAboutGuiReload();
-                } else {
-                    console.error(`❌ Failed to reset global default '${key}'`);
+                if (!resetGlobalDefault(key)) {
                     process.exit(1);
                 }
+                await informAboutGuiReload();
                 break;
             }
 
@@ -242,32 +243,10 @@ async function main() {
                     process.exit(1);
                 }
 
-                const parsedValue = parseSettingValue(value);
-
-                const schema = settings.SETTINGS_SCHEMA;
-                if (!schema[key]) {
-                    console.error(`❌ Unknown schema setting '${key}'`);
-                    console.error('   Run "pnpm settings:schema" to see available settings');
+                if (!setGlobalDefault(key, value)) {
                     process.exit(1);
                 }
-
-                // Use schema-based validation for global defaults
-                const success = settings.setGlobalDefault(key, parsedValue);
-                if (success) {
-                    const actualValue = settings.getGlobalDefault(key);
-                    console.log(`✅ Set global default ${key} = ${formatValue(actualValue)}`);
-                    await informAboutGuiReload();
-                } else {
-                    console.error(`❌ Failed to set global default '${key}' - validation failed`);
-                    console.error(`   Value ${formatValue(parsedValue)} is invalid for this setting`);
-
-                    // Show validation constraints
-                    const config = schema[key];
-                    if (config.validation) {
-                        console.error(`   Constraints: ${config.type} type, valid range varies by setting`);
-                    }
-                    process.exit(1);
-                }
+                await informAboutGuiReload();
                 break;
             }
 
@@ -278,21 +257,20 @@ async function main() {
                 console.log(confirmMessage);
 
                 // In a real CLI, we'd use readline, but for pnpm scripts this is a simple confirmation
-                if (process.argv[3] !== 'yes') {
+                if (key !== 'yes') {
                     console.log('Reset cancelled. To confirm, run: pnpm settings:reset-all yes');
                     process.exit(0);
                 }
 
-                const uiSuccess = settings.resetAllSettings();
-                const globalSuccess = settings.resetAllGlobalDefaults();
-
-                if (uiSuccess && globalSuccess) {
-                    console.log('✅ Successfully reset all settings to defaults');
-                    await informAboutGuiReload();
-                } else {
-                    console.error('❌ Failed to reset some settings');
+                // The facade's resetAllSettings already restores the schema
+                // global defaults too (it rebuilds from getDefaultSettings and
+                // preserves token/mock/apiHeaders) — the extra
+                // resetAllGlobalDefaults call this script used to make was
+                // redundant.
+                if (!resetAllSettings()) {
                     process.exit(1);
                 }
+                await informAboutGuiReload();
                 break;
             }
 
@@ -302,7 +280,9 @@ async function main() {
                 console.log('================');
                 console.log('');
                 console.log('Available commands:');
-                console.log('  pnpm settings:get [key]             - Get setting value (all if no key)');
+                console.log('  pnpm settings:get [key] [--reveal]  - Get setting value (all if no key)');
+                console.log('                                        Sensitive keys (token etc.) print as');
+                console.log('                                        [REDACTED] unless --reveal is passed');
                 console.log('  pnpm settings:set <key> <value>     - Set setting value');
                 console.log('  pnpm settings:set-global <key> <val> - Set global default (with validation)');
                 console.log('  pnpm settings:reset <key>           - Reset setting to default value');

@@ -2,10 +2,12 @@
  * Unit tests for the CLI parity commands: the one-shot actions
  * (boost / turbo / fill), single-challenge manual vote, logout, and
  * check-updates. These commands are thin wrappers that reuse the GUI's
- * code paths — the boost picker in api/boost and the IPC handlers — so the
- * tests assert the wiring: auth guard, challenge resolution, correct
- * dispatch + args, and success/error reporting. The handlers, api/boost,
- * the middleware, the update checker, and the logger are all mocked.
+ * code paths — the middleware's applyBoost (which honors the mock/real
+ * API swap) and the IPC handlers — so the tests assert the wiring: auth
+ * guard, challenge resolution, correct dispatch + args, and success/error
+ * reporting. The handlers, the middleware, the update checker, and the
+ * logger are all mocked; api/boost is mocked purely to prove the CLI
+ * never bypasses the factory to reach the real API surface.
  */
 
 jest.mock('../../src/js/logger.js', () => {
@@ -34,15 +36,20 @@ jest.mock('../../src/js/settings.js', () => ({
 jest.mock('../../src/js/apiFactory', () => {
     const getActiveChallenges = jest.fn();
     const isAuthenticated = jest.fn(() => true);
+    const applyBoost = jest.fn();
     return {
         __getActiveChallenges: getActiveChallenges,
         __isAuthenticated: isAuthenticated,
-        getMiddleware: jest.fn(() => ({ isAuthenticated, getActiveChallenges })),
+        __applyBoost: applyBoost,
+        getMiddleware: jest.fn(() => ({ isAuthenticated, getActiveChallenges, applyBoost })),
         getApiStrategy: jest.fn(),
         refreshApi: jest.fn(),
     };
 });
 
+// Mocked ONLY to prove the CLI never reaches the real API module directly —
+// in mock mode a direct import would fire a real boost request (the bug this
+// guards against). Every boost must flow through the middleware above.
 jest.mock('../../src/js/api/boost', () => ({ applyBoost: jest.fn() }));
 
 jest.mock('../../src/js/ipc/actions.handlers', () => {
@@ -92,14 +99,24 @@ beforeEach(() => {
 });
 
 describe('CLI boost command', () => {
-    test('no --image: reuses api/boost.applyBoost (resolves boostImageIndex) and reports success', async () => {
-        boostApi.applyBoost.mockResolvedValue({ ok: true });
+    test('no --image: routes through the middleware applyBoost (resolves boostImageIndex) and reports success', async () => {
+        apiFactory.__applyBoost.mockResolvedValue({ ok: true });
 
         await boostChallenge('111', {});
 
-        expect(boostApi.applyBoost).toHaveBeenCalledWith({ id: 111, title: 'Sunset' }, 'tok');
+        // Middleware injects the token itself — the CLI passes only the challenge.
+        expect(apiFactory.__applyBoost).toHaveBeenCalledWith({ id: 111, title: 'Sunset' });
         expect(actionsHandlers['apply-boost-to-entry']).not.toHaveBeenCalled();
         expect(contains(msgsAt('success'), 'Sunset')).toBe(true);
+    });
+
+    test('never bypasses the factory to reach the real api/boost module (mock-mode safety)', async () => {
+        apiFactory.__applyBoost.mockResolvedValue({ ok: true });
+
+        await boostChallenge('111', {});
+
+        expect(boostApi.applyBoost).not.toHaveBeenCalled();
+        expect(apiFactory.__applyBoost).toHaveBeenCalledTimes(1);
     });
 
     test('--image routes to the apply-boost-to-entry handler with the explicit id', async () => {
@@ -108,12 +125,12 @@ describe('CLI boost command', () => {
         await boostChallenge('111', { imageId: 'img9' });
 
         expect(actionsHandlers['apply-boost-to-entry']).toHaveBeenCalledWith(null, '111', 'img9');
-        expect(boostApi.applyBoost).not.toHaveBeenCalled();
+        expect(apiFactory.__applyBoost).not.toHaveBeenCalled();
         expect(contains(msgsAt('success'), 'img9')).toBe(true);
     });
 
     test('a null/failed boost is reported as an error', async () => {
-        boostApi.applyBoost.mockResolvedValue(null);
+        apiFactory.__applyBoost.mockResolvedValue(null);
 
         await boostChallenge('111', {});
 
@@ -125,7 +142,7 @@ describe('CLI boost command', () => {
 
         await boostChallenge('111', {});
 
-        expect(boostApi.applyBoost).not.toHaveBeenCalled();
+        expect(apiFactory.__applyBoost).not.toHaveBeenCalled();
         expect(apiFactory.__getActiveChallenges).not.toHaveBeenCalled();
         expect(contains(allMsgs(), 'Run: login')).toBe(true);
     });
@@ -135,8 +152,20 @@ describe('CLI boost command', () => {
 
         await boostChallenge('999', {});
 
-        expect(boostApi.applyBoost).not.toHaveBeenCalled();
+        expect(apiFactory.__applyBoost).not.toHaveBeenCalled();
         expect(contains(msgsAt('error'), 'not found')).toBe(true);
+    });
+
+    test('finds the challenge when the API returns string ids', async () => {
+        // Regression companion to findActiveChallenge: the live list may
+        // carry ids as strings; the lookup must still match.
+        apiFactory.__getActiveChallenges.mockResolvedValue({ challenges: [{ id: '111', title: 'Sunset' }] });
+        apiFactory.__applyBoost.mockResolvedValue({ ok: true });
+
+        await boostChallenge(111, {});
+
+        expect(apiFactory.__applyBoost).toHaveBeenCalledWith({ id: '111', title: 'Sunset' });
+        expect(contains(msgsAt('success'), 'Sunset')).toBe(true);
     });
 });
 
@@ -311,7 +340,7 @@ describe('CLI actions — error paths', () => {
 
         await boostChallenge('111', {});
 
-        expect(boostApi.applyBoost).not.toHaveBeenCalled();
+        expect(apiFactory.__applyBoost).not.toHaveBeenCalled();
         expect(contains(msgsAt('error'), 'Failed to fetch challenges')).toBe(true);
     });
 
@@ -324,7 +353,7 @@ describe('CLI actions — error paths', () => {
     });
 
     test('boost: a thrown applyBoost is caught', async () => {
-        boostApi.applyBoost.mockRejectedValue(new Error('boom'));
+        apiFactory.__applyBoost.mockRejectedValue(new Error('boom'));
 
         await expect(boostChallenge('111', {})).resolves.toBeUndefined();
         expect(contains(msgsAt('error'), 'Failed to apply boost')).toBe(true);

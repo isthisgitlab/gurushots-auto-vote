@@ -15,7 +15,7 @@
  * them in the factory closure.
  */
 
-import { act, render, screen } from '@/test/test-utils';
+import { act, render, screen } from './helpers/test-utils';
 import { EntryBadge } from '@/components/app/EntryBadge';
 
 const mockBoostState = {

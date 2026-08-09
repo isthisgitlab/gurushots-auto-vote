@@ -6,10 +6,10 @@ pre-commit:
     parallel: false
     commands:
         eslint:
-            glob: '*.{js,jsx}'
+            glob: '*.{js,jsx,mjs}'
             run: pnpm exec eslint --fix {staged_files}
             stage_fixed: true
         prettier:
-            glob: '*.{js,jsx,ts,json,jsonc,css,md,yml,yaml,html}'
+            glob: '*.{js,jsx,mjs,ts,json,jsonc,css,md,yml,yaml,html}'
             run: pnpm exec prettier --write {staged_files}
             stage_fixed: true

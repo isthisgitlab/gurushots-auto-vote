@@ -24,6 +24,7 @@ const logger = require('../logger');
 const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } = require('../scheduling/randomDelay');
 const { computeNextCycleDelayMs } = require('../scheduling/thresholdWindow');
 const { resolveThreshold, resolveScheduledFill } = require('../scheduling/nodeResolvers');
+const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 
 const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
 
@@ -52,7 +53,7 @@ const computeNextDelayMs = async (token, prefetched = null) => {
             lastMinuteCheckMinutes,
             minGapMs: MIN_CYCLE_GAP_MS,
             resolveScheduledFill,
-            timezone: userSettings.timezone || 'Europe/Riga',
+            timezone: userSettings.timezone || DEFAULT_TIMEZONE,
         });
         return delayMs;
     } catch (err) {

@@ -11,6 +11,10 @@ permissions:
     packages: write
 
 jobs:
+    # NOT a duplicate of test.yml: workflows can't gate on each other
+    # (GitHub Actions has no cross-workflow `needs`), so this job is the
+    # ONLY thing standing between a red test suite and version-bump →
+    # build → create-release. Do not remove it as "redundant".
     test:
         runs-on: ubuntu-slim
         steps:

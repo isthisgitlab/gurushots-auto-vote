@@ -57,6 +57,23 @@ const getFormatter = (timeZone) => {
 };
 
 /**
+ * formatToParts → { type: value } accumulation for an instant in `timeZone`.
+ * Shared by tzOffsetSeconds and wallDateOf.
+ *
+ * @param {number} epochSec - Unix timestamp (seconds)
+ * @param {string} timeZone - IANA zone name (throws RangeError if unknown)
+ * @returns {Record<string, string>}
+ */
+const partsOf = (epochSec, timeZone) => {
+    const parts = getFormatter(timeZone).formatToParts(epochSec * 1000);
+    const byType = {};
+    for (const part of parts) {
+        byType[part.type] = part.value;
+    }
+    return byType;
+};
+
+/**
  * Strict 'HH:MM' 24-hour parser.
  *
  * @param {*} str - Candidate value; anything but a strict 'HH:MM' string yields null.
@@ -82,11 +99,7 @@ const parseTimeOfDay = (str) => {
  * @returns {number} Offset in seconds
  */
 const tzOffsetSeconds = (epochSec, timeZone) => {
-    const parts = getFormatter(timeZone).formatToParts(epochSec * 1000);
-    const byType = {};
-    for (const part of parts) {
-        byType[part.type] = part.value;
-    }
+    const byType = partsOf(epochSec, timeZone);
     const asUtc =
         Date.UTC(
             Number(byType.year),
@@ -131,11 +144,7 @@ const epochForWallTime = (y, m, d, hh, mm, timeZone) => {
  * @returns {{y: number, m: number, d: number}}
  */
 const wallDateOf = (epochSec, timeZone) => {
-    const parts = getFormatter(timeZone).formatToParts(epochSec * 1000);
-    const byType = {};
-    for (const part of parts) {
-        byType[part.type] = part.value;
-    }
+    const byType = partsOf(epochSec, timeZone);
     return { y: Number(byType.year), m: Number(byType.month), d: Number(byType.day) };
 };
 

@@ -20,3 +20,15 @@ allowBuilds:
 # with it. Note this only gates what pnpm resolves; `pnpm bump` (npm-check-updates)
 # ignores it entirely and will still write the newest published version.
 minimumReleaseAge: 360
+# Dev-tree-only CVE overrides — upstream hard-pins block the fixes from
+# arriving any other way (@electron/universal pins minimatch's old
+# brace-expansion; node-gyp's tree pins undici 6.x; xcode pins uuid).
+# Exact-pinned for reproducibility. All four resolve ONLY through dev
+# tooling (electron-builder, node-gyp, @capacitor/cli) — nothing shipped.
+# Re-check with a full `pnpm audit` after any lockfile change; drop an
+# override once the upstream chain moves past the vulnerable range.
+overrides:
+    'brace-expansion@1': 1.1.18
+    'brace-expansion@2': 2.1.4
+    'undici@<6.28.0': 6.28.0
+    'uuid@<11.1.1': 11.1.1

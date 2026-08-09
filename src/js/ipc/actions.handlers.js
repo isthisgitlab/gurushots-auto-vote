@@ -15,16 +15,14 @@ const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
 const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
+const { findActiveChallenge } = require('../services/findActiveChallenge');
 
 // In-process guard that prevents two simultaneous mini-game runs on
 // the same challenge — defends against double-click and against an
 // autovote cycle racing with a manual click.
 const turboMiniGameInFlight = new Set();
 
-const sanitizeForLog = (value) =>
-    String(value ?? '')
-        .replace(/[\r\n\t]/g, ' ')
-        .slice(0, 200);
+const sanitizeForLog = logger.sanitizeLogString;
 
 const buildHandlers = () => ({
     'get-active-challenges': async (event, token) => {
@@ -48,12 +46,12 @@ const buildHandlers = () => ({
                 logger.CATEGORIES.AUTHENTICATION,
             );
         try {
-            // Route through the factory's surfaces (no direct api/mock imports)
-            // and the shared token normalizer. The explicit isMock arg from the
-            // login screen still selects the surface — login happens before the
-            // mock setting is necessarily committed, so we honour the caller's
-            // choice rather than re-reading settings.mock here.
-            const strategy = isMock ? apiFactory.mockApi : apiFactory.realApi;
+            // Route through the factory (no direct api/mock imports) and the
+            // shared token normalizer. The explicit isMock arg from the login
+            // screen still selects the surface — login happens before the mock
+            // setting is necessarily committed, so we pass the caller's choice
+            // as an explicit override rather than re-reading settings.mock here.
+            const strategy = apiFactory.getApiStrategy({ mock: !!isMock });
             const response = await strategy.authenticate(username, password);
             const { ok, token, error } = auth.extractAuthResult(response);
 
@@ -94,7 +92,7 @@ const buildHandlers = () => ({
             try {
                 const strategy = apiFactory.getApiStrategy();
                 const challengesResponse = await strategy.getActiveChallenges(userSettings.token);
-                const liveChallenge = challengesResponse?.challenges?.find((c) => String(c.id) === String(challengeId));
+                const liveChallenge = findActiveChallenge(challengesResponse?.challenges, challengeId);
                 if (!liveChallenge) {
                     return { success: false, error: 'Challenge no longer active' };
                 }
@@ -194,7 +192,7 @@ const buildHandlers = () => ({
 
             const strategy = apiFactory.getApiStrategy();
             const challengesResponse = await strategy.getActiveChallenges(guard.token);
-            const liveChallenge = challengesResponse?.challenges?.find((c) => String(c.id) === String(challengeId));
+            const liveChallenge = findActiveChallenge(challengesResponse?.challenges, challengeId);
             if (!liveChallenge) {
                 return { success: false, error: 'Challenge no longer active' };
             }

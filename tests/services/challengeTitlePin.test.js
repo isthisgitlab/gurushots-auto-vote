@@ -37,6 +37,13 @@ jest.mock('../../src/js/logger', () => ({
         debug: jest.fn(),
         success: jest.fn(),
     })),
+    // Faithful implementation — the module under test interpolates its return
+    // value into the warning message this suite asserts on.
+    sanitizeLogString: jest.fn((value, maxLength = 200) =>
+        String(value ?? '')
+            .replace(/[\r\n\t]/g, ' ')
+            .slice(0, maxLength),
+    ),
 }));
 
 const settings = require('../../src/js/settings');

@@ -4,7 +4,7 @@
  * on the Capacitor platform, and that "Got it" calls onClose. (The test mock's
  * t() returns the key, so assertions match translation keys.)
  */
-import { fireEvent, render, screen } from '@/test/test-utils';
+import { fireEvent, render, screen } from './helpers/test-utils';
 import { WelcomeModal } from '@/components/app/WelcomeModal';
 
 describe('WelcomeModal', () => {

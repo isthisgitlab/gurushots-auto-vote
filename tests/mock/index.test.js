@@ -300,12 +300,13 @@ describe('mock/index', () => {
                 expect(result).toEqual({ challenges: [{ id: 'fresh', title: 'Fresh Challenge' }] });
             });
 
-            test('should return error for missing token', async () => {
-                await expect(mockIndex.mockApiClient.getActiveChallenges(null)).rejects.toEqual(
-                    errors.mockAuthErrors.invalidToken,
-                );
+            test('should resolve an empty challenge list for missing token (real-API parity)', async () => {
+                // The real getActiveChallenges never rejects — it resolves
+                // { challenges: [] } on failure. The mock must match so
+                // callers behave identically in both modes.
+                await expect(mockIndex.mockApiClient.getActiveChallenges(null)).resolves.toEqual({ challenges: [] });
 
-                expect(logger.__mockErrorFn).toHaveBeenCalledWith('No token provided, returning error', null);
+                expect(logger.__mockErrorFn).toHaveBeenCalledWith('No token provided, returning empty result', null);
             });
 
             test('should log token information', async () => {
@@ -348,12 +349,11 @@ describe('mock/index', () => {
                 expect(result).toEqual(voting.mockEmptyVoteImages);
             });
 
-            test('should return error for missing token', async () => {
+            test('should resolve null for missing token (real-API parity)', async () => {
                 const challenge = { title: 'Test Challenge', url: 'challenge-1' };
 
-                await expect(mockIndex.mockApiClient.getVoteImages(challenge, null)).rejects.toEqual(
-                    errors.mockAuthErrors.invalidToken,
-                );
+                // Real getVoteImages resolves null on failure — never rejects.
+                await expect(mockIndex.mockApiClient.getVoteImages(challenge, null)).resolves.toBeNull();
             });
         });
 
@@ -378,12 +378,11 @@ describe('mock/index', () => {
                 // Note: This error message was changed to use logger.error
             });
 
-            test('should return error for missing token', async () => {
+            test('should resolve undefined for missing token (real-API parity)', async () => {
                 const voteImages = { images: [{ id: 'img1', ratio: 25 }] };
 
-                await expect(mockIndex.mockApiClient.submitVotes(voteImages, null)).rejects.toEqual(
-                    errors.mockAuthErrors.invalidToken,
-                );
+                // Real submitVotes bare-returns on failure — never rejects.
+                await expect(mockIndex.mockApiClient.submitVotes(voteImages, null)).resolves.toBeUndefined();
             });
         });
 
@@ -437,10 +436,9 @@ describe('mock/index', () => {
                 // Note: This message was not migrated to logger in the implementation
             });
 
-            test('should return error for missing token', async () => {
-                await expect(mockIndex.mockApiClient.applyBoostToEntry('123', 'img456', null)).rejects.toEqual(
-                    errors.mockAuthErrors.invalidToken,
-                );
+            test('should resolve null for missing token (real-API parity)', async () => {
+                // Real applyBoostToEntry resolves null on failure — never rejects.
+                await expect(mockIndex.mockApiClient.applyBoostToEntry('123', 'img456', null)).resolves.toBeNull();
             });
         });
 
@@ -496,10 +494,14 @@ describe('mock/index', () => {
                 });
             });
 
-            test('should return error for missing token', async () => {
-                await expect(mockIndex.mockApiClient.fetchChallengesAndVote(null)).rejects.toEqual(
-                    errors.mockAuthErrors.invalidToken,
-                );
+            test('should complete an empty pass for missing token (real-API parity)', async () => {
+                // Real fetchChallengesAndVote has no token guard: the pass
+                // runs, finds no challenges, and completes — never rejects.
+                await expect(mockIndex.mockApiClient.fetchChallengesAndVote(null)).resolves.toEqual({
+                    success: true,
+                    message: 'No active challenges found',
+                    challenges: [],
+                });
             });
 
             test('never runs stale-metadata cleanup (shared un-namespaced store)', async () => {

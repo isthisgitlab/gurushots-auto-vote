@@ -56,7 +56,7 @@ jest.mock('../../src/js/metadata', () => ({
     updateChallengeVoteMetadata: jest.fn(() => true),
 }));
 
-const { makePostRequest, createCommonHeaders } = require('../../src/js/api/api-client');
+const { makePostRequest } = require('../../src/js/api/api-client');
 const logger = require('../../src/js/logger');
 const { updateChallengeVoteMetadata } = require('../../src/js/metadata');
 

@@ -8,19 +8,20 @@
  */
 
 const VotingLogic = require('../../src/js/services/VotingLogic');
+const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');
 
 jest.mock('../../src/js/settings');
 
 const buildChallenge = ({ exposureFactor, startInSeconds = -3600, closeInSeconds = 7200 }) => {
     const now = Math.floor(Date.now() / 1000);
-    return {
+    return buildBaseChallenge({
         id: '111',
         title: 'Manual Vote Challenge',
         type: 'regular',
         start_time: now + startInSeconds,
         close_time: now + closeInSeconds,
         member: { ranking: { exposure: { exposure_factor: exposureFactor } } },
-    };
+    });
 };
 
 const NOW = () => Math.floor(Date.now() / 1000);

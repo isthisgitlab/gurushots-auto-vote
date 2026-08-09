@@ -39,7 +39,7 @@ describe('useLastHourExposure setting', () => {
         const now = Math.floor(Date.now() / 1000);
 
         // Mock settings - useLastHourExposure is TRUE
-        settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
+        settings.getEffectiveSetting.mockImplementation((key, _challengeId) => {
             switch (key) {
                 case 'onlyBoost':
                     return false;
@@ -88,7 +88,7 @@ describe('useLastHourExposure setting', () => {
         const now = Math.floor(Date.now() / 1000);
 
         // Mock settings - useLastHourExposure is FALSE
-        settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
+        settings.getEffectiveSetting.mockImplementation((key, _challengeId) => {
             switch (key) {
                 case 'onlyBoost':
                     return false;
@@ -137,7 +137,7 @@ describe('useLastHourExposure setting', () => {
         const now = Math.floor(Date.now() / 1000);
 
         // Mock settings - useLastHourExposure is FALSE
-        settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
+        settings.getEffectiveSetting.mockImplementation((key, _challengeId) => {
             switch (key) {
                 case 'onlyBoost':
                     return false;
@@ -185,7 +185,7 @@ describe('useLastHourExposure setting', () => {
         const now = Math.floor(Date.now() / 1000);
 
         // Mock settings - useLastHourExposure is TRUE but we're outside last hour
-        settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
+        settings.getEffectiveSetting.mockImplementation((key, _challengeId) => {
             switch (key) {
                 case 'onlyBoost':
                     return false;
@@ -278,7 +278,7 @@ describe('useLastHourExposure setting', () => {
         const now = Math.floor(Date.now() / 1000);
 
         // Mock settings with per-challenge override
-        settings.getEffectiveSetting.mockImplementation((key, challengeId) => {
+        settings.getEffectiveSetting.mockImplementation((key, _challengeId) => {
             switch (key) {
                 case 'onlyBoost':
                     return false;

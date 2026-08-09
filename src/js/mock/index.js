@@ -98,6 +98,12 @@ const simulateApiError = (error, delay = 500) => {
  * method's no-token result. The wrapped `fn` therefore only ever runs
  * with a token present (mock mode accepts any token, including real ones).
  *
+ * Contract: onNoToken must RESOLVE with the same shape the method's real
+ * counterpart resolves with on failure (real api modules never reject on
+ * a missing token — e.g. challenges resolves `{ challenges: [] }`, boost
+ * resolves `null`). Callers must behave identically in mock and real
+ * mode; tests/mock/no-token-contract.test.js enforces this.
+ *
  * @param {object} spec
  * @param {string} spec.name - method name for the "Mock <name>" preamble
  * @param {string} [spec.category] - preamble logger category (default 'api')
@@ -109,7 +115,14 @@ const simulateApiError = (error, delay = 500) => {
  * @returns {(...args: any[]) => Promise<any>}
  */
 const mockMethod = (
-    { name, category = 'api', tokenArg, debug, noTokenMessage = 'No token provided, returning error', onNoToken },
+    {
+        name,
+        category = 'api',
+        tokenArg,
+        debug,
+        noTokenMessage = 'No token provided, returning empty result',
+        onNoToken,
+    },
     fn,
 ) => {
     return async (...args) => {
@@ -158,7 +171,8 @@ const mockApiClient = {
                     .withCategory('api')
                     .debug(`Token starts with mock_: ${token ? token.startsWith('mock_') : false}`, null);
             },
-            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+            // Real getActiveChallenges resolves { challenges: [] } on failure
+            onNoToken: () => ({ challenges: [] }),
         },
         async () => {
             // Use cached challenges for session stability, generate only once per session
@@ -197,7 +211,8 @@ const mockApiClient = {
                 logger.withCategory('challenges').debug(`Challenge: ${challenge.title}`, null);
                 logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
             },
-            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+            // Real getVoteImages resolves null on failure
+            onNoToken: () => null,
         },
         async (challenge) => {
             const challengeUrl = challenge.url;
@@ -245,7 +260,8 @@ const mockApiClient = {
                 logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
                 logger.withCategory('voting').debug(`Exposure threshold: ${exposureThreshold}`, null);
             },
-            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+            // Real submitVotes bare-returns (resolves undefined) on failure
+            onNoToken: () => undefined,
         },
         async (voteImages) => {
             if (voteImages.images && voteImages.images.length > 0) {
@@ -324,7 +340,8 @@ const mockApiClient = {
                 logger.withCategory('voting').debug(`Boost state: ${challenge.member.boost.state}`, null);
                 logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
             },
-            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+            // Real applyBoost resolves null on failure
+            onNoToken: () => null,
         },
         async (challenge) => {
             const boostState = challenge.member.boost.state;
@@ -353,7 +370,8 @@ const mockApiClient = {
                 logger.withCategory('voting').debug(`Image ID: ${imageId}`, null);
                 logger.withCategory('general').debug(`Token provided: ${token ? 'yes' : 'none'}`);
             },
-            onNoToken: () => simulateApiError(errors.mockAuthErrors.invalidToken, 500),
+            // Real applyBoostToEntry resolves null on failure
+            onNoToken: () => null,
         },
         async () => {
             logger.withCategory('voting').debug('Applying boost to specific entry successfully', null);
@@ -561,8 +579,10 @@ const mockApiClient = {
         logger.withCategory('voting').api('Mock fetchChallengesAndVote', null);
         logger.withCategory('api').debug(`Token provided: ${!!token}`, null);
         if (!token) {
-            logger.withCategory('authentication').error('No token provided, returning error', null);
-            return simulateApiError(errors.mockAuthErrors.invalidToken, 500);
+            // Real fetchChallengesAndVote has no token guard: the pass runs,
+            // getActiveChallenges resolves { challenges: [] }, and the pass
+            // completes empty. Log the condition but keep the same contract.
+            logger.withCategory('authentication').error('No token provided, voting pass will find no challenges', null);
         }
         return runVotingPass(token, challengeIdFilter, {
             api: {

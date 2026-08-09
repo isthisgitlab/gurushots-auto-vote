@@ -10,19 +10,20 @@
 
 const settings = require('../../src/js/settings');
 const VotingLogic = require('../../src/js/services/VotingLogic');
+const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');
 
 jest.mock('../../src/js/settings');
 
 const buildChallenge = ({ exposureFactor, closeInSeconds }) => {
     const now = Math.floor(Date.now() / 1000);
-    return {
+    return buildBaseChallenge({
         id: '999',
         title: 'Target Split Challenge',
         type: 'regular',
         close_time: now + closeInSeconds,
         start_time: now - 3600,
         member: { ranking: { exposure: { exposure_factor: exposureFactor } } },
-    };
+    });
 };
 
 const mockSettings = (overrides = {}) => {
