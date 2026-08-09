@@ -131,9 +131,10 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                     cadence: (mode, message) => (mode === 'normal' ? undefined : window.api.logDebug?.(message)),
                     decisionError: (err) => window.api.logWarning(`${DECISION_ERROR_MESSAGE}: ${err.message || err}`),
                     // runVotingCycle catches internally and resolves false, so a
-                    // rejection here is a can't-happen; swallowing it keeps the
-                    // chain alive either way.
-                    cycleError: () => {},
+                    // rejection here is a can't-happen TODAY — but that is an
+                    // invariant of a different module. Log best-effort instead
+                    // of swallowing so a future regression can't fail silently.
+                    cycleError: (err) => window.api.logWarning?.(`Voting cycle failed: ${err?.message || err}`),
                 },
             }),
         [runVotingCycle],

@@ -21,6 +21,17 @@ const formatSettingForLog = (key, value) => {
     return masked[key] === '[REDACTED]' ? '[REDACTED]' : JSON.stringify(value);
 };
 
+// One consistent recovery message for a mistyped schema key, shared by every
+// command that validates against SETTINGS_SCHEMA. Self-contained (lists the
+// keys inline) so it stays correct for both hosts — the main CLI and the
+// pnpm settings:* scripts wire different command names for the schema dump.
+const logUnknownSchemaKey = (key) => {
+    logger.withCategory('settings').error(`Unknown schema setting '${key}'`);
+    logger
+        .withCategory('settings')
+        .info(`Available settings: ${Object.keys(settings.SETTINGS_SCHEMA).sort().join(', ')}`);
+};
+
 // Guard for the per-challenge variants: a key must declare perChallenge in
 // the schema before it can carry an override. Logs and returns false on miss.
 const requirePerChallenge = (key) => {
@@ -90,11 +101,7 @@ const setGlobalDefault = (key, value) => {
 
         const schema = settings.SETTINGS_SCHEMA;
         if (!schema[key]) {
-            logger.withCategory('settings').error(`Unknown schema setting '${key}'`);
-            logger.withCategory('settings').info('Available settings:');
-            Object.keys(schema).forEach((settingKey) => {
-                logger.withCategory('settings').info(`  ${settingKey}`);
-            });
+            logUnknownSchemaKey(key);
             return false;
         }
 
@@ -199,8 +206,7 @@ const resetSetting = (key, challengeId = null) => {
 const resetGlobalDefault = (key) => {
     try {
         if (!settings.SETTINGS_SCHEMA[key]) {
-            logger.withCategory('settings').error(`Unknown schema setting '${key}'`);
-            logger.withCategory('settings').info('Run "settings-schema" to see available settings');
+            logUnknownSchemaKey(key);
             return false;
         }
         if (!settings.resetGlobalDefault(key)) {

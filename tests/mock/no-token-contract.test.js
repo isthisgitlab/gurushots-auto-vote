@@ -56,10 +56,16 @@ describe('no-token failure contract: neither surface rejects', () => {
     });
 
     test('applyBoost resolves null on both surfaces', async () => {
-        // Real applyBoost with no entries resolves null before any request;
-        // with a missing token the request path also resolves null.
-        await expect(realBoost.applyBoost(challengeArg, null)).resolves.toBeNull();
-        await expect(mockApiClient.applyBoost(challengeArg, null)).resolves.toBeNull();
+        // Give the challenge a pickable entry so the REAL applyBoost gets
+        // past the no-entries guard and actually reaches the request path
+        // (_postBoost → makePostRequest resolving null on failure) — the
+        // branch this contract is about.
+        const boostable = {
+            ...challengeArg,
+            member: { boost: { state: 'AVAILABLE' }, ranking: { entries: [{ id: 'img1' }] } },
+        };
+        await expect(realBoost.applyBoost(boostable, null)).resolves.toBeNull();
+        await expect(mockApiClient.applyBoost(boostable, null)).resolves.toBeNull();
     });
 
     test('applyBoostToEntry resolves null on both surfaces', async () => {

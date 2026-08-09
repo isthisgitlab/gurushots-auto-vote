@@ -23,6 +23,11 @@ const { spawn } = require('node:child_process');
  * Sensitive keys (token etc.) print as [REDACTED]; pass --reveal to `get`
  * to print the raw value.
  *
+ * Output note (deliberate): `get` prints plain console lines (pipeable,
+ * no timestamps — it is the read/inspect path), while the mutating
+ * commands delegate to src/js/cli/commands/settings.js and emit through
+ * the shared logger (timestamped, colored) exactly like the main CLI.
+ *
  * Examples:
  *   pnpm settings:get            # Get all settings
  *   pnpm settings:get theme      # Get theme setting
