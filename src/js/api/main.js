@@ -14,6 +14,11 @@ const { cleanupStaleMetadata } = require('../metadata');
 const { sleep, getRandomDelay } = require('../timing');
 const logger = require('../logger');
 const { runVotingPass } = require('../services/votingOrchestrator');
+const { createMetadataEntryTracker } = require('../services/newEntryTracker');
+
+// One instance for the process: the tracker is stateless (it reads and writes
+// metadata.json on each call), but building it per pass would be pointless churn.
+const metadataEntryTracker = createMetadataEntryTracker();
 
 /**
  * Plays through the Turbo mini-game for a single challenge.
@@ -106,6 +111,9 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
             runTurboMiniGame,
         },
         cleanupStaleMetadata,
+        // Real mode persists new-entry snapshots to metadata.json, where
+        // cleanupStaleMetadata prunes them alongside their challenge.
+        entryTracker: metadataEntryTracker,
         // Random 2-5s spacing between challenges to mimic human behavior.
         interChallengeDelay: () => getRandomDelay(2000, 5000),
     });

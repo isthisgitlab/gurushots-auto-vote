@@ -238,6 +238,8 @@ Each challenge has an exposure **trigger** ("vote while my exposure is below thi
 
 For triggers with a separate target, the app votes only when you're below the trigger, then keeps going up to the target. A target of `0` means "stop at the trigger" (target = trigger).
 
+**Vote on new entry** (`voteOnNewEntry`, off by default) adds one exception to steps 3–7: when a new photo appears in a challenge — added by you on the website, or by auto-fill, emergency fill, or a boost/turbo fill — the app votes once even if your exposure already reads at or above the trigger, up to whichever target the winning rule above resolved. Adding a photo dilutes exposure immediately, but the reported figure doesn't always catch up on the same poll, so without this the fresh entry can sit unexposed for a cycle or more. It does **not** override steps 1, 2, or 4: if only-boost, not-started, or vote-only-in-last-minute is blocking, no vote happens. If the vote fails, the trigger stays armed and the next cycle retries it.
+
 ### Scheduling cadence
 
 Continuous mode rolls a random delay in `[checkFrequencyMin, checkFrequencyMax]` minutes between cycles. As soon as any challenge enters its `lastMinuteThreshold` window, the scheduler switches to a fixed, tighter cadence (`lastMinuteCheckFrequency`, default every 1 minute) until no challenge is in that window, then reverts. (See [`docs/scheduling.md`](docs/scheduling.md) for the per-platform internals — CLI/Android share one engine; the GUI uses the same math.)
@@ -299,12 +301,13 @@ All of these support per-challenge overrides except where noted.
 
 **General**
 
-| Setting          | Default | Range / values                         | Description                                                              |
-| ---------------- | ------- | -------------------------------------- | ------------------------------------------------------------------------ |
-| `exposure`       | `100`   | 1–100 %                                | Normal-rule trigger: vote while your exposure is below this.             |
-| `exposureTarget` | `0`     | `0`, or 1–100 % (if set, ≥ `exposure`) | Vote up to this % when the normal rule fires. `0` = stop at the trigger. |
-| `onlyBoost`      | `false` | bool                                   | Skip normal voting; only apply boost/turbo.                              |
-| `compactCards`   | `false` | bool                                   | Compact challenge-card layout (GUI display only).                        |
+| Setting          | Default | Range / values                         | Description                                                                                                                                                                                         |
+| ---------------- | ------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exposure`       | `100`   | 1–100 %                                | Normal-rule trigger: vote while your exposure is below this.                                                                                                                                        |
+| `exposureTarget` | `0`     | `0`, or 1–100 % (if set, ≥ `exposure`) | Vote up to this % when the normal rule fires. `0` = stop at the trigger.                                                                                                                            |
+| `onlyBoost`      | `false` | bool                                   | Skip normal voting; only apply boost/turbo.                                                                                                                                                         |
+| `voteOnNewEntry` | `false` | bool                                   | When a new photo appears, vote once even if exposure is already at/above the trigger, up to the normal target. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Fill Only. |
+| `compactCards`   | `false` | bool                                   | Compact challenge-card layout (GUI display only).                                                                                                                                                   |
 
 **Boost**
 

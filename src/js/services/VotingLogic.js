@@ -106,6 +106,10 @@ const getScheduledFillState = (challenge, challengeId, now) => {
  * @property {number} targetExposure
  * @property {string|null} ruleLabel
  * @property {*} thresholdInfo
+ * @property {boolean} forcedByNewEntry - True only when a detected new entry
+ *   actually CHANGED the outcome: exposure was at/above the trigger and the vote
+ *   happens anyway. False on every blocked path, and false when the challenge was
+ *   already eligible on its own.
  */
 
 /**
@@ -113,6 +117,10 @@ const getScheduledFillState = (challenge, challengeId, now) => {
  * @property {boolean} shouldVote
  * @property {string} voteReason
  * @property {number} targetExposure
+ * @property {boolean} forcedByNewEntry - Surfaced so the orchestrator can tell a
+ *   new-entry-forced vote from an organic one without re-deriving the rule. It
+ *   only preserves the trigger (skips recording the entry snapshot) when a FORCED
+ *   vote throws; an organic vote's eligibility recurs by itself next cycle.
  */
 
 /**
@@ -211,10 +219,15 @@ const getEffectiveLastHourExposureTarget = (challengeId) => {
  * @param {any} challenge
  * @param {number} now
  * @param {'auto'|'manual'} mode
+ * @param {{hasNewEntry?: boolean}} [options] - `hasNewEntry` is supplied
+ *   ALREADY GATED on the voteOnNewEntry setting by the caller (the orchestrator
+ *   owns that read). Deliberately not read here: two reads of the same key in two
+ *   layers would drift.
  * @returns {VotingRuleResult}
  */
-const _runVotingRules = (challenge, now, mode) => {
+const _runVotingRules = (challenge, now, mode, options = {}) => {
     const challengeId = challenge.id.toString();
+    const hasNewEntry = options.hasNewEntry === true;
 
     const onlyBoost = mode === 'auto' && settings.getEffectiveSetting('onlyBoost', challengeId);
     const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
@@ -237,6 +250,9 @@ const _runVotingRules = (challenge, now, mode) => {
         targetExposure: 100,
         ruleLabel: null,
         thresholdInfo: null,
+        // A new entry never defeats a block — onlyBoost, vote-only-in-last-minute,
+        // scheduled-fill-only and not-yet-started are all explicit opt-outs.
+        forcedByNewEntry: false,
     });
     // Eligibility uses the trigger ("vote if below"); the loop ceiling uses the target
     // ("vote up to"). For flash and lastminute they are intentionally both 100.
@@ -248,14 +264,22 @@ const _runVotingRules = (challenge, now, mode) => {
      * @returns {VotingRuleResult}
      */
     const decided = (ruleLabel, trigger, target, thresholdInfo) => {
-        const atTarget = currentExposure >= trigger;
+        const wouldBeAtTarget = currentExposure >= trigger;
+        // A detected new entry defeats the at-target check only — it never unblocks
+        // a blocked rule. Gated on wouldBeAtTarget so `forcedByNewEntry` marks the
+        // cases where the flag actually changed the outcome: when exposure is
+        // already below the trigger the vote is organic and recurs on its own next
+        // cycle, so there is no trigger worth preserving across a failure.
+        const forcedByNewEntry = hasNewEntry && wouldBeAtTarget;
+        const atTarget = wouldBeAtTarget && !hasNewEntry;
         return {
             eligible: !atTarget,
             atTarget,
             skipReason: null,
             targetExposure: target,
             ruleLabel,
-            thresholdInfo: { ...thresholdInfo, currentExposure },
+            thresholdInfo: { ...thresholdInfo, currentExposure, trigger },
+            forcedByNewEntry,
         };
     };
 
@@ -304,23 +328,56 @@ const _runVotingRules = (challenge, now, mode) => {
 };
 
 /**
- * Auto-vote evaluator. Returns { shouldVote, voteReason, targetExposure }.
+ * Auto-vote evaluator. Returns { shouldVote, voteReason, targetExposure, forcedByNewEntry }.
  * @param {any} challenge
  * @param {number} now
+ * @param {{hasNewEntry?: boolean}} [options] - `hasNewEntry` must already be gated
+ *   on the voteOnNewEntry setting by the caller; see `_runVotingRules`.
  * @returns {AutoVoteDecision}
  */
-const evaluateVotingDecision = (challenge, now) => {
-    const r = _runVotingRules(challenge, now, 'auto');
-    if (r.skipReason) return { shouldVote: false, voteReason: r.skipReason, targetExposure: r.targetExposure };
+const evaluateVotingDecision = (challenge, now, options = {}) => {
+    const r = _runVotingRules(challenge, now, 'auto', options);
+    if (r.skipReason)
+        return {
+            shouldVote: false,
+            voteReason: r.skipReason,
+            targetExposure: r.targetExposure,
+            forcedByNewEntry: false,
+        };
 
     const {
         currentExposure,
+        trigger,
         effectiveThreshold,
         effectiveLastHourExposure,
         effectiveLastMinuteThreshold,
         effectiveExposureTarget,
         effectiveLastHourExposureTarget,
     } = r.thresholdInfo;
+
+    // A forced vote needs its own phrasing, not a suffix on the normal one. The
+    // per-label templates below choose their comparison from `eligible`/`atTarget`,
+    // and forcing flips those — so reusing them would emit a literally false
+    // sentence ("exposure 100% < 90%") for precisely the case someone is reading
+    // the log to understand. Any of the five labels can be forced, so this branch
+    // covers all of them before the map is consulted.
+    if (r.forcedByNewEntry) {
+        /** @type {Record<string, string>} */
+        const forcedLabels = {
+            flash: 'flash type',
+            lastminute: `lastminute threshold (${effectiveLastMinuteThreshold}m)`,
+            scheduled: 'scheduled fill window',
+            'last-hour': 'last hour threshold',
+            normal: 'normal threshold',
+        };
+        const labelText = forcedLabels[/** @type {string} */ (r.ruleLabel)];
+        return {
+            shouldVote: true,
+            voteReason: `${labelText}: new entry detected (exposure ${currentExposure}% >= ${trigger}%) — voting up to ${r.targetExposure}%`,
+            targetExposure: r.targetExposure,
+            forcedByNewEntry: true,
+        };
+    }
     /** @param {number} trigger @param {number} target @returns {string} */
     const targetSuffix = (trigger, target) => (target !== trigger ? ` (vote up to ${target}%)` : '');
     /** @type {Record<string, string>} */
@@ -343,6 +400,7 @@ const evaluateVotingDecision = (challenge, now) => {
         shouldVote: r.eligible,
         voteReason: reasons[/** @type {string} */ (r.ruleLabel)],
         targetExposure: r.targetExposure,
+        forcedByNewEntry: false,
     };
 };
 

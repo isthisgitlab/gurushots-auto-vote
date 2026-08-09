@@ -268,6 +268,9 @@
             onePhoto: '1 bilde',
             onlyBoost: 'Tikai "Boost" režīms',
             onlyBoostDesc: 'Pilnībā izlaist parasto balsošanu šim izaicinājumam un tikai pielietot Boost.',
+            voteOnNewEntry: 'Balsot par jaunu bildi',
+            voteOnNewEntryDesc:
+                'Kad šajā izaicinājumā parādās jauna bilde — pievienota paša mājaslapā vai ar automātisko aizpildi, ārkārtas aizpildi vai Boost/Turbo aizpildi — nobalsot vienu reizi arī tad, ja redzamība jau ir sasniegusi vai pārsniegusi slieksni. Balso līdz tam griestiem, ko izaicinājums izmantotu parasti: Redzamības mērķis (vai Redzamība, ja mērķis ir 0), vai Pēdējās stundas ekspozīcijas mērķis pēdējās stundas laikā, kad ieslēgts "Izmantot pēdējās stundas ekspozīciju". Nepārspēj režīmus "Tikai Boost", "Balsot tikai pēdējās minūtes laikā" vai "Tikai plānotā aizpilde": ja kāds no tiem bloķē, balsojums nenotiek.',
             override: 'Pielāgots',
             overrideForChallenge: 'Pielāgot iestatījumus izaicinājumam',
             photo: 'bilde',

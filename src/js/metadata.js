@@ -27,23 +27,80 @@ const getDefaultMetadata = () => {
 };
 
 /**
- * Validate metadata entry
+ * Upper bounds for the per-challenge entry-id snapshot (voteOnNewEntry). Unlike
+ * lastVoteTime/exposureBump these ids come straight off a remote API response, and
+ * loadMetadata/saveMetadata parse and re-serialize the WHOLE file synchronously on
+ * the Electron main process — so an inflated entries array would stall the UI on
+ * every poll. Real max_photo_submits is single-digit; both caps are far above any
+ * legitimate value and exist only to bound a malformed response.
+ */
+const MAX_TRACKED_ENTRY_IDS = 64;
+const MAX_ENTRY_ID_LENGTH = 64;
+
+/**
+ * Validate an entryIds snapshot.
+ * @param {*} entryIds
+ * @returns {string|null} - Failure reason, or null when the value is acceptable
+ */
+const entryIdsFailureReason = (entryIds) => {
+    if (!Array.isArray(entryIds)) {
+        return `entryIds is not an array (type: ${typeof entryIds})`;
+    }
+    if (entryIds.length > MAX_TRACKED_ENTRY_IDS) {
+        return `entryIds has ${entryIds.length} elements (max ${MAX_TRACKED_ENTRY_IDS})`;
+    }
+    for (const id of entryIds) {
+        if (typeof id !== 'string' || id.length === 0) {
+            return `entryIds contains a non-string or empty id (type: ${typeof id})`;
+        }
+        if (id.length > MAX_ENTRY_ID_LENGTH) {
+            return `entryIds contains an id of length ${id.length} (max ${MAX_ENTRY_ID_LENGTH})`;
+        }
+    }
+    return null;
+};
+
+/**
+ * Validate metadata entry.
+ *
+ * lastVoteTime and exposureBump are always internally computed, so a malformed
+ * value there means the whole entry is untrustworthy and gets dropped — that is
+ * the long-standing behavior and these checks deliberately run FIRST so an entry
+ * that is bad in both ways is still dropped rather than "repaired".
+ *
+ * entryIds is different: it derives from remote API data, so applying the same
+ * all-or-nothing rule would let one odd API response silently wipe a challenge's
+ * real voting history. A malformed entryIds is therefore STRIPPED, and the rest of
+ * the entry survives.
+ *
  * @param {Object} entry - Metadata entry to validate
- * @returns {Object} - {isValid, reason} where reason describes validation failure
+ * @returns {Object} - {isValid, reason, entry, repairReason} where `entry` is the
+ *   (possibly repaired) entry to store and `repairReason` describes a stripped
+ *   field, if any
  */
 const validateMetadataEntry = (entry) => {
     if (typeof entry !== 'object' || entry === null) {
-        return { isValid: false, reason: 'Entry is not an object or is null' };
+        return { isValid: false, reason: 'Entry is not an object or is null', entry: null, repairReason: null };
     }
 
     // Check lastVoteTime
     if (entry.lastVoteTime && typeof entry.lastVoteTime !== 'string') {
-        return { isValid: false, reason: `lastVoteTime is not a string (type: ${typeof entry.lastVoteTime})` };
+        return {
+            isValid: false,
+            reason: `lastVoteTime is not a string (type: ${typeof entry.lastVoteTime})`,
+            entry: null,
+            repairReason: null,
+        };
     }
     if (entry.lastVoteTime) {
         const date = new Date(entry.lastVoteTime);
         if (isNaN(date.getTime())) {
-            return { isValid: false, reason: `lastVoteTime "${entry.lastVoteTime}" is not a valid date format` };
+            return {
+                isValid: false,
+                reason: `lastVoteTime "${entry.lastVoteTime}" is not a valid date format`,
+                entry: null,
+                repairReason: null,
+            };
         }
     }
 
@@ -53,14 +110,32 @@ const validateMetadataEntry = (entry) => {
             return {
                 isValid: false,
                 reason: `exposureBump is not a number (type: ${typeof entry.exposureBump}, value: ${entry.exposureBump})`,
+                entry: null,
+                repairReason: null,
             };
         }
         if (entry.exposureBump < 0) {
-            return { isValid: false, reason: `exposureBump is negative (${entry.exposureBump})` };
+            return {
+                isValid: false,
+                reason: `exposureBump is negative (${entry.exposureBump})`,
+                entry: null,
+                repairReason: null,
+            };
         }
     }
 
-    return { isValid: true, reason: null };
+    // Check entryIds LAST — strip-not-drop, so the checks above keep their
+    // whole-entry-reject semantics.
+    if (entry.entryIds !== undefined) {
+        const failure = entryIdsFailureReason(entry.entryIds);
+        if (failure) {
+            const repaired = { ...entry };
+            delete repaired.entryIds;
+            return { isValid: true, reason: null, entry: repaired, repairReason: failure };
+        }
+    }
+
+    return { isValid: true, reason: null, entry, repairReason: null };
 };
 
 /**
@@ -139,7 +214,17 @@ const validateMetadata = (metadata) => {
 
         const validation = validateMetadataEntry(entry);
         if (validation.isValid) {
-            validatedMetadata[challengeId] = entry;
+            // validation.entry is the repaired entry — identical to `entry` unless a
+            // malformed entryIds snapshot was stripped off it.
+            validatedMetadata[challengeId] = validation.entry;
+            if (validation.repairReason) {
+                logger
+                    .withCategory('challenges')
+                    .warning(
+                        `Dropping invalid entryIds snapshot for challenge ${challengeId}: ${validation.repairReason}`,
+                    );
+                hasChanges = true;
+            }
         } else {
             logger
                 .withCategory('challenges')
@@ -301,6 +386,68 @@ const updateChallengeVoteMetadata = (challengeId, exposure, timestamp = null) =>
 };
 
 /**
+ * True when two id lists hold the same members, regardless of order.
+ * The server can reorder ranking.entries between polls (after a boost, or a
+ * ranking resort) with no actual membership change, so every comparison on this
+ * snapshot is a set comparison — a positional or JSON.stringify compare would
+ * read a reorder as a change.
+ * @param {string[]|null} a
+ * @param {string[]|null} b
+ * @returns {boolean}
+ */
+const sameEntryIdSet = (a, b) => {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    if (a.length !== b.length) return false;
+    const setA = new Set(a);
+    if (setA.size !== new Set(b).size) return false;
+    return b.every((id) => setA.has(id));
+};
+
+/**
+ * Read the persisted entry-id snapshot for a challenge (voteOnNewEntry).
+ * @param {string} challengeId - Challenge ID
+ * @returns {string[]|null} - The stored ids, or null when none has ever been
+ *   stored. `null` and `[]` are meaningfully different: `[]` means "seen, and the
+ *   challenge had no entries", which is a valid baseline that must not fire.
+ */
+const getChallengeEntryIds = (challengeId) => {
+    const entry = getChallengeMetadata(challengeId);
+    const stored = entry?.entryIds;
+    return Array.isArray(stored) ? stored : null;
+};
+
+/**
+ * Persist the entry-id snapshot for a challenge (voteOnNewEntry).
+ * No-ops when the stored snapshot already holds the same set, so a server-side
+ * reorder costs no file I/O.
+ * @param {string} challengeId - Challenge ID
+ * @param {string[]} entryIds - Current entry ids
+ * @returns {boolean} - True if successful (including the skipped-write case)
+ */
+const setChallengeEntryIds = (challengeId, entryIds) => {
+    if (!challengeId) {
+        logger.withCategory('challenges').error('Challenge ID is required', null);
+        return false;
+    }
+    const failure = entryIdsFailureReason(entryIds);
+    if (failure) {
+        logger
+            .withCategory('challenges')
+            .warning(`Refusing to store entryIds for challenge ${challengeId}: ${failure}`, null);
+        return false;
+    }
+
+    const metadata = loadMetadata();
+    const existing = metadata[challengeId];
+    if (existing && sameEntryIdSet(existing.entryIds, entryIds)) {
+        return true; // Unchanged — skip the whole-file rewrite
+    }
+
+    metadata[challengeId] = { ...(existing || {}), entryIds };
+    return saveMetadata(metadata);
+};
+
+/**
  * Remove metadata for a specific challenge
  * @param {string} challengeId - Challenge ID
  * @returns {boolean} - True if successful, false otherwise
@@ -456,6 +603,12 @@ module.exports = {
     updateChallengeVoteMetadata,
     removeChallengeMetadata,
     cleanupStaleMetadata,
+
+    // Entry-id snapshot (voteOnNewEntry)
+    getChallengeEntryIds,
+    setChallengeEntryIds,
+    MAX_TRACKED_ENTRY_IDS,
+    MAX_ENTRY_ID_LENGTH,
 
     // Update check functions
     getUpdateCheckData,

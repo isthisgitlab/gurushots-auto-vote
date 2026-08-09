@@ -268,6 +268,9 @@
             onePhoto: '1 photo',
             onlyBoost: 'Only Boost Mode',
             onlyBoostDesc: 'Skip regular voting for this challenge entirely and only apply Boost.',
+            voteOnNewEntry: 'Vote On New Entry',
+            voteOnNewEntryDesc:
+                'When a new photo appears in this challenge — added by you on the website, or by Auto Fill, Emergency Fill, or a Boost/Turbo fill — vote once even if exposure already reads at or above your threshold. It votes up to whichever ceiling the challenge would normally use: Exposure Target (or Exposure, when Target is 0), or Last Hour Exposure Target during the final hour when Use Last Hour Exposure is on. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Fill Only: if any of those is blocking, no vote happens.',
             override: 'Override',
             overrideForChallenge: 'Override for Challenge',
             photo: 'photo',

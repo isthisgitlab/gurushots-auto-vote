@@ -517,6 +517,35 @@ describe('mock/index', () => {
                 expect(cleanupSpy).not.toHaveBeenCalled();
                 cleanupSpy.mockRestore();
             });
+
+            test('never persists new-entry snapshots to the shared metadata store', async () => {
+                // Same reasoning as cleanupStaleMetadata above: mock challenge ids
+                // never match real ones, and mock passes cleanupStaleMetadata: null,
+                // so a metadata-backed tracker here would pile up entryIds in the
+                // user's REAL metadata.json that nothing would ever prune. The mock
+                // binder must inject the in-memory tracker.
+                const metadata = require('../../src/js/metadata');
+                const settings = require('../../src/js/settings');
+                const setSpy = jest.spyOn(metadata, 'setChallengeEntryIds');
+                const getSpy = jest.spyOn(metadata, 'getChallengeEntryIds');
+                // Force the gate open — at the schema default (false) nothing would
+                // be tracked either way and the assertion would be vacuous.
+                const realGet = settings.getEffectiveSetting;
+                const settingsSpy = jest
+                    .spyOn(settings, 'getEffectiveSetting')
+                    .mockImplementation((key, cid) =>
+                        key === 'voteOnNewEntry' ? true : realGet.call(settings, key, cid),
+                    );
+
+                const result = await mockIndex.mockApiClient.fetchChallengesAndVote('test-token');
+
+                expect(result.success).toBe(true);
+                expect(setSpy).not.toHaveBeenCalled();
+                expect(getSpy).not.toHaveBeenCalled();
+                settingsSpy.mockRestore();
+                setSpy.mockRestore();
+                getSpy.mockRestore();
+            });
         });
 
         describe('fetchChallengesAndVote — fill-new options', () => {

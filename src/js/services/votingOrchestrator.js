@@ -37,7 +37,13 @@
  *   },
  *   cleanupStaleMetadata: (Function|null),
  *   interChallengeDelay: () => number,
+ *   entryTracker?: ({get: Function, set: Function}|null),
  * }} deps
+ *   `entryTracker` backs the voteOnNewEntry feature. Real mode passes a
+ *   metadata.json-backed tracker; mock passes an in-memory one for the same reason
+ *   it passes cleanupStaleMetadata: null — the metadata store is shared and
+ *   un-namespaced, and mock challenge ids would accumulate there unpruned. Omitting
+ *   it entirely makes the feature inert.
  * @returns {Promise<{success:boolean, message?:string, error?:string, challenges?:Array}>}
  *   `challenges` is the full active list this cycle fetched (not the
  *   filtered subset) so callers can reuse it for threshold scheduling.
@@ -47,6 +53,7 @@ const logger = require('../logger');
 const settings = require('../settings');
 const votingLogic = require('./VotingLogic');
 const autoFill = require('./autoFill');
+const newEntryTracker = require('./newEntryTracker');
 const cancellation = require('../voting/cancellation');
 const { formatDuration } = require('../format/duration');
 const { sleep } = require('../timing');
@@ -273,7 +280,7 @@ const actionRunners = {
 };
 
 const runVotingPass = async (token, challengeIdFilter, deps) => {
-    const { api, cleanupStaleMetadata, interChallengeDelay } = deps;
+    const { api, cleanupStaleMetadata, interChallengeDelay, entryTracker = null } = deps;
     // Shared dependency bundle for every auto-fill entry point this pass
     // (fill-new on boost/turbo, staggered auto-fill, emergency fill).
     const fillDeps = {
@@ -397,8 +404,38 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 if (typeof run === 'function') await run(actionCtx);
             }
 
+            // New-entry detection (voteOnNewEntry). Runs AFTER the deadline actions
+            // above on purpose: auto-fill / emergency fill / boost-turbo fill-new all
+            // reflect their new entry into challenge.member.ranking.entries, so an
+            // entry submitted seconds ago in this very cycle is detected in this very
+            // cycle rather than waiting for the next one.
+            //
+            // The setting is read HERE and nowhere else — VotingLogic takes the
+            // already-gated boolean. Gating the whole block (not just the decision)
+            // keeps the feature genuinely opt-in: metadata.json is a synchronous
+            // whole-file read/write, and a user who never enables this should pay
+            // none of it.
+            const challengeId = challenge.id.toString();
+            const tracking =
+                entryTracker && settings.getEffectiveSetting('voteOnNewEntry', challengeId) === true
+                    ? newEntryTracker.readEntryIds(challenge)
+                    : null;
+            const hasNewEntry = tracking
+                ? newEntryTracker.hasNewEntries(entryTracker.get(challengeId), tracking)
+                : false;
+            if (hasNewEntry) {
+                logger
+                    .withCategory('voting')
+                    .info(`${logger.challengeTag(challenge)} New entry detected — forcing a vote this cycle`, null);
+            }
+
             // Use the centralized voting logic service
-            const { shouldVote, voteReason, targetExposure } = votingLogic.evaluateVotingDecision(challenge, now);
+            const { shouldVote, voteReason, targetExposure, forcedByNewEntry } = votingLogic.evaluateVotingDecision(
+                challenge,
+                now,
+                { hasNewEntry },
+            );
+            let voteThrew = false;
 
             // Vote on challenge if conditions are met
             if (shouldVote) {
@@ -470,6 +507,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                             .warning(`${logger.challengeTag(challenge)} No vote images available — skipping`, null);
                     }
                 } catch (error) {
+                    voteThrew = true;
                     logger.withCategory('voting').endOperation(`vote-${challenge.id}`, null, error.message || error);
                 }
             } else {
@@ -477,6 +515,20 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 logger
                     .withCategory('voting')
                     .info(`${logger.challengeTag(challenge)} Skipping voting - ${voteReason}`, null);
+            }
+
+            // Record the entry snapshot, which disarms the trigger. Skipped only when
+            // a vote this trigger FORCED threw, so the next cycle retries it — that is
+            // the whole retry contract. Deliberately NOT skipped for:
+            //   - "no vote images available", which is not a throw; treating it as a
+            //     failure would force a getVoteImages call every cycle forever on a
+            //     challenge that never has any.
+            //   - a blocked decision (onlyBoost / vote-only-in-last-minute /
+            //     scheduled-fill-only / not started), which consumes the trigger.
+            //     Every block that can later lift, lifts into a rule that already
+            //     votes to 100% or re-reads exposure from scratch, so nothing is lost.
+            if (tracking && !(forcedByNewEntry && voteThrew)) {
+                entryTracker.set(challengeId, tracking);
             }
         }
 

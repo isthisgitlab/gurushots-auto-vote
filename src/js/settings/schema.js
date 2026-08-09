@@ -224,6 +224,16 @@ const SETTINGS_SCHEMA = {
         label: 'app.onlyBoost',
         description: 'app.onlyBoostDesc',
     },
+    voteOnNewEntry: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'general',
+        label: 'app.voteOnNewEntry',
+        description: 'app.voteOnNewEntryDesc',
+    },
     compactCards: {
         type: 'boolean',
         default: false,

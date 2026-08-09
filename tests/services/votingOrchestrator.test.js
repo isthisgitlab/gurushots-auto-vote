@@ -424,3 +424,234 @@ describe('voting path', () => {
         expect(delayFn).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('voteOnNewEntry — gate, arm, record', () => {
+    const settings = require('../../src/js/settings');
+
+    /** Minimal in-memory tracker with call spies, matching the deps contract. */
+    const makeTracker = (seed = {}) => {
+        const store = new Map(Object.entries(seed));
+        return {
+            get: jest.fn((id) => (store.has(id) ? store.get(id) : null)),
+            set: jest.fn((id, ids) => store.set(id, [...ids])),
+            store,
+        };
+    };
+
+    /** A challenge carrying real entry objects, since detection reads their ids. */
+    const withEntries = (ids) =>
+        makeChallenge({
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: ids.map((id) => ({ id })), exposure: { exposure_factor: 100 } },
+            },
+        });
+
+    /** The gate reads voteOnNewEntry off settings; everything else stays false. */
+    const enableSetting = (value = true) =>
+        settings.getEffectiveSetting.mockImplementation((key) => (key === 'voteOnNewEntry' ? value : false));
+
+    const lastDecisionOptions = () => votingLogic.evaluateVotingDecision.mock.calls.at(-1)?.[2];
+
+    beforeEach(() => {
+        settings.getEffectiveSetting.mockImplementation(() => false);
+    });
+
+    test('setting off: the tracker is never read or written', async () => {
+        const api = makeApi([withEntries(['a'])]);
+        const tracker = makeTracker();
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.get).not.toHaveBeenCalled();
+        expect(tracker.set).not.toHaveBeenCalled();
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('no entryTracker injected: feature is inert even with the setting on', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a'])]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(true);
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('first sight records a baseline and does not force a vote', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        const tracker = makeTracker();
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('an entry added between passes is detected on the next pass', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        const tracker = makeTracker({ 101: ['a'] });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('an entry added by auto-fill within the same pass is detected in that pass', async () => {
+        // The whole reason detection runs after the deadline runners: reflectNewEntry
+        // mutates the shared challenge object, so the fill lands before the decision.
+        enableSetting();
+        const challenge = withEntries(['a']);
+        const api = makeApi([challenge]);
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'autoFill', thresholdSec: 900 }]);
+        autoFill.maybeAutoFillChallenge.mockImplementation(async (c) => {
+            c.member.ranking.entries.push({ id: 'fresh' });
+            return 'submitted';
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'fresh']);
+    });
+
+    test('a reordered entries array is not a new entry and does not fire', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['b', 'a'])]);
+        const tracker = makeTracker({ 101: ['a', 'b'] });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('a challenge with no usable entries array is skipped entirely', async () => {
+        enableSetting();
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = undefined;
+        const api = makeApi([challenge]);
+        const tracker = makeTracker();
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.get).not.toHaveBeenCalled();
+        expect(tracker.set).not.toHaveBeenCalled();
+    });
+
+    test('a forced vote that throws leaves the snapshot unwritten so the next pass retries', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        api.submitVotes.mockRejectedValue(new Error('network went away'));
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'new entry detected',
+            targetExposure: 100,
+            forcedByNewEntry: true,
+        });
+
+        const result = await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(result.success).toBe(true);
+        expect(tracker.set).not.toHaveBeenCalled();
+        expect(tracker.store.get('101')).toEqual(['a']); // still armed
+    });
+
+    test('a NON-forced vote that throws still records the snapshot', async () => {
+        // Organic eligibility recurs by itself next cycle — there is no trigger to
+        // preserve, so holding the snapshot back would only re-fire pointlessly.
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        api.submitVotes.mockRejectedValue(new Error('network went away'));
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'below threshold',
+            targetExposure: 100,
+            forcedByNewEntry: false,
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('"no vote images" on a forced decision still records', async () => {
+        // Not a throw: treating it as failure would force a getVoteImages call every
+        // cycle forever on a challenge that never has any.
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        api.getVoteImages.mockResolvedValue({ images: null });
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'new entry detected',
+            targetExposure: 100,
+            forcedByNewEntry: true,
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('a blocked decision consumes the trigger and does not vote', async () => {
+        enableSetting();
+        const api = makeApi([withEntries(['a', 'b'])]);
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: false,
+            voteReason: 'boost-only mode enabled',
+            targetExposure: 100,
+            forcedByNewEntry: false,
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(api.submitVotes).not.toHaveBeenCalled();
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('disable then re-enable fires exactly one catch-up vote, then goes quiet', async () => {
+        const tracker = makeTracker();
+
+        // Pass 1 — enabled, establishes the baseline.
+        enableSetting();
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a'])]), { entryTracker: tracker }));
+        expect(tracker.store.get('101')).toEqual(['a']);
+
+        // Pass 2 — disabled. Entries change, but nothing is read or written, so the
+        // stored snapshot goes stale.
+        enableSetting(false);
+        tracker.set.mockClear();
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+        expect(tracker.set).not.toHaveBeenCalled();
+        expect(tracker.store.get('101')).toEqual(['a']);
+
+        // Pass 3 — re-enabled against the stale baseline: one catch-up fire.
+        enableSetting();
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
+
+        // Pass 4 — snapshot is current again, so it stays quiet.
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: false });
+    });
+
+    test('a per-challenge override behaves the same as the global default', async () => {
+        // The gate reads the EFFECTIVE value, so an override flip must be equivalent.
+        const tracker = makeTracker({ 101: ['a'] });
+        settings.getEffectiveSetting.mockImplementation((key, challengeId) =>
+            key === 'voteOnNewEntry' ? challengeId === '101' : false,
+        );
+
+        await runVotingPass('tok', null, deps(makeApi([withEntries(['a', 'b'])]), { entryTracker: tracker }));
+
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('voteOnNewEntry', '101');
+        expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
+    });
+});

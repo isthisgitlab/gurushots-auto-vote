@@ -261,3 +261,120 @@ describe('update-check helpers', () => {
         expect(writes).toHaveLength(0);
     });
 });
+
+describe('entryIds snapshot (voteOnNewEntry)', () => {
+    test('round-trips through save and load', () => {
+        setStoredMetadata({ updateCheck: { lastCheck: null, skipVersion: null } });
+        const writes = captureWrites();
+
+        expect(metadata.setChallengeEntryIds('c1', ['a', 'b'])).toBe(true);
+        expect(writes.at(-1).c1.entryIds).toEqual(['a', 'b']);
+
+        setStoredMetadata(writes.at(-1));
+        expect(metadata.getChallengeEntryIds('c1')).toEqual(['a', 'b']);
+    });
+
+    test('an empty snapshot is preserved and is distinct from an absent one', () => {
+        // [] means "seen, and the challenge had no entries" — a valid baseline that
+        // must not read as null, or the very next pass would fire on everything.
+        setStoredMetadata({ updateCheck: { lastCheck: null, skipVersion: null } });
+        const writes = captureWrites();
+
+        metadata.setChallengeEntryIds('c1', []);
+        expect(writes.at(-1).c1.entryIds).toEqual([]);
+
+        setStoredMetadata(writes.at(-1));
+        expect(metadata.getChallengeEntryIds('c1')).toEqual([]);
+        expect(metadata.getChallengeEntryIds('never-seen')).toBeNull();
+    });
+
+    test('merges into an existing entry without disturbing vote history', () => {
+        setStoredMetadata({
+            updateCheck: { lastCheck: null, skipVersion: null },
+            c1: { lastVoteTime: '2026-01-01T00:00:00.000Z', exposureBump: 42 },
+        });
+        const writes = captureWrites();
+
+        metadata.setChallengeEntryIds('c1', ['a']);
+
+        expect(writes.at(-1).c1).toEqual({
+            lastVoteTime: '2026-01-01T00:00:00.000Z',
+            exposureBump: 42,
+            entryIds: ['a'],
+        });
+    });
+
+    test('skips the write when the id set is unchanged, including a reorder', () => {
+        // The whole file is re-read and re-serialized on every write, so a
+        // server-side reorder must not cost any I/O at all.
+        setStoredMetadata({
+            updateCheck: { lastCheck: null, skipVersion: null },
+            c1: { entryIds: ['a', 'b'] },
+        });
+        const writes = captureWrites();
+
+        expect(metadata.setChallengeEntryIds('c1', ['a', 'b'])).toBe(true);
+        expect(writes).toHaveLength(0);
+
+        expect(metadata.setChallengeEntryIds('c1', ['b', 'a'])).toBe(true);
+        expect(writes).toHaveLength(0);
+
+        expect(metadata.setChallengeEntryIds('c1', ['a', 'b', 'c'])).toBe(true);
+        expect(writes).toHaveLength(1);
+    });
+
+    test.each([
+        ['not an array', 'nope'],
+        ['contains a non-string', ['a', 7]],
+        ['contains an empty string', ['a', '']],
+        ['over the id-count cap', Array.from({ length: 65 }, (_, i) => `id${i}`)],
+        ['contains an over-long id', ['a'.repeat(65)]],
+    ])('a malformed entryIds (%s) is stripped while the rest of the entry survives', (_label, entryIds) => {
+        // entryIds derives from a remote API response, unlike lastVoteTime and
+        // exposureBump — so it must never be able to take real voting history down
+        // with it the way a malformed internal field does.
+        setStoredMetadata({
+            updateCheck: { lastCheck: null, skipVersion: null },
+            c1: { lastVoteTime: '2026-01-01T00:00:00.000Z', exposureBump: 42, entryIds },
+        });
+
+        const loaded = metadata.loadMetadata();
+
+        expect(loaded.c1).toEqual({ lastVoteTime: '2026-01-01T00:00:00.000Z', exposureBump: 42 });
+        expect(metadata.getChallengeEntryIds('c1')).toBeNull();
+    });
+
+    test('an entry malformed in BOTH ways is still dropped whole, not repaired', () => {
+        // Ordering guard: the pre-existing lastVoteTime/exposureBump checks must
+        // short-circuit before the entryIds repair path can rescue the entry.
+        setStoredMetadata({
+            updateCheck: { lastCheck: null, skipVersion: null },
+            c1: { lastVoteTime: 'not-a-date', entryIds: 'also-bad' },
+        });
+
+        expect(metadata.loadMetadata().c1).toBeUndefined();
+    });
+
+    test('setChallengeEntryIds refuses to store a malformed snapshot', () => {
+        setStoredMetadata({ updateCheck: { lastCheck: null, skipVersion: null } });
+        const writes = captureWrites();
+
+        expect(metadata.setChallengeEntryIds('c1', ['ok', 123])).toBe(false);
+        expect(metadata.setChallengeEntryIds('', ['ok'])).toBe(false);
+        expect(writes).toHaveLength(0);
+    });
+
+    test('cleanupStaleMetadata removes snapshots along with their challenge', () => {
+        setStoredMetadata({
+            updateCheck: { lastCheck: null, skipVersion: null },
+            gone: { entryIds: ['a'] },
+            live: { entryIds: ['b'] },
+        });
+        const writes = captureWrites();
+
+        expect(metadata.cleanupStaleMetadata(['live'])).toBe(true);
+
+        expect(writes.at(-1).gone).toBeUndefined();
+        expect(writes.at(-1).live.entryIds).toEqual(['b']);
+    });
+});
