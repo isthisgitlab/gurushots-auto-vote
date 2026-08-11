@@ -155,14 +155,16 @@ jobs:
 
                     # Guard against that regression returning: dereferencing duplicated
                     # Electron Framework and tripled the archive (v1.4.1 shipped 363 MB
-                    # for a 311 MB bundle). Assert the symlinks survive a round trip.
-                    CHECK="${RUNNER_TEMP}/appzip-check"
-                    rm -rf "$CHECK"
+                    # for a 311 MB bundle). Count the source bundle rather than hardcode
+                    # a total, so this catches a partial dereference too and survives an
+                    # Electron bump that changes the framework layout.
+                    EXPECTED=$(find "$APP" -type l | wc -l | tr -d ' ')
+                    CHECK=$(mktemp -d)
                     ditto -x -k "$ZIP" "$CHECK"
-                    LINKS=$(find "$CHECK/GuruShotsAutoVote.app" -type l | wc -l | tr -d ' ')
+                    ACTUAL=$(find "$CHECK/$(basename "$APP")" -type l | wc -l | tr -d ' ')
                     rm -rf "$CHECK"
-                    if [ "$LINKS" -eq 0 ]; then
-                      echo "::error::.app.zip dereferenced its symlinks — archiver regression"
+                    if [ "$ACTUAL" -ne "$EXPECTED" ]; then
+                      echo "::error::.app.zip kept $ACTUAL of $EXPECTED symlinks — archiver regression"
                       exit 1
                     fi
                   fi
