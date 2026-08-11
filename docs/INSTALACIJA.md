@@ -52,31 +52,31 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 
 #### 🖥️ Grafiskā lietotne (ieteicams lielākajai daļai lietotāju)
 
-| Platforma         | Lejupielāde                                                                                                                                                          | Izmērs | Tips                  |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | --------------------- |
-| **Windows**       | [📥 GuruShotsAutoVote-v1.4.1-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-x64.exe)                 | ~50 MB | Portatīva izpildfaila |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.4.1-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-arm64.dmg)             | ~50 MB | DMG instalētājs       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.4.1-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-arm64.app.zip)     | ~50 MB | App komplekts (ZIP)   |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.4.1-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-x86_64.AppImage) | ~50 MB | AppImage              |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.4.1-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-arm64.AppImage)   | ~50 MB | AppImage              |
+| Platforma         | Lejupielāde                                                                                                                                                          | Izmērs  | Tips                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------- |
+| **Windows**       | [📥 GuruShotsAutoVote-v1.4.1-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-x64.exe)                 | ~96 MB  | Portatīva izpildfaila |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.4.1-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-arm64.dmg)             | ~108 MB | DMG instalētājs       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.4.1-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-arm64.app.zip)     | ~120 MB | App komplekts (ZIP)   |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.4.1-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-x86_64.AppImage) | ~98 MB  | AppImage              |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.4.1-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1-arm64.AppImage)   | ~91 MB  | AppImage              |
 
 > **macOS:** tikai Apple Silicon (arm64) — Intel (x86_64) būvējuma nav. **DMG** ir vienkāršākā instalācija; **APP** zip ir alternatīva, ja vēlaties ievietot komplektu pats.
 
 #### 📱 Mobilā lietotne (Android, sānielāde — bez Play Store)
 
-| Platforma                     | Lejupielāde                                                                                                                                  | Izmērs | Tips           |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------ | -------------- |
-| **Android (8.0+, sānielāde)** | [📥 GuruShotsAutoVote-v1.4.1.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1.apk) | ~10 MB | Parakstīts APK |
+| Platforma                     | Lejupielāde                                                                                                                                  | Izmērs  | Tips           |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------------- |
+| **Android (8.0+, sānielāde)** | [📥 GuruShotsAutoVote-v1.4.1.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.4.1.apk) | ~5.2 MB | Parakstīts APK |
 
 Android versija ir Capacitor apvalks ap to pašu React saskarni plus Kotlin spraudnis, kas balsošanas ciklus izpilda native līmenī fonā ar `AlarmManager` un foreground servisu. Balsošana turpinās, kad telefons ir bloķēts un lietotne aizvilkta no nesenajiem.
 
 #### 💻 Komandrinda (pieredzējušiem lietotājiem / automatizācijai)
 
-| Platforma             | Lejupielāde                                                                                                                          | Izmērs | Tips                  |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------ | --------------------- |
-| **macOS CLI**         | [📥 gurucli-v1.4.1-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.4.1-mac)             | ~55 MB | Termināļa izpildfaila |
-| **Linux CLI (x64)**   | [📥 gurucli-v1.4.1-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.4.1-linux)         | ~50 MB | Termināļa izpildfaila |
-| **Linux CLI (ARM64)** | [📥 gurucli-v1.4.1-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.4.1-linux-arm) | ~47 MB | Termināļa izpildfaila |
+| Platforma             | Lejupielāde                                                                                                                          | Izmērs  | Tips                  |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------- | --------------------- |
+| **macOS CLI**         | [📥 gurucli-v1.4.1-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.4.1-mac)             | ~101 MB | Termināļa izpildfaila |
+| **Linux CLI (x64)**   | [📥 gurucli-v1.4.1-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.4.1-linux)         | ~113 MB | Termināļa izpildfaila |
+| **Linux CLI (ARM64)** | [📥 gurucli-v1.4.1-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.4.1-linux-arm) | ~111 MB | Termināļa izpildfaila |
 
 > Windows CLI būvējuma nav — uz Windows izmantojiet augšā esošo grafisko lietotni.
 
