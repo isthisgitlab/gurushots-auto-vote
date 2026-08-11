@@ -144,11 +144,29 @@ jobs:
             - name: Zip macOS .app file with version
               if: matrix.platform == 'mac'
               run: |
+                  set -euo pipefail
                   VERSION=$(node -p "require('./package.json').version")
-                  if [ -d "build/mac-arm64/GuruShotsAutoVote.app" ]; then
-                    cd build/mac-arm64
-                    zip -r "../GuruShotsAutoVote-v${VERSION}-arm64.app.zip" "GuruShotsAutoVote.app"
-                    cd ../..
+                  APP="build/mac-arm64/GuruShotsAutoVote.app"
+                  ZIP="build/GuruShotsAutoVote-v${VERSION}-arm64.app.zip"
+                  if [ -d "$APP" ]; then
+                    # ditto, not zip: the bundle's frameworks are reached through symlinks
+                    # (Versions/Current and friends) and zip without -y dereferences them.
+                    ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+
+                    # Guard against that regression returning: dereferencing duplicated
+                    # Electron Framework and tripled the archive (v1.4.1 shipped 363 MB
+                    # for a 311 MB bundle). Count the source bundle rather than hardcode
+                    # a total, so this catches a partial dereference too and survives an
+                    # Electron bump that changes the framework layout.
+                    EXPECTED=$(find "$APP" -type l | wc -l | tr -d ' ')
+                    CHECK=$(mktemp -d)
+                    ditto -x -k "$ZIP" "$CHECK"
+                    ACTUAL=$(find "$CHECK/$(basename "$APP")" -type l | wc -l | tr -d ' ')
+                    rm -rf "$CHECK"
+                    if [ "$ACTUAL" -ne "$EXPECTED" ]; then
+                      echo "::error::.app.zip kept $ACTUAL of $EXPECTED symlinks — archiver regression"
+                      exit 1
+                    fi
                   fi
 
             - name: Build Linux ARM app
