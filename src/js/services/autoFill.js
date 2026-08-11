@@ -31,7 +31,7 @@ const {
     detectLetterPrefix,
 } = require('./photoPicker');
 const { getSemanticScores } = require('./semantic');
-const { enrichCandidates } = require('./photoStats');
+const { enrichCandidates, resetPassState: resetPhotoStatsPassState } = require('./photoStats');
 const { oneLine } = require('../format/logSafe');
 const { getScheduleShift, remapScheduleRows } = require('./scheduleRemap');
 
@@ -467,9 +467,17 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
  * from a silent limitation into something the user can see and wait out.
  */
 const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logger) => {
-    const winnerId = picked[0];
-    const winner = scored.find((entry) => String(entry.id) === String(winnerId));
-    if (!winner) return;
+    // Only the SUBMITTED photos that were actually in the contested group belong
+    // in this message. picked[0] is not a safe proxy: a multi-slot fill
+    // (emergency fill and manual fill-all both pass wantCount = slotsRemaining)
+    // can award slot 1 to a genuine theme match and only later slots on
+    // popularity, and naming that first photo would claim "nothing matched the
+    // theme" about a photo that did — while leaving the photos that really were
+    // chosen blind unexplained.
+    const explained = picked
+        .map((id) => scored.find((entry) => String(entry.id) === String(id)))
+        .filter((entry) => entry && contestedIds.has(String(entry.id)));
+    if (explained.length === 0) return;
 
     // Coverage is read off the SCORED entries, not the photo objects handed to
     // selectEnrichmentSet: enrichCandidates returns copies, so `statsKnown`
@@ -478,17 +486,27 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
     const known = contestedEntries.filter((entry) => entry.statsKnown === true).length;
     const coverage =
         known < contestedEntries.length
-            ? `; vote counts are known for ${known} of ${contestedEntries.length} tied photos so far — the rest are measured over the next few fills`
+            ? `; past-performance figures have been looked up for ${known} of ${contestedEntries.length} of them so far, and the rest are looked up a batch per fill`
             : '';
+
+    // An unmeasured photo still carries the library endpoint's flat votes:0.
+    // Printing that as "0 votes" would repeat the exact misreading this feature
+    // exists to remove, so say so instead of showing a number we do not have.
     // Photo ids come from the API: collapse CR/LF before interpolating, or a
     // crafted value could forge log lines (CWE-117).
+    const describe = (entry) =>
+        entry.statsKnown === true
+            ? `${oneLine(entry.id)} (${entry.votes} votes, ${entry.achievementCount} achievements, ${entry.views} views)`
+            : `${oneLine(entry.id)} (past performance not looked up yet — ranked below any photo that was)`;
+
     logger
         .withCategory('autoFill')
         .warning(
-            `${prefix}: nothing in ${logger.challengeTag(challenge)} matched the challenge theme, so the entry was chosen on past performance — ` +
-                `photo ${oneLine(winnerId)} (${winner.votes} votes, ${winner.achievementCount} achievements, ${winner.views} views) ` +
+            `${prefix}: nothing in ${logger.challengeTag(challenge)} matched the challenge theme, so ` +
+                `${explained.length === 1 ? 'the entry was' : `${explained.length} entries were`} chosen on past performance — ` +
+                `${explained.map(describe).join('; ')} ` +
                 `out of ${contestedEntries.length} equally off-theme candidates${coverage}. ` +
-                `Set Title Tag Rules for this challenge title to steer which photos qualify.`,
+                `Set a Per-Title Tag Rule for this challenge title in Settings to steer which photos qualify.`,
             null,
         );
 };
@@ -644,9 +662,6 @@ const runFillAttempt = async ({
     }
 
     let picked = finalizePick(scored, wantCount);
-    if (contested.length > 0 && picked.length > 0) {
-        logPopularityPick(label, challenge, scored, contestedIds, picked, logger);
-    }
     if (picked.length === 0) {
         if (onEmptyPick) {
             return { status: 'no-pick', detail: onEmptyPick(eligible) };
@@ -683,6 +698,14 @@ const runFillAttempt = async ({
     try {
         const result = await submitToChallenge(challenge.id, picked, token);
         if (result && result.ok) {
+            // Explain the pick only once it actually became an entry. Logging
+            // earlier would tell the user "this photo was chosen" for a fill
+            // that then stood down on the live re-check or was rejected — an
+            // entry they would go looking for and never find. `picked` is also
+            // final only here: onRefreshed can replace it.
+            if (contested.length > 0) {
+                logPopularityPick(label, challenge, scored, contestedIds, picked, logger);
+            }
             return { status: 'submitted', picked };
         }
         const reason = describeSubmitFailure(result && result.raw);
@@ -981,6 +1004,12 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     if (slotsRemaining <= 0) {
         return { success: true, submitted: 0, skipped: 0 };
     }
+
+    // Manual "Fill Now" is its own operation, not part of a voting pass, so it
+    // gets a fresh photo-stats budget and failure breaker. Without this an
+    // earlier background pass that tripped the breaker would silently deny stat
+    // enrichment to every manual fill until the next pass happened to reset it.
+    resetPhotoStatsPassState();
 
     // settings is optional for fillChallengeNow — unit tests for legacy
     // failure paths invoke without it. The production IPC handler always

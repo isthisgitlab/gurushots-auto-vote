@@ -8,18 +8,28 @@
  */
 
 const logger = require('../logger');
+const { oneLine } = require('../format/logSafe');
 const { makePostRequest } = require('./api-client');
 const { ENDPOINTS, createWebHeaders, makeRequireValue } = require('./constants');
 
 const requireValue = makeRequireValue('submissions');
 
 // Upper bound on pages fetched by one `paginate: true` call. At the default
-// limit of 100 this is 1000 photos — far above any realistic eligible set,
-// while keeping worst-case sequential latency well inside the emergency-fill
-// window (each page is a normal makePostRequest under the apiTimeout setting).
+// limit of 100 this is 1000 photos — far above any realistic eligible set.
 // Hitting the cap is logged, never silent: truncating the candidate list
 // without saying so would misreport "considered the whole library".
 const MAX_LIBRARY_PAGES = 10;
+
+// Wall-clock ceiling on one paginated walk. A page count alone does NOT bound
+// the walk usefully: pages are fetched sequentially and each one is a normal
+// makePostRequest carrying the apiTimeout (30s by default) plus up to
+// apiMaxRetries exponential-backoff retries, so ten unlucky pages could run
+// for minutes. This same fetch is shared with emergency fill, whose entire
+// default trigger window is 300s — a walk that outlives the window would
+// defeat the feature it is trying to feed. When the budget runs out the walk
+// stops and returns what it has: fewer candidates is always better than
+// missing the deadline, and the shortfall is logged.
+const PAGINATE_BUDGET_MS = 20_000;
 
 /**
  * Fetch ONE page of the eligible-photo library.
@@ -72,38 +82,54 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search }) => {
  *   presence-based detection would silently downgrade to a single page.
  *
  *   With paginate:true the walk begins at `start` (default 0), advances by
- *   `limit`, and stops at the first short page, at MAX_LIBRARY_PAGES, or at
- *   the first failed/malformed page. It NEVER throws mid-walk: a transient
- *   failure on page 7 returns pages 1-6 rather than sinking a fill that used
- *   to succeed on a single request. Both early-stop paths log a warning.
+ *   `limit`, and stops at the first short page, at MAX_LIBRARY_PAGES, at the
+ *   PAGINATE_BUDGET_MS wall-clock budget, or at the first failed/malformed
+ *   page. It NEVER throws mid-walk: a transient failure on page 7 returns
+ *   pages 1-6 rather than sinking a fill that used to succeed on a single
+ *   request. Every early stop logs a warning.
+ *
+ *   budgetMs: override the wall-clock budget for this walk. Callers running
+ *   against a deadline should pass something smaller.
  * @returns {Promise<Array<object>>} list of photo items, or empty array on failure
  */
 const getEligiblePhotos = async (challengeId, token, options = {}) => {
     requireValue(challengeId, 'challengeId');
     requireValue(token, 'token');
-    const limit = Number.isFinite(options.limit) ? options.limit : 100;
-    const start = Number.isFinite(options.start) ? options.start : 0;
+    // A non-positive limit would break both the offset advance (start never
+    // moves) and the short-page test (`0 < 0` is false), turning the walk into
+    // MAX_LIBRARY_PAGES redundant requests for the same offset.
+    const limit = Number.isFinite(options.limit) && options.limit > 0 ? options.limit : 100;
+    const start = Number.isFinite(options.start) && options.start >= 0 ? options.start : 0;
     const search = options.search;
 
     if (options.paginate !== true) {
         return (await fetchPhotoPage(challengeId, token, { limit, start, search })) || [];
     }
 
+    const budgetMs = Number.isFinite(options.budgetMs) && options.budgetMs > 0 ? options.budgetMs : PAGINATE_BUDGET_MS;
+    const startedAt = Date.now();
     // Dedupe across pages: offset pagination over a live, date-ordered list can
     // repeat a row when the underlying set shifts between requests.
     const byId = new Map();
+    const warn = (message) => logger.withCategory('api').warning(`autoFill: ${message}`, null);
     let page = 0;
+    let stoppedEarly = false;
     for (; page < MAX_LIBRARY_PAGES; page++) {
+        if (page > 0 && Date.now() - startedAt >= budgetMs) {
+            warn(
+                `reading your photo library took longer than ${Math.round(budgetMs / 1000)}s, so it stopped after ${page} page(s) with ${byId.size} photo(s); older photos were not considered this time`,
+            );
+            stoppedEarly = true;
+            break;
+        }
         let items;
         try {
             items = await fetchPhotoPage(challengeId, token, { limit, start: start + page * limit, search });
         } catch (error) {
-            logger
-                .withCategory('api')
-                .warning(
-                    `get_photos_private: page ${page + 1} failed (${error?.message || error}); using the ${byId.size} photo(s) fetched so far`,
-                    null,
-                );
+            warn(
+                `reading page ${page + 1} of your photo library failed (${oneLine(error?.message || error)}); continuing with the ${byId.size} photo(s) already read`,
+            );
+            stoppedEarly = true;
             break;
         }
         if (items === null) {
@@ -111,12 +137,10 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
             // long-standing empty-array contract); a later page means a partial
             // walk the caller should know about.
             if (page > 0) {
-                logger
-                    .withCategory('api')
-                    .warning(
-                        `get_photos_private: page ${page + 1} returned no usable items; using the ${byId.size} photo(s) fetched so far`,
-                        null,
-                    );
+                warn(
+                    `page ${page + 1} of your photo library came back empty or unreadable; continuing with the ${byId.size} photo(s) already read`,
+                );
+                stoppedEarly = true;
             }
             break;
         }
@@ -131,13 +155,10 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
         }
     }
 
-    if (page === MAX_LIBRARY_PAGES) {
-        logger
-            .withCategory('api')
-            .warning(
-                `get_photos_private: stopped at the ${MAX_LIBRARY_PAGES}-page cap with ${byId.size} photo(s); older photos were not considered`,
-                null,
-            );
+    if (!stoppedEarly && page === MAX_LIBRARY_PAGES) {
+        warn(
+            `stopped reading your photo library at the ${MAX_LIBRARY_PAGES}-page limit with ${byId.size} photo(s); older photos were not considered`,
+        );
     }
     return Array.from(byId.values());
 };
@@ -209,4 +230,5 @@ module.exports = {
     getImageData,
     submitToChallenge,
     MAX_LIBRARY_PAGES,
+    PAGINATE_BUDGET_MS,
 };

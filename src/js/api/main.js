@@ -9,7 +9,7 @@ const { getActiveChallenges } = require('./challenges');
 const { getVoteImages, submitVotes } = require('./voting');
 const { applyBoost, applyBoostToEntry } = require('./boost');
 const { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } = require('./turbo');
-const { getEligiblePhotos, submitToChallenge } = require('./submissions');
+const { getEligiblePhotos, getImageData, submitToChallenge } = require('./submissions');
 const { cleanupStaleMetadata } = require('../metadata');
 const { sleep, getRandomDelay } = require('../timing');
 const logger = require('../logger');
@@ -107,6 +107,7 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
             applyBoostToEntry,
             applyTurbo,
             getEligiblePhotos,
+            getImageData,
             submitToChallenge,
             runTurboMiniGame,
         },

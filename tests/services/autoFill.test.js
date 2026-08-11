@@ -2501,13 +2501,13 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const explanation = warnings.find((m) => m.includes('chosen on past performance'));
         expect(explanation).toBeDefined();
         expect(explanation).toContain('votes');
-        expect(explanation).toContain('Title Tag Rules');
+        expect(explanation).toContain('Per-Title Tag Rule');
         // Both photos were measured, so the line must NOT claim partial
         // coverage. enrichCandidates returns COPIES, so counting statsKnown on
         // the objects selectEnrichmentSet handed out reports 0 every time —
         // coverage has to be read off the patched scored entries.
         expect(explanation).toContain('out of 2 equally off-theme candidates');
-        expect(explanation).not.toContain('known for 0 of');
+        expect(explanation).not.toContain('looked up for 0 of');
     });
 
     test('reports partial coverage honestly when only some photos were measured', async () => {
@@ -2530,7 +2530,68 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         const explanation = logger.__level.warning.mock.calls
             .map(([msg]) => msg)
             .find((m) => m.includes('chosen on past performance'));
-        expect(explanation).toContain('known for 1 of 2 tied photos');
+        expect(explanation).toContain('looked up for 1 of 2');
+        // The unmeasured photo must never be reported as "0 votes" — that is
+        // the flat-zero misreading this whole feature exists to remove.
+        if (explanation.includes(' b (')) {
+            expect(explanation).toContain('not looked up yet');
+        }
+    });
+
+    test('the explanation is withheld when the submit never lands', async () => {
+        // Logging before the submit would tell the user an entry was chosen for
+        // a fill that then got rejected — an entry they would go hunting for.
+        const logger = makeCapturingLogger();
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('a', 900, 9000), libraryPhoto('b', 800, 8000)]);
+        const getImageData = jest.fn(async () => ({ votes: 5, views: 9, achievements: [] }));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: false, raw: { success: false } });
+
+        await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        const warnings = logger.__level.warning.mock.calls.map(([msg]) => msg);
+        expect(warnings.some((m) => m.includes('chosen on past performance'))).toBe(false);
+    });
+
+    test('a multi-slot fill explains only the popularity-decided entries, not a theme match', async () => {
+        // Regression guard: picked[0] is not a safe stand-in for "the
+        // popularity pick". Here slot 1 goes to a genuine theme match, so
+        // naming it would claim "nothing matched the theme" about a photo that
+        // did — and leave the actually-contested entry unexplained.
+        const logger = makeCapturingLogger();
+        const photos = [
+            { ...allowedPhoto('pink', ['Pink', 'Flower'], 5000), votes: 0, views: 1 },
+            libraryPhoto('tiedA', 900, 4000),
+            libraryPhoto('tiedB', 100, 3000),
+        ];
+        const getImageData = jest.fn(async (id) =>
+            id === 'tiedB'
+                ? { votes: 90000, views: 100, achievements: [] }
+                : { votes: 10, views: 900, achievements: [] },
+        );
+
+        const result = await fillChallengeNow(makeChallenge({ maxSubmits: 3, entries: [{ id: 'e1' }] }), 'tok', 'all', {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue(photos),
+            getImageData,
+            submitToChallenge: jest.fn().mockResolvedValue({ ok: true, raw: { success: true } }),
+        });
+
+        expect(result.success).toBe(true);
+        const explanation = logger.__level.warning.mock.calls
+            .map(([msg]) => msg)
+            .find((m) => m.includes('chosen on past performance'));
+        expect(explanation).toBeDefined();
+        expect(explanation).toContain('tiedB');
+        expect(explanation).not.toContain('pink');
     });
 
     test('a get_image_data outage still completes the fill', async () => {

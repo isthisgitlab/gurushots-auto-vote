@@ -641,6 +641,7 @@ const mockApiClient = {
                 applyBoostToEntry: mockApiClient.applyBoostToEntry,
                 applyTurbo: mockApiClient.applyTurbo,
                 getEligiblePhotos: mockApiClient.getEligiblePhotos,
+                getImageData: mockApiClient.getImageData,
                 submitToChallenge: mockApiClient.submitToChallenge,
                 runTurboMiniGame: mockApiClient.runTurboMiniGame,
             },

@@ -74,6 +74,22 @@ const MAX_CACHE_ENTRIES = 5000;
 // a huge array cannot inflate the cache or the candidate objects.
 const MAX_ACHIEVEMENT_COUNT = 999;
 
+// Photo ids are untrusted strings and become cache KEYS, so MAX_CACHE_ENTRIES
+// alone does not bound the file: 5000 entries whose values are three numbers
+// each is tiny, but 5000 megabyte-long keys is not. Real GuruShots ids are
+// 32-char hex; anything past this is malformed and simply goes uncached (it is
+// still enriched for the current fill, just never persisted). Same
+// bound-the-untrusted-input reflex as MAX_LABELS_PER_PHOTO in photoPicker.js.
+const MAX_PHOTO_ID_LENGTH = 128;
+
+// Ceiling on newly fetched photos across a whole voting pass, not just one
+// fill. MAX_ENRICH_PER_FILL bounds a single challenge; runVotingPass walks
+// every active challenge, and a user with many of them would otherwise
+// accumulate an unbounded number of third-party requests per pass. Paired with
+// the consecutive-failure breaker: that one reacts to the endpoint pushing
+// back, this one caps volume even when every request succeeds.
+const MAX_ENRICH_PER_PASS = 200;
+
 const statsStore = createJsonStore({ fileName: 'photo-stats.json', prefKey: 'gurushots-photo-stats' });
 
 /** @type {Map<string, {votes: number, views: number, achievementCount: number, fetchedAt: number}>|null} */
@@ -83,6 +99,17 @@ let cacheDirty = false;
 // Reset per voting pass by resetPassState().
 let consecutiveFailures = 0;
 let breakerLoggedThisPass = false;
+let fetchedThisPass = 0;
+let passCapLogged = false;
+
+// Only ids short enough to be safe cache keys are persisted; see
+// MAX_PHOTO_ID_LENGTH. Returns null for anything unusable.
+const cacheKeyFor = (id) => {
+    if (id === undefined || id === null) return null;
+    const key = String(id);
+    if (key === '' || key.length > MAX_PHOTO_ID_LENGTH) return null;
+    return key;
+};
 
 const nonNegInt = (value) => {
     const n = Number(value);
@@ -126,6 +153,7 @@ const loadCache = () => {
         for (const id of Object.keys(photos)) {
             const entry = photos[id];
             if (!entry || typeof entry !== 'object') continue;
+            if (cacheKeyFor(id) === null) continue;
             cache.set(id, {
                 votes: nonNegInt(entry.votes),
                 views: nonNegInt(entry.views),
@@ -150,7 +178,12 @@ const persistCache = () => {
             const sorted = Array.from(cache.entries()).sort((a, b) => b[1].fetchedAt - a[1].fetchedAt);
             cache = new Map(sorted.slice(0, MAX_CACHE_ENTRIES));
         }
-        const photos = {};
+        // Object.create(null), not {}: a photo id of "__proto__" assigned onto a
+        // normal object literal hits the inherited accessor and reassigns that
+        // object's prototype instead of storing a key, silently dropping the
+        // entry on every write. loadCache already guards the read side with
+        // Object.keys; this is the matching write-side guard.
+        const photos = Object.create(null);
         for (const [id, entry] of cache) photos[id] = entry;
         statsStore.writeRaw(JSON.stringify({ version: 1, photos }));
         cacheDirty = false;
@@ -168,9 +201,13 @@ const persistCache = () => {
 const resetPassState = () => {
     consecutiveFailures = 0;
     breakerLoggedThisPass = false;
+    fetchedThisPass = 0;
+    passCapLogged = false;
 };
 
-const breakerOpen = () => consecutiveFailures >= FAILURE_BREAKER_THRESHOLD;
+// Enrichment stops for the pass either because the endpoint is failing or
+// because the pass has spent its request budget.
+const breakerOpen = () => consecutiveFailures >= FAILURE_BREAKER_THRESHOLD || fetchedThisPass >= MAX_ENRICH_PER_PASS;
 
 /**
  * Run `worker` over `items` at most ENRICH_CONCURRENCY at a time.
@@ -213,22 +250,42 @@ const enrichCandidates = async (photos, token, deps) => {
     const now = Date.now();
     const store = loadCache();
 
-    // Split into cache hits (free) and fetch candidates. Selection deliberately
-    // prefers UNCACHED photos so successive fills widen coverage instead of
-    // re-confirming the same slice; `views` only breaks ties among them. It is
-    // explicitly NOT a views-ranked top-N — views is the very signal whose
-    // unreliability made this enrichment necessary, so using it to gate which
-    // photos are ever measured would re-create the original bug in miniature.
+    // Split into cache hits (free) and fetch candidates.
+    //
+    // Ordering, stated precisely because it decides which photos get measured
+    // first when a contested set is bigger than one fill's budget:
+    //
+    //   1. Anything already fresh in the cache costs nothing and is resolved
+    //      outright — it never competes for the budget.
+    //   2. Among the rest, NEVER-measured photos come before ones whose entry
+    //      merely went stale. A stale entry still has usable numbers from its
+    //      last lookup, so spending the budget re-confirming it while another
+    //      photo has never been looked at at all is strictly worse for coverage.
+    //   3. Only within each of those groups does `views` order the queue.
+    //
+    // That third step IS a views-ranked ordering, and it is worth being honest
+    // about what it does and does not do. It never feeds the ranking tiers —
+    // votes/achievements/views are compared only once real numbers arrive — it
+    // just picks the reading order, and views is a decent prior for "which
+    // photo is likely to have lots of votes". Because measured photos leave the
+    // queue permanently, coverage still reaches every candidate; views only
+    // affects how soon. The original bug was views DECIDING the submission, not
+    // views being consulted at all.
     const needFetch = [];
     const resolved = new Map();
+    const seen = new Set();
     for (const photo of photos) {
         const id = photo && photo.id !== undefined && photo.id !== null ? String(photo.id) : null;
         if (!id) continue;
+        // Callers dedupe upstream, but do not rely on it: a repeated id would
+        // otherwise burn two budget slots fetching the same photo twice.
+        if (seen.has(id)) continue;
+        seen.add(id);
         const entry = store.get(id);
         if (isFresh(entry, now)) {
             resolved.set(id, entry);
         } else {
-            needFetch.push(photo);
+            needFetch.push({ photo, everMeasured: entry !== undefined });
         }
     }
 
@@ -236,20 +293,32 @@ const enrichCandidates = async (photos, token, deps) => {
     if (!breakerOpen()) {
         fetchList = needFetch
             .slice()
-            .sort((a, b) => nonNegInt(b?.views) - nonNegInt(a?.views))
-            .slice(0, MAX_ENRICH_PER_FILL);
+            .sort((a, b) => {
+                if (a.everMeasured !== b.everMeasured) return a.everMeasured ? 1 : -1;
+                return nonNegInt(b.photo?.views) - nonNegInt(a.photo?.views);
+            })
+            .slice(0, MAX_ENRICH_PER_FILL)
+            .map((candidate) => candidate.photo);
     }
 
     if (fetchList.length > 0) {
         await mapChunked(fetchList, async (photo) => {
             if (breakerOpen()) return null;
             const id = String(photo.id);
+            fetchedThisPass++;
+            if (fetchedThisPass >= MAX_ENRICH_PER_PASS && !passCapLogged) {
+                passCapLogged = true;
+                log.withCategory('autoFill').warning(
+                    `autoFill: reached this cycle's limit of ${MAX_ENRICH_PER_PASS} photo-stat lookups; remaining challenges rank on what is already known and resume next cycle`,
+                    null,
+                );
+            }
             let payload;
             try {
                 payload = await getImageData(id, token);
             } catch (error) {
                 log.withCategory('autoFill').debug(
-                    `photoStats: get_image_data failed for photo ${oneLine(id)}: ${error?.message || error}`,
+                    `photoStats: get_image_data failed for photo ${oneLine(id)}: ${oneLine(error?.message || error)}`,
                     null,
                 );
                 payload = null;
@@ -267,9 +336,13 @@ const enrichCandidates = async (photos, token, deps) => {
             }
             consecutiveFailures = 0;
             const stats = { ...toStats(payload), fetchedAt: now };
-            store.set(id, stats);
-            cacheDirty = true;
+            // Always usable for THIS fill; only persisted when the id is a safe
+            // cache key (see MAX_PHOTO_ID_LENGTH).
             resolved.set(id, stats);
+            if (cacheKeyFor(id) !== null) {
+                store.set(id, stats);
+                cacheDirty = true;
+            }
             return null;
         });
         persistCache();
@@ -304,6 +377,8 @@ module.exports = {
     enrichCandidates,
     resetPassState,
     MAX_ENRICH_PER_FILL,
+    MAX_ENRICH_PER_PASS,
+    MAX_CACHE_ENTRIES,
     STATS_TTL_MS,
     FAILURE_BREAKER_THRESHOLD,
     __resetForTests,

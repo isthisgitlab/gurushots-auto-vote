@@ -824,24 +824,11 @@ const finalizePick = (scored, slotsToFill) => {
     return ranked.slice(0, slotsToFill).map((p) => p.id);
 };
 
-/**
- * Did the popularity tiers (not the theme) decide this pick? True when the
- * candidates competing for the last awarded slot were tied on every theme tier
- * — the state in which an off-theme photo gets submitted and the user is owed
- * an explanation.
- *
- * @param {Array<object>} scored
- * @param {number} slotsToFill
- * @returns {boolean}
- */
-const wasDecidedByPopularity = (scored, slotsToFill) => selectEnrichmentSet(scored, slotsToFill).length > 0;
-
 module.exports = {
     pickPhotosForChallenge,
     buildScoredCandidates,
     selectEnrichmentSet,
     finalizePick,
-    wasDecidedByPopularity,
     buildSearchTerms,
     detectLetterPrefix,
     labelWordStems,

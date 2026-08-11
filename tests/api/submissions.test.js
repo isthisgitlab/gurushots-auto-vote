@@ -133,14 +133,14 @@ describe('submissions', () => {
             // have been a single-request success, and throwing here would fail
             // the whole fill.
             expect(photos.map((p) => p.id)).toEqual(['p1', 'p2']);
-            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('page 2 failed'), null);
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('reading page 2'), null);
         });
 
         test('a mid-walk malformed page keeps what was fetched and warns', async () => {
             makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce({ nope: true });
             const photos = await getEligiblePhotos('c1', token, { limit: 2, paginate: true });
             expect(photos.map((p) => p.id)).toEqual(['p1', 'p2']);
-            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('no usable items'), null);
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('came back empty or unreadable'), null);
         });
 
         test('a malformed FIRST page is just an empty library, not a warning', async () => {
@@ -156,7 +156,42 @@ describe('submissions', () => {
             const photos = await getEligiblePhotos('c1', token, { limit: 2, paginate: true });
             expect(makePostRequest).toHaveBeenCalledTimes(MAX_LIBRARY_PAGES);
             expect(photos.map((p) => p.id)).toEqual(['a', 'b']);
-            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining(`${MAX_LIBRARY_PAGES}-page cap`), null);
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining(`${MAX_LIBRARY_PAGES}-page limit`), null);
+        });
+
+        test('abandons the walk when it outruns its wall-clock budget', async () => {
+            // The walk is sequential and every page carries apiTimeout plus
+            // retries, so a page cap alone cannot keep it inside the
+            // emergency-fill window — the time budget is what does.
+            const realNow = Date.now;
+            let clock = 1_000_000;
+            Date.now = () => clock;
+            try {
+                makePostRequest.mockImplementation(async () => {
+                    clock += 5_000; // each page "takes" 5s
+                    return page('a', 'b');
+                });
+                const photos = await getEligiblePhotos('c1', token, {
+                    limit: 2,
+                    paginate: true,
+                    budgetMs: 12_000,
+                });
+                // Pages starting at t=0/5s/10s are allowed; the check at 15s stops it.
+                expect(makePostRequest).toHaveBeenCalledTimes(3);
+                expect(photos.map((p) => p.id)).toEqual(['a', 'b']);
+                expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('took longer than'), null);
+            } finally {
+                Date.now = realNow;
+            }
+        });
+
+        test('a non-positive limit cannot stall the walk on a single offset', async () => {
+            // limit<=0 would break both the offset advance and the short-page
+            // test, re-requesting start=0 until the page cap.
+            makePostRequest.mockResolvedValueOnce({ items: [] });
+            await getEligiblePhotos('c1', token, { limit: 0, paginate: true });
+            expect(makePostRequest).toHaveBeenCalledTimes(1);
+            expect(makePostRequest.mock.calls[0][2]).toContain('limit=100');
         });
     });
 

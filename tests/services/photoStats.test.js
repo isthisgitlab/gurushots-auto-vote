@@ -27,7 +27,8 @@ jest.mock('../../src/js/logger', () => {
 });
 
 const photoStats = require('../../src/js/services/photoStats');
-const { enrichCandidates, resetPassState, MAX_ENRICH_PER_FILL, STATS_TTL_MS } = photoStats;
+const { enrichCandidates, resetPassState, MAX_ENRICH_PER_FILL, MAX_ENRICH_PER_PASS, MAX_CACHE_ENTRIES, STATS_TTL_MS } =
+    photoStats;
 const { __level: log } = require('../../src/js/logger');
 
 const photo = (id, extra = {}) => ({ id, labels: ['Misc'], permission: { allowed: true }, ...extra });
@@ -222,5 +223,129 @@ describe('photoStats.enrichCandidates', () => {
         const getImageData = jest.fn();
         expect(await enrichCandidates([], 'tok', { getImageData })).toEqual([]);
         expect(getImageData).not.toHaveBeenCalled();
+    });
+
+    test('never-measured photos are fetched before merely-stale ones', async () => {
+        const now = Date.now();
+        const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+
+        // Measure 'stale' now, then jump past the TTL so it needs re-reading.
+        await enrichCandidates([photo('stale', { views: 9999 })], 'tok', { getImageData });
+        nowSpy.mockReturnValue(now + STATS_TTL_MS + 1);
+
+        // 'stale' has by far the most views, so a purely views-ranked queue
+        // would re-read it first. A never-measured photo has no numbers at all,
+        // which is strictly worse for coverage, so it must go first.
+        getImageData.mockClear();
+        const many = [
+            photo('stale', { views: 9999 }),
+            ...Array.from({ length: MAX_ENRICH_PER_FILL }, (_, i) => photo(`fresh${i}`, { views: 1 })),
+        ];
+        await enrichCandidates(many, 'tok', { getImageData });
+        const fetched = getImageData.mock.calls.map(([id]) => id);
+        expect(fetched).toHaveLength(MAX_ENRICH_PER_FILL);
+        expect(fetched).not.toContain('stale');
+        nowSpy.mockRestore();
+    });
+
+    test('within the never-measured group, higher-view photos are read first', async () => {
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        const many = [
+            ...Array.from({ length: MAX_ENRICH_PER_FILL }, (_, i) => photo(`low${i}`, { views: 1 })),
+            photo('high', { views: 5000 }),
+        ];
+        await enrichCandidates(many, 'tok', { getImageData });
+        // views never feeds the ranking tiers — it only orders the reading
+        // queue — but that order decides who gets measured first when the set
+        // is larger than one fill's budget, so it is worth pinning.
+        expect(getImageData.mock.calls[0][0]).toBe('high');
+    });
+
+    test('a duplicate id does not burn two budget slots', async () => {
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        await enrichCandidates([photo('dup'), photo('dup'), photo('other')], 'tok', { getImageData });
+        const fetched = getImageData.mock.calls.map(([id]) => id);
+        expect(fetched.filter((id) => id === 'dup')).toHaveLength(1);
+        expect(fetched).toContain('other');
+    });
+
+    test('a cache entry stamped in the future is not treated as fresh', async () => {
+        const now = Date.now();
+        const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
+        const getImageData = jest.fn().mockResolvedValue(payload(7, 7));
+        await enrichCandidates([photo('p1')], 'tok', { getImageData });
+
+        // Clock skew or a corrupted file must not make an entry immortal.
+        nowSpy.mockReturnValue(now - 60_000);
+        getImageData.mockClear().mockResolvedValue(payload(8, 8));
+        const out = await enrichCandidates([photo('p1')], 'tok', { getImageData });
+        expect(getImageData).toHaveBeenCalledTimes(1);
+        expect(out[0].votes).toBe(8);
+        nowSpy.mockRestore();
+    });
+
+    test('an oversized photo id is still enriched but never persisted', async () => {
+        const longId = 'x'.repeat(500);
+        const getImageData = jest.fn().mockResolvedValue(payload(42, 42));
+        const out = await enrichCandidates([photo(longId)], 'tok', { getImageData });
+        expect(out[0]).toEqual(expect.objectContaining({ votes: 42, statsKnown: true }));
+        // MAX_CACHE_ENTRIES bounds the entry COUNT, not key length — an
+        // unbounded id would inflate the file past what that cap intends.
+        expect(storeData === null || !storeData.includes(longId)).toBe(true);
+    });
+
+    test('a photo id of "__proto__" round-trips through the persisted cache', async () => {
+        // A plain {} would swallow this key on write via the inherited setter,
+        // silently dropping the entry on every persist.
+        const getImageData = jest.fn().mockResolvedValue(payload(11, 22));
+        await enrichCandidates([photo('__proto__')], 'tok', { getImageData });
+
+        photoStats.__resetForTests();
+        getImageData.mockClear();
+        const out = await enrichCandidates([photo('__proto__')], 'tok', { getImageData });
+        expect(getImageData).not.toHaveBeenCalled();
+        expect(out[0].votes).toBe(11);
+        expect({}.votes).toBeUndefined();
+    });
+
+    test('the pass-wide ceiling stops enrichment across many challenges', async () => {
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        // Each call is a separate "challenge" within one pass.
+        for (let i = 0; i < 12; i++) {
+            const batch = Array.from({ length: MAX_ENRICH_PER_FILL }, (_, j) => photo(`c${i}p${j}`));
+            await enrichCandidates(batch, 'tok', { getImageData });
+        }
+        expect(getImageData.mock.calls.length).toBeLessThanOrEqual(MAX_ENRICH_PER_PASS);
+        expect(log.warning).toHaveBeenCalledWith(expect.stringContaining("this cycle's limit"), null);
+
+        // A new pass lifts it.
+        resetPassState();
+        getImageData.mockClear();
+        await enrichCandidates([photo('after-reset')], 'tok', { getImageData });
+        expect(getImageData).toHaveBeenCalled();
+    });
+
+    test('cache eviction keeps the newest entries when over the cap', async () => {
+        // Build a persisted cache already past the cap, with a clearly-oldest
+        // and a clearly-newest entry, then force a write.
+        const now = Date.now();
+        const photos = {};
+        for (let i = 0; i < MAX_CACHE_ENTRIES + 10; i++) {
+            photos[`p${i}`] = { votes: i, views: 0, achievementCount: 0, fetchedAt: now - i };
+        }
+        storeData = JSON.stringify({ version: 1, photos });
+        photoStats.__resetForTests();
+
+        const getImageData = jest.fn().mockResolvedValue(payload(1, 1));
+        await enrichCandidates([photo('brand-new')], 'tok', { getImageData });
+
+        const persisted = JSON.parse(storeData).photos;
+        expect(Object.keys(persisted).length).toBeLessThanOrEqual(MAX_CACHE_ENTRIES);
+        // Newest survive, oldest are dropped — a flipped comparator would
+        // silently invert this and nothing else would notice.
+        expect(persisted['brand-new']).toBeDefined();
+        expect(persisted.p0).toBeDefined();
+        expect(persisted[`p${MAX_CACHE_ENTRIES + 9}`]).toBeUndefined();
     });
 });
