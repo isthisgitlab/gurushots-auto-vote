@@ -142,6 +142,8 @@ describe('time-unit migration in loadSettings', () => {
             _emergencyFillTimeMigratedV1: true,
             _autoFillScheduleMigratedV1: true,
             _autoFillScheduleBoundsV1: true,
+            _scheduledFillListsMigratedV1: true,
+            _scheduledFillListBoundsV1: true,
         });
 
         settings.loadSettings();

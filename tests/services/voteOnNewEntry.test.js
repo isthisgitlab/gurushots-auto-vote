@@ -49,8 +49,8 @@ const mockSettings = (overrides = {}) => {
         lastHourExposureTarget: 0,
         useScheduledFill: false,
         scheduledFillReplaces: false,
-        scheduledFillTime: '',
-        scheduledFillBeforeEnd: 0,
+        scheduledFillTime: [],
+        scheduledFillBeforeEnd: [],
         scheduledFillWindowMinutes: 60,
         timezone: 'UTC',
     };
@@ -184,7 +184,7 @@ describe('voteOnNewEntry — reason strings stay truthful for every rule label',
     test('scheduled fill window: forced reason is truthful and votes', () => {
         mockSettings({
             useScheduledFill: true,
-            scheduledFillBeforeEnd: 3600,
+            scheduledFillBeforeEnd: [3600],
             scheduledFillWindowMinutes: 60,
         });
         const result = VotingLogic.evaluateVotingDecision(
@@ -232,7 +232,7 @@ describe('voteOnNewEntry — overrides nothing that blocks', () => {
         mockSettings({
             useScheduledFill: true,
             scheduledFillReplaces: true,
-            scheduledFillBeforeEnd: 600,
+            scheduledFillBeforeEnd: [600],
             scheduledFillWindowMinutes: 5,
         });
         const result = VotingLogic.evaluateVotingDecision(

@@ -363,8 +363,8 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
     const NOW_SEC = Math.floor(Date.now() / 1000);
     const SF_SCHEMA = {
         useScheduledFill: { type: 'boolean', default: false },
-        scheduledFillTime: { type: 'timeOfDay', default: '' },
-        scheduledFillBeforeEnd: { type: 'time', default: 0 },
+        scheduledFillTime: { type: 'timeOfDayList', default: [] },
+        scheduledFillBeforeEnd: { type: 'timeList', default: [] },
         scheduledFillWindowMinutes: { type: 'number', default: 60 },
         scheduledFillReplaces: { type: 'boolean', default: false },
     };
@@ -419,14 +419,14 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
     });
 
     test('(a) enabled with a time configured → no warning', async () => {
-        mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillTime: '21:30' });
+        mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillTime: ['21:30'] });
         renderWithChallenge();
         await awaitRendered();
         expect(document.body.textContent).not.toContain('app.scheduledFillNoTimesHint');
     });
 
     test('(b) a set fill time renders the next-window hint', async () => {
-        mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillTime: '21:30' });
+        mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillTime: ['21:30'] });
         renderWithChallenge();
         await awaitRendered();
         expect(document.body.textContent).toContain('app.scheduledFillNextHint');
@@ -438,18 +438,62 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
         expect(document.body.textContent).not.toContain('app.scheduledFillNextHint');
     });
 
+    test('(b) a before-end-ONLY config shows the next-window hint with its source (the issue case)', async () => {
+        // Two before-end offsets, zero daily times — the hint must still
+        // render (it lives on the master-toggle row, not the times row) and
+        // name the producing before-end trigger.
+        mockApi.getChallengeOverrides.mockResolvedValue({
+            useScheduledFill: true,
+            scheduledFillBeforeEnd: [4 * 3600, 10 * 3600],
+        });
+        renderWithChallenge({ type: 'default', close_time: NOW_SEC + 11 * 3600, member: {} });
+        await awaitRendered();
+        // (The translation mock returns keys verbatim, so the {3} source
+        // placeholder can't be asserted here — the real string embeds the
+        // producing trigger; what matters is the hint renders at all for a
+        // config with zero daily times.)
+        expect(document.body.textContent).toContain('app.scheduledFillNextHint');
+    });
+
+    test('(b) a corrupt entry before a valid one does not derail the hint (paired sources)', async () => {
+        // Hand-edited settings can hold an unparseable entry; the hint must
+        // still render for the valid sibling. (The source pairing regression
+        // — labeling 11:30's window with the corrupt '25:99' string — is
+        // structural: occurrences stay paired with their entry before
+        // filtering, so a shifted index can't mislabel.)
+        mockApi.getChallengeOverrides.mockResolvedValue({
+            useScheduledFill: true,
+            scheduledFillTime: ['25:99', '21:30'],
+        });
+        renderWithChallenge();
+        await awaitRendered();
+        expect(document.body.textContent).toContain('app.scheduledFillNextHint');
+    });
+
+    test('(b) with entries in both lists the hint still renders once', async () => {
+        mockApi.getChallengeOverrides.mockResolvedValue({
+            useScheduledFill: true,
+            scheduledFillTime: ['09:00', '21:30'],
+            scheduledFillBeforeEnd: [4 * 3600],
+        });
+        renderWithChallenge({ type: 'default', close_time: NOW_SEC + 11 * 3600, member: {} });
+        await awaitRendered();
+        const matches = document.body.textContent.match(/app\.scheduledFillNextHint/g) || [];
+        expect(matches).toHaveLength(1);
+    });
+
     test('(b) a fill time with the master toggle OFF → no next-window hint (nothing would fill)', async () => {
         // Regression lock: a time typed in before flipping Use Scheduled Fill
         // on must not render an "active schedule" status — the decision path
         // is fully inactive without the master toggle.
-        mockApi.getChallengeOverrides.mockResolvedValue({ scheduledFillTime: '21:30' });
+        mockApi.getChallengeOverrides.mockResolvedValue({ scheduledFillTime: ['21:30'] });
         renderWithChallenge();
         await awaitRendered();
         expect(document.body.textContent).not.toContain('app.scheduledFillNextHint');
     });
 
     test('(c) before-end shorter than the window with the master toggle OFF → no wasted-window hint', async () => {
-        mockApi.getChallengeOverrides.mockResolvedValue({ scheduledFillBeforeEnd: 600 });
+        mockApi.getChallengeOverrides.mockResolvedValue({ scheduledFillBeforeEnd: [600] });
         renderWithChallenge();
         await awaitRendered();
         expect(document.body.textContent).not.toContain('app.scheduledFillWastedWindowHint');
@@ -458,7 +502,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
     test('(c) before-end shorter than the window → wasted-window hint', async () => {
         // 10-minute before-end offset with the default 60-minute window: the
         // window's tail extends past the close.
-        mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillBeforeEnd: 600 });
+        mockApi.getChallengeOverrides.mockResolvedValue({ useScheduledFill: true, scheduledFillBeforeEnd: [600] });
         renderWithChallenge();
         await awaitRendered();
         expect(document.body.textContent).toContain('app.scheduledFillWastedWindowHint');
@@ -468,7 +512,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
         mockApi.getSettings.mockResolvedValue({ timezone: 'UTC', checkFrequencyMax: 30 });
         mockApi.getChallengeOverrides.mockResolvedValue({
             useScheduledFill: true,
-            scheduledFillTime: '21:30',
+            scheduledFillTime: ['21:30'],
             scheduledFillWindowMinutes: 5,
         });
         renderWithChallenge();
@@ -482,7 +526,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
         // can ever come while threshold voting stays blocked.
         mockApi.getChallengeOverrides.mockResolvedValue({
             useScheduledFill: true,
-            scheduledFillBeforeEnd: 5 * 3600,
+            scheduledFillBeforeEnd: [5 * 3600],
             scheduledFillReplaces: true,
         });
         renderWithChallenge({ type: 'default', close_time: NOW_SEC + 7200, member: {} });
@@ -493,7 +537,20 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
     test('(e) replace mode with a reachable window → no unreachable warning', async () => {
         mockApi.getChallengeOverrides.mockResolvedValue({
             useScheduledFill: true,
-            scheduledFillBeforeEnd: 3600,
+            scheduledFillBeforeEnd: [3600],
+            scheduledFillReplaces: true,
+        });
+        renderWithChallenge({ type: 'default', close_time: NOW_SEC + 7200, member: {} });
+        await awaitRendered();
+        expect(document.body.textContent).not.toContain('app.scheduledFillUnreachableHint');
+    });
+
+    test('(e) ONE reachable entry among unreachable ones suppresses the warning', async () => {
+        // 5h offset is already past on a 2h-away close, but the 1h offset is
+        // still ahead — any reachable entry means no lockout.
+        mockApi.getChallengeOverrides.mockResolvedValue({
+            useScheduledFill: true,
+            scheduledFillBeforeEnd: [5 * 3600, 3600],
             scheduledFillReplaces: true,
         });
         renderWithChallenge({ type: 'default', close_time: NOW_SEC + 7200, member: {} });
@@ -515,7 +572,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
 
     test('(f) profile Apply that flips replace mode on shows the highlighted warning', async () => {
         mockApi.getChallengeProfiles.mockResolvedValue({
-            'night tactic': { scheduledFillReplaces: true, scheduledFillTime: '21:30', useScheduledFill: true },
+            'night tactic': { scheduledFillReplaces: true, scheduledFillTime: ['21:30'], useScheduledFill: true },
         });
         renderWithChallenge();
         await awaitRendered();
@@ -532,7 +589,7 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
 
     test('(f) profile Apply that leaves replace mode off shows no warning', async () => {
         mockApi.getChallengeProfiles.mockResolvedValue({
-            'plain tactic': { scheduledFillTime: '21:30', useScheduledFill: true },
+            'plain tactic': { scheduledFillTime: ['21:30'], useScheduledFill: true },
         });
         renderWithChallenge();
         await awaitRendered();

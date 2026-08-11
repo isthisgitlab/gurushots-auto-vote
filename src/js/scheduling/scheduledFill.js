@@ -13,10 +13,11 @@
  *
  * @callback ResolveScheduledFill
  * @param {string} challengeId - Challenge id as a string.
- * @returns {{enabled: boolean, timeOfDay: *, beforeEndSec: *}|Promise<{enabled: boolean, timeOfDay: *, beforeEndSec: *}>}
+ * @returns {{enabled: boolean, timesOfDay: *, beforeEndSecs: *}|Promise<{enabled: boolean, timesOfDay: *, beforeEndSecs: *}>}
  */
 
 const { occurrencesOf } = require('./wallClock');
+const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/schema');
 
 // Non-flash challenges that are still open at `now`. Flash challenges never
 // enter last-minute/scheduled-fill mode, and closed ones can't. Shared with
@@ -25,16 +26,18 @@ const eligibleChallenges = (challenges, now) => challenges.filter((c) => c.type 
 
 /**
  * Soonest upcoming scheduled-fill window start strictly after `now` across
- * still-open, non-flash challenges. Per challenge:
- *   - time-of-day form: the next daily occurrence, counted only while it still
- *     falls before that challenge's close;
- *   - before-end form: close_time - beforeEndSec, counted only while it is
- *     still ahead;
- *   - both forms configured → the earlier (min) of the two candidate starts.
+ * still-open, non-flash challenges. Both triggers are LISTS — per challenge:
+ *   - each time-of-day entry contributes its next daily occurrence, counted
+ *     only while it still falls before that challenge's close;
+ *   - each before-end entry contributes close_time - entry, counted only
+ *     while it is still ahead;
+ *   - the challenge's candidate is the earliest (min) across all entries of
+ *     both lists.
  *
  * Fail-soft like the decision path: a challenge whose config is corrupt or
- * whose resolver throws is skipped, never thrown — the scheduler must keep
- * running on its normal cadence regardless.
+ * whose resolver throws is skipped, a corrupt ENTRY inside a list is skipped,
+ * and lists are sliced to MAX_SCHEDULED_FILL_ENTRIES — the scheduler must
+ * keep running on its normal cadence regardless.
  *
  * @param {Array} challenges
  * @param {number} now - Unix timestamp (seconds)
@@ -66,13 +69,21 @@ async function soonestScheduledStart(challenges, now, resolveScheduledFill, time
         let startTime = Infinity;
         let form = null;
 
-        const occ = occurrencesOf(config.timeOfDay, timezone, now);
-        if (occ && occ.next < close) {
-            startTime = occ.next;
-            form = 'time-of-day';
+        const times = (Array.isArray(config.timesOfDay) ? config.timesOfDay : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
+        for (const entry of times) {
+            const occ = occurrencesOf(entry, timezone, now);
+            if (occ && occ.next < close && occ.next < startTime) {
+                startTime = occ.next;
+                form = 'time-of-day';
+            }
         }
-        const beforeEndSec = Number(config.beforeEndSec);
-        if (beforeEndSec > 0) {
+        const befores = (Array.isArray(config.beforeEndSecs) ? config.beforeEndSecs : []).slice(
+            0,
+            MAX_SCHEDULED_FILL_ENTRIES,
+        );
+        for (const entry of befores) {
+            const beforeEndSec = Number(entry);
+            if (!(beforeEndSec > 0)) continue;
             const start = close - beforeEndSec;
             if (start > now && start < startTime) {
                 startTime = start;

@@ -13,14 +13,17 @@ import { computeNextCycleDelayMs as computeNextDelayMs } from '../../scheduling/
 export const resolveThreshold = (challengeId) => window.api.getEffectiveSetting('lastMinuteThreshold', challengeId);
 
 // WebView resolver for the scheduled-fill cadence cap: the three per-challenge
-// keys over the same key-agnostic IPC channel, batched per challenge.
+// keys over the same key-agnostic IPC channel, batched per challenge. Both
+// trigger values are LISTS, passed RAW — scheduledFill.js owns the guards
+// (no Number() coercion: Number([a, b]) is NaN and would silently disable the
+// cap for multi-entry configs).
 export const resolveScheduledFill = async (challengeId) => {
-    const [enabled, timeOfDay, beforeEndSec] = await Promise.all([
+    const [enabled, timesOfDay, beforeEndSecs] = await Promise.all([
         window.api.getEffectiveSetting('useScheduledFill', challengeId),
         window.api.getEffectiveSetting('scheduledFillTime', challengeId),
         window.api.getEffectiveSetting('scheduledFillBeforeEnd', challengeId),
     ]);
-    return { enabled: enabled === true, timeOfDay, beforeEndSec: Number(beforeEndSec) || 0 };
+    return { enabled: enabled === true, timesOfDay, beforeEndSecs };
 };
 
 /**

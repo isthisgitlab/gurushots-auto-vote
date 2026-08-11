@@ -134,8 +134,8 @@ describe('headless runOneCycle', () => {
                     lastMinuteThreshold: 10,
                     lastMinuteCheckFrequency: 1,
                     useScheduledFill: true,
-                    scheduledFillTime: '',
-                    scheduledFillBeforeEnd: 3600 - 90,
+                    scheduledFillTime: [],
+                    scheduledFillBeforeEnd: [3600 - 90],
                 })[key],
         );
 

@@ -253,31 +253,36 @@ describe('settings facade — challenge profiles', () => {
             expect(
                 settings.saveChallengeProfile('night tactic', {
                     useScheduledFill: true,
-                    scheduledFillTime: '21:30',
+                    scheduledFillTime: ['21:30', '09:00'],
+                    scheduledFillBeforeEnd: [14400, 36000],
                     scheduledFillReplaces: true,
                 }),
             ).toBe(true);
 
             expect(settings.applyChallengeProfile('night tactic', '123')).toBe(true);
+            // The load-time bounds pass canonical-sorts lists (order carries
+            // no meaning), so the round-tripped arrays come back sorted.
             expect(settings.getChallengeOverrides('123')).toEqual({
                 useScheduledFill: true,
-                scheduledFillTime: '21:30',
+                scheduledFillTime: ['09:00', '21:30'],
+                scheduledFillBeforeEnd: [14400, 36000],
                 scheduledFillReplaces: true,
             });
-            expect(settings.getEffectiveSetting('scheduledFillTime', '123')).toBe('21:30');
+            expect(settings.getEffectiveSetting('scheduledFillTime', '123')).toEqual(['09:00', '21:30']);
         });
 
         test('rejects a profile carrying an invalid scheduledFillTime fail-closed', () => {
             // The zod validator runs through the same validateSetting path as
             // direct per-challenge writes — an invalid value must abort the
             // whole save/apply, not slip through the profile side door.
-            expect(settings.saveChallengeProfile('bad', { scheduledFillTime: '25:99' })).toBe(false);
-            expect(settings.saveChallengeProfile('bad', { scheduledFillTime: 2130 })).toBe(false);
+            expect(settings.saveChallengeProfile('bad', { scheduledFillTime: ['25:99'] })).toBe(false);
+            expect(settings.saveChallengeProfile('bad', { scheduledFillTime: [2130] })).toBe(false);
+            expect(settings.saveChallengeProfile('bad', { scheduledFillTime: '21:30' })).toBe(false); // non-array
 
             // And a profile corrupted in place after saving is rejected at apply.
-            settings.saveChallengeProfile('was-fine', { scheduledFillTime: '21:30' });
+            settings.saveChallengeProfile('was-fine', { scheduledFillTime: ['21:30'] });
             const raw = settings.loadSettings();
-            raw.challengeSettings.profiles['was-fine'].scheduledFillTime = '25:99';
+            raw.challengeSettings.profiles['was-fine'].scheduledFillTime = ['25:99'];
             settings.saveSettings(raw);
             expect(settings.applyChallengeProfile('was-fine', '123')).toBe(false);
             expect(settings.getChallengeOverrides('123')).toEqual({});

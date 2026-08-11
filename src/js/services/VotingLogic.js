@@ -22,18 +22,24 @@ const { getNextScheduleThresholdSec } = /** @type {any} */ (require('./autoFill'
 const { occurrencesOf } = /** @type {any} */ (require('../scheduling/wallClock'));
 const { isBoostWindowOpen: boostWindowOpen } = require('../voting/boostWindow');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
+const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/schema');
 
 /**
  * Scheduled-fill state for a challenge at `now`.
  *
- * `active` is true only when useScheduledFill is on AND at least one time
- * form is actually configured (a parseable scheduledFillTime, or
- * scheduledFillBeforeEnd > 0). This is what keeps "enabled with no times" a
- * harmless no-op: an `active = useScheduledFill` shortcut would let replace
- * mode permanently block all threshold voting with no window ever opening.
+ * Both triggers are LISTS (issue #26 follow-up): every scheduledFillTime
+ * entry opens its own daily window and every scheduledFillBeforeEnd entry its
+ * own one-shot window, all sharing scheduledFillWindowMinutes, all OR'd —
+ * `inWindow` is true when `now` sits inside ANY entry's
+ * `[start, start + window]` interval.
  *
- * Both forms configured → OR semantics: `inWindow` is true when `now` sits
- * inside either form's `[start, start + window]` interval.
+ * `active` is true only when useScheduledFill is on AND at least one USABLE
+ * entry exists across both lists (a parseable 'HH:MM', or an offset > 0).
+ * This is what keeps "enabled with no times" a harmless no-op: an
+ * `active = useScheduledFill` shortcut would let replace mode permanently
+ * block all threshold voting with no window ever opening. A corrupt entry
+ * inside a list is skipped (contributing nothing, not even `active`); a
+ * whole value that isn't an array turns that form off.
  *
  * The whole body is wrapped in try/catch returning the inactive state — the
  * same posture (and reason) as getExposureResolver in settings.js: this runs
@@ -66,20 +72,31 @@ const getScheduledFillState = (challenge, challengeId, now) => {
         const windowMin = Number(settings.getEffectiveSetting('scheduledFillWindowMinutes', challengeId));
         const windowSec = (Number.isFinite(windowMin) && windowMin > 0 ? windowMin : 60) * 60;
         const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
-        const timeOfDay = settings.getEffectiveSetting('scheduledFillTime', challengeId);
-        const beforeEndSec = Number(settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId));
+        // Both triggers are LISTS — every entry opens its own window, all OR'd.
+        // Non-array corruption = form off; a corrupt ENTRY inside the array is
+        // skipped (contributes nothing, not even `active`). The slice bounds
+        // per-cycle Intl work against a post-migration hand-edited oversized
+        // array (the write path and the load-time bounds pass both cap at
+        // MAX_SCHEDULED_FILL_ENTRIES already).
+        const rawTimes = settings.getEffectiveSetting('scheduledFillTime', challengeId);
+        const times = (Array.isArray(rawTimes) ? rawTimes : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
+        const rawBefores = settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId);
+        const befores = (Array.isArray(rawBefores) ? rawBefores : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
 
         let active = false;
         let inWindow = false;
 
-        // Time-of-day form: unparseable/empty values yield null → form off.
-        const occ = occurrencesOf(timeOfDay, timezone, now);
-        if (occ) {
+        // Time-of-day entries: unparseable values yield null → entry skipped.
+        for (const entry of times) {
+            const occ = occurrencesOf(entry, timezone, now);
+            if (!occ) continue;
             active = true;
-            inWindow = now - occ.prev <= windowSec;
+            if (now - occ.prev <= windowSec) inWindow = true;
         }
-        // Before-end form: 0 (off sentinel), NaN and negatives all fail the > 0 gate.
-        if (beforeEndSec > 0) {
+        // Before-end entries: NaN and non-positives fail the > 0 gate → skipped.
+        for (const entry of befores) {
+            const beforeEndSec = Number(entry);
+            if (!(beforeEndSec > 0)) continue;
             active = true;
             const start = Number(challenge.close_time) - beforeEndSec;
             if (now >= start && now - start <= windowSec) inWindow = true;

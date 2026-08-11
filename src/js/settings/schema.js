@@ -163,19 +163,84 @@ const tagsList = z
     )
     .max(MAX_TAGS_PER_LIST);
 
-// Scheduled fill: a strict 24h 'HH:MM' wall-clock string ('' = off sentinel,
-// mirroring skipUpdateVersion's empty-string convention), a seconds-before-close
-// offset (0 = off, mirroring emergencyFill), and the fill-window length in
-// minutes. The window floor keeps a window from being shorter than one
-// last-minute check cycle; the 12h ceiling keeps "hold at 100%" from silently
-// becoming an all-day threshold override. The message on the time validator is
-// surfaced verbatim by getValidationError (CLI settings:set feedback).
+// Scheduled fill: LISTS of triggers (issue #26 follow-up — "fill twice in a
+// day, like 4 hours to the end and 10 hours to the end"). Each entry opens
+// its own fill window; the empty array is the off sentinel and the schema
+// default (the old scalar '' / 0 sentinels are migrated in settings.js —
+// _scheduledFillListsMigratedV1). Entries are deduped by the validators and
+// canonical-sorted by the sanitizers; order carries no meaning. The window
+// floor keeps a window from being shorter than one last-minute check cycle;
+// the 12h ceiling keeps "hold at 100%" from silently becoming an all-day
+// threshold override. Entry-level messages are surfaced verbatim by
+// getValidationError (CLI settings:set feedback).
 const MAX_BEFORE_END_SECONDS = MAX_SCHEDULE_SECONDS; // same 30-day defense-in-depth cap
-const timeOfDayOrOff = z
-    .string()
-    .refine((v) => v === '' || /^([01]\d|2[0-3]):[0-5]\d$/.test(v), 'expected 24h HH:MM or empty');
-const beforeEndSeconds = z.number().int().min(0).max(MAX_BEFORE_END_SECONDS);
+const MAX_SCHEDULED_FILL_ENTRIES = 6;
+const timeOfDayEntry = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected 24h HH:MM');
+const timeOfDayList = z
+    .array(timeOfDayEntry)
+    .max(MAX_SCHEDULED_FILL_ENTRIES, `at most ${MAX_SCHEDULED_FILL_ENTRIES} times`)
+    .refine((v) => new Set(v).size === v.length, 'duplicate times');
+const beforeEndEntry = z.number().int().min(1).max(MAX_BEFORE_END_SECONDS);
+const beforeEndList = z
+    .array(beforeEndEntry)
+    .max(MAX_SCHEDULED_FILL_ENTRIES, `at most ${MAX_SCHEDULED_FILL_ENTRIES} offsets`)
+    .refine((v) => new Set(v).size === v.length, 'duplicate offsets');
 const windowMinutes = z.number().int().min(5).max(720);
+
+/**
+ * Clamp a persisted scheduledFillTime list to the current bounds — the
+ * sanitizeFillSchedule contract: healed array when anything changed, null
+ * when the input already conforms or isn't an array at all. Keeps strict
+ * 'HH:MM' strings, dedupes (first wins), sorts (lexicographic == chronological
+ * for zero-padded 24h times) and THEN caps, so with >MAX entries the earliest
+ * survive deterministically rather than storage order. Deliberately unhealed
+ * gap (same accepted-risk class the scalar era carried): a value that is
+ * neither string, number, nor array (`true`/`{}`/null from a hand edit) is
+ * left as-is — the modal's resubmit path rejects it with the zod message
+ * rather than saving.
+ *
+ * @param {*} value
+ * @returns {string[]|null}
+ */
+const sanitizeTimeOfDayList = (value) => {
+    if (!Array.isArray(value)) return null;
+    const seen = new Set();
+    const normalized = value
+        .filter((entry) => {
+            if (typeof entry !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(entry)) return false;
+            if (seen.has(entry)) return false;
+            seen.add(entry);
+            return true;
+        })
+        .sort()
+        .slice(0, MAX_SCHEDULED_FILL_ENTRIES);
+    const unchanged = normalized.length === value.length && normalized.every((entry, i) => entry === value[i]);
+    return unchanged ? null : normalized;
+};
+
+/**
+ * Same contract for the scheduledFillBeforeEnd list: keep ints
+ * 1..MAX_BEFORE_END_SECONDS, dedupe, sort ascending, then cap (smallest
+ * offsets — the windows closest to the deadline — survive deterministically).
+ *
+ * @param {*} value
+ * @returns {number[]|null}
+ */
+const sanitizeBeforeEndList = (value) => {
+    if (!Array.isArray(value)) return null;
+    const seen = new Set();
+    const normalized = value
+        .filter((entry) => {
+            if (!Number.isInteger(entry) || entry < 1 || entry > MAX_BEFORE_END_SECONDS) return false;
+            if (seen.has(entry)) return false;
+            seen.add(entry);
+            return true;
+        })
+        .sort((a, b) => a - b)
+        .slice(0, MAX_SCHEDULED_FILL_ENTRIES);
+    const unchanged = normalized.length === value.length && normalized.every((entry, i) => entry === value[i]);
+    return unchanged ? null : normalized;
+};
 
 // Entries are grouped by their `group` field (see SETTINGS_GROUPS below) and
 // declared in group order so the file reads top-to-bottom the way the
@@ -441,12 +506,13 @@ const SETTINGS_SCHEMA = {
 
     // --- Scheduled Fill ---
     // Fill exposure at configured wall-clock instants instead of (or on top
-    // of) the threshold rules. Two independent time forms — a recurring
-    // time-of-day (interpreted in the app `timezone` setting via
-    // scheduling/wallClock.js, NOT device-local time) and a one-shot
-    // seconds-before-close offset — OR'd when both are set. The decision-side
-    // consumer is getScheduledFillState in services/VotingLogic.js; the
-    // cadence-side consumer is scheduling/scheduledFill.js.
+    // of) the threshold rules. Two independent trigger LISTS — recurring
+    // times-of-day (interpreted in the app `timezone` setting via
+    // scheduling/wallClock.js, NOT device-local time) and one-shot
+    // seconds-before-close offsets — every entry opens its own window sharing
+    // scheduledFillWindowMinutes, all OR'd. The decision-side consumer is
+    // getScheduledFillState in services/VotingLogic.js; the cadence-side
+    // consumer is scheduling/scheduledFill.js.
     useScheduledFill: {
         type: 'boolean',
         default: false,
@@ -458,20 +524,20 @@ const SETTINGS_SCHEMA = {
         description: 'app.useScheduledFillDesc',
     },
     scheduledFillTime: {
-        type: 'timeOfDay',
-        default: '', // '' = this form off
+        type: 'timeOfDayList',
+        default: [], // [] = this form off
         perChallenge: true,
-        validation: timeOfDayOrOff,
+        validation: timeOfDayList,
         validationOrder: 1,
         group: 'scheduledFill',
         label: 'app.scheduledFillTime',
         description: 'app.scheduledFillTimeDesc',
     },
     scheduledFillBeforeEnd: {
-        type: 'time', // hours/minutes input, stored as seconds (emergencyFill precedent)
-        default: 0, // 0 = this form off
+        type: 'timeList', // rows of hours/minutes inputs, stored as seconds each
+        default: [], // [] = this form off
         perChallenge: true,
-        validation: beforeEndSeconds,
+        validation: beforeEndList,
         validationOrder: 1,
         group: 'scheduledFill',
         label: 'app.scheduledFillBeforeEnd',
@@ -697,4 +763,12 @@ module.exports = {
     getValidationError,
     getSettingsSchema,
     sanitizeFillSchedule,
+    sanitizeTimeOfDayList,
+    sanitizeBeforeEndList,
+    // Shared cap for the scheduled-fill lists: the write path enforces it via
+    // zod, the load-time bounds migration heals older data, and the hot-path
+    // consumers (VotingLogic, scheduledFill.js, the settings modal) slice
+    // defensively with it so a post-migration hand-edited array can't inflate
+    // per-cycle Intl work.
+    MAX_SCHEDULED_FILL_ENTRIES,
 };

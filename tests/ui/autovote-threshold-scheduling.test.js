@@ -63,8 +63,8 @@ describe('autovoteScheduler helpers', () => {
                     {
                         lastMinuteThreshold: 5,
                         useScheduledFill: true,
-                        scheduledFillTime: '',
-                        scheduledFillBeforeEnd: 3600 - 120,
+                        scheduledFillTime: [],
+                        scheduledFillBeforeEnd: [3600 - 120],
                     }[key],
                 ),
             );
