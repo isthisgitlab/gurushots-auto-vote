@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
 import { ResetButton } from '@/components/ui/ResetButton';
+import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../settings/limits';
 
 // Used only to fingerprint a tag array for the draft-sync effect. A comma is
 // fine here: tagsTextToArray splits user input on commas before storage, so a
@@ -174,10 +175,10 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
     );
 }
 
-// Mirrors MAX_SCHEDULED_FILL_ENTRIES in settings/schema.js (renderer-bundle-safe
-// module that can't import that zod-carrying file — change both together, same
-// convention as SCHEDULE_MAX_SECONDS above).
-export const SCHEDULED_FILL_MAX_ENTRIES = 6;
+// Single source of truth: settings/limits.js is dependency-free, so importing
+// it here costs the renderer bundle nothing (unlike settings/schema.js, which
+// requires zod). Re-exported under the local name its consumers already use.
+export const SCHEDULED_FILL_MAX_ENTRIES = MAX_SCHEDULED_FILL_ENTRIES;
 
 /**
  * Variable add/remove row-list editor for the scheduled-fill daily times

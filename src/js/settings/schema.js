@@ -1,5 +1,9 @@
 // @ts-check
 const { z } = require('zod');
+// Bounds live in the dependency-free limits.js so renderer-reachable modules
+// can read them without pulling zod in through this file. Re-exported below to
+// keep this module's public surface unchanged.
+const { MAX_SCHEDULED_FILL_ENTRIES } = require('./limits');
 
 /**
  * Centralized Settings Schema
@@ -174,7 +178,6 @@ const tagsList = z
 // threshold override. Entry-level messages are surfaced verbatim by
 // getValidationError (CLI settings:set feedback).
 const MAX_BEFORE_END_SECONDS = MAX_SCHEDULE_SECONDS; // same 30-day defense-in-depth cap
-const MAX_SCHEDULED_FILL_ENTRIES = 6;
 const timeOfDayEntry = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected 24h HH:MM');
 const timeOfDayList = z
     .array(timeOfDayEntry)
