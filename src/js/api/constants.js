@@ -22,6 +22,7 @@ const ENDPOINTS = {
     submitTurboSelection: `${API_BASE}/rest/submit_challenge_turbo_selection`,
     setTurbo: `${API_BASE}/rest/set_challenge_turbo`,
     photosPrivate: `${API_BASE}/rest/get_photos_private`,
+    imageData: `${API_BASE}/rest/get_image_data`,
     submitToChallenge: `${API_BASE}/rest/submit_to_challenge`,
 };
 

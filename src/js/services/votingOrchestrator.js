@@ -53,6 +53,7 @@ const logger = require('../logger');
 const settings = require('../settings');
 const votingLogic = require('./VotingLogic');
 const autoFill = require('./autoFill');
+const photoStats = require('./photoStats');
 const newEntryTracker = require('./newEntryTracker');
 const cancellation = require('../voting/cancellation');
 const { formatDuration } = require('../format/duration');
@@ -287,9 +288,13 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         settings,
         logger,
         getEligiblePhotos: api.getEligiblePhotos,
+        getImageData: api.getImageData,
         submitToChallenge: api.submitToChallenge,
         getActiveChallenges: api.getActiveChallenges,
     };
+    // Clear the photo-stats failure breaker so a pass that hit a rate limit does
+    // not disable stat enrichment for every later pass in the session.
+    photoStats.resetPassState();
     logger.withCategory('voting').startOperation('voting-process', 'Voting process');
 
     try {

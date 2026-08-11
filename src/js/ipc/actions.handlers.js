@@ -201,6 +201,7 @@ const buildHandlers = () => ({
                 settings,
                 logger,
                 getEligiblePhotos: strategy.getEligiblePhotos,
+                getImageData: strategy.getImageData,
                 submitToChallenge: strategy.submitToChallenge,
             });
 

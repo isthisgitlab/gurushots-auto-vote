@@ -533,6 +533,49 @@ const mockApiClient = {
     ),
 
     /**
+     * Simulate the per-photo record. Mirrors /rest/get_image_data, which is
+     * where the REAL popularity signals live: the library endpoint above
+     * returns votes=0 and no achievements for every photo on the live API, so
+     * auto-fill enriches candidates from here before ranking them.
+     *
+     * The vote counts below deliberately disagree with the library listing's
+     * (which the live API would have reported as 0), so mock mode actually
+     * exercises the enrichment tier instead of ranking identically either way.
+     * `photo_old_008` is the important case: oldest, lowest views, but by far
+     * the most votes and achievements — it should win a no-theme-match fill.
+     */
+    getImageData: mockMethod(
+        {
+            name: 'getImageData',
+            tokenArg: 1,
+            debug: (imageId) => {
+                logger.withCategory('challenges').debug(`Image ID: ${imageId}`, null);
+            },
+            noTokenMessage: 'No token provided, returning null',
+            onNoToken: () => null,
+        },
+        async (imageId) => {
+            const stats = {
+                photo_pink_flower_001: { votes: 3120, views: 1820, achievements: ['top_100'] },
+                photo_nature_landscape_002: { votes: 1780, views: 1110, achievements: [] },
+                photo_urban_003: { votes: 890, views: 640, achievements: [] },
+                photo_recent_004: { votes: 240, views: 95, achievements: [] },
+                photo_pink_petal_005: { votes: 4010, views: 2230, achievements: ['top_50', 'top_100'] },
+                photo_animal_006: { votes: 1560, views: 980, achievements: ['top_100'] },
+                photo_blocked_007: { votes: 9990, views: 5000, achievements: ['elite'] },
+                photo_old_008: { votes: 12400, views: 70, achievements: ['elite', 'top_30', 'top_50', 'top_100'] },
+            };
+            await simulateApiResponse({}, 150);
+            const key = String(imageId);
+            // Own-property check: a lookup for "__proto__"/"constructor" on a
+            // plain object literal resolves up the prototype chain and would
+            // return a truthy non-entry.
+            if (!Object.prototype.hasOwnProperty.call(stats, key)) return null;
+            return { id: key, ...stats[key] };
+        },
+    ),
+
+    /**
      * Simulate submitting one or more photos to a challenge. Mirrors
      * /rest/submit_to_challenge; returns { ok, raw }.
      */

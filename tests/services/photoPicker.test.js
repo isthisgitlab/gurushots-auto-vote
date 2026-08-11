@@ -4,6 +4,9 @@
 
 const {
     pickPhotosForChallenge,
+    buildScoredCandidates,
+    selectEnrichmentSet,
+    finalizePick,
     buildSearchTerms,
     detectLetterPrefix,
     tokenise,
@@ -341,21 +344,23 @@ describe('photoPicker', () => {
             expect(picked).toEqual(['proven']);
         });
 
-        test('quality fallback respects priority: score > achievements > votes > date', () => {
+        test('quality fallback respects priority: score > votes > achievements > date', () => {
             const photos = [
                 // Theme match wins despite no quality signals
                 allowed('themeMatch', ['Pink'], 1000, { achievements: [], votes: 0 }),
-                // High achievements beats high votes
-                allowed('manyWins', ['Misc'], 1000, { achievements: ['a', 'b'], votes: 100 }),
-                // Higher votes than the next
+                // Highest votes — outranks the badge-heavier photo below, because
+                // raw popularity is the stronger signal (see the tier list in
+                // photoPicker.js's header).
                 allowed('highVotes', ['Misc'], 5000, { achievements: [], votes: 800 }),
+                // More achievements, but fewer votes
+                allowed('manyWins', ['Misc'], 1000, { achievements: ['a', 'b'], votes: 100 }),
                 // Newest, no signals
                 allowed('newest', ['Misc'], 9000, { achievements: [], votes: 0 }),
             ];
             expect(pickPhotosForChallenge(challenge, photos, 4)).toEqual([
                 'themeMatch',
-                'manyWins',
                 'highVotes',
+                'manyWins',
                 'newest',
             ]);
         });
@@ -1075,6 +1080,203 @@ describe('photoPicker', () => {
                 fillWithoutTagMatch: false,
             });
             expect(picked).toEqual(['seaLife']);
+        });
+    });
+
+    describe('selectEnrichmentSet', () => {
+        // "Your Legacy" is the canonical abstract title: no label can match it
+        // and its semantic score sits under the floor, so every candidate ties.
+        const abstract = { title: 'Your Legacy', url: 'your-legacy' };
+        const themed = { title: 'Pink In Nature', url: 'pink-in-nature' };
+        const setOf = (challenge, photos, slots, opts = {}) =>
+            selectEnrichmentSet(buildScoredCandidates(challenge, photos, opts), slots).map((p) => p.id);
+
+        test('an abstract title leaves the whole library contested', () => {
+            const photos = [allowed('a', ['Boy']), allowed('b', ['Cat']), allowed('c', ['Tree'])];
+            expect(setOf(abstract, photos, 1).sort()).toEqual(['a', 'b', 'c']);
+        });
+
+        test('a decisive theme match costs nothing to enrich', () => {
+            const photos = [allowed('pink', ['Pink', 'Flower']), allowed('other', ['Car']), allowed('more', ['Dog'])];
+            expect(setOf(themed, photos, 1)).toEqual([]);
+        });
+
+        test('candidates that all fit in the available slots are never contested', () => {
+            const photos = [allowed('a', ['Boy']), allowed('b', ['Cat'])];
+            expect(setOf(abstract, photos, 2)).toEqual([]);
+            expect(setOf(abstract, photos, 5)).toEqual([]);
+        });
+
+        test('MULTI-SLOT: a unique leader must not hide the contest for the later slots', () => {
+            // Regression guard. Emergency fill and manual fill-all pass
+            // wantCount = slotsRemaining, so multi-slot batches are routine. A
+            // global-maximum tie group would see the single on-theme leader,
+            // return nothing, and leave slots 2..N to be decided by the very
+            // flat-zero popularity data this mechanism replaces.
+            const photos = [
+                allowed('pink', ['Pink', 'Flower']),
+                ...Array.from({ length: 50 }, (_, i) => allowed(`tied${i}`, ['Misc'])),
+            ];
+            const contested = setOf(themed, photos, 3);
+            expect(contested).not.toContain('pink');
+            expect(contested).toHaveLength(50);
+        });
+
+        test('only the photos level with the boundary slot are contested', () => {
+            // Two distinct theme ranks: 'pink' scores, the rest do not. With one
+            // slot the boundary is 'pink' alone, so nothing is contested.
+            const photos = [
+                allowed('pink', ['Pink']),
+                allowed('x', ['Misc']),
+                allowed('y', ['Misc']),
+                allowed('z', ['Misc']),
+            ];
+            expect(setOf(themed, photos, 1)).toEqual([]);
+            expect(setOf(themed, photos, 2).sort()).toEqual(['x', 'y', 'z']);
+        });
+
+        test('respects the must-tag hard filter', () => {
+            const photos = [allowed('cat', ['Cat']), allowed('dog', ['Dog']), allowed('bird', ['Bird'])];
+            // Only 'cat' survives the filter, so there is nothing left to contest.
+            expect(setOf(abstract, photos, 1, { mustIncludeTags: ['cat'], fillWithoutTagMatch: false })).toEqual([]);
+        });
+
+        test('respects the letter-challenge hard filter', () => {
+            const letters = { title: 'Begins With L', url: 'begins-with-l' };
+            const photos = [allowed('lion', ['Lion']), allowed('leaf', ['Leaf']), allowed('cat', ['Cat'])];
+            expect(setOf(letters, photos, 1).sort()).toEqual(['leaf', 'lion']);
+        });
+
+        test('never invokes onFallback — that warning belongs to the real pick only', () => {
+            const onFallback = jest.fn();
+            const photos = [allowed('a', ['Boy']), allowed('b', ['Cat'])];
+            selectEnrichmentSet(
+                buildScoredCandidates(abstract, photos, { mustIncludeTags: ['nothingmatches'], onFallback }),
+                1,
+            );
+            // buildScoredCandidates legitimately fires it once (the pick path);
+            // selectEnrichmentSet itself must add no further calls.
+            const afterBuild = onFallback.mock.calls.length;
+            selectEnrichmentSet(buildScoredCandidates(abstract, photos, {}), 1);
+            expect(onFallback.mock.calls.length).toBe(afterBuild);
+        });
+
+        test('handles empty and invalid inputs', () => {
+            expect(selectEnrichmentSet([], 1)).toEqual([]);
+            expect(selectEnrichmentSet(null, 1)).toEqual([]);
+            expect(setOf(abstract, [allowed('a', ['Boy']), allowed('b', ['Cat'])], 0)).toEqual([]);
+        });
+
+        test('finalizePick guards its own inputs', () => {
+            expect(finalizePick([], 1)).toEqual([]);
+            expect(finalizePick(null, 1)).toEqual([]);
+            const scored = buildScoredCandidates(abstract, [allowed('a', ['Boy'])], {});
+            expect(finalizePick(scored, 0)).toEqual([]);
+            expect(finalizePick(scored, 1)).toEqual(['a']);
+        });
+    });
+
+    describe('statsKnown tier', () => {
+        const abstract = { title: 'Your Legacy', url: 'your-legacy' };
+        const pick = (photos) => pickPhotosForChallenge(abstract, photos, photos.length);
+
+        test('a measured photo outranks an unmeasured one regardless of its stale votes', () => {
+            // The unmeasured photo still carries get_photos_private's flat
+            // votes:0. That is missing data, not a measurement of zero, so it
+            // must not be sorted as though it genuinely has no votes.
+            const measured = allowed('measured', ['Misc'], 1000, { votes: 40, statsKnown: true });
+            const unmeasured = allowed('unmeasured', ['Misc'], 9000, { votes: 0 });
+            expect(pick([unmeasured, measured])).toEqual(['measured', 'unmeasured']);
+        });
+
+        test('among measured photos, votes decide', () => {
+            const low = allowed('low', ['Misc'], 9000, { votes: 2000, achievementCount: 3, statsKnown: true });
+            const high = allowed('high', ['Misc'], 1000, { votes: 100000, achievementCount: 20, statsKnown: true });
+            expect(pick([low, high])).toEqual(['high', 'low']);
+        });
+
+        test('achievementCount is honoured as a number and as a raw array', () => {
+            const asNumber = allowed('num', ['Misc'], 1000, { votes: 10, achievementCount: 5, statsKnown: true });
+            const asArray = allowed('arr', ['Misc'], 1000, {
+                votes: 10,
+                achievements: ['a', 'b', 'c', 'd', 'e', 'f'],
+                statsKnown: true,
+            });
+            expect(pick([asNumber, asArray])).toEqual(['arr', 'num']);
+        });
+
+        test('a theme match still beats any amount of measured popularity', () => {
+            const themeless = allowed('rich', ['Misc'], 1000, { votes: 999999, statsKnown: true });
+            const onTheme = allowed('legacy', ['Legacy'], 1000, { votes: 0 });
+            // "legacy" is the challenge keyword, so this photo scores on tier 3.
+            expect(pick([themeless, onTheme])[0]).toBe('legacy');
+        });
+    });
+
+    // Permanent regression guard for the "Your Legacy" report: a soccer photo
+    // with 3 badges and ~2k votes was submitted ahead of photos with 20+ badges
+    // and 100k+ votes, because get_photos_private reports votes=0 / no
+    // achievements for EVERY library photo and ranking silently collapsed to
+    // views then upload_date. Mirrors the Farm-Life/Sea-Life block above: if a
+    // future change reverts the enrichment or the tier order, this fails loudly.
+    describe('"Your Legacy" regression — popularity fallback on the real payload shape', () => {
+        const challenge = { title: 'Your Legacy', url: 'your-legacy' };
+        const soccerLabels = [
+            'People',
+            'Person',
+            'Boy',
+            'Male',
+            'Teen',
+            'Clothing',
+            'Shorts',
+            'Adult',
+            'Man',
+            'Footwear',
+            'Shoe',
+            'Ball',
+            'Football',
+            'Soccer',
+            'Soccer Ball',
+            'Sport',
+        ];
+
+        // The shape get_photos_private actually returns: votes flat zero, no
+        // achievements field at all, views populated.
+        const unenriched = (id, labels, views, uploadDate) => allowed(id, labels, uploadDate, { votes: 0, views });
+
+        test('the whole library ties on theme, so every candidate is contested', () => {
+            const photos = [
+                unenriched('soccer', soccerLabels, 1203, 9000),
+                unenriched('portfolio', ['Landscape', 'Mountain'], 400, 1000),
+            ];
+            const contested = selectEnrichmentSet(buildScoredCandidates(challenge, photos, {}), 1);
+            expect(contested.map((p) => p.id).sort()).toEqual(['portfolio', 'soccer']);
+        });
+
+        test('unenriched, the higher-VIEW soccer photo wins — the reported bug', () => {
+            const photos = [
+                unenriched('soccer', soccerLabels, 1203, 9000),
+                unenriched('portfolio', ['Landscape', 'Mountain'], 400, 1000),
+            ];
+            expect(pickPhotosForChallenge(challenge, photos, 1)).toEqual(['soccer']);
+        });
+
+        test('enriched, the 100k-vote photo wins even with fewer views', () => {
+            const photos = [
+                allowed('soccer', soccerLabels, 9000, {
+                    votes: 3701,
+                    views: 1203,
+                    achievementCount: 3,
+                    statsKnown: true,
+                }),
+                allowed('portfolio', ['Landscape', 'Mountain'], 1000, {
+                    votes: 100000,
+                    views: 400,
+                    achievementCount: 20,
+                    statsKnown: true,
+                }),
+            ];
+            expect(pickPhotosForChallenge(challenge, photos, 1)).toEqual(['portfolio']);
         });
     });
 });

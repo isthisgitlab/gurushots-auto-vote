@@ -24,14 +24,26 @@
  *   3. Tag-match score — how many of the photo's label word-stems overlap the
  *      challenge keywords (URL slug + title + welcome_message, light-stemmed,
  *      stopword-filtered).
- *   4. Achievements count \
- *   5. Votes                > popularity — ONLY orders photos that tied at 0
- *   6. Views               /  across tiers 1-3, i.e. nothing matched the theme.
- *   7. Upload date        /
+ *   4. Stats known       \
+ *   5. Votes              \  popularity — ONLY orders photos that tied at 0
+ *   6. Achievements count /  across tiers 1-3, i.e. nothing matched the theme.
+ *   7. Views             /
+ *   8. Upload date      /
  *
- * NOTE on votes: the live get_photos_private endpoint returns votes=0 for every
- * library photo, so tier 5 rarely fires against the real API; it is kept for the
- * case where a populated value is available (and for mocks/tests).
+ * NOTE on tier 4: get_photos_private returns votes=0 and no achievements for
+ * every library photo, so the real values are fetched per photo from
+ * get_image_data by services/photoStats.js, which marks each candidate
+ * `statsKnown`. That fetch is budgeted, so a candidate set can be partially
+ * enriched — and an unenriched photo still carries the endpoint's flat
+ * `votes: 0`. Ranking it as if it had zero votes would let a mediocre enriched
+ * photo beat a genuinely stronger unmeasured one, so "we don't know" is its own
+ * tier ABOVE votes rather than a silent zero.
+ *
+ * NOTE on how often the popularity tiers decide: for an abstract title (e.g.
+ * "Your Legacy") no label can match and the semantic score falls under
+ * SEMANTIC_MATCH_FLOOR, so EVERY candidate ties at (0,0,0) and the tie group is
+ * effectively the whole library. The popularity path is the majority path for
+ * such challenges, not an edge case.
  */
 
 const STOPWORDS = new Set([
@@ -560,7 +572,22 @@ const scorePhoto = (photo, keywords, precomputedLabelStems = null) => {
     return score;
 };
 
-const achievementCountOf = (photo) => (Array.isArray(photo.achievements) ? photo.achievements.length : 0);
+// Prefers the numeric count photoStats.js merges on (it stores only the count,
+// never the full achievements array — those objects carry long descriptions and
+// icon URLs and would bloat a persisted cache for a value only ever read as a
+// length). Falls back to counting a raw `achievements` array so mocks, tests and
+// any future payload that inlines the array keep working.
+const achievementCountOf = (photo) => {
+    if (Number.isFinite(photo.achievementCount) && photo.achievementCount >= 0) {
+        return Math.floor(photo.achievementCount);
+    }
+    return Array.isArray(photo.achievements) ? photo.achievements.length : 0;
+};
+
+// Tier 4. True only when photoStats.js actually resolved this photo's real
+// numbers; see the "NOTE on tier 4" in the file header for why unknown must not
+// collapse into votes:0.
+const statsKnownOf = (photo) => photo.statsKnown === true;
 
 const votesOf = (photo) => (Number.isFinite(photo.votes) ? photo.votes : 0);
 
@@ -606,6 +633,26 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  */
 const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {}) => {
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
+    const scored = buildScoredCandidates(challenge, eligiblePhotos, opts);
+    return finalizePick(scored, slotsToFill);
+};
+
+/**
+ * Filter + score candidates, WITHOUT sorting or slicing.
+ *
+ * Split out of pickPhotosForChallenge so one fill can score once and then both
+ * (a) work out which photos need stat enrichment and (b) produce the final
+ * ranking, instead of running this loop twice. The stemming/matching inside is
+ * deliberately cost-bounded (see MAX_STEMS_PER_PHOTO and friends) because it is
+ * the hot loop of every fill on every scheduler cycle — including the
+ * battery-constrained Android headless service.
+ *
+ * @param {object} challenge
+ * @param {Array<object>} eligiblePhotos
+ * @param {object} [opts] - same shape as pickPhotosForChallenge's opts
+ * @returns {Array<object>} scored entries (unsorted); [] when nothing qualifies
+ */
+const buildScoredCandidates = (challenge, eligiblePhotos, opts = {}) => {
     if (!Array.isArray(eligiblePhotos) || eligiblePhotos.length === 0) return [];
 
     const allowed = eligiblePhotos.filter((p) => p && p.permission && p.permission.allowed === true && p.id);
@@ -687,38 +734,114 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
     };
 
     const keywords = buildChallengeKeywords(challenge);
-    const scored = filtered.map(({ photo, wordStems }) => ({
+    return filtered.map(({ photo, wordStems }) => ({
         id: photo.id,
+        photo,
         shouldMatchCount: countShouldMatches(wordStems, shouldStems),
         semantic: semanticTier(photo.id),
         score: scorePhoto(photo, keywords, wordStems),
+        statsKnown: statsKnownOf(photo),
         achievementCount: achievementCountOf(photo),
         votes: votesOf(photo),
         views: viewsOf(photo),
         uploadDate: uploadDateOf(photo),
     }));
+};
 
-    // Match tiers first, popularity tiers last. Because every match tier is
-    // non-negative, a photo that matched on ANY of them cannot be overtaken by a
-    // photo that matched on none — the popularity tiers below are only ever
-    // reached by photos that tied, which for an unmatched photo means tied at
-    // zero. That is the governing rule ("a theme match always beats popularity")
-    // and it is enforced by this ordering, so do not reorder these.
-    scored.sort((a, b) => {
-        if (b.shouldMatchCount !== a.shouldMatchCount) return b.shouldMatchCount - a.shouldMatchCount;
-        if (b.semantic !== a.semantic) return b.semantic - a.semantic;
-        if (b.score !== a.score) return b.score - a.score;
-        if (b.achievementCount !== a.achievementCount) return b.achievementCount - a.achievementCount;
+// The theme tiers, highest-priority first. A photo's standing on these is what
+// the enrichment set is derived from — they are the tiers that a stat lookup
+// can NEVER change, so anything they already separate is settled.
+const compareTheme = (a, b) => {
+    if (b.shouldMatchCount !== a.shouldMatchCount) return b.shouldMatchCount - a.shouldMatchCount;
+    if (b.semantic !== a.semantic) return b.semantic - a.semantic;
+    return b.score - a.score;
+};
+
+const sameTheme = (a, b) => compareTheme(a, b) === 0;
+
+/**
+ * The candidates whose relative order the POPULARITY tiers will actually decide
+ * — i.e. the ones worth spending a stat lookup on.
+ *
+ * This is deliberately NOT "everything sharing the best theme tuple". That is
+ * only equivalent when slotsToFill === 1. Emergency fill passes
+ * wantCount: slotsRemaining and manual fill-all does the same, so multi-slot
+ * batches are routine: with one uniquely-best photo and fifty candidates tied
+ * behind it, a global-maximum tie group returns a single photo, enrichment is
+ * skipped, and every slot after the first is decided by exactly the flat-zero
+ * popularity data this whole mechanism exists to replace.
+ *
+ * The boundary is the last slot. Candidates strictly ABOVE it are already in on
+ * theme alone; candidates strictly BELOW it can never reach it. Only the ones
+ * sharing the boundary's theme tuple are still competing, so only they matter.
+ *
+ * @param {Array<object>} scored - from buildScoredCandidates
+ * @param {number} slotsToFill
+ * @returns {Array<object>} the photo objects to enrich ([] when nothing is contested)
+ */
+const selectEnrichmentSet = (scored, slotsToFill) => {
+    if (!Array.isArray(scored) || scored.length === 0) return [];
+    if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
+    // Every candidate gets a slot — their order is irrelevant.
+    if (scored.length <= slotsToFill) return [];
+
+    const byTheme = scored.slice().sort(compareTheme);
+    const boundary = byTheme[slotsToFill - 1];
+    const contested = byTheme.filter((entry) => sameTheme(entry, boundary));
+    // A unique occupant of the boundary slot is already settled on theme alone.
+    return contested.length <= 1 ? [] : contested.map((entry) => entry.photo);
+};
+
+/**
+ * Sort scored candidates and take the top `slotsToFill` ids.
+ *
+ * Match tiers first, popularity tiers last. Because every match tier is
+ * non-negative, a photo that matched on ANY of them cannot be overtaken by a
+ * photo that matched on none — the popularity tiers below are only ever
+ * reached by photos that tied, which for an unmatched photo means tied at
+ * zero. That is the governing rule ("a theme match always beats popularity")
+ * and it is enforced by this ordering, so do not reorder these.
+ *
+ * @param {Array<object>} scored
+ * @param {number} slotsToFill
+ * @returns {Array<string>}
+ */
+const finalizePick = (scored, slotsToFill) => {
+    if (!Array.isArray(scored) || scored.length === 0) return [];
+    if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
+    const ranked = scored.slice().sort((a, b) => {
+        const theme = compareTheme(a, b);
+        if (theme !== 0) return theme;
+        // Known-stat photos outrank unknown-stat ones: an unenriched photo still
+        // carries get_photos_private's flat votes:0, which is missing data, not
+        // a measurement of zero.
+        if (b.statsKnown !== a.statsKnown) return b.statsKnown ? 1 : -1;
         if (b.votes !== a.votes) return b.votes - a.votes;
+        if (b.achievementCount !== a.achievementCount) return b.achievementCount - a.achievementCount;
         if (b.views !== a.views) return b.views - a.views;
         return b.uploadDate - a.uploadDate;
     });
-
-    return scored.slice(0, slotsToFill).map((p) => p.id);
+    return ranked.slice(0, slotsToFill).map((p) => p.id);
 };
+
+/**
+ * Did the popularity tiers (not the theme) decide this pick? True when the
+ * candidates competing for the last awarded slot were tied on every theme tier
+ * — the state in which an off-theme photo gets submitted and the user is owed
+ * an explanation.
+ *
+ * @param {Array<object>} scored
+ * @param {number} slotsToFill
+ * @returns {boolean}
+ */
+const wasDecidedByPopularity = (scored, slotsToFill) => selectEnrichmentSet(scored, slotsToFill).length > 0;
 
 module.exports = {
     pickPhotosForChallenge,
+    buildScoredCandidates,
+    selectEnrichmentSet,
+    finalizePick,
+    wasDecidedByPopularity,
     buildSearchTerms,
     detectLetterPrefix,
     labelWordStems,

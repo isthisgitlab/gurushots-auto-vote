@@ -22,8 +22,17 @@
  * without entangling the modules.
  */
 
-const { pickPhotosForChallenge, buildSearchTerms, detectLetterPrefix } = require('./photoPicker');
+const {
+    pickPhotosForChallenge,
+    buildScoredCandidates,
+    selectEnrichmentSet,
+    finalizePick,
+    buildSearchTerms,
+    detectLetterPrefix,
+} = require('./photoPicker');
 const { getSemanticScores } = require('./semantic');
+const { enrichCandidates } = require('./photoStats');
+const { oneLine } = require('../format/logSafe');
 const { getScheduleShift, remapScheduleRows } = require('./scheduleRemap');
 
 /**
@@ -179,7 +188,13 @@ const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligi
             log.debug(message, null);
         }
     }
-    return getEligiblePhotos(challengeId, token);
+    // paginate: the unfiltered fallback is the ONLY path that walks the whole
+    // library. A single page is the 100 most recently uploaded eligible photos,
+    // which silently excluded a user's older, strongest work from ever being a
+    // candidate. The themed searches above stay single-page on purpose: they are
+    // already narrowed by the server's own index, and paging each of them would
+    // multiply sequential round-trips on a path that can run close to a deadline.
+    return getEligiblePhotos(challengeId, token, { paginate: true });
 };
 
 const getEntries = (challenge) => {
@@ -437,6 +452,48 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
 };
 
 /**
+ * Explain a pick that the popularity tiers decided rather than the theme.
+ *
+ * WARNING level on purpose. debug/info are compiled out of packaged builds (see
+ * makeFallbackLogger), and this is the ONLY trace a real user gets for "why did
+ * it submit THAT photo?" when a challenge title is too abstract to match
+ * anything — which for titles like "Your Legacy" is the normal case, not an
+ * edge case.
+ *
+ * Carries the deciding numbers and the stat coverage, because partial coverage
+ * is the one way this can still pick a weaker photo: only photos whose real
+ * votes were fetched can be ranked on them, and the per-fill fetch budget means
+ * a large library is measured over several fills. Saying "12 of 340" turns that
+ * from a silent limitation into something the user can see and wait out.
+ */
+const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logger) => {
+    const winnerId = picked[0];
+    const winner = scored.find((entry) => String(entry.id) === String(winnerId));
+    if (!winner) return;
+
+    // Coverage is read off the SCORED entries, not the photo objects handed to
+    // selectEnrichmentSet: enrichCandidates returns copies, so `statsKnown`
+    // only ever lands on the scored entries the loop above patched.
+    const contestedEntries = scored.filter((entry) => contestedIds.has(String(entry.id)));
+    const known = contestedEntries.filter((entry) => entry.statsKnown === true).length;
+    const coverage =
+        known < contestedEntries.length
+            ? `; vote counts are known for ${known} of ${contestedEntries.length} tied photos so far — the rest are measured over the next few fills`
+            : '';
+    // Photo ids come from the API: collapse CR/LF before interpolating, or a
+    // crafted value could forge log lines (CWE-117).
+    logger
+        .withCategory('autoFill')
+        .warning(
+            `${prefix}: nothing in ${logger.challengeTag(challenge)} matched the challenge theme, so the entry was chosen on past performance — ` +
+                `photo ${oneLine(winnerId)} (${winner.votes} votes, ${winner.achievementCount} achievements, ${winner.views} views) ` +
+                `out of ${contestedEntries.length} equally off-theme candidates${coverage}. ` +
+                `Set Title Tag Rules for this challenge title to steer which photos qualify.`,
+            null,
+        );
+};
+
+/**
  * The one fill pipeline all four public entry points share:
  *
  *   fetch candidates → semantic scores → (optional probe) → pick →
@@ -549,13 +606,47 @@ const runFillAttempt = async ({
         return { status: 'probe-stand-down' };
     }
 
-    let picked = pickPhotosForChallenge(challenge, eligible, wantCount, {
+    // Everything below is submission-bound. The probe above deliberately runs
+    // FIRST and on unenriched data: it decides only WHETHER to stand down, never
+    // WHICH photo to submit, so it does not need real vote counts — and it runs
+    // on every scheduler cycle inside the emergency window, usually to stand
+    // down. Enriching before it would spend a burst of get_image_data requests
+    // per cycle to submit nothing. Do not "fix" this asymmetry.
+    const scored = buildScoredCandidates(challenge, eligible, {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
         semanticScores,
         onFallback: makeFallbackLogger(label, challenge, logger),
     });
+
+    // Stat enrichment. selectEnrichmentSet returns the candidates still
+    // competing for the last slot after the theme tiers — i.e. exactly the set
+    // whose order the popularity tiers decide. It is empty whenever the theme
+    // settled things, so a clean match costs no extra requests.
+    const contested = selectEnrichmentSet(scored, wantCount);
+    const contestedIds = new Set(contested.map((photo) => String(photo.id)));
+    if (contested.length > 0) {
+        const enriched = await enrichCandidates(contested, token, deps);
+        const statsById = new Map(enriched.map((photo) => [String(photo.id), photo]));
+        for (const entry of scored) {
+            const fresh = statsById.get(String(entry.id));
+            if (!fresh) continue;
+            entry.statsKnown = fresh.statsKnown === true;
+            if (entry.statsKnown) {
+                entry.votes = Number.isFinite(fresh.votes) ? fresh.votes : entry.votes;
+                entry.views = Number.isFinite(fresh.views) ? fresh.views : entry.views;
+                entry.achievementCount = Number.isFinite(fresh.achievementCount)
+                    ? fresh.achievementCount
+                    : entry.achievementCount;
+            }
+        }
+    }
+
+    let picked = finalizePick(scored, wantCount);
+    if (contested.length > 0 && picked.length > 0) {
+        logPopularityPick(label, challenge, scored, contestedIds, picked, logger);
+    }
     if (picked.length === 0) {
         if (onEmptyPick) {
             return { status: 'no-pick', detail: onEmptyPick(eligible) };

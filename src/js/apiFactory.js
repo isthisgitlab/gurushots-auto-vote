@@ -18,7 +18,7 @@ const { getActiveChallenges } = require('./api/challenges');
 const { getVoteImages, submitVotes } = require('./api/voting');
 const { applyBoost, applyBoostToEntry } = require('./api/boost');
 const { applyTurbo } = require('./api/turbo');
-const { getEligiblePhotos, submitToChallenge } = require('./api/submissions');
+const { getEligiblePhotos, getImageData, submitToChallenge } = require('./api/submissions');
 const { mockApiClient } = require('./mock');
 
 /**
@@ -40,6 +40,7 @@ const { mockApiClient } = require('./mock');
  * @property {(...args: any[]) => any} applyBoostToEntry
  * @property {(...args: any[]) => any} applyTurbo
  * @property {(...args: any[]) => any} getEligiblePhotos
+ * @property {(...args: any[]) => any} getImageData
  * @property {(...args: any[]) => any} submitToChallenge
  * @property {() => string} getStrategyType
  */
@@ -56,6 +57,7 @@ const realApi = {
     applyBoostToEntry,
     applyTurbo,
     getEligiblePhotos,
+    getImageData,
     submitToChallenge,
     getStrategyType: () => 'RealAPI',
 };

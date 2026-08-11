@@ -3,6 +3,20 @@
  * (maybeAutoFillChallenge) and the manual GUI entry point (fillChallengeNow).
  */
 
+// photoStats persists its cache through this store; keep it in memory so the
+// suite never touches the real user-data directory.
+let statsStoreData = null;
+jest.mock('../../src/js/settings/storage', () => ({
+    createJsonStore: () => ({
+        readRaw: () => statsStoreData,
+        writeRaw: (data) => {
+            statsStoreData = data;
+        },
+        getFilePath: () => '/tmp/photo-stats.json',
+        initializeAsync: async () => {},
+    }),
+}));
+
 const {
     maybeAutoFillChallenge,
     maybeEmergencyFillChallenge,
@@ -753,7 +767,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         });
         expect(result).toBe('submitted');
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'sunset' });
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // unfiltered fallback
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // unfiltered fallback
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['off'], 'tok');
     });
 
@@ -1490,7 +1504,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'cat' });
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'dog' });
         // Search produced allowed candidates → the unfiltered fallback is not used.
-        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok');
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true });
     });
 
     test('falls back to the unfiltered library when every search is empty', async () => {
@@ -1505,7 +1519,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         );
         expect(out.map((p) => p.id)).toEqual(['full']);
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'pink' });
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // unfiltered fallback
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // unfiltered fallback
     });
 
     // The themed-search-empty fallback is the path that may submit an off-theme
@@ -1573,7 +1587,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { getEligiblePhotos, logger: makeLogger() },
         );
         expect(out.map((p) => p.id)).toEqual(['full']);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok');
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true });
     });
 
     test('goes straight to the unfiltered fetch when no terms are derivable', async () => {
@@ -1586,7 +1600,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         );
         expect(out.map((p) => p.id)).toEqual(['x']);
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok');
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true });
     });
 
     test('tolerates a single search term throwing (other terms still contribute)', async () => {
@@ -1602,7 +1616,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { getEligiblePhotos, logger: makeLogger() },
         );
         expect(out.map((p) => p.id)).toEqual(['p2']);
-        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok'); // dog matched → no fallback
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // dog matched → no fallback
     });
 });
 
@@ -1723,7 +1737,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         );
         expect(out.map((p) => p.id)).toEqual(['best', 'landscape']);
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // no { search } term
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // no { search } term
         expect(debug).toHaveBeenCalledWith(expect.stringContaining('letter challenge "L"'), null);
     });
 
@@ -1749,7 +1763,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         });
         expect(result).toBe('submitted');
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // no themed search
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // no themed search
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['landscape'], 'tok');
     });
 
@@ -1774,7 +1788,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         });
         expect(result).toBe('submitted');
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // no themed search
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // no themed search
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['lion'], 'tok');
     });
 
@@ -1822,7 +1836,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
             submitToChallenge,
         });
         expect(result).toBe('submitted');
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok'); // no themed search
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // no themed search
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['castle'], 'tok');
     });
 
@@ -2373,5 +2387,250 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         const result = await submitNewEntryForAction(challenge, 'tok', deps);
         expect(result).toEqual({ ok: false, imageId: null, reason: 'challenge-gone' });
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+});
+
+describe('photo-stats enrichment in the fill pipeline', () => {
+    const photoStats = require('../../src/js/services/photoStats');
+
+    // Stable per-category logger so warnings can be asserted on.
+    const makeCapturingLogger = () => {
+        const level = {
+            info: jest.fn(),
+            warning: jest.fn(),
+            success: jest.fn(),
+            error: jest.fn(),
+            debug: jest.fn(),
+        };
+        return {
+            withCategory: jest.fn(() => level),
+            challengeTag: (c) => `[Challenge ${c?.id}: ${c?.title}]`,
+            __level: level,
+        };
+    };
+
+    // Abstract title: nothing can match it, so the popularity tiers decide —
+    // the "Your Legacy" case.
+    const abstractChallenge = (over = {}) =>
+        makeChallenge({ title: 'Your Legacy', url: 'your-legacy', entries: [{ id: 'e1' }], ...over });
+
+    const libraryPhoto = (id, views, uploadDate) => ({
+        id,
+        labels: ['Boy', 'Soccer'],
+        // The real get_photos_private shape: votes flat zero, no achievements.
+        votes: 0,
+        views,
+        upload_date: uploadDate,
+        permission: { allowed: true, message: null },
+    });
+
+    beforeEach(() => {
+        statsStoreData = null;
+        photoStats.__resetForTests();
+        photoStats.resetPassState();
+    });
+
+    test('enriched vote counts decide the pick, beating the higher-view photo', async () => {
+        // 'soccer' has more views and is newer, so it wins on the unenriched
+        // data — this is exactly the reported bug. 'portfolio' has 100k votes.
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
+        const getImageData = jest.fn(async (id) =>
+            id === 'portfolio'
+                ? { votes: 100000, views: 400, achievements: [{ n: 1 }, { n: 2 }] }
+                : { votes: 3701, views: 1203, achievements: [{ n: 1 }] },
+        );
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['portfolio'], 'tok');
+    });
+
+    test('a clean theme match costs no enrichment requests', async () => {
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([allowedPhoto('pink', ['Pink', 'Flower']), allowedPhoto('other', ['Car'], 1000)]);
+        const getImageData = jest.fn();
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        const result = await maybeAutoFillChallenge(
+            makeChallenge({ entries: [{ id: 'e1' }] }), // "Pink In Nature"
+            'tok',
+            NOW,
+            {
+                settings: makeSettings({ autoFill: true }),
+                logger: makeLogger(),
+                getEligiblePhotos,
+                getImageData,
+                submitToChallenge,
+            },
+        );
+
+        expect(result).toBe('submitted');
+        expect(getImageData).not.toHaveBeenCalled();
+    });
+
+    test('explains a popularity-decided pick at warning level, with the remedy', async () => {
+        const logger = makeCapturingLogger();
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
+        const getImageData = jest.fn(async () => ({ votes: 500, views: 10, achievements: [] }));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        // debug/info are compiled out of packaged builds, so this has to be a
+        // warning or a real user sees nothing at all.
+        const warnings = logger.__level.warning.mock.calls.map(([msg]) => msg);
+        const explanation = warnings.find((m) => m.includes('chosen on past performance'));
+        expect(explanation).toBeDefined();
+        expect(explanation).toContain('votes');
+        expect(explanation).toContain('Title Tag Rules');
+        // Both photos were measured, so the line must NOT claim partial
+        // coverage. enrichCandidates returns COPIES, so counting statsKnown on
+        // the objects selectEnrichmentSet handed out reports 0 every time —
+        // coverage has to be read off the patched scored entries.
+        expect(explanation).toContain('out of 2 equally off-theme candidates');
+        expect(explanation).not.toContain('known for 0 of');
+    });
+
+    test('reports partial coverage honestly when only some photos were measured', async () => {
+        const logger = makeCapturingLogger();
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('a', 900, 9000), libraryPhoto('b', 800, 8000)]);
+        // Only 'a' resolves; 'b' stays unmeasured.
+        const getImageData = jest.fn(async (id) => (id === 'a' ? { votes: 5, views: 9, achievements: [] } : null));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        const explanation = logger.__level.warning.mock.calls
+            .map(([msg]) => msg)
+            .find((m) => m.includes('chosen on past performance'));
+        expect(explanation).toContain('known for 1 of 2 tied photos');
+    });
+
+    test('a get_image_data outage still completes the fill', async () => {
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
+        const getImageData = jest.fn().mockRejectedValue(new Error('429 Too Many Requests'));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        // Degrades to the old views/date ranking rather than failing.
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['soccer'], 'tok');
+    });
+
+    test('a fill with no getImageData injected behaves exactly as before', async () => {
+        const getEligiblePhotos = jest
+            .fn()
+            .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        const result = await maybeAutoFillChallenge(abstractChallenge(), 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos,
+            submitToChallenge,
+        });
+
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['soccer'], 'tok');
+    });
+
+    test('the emergency-fill stand-down probe never triggers enrichment', async () => {
+        // autoFill still owns this challenge and its must-tag filter matches, so
+        // the probe stands down. That path runs on every scheduler cycle inside
+        // the emergency window — spending a burst of lookups there to submit
+        // nothing is exactly what the seam placement avoids.
+        const getImageData = jest.fn();
+        const submitToChallenge = jest.fn();
+        const challenge = makeChallenge({
+            title: 'Your Legacy',
+            url: 'your-legacy',
+            closeIn: 60,
+            entries: [{ id: 'e1' }],
+        });
+
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, mustIncludeTags: ['boy'] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([libraryPhoto('soccer', 1203, 9000)]),
+            getImageData,
+            submitToChallenge,
+        });
+
+        expect(result).toBe('skipped');
+        expect(getImageData).not.toHaveBeenCalled();
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a multi-slot batch enriches the photos contesting the later slots', async () => {
+        // Regression guard for the multi-slot case: one on-theme leader plus a
+        // pack tied behind it. Enrichment must still run for slots 2..N.
+        const photos = [
+            { ...allowedPhoto('pink', ['Pink', 'Flower'], 5000), votes: 0, views: 1 },
+            libraryPhoto('tiedA', 900, 4000),
+            libraryPhoto('tiedB', 100, 3000),
+        ];
+        const getImageData = jest.fn(async (id) =>
+            id === 'tiedB'
+                ? { votes: 90000, views: 100, achievements: [] }
+                : { votes: 10, views: 900, achievements: [] },
+        );
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        const result = await fillChallengeNow(
+            makeChallenge({ maxSubmits: 3, entries: [{ id: 'e1' }] }), // 2 free slots
+            'tok',
+            'all',
+            {
+                settings: makeSettings({ autoFill: true }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue(photos),
+                getImageData,
+                submitToChallenge,
+            },
+        );
+
+        expect(result.success).toBe(true);
+        // 'pink' takes slot 1 on theme; the contested pair was measured, so the
+        // 90k-vote photo takes slot 2 despite having far fewer views.
+        expect(getImageData).toHaveBeenCalledWith('tiedA', 'tok');
+        expect(getImageData).toHaveBeenCalledWith('tiedB', 'tok');
+        expect(getImageData).not.toHaveBeenCalledWith('pink', 'tok');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['pink', 'tiedB'], 'tok');
     });
 });

@@ -21,7 +21,11 @@ jest.mock('../src/js/api/challenges', () => ({ getActiveChallenges: jest.fn() })
 jest.mock('../src/js/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
 jest.mock('../src/js/api/boost', () => ({ applyBoost: jest.fn(), applyBoostToEntry: jest.fn() }));
 jest.mock('../src/js/api/turbo', () => ({ applyTurbo: jest.fn() }));
-jest.mock('../src/js/api/submissions', () => ({ getEligiblePhotos: jest.fn(), submitToChallenge: jest.fn() }));
+jest.mock('../src/js/api/submissions', () => ({
+    getEligiblePhotos: jest.fn(),
+    getImageData: jest.fn(),
+    submitToChallenge: jest.fn(),
+}));
 jest.mock('../src/js/mock', () => ({
     mockApiClient: {
         authenticate: jest.fn(),
@@ -34,6 +38,7 @@ jest.mock('../src/js/mock', () => ({
         applyBoostToEntry: jest.fn(),
         applyTurbo: jest.fn(),
         getEligiblePhotos: jest.fn(),
+        getImageData: jest.fn(),
         submitToChallenge: jest.fn(),
     },
 }));
