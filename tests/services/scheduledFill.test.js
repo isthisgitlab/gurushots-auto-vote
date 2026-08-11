@@ -41,8 +41,8 @@ const mockSettings = (overrides = {}) => {
         exposureTarget: 0,
         lastHourExposureTarget: 0,
         useScheduledFill: false,
-        scheduledFillTime: '',
-        scheduledFillBeforeEnd: 0,
+        scheduledFillTime: [],
+        scheduledFillBeforeEnd: [],
         scheduledFillWindowMinutes: 60,
         scheduledFillReplaces: false,
     };
@@ -54,7 +54,7 @@ beforeEach(() => jest.clearAllMocks());
 
 describe('getScheduledFillState — active semantics', () => {
     test('inactive when useScheduledFill is off, even with times configured', () => {
-        mockSettings({ useScheduledFill: false, scheduledFillTime: '12:00', scheduledFillBeforeEnd: 300 });
+        mockSettings({ useScheduledFill: false, scheduledFillTime: ['12:00'], scheduledFillBeforeEnd: [300] });
         const state = VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW);
         expect(state).toEqual({ active: false, inWindow: false, replaces: false });
     });
@@ -62,8 +62,8 @@ describe('getScheduledFillState — active semantics', () => {
     test('inactive when enabled but NO time form is configured (replace mode must be a no-op)', () => {
         mockSettings({
             useScheduledFill: true,
-            scheduledFillTime: '',
-            scheduledFillBeforeEnd: 0,
+            scheduledFillTime: [],
+            scheduledFillBeforeEnd: [],
             scheduledFillReplaces: true,
         });
         const state = VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW);
@@ -72,7 +72,7 @@ describe('getScheduledFillState — active semantics', () => {
 
     test('active via the before-end form alone', () => {
         // Window starts 2h before a close that is 2h away → starts exactly now.
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: 7200 });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [7200] });
         const state = VotingLogic.getScheduledFillState(buildChallenge({ closeInSeconds: 7200 }), '777', NOW);
         expect(state.active).toBe(true);
         expect(state.inWindow).toBe(true);
@@ -80,7 +80,7 @@ describe('getScheduledFillState — active semantics', () => {
 
     test('active via the time-of-day form alone', () => {
         // NOW is 12:00 UTC; a 11:30 daily time with a 60-minute window covers it.
-        mockSettings({ useScheduledFill: true, scheduledFillTime: '11:30' });
+        mockSettings({ useScheduledFill: true, scheduledFillTime: ['11:30'] });
         const state = VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW);
         expect(state.active).toBe(true);
         expect(state.inWindow).toBe(true);
@@ -88,20 +88,48 @@ describe('getScheduledFillState — active semantics', () => {
 
     test('both forms configured → in-window via either (OR)', () => {
         // Time-of-day window (07:00 + 60m) is long past; before-end window covers now.
-        mockSettings({ useScheduledFill: true, scheduledFillTime: '07:00', scheduledFillBeforeEnd: 7200 });
+        mockSettings({ useScheduledFill: true, scheduledFillTime: ['07:00'], scheduledFillBeforeEnd: [7200] });
         const viaBeforeEnd = VotingLogic.getScheduledFillState(buildChallenge({ closeInSeconds: 7200 }), '777', NOW);
         expect(viaBeforeEnd.inWindow).toBe(true);
 
         // Before-end window (24h before a 2h-away close) is long past; time-of-day covers now.
-        mockSettings({ useScheduledFill: true, scheduledFillTime: '11:30', scheduledFillBeforeEnd: 86400 });
+        mockSettings({ useScheduledFill: true, scheduledFillTime: ['11:30'], scheduledFillBeforeEnd: [86400] });
         const viaTimeOfDay = VotingLogic.getScheduledFillState(buildChallenge({ closeInSeconds: 7200 }), '777', NOW);
         expect(viaTimeOfDay.inWindow).toBe(true);
+    });
+
+    test('two before-end entries each open their own window (the issue #26 case: 4h and 10h)', () => {
+        // Challenge closes in 11h. Offsets [4h, 10h] → windows at close-10h
+        // (= NOW + 1h) and close-4h (= NOW + 7h), 60 minutes each.
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [4 * 3600, 10 * 3600] });
+        const challenge = buildChallenge({ closeInSeconds: 11 * 3600 });
+
+        const tenHourWindowStart = challenge.close_time - 10 * 3600;
+        const fourHourWindowStart = challenge.close_time - 4 * 3600;
+
+        expect(VotingLogic.getScheduledFillState(challenge, '777', tenHourWindowStart + 60).inWindow).toBe(true);
+        expect(VotingLogic.getScheduledFillState(challenge, '777', fourHourWindowStart + 60).inWindow).toBe(true);
+        // Between the two windows: neither covers.
+        expect(VotingLogic.getScheduledFillState(challenge, '777', tenHourWindowStart + 2 * 3600).inWindow).toBe(false);
+    });
+
+    test('two daily times each open their own window', () => {
+        // NOW is 12:00 UTC. Times 11:30 (open now) and 18:00 (later today).
+        mockSettings({ useScheduledFill: true, scheduledFillTime: ['11:30', '18:00'] });
+        expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW).inWindow).toBe(true);
+
+        // At 14:00 neither window covers; at 18:30 the second one does.
+        const at1400 = Math.floor(Date.UTC(2026, 0, 15, 14, 0, 0) / 1000);
+        const at1830 = Math.floor(Date.UTC(2026, 0, 15, 18, 30, 0) / 1000);
+        const challenge = buildChallenge({ closeInSeconds: 24 * 3600 });
+        expect(VotingLogic.getScheduledFillState(challenge, '777', at1400).inWindow).toBe(false);
+        expect(VotingLogic.getScheduledFillState(challenge, '777', at1830).inWindow).toBe(true);
     });
 
     test('window boundaries are inclusive [S, S+W]', () => {
         const windowSec = 60 * 60;
         const beforeEnd = 7200;
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: beforeEnd, scheduledFillWindowMinutes: 60 });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [beforeEnd], scheduledFillWindowMinutes: 60 });
         const challenge = buildChallenge({ closeInSeconds: 7200 + windowSec + 3600 });
         const start = challenge.close_time - beforeEnd;
 
@@ -113,8 +141,8 @@ describe('getScheduledFillState — active semantics', () => {
 });
 
 describe('getScheduledFillState — corrupt persisted values fail soft', () => {
-    test.each([[null], [2130], [{ time: '21:30' }], [['21:30']], [true]])(
-        'scheduledFillTime as %p turns the form off without throwing',
+    test.each([[null], [2130], [{ time: '21:30' }], ['21:30'], [true]])(
+        'a NON-ARRAY scheduledFillTime %p turns the whole form off without throwing',
         (corrupt) => {
             mockSettings({ useScheduledFill: true, scheduledFillTime: corrupt });
             expect(() => VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW)).not.toThrow();
@@ -122,28 +150,67 @@ describe('getScheduledFillState — corrupt persisted values fail soft', () => {
         },
     );
 
-    test.each([['abc'], [null], [{}], [NaN], [-100]])('scheduledFillBeforeEnd as %p turns the form off', (corrupt) => {
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: corrupt });
-        expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW).active).toBe(false);
+    test.each([['abc'], [null], [{}], [NaN], [-100], [7200]])(
+        'a NON-ARRAY scheduledFillBeforeEnd %p turns the whole form off',
+        (corrupt) => {
+            mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: corrupt });
+            expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW).active).toBe(false);
+        },
+    );
+
+    test('a corrupt ENTRY is skipped while a sibling entry still fills', () => {
+        mockSettings({ useScheduledFill: true, scheduledFillTime: ['25:99', '11:30'] });
+        const viaTime = VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW);
+        expect(viaTime.active).toBe(true);
+        expect(viaTime.inWindow).toBe(true);
+
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [-5, 7200] });
+        const viaBefore = VotingLogic.getScheduledFillState(buildChallenge({ closeInSeconds: 7200 }), '777', NOW);
+        expect(viaBefore.active).toBe(true);
+        expect(viaBefore.inWindow).toBe(true);
     });
 
-    test('a hand-edited numeric string coerces to its numeric meaning instead of failing', () => {
-        // The write path rejects '7200' (zod wants a number), but a hand-edited
+    test('a list of ONLY corrupt entries leaves the feature inactive (not even active)', () => {
+        mockSettings({
+            useScheduledFill: true,
+            scheduledFillTime: ['25:99', 2130],
+            scheduledFillBeforeEnd: [-5, NaN],
+            scheduledFillReplaces: true,
+        });
+        expect(VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW)).toEqual({
+            active: false,
+            inWindow: false,
+            replaces: false,
+        });
+    });
+
+    test('an oversized hand-edited list is sliced to the entry cap (Intl work stays bounded)', () => {
+        // 100 entries, the only in-window one placed beyond the cap — it must
+        // NOT be evaluated. Entries within the cap are all far from now.
+        const times = Array.from({ length: 99 }, (_, i) => `0${Math.floor(i / 10)}:0${i % 10}`.slice(-5));
+        times.push('11:30'); // in-window, but 100th
+        mockSettings({ useScheduledFill: true, scheduledFillTime: times });
+        const state = VotingLogic.getScheduledFillState(buildChallenge(), '777', NOW);
+        expect(state.inWindow).toBe(false);
+    });
+
+    test('a hand-edited numeric-string ENTRY coerces to its numeric meaning instead of failing', () => {
+        // The write path rejects ['7200'] (zod wants numbers), but a hand-edited
         // settings.json holding one degrades gracefully to the number it spells.
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: '7200' });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: ['7200'] });
         expect(VotingLogic.getScheduledFillState(buildChallenge({ closeInSeconds: 7200 }), '777', NOW).inWindow).toBe(
             true,
         );
     });
 
     test('corrupt window minutes falls back to the 60-minute default, not "never in window"', () => {
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: 7200, scheduledFillWindowMinutes: 'sixty' });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [7200], scheduledFillWindowMinutes: 'sixty' });
         const state = VotingLogic.getScheduledFillState(buildChallenge({ closeInSeconds: 7200 }), '777', NOW);
         expect(state.inWindow).toBe(true);
     });
 
     test('a throwing settings read degrades to inactive instead of propagating', () => {
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: 300 });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [300] });
         settings.getSetting = jest.fn(() => {
             throw new Error('corrupt settings blob');
         });
@@ -158,7 +225,7 @@ describe('getScheduledFillState — corrupt persisted values fail soft', () => {
 
 describe('scheduled rule — auto voting decisions', () => {
     test('in-window below 100% votes with the scheduled reason and 100/100 target', () => {
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: 7200 });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [7200] });
         const result = VotingLogic.evaluateVotingDecision(
             buildChallenge({ exposureFactor: 40, closeInSeconds: 7200 }),
             NOW,
@@ -169,7 +236,7 @@ describe('scheduled rule — auto voting decisions', () => {
     });
 
     test('in-window at 100% does not vote (atTarget)', () => {
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: 7200 });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [7200] });
         const result = VotingLogic.evaluateVotingDecision(
             buildChallenge({ exposureFactor: 100, closeInSeconds: 7200 }),
             NOW,
@@ -182,7 +249,7 @@ describe('scheduled rule — auto voting decisions', () => {
         // Window opens 1h before close (close is 4h away) → not in window now.
         mockSettings({
             useScheduledFill: true,
-            scheduledFillBeforeEnd: 3600,
+            scheduledFillBeforeEnd: [3600],
             exposure: 80,
             scheduledFillReplaces: false,
         });
@@ -197,7 +264,7 @@ describe('scheduled rule — auto voting decisions', () => {
     test('replace mode outside the window blocks normal voting', () => {
         mockSettings({
             useScheduledFill: true,
-            scheduledFillBeforeEnd: 3600,
+            scheduledFillBeforeEnd: [3600],
             exposure: 80,
             scheduledFillReplaces: true,
         });
@@ -214,7 +281,7 @@ describe('scheduled rule — auto voting decisions', () => {
         // before-end window has not opened yet.
         mockSettings({
             useScheduledFill: true,
-            scheduledFillBeforeEnd: 600,
+            scheduledFillBeforeEnd: [600],
             scheduledFillReplaces: true,
             useLastHourExposure: true,
             lastHourExposure: 90,
@@ -229,7 +296,7 @@ describe('scheduled rule — auto voting decisions', () => {
     });
 
     test('replace mode keeps the flash rule', () => {
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: 600, scheduledFillReplaces: true });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [600], scheduledFillReplaces: true });
         const result = VotingLogic.evaluateVotingDecision(
             buildChallenge({ exposureFactor: 40, closeInSeconds: 14400, type: 'flash' }),
             NOW,
@@ -241,7 +308,7 @@ describe('scheduled rule — auto voting decisions', () => {
     test('replace mode keeps the last-minute rule', () => {
         mockSettings({
             useScheduledFill: true,
-            scheduledFillBeforeEnd: 60,
+            scheduledFillBeforeEnd: [60],
             scheduledFillReplaces: true,
             lastMinuteThreshold: 10,
         });
@@ -254,7 +321,7 @@ describe('scheduled rule — auto voting decisions', () => {
     });
 
     test('onlyBoost keeps precedence over an in-window scheduled fill', () => {
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: 7200, onlyBoost: true });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [7200], onlyBoost: true });
         const result = VotingLogic.evaluateVotingDecision(
             buildChallenge({ exposureFactor: 40, closeInSeconds: 7200 }),
             NOW,
@@ -266,7 +333,7 @@ describe('scheduled rule — auto voting decisions', () => {
     test('voteOnlyInLastMinute keeps precedence over an in-window scheduled fill', () => {
         mockSettings({
             useScheduledFill: true,
-            scheduledFillBeforeEnd: 7200,
+            scheduledFillBeforeEnd: [7200],
             voteOnlyInLastMinute: true,
             lastMinuteThreshold: 10,
         });
@@ -290,7 +357,7 @@ describe('scheduled rule — auto voting decisions', () => {
 
     test('time-of-day form drives the decision through the real wallClock module', () => {
         // NOW is 12:00 UTC; window [11:30, 12:30] covers it → scheduled vote.
-        mockSettings({ useScheduledFill: true, scheduledFillTime: '11:30', exposure: 10 });
+        mockSettings({ useScheduledFill: true, scheduledFillTime: ['11:30'], exposure: 10 });
         const inWindow = VotingLogic.evaluateVotingDecision(
             buildChallenge({ exposureFactor: 40, closeInSeconds: 14400 }),
             NOW,
@@ -299,7 +366,7 @@ describe('scheduled rule — auto voting decisions', () => {
         expect(inWindow.voteReason).toBe('scheduled fill window: exposure 40% < 100%');
 
         // A 13:00 time has not opened yet → falls through (and 40% >= 10% → no vote).
-        mockSettings({ useScheduledFill: true, scheduledFillTime: '13:00', exposure: 10 });
+        mockSettings({ useScheduledFill: true, scheduledFillTime: ['13:00'], exposure: 10 });
         const outside = VotingLogic.evaluateVotingDecision(
             buildChallenge({ exposureFactor: 40, closeInSeconds: 14400 }),
             NOW,
@@ -313,7 +380,7 @@ describe('scheduled rule — manual voting decisions', () => {
     test('manual mode ignores the replace-mode block outside the window', () => {
         mockSettings({
             useScheduledFill: true,
-            scheduledFillBeforeEnd: 3600,
+            scheduledFillBeforeEnd: [3600],
             exposure: 80,
             scheduledFillReplaces: true,
         });
@@ -326,7 +393,7 @@ describe('scheduled rule — manual voting decisions', () => {
     });
 
     test('manual mode in-window at 100% surfaces the scheduled message', () => {
-        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: 7200 });
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [7200] });
         const result = VotingLogic.evaluateManualVotingDecision(
             buildChallenge({ exposureFactor: 100, closeInSeconds: 7200 }),
             NOW,

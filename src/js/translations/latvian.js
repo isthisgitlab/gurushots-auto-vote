@@ -341,25 +341,33 @@
                 'Cik bieži (minūtēs) pārbaudīt izaicinājumu, kad tas ir pēdējās minūtes sliekšņa robežās. Noklusējums 1 pārbauda katru minūti, lai nepalaistu garām beigu grūdienu.',
             useScheduledFill: 'Izmantot plānoto aizpildi',
             useScheduledFillDesc:
-                'Aizpildīt ekspozīciju izvēlētos laikos, nevis tikai tad, kad tā nokrītas zem Redzamības sliekšņa. Pieejami divi palaidēji, kurus var apvienot: ikdienas Aizpildes laiks un vienreizējs Aizpildīt pirms beigām intervāls — ja iestatīti abi, katrs atver savu aizpildes logu. Loga laikā izaicinājums tiek balsots līdz 100% un tur noturēts; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens palaidējs zemāk, un nekad neattiecas uz zibens izaicinājumiem vai izaicinājumiem režīmā "Tikai Boost". Ja lietotne nedarbojas visa loga laikā, šī aizpilde tiek izlaista — atgūšanas nav.',
-            scheduledFillTime: 'Aizpildes laiks',
+                'Aizpildīt ekspozīciju izvēlētos laikos, nevis tikai tad, kad tā nokrītas zem Redzamības sliekšņa. Pieejami divi palaidēju saraksti, kurus var apvienot: viens vai vairāki ikdienas Aizpildes laiki un viens vai vairāki vienreizēji Aizpildīt pirms beigām intervāli. Katrs ieraksts atver savu neatkarīgu aizpildes logu — piem., intervāli 10h un 4h pirms beigām aizpilda divreiz noslēguma dienā. Loga laikā izaicinājums tiek balsots līdz 100% un tur noturēts; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens laiks zemāk, un nekad neattiecas uz zibens izaicinājumiem vai izaicinājumiem režīmā "Tikai Boost". Ja lietotne nedarbojas visa loga laikā, šī aizpilde tiek izlaista — atgūšanas nav.',
+            scheduledFillTime: 'Aizpildes laiki',
             scheduledFillTimeDesc:
-                'Ikdienas pulksteņa laiks (24h), kurā atveras aizpildes logs, lietotnes Laika joslas iestatījumā — nevis šīs ierīces pulkstenī. Atstājiet tukšu, lai izslēgtu šo palaidēju. Ap vasaras/ziemas laika maiņu faktiskais brīdis maiņas dienā var nobīdīties līdz pat stundai.',
-            scheduledFillTimeOff: 'laiks nav iestatīts — šis palaidējs ir izslēgts',
+                'Ikdienas pulksteņa laiki (24h), kuros atveras aizpildes logi, lietotnes Laika joslas iestatījumā — nevis šīs ierīces pulkstenī. Katrs laiks katru dienu atver savu logu; noņemiet visas rindas, lai izslēgtu šo palaidēju. Ap vasaras/ziemas laika maiņu faktiskais brīdis maiņas dienā var nobīdīties līdz pat stundai.',
+            scheduledFillTimeOff: 'laiki nav iestatīti — šis palaidējs ir izslēgts',
             scheduledFillBeforeEnd: 'Aizpildīt pirms beigām',
             scheduledFillBeforeEndDesc:
-                'Atvērt vienreizēju aizpildes logu tik ilgi pirms izaicinājuma beigām. GUI ievada stundās un minūtēs; iestatiet 0h 0m, lai izslēgtu šo palaidēju. Tas ir relatīvs pret katra izaicinājuma termiņu — pārbaudiet to vēlreiz, kad izmantojat saglabātu profilu izaicinājumam ar citu laika grafiku.',
+                'Atvērt vienreizējus aizpildes logus tik ilgi pirms izaicinājuma beigām — piem., 10h 0m un 4h 0m, lai aizpildītu divreiz noslēguma dienā. GUI ievada stundās un minūtēs; noņemiet visas rindas, lai izslēgtu šo palaidēju. Tie ir relatīvi pret katra izaicinājuma termiņu — pārbaudiet tos vēlreiz, kad izmantojat saglabātu profilu izaicinājumam ar citu laika grafiku.',
+            scheduledFillBeforeEndOff: 'intervāli nav iestatīti — šis palaidējs ir izslēgts',
+            scheduledFillAddTime: 'Pievienot laiku',
+            scheduledFillAddBeforeEnd: 'Pievienot intervālu',
+            scheduledFillRemoveEntry: 'Noņemt ierakstu',
+            scheduledFillEntryDraft: 'iestatiet laiku — 0h 0m rindas netiek saglabātas',
+            scheduledFillDuplicateEntry: 'dublikāts — šis ieraksts tiek ignorēts',
+            scheduledFillMaxEntries: 'Sasniegts maksimums — {0} ieraksti.',
+            scheduledFillSourceBeforeEnd: '{0} pirms beigām',
             scheduledFillWindowMinutes: 'Aizpildes logs (minūtes)',
             scheduledFillWindowMinutesDesc:
                 'Cik ilgi katrs aizpildes logs paliek atvērts pēc sava sākuma laika. Loga laikā izaicinājums tiek uzpildīts līdz 100% un tur noturēts; pēc tā aizvēršanās atkal darbojas parastie noteikumi. Turiet to garāku par Pārbaudes biežumu, lai balsošanas cikls garantēti trāpītu logā.',
             scheduledFillReplaces: 'Tikai plānotā aizpilde',
             scheduledFillReplacesDesc:
                 'Kad ieslēgts, parastā un pēdējās stundas ekspozīcijas balsošana ārpus plānotajiem aizpildes logiem tiek bloķēta — plānotie laiki kļūst par vienīgajām automātiskajām aizpildēm. Zibens izaicinājumi un Pēdējās minūtes noteikumi joprojām balso kā parasti, manuālā balsošana netiek ietekmēta, un "Balsot tikai pēdējās minūtes laikā" ir pārāks par šo iestatījumu. Brīdinājums: ja lietotne nedarbojas visa loga laikā, šī aizpilde tiek izlaista bez atgūšanas un bez sliekšņa rezerves, tāpēc izaicinājums var noslēgties nepilnīgi aizpildīts.',
-            scheduledFillNextHint: 'Nākamais aizpildes logs: {0}–{1} ({2})',
+            scheduledFillNextHint: 'Nākamais aizpildes logs: {0}–{1} ({2}) — no {3}',
             scheduledFillNoTimesHint:
                 'Nav iestatīts aizpildes laiks — plānotā aizpilde nedarbojas, kamēr nav iestatīts kāds zemāk.',
             scheduledFillWastedWindowHint:
-                'Šis logs sniedzas pāri izaicinājuma termiņam — izmantojama ir tikai daļa pirms beigām.',
+                'Logi intervāliem {0} sniedzas pāri izaicinājuma termiņam — izmantojama ir tikai daļa pirms beigām.',
             scheduledFillShortWindowHint:
                 'Šis logs ir īsāks par jūsu maksimālo Pārbaudes biežumu ({0} min) — vesels logs var iekrist starp balsošanas cikliem, kamēr lietotne darbojas bez uzraudzības.',
             scheduledFillUnreachableHint:

@@ -4,10 +4,11 @@ import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { groupSchemaEntries } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
+import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
 import { getScheduleShift } from '../../../services/scheduleRemap';
 import { occurrencesOf } from '../../../scheduling/wallClock';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
-import { SettingInput } from './SettingInput';
+import { SettingInput, SCHEDULED_FILL_MAX_ENTRIES } from './SettingInput';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -194,27 +195,36 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
 
     // Scheduled-fill hint state, derived fresh per render from the effective
     // (override-or-global) values — same render-time spirit as the
-    // scheduleShift hint below. A failing wall-clock computation must never
-    // break the modal, so the Intl math is guarded.
+    // scheduleShift hint below. Both triggers are LISTS; every entry opens
+    // its own window. A failing wall-clock computation must never break the
+    // modal, so the Intl math is guarded.
     const effectiveOf = (key) => (key in overrides ? overrides[key] : (defaults?.[key] ?? schema?.[key]?.default));
     const appTimezone = appSettings?.timezone || DEFAULT_TIMEZONE;
     const checkFrequencyMax = Number(appSettings?.checkFrequencyMax) || 0;
-    const sfTime = effectiveOf('scheduledFillTime');
-    const sfTimeSet = typeof sfTime === 'string' && sfTime !== '';
-    const sfBeforeEnd = Number(effectiveOf('scheduledFillBeforeEnd')) || 0;
+    const rawSfTimes = effectiveOf('scheduledFillTime');
+    const sfTimes = (Array.isArray(rawSfTimes) ? rawSfTimes : []).slice(0, SCHEDULED_FILL_MAX_ENTRIES);
+    const rawSfBeforeEnds = effectiveOf('scheduledFillBeforeEnd');
+    const sfBeforeEnds = (Array.isArray(rawSfBeforeEnds) ? rawSfBeforeEnds : [])
+        .slice(0, SCHEDULED_FILL_MAX_ENTRIES)
+        .map(Number)
+        .filter((sec) => sec > 0);
     const sfWindowMin = Number(effectiveOf('scheduledFillWindowMinutes')) || 60;
     const sfWindowSec = sfWindowMin * 60;
     const sfEnabled = effectiveOf('useScheduledFill') === true;
     const sfReplaces = effectiveOf('scheduledFillReplaces') === true;
-    const sfActive = sfEnabled && (sfTimeSet || sfBeforeEnd > 0);
     const nowSec = Math.floor(Date.now() / 1000);
     const closeTime = Number(challenge?.close_time) || 0;
-    let sfOcc = null;
-    try {
-        sfOcc = sfTimeSet ? occurrencesOf(sfTime, appTimezone, nowSec) : null;
-    } catch {
-        sfOcc = null;
-    }
+    // Explicit arrow (never `map(occurrencesOf)`): map's (element, index,
+    // array) signature would bind the index to the timeZone parameter.
+    const sfOccs = (() => {
+        try {
+            return sfTimes.map((entry) => occurrencesOf(entry, appTimezone, nowSec)).filter(Boolean);
+        } catch {
+            return [];
+        }
+    })();
+    const sfTimeSet = sfOccs.length > 0;
+    const sfActive = sfEnabled && (sfTimeSet || sfBeforeEnds.length > 0);
     const formatInTz = (epochSec) => {
         try {
             return new Intl.DateTimeFormat(undefined, {
@@ -227,38 +237,76 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             return new Date(epochSec * 1000).toISOString().slice(11, 16);
         }
     };
+    // Next-window candidates from BOTH lists: per time entry the open-or-next
+    // occurrence, per before-end entry its one-shot start while the window is
+    // still at least partly ahead. Each carries its producing trigger so the
+    // hint can name whose window is shown.
+    const sfCandidates = [];
+    for (let i = 0; i < sfOccs.length; i++) {
+        const occ = sfOccs[i];
+        const start = nowSec - occ.prev <= sfWindowSec ? occ.prev : occ.next;
+        sfCandidates.push({ start, source: sfTimes[i] });
+    }
+    for (const sec of sfBeforeEnds) {
+        if (closeTime <= nowSec) continue;
+        const start = closeTime - sec;
+        if (nowSec <= start + sfWindowSec) {
+            sfCandidates.push({
+                start,
+                source: t('app.scheduledFillSourceBeforeEnd').replace(
+                    '{0}',
+                    formatSecondsAsHoursMinutes(sec, t('app.hours'), t('app.minutes')),
+                ),
+            });
+        }
+    }
+    const sfNext = sfCandidates.reduce((best, c) => (best === null || c.start < best.start ? c : best), null);
     // With replace mode on, is any fill window still reachable for THIS
     // challenge? Unreachable means replace mode keeps blocking threshold
     // voting with no fill ever coming (e.g. a "5h before end" profile applied
     // to a challenge with 2h left).
     let sfUnreachable = false;
     if (sfActive && sfReplaces && closeTime > nowSec) {
-        const beforeEndReachable = sfBeforeEnd > 0 && nowSec <= closeTime - sfBeforeEnd + sfWindowSec;
-        const timeOfDayReachable = !!sfOcc && (nowSec - sfOcc.prev <= sfWindowSec || sfOcc.next < closeTime);
+        const beforeEndReachable = sfBeforeEnds.some((sec) => nowSec <= closeTime - sec + sfWindowSec);
+        const timeOfDayReachable = sfOccs.some((occ) => nowSec - occ.prev <= sfWindowSec || occ.next < closeTime);
         sfUnreachable = !beforeEndReachable && !timeOfDayReachable;
     }
     /** Conditional inline hints for the scheduled-fill keys; [] for other keys. */
     const scheduledFillHints = (key) => {
         const hints = [];
-        if (key === 'useScheduledFill' && sfEnabled && !sfTimeSet && sfBeforeEnd <= 0) {
-            hints.push({ tone: 'text-warning', text: t('app.scheduledFillNoTimesHint') });
+        if (key === 'useScheduledFill') {
+            if (sfEnabled && !sfTimeSet && sfBeforeEnds.length === 0) {
+                hints.push({ tone: 'text-warning', text: t('app.scheduledFillNoTimesHint') });
+            }
+            // The next-window hint lives on the master-toggle row (feature-level
+            // status): a before-end-only config — the issue's own motivating
+            // case — would never see it on the daily-times row. It gates on
+            // sfEnabled like every value-derived hint: a time typed in while
+            // the toggle is off must not render an "active schedule" status.
+            if (sfEnabled && sfNext) {
+                hints.push({
+                    tone: 'text-info',
+                    text: t('app.scheduledFillNextHint')
+                        .replace('{0}', formatInTz(sfNext.start))
+                        .replace('{1}', formatInTz(sfNext.start + sfWindowSec))
+                        .replace('{2}', appTimezone)
+                        .replace('{3}', sfNext.source),
+                });
+            }
         }
-        // Both value-derived hints gate on sfEnabled like their siblings: a
-        // time typed in while the master toggle is still off must not render
-        // an "active schedule" status — getScheduledFillState is fully
-        // inactive without useScheduledFill, so nothing would actually fill.
-        if (key === 'scheduledFillTime' && sfEnabled && sfOcc) {
-            const start = nowSec - sfOcc.prev <= sfWindowSec ? sfOcc.prev : sfOcc.next;
-            hints.push({
-                tone: 'text-info',
-                text: t('app.scheduledFillNextHint')
-                    .replace('{0}', formatInTz(start))
-                    .replace('{1}', formatInTz(start + sfWindowSec))
-                    .replace('{2}', appTimezone),
-            });
-        }
-        if (key === 'scheduledFillBeforeEnd' && sfEnabled && sfBeforeEnd > 0 && sfBeforeEnd < sfWindowSec) {
-            hints.push({ tone: 'text-warning', text: t('app.scheduledFillWastedWindowHint') });
+        if (key === 'scheduledFillBeforeEnd' && sfEnabled) {
+            const wasted = sfBeforeEnds.filter((sec) => sec < sfWindowSec);
+            if (wasted.length > 0) {
+                hints.push({
+                    tone: 'text-warning',
+                    text: t('app.scheduledFillWastedWindowHint').replace(
+                        '{0}',
+                        wasted
+                            .map((sec) => formatSecondsAsHoursMinutes(sec, t('app.hours'), t('app.minutes')))
+                            .join(', '),
+                    ),
+                });
+            }
         }
         if (
             key === 'scheduledFillWindowMinutes' &&

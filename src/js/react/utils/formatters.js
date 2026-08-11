@@ -40,14 +40,21 @@ export const formatSettingDefault = (value, config, t) => {
             )
             .join(', ');
     }
+    // Before the generic array branch: each timeList entry is seconds and
+    // must render as hours/minutes, not a raw number. timeOfDayList needs no
+    // branch — the generic array join already renders 'HH:MM' strings.
+    if (config?.type === 'timeList') {
+        const entries = Array.isArray(value) ? value : [];
+        return (
+            entries.map((entry) => formatSecondsAsHoursMinutes(entry, t('app.hours'), t('app.minutes'))).join(', ') ||
+            t('app.none')
+        );
+    }
     if (Array.isArray(value)) {
         return value.join(', ') || t('app.none');
     }
     if (config?.type === 'time') {
         return formatSecondsAsHoursMinutes(value, t('app.hours'), t('app.minutes'));
-    }
-    if (config?.type === 'timeOfDay') {
-        return value === '' || value == null ? t('app.none') : String(value);
     }
     if (config?.type === 'number' && config.unit) {
         return `${value} ${t(config.unit)}`;

@@ -342,24 +342,32 @@
                 'How often (in minutes) to re-check a challenge once it is inside the Last Minute Threshold. The default 1 checks every minute so the final push is not missed.',
             useScheduledFill: 'Use Scheduled Fill',
             useScheduledFillDesc:
-                "Fill exposure at chosen times instead of only when it drops below the Exposure threshold. Two triggers are available and can be combined: a daily Fill Time and a one-shot Fill Before End offset — when both are set, each opens its own fill window. During a window the challenge is voted up to 100% and held there; times are interpreted in the app Timezone setting (not this device's clock). Has no effect until at least one trigger below is set, and never applies to flash challenges or challenges in Boost Only mode. If the app is not running during a whole window, that fill is skipped — there is no catch-up.",
-            scheduledFillTime: 'Fill Time',
+                "Fill exposure at chosen times instead of only when it drops below the Exposure threshold. Two trigger lists are available and can be combined: one or more daily Fill Times and one or more one-shot Fill Before End offsets. Each entry opens its own independent fill window — e.g. offsets of 10h and 4h before the end fill twice on closing day. During a window the challenge is voted up to 100% and held there; times are interpreted in the app Timezone setting (not this device's clock). Has no effect until at least one time below is set, and never applies to flash challenges or challenges in Boost Only mode. If the app is not running during a whole window, that fill is skipped — there is no catch-up.",
+            scheduledFillTime: 'Fill Times',
             scheduledFillTimeDesc:
-                "Daily wall-clock time (24h) at which a fill window opens, in the app Timezone setting — not this device's clock. Leave empty to turn this trigger off. Around a daylight-saving switch the actual instant can shift by up to an hour on the changeover day.",
-            scheduledFillTimeOff: 'no time set — this trigger is off',
+                "Daily wall-clock times (24h) at which fill windows open, in the app Timezone setting — not this device's clock. Each time opens its own window every day; remove all rows to turn this trigger off. Around a daylight-saving switch the actual instant can shift by up to an hour on the changeover day.",
+            scheduledFillTimeOff: 'no times set — this trigger is off',
             scheduledFillBeforeEnd: 'Fill Before End',
             scheduledFillBeforeEndDesc:
-                "Open a one-shot fill window this long before the challenge closes. Entered as hours and minutes in the GUI; set to 0h 0m to turn this trigger off. This is relative to each challenge's own deadline — re-check it when reusing a saved profile on a challenge with a different timeline.",
+                "Open one-shot fill windows these long before the challenge closes — e.g. 10h 0m and 4h 0m to fill twice on closing day. Entered as hours and minutes in the GUI; remove all rows to turn this trigger off. These are relative to each challenge's own deadline — re-check them when reusing a saved profile on a challenge with a different timeline.",
+            scheduledFillBeforeEndOff: 'no offsets set — this trigger is off',
+            scheduledFillAddTime: 'Add time',
+            scheduledFillAddBeforeEnd: 'Add offset',
+            scheduledFillRemoveEntry: 'Remove entry',
+            scheduledFillEntryDraft: 'set a time — 0h 0m rows are not saved',
+            scheduledFillDuplicateEntry: 'duplicate — this entry is ignored',
+            scheduledFillMaxEntries: 'Maximum of {0} entries reached.',
+            scheduledFillSourceBeforeEnd: '{0} before end',
             scheduledFillWindowMinutes: 'Fill Window (minutes)',
             scheduledFillWindowMinutesDesc:
                 'How long each fill window stays open after its start time. Within the window the challenge is topped up to 100% and held there; after it closes, normal rules apply again. Keep it longer than your Check Frequency so a voting cycle is guaranteed to land inside the window.',
             scheduledFillReplaces: 'Scheduled Fill Only',
             scheduledFillReplacesDesc:
                 'When on, normal and last-hour exposure voting are blocked outside the scheduled fill windows — the scheduled times become the only automatic fills. Flash challenges and the Last Minute rules still vote as usual, manual voting is unaffected, and Vote Only in Last Minute takes precedence over this setting. Warning: if the app is not running during a whole window, that fill is skipped with no catch-up and no threshold fallback, so the challenge can close under-filled.',
-            scheduledFillNextHint: 'Next fill window: {0}–{1} ({2})',
+            scheduledFillNextHint: 'Next fill window: {0}–{1} ({2}) — from {3}',
             scheduledFillNoTimesHint: 'No fill time configured — scheduled fill is inactive until you set one below.',
             scheduledFillWastedWindowHint:
-                'This window extends past the challenge deadline — only the part before the close is usable.',
+                'The windows for {0} extend past the challenge deadline — only the part before the close is usable.',
             scheduledFillShortWindowHint:
                 'This window is shorter than your maximum Check Frequency ({0} min) — a whole window could fall between voting cycles while the app is running unattended.',
             scheduledFillUnreachableHint:

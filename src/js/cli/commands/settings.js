@@ -405,14 +405,19 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
                          (default: 300 = 5 min; 0 = off). NOTE: this used to be minutes.
 
 Scheduled fill (fill exposure at chosen times — per-challenge, set with
-set-global-default or set-setting --challenge=<id>):
+set-global-default or set-setting --challenge=<id>; every entry opens its own
+fill window, all OR'd; older single values migrate to arrays automatically):
   useScheduledFill           - Master switch (default: false). Inert until a
                                time below is set; never applies to flash or
                                boost-only challenges.
-  scheduledFillTime          - Daily 24h "HH:MM" in the app timezone setting,
-                               NOT the device clock ("" = off). e.g. "21:30"
-  scheduledFillBeforeEnd     - One-shot window this many SECONDS before the
-                               challenge closes (default: 0 = off; max 30 days)
+  scheduledFillTime          - JSON array of daily 24h "HH:MM" times in the
+                               app timezone setting, NOT the device clock.
+                               e.g. '["09:00","21:30"]' ([] = off, max 6,
+                               no duplicates)
+  scheduledFillBeforeEnd     - JSON array of SECONDS-before-close offsets,
+                               each opening a one-shot window. e.g.
+                               '[14400,36000]' fills at 4h and 10h before the
+                               end ([] = off, max 6 entries, each 1s..30 days)
   scheduledFillWindowMinutes - How long each fill window stays open
                                (default: 60, range 5-720)
   scheduledFillReplaces      - true = scheduled windows become the ONLY
@@ -421,6 +426,9 @@ set-global-default or set-setting --challenge=<id>):
                                and manual voting still apply). A window missed
                                while the app is not running is skipped with no
                                catch-up. (default: false)
+  Set them like autoFillSchedule (validated JSON values):
+    set-global-default scheduledFillTime '["09:00","21:30"]'
+    set-setting scheduledFillBeforeEnd '[14400,36000]' --challenge=12345
 
 Auto-fill schedule (JSON array of {count, seconds} rows; replaces the old
 autoFillIntervalMinutes — existing values are migrated automatically):

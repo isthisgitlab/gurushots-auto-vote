@@ -207,7 +207,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
             // shape: sync on Node, Promise on the WebView. Reuse the outer
             // describe.each's shape by wrapping the config the same way.
             const wrap = (config) => (resolveThreshold() instanceof Promise ? Promise.resolve(config) : config);
-            const off = { enabled: false, timeOfDay: '', beforeEndSec: 0 };
+            const off = { enabled: false, timesOfDay: [], beforeEndSecs: [] };
 
             it('omitting the new opts leaves results identical (backward compat)', async () => {
                 const now = Math.floor(Date.now() / 1000);
@@ -225,7 +225,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 3600 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveScheduledFill: () => wrap({ enabled: true, timeOfDay: '', beforeEndSec: 3480 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [3480] }),
                     timezone: 'UTC',
                 });
                 expect(result.mode).toBe('scheduled');
@@ -239,7 +239,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 3600 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveScheduledFill: () => wrap({ enabled: true, timeOfDay: '12:01', beforeEndSec: 0 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: ['12:01'], beforeEndSecs: [] }),
                     timezone: 'UTC',
                 });
                 expect(result.mode).toBe('scheduled');
@@ -253,7 +253,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 7200 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveScheduledFill: () => wrap({ enabled: true, timeOfDay: '', beforeEndSec: 1800 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [1800] }),
                     timezone: 'UTC',
                 });
                 expect(result.mode).toBe('normal');
@@ -267,7 +267,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 5, title: 'Both', type: 'regular', close_time: now + 17 * 60 }];
                 const boundaryWins = await computeNextCycleDelayMs(challenges, now, {
                     ...opts({ resolveThreshold: () => 16 }),
-                    resolveScheduledFill: () => wrap({ enabled: true, timeOfDay: '', beforeEndSec: 15 * 60 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [15 * 60] }),
                     timezone: 'UTC',
                 });
                 expect(boundaryWins.mode).toBe('approaching');
@@ -276,7 +276,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 // Flip it: scheduled start 30s away beats the 60s boundary.
                 const scheduledWins = await computeNextCycleDelayMs(challenges, now, {
                     ...opts({ resolveThreshold: () => 16 }),
-                    resolveScheduledFill: () => wrap({ enabled: true, timeOfDay: '', beforeEndSec: 17 * 60 - 30 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [17 * 60 - 30] }),
                     timezone: 'UTC',
                 });
                 expect(scheduledWins.mode).toBe('scheduled');
@@ -290,7 +290,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 1800 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts({ resolveThreshold: () => 5 }),
-                    resolveScheduledFill: () => wrap({ enabled: true, timeOfDay: '13:00', beforeEndSec: 0 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: ['13:00'], beforeEndSecs: [] }),
                     timezone: 'UTC',
                 });
                 expect(result.mode).toBe('normal');
@@ -304,7 +304,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'Sched', type: 'regular', close_time: now + 3600 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveScheduledFill: () => wrap({ enabled: true, timeOfDay: '', beforeEndSec: 3500 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [3500] }),
                     timezone: 'UTC',
                 });
                 expect(result.mode).toBe('scheduled');
@@ -317,12 +317,58 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'Both forms', type: 'regular', close_time: now + 3600 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveScheduledFill: () => wrap({ enabled: true, timeOfDay: '12:05', beforeEndSec: 3480 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: ['12:05'], beforeEndSecs: [3480] }),
                     timezone: 'UTC',
                 });
                 expect(result.mode).toBe('scheduled');
                 expect(result.delayMs).toBe(120_000);
                 expect(result.nextScheduled.form).toBe('before-end');
+            });
+
+            it('multiple time entries: the soonest upcoming occurrence wins, not list order', async () => {
+                // 20:00 UTC with times ['09:00', '21:30'] → the cap targets
+                // today 21:30 (90 min out), not tomorrow 09:00. normalDelayMs
+                // is raised so the cap is what binds.
+                const now = Math.floor(Date.UTC(2026, 0, 15, 20, 0, 0) / 1000);
+                const challenges = [{ id: 9, title: 'Multi', type: 'regular', close_time: now + 48 * 3600 }];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts({ normalDelayMs: 4 * 3600_000 }),
+                    resolveScheduledFill: () =>
+                        wrap({ enabled: true, timesOfDay: ['09:00', '21:30'], beforeEndSecs: [] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(90 * 60_000);
+                expect(result.nextScheduled.form).toBe('time-of-day');
+            });
+
+            it('multiple before-end entries: the earliest upcoming window start wins (issue case: 4h and 10h)', async () => {
+                // Close in 11h with offsets [4h, 10h] → the 10h window opens
+                // in 1h; that start binds, not the 4h one (7h out).
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [{ id: 9, title: 'Twice', type: 'regular', close_time: now + 11 * 3600 }];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts({ normalDelayMs: 4 * 3600_000 }),
+                    resolveScheduledFill: () =>
+                        wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [4 * 3600, 10 * 3600] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(3600_000);
+                expect(result.nextScheduled.form).toBe('before-end');
+            });
+
+            it('a corrupt entry inside a list is ignored while siblings still cap', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [{ id: 9, title: 'Mixed', type: 'regular', close_time: now + 3600 }];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveScheduledFill: () =>
+                        wrap({ enabled: true, timesOfDay: ['25:99'], beforeEndSecs: [-5, 3600 - 120] }),
+                    timezone: 'UTC',
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(120_000);
             });
 
             it('floors the scheduled cap at minGapMs', async () => {
@@ -331,7 +377,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'Imminent', type: 'regular', close_time: now + 3600 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveScheduledFill: () => wrap({ enabled: true, timeOfDay: '', beforeEndSec: 3599 }),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [3599] }),
                     timezone: 'UTC',
                 });
                 expect(result.mode).toBe('scheduled');

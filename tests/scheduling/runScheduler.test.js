@@ -263,8 +263,8 @@ describe('createScheduler — threshold-aware cadence', () => {
             if (key === 'lastMinuteThreshold') return 5;
             if (key === 'lastMinuteCheckFrequency') return lastMinuteCheckFrequencyValue;
             if (key === 'useScheduledFill') return true;
-            if (key === 'scheduledFillTime') return '';
-            if (key === 'scheduledFillBeforeEnd') return 3600 - 90;
+            if (key === 'scheduledFillTime') return [];
+            if (key === 'scheduledFillBeforeEnd') return [3600 - 90];
             return 1;
         });
         const challenge = { id: 7, title: 'Scheduled', type: 'regular', close_time: now + 3600 };

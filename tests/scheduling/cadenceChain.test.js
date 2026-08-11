@@ -42,7 +42,7 @@ const makeDeps = (overrides = {}) => {
         fetchChallenges: jest.fn(async () => ({ challenges: [] })),
         resolveLastMinuteCheckMinutes: jest.fn(() => 1),
         resolveThreshold: jest.fn(() => 10),
-        resolveScheduledFill: jest.fn(() => ({ enabled: false, timeOfDay: '', beforeEndSec: 0 })),
+        resolveScheduledFill: jest.fn(() => ({ enabled: false, timesOfDay: [], beforeEndSecs: [] })),
         runCycle: jest.fn(async () => true),
         log: {
             cadence: jest.fn(),

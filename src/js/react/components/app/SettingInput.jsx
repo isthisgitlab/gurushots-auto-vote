@@ -174,6 +174,213 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled =
     );
 }
 
+// Mirrors MAX_SCHEDULED_FILL_ENTRIES in settings/schema.js (renderer-bundle-safe
+// module that can't import that zod-carrying file — change both together, same
+// convention as SCHEDULE_MAX_SECONDS above).
+export const SCHEDULED_FILL_MAX_ENTRIES = 6;
+
+/**
+ * Variable add/remove row-list editor for the scheduled-fill daily times
+ * (`type: 'timeOfDayList'`): one native <input type="time"> per row. Row-list
+ * structure follows TitleTagRulesEditor (the codebase's add/remove-row
+ * precedent); draft sync follows TagsField's fingerprint pattern. Emission
+ * drops empty rows (a just-added row stays a local draft, never emitting an
+ * invalid '' entry) and dedupes first-wins so a duplicate row can't block
+ * saving; the duplicate row itself is flagged inline. A11y: per-row hint ids
+ * (ScheduleField-style — one shared region could only expose one row's text),
+ * indexed aria-labels on the inputs AND the remove buttons, and a persistent
+ * role="status" message at the entry cap (a disabled add button is skipped by
+ * Tab, so its reason must be perceivable without hover).
+ */
+export function TimeOfDayListField({ settingKey, label, value, onChange, onReset, disabled = false }) {
+    const { t } = useTranslation();
+    const arr = Array.isArray(value) ? value : [];
+    const [rows, setRows] = useState(() => arr.slice());
+
+    const emittedOf = (rowList) => {
+        const seen = new Set();
+        return rowList.filter((row) => {
+            if (row === '' || seen.has(row)) return false;
+            seen.add(row);
+            return true;
+        });
+    };
+
+    const propKey = arr.join(',');
+    useEffect(() => {
+        if (emittedOf(rows).join(',') !== propKey) {
+            setRows(arr.slice());
+        }
+    }, [propKey]);
+
+    const update = (nextRows) => {
+        setRows(nextRows);
+        onChange(settingKey, emittedOf(nextRows));
+    };
+
+    const atCap = rows.length >= SCHEDULED_FILL_MAX_ENTRIES;
+
+    return (
+        <div className="space-y-2">
+            {rows.map((row, i) => {
+                const duplicate = row !== '' && rows.indexOf(row) !== i;
+                const hintId = `${settingKey}-row-${i}-hint`;
+                return (
+                    <div key={i} className="flex items-center gap-2 flex-wrap">
+                        <input
+                            type="time"
+                            className={`input input-bordered input-sm w-32 ${duplicate ? 'input-error' : ''}`}
+                            aria-label={`${label} ${i + 1}`}
+                            aria-describedby={hintId}
+                            value={row}
+                            onChange={(e) => update(rows.map((r, j) => (j === i ? e.target.value : r)))}
+                            disabled={disabled}
+                        />
+                        <button
+                            className="btn btn-ghost btn-xs"
+                            aria-label={`${t('app.scheduledFillRemoveEntry')} ${i + 1}`}
+                            onClick={() => update(rows.filter((_, j) => j !== i))}
+                            disabled={disabled}
+                        >
+                            ✕
+                        </button>
+                        <span aria-live="polite" id={hintId} className="text-xs">
+                            {duplicate && <span className="text-error">{t('app.scheduledFillDuplicateEntry')}</span>}
+                        </span>
+                    </div>
+                );
+            })}
+            <div className="flex items-center gap-2 flex-wrap">
+                <button
+                    className="btn btn-outline btn-xs"
+                    onClick={() => update([...rows, ''])}
+                    disabled={disabled || atCap}
+                >
+                    {t('app.scheduledFillAddTime')}
+                </button>
+                {emittedOf(rows).length === 0 && (
+                    <span role="status" className="text-sm opacity-70">
+                        {t('app.scheduledFillTimeOff')}
+                    </span>
+                )}
+                {atCap && (
+                    <span role="status" className="text-xs text-warning">
+                        {t('app.scheduledFillMaxEntries').replace('{0}', String(SCHEDULED_FILL_MAX_ENTRIES))}
+                    </span>
+                )}
+                {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Variable add/remove row-list editor for the scheduled-fill before-end
+ * offsets (`type: 'timeList'`): one hours+minutes pair per row, each stored
+ * as seconds. 0-second rows stay local drafts (ScheduleField's
+ * emit-only-active precedent). Same dedupe/cap/a11y behavior as
+ * TimeOfDayListField above.
+ */
+export function TimeListField({ settingKey, label, value, onChange, onReset, disabled = false }) {
+    const { t } = useTranslation();
+    const arr = Array.isArray(value) ? value : [];
+    const [rows, setRows] = useState(() => arr.slice());
+
+    const emittedOf = (rowList) => {
+        const seen = new Set();
+        return rowList.filter((row) => {
+            if (!(row > 0) || seen.has(row)) return false;
+            seen.add(row);
+            return true;
+        });
+    };
+
+    const propKey = arr.join(',');
+    useEffect(() => {
+        if (emittedOf(rows).join(',') !== propKey) {
+            setRows(arr.slice());
+        }
+    }, [propKey]);
+
+    const update = (nextRows) => {
+        setRows(nextRows);
+        onChange(settingKey, emittedOf(nextRows));
+    };
+
+    const atCap = rows.length >= SCHEDULED_FILL_MAX_ENTRIES;
+
+    return (
+        <div className="space-y-2">
+            {rows.map((row, i) => {
+                const seconds = Number.isFinite(row) ? row : 0;
+                const { hours, minutes } = secondsToHoursMinutes(seconds);
+                const duplicate = seconds > 0 && rows.indexOf(row) !== i;
+                const hintId = `${settingKey}-row-${i}-hint`;
+                const setRow = (nextSeconds) => update(rows.map((r, j) => (j === i ? nextSeconds : r)));
+                return (
+                    <div key={i} className="flex items-center gap-2 flex-wrap">
+                        <input
+                            type="number"
+                            className={`input input-bordered input-sm w-16 ${duplicate ? 'input-error' : ''}`}
+                            min="0"
+                            aria-label={`${label} ${i + 1} ${t('app.hours')}`}
+                            aria-describedby={hintId}
+                            value={hours}
+                            onChange={(e) => setRow(hoursMinutesToSeconds(parseInt(e.target.value, 10), minutes))}
+                            disabled={disabled}
+                        />
+                        <span className="text-sm">{t('app.hours')}</span>
+                        <input
+                            type="number"
+                            className={`input input-bordered input-sm w-16 ${duplicate ? 'input-error' : ''}`}
+                            min="0"
+                            max="59"
+                            aria-label={`${label} ${i + 1} ${t('app.minutes')}`}
+                            aria-describedby={hintId}
+                            value={minutes}
+                            onChange={(e) => setRow(hoursMinutesToSeconds(hours, parseInt(e.target.value, 10)))}
+                            disabled={disabled}
+                        />
+                        <span className="text-sm">{t('app.minutes')}</span>
+                        <button
+                            className="btn btn-ghost btn-xs"
+                            aria-label={`${t('app.scheduledFillRemoveEntry')} ${i + 1}`}
+                            onClick={() => update(rows.filter((_, j) => j !== i))}
+                            disabled={disabled}
+                        >
+                            ✕
+                        </button>
+                        <span aria-live="polite" id={hintId} className="text-xs">
+                            {seconds === 0 && <span className="opacity-60">{t('app.scheduledFillEntryDraft')}</span>}
+                            {duplicate && <span className="text-error">{t('app.scheduledFillDuplicateEntry')}</span>}
+                        </span>
+                    </div>
+                );
+            })}
+            <div className="flex items-center gap-2 flex-wrap">
+                <button
+                    className="btn btn-outline btn-xs"
+                    onClick={() => update([...rows, 0])}
+                    disabled={disabled || atCap}
+                >
+                    {t('app.scheduledFillAddBeforeEnd')}
+                </button>
+                {emittedOf(rows).length === 0 && (
+                    <span role="status" className="text-sm opacity-70">
+                        {t('app.scheduledFillBeforeEndOff')}
+                    </span>
+                )}
+                {atCap && (
+                    <span role="status" className="text-xs text-warning">
+                        {t('app.scheduledFillMaxEntries').replace('{0}', String(SCHEDULED_FILL_MAX_ENTRIES))}
+                    </span>
+                )}
+                {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
+            </div>
+        </div>
+    );
+}
+
 /**
  * Get default value for a config type to prevent uncontrolled inputs
  */
@@ -186,8 +393,9 @@ function getDefaultForType(type) {
             return false;
         case 'tags':
         case 'schedule':
+        case 'timeOfDayList':
+        case 'timeList':
             return [];
-        case 'timeOfDay':
         default:
             return '';
     }
@@ -232,29 +440,33 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
         );
     }
 
-    // Handle timeOfDay type: a wall-clock 'HH:MM' string, '' = off. The native
-    // time picker looks device-local, but the value is interpreted in the app
-    // timezone setting — the surrounding modal renders a hint naming the zone.
-    // The off-hint follows ScheduleField's inline-hint convention above:
-    // aria-describedby ties it to the input and aria-live announces the
-    // off/on flip to assistive tech when the value is cleared or set.
-    if (config.type === 'timeOfDay') {
-        const hintId = `${settingKey}-off-hint`;
+    // Scheduled-fill daily times: variable list of native time pickers. The
+    // values look device-local but are interpreted in the app timezone
+    // setting — the surrounding modal renders a hint naming the zone.
+    if (config.type === 'timeOfDayList') {
         return (
-            <div className="flex items-center gap-2">
-                <input
-                    type="time"
-                    className="input input-bordered input-sm w-32"
-                    aria-describedby={hintId}
-                    value={normalizedValue}
-                    onChange={(e) => onChange(settingKey, e.target.value)}
-                    disabled={disabled}
-                />
-                <span aria-live="polite" id={hintId} className="text-sm">
-                    {normalizedValue === '' && <span className="opacity-70">{t('app.scheduledFillTimeOff')}</span>}
-                </span>
-                {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
-            </div>
+            <TimeOfDayListField
+                settingKey={settingKey}
+                label={t(config.label)}
+                value={normalizedValue}
+                onChange={onChange}
+                onReset={onReset}
+                disabled={disabled}
+            />
+        );
+    }
+
+    // Scheduled-fill before-end offsets: variable list of hours+minutes rows.
+    if (config.type === 'timeList') {
+        return (
+            <TimeListField
+                settingKey={settingKey}
+                label={t(config.label)}
+                value={normalizedValue}
+                onChange={onChange}
+                onReset={onReset}
+                disabled={disabled}
+            />
         );
     }
 

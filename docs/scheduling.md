@@ -35,10 +35,18 @@ challenge's last-minute boundary and start the final voting push late.
 
 Per-challenge scheduled fill (issue #26) lets a challenge be voted to 100%
 at chosen wall-clock instants instead of (or on top of) the exposure
-threshold. Two time forms, OR'd when both are configured: a recurring
-time-of-day (`scheduledFillTime`, interpreted in the app `timezone`
+threshold. Two trigger LISTS, all entries OR'd: recurring times-of-day
+(`scheduledFillTime`, each 'HH:MM' entry interpreted in the app `timezone`
 setting via `src/js/scheduling/wallClock.js`, **not** device-local time)
-and a one-shot seconds-before-close offset (`scheduledFillBeforeEnd`).
+and one-shot seconds-before-close offsets (`scheduledFillBeforeEnd`) —
+e.g. `[14400, 36000]` fills at 4h and 10h before the end. Every entry
+opens its own window sharing `scheduledFillWindowMinutes`; entries are
+deduped and capped at 6 per list (canonical-sorted on load; a hand-edited
+oversized array is additionally sliced defensively on every hot path).
+Pre-list scalar values (including inside challenge profiles) migrate to
+one-element arrays automatically; an explicit `''`/`0` opt-out override
+migrates to an explicit `[]`, never deleted, so it keeps shadowing a
+configured global default.
 
 The decision side lives in `getScheduledFillState`
 (`src/js/services/VotingLogic.js`): during a window
@@ -51,10 +59,11 @@ The cadence side lives in `soonestScheduledStart`
 (`src/js/scheduling/scheduledFill.js`), fed to `computeNextCycleDelayMs`
 through a second injected resolver (`resolveScheduledFill`, sync on Node /
 async IPC on the WebView) plus the `timezone` scalar — both optional, so
-hosts that don't pass them keep byte-identical behavior. The cap lands a
-cycle exactly at the next window start; inside the window the normal
-cadence covers decay top-ups (once at 100%, eligibility turns off by
-itself).
+hosts that don't pass them keep byte-identical behavior. The cap targets
+the soonest upcoming window start **across all entries of all
+challenges**, landing a cycle exactly when it opens; inside a window the
+normal cadence covers decay top-ups (once at 100%, eligibility turns off
+by itself).
 
 Deliberate semantics and caveats:
 
