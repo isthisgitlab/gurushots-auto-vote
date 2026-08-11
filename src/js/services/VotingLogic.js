@@ -22,7 +22,10 @@ const { getNextScheduleThresholdSec } = /** @type {any} */ (require('./autoFill'
 const { occurrencesOf } = /** @type {any} */ (require('../scheduling/wallClock'));
 const { isBoostWindowOpen: boostWindowOpen } = require('../voting/boostWindow');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
-const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/schema');
+// From settings/limits (not settings/schema) — keeps zod out of any bundle
+// that reaches this module. No `any` cast needed: limits.js exports a plain
+// number literal, so inference is already exact.
+const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/limits');
 
 /**
  * Scheduled-fill state for a challenge at `now`.
