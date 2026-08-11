@@ -220,6 +220,18 @@ describe('scheduled-fill list bounds pass', () => {
         expect('scheduledFillTime' in merged.challengeSettings.globalDefaults).toBe(false);
     });
 
+    test('steady state: with both flags set, an out-of-order list is NOT re-sorted on load', () => {
+        // The sanitizer must stay a one-time flag-gated pass, never a
+        // standing per-load invariant — a regression re-running it on every
+        // load would silently reorder user-saved values.
+        seed(
+            { globalDefaults: { scheduledFillTime: ['21:30', '09:00'] } },
+            { _scheduledFillListsMigratedV1: true, _scheduledFillListBoundsV1: true },
+        );
+        const merged = settings.loadSettings();
+        expect(merged.challengeSettings.globalDefaults.scheduledFillTime).toEqual(['21:30', '09:00']);
+    });
+
     test('post-flag, a hand-edited non-array value is left as-is (documented gap — write path rejects it)', () => {
         // Both flags already set: neither migration runs again, and the
         // sanitizer's non-array contract returns null (untouched). This is

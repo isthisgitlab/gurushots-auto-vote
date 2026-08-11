@@ -417,7 +417,8 @@ fill window, all OR'd; older single values migrate to arrays automatically):
   scheduledFillBeforeEnd     - JSON array of SECONDS-before-close offsets,
                                each opening a one-shot window. e.g.
                                '[14400,36000]' fills at 4h and 10h before the
-                               end ([] = off, max 6 entries, each 1s..30 days)
+                               end ([] = off, max 6, no duplicates, each
+                               1s..30 days)
   scheduledFillWindowMinutes - How long each fill window stays open
                                (default: 60, range 5-720)
   scheduledFillReplaces      - true = scheduled windows become the ONLY

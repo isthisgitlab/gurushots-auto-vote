@@ -194,7 +194,11 @@ export const SCHEDULED_FILL_MAX_ENTRIES = 6;
  */
 export function TimeOfDayListField({ settingKey, label, value, onChange, onReset, disabled = false }) {
     const { t } = useTranslation();
-    const arr = Array.isArray(value) ? value : [];
+    // The cap slice also bounds rendering: a hand-edited oversized array must
+    // not paint hundreds of rows (the write path and load-time bounds pass
+    // both enforce the cap already — this is the same defensive posture as
+    // the decision/cadence consumers).
+    const arr = (Array.isArray(value) ? value : []).slice(0, SCHEDULED_FILL_MAX_ENTRIES);
     const [rows, setRows] = useState(() => arr.slice());
 
     const emittedOf = (rowList) => {
@@ -237,13 +241,16 @@ export function TimeOfDayListField({ settingKey, label, value, onChange, onReset
                             disabled={disabled}
                         />
                         <button
-                            className="btn btn-ghost btn-xs"
+                            className="btn btn-ghost btn-sm"
                             aria-label={`${t('app.scheduledFillRemoveEntry')} ${i + 1}`}
                             onClick={() => update(rows.filter((_, j) => j !== i))}
                             disabled={disabled}
                         >
                             ✕
                         </button>
+                        {/* No draft hint here, unlike TimeListField: a blank native
+                            time input visibly reads as empty, while a 0h 0m pair
+                            over there looks like a filled, valid value. */}
                         <span aria-live="polite" id={hintId} className="text-xs">
                             {duplicate && <span className="text-error">{t('app.scheduledFillDuplicateEntry')}</span>}
                         </span>
@@ -252,13 +259,13 @@ export function TimeOfDayListField({ settingKey, label, value, onChange, onReset
             })}
             <div className="flex items-center gap-2 flex-wrap">
                 <button
-                    className="btn btn-outline btn-xs"
+                    className="btn btn-outline btn-sm"
                     onClick={() => update([...rows, ''])}
                     disabled={disabled || atCap}
                 >
                     {t('app.scheduledFillAddTime')}
                 </button>
-                {emittedOf(rows).length === 0 && (
+                {rows.length === 0 && (
                     <span role="status" className="text-sm opacity-70">
                         {t('app.scheduledFillTimeOff')}
                     </span>
@@ -283,7 +290,9 @@ export function TimeOfDayListField({ settingKey, label, value, onChange, onReset
  */
 export function TimeListField({ settingKey, label, value, onChange, onReset, disabled = false }) {
     const { t } = useTranslation();
-    const arr = Array.isArray(value) ? value : [];
+    // Cap slice bounds rendering against hand-edited oversized arrays (see
+    // TimeOfDayListField).
+    const arr = (Array.isArray(value) ? value : []).slice(0, SCHEDULED_FILL_MAX_ENTRIES);
     const [rows, setRows] = useState(() => arr.slice());
 
     const emittedOf = (rowList) => {
@@ -315,14 +324,24 @@ export function TimeListField({ settingKey, label, value, onChange, onReset, dis
                 const seconds = Number.isFinite(row) ? row : 0;
                 const { hours, minutes } = secondsToHoursMinutes(seconds);
                 const duplicate = seconds > 0 && rows.indexOf(row) !== i;
+                // ScheduleField's full bounds check (not just the ceiling):
+                // the zod validator would reject the save with only the
+                // generic "check the highlighted values" banner — so the
+                // offending row must actually highlight. Negative/fractional
+                // hand-edited values render as 0h 0m yet aren't drafts, so
+                // without the full check they'd silently look like one.
+                const outOfRange =
+                    seconds !== 0 && (!Number.isInteger(seconds) || seconds < 0 || seconds > SCHEDULE_MAX_SECONDS);
+                const rowError = duplicate || outOfRange;
                 const hintId = `${settingKey}-row-${i}-hint`;
                 const setRow = (nextSeconds) => update(rows.map((r, j) => (j === i ? nextSeconds : r)));
                 return (
                     <div key={i} className="flex items-center gap-2 flex-wrap">
                         <input
                             type="number"
-                            className={`input input-bordered input-sm w-16 ${duplicate ? 'input-error' : ''}`}
+                            className={`input input-bordered input-sm w-16 ${rowError ? 'input-error' : ''}`}
                             min="0"
+                            max={SCHEDULE_MAX_SECONDS / 3600}
                             aria-label={`${label} ${i + 1} ${t('app.hours')}`}
                             aria-describedby={hintId}
                             value={hours}
@@ -332,7 +351,7 @@ export function TimeListField({ settingKey, label, value, onChange, onReset, dis
                         <span className="text-sm">{t('app.hours')}</span>
                         <input
                             type="number"
-                            className={`input input-bordered input-sm w-16 ${duplicate ? 'input-error' : ''}`}
+                            className={`input input-bordered input-sm w-16 ${rowError ? 'input-error' : ''}`}
                             min="0"
                             max="59"
                             aria-label={`${label} ${i + 1} ${t('app.minutes')}`}
@@ -343,7 +362,7 @@ export function TimeListField({ settingKey, label, value, onChange, onReset, dis
                         />
                         <span className="text-sm">{t('app.minutes')}</span>
                         <button
-                            className="btn btn-ghost btn-xs"
+                            className="btn btn-ghost btn-sm"
                             aria-label={`${t('app.scheduledFillRemoveEntry')} ${i + 1}`}
                             onClick={() => update(rows.filter((_, j) => j !== i))}
                             disabled={disabled}
@@ -352,6 +371,7 @@ export function TimeListField({ settingKey, label, value, onChange, onReset, dis
                         </button>
                         <span aria-live="polite" id={hintId} className="text-xs">
                             {seconds === 0 && <span className="opacity-60">{t('app.scheduledFillEntryDraft')}</span>}
+                            {outOfRange && <span className="text-error">{t('app.autoFillScheduleOutOfRange')}</span>}
                             {duplicate && <span className="text-error">{t('app.scheduledFillDuplicateEntry')}</span>}
                         </span>
                     </div>
@@ -359,13 +379,13 @@ export function TimeListField({ settingKey, label, value, onChange, onReset, dis
             })}
             <div className="flex items-center gap-2 flex-wrap">
                 <button
-                    className="btn btn-outline btn-xs"
+                    className="btn btn-outline btn-sm"
                     onClick={() => update([...rows, 0])}
                     disabled={disabled || atCap}
                 >
                     {t('app.scheduledFillAddBeforeEnd')}
                 </button>
-                {emittedOf(rows).length === 0 && (
+                {rows.length === 0 && (
                     <span role="status" className="text-sm opacity-70">
                         {t('app.scheduledFillBeforeEndOff')}
                     </span>

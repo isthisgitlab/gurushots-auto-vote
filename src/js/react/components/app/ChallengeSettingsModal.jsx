@@ -215,15 +215,20 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     const nowSec = Math.floor(Date.now() / 1000);
     const closeTime = Number(challenge?.close_time) || 0;
     // Explicit arrow (never `map(occurrencesOf)`): map's (element, index,
-    // array) signature would bind the index to the timeZone parameter.
-    const sfOccs = (() => {
+    // array) signature would bind the index to the timeZone parameter. Each
+    // occurrence stays PAIRED with its source entry before the invalid ones
+    // are filtered out — a filter-then-reindex against sfTimes would mislabel
+    // every hint source after the first unparseable entry.
+    const sfTimeOccs = (() => {
         try {
-            return sfTimes.map((entry) => occurrencesOf(entry, appTimezone, nowSec)).filter(Boolean);
+            return sfTimes
+                .map((entry) => ({ entry, occ: occurrencesOf(entry, appTimezone, nowSec) }))
+                .filter((pair) => pair.occ);
         } catch {
             return [];
         }
     })();
-    const sfTimeSet = sfOccs.length > 0;
+    const sfTimeSet = sfTimeOccs.length > 0;
     const sfActive = sfEnabled && (sfTimeSet || sfBeforeEnds.length > 0);
     const formatInTz = (epochSec) => {
         try {
@@ -242,10 +247,9 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     // still at least partly ahead. Each carries its producing trigger so the
     // hint can name whose window is shown.
     const sfCandidates = [];
-    for (let i = 0; i < sfOccs.length; i++) {
-        const occ = sfOccs[i];
+    for (const { entry, occ } of sfTimeOccs) {
         const start = nowSec - occ.prev <= sfWindowSec ? occ.prev : occ.next;
-        sfCandidates.push({ start, source: sfTimes[i] });
+        sfCandidates.push({ start, source: entry });
     }
     for (const sec of sfBeforeEnds) {
         if (closeTime <= nowSec) continue;
@@ -268,7 +272,9 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     let sfUnreachable = false;
     if (sfActive && sfReplaces && closeTime > nowSec) {
         const beforeEndReachable = sfBeforeEnds.some((sec) => nowSec <= closeTime - sec + sfWindowSec);
-        const timeOfDayReachable = sfOccs.some((occ) => nowSec - occ.prev <= sfWindowSec || occ.next < closeTime);
+        const timeOfDayReachable = sfTimeOccs.some(
+            ({ occ }) => nowSec - occ.prev <= sfWindowSec || occ.next < closeTime,
+        );
         sfUnreachable = !beforeEndReachable && !timeOfDayReachable;
     }
     /** Conditional inline hints for the scheduled-fill keys; [] for other keys. */
