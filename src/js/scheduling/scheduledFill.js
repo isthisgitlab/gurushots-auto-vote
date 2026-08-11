@@ -18,8 +18,9 @@
 
 const { occurrencesOf } = require('./wallClock');
 // From settings/limits (not settings/schema) — schema.js requires zod, and a
-// CJS require of it cannot be tree-shaken out of the renderer bundles that
-// reach this module through the cadence chain.
+// CJS require of it cannot be tree-shaken out of app-bundle.js, which reaches
+// this module through the cadence chain (AutovoteContext -> cadenceChain ->
+// thresholdWindow) but never otherwise touches the validator.
 const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/limits');
 
 // Non-flash challenges that are still open at `now`. Flash challenges never
