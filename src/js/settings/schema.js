@@ -334,6 +334,22 @@ const SETTINGS_SCHEMA = {
         label: 'app.boostTime',
         description: 'app.boostTimeDesc',
     },
+    // Deliberately separate from boostTime, not a replacement for it. The two describe
+    // different clocks: boostTime counts down the boost's OWN timer, while a key-unlocked
+    // boost has no timer at all and can only be measured against the challenge's close time.
+    // Reusing boostTime for both would silently reinterpret one user-facing number as two
+    // different things. Default 900s (15m) preserves the behaviour of the constant it
+    // replaces — key-unlocked boosts never expire, so spending one late maximises its effect.
+    keyUnlockedBoostTime: {
+        type: 'time', // hours/minutes input, stored as seconds
+        default: 900, // 15 minutes in seconds
+        perChallenge: true,
+        validation: nonNegNumber,
+        validationOrder: 1,
+        group: 'boost',
+        label: 'app.keyUnlockedBoostTime',
+        description: 'app.keyUnlockedBoostTimeDesc',
+    },
     boostImageIndex: {
         type: 'number',
         default: 1,

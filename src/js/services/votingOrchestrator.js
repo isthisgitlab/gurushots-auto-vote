@@ -163,9 +163,13 @@ const runBoost = async (ctx) => {
         }
     } else {
         const timeDisplay = formatDuration(timeUntilDisplayBase);
+        // Both branches render the threshold they actually use. The key-unlocked message
+        // used to hardcode "10m" while the code applied at 15, which misled anyone
+        // debugging it; it is now a setting, so read it rather than restating a constant.
+        const keyUnlockedWindow = votingLogic.getEffectiveKeyUnlockedBoostTime(challenge.id.toString());
         const reason = isTimerBasedAvailable
             ? `${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`
-            : `${timeDisplay} until challenge ends (needs ≤ 10m to auto-apply)`;
+            : `${timeDisplay} until challenge ends (needs ≤ ${Math.round(keyUnlockedWindow / 60)}m to auto-apply)`;
         logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost not ready - ${reason}`, null);
     }
 };

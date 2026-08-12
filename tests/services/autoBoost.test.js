@@ -162,3 +162,65 @@ describe('isWithinEmergencyWindow', () => {
         expect(VotingLogic.isWithinEmergencyWindow(null, now)).toBe(false);
     });
 });
+
+/**
+ * Key-unlocked boosts have no timer of their own, so boostTime — which counts down that
+ * timer — cannot describe them. They used to be pinned to a hardcoded 15-minute constant
+ * (while the log message claimed 10). That window is now its own setting, deliberately
+ * separate from boostTime so one user-facing number is not reinterpreted as two things.
+ */
+describe('shouldApplyBoost — key-unlocked window', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const keyUnlockedChallenge = (now, closeInSeconds) =>
+        buildChallenge({
+            id: '777',
+            close_time: now + closeInSeconds,
+            // AVAILABLE_KEY, and AVAILABLE with no timeout, both count as key-unlocked.
+            member: { boost: { state: 'AVAILABLE_KEY', timeout: 0 } },
+        });
+
+    test('honours a configured window instead of the old constant', () => {
+        mockSettings({ keyUnlockedBoostTime: 1800, emergencyFill: 0 });
+        const now = NOW();
+
+        // 20 minutes out: inside a 30m window, outside the previous 15m constant.
+        expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 1200), now)).toBe(true);
+        // 40 minutes out: still outside.
+        expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 2400), now)).toBe(false);
+    });
+
+    test('falls back to 15 minutes when the setting is absent', () => {
+        // Settings written before this key existed must keep their old behaviour rather
+        // than reading as 0 and silently disabling key-unlocked boosts altogether.
+        mockSettings({ emergencyFill: 0 });
+        const now = NOW();
+
+        expect(VotingLogic.getEffectiveKeyUnlockedBoostTime('777')).toBe(900);
+        expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 600), now)).toBe(true);
+        expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 1200), now)).toBe(false);
+    });
+
+    test('a zero or malformed value falls back rather than disabling boosts', () => {
+        const now = NOW();
+        for (const bad of [0, -1, 'nonsense', null]) {
+            mockSettings({ keyUnlockedBoostTime: bad, emergencyFill: 0 });
+            expect(VotingLogic.getEffectiveKeyUnlockedBoostTime('777')).toBe(900);
+            expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 600), now)).toBe(true);
+        }
+    });
+
+    test('does not affect the timer-based window, which still reads boostTime', () => {
+        mockSettings({ keyUnlockedBoostTime: 60, boostTime: 3600, emergencyFill: 0 });
+        const now = NOW();
+        const timerBased = buildChallenge({
+            id: '777',
+            close_time: now + 7200,
+            member: { boost: { state: 'AVAILABLE', timeout: now + 60 } },
+        });
+
+        // Boost's own timer expires in 60s, well inside boostTime — the small
+        // key-unlocked window must not interfere.
+        expect(VotingLogic.shouldApplyBoost(timerBased, now)).toBe(true);
+    });
+});

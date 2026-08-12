@@ -131,6 +131,9 @@
             jumpToChallenge: 'Jump to challenge',
             boostTime: 'Boost Time',
             boostTimeDesc: 'Apply Boost when this much time remains before the challenge closes.',
+            keyUnlockedBoostTime: 'Key-Unlocked Boost Time',
+            keyUnlockedBoostTimeDesc:
+                'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these.',
             autoBoost: 'Auto-Apply Boost',
             autoBoostDesc: 'Automatically apply Boost on this challenge as its Boost window is about to close.',
             turbo: 'Turbo',

@@ -540,6 +540,23 @@ const getEffectiveBoostTime = (challengeId) => {
 };
 
 /**
+ * Get the effective key-unlocked boost window for a challenge.
+ *
+ * Separate from getEffectiveBoostTime on purpose: boostTime is measured against the boost's
+ * own countdown, which a key-unlocked boost does not have. This one is measured against the
+ * challenge's close time. Was a hardcoded 15 minutes; the default preserves that.
+ *
+ * @param {string} challengeId - Challenge ID
+ * @returns {number} - Seconds before close within which a key-unlocked boost is applied
+ */
+const getEffectiveKeyUnlockedBoostTime = (challengeId) => {
+    const raw = Number(settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId));
+    // Fall back to the schema default rather than 0 — a 0 here would read as "never apply",
+    // silently disabling key-unlocked boosts for anyone whose settings predate this key.
+    return Number.isFinite(raw) && raw > 0 ? raw : 900;
+};
+
+/**
  * True when the per-challenge Emergency Fill window is enabled (> 0) and the
  * challenge is currently inside it (closing within that many seconds). Mirrors
  * the window check in autoFill.maybeEmergencyFillChallenge.
@@ -606,11 +623,11 @@ const shouldApplyBoost = (challenge, now, options = {}) => {
     const isKeyUnlocked = boostState === 'AVAILABLE_KEY' || (boostState === 'AVAILABLE' && !hasTimeout);
 
     const timeUntilEnd = challenge.close_time - now;
-    const CLOSING = 15 * 60; // seconds
 
     if (isKeyUnlocked) {
-        // Auto-apply only if the challenge ends within next 15 minutes (CLOSING)
-        return timeUntilEnd > 0 && timeUntilEnd <= CLOSING;
+        // A key-unlocked boost has no timer of its own, so it is measured against the
+        // challenge's close time via its own setting (was a hardcoded 15 minutes).
+        return timeUntilEnd > 0 && timeUntilEnd <= getEffectiveKeyUnlockedBoostTime(challengeId);
     }
 
     // Timer-based AVAILABLE with a timeout: use existing effectiveBoostTime window
@@ -842,7 +859,7 @@ const getBoostThresholdSec = (challenge, challengeId) => {
     const boost = challenge?.member?.boost || {};
     const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
     if (boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout)) {
-        return 15 * 60; // CLOSING window (mirrors shouldApplyBoost)
+        return getEffectiveKeyUnlockedBoostTime(challengeId); // mirrors shouldApplyBoost
     }
     if (boost.state === 'AVAILABLE' && hasTimeout) {
         const boostTime = getEffectiveBoostTime(challengeId);
@@ -894,6 +911,7 @@ module.exports = {
     evaluateManualVotingDecision,
     evaluateManualVotingToHundred,
     getEffectiveBoostTime,
+    getEffectiveKeyUnlockedBoostTime,
     isWithinEmergencyWindow,
     shouldApplyBoost,
     isBoostWindowOpen,

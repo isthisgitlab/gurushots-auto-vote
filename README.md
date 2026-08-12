@@ -251,7 +251,7 @@ Continuous mode rolls a random delay in `[checkFrequencyMin, checkFrequencyMax]`
 When `autoBoost` is on, the app applies an available boost to the entry at `boostImageIndex` (1 = first photo, `0` = last; it steps back one slot if that entry is already turboed):
 
 - **Timer-based boost** — applied once the boost has `boostTime` seconds or less left on its own timer.
-- **Key-unlocked boost** (no timer) — the boost timer is ignored; it's applied only in the final 15 minutes before the challenge closes.
+- **Key-unlocked boost** (no timer) — `boostTime` doesn't apply, because there is no timer to count down. It uses its own `keyUnlockedBoostTime` window (default 15 min) measured against the challenge's close time. Since a key-unlocked boost never expires, the default spends it as late as possible for maximum effect.
 
 ### Turbo (earn, then apply)
 
@@ -313,12 +313,13 @@ All of these support per-challenge overrides except where noted.
 
 **Boost**
 
-| Setting           | Default       | Range / values | Description                                                                                 |
-| ----------------- | ------------- | -------------- | ------------------------------------------------------------------------------------------- |
-| `autoBoost`       | `true`        | bool           | Auto-apply boost near the deadline.                                                         |
-| `boostTime`       | `3600` s (1h) | ≥ 0            | Apply a timer-based boost when this much time (or less) remains. Entered as h+m in the GUI. |
-| `boostImageIndex` | `1`           | integer ≥ 0    | Entry slot to boost (1 = first, `0` = last). Steps back if that slot is already turboed.    |
-| `boostFillNew`    | `false`       | bool           | During auto-fill, submit a fresh photo and immediately boost that new entry.                |
+| Setting                | Default       | Range / values | Description                                                                                                                                                                              |
+| ---------------------- | ------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoBoost`            | `true`        | bool           | Auto-apply boost near the deadline.                                                                                                                                                      |
+| `boostTime`            | `3600` s (1h) | ≥ 0            | Apply a timer-based boost when this much time (or less) remains **on the boost's own timer**. Entered as h+m in the GUI.                                                                 |
+| `keyUnlockedBoostTime` | `900` s (15m) | ≥ 0            | Separate window for a **key-unlocked** boost, which has no timer of its own — measured against the challenge close time. `boostTime` does not apply to these. Entered as h+m in the GUI. |
+| `boostImageIndex`      | `1`           | integer ≥ 0    | Entry slot to boost (1 = first, `0` = last). Steps back if that slot is already turboed.                                                                                                 |
+| `boostFillNew`         | `false`       | bool           | During auto-fill, submit a fresh photo and immediately boost that new entry.                                                                                                             |
 
 **Turbo**
 
