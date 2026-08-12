@@ -11,6 +11,7 @@ const miscIpc = require('./ipc/misc.handlers');
 const settingsIpc = require('./ipc/settings.handlers');
 const votingIpc = require('./ipc/voting.handlers');
 const actionsIpc = require('./ipc/actions.handlers');
+const { isTrustedSender } = require('./ipc/registerHandlers');
 const { ensureExit, focusExistingWindow, clearTokenOnQuit } = require('./windows/lifecycle');
 const { watchSettingsFile } = require('./windows/settingsWatcher');
 const { createApplicationMenu } = require('./ui/applicationMenu');
@@ -350,8 +351,17 @@ app.on('window-all-closed', () => {
     }
 });
 
-// Handle login success
-ipcMain.on('login-success', () => {
+// Handle login success.
+//
+// registerHandlers applies isTrustedSender to every ipcMain.handle channel, but these two
+// are registered with ipcMain.on (a send, with no reply) and so bypassed it entirely — this
+// one swaps windows and the next clears the auth token. Nothing untrusted is loaded today,
+// so the exposure is theoretical, but there is no reason for these to be the exceptions.
+ipcMain.on('login-success', (event) => {
+    if (!isTrustedSender(event)) {
+        logger.withCategory('api').warning("Refused IPC 'login-success' from untrusted frame", null);
+        return;
+    }
     // Close login window
     if (loginWindow) {
         loginWindow.close();
@@ -363,7 +373,11 @@ ipcMain.on('login-success', () => {
 // Handle logout. ipcMain.on expects a void listener, so the async flow runs
 // in a caught IIFE — a failed token flush is logged, and the window teardown
 // still proceeds so the user is never stuck on a dead main window.
-ipcMain.on('logout', () => {
+ipcMain.on('logout', (event) => {
+    if (!isTrustedSender(event)) {
+        logger.withCategory('api').warning("Refused IPC 'logout' from untrusted frame", null);
+        return;
+    }
     if (!mainWindow) return;
 
     void (async () => {
@@ -377,6 +391,20 @@ ipcMain.on('logout', () => {
             // Reset mock value to environment default while preserving theme and remember me settings
             const envInfo = settings.getEnvironmentInfo();
             settings.setSetting('mock', envInfo.defaultMock);
+
+            // Re-check the window here, not just at entry. clearAuthToken awaits a settings
+            // flush, and the user can close the main window during that await — dereferencing
+            // a destroyed window inside .finally() threw an unhandled rejection in the main
+            // process, which has no global handler. Nothing left to tear down in that case,
+            // so just make sure they land back on a login window.
+            if (!mainWindow || mainWindow.isDestroyed()) {
+                if (loginWindow) {
+                    loginWindow.focus();
+                } else {
+                    createLoginWindow();
+                }
+                return;
+            }
 
             // Open the login window only after the main window is fully closed
             mainWindow.once('closed', () => {

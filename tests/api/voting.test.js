@@ -318,4 +318,84 @@ describe('voting', () => {
             expect(result).toEqual(mockResponse);
         });
     });
+
+    // Regression coverage for the vote-selection loop. The original implementation sampled
+    // `images` at random and terminated on `uniqueImageIds.size === images.length`, which is
+    // unreachable when the endpoint repeats an id — the loop then spun forever, synchronously.
+    // These tests are deliberately written against the fixed shape: a synchronous infinite
+    // loop cannot be bounded by Jest's testTimeout (that needs a free event loop), so a test
+    // that ran the old code would hang the worker rather than fail.
+    describe('submitVotes — selection loop', () => {
+        const countOccurrences = (haystack, needle) => haystack.split(needle).length - 1;
+
+        const buildVoteImages = (images, exposureFactor = 0) => ({
+            challenge: { id: '123', title: 'Test Challenge' },
+            voting: { exposure: { exposure_factor: exposureFactor } },
+            images,
+        });
+
+        test('terminates and votes each id once when the API repeats an image id', async () => {
+            makePostRequest.mockResolvedValueOnce({ success: true });
+
+            await submitVotes(
+                buildVoteImages([
+                    { id: 'img1', ratio: 1 },
+                    { id: 'img1', ratio: 1 },
+                    { id: 'img2', ratio: 1 },
+                ]),
+                'test-token',
+            );
+
+            expect(makePostRequest).toHaveBeenCalledTimes(1);
+            const body = makePostRequest.mock.calls[0][2];
+            expect(countOccurrences(body, '&image_ids[]=img1')).toBe(1);
+            expect(countOccurrences(body, '&image_ids[]=img2')).toBe(1);
+        });
+
+        test('does not warn about insufficient images when the target was actually reached', async () => {
+            makePostRequest.mockResolvedValueOnce({ success: true });
+
+            // Two images at 60% each overshoot the 100% target on the final one. The old
+            // exhaustion-based break warned here anyway, reporting a shortfall that never
+            // happened.
+            await submitVotes(
+                buildVoteImages([
+                    { id: 'img1', ratio: 60 },
+                    { id: 'img2', ratio: 60 },
+                ]),
+                'test-token',
+            );
+
+            expect(mockWarningFn).not.toHaveBeenCalledWith(
+                expect.stringContaining('Insufficient images'),
+                expect.anything(),
+            );
+        });
+
+        test('keeps voting when an image carries no usable ratio', async () => {
+            makePostRequest.mockResolvedValueOnce({ success: true });
+
+            // `exposure_factor += undefined` yields NaN, and `NaN < target` is false — so the
+            // old loop stopped after a single image and submitted a near-empty ballot silently.
+            await submitVotes(buildVoteImages([{ id: 'img1' }, { id: 'img2' }, { id: 'img3' }]), 'test-token');
+
+            const body = makePostRequest.mock.calls[0][2];
+            expect(countOccurrences(body, '&image_ids[]=')).toBe(3);
+            expect(mockWarningFn).toHaveBeenCalledWith(expect.stringContaining('no usable exposure ratio'), null);
+        });
+
+        test('still warns when the pool genuinely cannot reach the target', async () => {
+            makePostRequest.mockResolvedValueOnce({ success: true });
+
+            await submitVotes(
+                buildVoteImages([
+                    { id: 'img1', ratio: 1 },
+                    { id: 'img2', ratio: 1 },
+                ]),
+                'test-token',
+            );
+
+            expect(mockWarningFn).toHaveBeenCalledWith(expect.stringContaining('Insufficient images'), null);
+        });
+    });
 });

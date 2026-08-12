@@ -21,10 +21,15 @@ const fetchActiveChallenges = async (token) => {
     const headers = createCommonHeaders(token);
     const response = await makePostRequest(ENDPOINTS.activeChallenges, headers);
 
-    // Handle failed requests gracefully
+    // Handle failed requests gracefully. The empty list keeps every existing consumer
+    // working, but it is flagged so callers can tell "the fetch failed" apart from "you
+    // genuinely have no active challenges" — makePostRequest resolves null once retries are
+    // exhausted (e.g. GuruShots returning 5xx), and without this marker a dead API produced
+    // a pass that reported success with "No active challenges found" and re-armed as if
+    // everything were healthy.
     if (!response) {
         logger.withCategory('api').endOperation(operationId, null, 'API request failed');
-        return { challenges: [] }; // Return empty challenges to avoid crashing
+        return { challenges: [], fetchFailed: true };
     }
 
     // Pin first-seen titles AFTER the failed-request guard above — a network

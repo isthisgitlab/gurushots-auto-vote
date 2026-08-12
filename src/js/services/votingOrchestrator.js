@@ -77,8 +77,10 @@ const { sleep } = require('../timing');
 /** @param {ActionContext} ctx */
 const runBoost = async (ctx) => {
     const { challenge, token, now, api, fillDeps } = ctx;
-    // Check if boost is available for this challenge
-    const { boost } = challenge.member;
+    // Check if boost is available for this challenge. Optional-chained to match
+    // shouldApplyBoost/shouldApplyTurbo, which already guard the same tree: a payload
+    // without `member` used to throw straight out of the per-action loop.
+    const boost = challenge?.member?.boost || {};
     const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
     const isTimerBasedAvailable = boost.state === 'AVAILABLE' && hasTimeout;
     const isKeyUnlockedAvailable = boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout);
@@ -123,6 +125,9 @@ const runBoost = async (ctx) => {
                 if (filled.ok) {
                     autoFill.reflectNewEntry(challenge, filled.imageId);
                     boostResult = await api.applyBoostToEntry(cid, filled.imageId, token);
+                    // applyBoost raises this flag itself (it owns the entry pick); the
+                    // explicit-entry call cannot, so reflect it here.
+                    if (boostResult) autoFill.reflectEntryFlag(challenge, filled.imageId, 'boosted');
                 } else if (filled.reason === 'challenge-gone') {
                     // The live re-check confirmed the challenge left the
                     // active list — boosting an existing entry on it would
@@ -158,9 +163,13 @@ const runBoost = async (ctx) => {
         }
     } else {
         const timeDisplay = formatDuration(timeUntilDisplayBase);
+        // Both branches render the threshold they actually use. The key-unlocked message
+        // used to hardcode "10m" while the code applied at 15, which misled anyone
+        // debugging it; it is now a setting, so read it rather than restating a constant.
+        const keyUnlockedWindow = votingLogic.getEffectiveKeyUnlockedBoostTime(challenge.id.toString());
         const reason = isTimerBasedAvailable
             ? `${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`
-            : `${timeDisplay} until challenge ends (needs ≤ 10m to auto-apply)`;
+            : `${timeDisplay} until challenge ends (needs ≤ ${Math.round(keyUnlockedWindow / 60)}m to auto-apply)`;
         logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost not ready - ${reason}`, null);
     }
 };
@@ -228,6 +237,8 @@ const runTurboApply = async (ctx) => {
         try {
             const result = await api.applyTurbo(challenge.id, imageId, token);
             if (result.ok) {
+                // Mark the entry so a boost running later in this same pass avoids it.
+                autoFill.reflectEntryFlag(challenge, imageId, 'turbo');
                 logger
                     .withCategory('turbo')
                     .endOperation(`turbo-apply-${challenge.id}`, `Turbo applied to entry ${imageId}`);
@@ -300,9 +311,18 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
     try {
         // Get all active challenges
         logger.withCategory('challenges').info('🔄 Loading active challenges', null);
-        const { challenges: allChallenges } = await api.getActiveChallenges(token);
-        // Current timestamp in seconds (Unix epoch time)
-        const now = Math.floor(Date.now() / 1000);
+        const { challenges: allChallenges, fetchFailed } = await api.getActiveChallenges(token);
+
+        // A failed fetch is not an empty account. makePostRequest resolves null once retries
+        // are exhausted, which used to arrive here as an empty list and be reported as a
+        // successful pass with "No active challenges found" — so an outage looked identical
+        // to having nothing to vote on, and the scheduler re-armed as if all were well.
+        if (fetchFailed) {
+            const msg = 'Could not load active challenges — the API request failed';
+            logger.withCategory('challenges').error(msg, null);
+            logger.withCategory('voting').endOperation('voting-process', null, msg);
+            return { success: false, error: msg, challenges: allChallenges };
+        }
 
         logger.withCategory('challenges').info(`📋 Found ${allChallenges.length} active challenges`, null);
 
@@ -358,196 +378,237 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         for (const challenge of challenges) {
             processedCount++;
 
-            // Check for cancellation before processing each challenge
-            if (cancellation.isCancelled()) {
-                return cancelledResult();
-            }
+            // Current timestamp in seconds (Unix epoch time), re-read per challenge.
+            //
+            // This used to be captured once for the whole pass. A pass spends 2-5s of
+            // inter-challenge delay per challenge, plus retries (up to 30s per request),
+            // paginated library walks and up to 25 get_image_data calls per fill — minutes in
+            // total. Every challenge after the first was then evaluated against a clock biased
+            // into the past, so last-minute/emergency/boost/turbo windows that opened mid-pass
+            // were missed, and a challenge that had already closed still looked open.
+            const now = Math.floor(Date.now() / 1000);
 
-            // Log progress
-            logger
-                .withCategory('voting')
-                .progress(
-                    `Processing challenge ${processedCount}/${challenges.length}: ${challenge.title}`,
-                    processedCount,
-                    challenges.length,
-                );
-
-            // Auto-earn turbo by playing the mini-game when eligible. This has no
-            // close-time threshold (it plays whenever a turbo is winnable), and a
-            // turbo earned this cycle can't be applied until the next cycle re-fetches
-            // state, so it runs ahead of the timer-ordered deadline actions below.
-            if (votingLogic.shouldPlayAutoTurbo(challenge, now)) {
-                logger
-                    .withCategory('turbo')
-                    .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}`);
-                try {
-                    const result = await api.runTurboMiniGame(challenge, token);
-                    const summary = `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
-                    logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
-                } catch (error) {
-                    logger
-                        .withCategory('turbo')
-                        .endOperation(`turbo-earn-${challenge.id}`, null, error.message || error);
-                }
-            }
-
-            // Deadline actions (boost / auto-fill / turbo apply / emergency fill) run
-            // in the order their configured timers imply — largest seconds-before-close
-            // window first — instead of a fixed code order, so e.g. auto-fill (15m) acts
-            // before turbo (12m) when both are due. Each runner keeps its own full
-            // eligibility check, so an action that isn't actually due just no-ops.
-            const actionCtx = { challenge, token, now, api, fillDeps };
-            for (const { action } of votingLogic.orderDeadlineActions(challenge)) {
-                // Honor cancellation between actions, same as the per-challenge guard.
+            // One malformed challenge must not cost the pass every challenge after it.
+            // Before this, an unguarded property read threw past the per-action loop into the
+            // single outer catch below, which abandoned the whole pass. Catching here lets the
+            // loop move on to the next challenge; the cancellation checkpoints inside the body
+            // use `return`, which a try/catch does not intercept, so cancellation still exits
+            // the pass immediately rather than being swallowed as a per-challenge error.
+            try {
+                // Check for cancellation before processing each challenge
                 if (cancellation.isCancelled()) {
                     return cancelledResult();
                 }
-                // Defensive: orderDeadlineActions only emits the four known keys, but
-                // guard the dispatch so a future action added there without a matching
-                // runner degrades to a skip instead of throwing and aborting the loop.
-                const run = actionRunners[action];
-                if (typeof run === 'function') await run(actionCtx);
-            }
 
-            // New-entry detection (voteOnNewEntry). Runs AFTER the deadline actions
-            // above on purpose: auto-fill / emergency fill / boost-turbo fill-new all
-            // reflect their new entry into challenge.member.ranking.entries, so an
-            // entry submitted seconds ago in this very cycle is detected in this very
-            // cycle rather than waiting for the next one.
-            //
-            // The setting is read HERE and nowhere else — VotingLogic takes the
-            // already-gated boolean. Gating the whole block (not just the decision)
-            // keeps the feature genuinely opt-in: metadata.json is a synchronous
-            // whole-file read/write, and a user who never enables this should pay
-            // none of it.
-            const challengeId = challenge.id.toString();
-            const tracking =
-                entryTracker && settings.getEffectiveSetting('voteOnNewEntry', challengeId) === true
-                    ? newEntryTracker.readEntryIds(challenge)
-                    : null;
-            const previousIds = tracking ? entryTracker.get(challengeId) : null;
-            const hasNewEntry = tracking ? newEntryTracker.hasNewEntries(previousIds, tracking) : false;
-            if (hasNewEntry) {
+                // Log progress
                 logger
                     .withCategory('voting')
-                    .info(`${logger.challengeTag(challenge)} New entry detected — forcing a vote this cycle`, null);
-            }
+                    .progress(
+                        `Processing challenge ${processedCount}/${challenges.length}: ${challenge.title}`,
+                        processedCount,
+                        challenges.length,
+                    );
 
-            // Use the centralized voting logic service
-            const { shouldVote, voteReason, targetExposure, forcedByNewEntry } = votingLogic.evaluateVotingDecision(
-                challenge,
-                now,
-                { hasNewEntry },
-            );
-            let voteThrew = false;
-
-            // Record the entry snapshot, which disarms the trigger. Called from the
-            // end of this block, and additionally from the post-submit cancellation
-            // return — that one bails out of the whole pass after the vote already
-            // landed, so skipping the record there would re-force the identical vote
-            // next pass. The two earlier cancellation returns deliberately do NOT
-            // record: no vote went out yet, so the trigger must stay armed.
-            //
-            // Skipped only when a vote this trigger FORCED threw, so the next cycle
-            // retries it — that is the whole retry contract. Deliberately NOT skipped
-            // for:
-            //   - "no vote images available", which is not a throw; treating it as a
-            //     failure would force a getVoteImages call every cycle forever on a
-            //     challenge that never has any.
-            //   - a blocked decision (onlyBoost / vote-only-in-last-minute /
-            //     scheduled-fill-only / not started), which consumes the trigger.
-            //     Every block that can later lift, lifts into a rule that already
-            //     votes to 100% or re-reads exposure from scratch, so nothing is lost.
-            const recordEntrySnapshot = () => {
-                if (!tracking || (forcedByNewEntry && voteThrew)) return;
-                if (!newEntryTracker.shouldRecordSnapshot(previousIds, tracking)) return;
-                entryTracker.set(challengeId, tracking);
-            };
-
-            // Vote on challenge if conditions are met
-            if (shouldVote) {
-                logger
-                    .withCategory('voting')
-                    .startOperation(`vote-${challenge.id}`, `Voting on ${logger.challengeTag(challenge)}`, 'DEBUG');
-
-                try {
-                    // Check for cancellation before voting
-                    if (cancellation.isCancelled()) {
+                // Auto-earn turbo by playing the mini-game when eligible. This has no
+                // close-time threshold (it plays whenever a turbo is winnable), and a
+                // turbo earned this cycle can't be applied until the next cycle re-fetches
+                // state, so it runs ahead of the timer-ordered deadline actions below.
+                if (votingLogic.shouldPlayAutoTurbo(challenge, now)) {
+                    logger
+                        .withCategory('turbo')
+                        .startOperation(`turbo-earn-${challenge.id}`, `Playing turbo mini-game on ${challenge.title}`);
+                    try {
+                        const result = await api.runTurboMiniGame(challenge, token);
+                        const summary = `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
+                        logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
+                    } catch (error) {
                         logger
-                            .withCategory('voting')
-                            .warning('🛑 Voting cancelled by user during challenge processing', null);
-                        logger.withCategory('voting').endOperation('voting-process', null, 'Voting cancelled by user');
-                        return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
+                            .withCategory('turbo')
+                            .endOperation(`turbo-earn-${challenge.id}`, null, error.message || error);
                     }
+                }
 
+                // Deadline actions (boost / auto-fill / turbo apply / emergency fill) run
+                // in the order their configured timers imply — largest seconds-before-close
+                // window first — instead of a fixed code order, so e.g. auto-fill (15m) acts
+                // before turbo (12m) when both are due. Each runner keeps its own full
+                // eligibility check, so an action that isn't actually due just no-ops.
+                const actionCtx = { challenge, token, now, api, fillDeps };
+                for (const { action } of votingLogic.orderDeadlineActions(challenge)) {
+                    // Honor cancellation between actions, same as the per-challenge guard.
+                    if (cancellation.isCancelled()) {
+                        return cancelledResult();
+                    }
+                    // Defensive: orderDeadlineActions only emits the four known keys, but
+                    // guard the dispatch so a future action added there without a matching
+                    // runner degrades to a skip instead of throwing and aborting the loop.
+                    const run = actionRunners[action];
+                    if (typeof run === 'function') await run(actionCtx);
+                }
+
+                // New-entry detection (voteOnNewEntry). Runs AFTER the deadline actions
+                // above on purpose: auto-fill / emergency fill / boost-turbo fill-new all
+                // reflect their new entry into challenge.member.ranking.entries, so an
+                // entry submitted seconds ago in this very cycle is detected in this very
+                // cycle rather than waiting for the next one.
+                //
+                // The setting is read HERE and nowhere else — VotingLogic takes the
+                // already-gated boolean. Gating the whole block (not just the decision)
+                // keeps the feature genuinely opt-in: metadata.json is a synchronous
+                // whole-file read/write, and a user who never enables this should pay
+                // none of it.
+                const challengeId = challenge.id.toString();
+                const tracking =
+                    entryTracker && settings.getEffectiveSetting('voteOnNewEntry', challengeId) === true
+                        ? newEntryTracker.readEntryIds(challenge)
+                        : null;
+                const previousIds = tracking ? entryTracker.get(challengeId) : null;
+                const hasNewEntry = tracking ? newEntryTracker.hasNewEntries(previousIds, tracking) : false;
+                if (hasNewEntry) {
                     logger
                         .withCategory('voting')
-                        .info(`${logger.challengeTag(challenge)} Starting voting process - ${voteReason}`, null);
-
-                    // Get images to vote on
-                    const voteImages = await api.getVoteImages(challenge, token);
-                    if (voteImages && voteImages.images) {
-                        // Check for cancellation before submitting votes
-                        if (cancellation.isCancelled()) {
-                            logger
-                                .withCategory('voting')
-                                .warning('🛑 Voting cancelled by user before vote submission', null);
-                            logger
-                                .withCategory('voting')
-                                .endOperation('voting-process', null, 'Voting cancelled by user');
-                            return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
-                        }
-
-                        logger
-                            .withCategory('voting')
-                            .info(
-                                `${logger.challengeTag(challenge)} Submitting votes for ${voteImages.images.length} images`,
-                                null,
-                            );
-
-                        // Submit votes to target exposure (dynamic based on voting rules)
-                        await api.submitVotes(voteImages, token, targetExposure);
-
-                        // Check for cancellation before delay
-                        if (cancellation.isCancelled()) {
-                            // The vote already went through, so the trigger is spent —
-                            // record before bailing or the next pass re-votes it.
-                            recordEntrySnapshot();
-                            logger
-                                .withCategory('voting')
-                                .warning('🛑 Voting cancelled by user after vote submission', null);
-                            logger
-                                .withCategory('voting')
-                                .endOperation('voting-process', null, 'Voting cancelled by user');
-                            return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
-                        }
-
-                        logger.withCategory('voting').endOperation(`vote-${challenge.id}`, 'voting attempt complete');
-
-                        // Add a delay between challenges (strategy-specific pacing)
-                        const delay = interChallengeDelay();
-                        logger.withCategory('voting').debug(`Adding ${delay}ms delay between challenges`, null);
-                        await sleep(delay);
-                    } else {
-                        // No images is a valid "nothing to do" state — close the op as a
-                        // DEBUG success (silent) and surface one WARN for user visibility.
-                        logger.withCategory('voting').endOperation(`vote-${challenge.id}`, 'no vote images available');
-                        logger
-                            .withCategory('voting')
-                            .warning(`${logger.challengeTag(challenge)} No vote images available — skipping`, null);
-                    }
-                } catch (error) {
-                    voteThrew = true;
-                    logger.withCategory('voting').endOperation(`vote-${challenge.id}`, null, error.message || error);
+                        .info(`${logger.challengeTag(challenge)} New entry detected — forcing a vote this cycle`, null);
                 }
-            } else {
-                // Log why voting was skipped
+
+                // Use the centralized voting logic service
+                const { shouldVote, voteReason, targetExposure, forcedByNewEntry } = votingLogic.evaluateVotingDecision(
+                    challenge,
+                    now,
+                    { hasNewEntry },
+                );
+                let voteThrew = false;
+
+                // Record the entry snapshot, which disarms the trigger. Called from the
+                // end of this block, and additionally from the post-submit cancellation
+                // return — that one bails out of the whole pass after the vote already
+                // landed, so skipping the record there would re-force the identical vote
+                // next pass. The two earlier cancellation returns deliberately do NOT
+                // record: no vote went out yet, so the trigger must stay armed.
+                //
+                // Skipped only when a vote this trigger FORCED threw, so the next cycle
+                // retries it — that is the whole retry contract. Deliberately NOT skipped
+                // for:
+                //   - "no vote images available", which is not a throw; treating it as a
+                //     failure would force a getVoteImages call every cycle forever on a
+                //     challenge that never has any.
+                //   - a blocked decision (onlyBoost / vote-only-in-last-minute /
+                //     scheduled-fill-only / not started), which consumes the trigger.
+                //     Every block that can later lift, lifts into a rule that already
+                //     votes to 100% or re-reads exposure from scratch, so nothing is lost.
+                const recordEntrySnapshot = () => {
+                    if (!tracking || (forcedByNewEntry && voteThrew)) return;
+                    if (!newEntryTracker.shouldRecordSnapshot(previousIds, tracking)) return;
+                    entryTracker.set(challengeId, tracking);
+                };
+
+                // Vote on challenge if conditions are met
+                if (shouldVote) {
+                    logger
+                        .withCategory('voting')
+                        .startOperation(`vote-${challenge.id}`, `Voting on ${logger.challengeTag(challenge)}`, 'DEBUG');
+
+                    try {
+                        // Check for cancellation before voting
+                        if (cancellation.isCancelled()) {
+                            logger
+                                .withCategory('voting')
+                                .warning('🛑 Voting cancelled by user during challenge processing', null);
+                            logger
+                                .withCategory('voting')
+                                .endOperation('voting-process', null, 'Voting cancelled by user');
+                            return { success: false, message: 'Voting cancelled by user', challenges: allChallenges };
+                        }
+
+                        logger
+                            .withCategory('voting')
+                            .info(`${logger.challengeTag(challenge)} Starting voting process - ${voteReason}`, null);
+
+                        // Get images to vote on
+                        const voteImages = await api.getVoteImages(challenge, token);
+                        if (voteImages && voteImages.images) {
+                            // Check for cancellation before submitting votes
+                            if (cancellation.isCancelled()) {
+                                logger
+                                    .withCategory('voting')
+                                    .warning('🛑 Voting cancelled by user before vote submission', null);
+                                logger
+                                    .withCategory('voting')
+                                    .endOperation('voting-process', null, 'Voting cancelled by user');
+                                return {
+                                    success: false,
+                                    message: 'Voting cancelled by user',
+                                    challenges: allChallenges,
+                                };
+                            }
+
+                            logger
+                                .withCategory('voting')
+                                .info(
+                                    `${logger.challengeTag(challenge)} Submitting votes for ${voteImages.images.length} images`,
+                                    null,
+                                );
+
+                            // Submit votes to target exposure (dynamic based on voting rules)
+                            await api.submitVotes(voteImages, token, targetExposure);
+
+                            // Check for cancellation before delay
+                            if (cancellation.isCancelled()) {
+                                // The vote already went through, so the trigger is spent —
+                                // record before bailing or the next pass re-votes it.
+                                recordEntrySnapshot();
+                                logger
+                                    .withCategory('voting')
+                                    .warning('🛑 Voting cancelled by user after vote submission', null);
+                                logger
+                                    .withCategory('voting')
+                                    .endOperation('voting-process', null, 'Voting cancelled by user');
+                                return {
+                                    success: false,
+                                    message: 'Voting cancelled by user',
+                                    challenges: allChallenges,
+                                };
+                            }
+
+                            logger
+                                .withCategory('voting')
+                                .endOperation(`vote-${challenge.id}`, 'voting attempt complete');
+
+                            // Add a delay between challenges (strategy-specific pacing)
+                            const delay = interChallengeDelay();
+                            logger.withCategory('voting').debug(`Adding ${delay}ms delay between challenges`, null);
+                            await sleep(delay);
+                        } else {
+                            // No images is a valid "nothing to do" state — close the op as a
+                            // DEBUG success (silent) and surface one WARN for user visibility.
+                            logger
+                                .withCategory('voting')
+                                .endOperation(`vote-${challenge.id}`, 'no vote images available');
+                            logger
+                                .withCategory('voting')
+                                .warning(`${logger.challengeTag(challenge)} No vote images available — skipping`, null);
+                        }
+                    } catch (error) {
+                        voteThrew = true;
+                        logger
+                            .withCategory('voting')
+                            .endOperation(`vote-${challenge.id}`, null, error.message || error);
+                    }
+                } else {
+                    // Log why voting was skipped
+                    logger
+                        .withCategory('voting')
+                        .info(`${logger.challengeTag(challenge)} Skipping voting - ${voteReason}`, null);
+                }
+
+                recordEntrySnapshot();
+            } catch (error) {
                 logger
                     .withCategory('voting')
-                    .info(`${logger.challengeTag(challenge)} Skipping voting - ${voteReason}`, null);
+                    .error(
+                        `${logger.challengeTag(challenge)} Skipped after an unexpected error — continuing with the remaining challenges`,
+                        error,
+                    );
             }
-
-            recordEntrySnapshot();
         }
 
         // Complete the voting process

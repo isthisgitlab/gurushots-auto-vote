@@ -260,7 +260,10 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
 
     const isWithinLastMinute = isWithinLastMinuteThreshold(challenge.close_time, now, challengeId);
     const withinLastHour = isWithinLastHour(challenge.close_time, now);
-    const currentExposure = challenge.member.ranking.exposure.exposure_factor;
+    // Optional-chained for consistency with evaluateManualVotingToHundred and the
+    // boost/turbo predicates, which all guard this same tree. An unguarded read here threw
+    // out of the per-challenge loop and abandoned every remaining challenge in the pass.
+    const currentExposure = challenge?.member?.ranking?.exposure?.exposure_factor ?? 0;
 
     /** @param {string} skipReason @returns {VotingRuleResult} */
     const blocked = (skipReason) => ({
@@ -313,6 +316,15 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
 
     if (onlyBoost) return blocked('boost-only mode enabled');
     if (mode === 'auto' && challenge.start_time >= now) return blocked('challenge not started');
+    // Symmetric with the not-started guard above. Both time windows below require
+    // `timeUntilEnd > 0`, so without this a challenge whose close_time has passed falls all
+    // the way through to the *normal* rule and votes — the exact opposite of the intent, and
+    // reachable whenever a challenge closes partway through a pass. Placed ahead of the flash
+    // branch so a closed flash challenge is skipped too. Auto only, mirroring not-started:
+    // the manual to-100% path does its own `close_time <= now` check, and adding a manual
+    // block here would surface under the last-minute message this function reuses for every
+    // manual skip reason.
+    if (mode === 'auto' && challenge.close_time <= now) return blocked('challenge has ended');
 
     if (challenge.type === 'flash') {
         return decided('flash', 100, 100, sharedThresholdInfo);
@@ -528,6 +540,28 @@ const getEffectiveBoostTime = (challengeId) => {
 };
 
 /**
+ * Get the effective key-unlocked boost window for a challenge.
+ *
+ * Separate from getEffectiveBoostTime on purpose: boostTime is measured against the boost's
+ * own countdown, which a key-unlocked boost does not have. This one is measured against the
+ * challenge's close time. Was a hardcoded 15 minutes; the default preserves that.
+ *
+ * @param {string} challengeId - Challenge ID
+ * @returns {number} - Seconds before close within which a key-unlocked boost is applied
+ */
+const getEffectiveKeyUnlockedBoostTime = (challengeId) => {
+    const value = settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId);
+    // An explicit 0 means "never auto-apply", matching the 0-is-off convention boostTime and
+    // emergencyFill already use, and it is a value both the schema and the GUI input accept —
+    // so it must be honoured rather than quietly replaced by the default. Only a genuinely
+    // unusable value (missing, null, NaN, negative — reachable from an under-mocked caller or
+    // a hand-edited settings file) falls back to the schema default. Type-checked rather than
+    // coerced, because Number(null) is 0 and would otherwise read as a deliberate "off".
+    const raw = typeof value === 'number' ? value : Number.NaN;
+    return Number.isFinite(raw) && raw >= 0 ? raw : 900;
+};
+
+/**
  * True when the per-challenge Emergency Fill window is enabled (> 0) and the
  * challenge is currently inside it (closing within that many seconds). Mirrors
  * the window check in autoFill.maybeEmergencyFillChallenge.
@@ -594,11 +628,11 @@ const shouldApplyBoost = (challenge, now, options = {}) => {
     const isKeyUnlocked = boostState === 'AVAILABLE_KEY' || (boostState === 'AVAILABLE' && !hasTimeout);
 
     const timeUntilEnd = challenge.close_time - now;
-    const CLOSING = 15 * 60; // seconds
 
     if (isKeyUnlocked) {
-        // Auto-apply only if the challenge ends within next 15 minutes (CLOSING)
-        return timeUntilEnd > 0 && timeUntilEnd <= CLOSING;
+        // A key-unlocked boost has no timer of its own, so it is measured against the
+        // challenge's close time via its own setting (was a hardcoded 15 minutes).
+        return timeUntilEnd > 0 && timeUntilEnd <= getEffectiveKeyUnlockedBoostTime(challengeId);
     }
 
     // Timer-based AVAILABLE with a timeout: use existing effectiveBoostTime window
@@ -678,6 +712,28 @@ const pickEntryAvoidingConflict = (entries, requestedIndex, conflictField) => {
         slot = (slot - 1 + entries.length) % entries.length;
     }
     return entries[slot]?.[conflictField] ? null : entries[slot];
+};
+
+/**
+ * Pick the entry a boost should land on: `boostImageIndex` (1-indexed, 0 = last), stepping
+ * off any entry that already carries turbo. Symmetric to shouldApplyTurbo's own pick, which
+ * avoids boosted entries.
+ *
+ * Lives here rather than privately inside api/boost.js so the mock boost surface resolves the
+ * SAME entry the real one does. Both then raise the conflict flag on it, which is what keeps
+ * the same-pass "boost and turbo never share an entry" rule true in mock mode too — the mock
+ * runs the identical shared voting pass, so a rule that only held on the real surface would
+ * make mock runs quietly diverge.
+ *
+ * @param {any} challenge
+ * @param {string} challengeId
+ * @returns {any|null} the entry to boost, or null when every candidate is turboed
+ */
+const pickBoostEntry = (challenge, challengeId) => {
+    const entries = challenge?.member?.ranking?.entries;
+    if (!Array.isArray(entries) || entries.length === 0) return null;
+    const requestedIndex = settings.getEffectiveSetting('boostImageIndex', challengeId);
+    return pickEntryAvoidingConflict(entries, requestedIndex, 'turbo');
 };
 
 /**
@@ -830,7 +886,7 @@ const getBoostThresholdSec = (challenge, challengeId) => {
     const boost = challenge?.member?.boost || {};
     const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
     if (boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout)) {
-        return 15 * 60; // CLOSING window (mirrors shouldApplyBoost)
+        return getEffectiveKeyUnlockedBoostTime(challengeId); // mirrors shouldApplyBoost
     }
     if (boost.state === 'AVAILABLE' && hasTimeout) {
         const boostTime = getEffectiveBoostTime(challengeId);
@@ -842,9 +898,19 @@ const getBoostThresholdSec = (challenge, challengeId) => {
 /**
  * Order the per-challenge deadline actions by the seconds-before-close at which
  * each becomes due, largest window first — so actions fire in the order their
- * configured timers imply (e.g. auto-fill 15m → turbo 12m → vote/last-minute
- * 10m) rather than a fixed code order. Each action's own handler still decides
- * whether to actually act; this only fixes ordering.
+ * configured timers imply rather than a fixed code order. Each action's own
+ * handler still decides whether to actually act; this only fixes ordering.
+ *
+ * The ordering is therefore user-controlled: it falls out of the time settings, so
+ * widening turboTime or boostTime moves that action earlier in the pass. With the
+ * defaults (turboTime 7200, autoFill's top row 1800, emergencyFill 300) the real
+ * order is turbo → autoFill → emergencyFill → boost. An earlier version of this
+ * comment gave "auto-fill 15m → turbo 12m" as the worked example, which inverted
+ * what the defaults actually produce; the numbers, not the code order, decide.
+ *
+ * Note this sorts turbo on its configured window even when no turbo is held or
+ * Auto-Apply Turbo is off — the runner then no-ops. That keeps the ordering a pure
+ * function of the settings rather than of live challenge state.
  *
  * Tie-break (stable): autoFill → emergencyFill → boost → turbo, so fills and
  * boost precede turbo and a freshly filled (and locally reflected) entry is
@@ -882,6 +948,8 @@ module.exports = {
     evaluateManualVotingDecision,
     evaluateManualVotingToHundred,
     getEffectiveBoostTime,
+    getEffectiveKeyUnlockedBoostTime,
+    pickBoostEntry,
     isWithinEmergencyWindow,
     shouldApplyBoost,
     isBoostWindowOpen,

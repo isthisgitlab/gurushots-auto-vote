@@ -13,6 +13,8 @@ const settings = require('../settings');
 const logger = require('../logger');
 const { runVotingPass } = require('../services/votingOrchestrator');
 const { createMemoryEntryTracker } = require('../services/newEntryTracker');
+const votingLogic = require('../services/VotingLogic');
+const autoFill = require('../services/autoFill');
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
@@ -176,8 +178,11 @@ const mockApiClient = {
                     .withCategory('api')
                     .debug(`Token starts with mock_: ${token ? token.startsWith('mock_') : false}`, null);
             },
-            // Real getActiveChallenges resolves { challenges: [] } on failure
-            onNoToken: () => ({ challenges: [] }),
+            // Real getActiveChallenges resolves a flagged empty list on failure, and a
+            // missing token is a failure to fetch — not an account with nothing active.
+            // Mirroring the flag keeps the mock strategy on the same contract, so the
+            // shared voting pass reports an outage identically on both surfaces.
+            onNoToken: () => ({ challenges: [], fetchFailed: true }),
         },
         async () => {
             // Use cached challenges for session stability, generate only once per session
@@ -352,6 +357,12 @@ const mockApiClient = {
             const boostState = challenge.member.boost.state;
             if (boostState === 'AVAILABLE' || boostState === 'AVAILABLE_KEY') {
                 logger.withCategory('voting').debug('Applying boost successfully', null);
+                // Mirror the real surface's side effect: resolve the same entry via the
+                // shared picker and raise its conflict flag, so a turbo later in this same
+                // mock pass avoids it. Without this the "boost and turbo never share an
+                // entry" rule held only on the real surface and mock runs diverged.
+                const picked = votingLogic.pickBoostEntry(challenge, challenge.id?.toString?.() || '');
+                if (picked) autoFill.reflectEntryFlag(challenge, picked.id, 'boosted');
                 return simulateApiResponse(boost.mockBoostSuccess, 1500);
             } else if (boostState === 'USED') {
                 logger.withCategory('voting').info('Boost already used', null);

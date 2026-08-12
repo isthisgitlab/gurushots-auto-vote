@@ -9,6 +9,7 @@ const logger = require('../../logger');
 const settings = require('../../settings');
 const { getDefaultSettings } = require('../../settings');
 const { parseSettingValue } = require('../parseValue');
+const { formatDuration } = require('../../format/duration');
 
 /**
  * Format a settings value for log output, redacting sensitive keys via
@@ -18,7 +19,22 @@ const { parseSettingValue } = require('../parseValue');
  */
 const formatSettingForLog = (key, value) => {
     const masked = logger.sanitizeForLog({ [key]: value });
-    return masked[key] === '[REDACTED]' ? '[REDACTED]' : JSON.stringify(value);
+    if (masked[key] === '[REDACTED]') return '[REDACTED]';
+
+    const raw = JSON.stringify(value);
+
+    // Time-typed settings are stored in seconds but read as durations everywhere else —
+    // the GUI enters them as hours+minutes, and their own descriptions talk in minutes.
+    // Printing the bare number invited the wrong comparison: `emergencyFill` 300 next to
+    // `lastMinuteThreshold` 10 looks like 300 > 10 when it is really 5 minutes vs 10.
+    // Annotate rather than convert, so the printed value still matches what set-setting
+    // expects back.
+    const config = settings.SETTINGS_SCHEMA?.[key];
+    if (config?.type === 'time' && typeof value === 'number' && Number.isFinite(value)) {
+        return value === 0 ? `${raw} (off)` : `${raw} (${formatDuration(value)})`;
+    }
+
+    return raw;
 };
 
 // One consistent recovery message for a mistyped schema key, shared by every
@@ -83,6 +99,23 @@ const setSetting = (key, value, challengeId = null) => {
                 .error(`Failed to set ${key} for challenge ${challengeId} — validation failed`);
             return false;
         }
+        // A schema key with no --challenge used to be written as an unvalidated top-level
+        // key that nothing ever reads — the command reported success and changed nothing.
+        // Setting the global default is what the user meant; say so rather than doing it
+        // silently, so a script author can see the redirect in the output.
+        if (settings.SETTINGS_SCHEMA?.[key]) {
+            // Worded for both kinds of schema key: most support per-challenge overrides, but
+            // a few (lastMinuteCheckFrequency) are global-only, and pointing those at
+            // --challenge would just hit requirePerChallenge's rejection.
+            logger.withCategory('settings').info(`'${key}' is a voting setting — applying it as the global default`);
+            if (settings.SETTINGS_SCHEMA[key].perChallenge) {
+                logger
+                    .withCategory('settings')
+                    .info(`Use --challenge <id> to override it for a single challenge instead`);
+            }
+            return setGlobalDefault(key, value);
+        }
+
         if (!settings.setSetting(key, parsedValue)) {
             logger.withCategory('settings').error(`Failed to save setting '${key}' - validation failed`);
             return false;
@@ -367,6 +400,8 @@ Per-challenge overrides:
   list-settings to read or write a single challenge's override. Without an
   override the challenge inherits the global default. Only settings that
   support per-challenge overrides accept the flag.
+  set-setting on a challenge setting WITHOUT --challenge sets the global
+  default instead, and says so — it no longer writes a key nothing reads.
   Examples:
     set-setting exposure 80 --challenge=12345
     get-setting exposure --challenge=12345
@@ -399,7 +434,11 @@ Common Settings:
   timezone             - Timezone for timestamps (default: "Europe/Riga")
 
 Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
-  boostTime            - Seconds before close to apply a timer boost (default: 3600 = 1h)
+  boostTime            - Seconds left on the BOOST'S OWN timer at which a timer
+                         boost is applied (default: 3600 = 1h)
+  keyUnlockedBoostTime - Seconds before close to apply a KEY-UNLOCKED boost, which
+                         has no timer of its own, so boostTime cannot describe it
+                         (default: 900 = 15 min; 0 = off)
   turboTime            - Seconds before close to apply turbo (default: 7200 = 2h)
   emergencyFill        - Seconds before close to fill empty slots as a last resort
                          (default: 300 = 5 min; 0 = off). NOTE: this used to be minutes.
@@ -439,8 +478,8 @@ autoFillIntervalMinutes — existing values are migrated automatically):
                          exists. Omit a count to never schedule that image; an
                          empty array [] means auto-fill never submits.
                          Default: [{"count":2,"seconds":1800},{"count":3,"seconds":1200},{"count":4,"seconds":600}]
-  Set it with set-global-default (validated; set-setting without --challenge
-  writes an unvalidated top-level key the scheduler never reads):
+  Set it with set-global-default (set-setting without --challenge now redirects
+  here rather than writing a key the scheduler never reads):
     set-global-default autoFillSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
   Per-challenge override (also validated):
     set-setting autoFillSchedule '[{"count":2,"seconds":172800}]' --challenge=12345

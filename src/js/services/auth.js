@@ -89,4 +89,22 @@ const clearAuthToken = async () => {
     return hadToken;
 };
 
-module.exports = { requireAuthToken, extractAuthResult, clearAuthToken };
+/**
+ * Apply the `stayLoggedIn` preference at shutdown: with it off, the token must not survive
+ * the process exiting.
+ *
+ * Lives here rather than in windows/lifecycle.js because it is not an Electron rule — it was
+ * only ever implemented there, so the CLI and Android kept a token on disk indefinitely even
+ * with the setting off, quietly contradicting what the setting promises. The Electron path
+ * keeps its own single-instance gate around this (a second instance quitting must not clear
+ * the running one's token); that gate is genuinely Electron-specific and stays there.
+ *
+ * @returns {Promise<boolean>} true when a token was actually cleared.
+ */
+const clearTokenUnlessStayingLoggedIn = async () => {
+    if (settings.getSetting('stayLoggedIn')) return false;
+    if (!settings.getSetting('token')) return false;
+    return clearAuthToken();
+};
+
+module.exports = { requireAuthToken, extractAuthResult, clearAuthToken, clearTokenUnlessStayingLoggedIn };

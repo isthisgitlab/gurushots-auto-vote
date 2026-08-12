@@ -238,3 +238,64 @@ describe('pickEntryAvoidingConflict helper (direct unit tests)', () => {
         expect(pickEntryAvoidingConflict([{ id: 'only', boosted: true }], 0, 'boosted')).toBeNull();
     });
 });
+
+/**
+ * Same-pass conflict reflection.
+ *
+ * The pickers read entry.turbo / entry.boosted, but nothing used to set those flags after a
+ * successful apply — reflectNewEntry only ever pushed new entries with both false. The
+ * challenge object is not re-fetched mid-pass, so with the default timer ordering (turbo
+ * 7200s sorts ahead of boost) turbo would take entry X and boost would then still see
+ * entries[X].turbo === false and pick the very same entry. GuruShots allows one boost and one
+ * turbo per challenge, but on different entries, so the second apply was wasted.
+ */
+describe('same-pass boost/turbo conflict reflection', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        apiClient.makePostRequest.mockResolvedValue({ success: true });
+    });
+
+    test('applyBoost marks the entry it chose, so a later turbo avoids it', async () => {
+        setBoostIndex(1);
+        const challenge = buildChallenge([{ id: 'e1' }, { id: 'e2' }]);
+
+        await applyBoost(challenge, 'tok');
+
+        const entries = challenge.member.ranking.entries;
+        expect(lastBoostedImageId()).toBe('e1');
+        expect(entries[0].boosted).toBe(true);
+        // The turbo picker asks for entry 1 too — it must now step off the boosted one.
+        expect(pickEntryAvoidingConflict(entries, 1, 'boosted').id).toBe('e2');
+    });
+
+    test('a failed boost does not mark the entry', async () => {
+        setBoostIndex(1);
+        apiClient.makePostRequest.mockResolvedValue(null);
+        const challenge = buildChallenge([{ id: 'e1' }, { id: 'e2' }]);
+
+        await applyBoost(challenge, 'tok');
+
+        expect(challenge.member.ranking.entries[0].boosted).toBeUndefined();
+    });
+
+    test('reflectEntryFlag marks a turboed entry so a later boost avoids it', () => {
+        const { reflectEntryFlag } = require('../../src/js/services/autoFill');
+        const challenge = buildChallenge([{ id: 'e1' }, { id: 'e2' }]);
+
+        reflectEntryFlag(challenge, 'e1', 'turbo');
+
+        const entries = challenge.member.ranking.entries;
+        expect(entries[0].turbo).toBe(true);
+        expect(pickEntryAvoidingConflict(entries, 1, 'turbo').id).toBe('e2');
+    });
+
+    test('reflectEntryFlag is a no-op for an unknown id or a missing entry list', () => {
+        const { reflectEntryFlag } = require('../../src/js/services/autoFill');
+        const challenge = buildChallenge([{ id: 'e1' }]);
+
+        expect(() => reflectEntryFlag(challenge, 'nope', 'turbo')).not.toThrow();
+        expect(challenge.member.ranking.entries[0].turbo).toBeUndefined();
+        expect(() => reflectEntryFlag({}, 'e1', 'turbo')).not.toThrow();
+        expect(() => reflectEntryFlag(challenge, null, 'turbo')).not.toThrow();
+    });
+});

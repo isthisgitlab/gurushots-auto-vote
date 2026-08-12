@@ -156,7 +156,7 @@ describe('challenges', () => {
 
             const result = await getActiveChallenges(mockToken);
 
-            expect(result).toEqual({ challenges: [] });
+            expect(result).toEqual({ challenges: [], fetchFailed: true });
             // The logger module handles the error message, not console.error
         });
 
@@ -203,7 +203,7 @@ describe('challenges', () => {
 
             const result = await getActiveChallenges(mockToken);
 
-            expect(result).toEqual({ challenges: [] });
+            expect(result).toEqual({ challenges: [], fetchFailed: true });
             // The logger module handles the error message, not console.error
         });
 
@@ -212,7 +212,7 @@ describe('challenges', () => {
 
             const result = await getActiveChallenges(mockToken);
 
-            expect(result).toEqual({ challenges: [] });
+            expect(result).toEqual({ challenges: [], fetchFailed: true });
             // The early return on a failed request must keep the pin/prune
             // logic from ever seeing the synthetic empty payload.
             expect(pinChallengeTitles).not.toHaveBeenCalled();
@@ -224,7 +224,7 @@ describe('challenges', () => {
 
             const result = await getActiveChallenges(mockToken);
 
-            expect(result).toEqual({ challenges: [] });
+            expect(result).toEqual({ challenges: [], fetchFailed: true });
             expect(logger.withCategory).toHaveBeenCalledWith('api');
             expect(logger.__mockEndOperationFn).toHaveBeenCalledWith(expect.any(String), null, 'API request failed');
         });

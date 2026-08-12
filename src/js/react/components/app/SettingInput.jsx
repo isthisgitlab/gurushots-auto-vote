@@ -547,19 +547,58 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
 
     // Handle number type
     if (config.type === 'number') {
+        const hasMin = typeof config.min === 'number';
+        const hasMax = typeof config.max === 'number';
+        // An emptied field must count as invalid in its own right. `Number('')` is 0, so for
+        // the settings whose min is 0 (exposureTarget, lastHourExposureTarget, and the two
+        // entry-slot indexes) a blank field otherwise looked in-range: no border, no message,
+        // and Save then wrote '' straight through to zod, which rejects it — producing the
+        // generic "check the highlighted values" banner with nothing highlighted, the exact
+        // failure this was meant to end.
+        const isBlank = normalizedValue === '' || normalizedValue === null || normalizedValue === undefined;
+        const numericValue = Number(normalizedValue);
+        const invalid =
+            isBlank ||
+            !Number.isFinite(numericValue) ||
+            (hasMin && numericValue < config.min) ||
+            (hasMax && numericValue > config.max);
+        const rangeMessage =
+            hasMin && hasMax
+                ? t('app.validationOutOfRange').replace('{min}', config.min).replace('{max}', config.max)
+                : hasMin
+                  ? t('app.validationAtLeast').replace('{min}', config.min)
+                  : t('app.validationInvalidValue');
+
         return (
-            <div className="flex items-center gap-2">
-                <input
-                    type="number"
-                    className="input input-bordered input-sm w-24"
-                    min={config.min}
-                    max={config.max}
-                    value={normalizedValue}
-                    onChange={(e) => onChange(settingKey, parseInt(e.target.value, 10) || 0)}
-                    disabled={disabled}
-                />
-                {config.unit && <span className="text-sm">{t(config.unit)}</span>}
-                {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
+            <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                    <input
+                        type="number"
+                        className={`input input-bordered input-sm w-24 ${invalid ? 'input-error' : ''}`}
+                        min={config.min}
+                        max={config.max}
+                        value={normalizedValue}
+                        onChange={(e) => {
+                            // Clearing the field used to write 0 via `parseInt(...) || 0`,
+                            // which zod then rejected for min-1 keys like exposure — the user
+                            // saw a save failure for a value they never typed. Keep an empty
+                            // field empty and let the range check below explain it.
+                            const raw = e.target.value;
+                            if (raw === '') {
+                                onChange(settingKey, '');
+                                return;
+                            }
+                            const parsed = parseInt(raw, 10);
+                            onChange(settingKey, Number.isNaN(parsed) ? '' : parsed);
+                        }}
+                        disabled={disabled}
+                    />
+                    {config.unit && <span className="text-sm">{t(config.unit)}</span>}
+                    {onReset && (
+                        <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />
+                    )}
+                </div>
+                {invalid && <span className="text-error text-xs">{rangeMessage}</span>}
             </div>
         );
     }

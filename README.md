@@ -251,7 +251,7 @@ Continuous mode rolls a random delay in `[checkFrequencyMin, checkFrequencyMax]`
 When `autoBoost` is on, the app applies an available boost to the entry at `boostImageIndex` (1 = first photo, `0` = last; it steps back one slot if that entry is already turboed):
 
 - **Timer-based boost** — applied once the boost has `boostTime` seconds or less left on its own timer.
-- **Key-unlocked boost** (no timer) — the boost timer is ignored; it's applied only in the final 15 minutes before the challenge closes.
+- **Key-unlocked boost** (no timer) — `boostTime` doesn't apply, because there is no timer to count down. It uses its own `keyUnlockedBoostTime` window (default 15 min) measured against the challenge's close time. Since a key-unlocked boost never expires, the default spends it as late as possible for maximum effect.
 
 ### Turbo (earn, then apply)
 
@@ -285,17 +285,17 @@ Settings come in two layers. **App preferences** are global to the app. **Challe
 
 ### App preferences
 
-| Setting                                   | Default       | Range / values  | Notes                                                                              |
-| ----------------------------------------- | ------------- | --------------- | ---------------------------------------------------------------------------------- |
-| `theme`                                   | `light`       | `light`, `dark` | UI theme.                                                                          |
-| `language`                                | `en`          | `en`, `lv`      | UI language (English / Latvian); switches live.                                    |
-| `timezone`                                | `Europe/Riga` | any IANA zone   | Timezone for displaying challenge times (`customTimezones` stores added zones).    |
-| `stayLoggedIn`                            | `false`       | bool            | Skip the login window on next launch if a token exists.                            |
-| `apiTimeout`                              | `30`          | 1–120 s         | Per-request API timeout.                                                           |
-| `checkFrequencyMin` / `checkFrequencyMax` | `3` / `3`     | 1–60 min        | Random delay between cycles, picked in `[min, max]`. Equal values = fixed cadence. |
-| `apiMaxRetries`                           | `3`           | 0–10            | Retries on transient failures (network/timeout/429/5xx). `0` disables.             |
-| `apiRetryBaseDelayMs`                     | `1000`        | 100–10000 ms    | Base delay for exponential backoff between retries.                                |
-| `windowBounds`                            | —             | —               | GUI window position/size (Electron); persisted automatically.                      |
+| Setting                                   | Default       | Range / values  | Notes                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------- | ------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `theme`                                   | `light`       | `light`, `dark` | UI theme.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `language`                                | `en`          | `en`, `lv`      | UI language (English / Latvian); switches live.                                                                                                                                                                                                                                                                                                                                           |
+| `timezone`                                | `Europe/Riga` | any IANA zone   | Timezone for displaying challenge times (`customTimezones` stores added zones).                                                                                                                                                                                                                                                                                                           |
+| `stayLoggedIn`                            | `false`       | bool            | Keep the saved token between runs. When off, the token is cleared when the app exits — GUI quit, or the CLI stopping on Ctrl+C **or `SIGTERM`** — so the next launch asks you to log in again. Note the `SIGTERM` case: a `gurucli start` run under systemd/Docker loses its login on every restart unless you turn this **on**. Not applied on Android, which has no reliable exit hook. |
+| `apiTimeout`                              | `30`          | 1–120 s         | Per-request API timeout.                                                                                                                                                                                                                                                                                                                                                                  |
+| `checkFrequencyMin` / `checkFrequencyMax` | `3` / `3`     | 1–60 min        | Random delay between cycles, picked in `[min, max]`. Equal values = fixed cadence.                                                                                                                                                                                                                                                                                                        |
+| `apiMaxRetries`                           | `3`           | 0–10            | Retries on transient failures (network/timeout/429/5xx). `0` disables.                                                                                                                                                                                                                                                                                                                    |
+| `apiRetryBaseDelayMs`                     | `1000`        | 100–10000 ms    | Base delay for exponential backoff between retries.                                                                                                                                                                                                                                                                                                                                       |
+| `windowBounds`                            | —             | —               | GUI window position/size (Electron); persisted automatically.                                                                                                                                                                                                                                                                                                                             |
 
 ### Challenge settings
 
@@ -313,23 +313,24 @@ All of these support per-challenge overrides except where noted.
 
 **Boost**
 
-| Setting           | Default       | Range / values | Description                                                                                 |
-| ----------------- | ------------- | -------------- | ------------------------------------------------------------------------------------------- |
-| `autoBoost`       | `true`        | bool           | Auto-apply boost near the deadline.                                                         |
-| `boostTime`       | `3600` s (1h) | ≥ 0            | Apply a timer-based boost when this much time (or less) remains. Entered as h+m in the GUI. |
-| `boostImageIndex` | `1`           | integer ≥ 0    | Entry slot to boost (1 = first, `0` = last). Steps back if that slot is already turboed.    |
-| `boostFillNew`    | `false`       | bool           | During auto-fill, submit a fresh photo and immediately boost that new entry.                |
+| Setting                | Default       | Range / values | Description                                                                                                                                                                                                      |
+| ---------------------- | ------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoBoost`            | `true`        | bool           | Auto-apply boost near the deadline.                                                                                                                                                                              |
+| `boostTime`            | `3600` s (1h) | ≥ 0            | Apply a timer-based boost when this much time (or less) remains **on the boost's own timer**. Entered as h+m in the GUI.                                                                                         |
+| `keyUnlockedBoostTime` | `900` s (15m) | ≥ 0            | Separate window for a **key-unlocked** boost, which has no timer of its own — measured against the challenge close time. `boostTime` does not apply to these. `0` = never auto-apply. Entered as h+m in the GUI. |
+| `boostImageIndex`      | `1`           | `0`–`4`        | Entry slot to boost (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back if that slot is already turboed.                                                                                    |
+| `boostFillNew`         | `false`       | bool           | During auto-fill, submit a fresh photo and immediately boost that new entry.                                                                                                                                     |
 
 **Turbo**
 
-| Setting                     | Default       | Range / values | Description                                                                              |
-| --------------------------- | ------------- | -------------- | ---------------------------------------------------------------------------------------- |
-| `useTurbo`                  | `false`       | bool           | Auto-apply a held turbo before the deadline.                                             |
-| `autoTurbo`                 | `true`        | bool           | Auto-play the mini-game to earn turbo when none is held.                                 |
-| `turboTime`                 | `7200` s (2h) | ≥ 0            | Apply turbo when this much time (or less) remains. Entered as h+m in the GUI.            |
-| `turboImageIndex`           | `1`           | integer ≥ 0    | Entry slot to turbo (1 = first, `0` = last). Steps back if that slot is already boosted. |
-| `turboApplyWhenBoostActive` | `false`       | bool           | Allow turbo to apply while a boost window is open.                                       |
-| `turboFillNew`              | `false`       | bool           | During auto-fill, submit a fresh photo and immediately turbo that new entry.             |
+| Setting                     | Default       | Range / values | Description                                                                                                                   |
+| --------------------------- | ------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `useTurbo`                  | `false`       | bool           | Auto-apply a held turbo before the deadline.                                                                                  |
+| `autoTurbo`                 | `true`        | bool           | Auto-play the mini-game to earn turbo when none is held.                                                                      |
+| `turboTime`                 | `7200` s (2h) | ≥ 0            | Apply turbo when this much time (or less) remains. Entered as h+m in the GUI.                                                 |
+| `turboImageIndex`           | `1`           | `0`–`4`        | Entry slot to turbo (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back if that slot is already boosted. |
+| `turboApplyWhenBoostActive` | `false`       | bool           | Allow turbo to apply while a boost window is open.                                                                            |
+| `turboFillNew`              | `false`       | bool           | During auto-fill, submit a fresh photo and immediately turbo that new entry.                                                  |
 
 **Last hour**
 

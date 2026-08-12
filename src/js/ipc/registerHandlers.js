@@ -16,10 +16,14 @@
 const logger = require('../logger');
 
 const isTrustedSender = (event) => {
-    const frame = event?.senderFrame;
-    // Direct invocation without an Electron event (tests, internal reuse).
-    if (!frame) return true;
     try {
+        // Read senderFrame inside the try: Electron's getter throws when the sending frame
+        // has already been disposed (renderer navigated or closed while the message was in
+        // flight). Outside the try that propagated as an uncaught exception in the main
+        // process — a crash rather than the refusal this function is supposed to fall back to.
+        const frame = event?.senderFrame;
+        // Direct invocation without an Electron event (tests, internal reuse).
+        if (!frame) return true;
         if (event.sender?.mainFrame && frame !== event.sender.mainFrame) return false;
         return typeof frame.url !== 'string' || frame.url.startsWith('file://');
     } catch {
@@ -44,4 +48,7 @@ const registerHandlers = (ipcMain, handlers) => {
     }
 };
 
-module.exports = { registerHandlers };
+// isTrustedSender is exported so the handful of channels registered with ipcMain.on
+// (which carries no return value, so it cannot go through registerHandlers) can apply the
+// same origin check instead of silently having none.
+module.exports = { registerHandlers, isTrustedSender };

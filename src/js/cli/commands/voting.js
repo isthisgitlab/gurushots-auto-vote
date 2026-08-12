@@ -15,6 +15,7 @@ const { formatDateTime } = require('../../dateFormat');
 const { formatDuration } = require('../../format/duration');
 const { openBoostWindows } = require('../../voting/boostWindow');
 const { findActiveChallenge } = require('../../services/findActiveChallenge');
+const { clearTokenUnlessStayingLoggedIn } = require('../../services/auth');
 
 // Reuse the GUI's single-challenge manual-vote handler (votes to 100%,
 // bypassing thresholds). Built lazily on first use so loading this module for
@@ -161,10 +162,24 @@ const startContinuousVoting = async () => {
         getActiveChallenges: () => getMiddleware().getActiveChallenges(),
     });
 
+    // Honour stayLoggedIn on the way out, the way the desktop app does. Settings writes are
+    // synchronous on the CLI, so the clear lands before exit; the await is there for the
+    // shared helper's flush, which no-ops here. A failure must not block the shutdown.
     const handleShutdown = () => {
         logger.withCategory('voting').info('🛑 Shutting down continuous voting...');
         scheduler.stop();
-        process.exit(0);
+        void clearTokenUnlessStayingLoggedIn()
+            .then((cleared) => {
+                if (cleared) {
+                    logger.withCategory('authentication').info('Cleared saved token (Stay Logged In is off)');
+                }
+            })
+            .catch((error) => {
+                logger.withCategory('authentication').error('Failed to clear token on shutdown', error);
+            })
+            .finally(() => {
+                process.exit(0);
+            });
     };
 
     process.on('SIGINT', handleShutdown);

@@ -130,7 +130,11 @@
             boostWindowOpen: 'Boost window open',
             jumpToChallenge: 'Jump to challenge',
             boostTime: 'Boost Time',
-            boostTimeDesc: 'Apply Boost when this much time remains before the challenge closes.',
+            boostTimeDesc:
+                'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time.',
+            keyUnlockedBoostTime: 'Key-Unlocked Boost Time',
+            keyUnlockedBoostTimeDesc:
+                'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these. Set to 0 to never auto-apply it.',
             autoBoost: 'Auto-Apply Boost',
             autoBoostDesc: 'Automatically apply Boost on this challenge as its Boost window is about to close.',
             turbo: 'Turbo',
@@ -174,6 +178,10 @@
             autoFillScheduleDominated: 'never applies (a later image already has an equal or longer time)',
             autoFillScheduleOutOfRange: 'time must be at most 30 days',
             settingsSaveError: 'Some settings could not be saved — check the highlighted values and try again.',
+            unitPercent: '%',
+            unitMinutes: 'min',
+            validationOutOfRange: 'Enter a value between {min} and {max}.',
+            validationAtLeast: 'Enter a value of {min} or more.',
             autoFillBadge: 'auto-fill',
             customBadge: 'custom',
             mustIncludeTags: 'Must Include Tags',
@@ -187,7 +195,7 @@
                 'Only matters when Must Include Tags is set. Because a photo must match every tag, this triggers more often when several tags are required. When on (default), if none of your photos match all those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a fully matching photo exists.',
             emergencyFill: 'Emergency Fill',
             emergencyFillDesc:
-                'Safety net that runs in the last minutes of a challenge when auto-fill would otherwise leave entry slots empty — either because auto-fill is off, or because your Must Include Tags match no photo and Fill Without Tag Match is off. When a challenge is within this much time of closing, it fills the remaining slots with your best available photos anyway, even if they do not match your tags. This overrides those settings on purpose, so the challenge does not end with unused slots. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this at or below the Last Minute Threshold (default 10) so the app is already checking frequently in the final minutes.',
+                'Safety net that runs in the last minutes of a challenge when auto-fill would otherwise leave entry slots empty — either because auto-fill is off, or because your Must Include Tags match no photo and Fill Without Tag Match is off. When a challenge is within this much time of closing, it fills the remaining slots with your best available photos anyway, even if they do not match your tags. This overrides those settings on purpose, so the challenge does not end with unused slots. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this window no longer than the Last Minute Threshold (default 10 minutes) so the app is already checking frequently for the whole of it.',
             tagsPlaceholder: 'e.g. sunset, beach, ocean',
             titleTagRules: 'Per-Title Tag Rules',
             titleTagRulesDesc:

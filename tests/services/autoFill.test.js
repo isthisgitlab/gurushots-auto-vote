@@ -2234,6 +2234,72 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         expect(challenge.member.ranking.entries.map((e) => e.id)).toEqual(['e1', 'server2', 'local-fill']);
     });
 
+    test('locally-raised boost/turbo flags survive the refresh', async () => {
+        // The refresh swaps `challenge.member` for the fresh payload wholesale. An entry that
+        // is also in the fresh list therefore comes back with the SERVER's flags — and the
+        // server has not registered an apply from seconds ago, so it reports turbo/boosted
+        // false. That silently undid reflectEntryFlag: under the default action order
+        // (turbo, then autoFill, then boost) a turbo applied earlier in the pass had its flag
+        // wiped here, and boost then picked the very entry turbo had just consumed.
+        const challenge = {
+            id: 'c1',
+            max_photo_submits: 4,
+            close_time: NOW + 600,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: {
+                    entries: [
+                        { id: 'e1', turbo: true, boosted: false },
+                        { id: 'e2', turbo: false, boosted: true },
+                        { id: 'e3' },
+                    ],
+                    exposure: { exposure_factor: 100 },
+                },
+            },
+        };
+        const deps = {
+            // The server still reports every entry as untouched.
+            getActiveChallenges: jest.fn().mockResolvedValue(
+                freshList('c1', [
+                    { id: 'e1', turbo: false, boosted: false },
+                    { id: 'e2', turbo: false, boosted: false },
+                    { id: 'e3', turbo: false, boosted: false },
+                ]),
+            ),
+            logger: makeLogger(),
+        };
+
+        const result = await refreshChallengeState(challenge, 'tok', deps, 'autoFill');
+
+        expect(result).toBe('refreshed');
+        const byId = Object.fromEntries(challenge.member.ranking.entries.map((e) => [e.id, e]));
+        expect(byId.e1.turbo).toBe(true);
+        expect(byId.e2.boosted).toBe(true);
+        // Flags are only ever raised, never cleared — an untouched entry stays untouched.
+        expect(byId.e3.turbo).toBe(false);
+        expect(byId.e3.boosted).toBe(false);
+    });
+
+    test('a server-reported flag is kept even when the local snapshot lacked it', async () => {
+        const challenge = {
+            id: 'c1',
+            max_photo_submits: 4,
+            close_time: NOW + 600,
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                ranking: { entries: [{ id: 'e1' }], exposure: { exposure_factor: 100 } },
+            },
+        };
+        const deps = {
+            getActiveChallenges: jest.fn().mockResolvedValue(freshList('c1', [{ id: 'e1', boosted: true }])),
+            logger: makeLogger(),
+        };
+
+        await refreshChallengeState(challenge, 'tok', deps, 'autoFill');
+
+        expect(challenge.member.ranking.entries[0].boosted).toBe(true);
+    });
+
     test('helper without the dep wired → unavailable (legacy callers unchanged)', async () => {
         const challenge = makeChallenge();
         const result = await refreshChallengeState(challenge, 'tok', { logger: makeLogger() }, 'autoFill');

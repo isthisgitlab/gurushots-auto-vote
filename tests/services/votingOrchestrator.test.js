@@ -744,3 +744,83 @@ describe('voteOnNewEntry — gate, arm, record', () => {
         expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
     });
 });
+
+describe('failed challenge fetch', () => {
+    // makePostRequest resolves null once retries are exhausted (the GuruShots API returning
+    // 5xx for a while is the realistic trigger). challenges.js turns that into an empty list,
+    // which used to be indistinguishable from "you have no active challenges" — so an outage
+    // closed the pass as a success and the scheduler re-armed as if everything were healthy.
+    test('reports a failure instead of a successful empty pass', async () => {
+        const api = makeApi([]);
+        api.getActiveChallenges = jest.fn(async () => ({ challenges: [], fetchFailed: true }));
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/could not load active challenges/i);
+    });
+
+    test('a genuinely empty account still reports success', async () => {
+        const api = makeApi([]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result).toEqual({ success: true, message: 'No active challenges found', challenges: [] });
+    });
+});
+
+describe('per-challenge error isolation', () => {
+    // A throw inside the per-challenge body used to escape into runVotingPass's single outer
+    // catch, which abandoned every remaining challenge in the pass.
+    test('a challenge that throws is skipped, and the rest of the pass still runs', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        votingLogic.evaluateVotingDecision
+            .mockImplementationOnce(() => {
+                throw new Error('malformed challenge payload');
+            })
+            .mockReturnValue({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 });
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(2);
+        expect(result.success).toBe(true);
+    });
+
+    // The cancellation checkpoints inside that body use `return`, which a try/catch does not
+    // intercept — but a careless `catch` around them would still have to not swallow it.
+    test('cancellation still aborts the whole pass rather than being caught per challenge', async () => {
+        const list = [makeChallenge({ id: 1 }), makeChallenge({ id: 2 })];
+        const api = makeApi(list);
+        cancellation.isCancelled.mockReturnValue(true);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result).toEqual({
+            success: false,
+            message: 'Voting cancelled by user',
+            challenges: list,
+        });
+        expect(votingLogic.evaluateVotingDecision).not.toHaveBeenCalled();
+    });
+});
+
+describe('per-challenge clock', () => {
+    // `now` used to be captured once, before the loop, and reused for every challenge's
+    // deadline actions and voting decision. A pass can run for minutes (2-5s inter-challenge
+    // delay, retries, paginated library walks), so every challenge after the first was judged
+    // against a clock stuck in the past — missing windows that opened mid-pass.
+    test('re-reads the clock for each challenge instead of freezing it for the pass', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        const base = Date.now();
+        let tick = 0;
+        const spy = jest.spyOn(Date, 'now').mockImplementation(() => base + tick++ * 60_000);
+
+        await runVotingPass('tok', null, deps(api));
+
+        const observed = votingLogic.evaluateVotingDecision.mock.calls.map((call) => call[1]);
+        expect(observed).toHaveLength(2);
+        expect(observed[1]).toBeGreaterThan(observed[0]);
+
+        spy.mockRestore();
+    });
+});

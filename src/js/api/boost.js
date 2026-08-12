@@ -7,8 +7,7 @@
 const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
 const { ENDPOINTS } = require('./constants');
 const logger = require('../logger');
-const settings = require('../settings');
-const { pickEntryAvoidingConflict } = require('../services/VotingLogic');
+const { pickBoostEntry } = require('../services/VotingLogic');
 
 /**
  * POST the GuruShots boost-photo endpoint. Concentrates the form-encoded
@@ -34,16 +33,6 @@ const _postBoost = async (challengeId, imageId, token) => {
 };
 
 /**
- * Pick the entry to boost based on `boostImageIndex` (1-indexed, 0 = last),
- * avoiding any entry that already has turbo applied. Symmetric to the
- * shouldApplyTurbo picker which avoids boosted entries.
- */
-const _pickBoostEntry = (entries, challengeId) => {
-    const requestedIndex = settings.getEffectiveSetting('boostImageIndex', challengeId);
-    return pickEntryAvoidingConflict(entries, requestedIndex, 'turbo');
-};
-
-/**
  * Applies a boost to a photo in a challenge
  *
  * Boosts increase the visibility of your photo in a challenge.
@@ -62,7 +51,7 @@ const applyBoost = async (challenge, token) => {
         logger.withCategory('voting').error('No entries available for boosting', { challengeId });
         return null;
     }
-    const picked = _pickBoostEntry(entries, challengeId);
+    const picked = pickBoostEntry(challenge, challengeId);
     if (!picked) {
         logger
             .withCategory('voting')
@@ -87,6 +76,14 @@ const applyBoost = async (challenge, token) => {
         logger.withCategory('boost').endOperation(operationId, null, 'Boost application failed');
         return null;
     }
+
+    // Raise the conflict flag on the local challenge object now that the boost landed.
+    // `picked` is a reference into challenge.member.ranking.entries, so a turbo running
+    // later in this same pass sees the entry as taken instead of picking it again — boost
+    // and turbo may both be spent on a challenge, but never on the same entry. Done here
+    // rather than in the caller because this is the only place that knows which entry
+    // `boostImageIndex` actually resolved to; the response carries no entry id.
+    picked.boosted = true;
 
     logger.withCategory('boost').endOperation(operationId, `boost applied to image ${boostImageId}`);
     return response;
