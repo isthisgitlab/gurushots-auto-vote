@@ -260,7 +260,10 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
 
     const isWithinLastMinute = isWithinLastMinuteThreshold(challenge.close_time, now, challengeId);
     const withinLastHour = isWithinLastHour(challenge.close_time, now);
-    const currentExposure = challenge.member.ranking.exposure.exposure_factor;
+    // Optional-chained for consistency with evaluateManualVotingToHundred and the
+    // boost/turbo predicates, which all guard this same tree. An unguarded read here threw
+    // out of the per-challenge loop and abandoned every remaining challenge in the pass.
+    const currentExposure = challenge?.member?.ranking?.exposure?.exposure_factor ?? 0;
 
     /** @param {string} skipReason @returns {VotingRuleResult} */
     const blocked = (skipReason) => ({

@@ -320,6 +320,28 @@ const reflectNewEntry = (challenge, imageId) => {
 };
 
 /**
+ * Mark an entry as boosted/turboed on the local challenge object after the apply
+ * succeeded, so the *other* action running later in the same pass sees the conflict.
+ *
+ * Without this, `pickEntryAvoidingConflict` reads flags that are still whatever the
+ * pass-start snapshot carried: turbo would apply to entry X, then boost — which runs later
+ * under the default timer ordering — would still see `entries[X].turbo === false` and pick
+ * the same entry. GuruShots allows one boost and one turbo per challenge but on *different*
+ * entries, so the second action was silently wasted.
+ *
+ * @param {any} challenge
+ * @param {string|number} imageId - entry the action was applied to
+ * @param {'turbo'|'boosted'} field - conflict flag to raise
+ */
+const reflectEntryFlag = (challenge, imageId, field) => {
+    const entries = challenge?.member?.ranking?.entries;
+    if (!Array.isArray(entries) || !imageId) return;
+    const target = String(imageId);
+    const entry = entries.find((candidate) => String(candidate?.id) === target);
+    if (entry) entry[field] = true;
+};
+
+/**
  * Re-fetch live challenge state right before a submit so an entry added
  * outside this pass (e.g. a manual submission made while autorun was working
  * through earlier challenges) is seen before we consume a slot. The
@@ -1204,6 +1226,7 @@ module.exports = {
     fillChallengeNow,
     submitNewEntryForAction,
     reflectNewEntry,
+    reflectEntryFlag,
     resolveScheduleTarget,
     getNextScheduleThresholdSec,
     // exported for tests

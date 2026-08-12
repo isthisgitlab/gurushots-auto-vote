@@ -745,6 +745,41 @@ describe('voteOnNewEntry — gate, arm, record', () => {
     });
 });
 
+describe('per-challenge error isolation', () => {
+    // A throw inside the per-challenge body used to escape into runVotingPass's single outer
+    // catch, which abandoned every remaining challenge in the pass.
+    test('a challenge that throws is skipped, and the rest of the pass still runs', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        votingLogic.evaluateVotingDecision
+            .mockImplementationOnce(() => {
+                throw new Error('malformed challenge payload');
+            })
+            .mockReturnValue({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 });
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(votingLogic.evaluateVotingDecision).toHaveBeenCalledTimes(2);
+        expect(result.success).toBe(true);
+    });
+
+    // The cancellation checkpoints inside that body use `return`, which a try/catch does not
+    // intercept — but a careless `catch` around them would still have to not swallow it.
+    test('cancellation still aborts the whole pass rather than being caught per challenge', async () => {
+        const list = [makeChallenge({ id: 1 }), makeChallenge({ id: 2 })];
+        const api = makeApi(list);
+        cancellation.isCancelled.mockReturnValue(true);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result).toEqual({
+            success: false,
+            message: 'Voting cancelled by user',
+            challenges: list,
+        });
+        expect(votingLogic.evaluateVotingDecision).not.toHaveBeenCalled();
+    });
+});
+
 describe('per-challenge clock', () => {
     // `now` used to be captured once, before the loop, and reused for every challenge's
     // deadline actions and voting decision. A pass can run for minutes (2-5s inter-challenge
