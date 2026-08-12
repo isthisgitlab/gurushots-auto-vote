@@ -547,19 +547,48 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
 
     // Handle number type
     if (config.type === 'number') {
+        const hasMin = typeof config.min === 'number';
+        const hasMax = typeof config.max === 'number';
+        const numericValue = Number(normalizedValue);
+        // Flag the field itself instead of relying on the generic save banner, which
+        // promises "check the highlighted values" but had nothing to highlight here.
+        const outOfRange =
+            Number.isFinite(numericValue) &&
+            ((hasMin && numericValue < config.min) || (hasMax && numericValue > config.max));
+        const rangeMessage = hasMax
+            ? t('app.validationOutOfRange').replace('{min}', config.min).replace('{max}', config.max)
+            : t('app.validationAtLeast').replace('{min}', config.min);
+
         return (
-            <div className="flex items-center gap-2">
-                <input
-                    type="number"
-                    className="input input-bordered input-sm w-24"
-                    min={config.min}
-                    max={config.max}
-                    value={normalizedValue}
-                    onChange={(e) => onChange(settingKey, parseInt(e.target.value, 10) || 0)}
-                    disabled={disabled}
-                />
-                {config.unit && <span className="text-sm">{t(config.unit)}</span>}
-                {onReset && <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />}
+            <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                    <input
+                        type="number"
+                        className={`input input-bordered input-sm w-24 ${outOfRange ? 'input-error' : ''}`}
+                        min={config.min}
+                        max={config.max}
+                        value={normalizedValue}
+                        onChange={(e) => {
+                            // Clearing the field used to write 0 via `parseInt(...) || 0`,
+                            // which zod then rejected for min-1 keys like exposure — the user
+                            // saw a save failure for a value they never typed. Keep an empty
+                            // field empty and let the range check below explain it.
+                            const raw = e.target.value;
+                            if (raw === '') {
+                                onChange(settingKey, '');
+                                return;
+                            }
+                            const parsed = parseInt(raw, 10);
+                            onChange(settingKey, Number.isNaN(parsed) ? '' : parsed);
+                        }}
+                        disabled={disabled}
+                    />
+                    {config.unit && <span className="text-sm">{t(config.unit)}</span>}
+                    {onReset && (
+                        <ResetButton title={t('app.resetToDefaultNotSaved')} onClick={() => onReset(settingKey)} />
+                    )}
+                </div>
+                {outOfRange && hasMin && <span className="text-error text-xs">{rangeMessage}</span>}
             </div>
         );
     }

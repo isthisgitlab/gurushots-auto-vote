@@ -34,6 +34,11 @@ const { MAX_SCHEDULED_FILL_ENTRIES } = require('./limits');
  * @property {string} [group]
  * @property {string} [label]
  * @property {string} [description]
+ * @property {number} [min] - Advertised lower bound, mirroring `validation`. Forwarded to the
+ *   renderer by the schema IPC projection and bound to the number input.
+ * @property {number} [max] - Advertised upper bound; omitted where the value is clamped at use
+ *   time instead (the entry-slot indexes).
+ * @property {string} [unit] - Translation key for the suffix shown beside a number input.
  */
 
 /**
@@ -253,11 +258,19 @@ const sanitizeBeforeEndList = (value) => {
 /** @type {Record<string, SettingsSchemaEntry>} */
 const SETTINGS_SCHEMA = {
     // --- General ---
+    // NOTE on min/max/unit: the IPC schema projection and SettingInput have always
+    // forwarded these three fields, but no entry ever defined them — so every number input
+    // rendered unbounded and unlabelled, and the only feedback for an out-of-range value was
+    // a generic "could not be saved" banner. They mirror the zod validator directly; keep the
+    // two in step when either changes.
     exposure: {
         type: 'number',
         default: 100,
         perChallenge: true,
         validation: percentage,
+        min: 1,
+        max: 100,
+        unit: 'app.unitPercent',
         validationOrder: 1, // Validate first (no dependencies)
         group: 'general',
         label: 'app.exposure',
@@ -270,6 +283,9 @@ const SETTINGS_SCHEMA = {
         default: 0,
         perChallenge: true,
         validation: percentageOrZero,
+        min: 0,
+        max: 100,
+        unit: 'app.unitPercent',
         contextValidation: (value, allSettings) => {
             if (value === 0) return true; // sentinel — always ok
             return value >= effectiveExposureOf(allSettings);
@@ -355,6 +371,9 @@ const SETTINGS_SCHEMA = {
         default: 1,
         perChallenge: true,
         validation: nonNegInt,
+        // No max: any slot number is accepted and resolveEntryIndex clamps to the entry
+        // count at pick time, since the challenge's entry count is not known here.
+        min: 0,
         validationOrder: 1,
         group: 'boost',
         label: 'app.boostImageIndex',
@@ -407,6 +426,8 @@ const SETTINGS_SCHEMA = {
         default: 1,
         perChallenge: true,
         validation: nonNegInt,
+        // See boostImageIndex — clamped at pick time, so no max here.
+        min: 0,
         validationOrder: 1,
         group: 'turbo',
         label: 'app.turboImageIndex',
@@ -449,6 +470,9 @@ const SETTINGS_SCHEMA = {
         default: 100,
         perChallenge: true,
         validation: percentage,
+        min: 1,
+        max: 100,
+        unit: 'app.unitPercent',
         // If exposure is not set or invalid, effectiveExposureOf falls back to
         // the exposure default for comparison.
         contextValidation: (value, allSettings) => value <= effectiveExposureOf(allSettings),
@@ -467,6 +491,9 @@ const SETTINGS_SCHEMA = {
         default: 0,
         perChallenge: true,
         validation: percentageOrZero,
+        min: 0,
+        max: 100,
+        unit: 'app.unitPercent',
         contextValidation: (value, allSettings) => {
             if (value === 0) return true;
             const triggerValue = allSettings.lastHourExposure;
@@ -507,6 +534,9 @@ const SETTINGS_SCHEMA = {
         default: 10,
         perChallenge: true,
         validation: minute1to59,
+        min: 1,
+        max: 59,
+        unit: 'app.unitMinutes',
         validationOrder: 1, // Validate first (no dependencies)
         group: 'lastMinute',
         label: 'app.lastMinuteThreshold',
@@ -517,6 +547,9 @@ const SETTINGS_SCHEMA = {
         default: 1,
         perChallenge: false,
         validation: minute1to59,
+        min: 1,
+        max: 59,
+        unit: 'app.unitMinutes',
         validationOrder: 1, // Validate first (no dependencies)
         group: 'lastMinute',
         label: 'app.lastMinuteCheckFrequency',
@@ -567,6 +600,12 @@ const SETTINGS_SCHEMA = {
         default: 60,
         perChallenge: true,
         validation: windowMinutes,
+        // 5 is the real floor: it is what saving enforces and what the CLI help documents.
+        // getScheduledFillState still honours a smaller hand-edited value, which stays an
+        // advanced escape hatch rather than something the UI will produce.
+        min: 5,
+        max: 720,
+        unit: 'app.unitMinutes',
         validationOrder: 1,
         group: 'scheduledFill',
         label: 'app.scheduledFillWindowMinutes',
