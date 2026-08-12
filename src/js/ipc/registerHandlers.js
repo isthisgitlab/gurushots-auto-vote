@@ -44,4 +44,7 @@ const registerHandlers = (ipcMain, handlers) => {
     }
 };
 
-module.exports = { registerHandlers };
+// isTrustedSender is exported so the handful of channels registered with ipcMain.on
+// (which carries no return value, so it cannot go through registerHandlers) can apply the
+// same origin check instead of silently having none.
+module.exports = { registerHandlers, isTrustedSender };
