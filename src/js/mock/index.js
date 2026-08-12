@@ -176,8 +176,11 @@ const mockApiClient = {
                     .withCategory('api')
                     .debug(`Token starts with mock_: ${token ? token.startsWith('mock_') : false}`, null);
             },
-            // Real getActiveChallenges resolves { challenges: [] } on failure
-            onNoToken: () => ({ challenges: [] }),
+            // Real getActiveChallenges resolves a flagged empty list on failure, and a
+            // missing token is a failure to fetch — not an account with nothing active.
+            // Mirroring the flag keeps the mock strategy on the same contract, so the
+            // shared voting pass reports an outage identically on both surfaces.
+            onNoToken: () => ({ challenges: [], fetchFailed: true }),
         },
         async () => {
             // Use cached challenges for session stability, generate only once per session

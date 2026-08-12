@@ -745,6 +745,30 @@ describe('voteOnNewEntry — gate, arm, record', () => {
     });
 });
 
+describe('failed challenge fetch', () => {
+    // makePostRequest resolves null once retries are exhausted (the GuruShots API returning
+    // 5xx for a while is the realistic trigger). challenges.js turns that into an empty list,
+    // which used to be indistinguishable from "you have no active challenges" — so an outage
+    // closed the pass as a success and the scheduler re-armed as if everything were healthy.
+    test('reports a failure instead of a successful empty pass', async () => {
+        const api = makeApi([]);
+        api.getActiveChallenges = jest.fn(async () => ({ challenges: [], fetchFailed: true }));
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/could not load active challenges/i);
+    });
+
+    test('a genuinely empty account still reports success', async () => {
+        const api = makeApi([]);
+
+        const result = await runVotingPass('tok', null, deps(api));
+
+        expect(result).toEqual({ success: true, message: 'No active challenges found', challenges: [] });
+    });
+});
+
 describe('per-challenge error isolation', () => {
     // A throw inside the per-challenge body used to escape into runVotingPass's single outer
     // catch, which abandoned every remaining challenge in the pass.

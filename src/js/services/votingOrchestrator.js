@@ -307,7 +307,18 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
     try {
         // Get all active challenges
         logger.withCategory('challenges').info('🔄 Loading active challenges', null);
-        const { challenges: allChallenges } = await api.getActiveChallenges(token);
+        const { challenges: allChallenges, fetchFailed } = await api.getActiveChallenges(token);
+
+        // A failed fetch is not an empty account. makePostRequest resolves null once retries
+        // are exhausted, which used to arrive here as an empty list and be reported as a
+        // successful pass with "No active challenges found" — so an outage looked identical
+        // to having nothing to vote on, and the scheduler re-armed as if all were well.
+        if (fetchFailed) {
+            const msg = 'Could not load active challenges — the API request failed';
+            logger.withCategory('challenges').error(msg, null);
+            logger.withCategory('voting').endOperation('voting-process', null, msg);
+            return { success: false, error: msg, challenges: allChallenges };
+        }
 
         logger.withCategory('challenges').info(`📋 Found ${allChallenges.length} active challenges`, null);
 

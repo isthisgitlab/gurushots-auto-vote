@@ -301,10 +301,14 @@ describe('mock/index', () => {
             });
 
             test('should resolve an empty challenge list for missing token (real-API parity)', async () => {
-                // The real getActiveChallenges never rejects — it resolves
-                // { challenges: [] } on failure. The mock must match so
-                // callers behave identically in both modes.
-                await expect(mockIndex.mockApiClient.getActiveChallenges(null)).resolves.toEqual({ challenges: [] });
+                // The real getActiveChallenges never rejects — it resolves a flagged empty
+                // list on failure, so callers can tell an outage apart from an account with
+                // nothing active. The mock must match so callers behave identically in both
+                // modes.
+                await expect(mockIndex.mockApiClient.getActiveChallenges(null)).resolves.toEqual({
+                    challenges: [],
+                    fetchFailed: true,
+                });
 
                 expect(logger.__mockErrorFn).toHaveBeenCalledWith('No token provided, returning empty result', null);
             });
@@ -494,12 +498,14 @@ describe('mock/index', () => {
                 });
             });
 
-            test('should complete an empty pass for missing token (real-API parity)', async () => {
-                // Real fetchChallengesAndVote has no token guard: the pass
-                // runs, finds no challenges, and completes — never rejects.
+            test('should report a failed pass for missing token (real-API parity)', async () => {
+                // Real fetchChallengesAndVote has no token guard: the pass runs and never
+                // rejects. It no longer reports success, though — a fetch that could not
+                // produce a list is a failure, not an account with nothing active, and
+                // claiming success there is what made a dead API look healthy.
                 await expect(mockIndex.mockApiClient.fetchChallengesAndVote(null)).resolves.toEqual({
-                    success: true,
-                    message: 'No active challenges found',
+                    success: false,
+                    error: expect.stringMatching(/could not load active challenges/i),
                     challenges: [],
                 });
             });

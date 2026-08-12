@@ -39,9 +39,18 @@ const challengeArg = {
 };
 
 describe('no-token failure contract: neither surface rejects', () => {
-    test('getActiveChallenges resolves { challenges: [] } on both surfaces', async () => {
-        await expect(realChallenges.getActiveChallenges(null)).resolves.toEqual({ challenges: [] });
-        await expect(mockApiClient.getActiveChallenges(null)).resolves.toEqual({ challenges: [] });
+    test('getActiveChallenges resolves a flagged empty list on both surfaces', async () => {
+        // The flag distinguishes "the fetch failed" from "you have no active challenges", so
+        // an outage is not reported as a healthy empty pass. Both surfaces must carry it or
+        // the shared voting pass would behave differently in mock mode.
+        await expect(realChallenges.getActiveChallenges(null)).resolves.toEqual({
+            challenges: [],
+            fetchFailed: true,
+        });
+        await expect(mockApiClient.getActiveChallenges(null)).resolves.toEqual({
+            challenges: [],
+            fetchFailed: true,
+        });
     });
 
     test('getVoteImages resolves null on both surfaces', async () => {
