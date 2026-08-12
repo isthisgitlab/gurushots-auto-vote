@@ -77,3 +77,42 @@ describe('clearAuthToken', () => {
         expect(settings.__state.cached.token).toBe('');
     });
 });
+
+/**
+ * stayLoggedIn used to be honoured only by the Electron quit path, so a CLI or Android user
+ * who turned it off still kept a token on disk indefinitely — the opposite of what the
+ * setting promises. The rule now lives with the rest of the auth core so every shell can
+ * apply it; the Electron single-instance gate stays in windows/lifecycle.js because that part
+ * really is Electron-specific.
+ */
+describe('clearTokenUnlessStayingLoggedIn', () => {
+    const { clearTokenUnlessStayingLoggedIn } = require('../../src/js/services/auth');
+
+    beforeEach(() => {
+        settings.__state.cached = { token: 'old-token', stayLoggedIn: false };
+        settings.__state.persisted = { token: 'old-token' };
+        settings.flushPendingWrites = jest.fn(async () => {
+            settings.__state.persisted = { ...settings.__state.cached };
+        });
+    });
+
+    it('clears the token when stayLoggedIn is off', async () => {
+        await expect(clearTokenUnlessStayingLoggedIn()).resolves.toBe(true);
+        expect(settings.__state.persisted.token).toBe('');
+    });
+
+    it('keeps the token when stayLoggedIn is on', async () => {
+        settings.__state.cached.stayLoggedIn = true;
+
+        await expect(clearTokenUnlessStayingLoggedIn()).resolves.toBe(false);
+        expect(settings.__state.cached.token).toBe('old-token');
+        expect(settings.setSetting).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when there is no token to clear', async () => {
+        settings.__state.cached.token = '';
+
+        await expect(clearTokenUnlessStayingLoggedIn()).resolves.toBe(false);
+        expect(settings.setSetting).not.toHaveBeenCalled();
+    });
+});

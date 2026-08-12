@@ -285,17 +285,17 @@ Settings come in two layers. **App preferences** are global to the app. **Challe
 
 ### App preferences
 
-| Setting                                   | Default       | Range / values  | Notes                                                                              |
-| ----------------------------------------- | ------------- | --------------- | ---------------------------------------------------------------------------------- |
-| `theme`                                   | `light`       | `light`, `dark` | UI theme.                                                                          |
-| `language`                                | `en`          | `en`, `lv`      | UI language (English / Latvian); switches live.                                    |
-| `timezone`                                | `Europe/Riga` | any IANA zone   | Timezone for displaying challenge times (`customTimezones` stores added zones).    |
-| `stayLoggedIn`                            | `false`       | bool            | Skip the login window on next launch if a token exists.                            |
-| `apiTimeout`                              | `30`          | 1–120 s         | Per-request API timeout.                                                           |
-| `checkFrequencyMin` / `checkFrequencyMax` | `3` / `3`     | 1–60 min        | Random delay between cycles, picked in `[min, max]`. Equal values = fixed cadence. |
-| `apiMaxRetries`                           | `3`           | 0–10            | Retries on transient failures (network/timeout/429/5xx). `0` disables.             |
-| `apiRetryBaseDelayMs`                     | `1000`        | 100–10000 ms    | Base delay for exponential backoff between retries.                                |
-| `windowBounds`                            | —             | —               | GUI window position/size (Electron); persisted automatically.                      |
+| Setting                                   | Default       | Range / values  | Notes                                                                                                                                         |
+| ----------------------------------------- | ------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `theme`                                   | `light`       | `light`, `dark` | UI theme.                                                                                                                                     |
+| `language`                                | `en`          | `en`, `lv`      | UI language (English / Latvian); switches live.                                                                                               |
+| `timezone`                                | `Europe/Riga` | any IANA zone   | Timezone for displaying challenge times (`customTimezones` stores added zones).                                                               |
+| `stayLoggedIn`                            | `false`       | bool            | Keep the saved token between runs. When off, the token is cleared on exit (GUI quit, CLI Ctrl+C) so the next launch asks you to log in again. |
+| `apiTimeout`                              | `30`          | 1–120 s         | Per-request API timeout.                                                                                                                      |
+| `checkFrequencyMin` / `checkFrequencyMax` | `3` / `3`     | 1–60 min        | Random delay between cycles, picked in `[min, max]`. Equal values = fixed cadence.                                                            |
+| `apiMaxRetries`                           | `3`           | 0–10            | Retries on transient failures (network/timeout/429/5xx). `0` disables.                                                                        |
+| `apiRetryBaseDelayMs`                     | `1000`        | 100–10000 ms    | Base delay for exponential backoff between retries.                                                                                           |
+| `windowBounds`                            | —             | —               | GUI window position/size (Electron); persisted automatically.                                                                                 |
 
 ### Challenge settings
 
