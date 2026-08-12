@@ -57,10 +57,28 @@ describe('CLI settings commands — per-challenge support', () => {
         expect(settings.setSetting).not.toHaveBeenCalled();
     });
 
-    test('setSetting without a challengeId uses the global facade', () => {
+    test('setSetting on a schema key without a challengeId sets the global default', () => {
+        // It used to write an unvalidated top-level key that nothing reads, so the command
+        // reported success and changed nothing at all. The global default is what was meant.
+        settings.setGlobalDefault.mockReturnValue(true);
+        settings.getGlobalDefault.mockReturnValue(80);
+
         setSetting('exposure', '80');
-        expect(settings.setSetting).toHaveBeenCalledWith('exposure', 80);
+
+        expect(settings.setGlobalDefault).toHaveBeenCalledWith('exposure', 80);
+        expect(settings.setSetting).not.toHaveBeenCalled();
         expect(settings.setChallengeOverride).not.toHaveBeenCalled();
+    });
+
+    test('setSetting on an app-level key still writes it directly', () => {
+        // apiTimeout is deliberately absent from the schema mocked in beforeEach — app-level
+        // keys live outside SETTINGS_SCHEMA and must not be redirected to a global default.
+        settings.setSetting.mockReturnValue(true);
+
+        setSetting('apiTimeout', '45');
+
+        expect(settings.setSetting).toHaveBeenCalledWith('apiTimeout', 45);
+        expect(settings.setGlobalDefault).not.toHaveBeenCalled();
     });
 
     test('getSetting with a challengeId reads the effective value for that challenge', () => {

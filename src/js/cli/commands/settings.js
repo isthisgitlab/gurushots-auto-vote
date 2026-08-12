@@ -99,6 +99,16 @@ const setSetting = (key, value, challengeId = null) => {
                 .error(`Failed to set ${key} for challenge ${challengeId} — validation failed`);
             return false;
         }
+        // A schema key with no --challenge used to be written as an unvalidated top-level
+        // key that nothing ever reads — the command reported success and changed nothing.
+        // Setting the global default is what the user meant; say so rather than doing it
+        // silently, so a script author can see the redirect in the output.
+        if (settings.SETTINGS_SCHEMA?.[key]) {
+            logger.withCategory('settings').info(`'${key}' is a challenge setting — applying it as the global default`);
+            logger.withCategory('settings').info(`Use --challenge <id> to override it for a single challenge instead`);
+            return setGlobalDefault(key, value);
+        }
+
         if (!settings.setSetting(key, parsedValue)) {
             logger.withCategory('settings').error(`Failed to save setting '${key}' - validation failed`);
             return false;
@@ -383,6 +393,8 @@ Per-challenge overrides:
   list-settings to read or write a single challenge's override. Without an
   override the challenge inherits the global default. Only settings that
   support per-challenge overrides accept the flag.
+  set-setting on a challenge setting WITHOUT --challenge sets the global
+  default instead, and says so — it no longer writes a key nothing reads.
   Examples:
     set-setting exposure 80 --challenge=12345
     get-setting exposure --challenge=12345
@@ -455,8 +467,8 @@ autoFillIntervalMinutes — existing values are migrated automatically):
                          exists. Omit a count to never schedule that image; an
                          empty array [] means auto-fill never submits.
                          Default: [{"count":2,"seconds":1800},{"count":3,"seconds":1200},{"count":4,"seconds":600}]
-  Set it with set-global-default (validated; set-setting without --challenge
-  writes an unvalidated top-level key the scheduler never reads):
+  Set it with set-global-default (set-setting without --challenge now redirects
+  here rather than writing a key the scheduler never reads):
     set-global-default autoFillSchedule '[{"count":2,"seconds":172800},{"count":3,"seconds":10800},{"count":4,"seconds":900}]'
   Per-challenge override (also validated):
     set-setting autoFillSchedule '[{"count":2,"seconds":172800}]' --challenge=12345
