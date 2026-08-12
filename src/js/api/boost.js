@@ -80,9 +80,10 @@ const applyBoost = async (challenge, token) => {
     // Raise the conflict flag on the local challenge object now that the boost landed.
     // `picked` is a reference into challenge.member.ranking.entries, so a turbo running
     // later in this same pass sees the entry as taken instead of picking it again — boost
-    // and turbo may both be spent on a challenge, but never on the same entry. Done here
-    // rather than in the caller because this is the only place that knows which entry
-    // `boostImageIndex` actually resolved to; the response carries no entry id.
+    // and turbo may both be spent on a challenge, but never on the same entry. Set here, at
+    // the point the apply is known to have succeeded, rather than in the caller: the response
+    // carries no entry id, and the caller would otherwise have to re-run the pick and hope it
+    // resolved the same way.
     picked.boosted = true;
 
     logger.withCategory('boost').endOperation(operationId, `boost applied to image ${boostImageId}`);
