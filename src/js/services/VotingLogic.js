@@ -871,9 +871,19 @@ const getBoostThresholdSec = (challenge, challengeId) => {
 /**
  * Order the per-challenge deadline actions by the seconds-before-close at which
  * each becomes due, largest window first — so actions fire in the order their
- * configured timers imply (e.g. auto-fill 15m → turbo 12m → vote/last-minute
- * 10m) rather than a fixed code order. Each action's own handler still decides
- * whether to actually act; this only fixes ordering.
+ * configured timers imply rather than a fixed code order. Each action's own
+ * handler still decides whether to actually act; this only fixes ordering.
+ *
+ * The ordering is therefore user-controlled: it falls out of the time settings, so
+ * widening turboTime or boostTime moves that action earlier in the pass. With the
+ * defaults (turboTime 7200, autoFill's top row 1800, emergencyFill 300) the real
+ * order is turbo → autoFill → emergencyFill → boost. An earlier version of this
+ * comment gave "auto-fill 15m → turbo 12m" as the worked example, which inverted
+ * what the defaults actually produce; the numbers, not the code order, decide.
+ *
+ * Note this sorts turbo on its configured window even when no turbo is held or
+ * Auto-Apply Turbo is off — the runner then no-ops. That keeps the ordering a pure
+ * function of the settings rather than of live challenge state.
  *
  * Tie-break (stable): autoFill → emergencyFill → boost → turbo, so fills and
  * boost precede turbo and a freshly filled (and locally reflected) entry is

@@ -9,6 +9,7 @@ const logger = require('../../logger');
 const settings = require('../../settings');
 const { getDefaultSettings } = require('../../settings');
 const { parseSettingValue } = require('../parseValue');
+const { formatDuration } = require('../../format/duration');
 
 /**
  * Format a settings value for log output, redacting sensitive keys via
@@ -18,7 +19,22 @@ const { parseSettingValue } = require('../parseValue');
  */
 const formatSettingForLog = (key, value) => {
     const masked = logger.sanitizeForLog({ [key]: value });
-    return masked[key] === '[REDACTED]' ? '[REDACTED]' : JSON.stringify(value);
+    if (masked[key] === '[REDACTED]') return '[REDACTED]';
+
+    const raw = JSON.stringify(value);
+
+    // Time-typed settings are stored in seconds but read as durations everywhere else —
+    // the GUI enters them as hours+minutes, and their own descriptions talk in minutes.
+    // Printing the bare number invited the wrong comparison: `emergencyFill` 300 next to
+    // `lastMinuteThreshold` 10 looks like 300 > 10 when it is really 5 minutes vs 10.
+    // Annotate rather than convert, so the printed value still matches what set-setting
+    // expects back.
+    const config = settings.SETTINGS_SCHEMA?.[key];
+    if (config?.type === 'time' && typeof value === 'number' && Number.isFinite(value)) {
+        return value === 0 ? `${raw} (off)` : `${raw} (${formatDuration(value)})`;
+    }
+
+    return raw;
 };
 
 // One consistent recovery message for a mistyped schema key, shared by every

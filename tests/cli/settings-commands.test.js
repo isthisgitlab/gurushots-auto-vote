@@ -32,6 +32,7 @@ const {
     saveProfileFromChallenge,
     applyProfile,
     deleteProfile,
+    formatSettingForLog,
 } = require('../../src/js/cli/commands/settings');
 
 describe('CLI settings commands — per-challenge support', () => {
@@ -108,6 +109,37 @@ describe('CLI settings commands — challenge profiles', () => {
         settings.deleteChallengeProfile.mockReturnValue(true);
         deleteProfile('2-pic tactic');
         expect(settings.deleteChallengeProfile).toHaveBeenCalledWith('2-pic tactic');
+    });
+
+    // Time settings are stored in seconds but read as durations everywhere else. Printing
+    // the bare number invited the wrong comparison: emergencyFill 300 sitting next to
+    // lastMinuteThreshold 10 reads as 300 > 10 when it is really 5 minutes vs 10 minutes.
+    describe('formatSettingForLog annotates time settings', () => {
+        beforeEach(() => {
+            settings.SETTINGS_SCHEMA = {
+                emergencyFill: { type: 'time', perChallenge: true, default: 300 },
+                lastMinuteThreshold: { type: 'number', perChallenge: true, default: 10 },
+            };
+        });
+
+        test('renders a duration alongside the stored seconds', () => {
+            // The raw value is kept so it still round-trips through set-setting.
+            expect(formatSettingForLog('emergencyFill', 300)).toBe('300 (5m)');
+            expect(formatSettingForLog('emergencyFill', 3600)).toBe('3600 (1h 0m)');
+        });
+
+        test('marks the off sentinel rather than printing "<1m"', () => {
+            expect(formatSettingForLog('emergencyFill', 0)).toBe('0 (off)');
+        });
+
+        test('leaves non-time settings alone', () => {
+            // Already expressed in minutes — annotating would be noise.
+            expect(formatSettingForLog('lastMinuteThreshold', 10)).toBe('10');
+        });
+
+        test('leaves unknown keys alone', () => {
+            expect(formatSettingForLog('somethingElse', 42)).toBe('42');
+        });
     });
 
     test('command functions survive facade failures without throwing', () => {
