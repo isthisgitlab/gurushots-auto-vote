@@ -78,7 +78,12 @@ const zString = z.string();
 const percentage = z.number().min(1).max(100); // exposure-style trigger, 1–100
 const percentageOrZero = z.number().min(0).max(100); // target, 0 = "use trigger" sentinel
 const nonNegNumber = z.number().min(0); // time fields (seconds before close); 0 = off
-const nonNegInt = z.number().int().min(0); // image index (1-indexed, 0 = last)
+// Entry-slot index: 1-4 selects a slot, 0 is the "last entry" sentinel. GuruShots challenges
+// carry at most four submissions (max_photo_submits tops out at 4, which is also why the
+// auto-fill schedule only covers images 2-4), so anything above 4 could never name a real
+// slot — it used to be accepted and then silently clamped to the last entry at pick time.
+const MAX_ENTRY_SLOT = 4;
+const entrySlotIndex = z.number().int().min(0).max(MAX_ENTRY_SLOT);
 // Shared 1–59 range, preserving the previous predicates exactly: used by both
 // lastMinuteThreshold (minutes-before-close that count as "last minute") and
 // lastMinuteCheckFrequency (poll cadence in minutes). Neither is required to be
@@ -370,10 +375,9 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 1,
         perChallenge: true,
-        validation: nonNegInt,
-        // No max: any slot number is accepted and resolveEntryIndex clamps to the entry
-        // count at pick time, since the challenge's entry count is not known here.
+        validation: entrySlotIndex,
         min: 0,
+        max: MAX_ENTRY_SLOT,
         validationOrder: 1,
         group: 'boost',
         label: 'app.boostImageIndex',
@@ -425,9 +429,9 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 1,
         perChallenge: true,
-        validation: nonNegInt,
-        // See boostImageIndex — clamped at pick time, so no max here.
+        validation: entrySlotIndex,
         min: 0,
+        max: MAX_ENTRY_SLOT,
         validationOrder: 1,
         group: 'turbo',
         label: 'app.turboImageIndex',

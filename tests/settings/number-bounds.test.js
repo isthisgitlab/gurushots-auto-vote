@@ -24,12 +24,21 @@ describe('number settings advertise bounds', () => {
         expect(typeof config.min).toBe('number');
     });
 
-    test.each(numberSettings.filter(([, c]) => typeof c.max === 'number'))(
-        '%s declares a unit when it has a bounded range',
+    // The entry-slot indexes are deliberately unitless — "slot 2" needs no suffix. Every
+    // other number setting is a percentage or a duration and is unreadable without one.
+    const UNITLESS = new Set(['boostImageIndex', 'turboImageIndex']);
+
+    test.each(numberSettings.filter(([key]) => !UNITLESS.has(key)))('%s declares a unit', (_key, config) => {
+        expect(typeof config.unit).toBe('string');
+    });
+
+    test.each(numberSettings.filter(([key]) => UNITLESS.has(key)))(
+        '%s stays unitless and bounded to the four real entry slots',
         (_key, config) => {
-            // Percentages and minutes both need a suffix to be readable; the two
-            // slot-index settings are deliberately unitless and unbounded above.
-            expect(typeof config.unit).toBe('string');
+            expect(config.unit).toBeUndefined();
+            // 0 is the "last entry" sentinel; 1-4 are the only slots a challenge can have.
+            expect(config.min).toBe(0);
+            expect(config.max).toBe(4);
         },
     );
 });
