@@ -36,8 +36,7 @@ const { MAX_SCHEDULED_FILL_ENTRIES } = require('./limits');
  * @property {string} [description]
  * @property {number} [min] - Advertised lower bound, mirroring `validation`. Forwarded to the
  *   renderer by the schema IPC projection and bound to the number input.
- * @property {number} [max] - Advertised upper bound; omitted where the value is clamped at use
- *   time instead (the entry-slot indexes).
+ * @property {number} [max] - Advertised upper bound, mirroring `validation`.
  * @property {string} [unit] - Translation key for the suffix shown beside a number input.
  */
 

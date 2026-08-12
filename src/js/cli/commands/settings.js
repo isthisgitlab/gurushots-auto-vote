@@ -104,8 +104,15 @@ const setSetting = (key, value, challengeId = null) => {
         // Setting the global default is what the user meant; say so rather than doing it
         // silently, so a script author can see the redirect in the output.
         if (settings.SETTINGS_SCHEMA?.[key]) {
-            logger.withCategory('settings').info(`'${key}' is a challenge setting — applying it as the global default`);
-            logger.withCategory('settings').info(`Use --challenge <id> to override it for a single challenge instead`);
+            // Worded for both kinds of schema key: most support per-challenge overrides, but
+            // a few (lastMinuteCheckFrequency) are global-only, and pointing those at
+            // --challenge would just hit requirePerChallenge's rejection.
+            logger.withCategory('settings').info(`'${key}' is a voting setting — applying it as the global default`);
+            if (settings.SETTINGS_SCHEMA[key].perChallenge) {
+                logger
+                    .withCategory('settings')
+                    .info(`Use --challenge <id> to override it for a single challenge instead`);
+            }
             return setGlobalDefault(key, value);
         }
 
@@ -427,7 +434,11 @@ Common Settings:
   timezone             - Timezone for timestamps (default: "Europe/Riga")
 
 Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
-  boostTime            - Seconds before close to apply a timer boost (default: 3600 = 1h)
+  boostTime            - Seconds left on the BOOST'S OWN timer at which a timer
+                         boost is applied (default: 3600 = 1h)
+  keyUnlockedBoostTime - Seconds before close to apply a KEY-UNLOCKED boost, which
+                         has no timer of its own, so boostTime cannot describe it
+                         (default: 900 = 15 min; 0 = off)
   turboTime            - Seconds before close to apply turbo (default: 7200 = 2h)
   emergencyFill        - Seconds before close to fill empty slots as a last resort
                          (default: 300 = 5 min; 0 = off). NOTE: this used to be minutes.

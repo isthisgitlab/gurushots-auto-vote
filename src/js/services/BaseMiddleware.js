@@ -171,7 +171,11 @@ class BaseMiddleware {
         logger.withCategory('voting').startOperation('cli-vote-manual', 'CLI Manual Voting Process');
         try {
             const challengesResponse = await this.apiStrategy.getActiveChallenges(token);
-            if (!challengesResponse || !challengesResponse.challenges) {
+            // fetchFailed is the load-bearing check: getActiveChallenges always resolves a
+            // list shape, so `!challengesResponse.challenges` can never be true on failure and
+            // an outage used to fall through to voting an empty list, reporting
+            // "0 voted, 0 skipped of 0" as if there were simply nothing to do.
+            if (!challengesResponse || challengesResponse.fetchFailed || !challengesResponse.challenges) {
                 logger.withCategory('challenges').warning('Failed to fetch challenges for manual voting', null);
                 logger.withCategory('voting').endOperation('cli-vote-manual', null, 'failed to fetch challenges');
                 return;

@@ -131,10 +131,11 @@
             boostWindowOpen: 'Boost logs ir atvērts',
             jumpToChallenge: 'Pāriet uz izaicinājumu',
             boostTime: 'Boost laiks',
-            boostTimeDesc: 'Pielieto Boost, kad līdz izaicinājuma beigām ir atlicis šis laiks.',
-            keyUnlockedBoostTime: 'Ar atslēgu atvērtā Boost laiks',
+            boostTimeDesc:
+                'Pielieto Boost, kad paša Boost taimerī ir atlicis šis laiks. Neattiecas uz Boost, kas atvērts ar atslēgu — tam nav taimera, un tas izmanto atsevišķu iestatījumu “Boost laiks (atvērts ar atslēgu)”.',
+            keyUnlockedBoostTime: 'Boost laiks (atvērts ar atslēgu)',
             keyUnlockedBoostTimeDesc:
-                'Atsevišķs logs Boost, kas atvērts ar atslēgu — tādam nav sava taimera. Tā kā tas nebeidzas, to pielieto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Boost laiks uz šiem neattiecas.',
+                'Atsevišķs logs Boost, kas atvērts ar atslēgu — tam nav sava taimera. Tā kā tas nebeidzas, to pielieto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Iestatījums “Boost laiks” uz šiem neattiecas. 0 = izslēgts.',
             autoBoost: 'Auto-pielietot Boost',
             autoBoostDesc: 'Automātiski pielieto Boost šim izaicinājumam, kad tā Boost logs gatavojas aizvērties.',
             turbo: 'Turbo',

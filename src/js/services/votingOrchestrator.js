@@ -390,10 +390,10 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
 
             // One malformed challenge must not cost the pass every challenge after it.
             // Before this, an unguarded property read threw past the per-action loop into the
-            // single outer catch below, which abandoned the whole pass. `continue` in the
-            // catch keeps the loop going; the cancellation checkpoints inside the body use
-            // `return`, which a try/catch does not intercept, so cancellation still exits the
-            // pass immediately rather than being swallowed as a per-challenge error.
+            // single outer catch below, which abandoned the whole pass. Catching here lets the
+            // loop move on to the next challenge; the cancellation checkpoints inside the body
+            // use `return`, which a try/catch does not intercept, so cancellation still exits
+            // the pass immediately rather than being swallowed as a per-challenge error.
             try {
                 // Check for cancellation before processing each challenge
                 if (cancellation.isCancelled()) {
@@ -608,7 +608,6 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                         `${logger.challengeTag(challenge)} Skipped after an unexpected error — continuing with the remaining challenges`,
                         error,
                     );
-                continue;
             }
         }
 

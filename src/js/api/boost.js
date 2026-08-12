@@ -7,8 +7,7 @@
 const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
 const { ENDPOINTS } = require('./constants');
 const logger = require('../logger');
-const settings = require('../settings');
-const { pickEntryAvoidingConflict } = require('../services/VotingLogic');
+const { pickBoostEntry } = require('../services/VotingLogic');
 
 /**
  * POST the GuruShots boost-photo endpoint. Concentrates the form-encoded
@@ -34,16 +33,6 @@ const _postBoost = async (challengeId, imageId, token) => {
 };
 
 /**
- * Pick the entry to boost based on `boostImageIndex` (1-indexed, 0 = last),
- * avoiding any entry that already has turbo applied. Symmetric to the
- * shouldApplyTurbo picker which avoids boosted entries.
- */
-const _pickBoostEntry = (entries, challengeId) => {
-    const requestedIndex = settings.getEffectiveSetting('boostImageIndex', challengeId);
-    return pickEntryAvoidingConflict(entries, requestedIndex, 'turbo');
-};
-
-/**
  * Applies a boost to a photo in a challenge
  *
  * Boosts increase the visibility of your photo in a challenge.
@@ -62,7 +51,7 @@ const applyBoost = async (challenge, token) => {
         logger.withCategory('voting').error('No entries available for boosting', { challengeId });
         return null;
     }
-    const picked = _pickBoostEntry(entries, challengeId);
+    const picked = pickBoostEntry(challenge, challengeId);
     if (!picked) {
         logger
             .withCategory('voting')

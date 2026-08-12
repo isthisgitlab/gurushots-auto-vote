@@ -440,6 +440,33 @@ const refreshChallengeState = async (challenge, token, { getActiveChallenges, lo
             freshEntries.push(entry);
         }
     }
+
+    // Carry locally-raised boost/turbo flags across the swap.
+    //
+    // Replacing `member` wholesale means an entry that IS in the fresh payload comes back
+    // with the server's flags — and the server has not registered an apply from seconds ago,
+    // so it reports turbo/boosted false. That silently undid reflectEntryFlag: with the
+    // default action order (turbo, then autoFill, then boost) a turbo applied earlier in the
+    // pass had its flag wiped by this refresh, and boost then picked the very entry turbo had
+    // just consumed. Only ever raise a flag, never clear one — if either side says an entry
+    // is taken, treat it as taken. That errs toward using a different entry, which is the
+    // safe direction: boost and turbo may both be spent, but never on the same entry.
+    const localFlags = new Map();
+    for (const entry of prevEntries) {
+        if (!entry || entry.id == null) continue;
+        if (entry.turbo || entry.boosted) {
+            localFlags.set(String(entry.id), { turbo: !!entry.turbo, boosted: !!entry.boosted });
+        }
+    }
+    if (localFlags.size > 0) {
+        for (const entry of freshEntries) {
+            const flags = entry && entry.id != null ? localFlags.get(String(entry.id)) : null;
+            if (!flags) continue;
+            if (flags.turbo) entry.turbo = true;
+            if (flags.boosted) entry.boosted = true;
+        }
+    }
+
     return 'refreshed';
 };
 

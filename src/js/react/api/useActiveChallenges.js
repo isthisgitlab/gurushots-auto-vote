@@ -40,12 +40,17 @@ export function useActiveChallenges(autovoteRunning = false) {
     }, []);
 
     const apply = useCallback(async ({ settings, result }, { setData, setError }, skipCleanup = false) => {
-        // The api-client returns null after exhausting retries on a
-        // transient network/5xx failure. With a token present that's a
-        // fetch failure, not an empty challenge list — surface it (so the
-        // UI can show a "retrying" banner) and keep the last-known
-        // challenges on screen rather than blanking them on a blip.
-        if (settings.token && result == null) {
+        // A transient network/5xx failure that outlived the api-client's retries is a fetch
+        // failure, not an empty challenge list — surface it so the UI shows its "retrying"
+        // banner, and keep the last-known challenges on screen rather than blanking them on
+        // a blip.
+        //
+        // `result == null` alone never caught this: getActiveChallenges always resolves a
+        // list shape, so the banner this hook exists to drive could not fire and an outage
+        // rendered as a plain "no active challenges". The fetchFailed marker is what actually
+        // distinguishes the two; the null check stays as a guard for a genuinely absent
+        // response.
+        if (settings.token && (result == null || result.fetchFailed)) {
             setError(new Error('fetch_failed'));
             return;
         }

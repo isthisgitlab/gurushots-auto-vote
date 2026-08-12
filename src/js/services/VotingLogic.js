@@ -550,10 +550,15 @@ const getEffectiveBoostTime = (challengeId) => {
  * @returns {number} - Seconds before close within which a key-unlocked boost is applied
  */
 const getEffectiveKeyUnlockedBoostTime = (challengeId) => {
-    const raw = Number(settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId));
-    // Fall back to the schema default rather than 0 — a 0 here would read as "never apply",
-    // silently disabling key-unlocked boosts for anyone whose settings predate this key.
-    return Number.isFinite(raw) && raw > 0 ? raw : 900;
+    const value = settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId);
+    // An explicit 0 means "never auto-apply", matching the 0-is-off convention boostTime and
+    // emergencyFill already use, and it is a value both the schema and the GUI input accept —
+    // so it must be honoured rather than quietly replaced by the default. Only a genuinely
+    // unusable value (missing, null, NaN, negative — reachable from an under-mocked caller or
+    // a hand-edited settings file) falls back to the schema default. Type-checked rather than
+    // coerced, because Number(null) is 0 and would otherwise read as a deliberate "off".
+    const raw = typeof value === 'number' ? value : Number.NaN;
+    return Number.isFinite(raw) && raw >= 0 ? raw : 900;
 };
 
 /**
@@ -707,6 +712,28 @@ const pickEntryAvoidingConflict = (entries, requestedIndex, conflictField) => {
         slot = (slot - 1 + entries.length) % entries.length;
     }
     return entries[slot]?.[conflictField] ? null : entries[slot];
+};
+
+/**
+ * Pick the entry a boost should land on: `boostImageIndex` (1-indexed, 0 = last), stepping
+ * off any entry that already carries turbo. Symmetric to shouldApplyTurbo's own pick, which
+ * avoids boosted entries.
+ *
+ * Lives here rather than privately inside api/boost.js so the mock boost surface resolves the
+ * SAME entry the real one does. Both then raise the conflict flag on it, which is what keeps
+ * the same-pass "boost and turbo never share an entry" rule true in mock mode too — the mock
+ * runs the identical shared voting pass, so a rule that only held on the real surface would
+ * make mock runs quietly diverge.
+ *
+ * @param {any} challenge
+ * @param {string} challengeId
+ * @returns {any|null} the entry to boost, or null when every candidate is turboed
+ */
+const pickBoostEntry = (challenge, challengeId) => {
+    const entries = challenge?.member?.ranking?.entries;
+    if (!Array.isArray(entries) || entries.length === 0) return null;
+    const requestedIndex = settings.getEffectiveSetting('boostImageIndex', challengeId);
+    return pickEntryAvoidingConflict(entries, requestedIndex, 'turbo');
 };
 
 /**
@@ -922,6 +949,7 @@ module.exports = {
     evaluateManualVotingToHundred,
     getEffectiveBoostTime,
     getEffectiveKeyUnlockedBoostTime,
+    pickBoostEntry,
     isWithinEmergencyWindow,
     shouldApplyBoost,
     isBoostWindowOpen,

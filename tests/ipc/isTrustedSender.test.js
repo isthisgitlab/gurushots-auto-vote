@@ -63,6 +63,20 @@ describe('isTrustedSender', () => {
 
         expect(isTrustedSender(event)).toBe(false);
     });
+
+    test('refuses when reading senderFrame itself throws', () => {
+        // Electron's senderFrame getter throws once the sending frame is disposed — a
+        // renderer that navigated or closed while the message was in flight. That must fail
+        // closed, not crash the main process.
+        const event = {
+            get senderFrame() {
+                throw new Error('frame disposed');
+            },
+        };
+
+        expect(() => isTrustedSender(event)).not.toThrow();
+        expect(isTrustedSender(event)).toBe(false);
+    });
 });
 
 describe('registerHandlers applies the check to every channel', () => {

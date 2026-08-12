@@ -201,9 +201,24 @@ describe('shouldApplyBoost — key-unlocked window', () => {
         expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 1200), now)).toBe(false);
     });
 
-    test('a zero or malformed value falls back rather than disabling boosts', () => {
+    test('an explicit 0 turns key-unlocked auto-apply off', () => {
+        // 0-is-off is the convention boostTime and emergencyFill already use, and both the
+        // schema and the GUI input accept 0 — so it must be honoured, not overridden by the
+        // default. Silently substituting 900 here would ignore a value the user could set
+        // through the UI with no indication it had been discarded.
+        mockSettings({ keyUnlockedBoostTime: 0, emergencyFill: 0 });
         const now = NOW();
-        for (const bad of [0, -1, 'nonsense', null]) {
+
+        expect(VotingLogic.getEffectiveKeyUnlockedBoostTime('777')).toBe(0);
+        expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 600), now)).toBe(false);
+        expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 1), now)).toBe(false);
+    });
+
+    test('an unusable value falls back rather than disabling boosts', () => {
+        const now = NOW();
+        // Reachable from an under-mocked caller or a hand-edited settings file — unlike an
+        // explicit 0, none of these express an intent to switch the feature off.
+        for (const bad of [-1, 'nonsense', null, undefined]) {
             mockSettings({ keyUnlockedBoostTime: bad, emergencyFill: 0 });
             expect(VotingLogic.getEffectiveKeyUnlockedBoostTime('777')).toBe(900);
             expect(VotingLogic.shouldApplyBoost(keyUnlockedChallenge(now, 600), now)).toBe(true);
