@@ -29,6 +29,9 @@ Every result is floored at `MIN_CYCLE_GAP_MS`. The host rolls the random
 delay and resolves `lastMinuteCheckFrequency`/per-challenge thresholds with
 its own resolver (sync settings read on Node, async IPC in the WebView).
 
+This is what fixed the bug where the next cycle could sleep past a
+challenge's last-minute boundary and start the final voting push late.
+
 **Flash challenges never drive the cadence.** `eligibleChallenges`
 (`scheduling/scheduledFill.js`) filters `type !== 'flash'`, so a flash
 challenge's close time cannot shorten the sleep — even though
@@ -38,8 +41,6 @@ threshold boundary to land a cycle on, and tightening the cadence for one
 would just add API load without changing any decision. The practical
 consequence is that an account holding _only_ flash challenges polls at the
 plain random `[checkFrequencyMin, checkFrequencyMax]` cadence throughout.
-This is what fixed the bug where the next cycle could sleep past a
-challenge's last-minute boundary and start the final voting push late.
 
 ### Scheduled fill
 
