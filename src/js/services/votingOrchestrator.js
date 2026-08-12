@@ -301,8 +301,6 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         // Get all active challenges
         logger.withCategory('challenges').info('🔄 Loading active challenges', null);
         const { challenges: allChallenges } = await api.getActiveChallenges(token);
-        // Current timestamp in seconds (Unix epoch time)
-        const now = Math.floor(Date.now() / 1000);
 
         logger.withCategory('challenges').info(`📋 Found ${allChallenges.length} active challenges`, null);
 
@@ -357,6 +355,16 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         let processedCount = 0;
         for (const challenge of challenges) {
             processedCount++;
+
+            // Current timestamp in seconds (Unix epoch time), re-read per challenge.
+            //
+            // This used to be captured once for the whole pass. A pass spends 2-5s of
+            // inter-challenge delay per challenge, plus retries (up to 30s per request),
+            // paginated library walks and up to 25 get_image_data calls per fill — minutes in
+            // total. Every challenge after the first was then evaluated against a clock biased
+            // into the past, so last-minute/emergency/boost/turbo windows that opened mid-pass
+            // were missed, and a challenge that had already closed still looked open.
+            const now = Math.floor(Date.now() / 1000);
 
             // Check for cancellation before processing each challenge
             if (cancellation.isCancelled()) {

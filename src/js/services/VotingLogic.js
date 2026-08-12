@@ -313,6 +313,15 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
 
     if (onlyBoost) return blocked('boost-only mode enabled');
     if (mode === 'auto' && challenge.start_time >= now) return blocked('challenge not started');
+    // Symmetric with the not-started guard above. Both time windows below require
+    // `timeUntilEnd > 0`, so without this a challenge whose close_time has passed falls all
+    // the way through to the *normal* rule and votes — the exact opposite of the intent, and
+    // reachable whenever a challenge closes partway through a pass. Placed ahead of the flash
+    // branch so a closed flash challenge is skipped too. Auto only, mirroring not-started:
+    // the manual to-100% path does its own `close_time <= now` check, and adding a manual
+    // block here would surface under the last-minute message this function reuses for every
+    // manual skip reason.
+    if (mode === 'auto' && challenge.close_time <= now) return blocked('challenge has ended');
 
     if (challenge.type === 'flash') {
         return decided('flash', 100, 100, sharedThresholdInfo);

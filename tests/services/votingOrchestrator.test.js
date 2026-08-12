@@ -744,3 +744,24 @@ describe('voteOnNewEntry — gate, arm, record', () => {
         expect(lastDecisionOptions()).toEqual({ hasNewEntry: true });
     });
 });
+
+describe('per-challenge clock', () => {
+    // `now` used to be captured once, before the loop, and reused for every challenge's
+    // deadline actions and voting decision. A pass can run for minutes (2-5s inter-challenge
+    // delay, retries, paginated library walks), so every challenge after the first was judged
+    // against a clock stuck in the past — missing windows that opened mid-pass.
+    test('re-reads the clock for each challenge instead of freezing it for the pass', async () => {
+        const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
+        const base = Date.now();
+        let tick = 0;
+        const spy = jest.spyOn(Date, 'now').mockImplementation(() => base + tick++ * 60_000);
+
+        await runVotingPass('tok', null, deps(api));
+
+        const observed = votingLogic.evaluateVotingDecision.mock.calls.map((call) => call[1]);
+        expect(observed).toHaveLength(2);
+        expect(observed[1]).toBeGreaterThan(observed[0]);
+
+        spy.mockRestore();
+    });
+});

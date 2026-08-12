@@ -78,30 +78,71 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
     let { exposure_factor } = voting.exposure;
     const originalExposureFactor = exposure_factor; // Store original exposure level for metadata
 
-    // Track unique images to avoid voting for the same image twice
-    const uniqueImageIds = new Set();
+    // Vote over a shuffled, de-duplicated copy of the pool.
+    //
+    // This used to sample `images` at random and terminate on
+    // `uniqueImageIds.size === images.length`. That guard is unreachable whenever the
+    // endpoint returns one image id twice — the Set can never grow to the array's length —
+    // so once every distinct id had been consumed the loop spun forever on `continue`,
+    // synchronously, with no cancellation check. Iterating a shuffled deduped list makes
+    // termination structural: each iteration consumes exactly one candidate. Shuffling first
+    // preserves the same distribution over selection order the rejection sampling had.
+    const uniqueImages = [];
+    const seenImageIds = new Set();
+    for (const image of images) {
+        if (!image || seenImageIds.has(image.id)) continue;
+        seenImageIds.add(image.id);
+        uniqueImages.push(image);
+    }
 
-    // Continue voting until exposure factor reaches target exposure
-    while (exposure_factor < targetExposure) {
-        // Select a random image from the available images
-        const randomImage = images[Math.floor(Math.random() * images.length)];
-        if (uniqueImageIds.has(randomImage.id)) continue;
+    // Fisher-Yates, so the pick order stays unbiased.
+    for (let i = uniqueImages.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [uniqueImages[i], uniqueImages[j]] = [uniqueImages[j], uniqueImages[i]];
+    }
 
-        // Add image to voted list and update exposure factor
-        uniqueImageIds.add(randomImage.id);
-        votedImages += `&image_ids[]=${encodeURIComponent(randomImage.id)}`;
-        exposure_factor += randomImage.ratio;
+    const votedImageIds = [];
+    let unusableRatios = 0;
 
-        // Break if we've used all available images but still haven't reached target exposure
-        if (uniqueImageIds.size === images.length) {
-            logger
-                .withCategory('voting')
-                .warning(
-                    `${logger.challengeTag(challenge)} Insufficient images to reach ${targetExposure}% exposure (only ${uniqueImageIds.size} available)`,
-                    null,
-                );
-            break;
+    for (const image of uniqueImages) {
+        // Keep the original comparison verbatim rather than negating it. A legacy caller can
+        // still pass a function as the target, and `number < function` is false — but so is
+        // `number >= function`, so an inverted test would vote the whole pool instead of
+        // standing down. See the thresholdFunction case in tests/api/voting.test.js.
+        if (!(exposure_factor < targetExposure)) break;
+
+        votedImageIds.push(image.id);
+        votedImages += `&image_ids[]=${encodeURIComponent(image.id)}`;
+
+        // A missing or non-numeric ratio must not poison the accumulator: `NaN < target` is
+        // false, so a single malformed entry used to end the loop after one vote and submit
+        // a near-empty ballot without warning. Count it instead and keep going.
+        const ratio = Number(image.ratio);
+        if (Number.isFinite(ratio)) {
+            exposure_factor += ratio;
+        } else {
+            unusableRatios++;
         }
+    }
+
+    if (unusableRatios > 0) {
+        logger
+            .withCategory('voting')
+            .warning(
+                `${logger.challengeTag(challenge)} ${unusableRatios} of ${uniqueImages.length} images had no usable exposure ratio — exposure estimate may be low`,
+                null,
+            );
+    }
+
+    // Only a genuine shortfall is worth warning about. The old code warned whenever the pool
+    // was exhausted, including when the final image carried us past the target.
+    if (votedImageIds.length > 0 && exposure_factor < targetExposure) {
+        logger
+            .withCategory('voting')
+            .warning(
+                `${logger.challengeTag(challenge)} Insufficient images to reach ${targetExposure}% exposure (only ${uniqueImages.length} available)`,
+                null,
+            );
     }
 
     // The loop above never ran, so there is nothing to submit. This happens when
@@ -111,7 +152,7 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
     // when the two endpoints disagree. Posting an image_ids-less vote request
     // achieves nothing, and letting it through would log a clean "voted" cycle for
     // zero actual votes.
-    if (uniqueImageIds.size === 0) {
+    if (votedImageIds.length === 0) {
         logger
             .withCategory('voting')
             .warning(
@@ -158,7 +199,7 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
     logger
         .withCategory('voting')
         .success(
-            `${logger.challengeTag(challenge)} Votes submitted (${uniqueImageIds.size} images, ~${exposure_factor.toFixed(1)}% exposure)`,
+            `${logger.challengeTag(challenge)} Votes submitted (${votedImageIds.length} images, ~${exposure_factor.toFixed(1)}% exposure)`,
             null,
             duration,
         );
