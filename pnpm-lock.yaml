@@ -74,7 +74,7 @@ importers:
         version: 3.2.4(preact@10.29.8)
       '@ttsc/graph':
         specifier: 0.26.1
-        version: 0.26.1(@types/node@26.2.0)(supports-color@10.2.2)(ttsc@0.26.1)(zod@4.4.3)
+        version: 0.26.1(@types/node@26.2.0)(supports-color@10.2.2)(ttsc@0.26.2)(zod@4.4.3)
       '@ttsc/lint':
         specifier: 0.26.1
         version: 0.26.1
@@ -145,8 +145,8 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3
       ttsc:
-        specifier: 0.26.1
-        version: 0.26.1
+        specifier: 0.26.2
+        version: 0.26.2
       typescript:
         specifier: 7.1.0-dev.20260810.1
         version: 7.1.0-dev.20260810.1
@@ -1424,13 +1424,13 @@ packages:
     peerDependencies:
       preact: '>=10 || ^10.0.0-alpha.0 || ^10.0.0-beta.0'
 
-  '@ttsc/darwin-arm64@0.26.1':
-    resolution: {integrity: sha512-Dss6Kk1ut5NOH55S4efytqPEmXD5FsvcJZSHjg9XIDrn1q9xB5Os/9+DTcIjcp1/VsbOzNFrG2+Y9PLG4/dbhQ==}
+  '@ttsc/darwin-arm64@0.26.2':
+    resolution: {integrity: sha512-t/ynw/AAXOLIkFV9NxrmyjGLYTPXTjdlLLztxZNBIg8c6VoveJxBDhdjv19c//SkkgDTuAV/sWpoUiFA+jlpoA==}
     cpu: [arm64]
     os: [darwin]
 
-  '@ttsc/darwin-x64@0.26.1':
-    resolution: {integrity: sha512-1w/Y+B8Q0YIOzxRS4aY0QIvIOSZD6pvqu8YvgK6fp/1xnH+HKsE1UfNkbVXleRwtk9VnA8OKRGPLHDgbXfV3yw==}
+  '@ttsc/darwin-x64@0.26.2':
+    resolution: {integrity: sha512-cmdJ4rPtHjmKUaGwXo0dtbI9MLKlONlJgGxwBAVdnXX+ITB1KdXl6mk3Kp+wJkiyICiFsmr9+CqHlB/7woqO3A==}
     cpu: [x64]
     os: [darwin]
 
@@ -1443,28 +1443,28 @@ packages:
   '@ttsc/lint@0.26.1':
     resolution: {integrity: sha512-UGJujI1IZGH95LnJbJTKfjh+zXc4kmFGH2r6xrrBMUISfLJmaPpAP/pvLoENg4l7CerGdNxkLPMbLn0tE8SSJw==}
 
-  '@ttsc/linux-arm64@0.26.1':
-    resolution: {integrity: sha512-o4Q2Vof42mAAj3r+WT03ygDvaPW/vsj427UKg+Srn3aY3OQwj1fPH/vGAfacFBrjfcrP0JwGGfcIkeYfHcyALw==}
+  '@ttsc/linux-arm64@0.26.2':
+    resolution: {integrity: sha512-vZaZ5CVw6LLdvsQJhqxCd/ZhCvqk/QzqZsF/fWN8EW5Fsmxjhhm+kKJZA7xsxC89civru2pAVOjQS5E5D43l4g==}
     cpu: [arm64]
     os: [linux]
 
-  '@ttsc/linux-arm@0.26.1':
-    resolution: {integrity: sha512-1csQGiuZ2QQGuklscRRLifbOepIjeCN3xUE49ATdM+RRgI/pFTp/o7RLnrFDsHSKFRSlQ+ZB237AD9hCBkQ+dw==}
+  '@ttsc/linux-arm@0.26.2':
+    resolution: {integrity: sha512-5rL5cGQkd3MizwjEg5aCOtbRVZL/rJGKQmNUbTSq5RQ0WfQwAyTENJrSif67j7YF+48g9NxZvfdpy5/VUvqjkQ==}
     cpu: [arm]
     os: [linux]
 
-  '@ttsc/linux-x64@0.26.1':
-    resolution: {integrity: sha512-D6NcF6/q5Kvh3i9eLPsfrgh5XPOJ9UgOo0MqTFWHZ9ykWuYTWxebHNrm8cLac1HBUQJoaH5TrNHBs7CVQDS8lg==}
+  '@ttsc/linux-x64@0.26.2':
+    resolution: {integrity: sha512-nWmstkNumSwnFNhOlSKBghw/FyMVI7B+CqXtECYIU3upNpIvPtOaSdYLmzjQjKXBUe+kV6urLpfKjUfjPDgW+g==}
     cpu: [x64]
     os: [linux]
 
-  '@ttsc/win32-arm64@0.26.1':
-    resolution: {integrity: sha512-u4yhk0TQspAbZ6PrQV9/A/2oMUco7kcoU0GObMMY2M5+JBT8eaHaXBQiyJkTKLzM2a66+OapB3dPkcMRQ6iiBw==}
+  '@ttsc/win32-arm64@0.26.2':
+    resolution: {integrity: sha512-8Cvo7KlwsiqbDp2COIR2s9jPbkh7HwAEHzuSt3O9o+h7gLmaPxO0DbYmdqaUaPU5lS+d+CuC/UUgH27XwNzFJQ==}
     cpu: [arm64]
     os: [win32]
 
-  '@ttsc/win32-x64@0.26.1':
-    resolution: {integrity: sha512-rMc+XnH6XtIW3eMgGg061nOmPzMW2JU/X/GACDXABJVhSap7VvCdZHKKRiMRh6KdE8RenSz05JpYA5h/jVVoqw==}
+  '@ttsc/win32-x64@0.26.2':
+    resolution: {integrity: sha512-+64RLxWrmfd8JbzeEhGuvEFluwlmtkmkQrS6c1h803OI6uZW+0ScoNXQmIT2l//OY8b2/MXDTfW2ElWix7Ppjw==}
     cpu: [x64]
     os: [win32]
 
@@ -1731,10 +1731,12 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
+    deprecated: this version has critical issues, please update to the latest version
 
   abbrev@4.0.0:
     resolution: {integrity: sha512-a1wflyaL0tHtJSmLSOVybYhy22vRih4eduhhrkcjgrWGnRfrZtovJ2FRjxuTtkkj47O/baf0R86QU5OuYpz8fA==}
@@ -4238,8 +4240,8 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
-  ttsc@0.26.1:
-    resolution: {integrity: sha512-+LdUhN4VQ0nqUf8eXFrYRQlyc8AblHVr446h2MowXw7LZhPTq6umYnlkUR/v5DsAs6+i8ePD5m9Nnh42A2ngmw==}
+  ttsc@0.26.2:
+    resolution: {integrity: sha512-vIAxsPHDTBuglCt0sN/airSKnWam1IOBwhdrz/hvvo//WfI9gIPb9ujtKgPoRM6ERuAhtlrqBVtlxV+gSNJOPQ==}
     engines: {node: '>=22.15.0'}
     hasBin: true
 
@@ -5786,18 +5788,18 @@ snapshots:
       '@testing-library/dom': 8.20.1
       preact: 10.29.8
 
-  '@ttsc/darwin-arm64@0.26.1':
+  '@ttsc/darwin-arm64@0.26.2':
     optional: true
 
-  '@ttsc/darwin-x64@0.26.1':
+  '@ttsc/darwin-x64@0.26.2':
     optional: true
 
-  '@ttsc/graph@0.26.1(@types/node@26.2.0)(supports-color@10.2.2)(ttsc@0.26.1)(zod@4.4.3)':
+  '@ttsc/graph@0.26.1(@types/node@26.2.0)(supports-color@10.2.2)(ttsc@0.26.2)(zod@4.4.3)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.30.0(supports-color@10.2.2)(zod@4.4.3)
       '@typia/mcp': 13.2.0(@modelcontextprotocol/sdk@1.30.0(supports-color@10.2.2)(zod@4.4.3))
-      ttsc: 0.26.1
-      typia: 13.2.0(@types/node@26.2.0)(ttsc@0.26.1)
+      ttsc: 0.26.2
+      typia: 13.2.0(@types/node@26.2.0)(ttsc@0.26.2)
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - '@types/node'
@@ -5806,19 +5808,19 @@ snapshots:
 
   '@ttsc/lint@0.26.1': {}
 
-  '@ttsc/linux-arm64@0.26.1':
+  '@ttsc/linux-arm64@0.26.2':
     optional: true
 
-  '@ttsc/linux-arm@0.26.1':
+  '@ttsc/linux-arm@0.26.2':
     optional: true
 
-  '@ttsc/linux-x64@0.26.1':
+  '@ttsc/linux-x64@0.26.2':
     optional: true
 
-  '@ttsc/win32-arm64@0.26.1':
+  '@ttsc/win32-arm64@0.26.2':
     optional: true
 
-  '@ttsc/win32-x64@0.26.1':
+  '@ttsc/win32-x64@0.26.2':
     optional: true
 
   '@tybys/wasm-util@0.10.3':
@@ -8900,15 +8902,15 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  ttsc@0.26.1:
+  ttsc@0.26.2:
     optionalDependencies:
-      '@ttsc/darwin-arm64': 0.26.1
-      '@ttsc/darwin-x64': 0.26.1
-      '@ttsc/linux-arm': 0.26.1
-      '@ttsc/linux-arm64': 0.26.1
-      '@ttsc/linux-x64': 0.26.1
-      '@ttsc/win32-arm64': 0.26.1
-      '@ttsc/win32-x64': 0.26.1
+      '@ttsc/darwin-arm64': 0.26.2
+      '@ttsc/darwin-x64': 0.26.2
+      '@ttsc/linux-arm': 0.26.2
+      '@ttsc/linux-arm64': 0.26.2
+      '@ttsc/linux-x64': 0.26.2
+      '@ttsc/win32-arm64': 0.26.2
+      '@ttsc/win32-x64': 0.26.2
 
   type-check@0.4.0:
     dependencies:
@@ -8937,7 +8939,7 @@ snapshots:
       '@typescript/typescript-win32-arm64': 7.1.0-dev.20260810.1
       '@typescript/typescript-win32-x64': 7.1.0-dev.20260810.1
 
-  typia@13.2.0(@types/node@26.2.0)(ttsc@0.26.1):
+  typia@13.2.0(@types/node@26.2.0)(ttsc@0.26.2):
     dependencies:
       '@standard-schema/spec': 1.1.0
       '@typia/interface': 13.2.0
@@ -8947,7 +8949,7 @@ snapshots:
       randexp: 0.5.3
       tinyglobby: 0.2.17
     optionalDependencies:
-      ttsc: 0.26.1
+      ttsc: 0.26.2
     transitivePeerDependencies:
       - '@types/node'
 
