@@ -39,7 +39,7 @@ dependencies {
     implementation project(':capacitor-android')
     // Native background voting plugin deps
     implementation "org.jetbrains.kotlin:kotlin-stdlib:2.4.10"
-    implementation "com.squareup.okhttp3:okhttp:5.4.0"
+    implementation "com.squareup.okhttp3:okhttp:5.5.0"
     implementation "org.json:json:20260719"
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
