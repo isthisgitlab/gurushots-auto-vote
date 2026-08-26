@@ -140,8 +140,8 @@
             boostConflictWarning:
                 "Boost can't apply: your only entry already has Turbo (they can't share an entry). Add a second entry to use both.",
             statusHeaderActive: 'active',
-            statusHeaderBoosts: 'boosts ready',
-            statusHeaderTurbos: 'turbos ready',
+            statusHeaderBoosts: 'Boosts ready',
+            statusHeaderTurbos: 'Turbos ready',
             statusHeaderNext: 'Next',
             statusHeaderNotRunning: 'autovote off',
             statusHeaderNextApprox: 'approximate — recomputed each cycle',
