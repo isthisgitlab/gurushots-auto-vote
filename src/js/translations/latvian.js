@@ -462,6 +462,17 @@
             profileApplyHint:
                 'Profila pielietošana aizstāj pašreizējās formas vērtības (arī nesaglabātās izmaiņas); iestatījumi, kas profilā nav iekļauti, atgriežas uz "Izmanto globālo".',
             profileOverwriteHint: 'Saglabājot ar esošu nosaukumu, tas tiek pārrakstīts.',
+            intentBuiltIn: 'Iebūvēts sagatave',
+            intentModified: 'Rediģēta sagatave',
+            intentJustParticipate: 'Vienkārši piedalīties',
+            intentJustParticipateDesc:
+                'Uztur tavas dalības aizpildītas, bet nekad netērē Boost vai Turbo un nedzenas pēc redzamības tālāk par slieksni — maz pūļu, maz riska.',
+            intentFinishStrong: 'Nobeigt spēcīgi',
+            intentFinishStrongDesc:
+                'Lielāko izaicinājuma daļu spēlē normāli, tad pēdējā stundā izmanto Boost un Turbo un spēcīgi palielina redzamību.',
+            intentMaxExposure: 'Maksimāla redzamība',
+            intentMaxExposureDesc:
+                'Visu laiku spiež uz priekšu: balso līdz pilnai redzamībai, aizpilda dalības un izmanto Boost un Turbo.',
         },
         // Logs page specific
         logs: {

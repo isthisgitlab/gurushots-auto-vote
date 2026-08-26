@@ -458,6 +458,17 @@
             profileApplyHint:
                 'Applying a profile replaces the current form values (including unsaved edits); settings the profile does not include revert to "Using Global".',
             profileOverwriteHint: 'Saving with an existing name overwrites that profile.',
+            intentBuiltIn: 'Built-in preset',
+            intentModified: 'Edited built-in',
+            intentJustParticipate: 'Just Participate',
+            intentJustParticipateDesc:
+                'Keeps your entries filled but never spends a Boost or Turbo and does not chase exposure past the trigger — low effort, low risk.',
+            intentFinishStrong: 'Finish Strong',
+            intentFinishStrongDesc:
+                'Plays normally most of the challenge, then spends Boost and Turbo and pushes exposure hard in the final hour.',
+            intentMaxExposure: 'Max Exposure',
+            intentMaxExposureDesc:
+                'Pushes everything the whole way: votes to full exposure throughout, fills entries, and spends Boost and Turbo.',
             naExhibitionNoTurbo: "Exhibition challenges don't support Turbo.",
             naBoostSinglePhoto: "Single-photo challenges never unlock Boost — these settings won't take effect.",
         },

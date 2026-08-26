@@ -131,6 +131,13 @@ Note: You must login first before you can vote, boost, turbo, or fill.
 const main = async () => {
     try {
         initializeHeaders();
+        // Seed the curated intent presets once (idempotent; never fatal) so
+        // the `settings` command lists them and they can be applied from CLI.
+        try {
+            settings.seedIntentProfiles();
+        } catch (err) {
+            logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
+        }
         logger.withCategory('api').debug('main: Command is:', command);
 
         switch (command) {

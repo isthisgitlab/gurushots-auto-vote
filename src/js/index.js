@@ -243,6 +243,13 @@ if (gotSingleInstanceLock) {
             // Initialize API headers on app startup
             initializeHeaders();
 
+            // Seed the curated intent presets once (idempotent; never fatal).
+            try {
+                settings.seedIntentProfiles();
+            } catch (err) {
+                logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
+            }
+
             // Run log cleanup on app startup
             logger.cleanup();
 

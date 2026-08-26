@@ -182,6 +182,13 @@ const buildAllHandlers = () => {
 };
 
 const installBridge = () => {
+    // Seed the curated intent presets once (idempotent; never fatal). Mobile
+    // has no main-process startup, so the bridge install is the boot hook.
+    try {
+        settings.seedIntentProfiles();
+    } catch (err) {
+        logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
+    }
     const handlers = buildAllHandlers();
     const api = {};
 

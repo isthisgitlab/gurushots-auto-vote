@@ -19,6 +19,7 @@ const {
     sanitizeBeforeEndList,
 } = require('./settings/schema');
 const { getUiDefaultSettings } = require('./settings/uiDefaults');
+const { INTENT_PROFILES } = require('./settings/intentProfiles');
 const {
     storage,
     initializeAsync,
@@ -1294,6 +1295,65 @@ const applyChallengeProfile = (name, challengeId) => {
 };
 
 /**
+ * Seed the curated "intent" presets (settings/intentProfiles.js) into the
+ * named-profiles store on first run. Idempotent and collision-safe:
+ *
+ *  - A per-profile marker in `challengeSettings.seededProfiles` (normalized
+ *    names) records which intents were already seeded, so deleting one does
+ *    NOT resurrect it on the next run.
+ *  - An intent is written only when no profile with that normalized name
+ *    already exists — a user's own same-named profile is never clobbered.
+ *  - Seeding goes through saveChallengeProfile so the reserved-name guard,
+ *    perChallenge whitelist, and zod + contextValidation-as-a-set all run in
+ *    the vetted path. Bundles are self-contained, so a validation failure is
+ *    structural (schema drift): it is logged and the intent is marked seeded
+ *    anyway to avoid retrying every load.
+ *
+ * Returns true when nothing needed seeding or the seed-marker write succeeded.
+ */
+const seedIntentProfiles = () => {
+    const settings = loadSettings();
+    const priorSeeded = Array.isArray(settings.challengeSettings?.seededProfiles)
+        ? settings.challengeSettings.seededProfiles
+        : [];
+    const seededSet = new Set(priorSeeded.map(_normalizeProfileName));
+    const stored = _readProfilesMap(settings);
+
+    let changed = false;
+    for (const intent of INTENT_PROFILES) {
+        const normalized = _normalizeProfileName(intent.name);
+        if (seededSet.has(normalized)) continue; // already seeded once — respect a later deletion
+        // Never overwrite a user's own same-named profile.
+        if (_findProfileKey(stored, normalized) === null) {
+            const ok = saveChallengeProfile(intent.name, intent.values);
+            if (!ok) {
+                logger
+                    .withCategory('settings')
+                    .warning(
+                        `Skipped seeding intent profile "${_profileNameForLog(intent.name)}" (invalid for this install)`,
+                    );
+            }
+        }
+        // Mark seeded regardless of outcome (success, name collision, or a
+        // structural validation failure) so it is attempted at most once.
+        seededSet.add(normalized);
+        changed = true;
+    }
+
+    if (!changed) return true;
+
+    // saveChallengeProfile persisted the new profiles via its own load/save,
+    // so re-load fresh before recording the seed markers to avoid clobbering
+    // them with this now-stale snapshot.
+    const fresh = loadSettings();
+    if (!fresh.challengeSettings) {
+        fresh.challengeSettings = getDefaultSettings().challengeSettings;
+    }
+    fresh.challengeSettings.seededProfiles = Array.from(seededSet);
+    return saveSettings(fresh);
+};
+
+/**
  * Cleanup stale challenge settings for challenges that no longer exist
  */
 const cleanupStaleChallengeSetting = (activeChallengeIds) => {
@@ -1568,6 +1628,7 @@ module.exports = {
     saveChallengeProfile,
     deleteChallengeProfile,
     applyChallengeProfile,
+    seedIntentProfiles,
     MAX_CHALLENGE_PROFILES,
     MAX_PROFILE_NAME_LENGTH,
 
