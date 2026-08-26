@@ -130,6 +130,16 @@
             boost: 'Boost',
             boostWindowOpen: 'Boost logs ir atvērts',
             jumpToChallenge: 'Pāriet uz izaicinājumu',
+            deadlineTimeline: 'Gaidāmās darbības',
+            deadlineTimelineApprox: 'aptuveni — var mainīties, aizpildoties dalībām',
+            deadlineNext: 'Nākamā',
+            deadlineDue: 'jau tagad',
+            deadlineActionAutoFill: 'Auto-aizpilde',
+            deadlineActionBoost: 'Boost',
+            deadlineActionTurbo: 'Turbo',
+            deadlineActionEmergencyFill: 'Ārkārtas aizpilde',
+            boostConflictWarning:
+                'Boost nevar pielietot: tavai vienīgajai dalībai jau ir Turbo (tie nevar dalīt vienu dalību). Pievieno otru dalību, lai izmantotu abus.',
             settingHelpLabel: 'Ko tas nozīmē?',
             boostTime: 'Boost laiks',
             boostTimeDesc:

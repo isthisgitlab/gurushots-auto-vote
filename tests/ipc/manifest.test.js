@@ -47,6 +47,7 @@ const collectHandlerChannels = () => {
     const votingHandlers = require('../../src/js/ipc/voting.handlers');
     const logHandlers = require('../../src/js/ipc/log.handlers');
     const actionsHandlers = require('../../src/js/ipc/actions.handlers');
+    const computationsHandlers = require('../../src/js/ipc/computations.handlers');
     const miscHandlers = require('../../src/js/ipc/misc.handlers');
     const updateHandlers = require('../../src/js/ipc/update.handlers');
 
@@ -55,6 +56,7 @@ const collectHandlerChannels = () => {
         ...Object.keys(votingHandlers.buildHandlers()),
         ...Object.keys(logHandlers.buildHandlers()),
         ...Object.keys(actionsHandlers.buildHandlers()),
+        ...Object.keys(computationsHandlers.buildHandlers()),
         ...Object.keys(miscHandlers.buildHandlers({ getMainWindow: () => null, getLoginWindow: () => null })),
         ...Object.keys(
             updateHandlers.buildHandlers({

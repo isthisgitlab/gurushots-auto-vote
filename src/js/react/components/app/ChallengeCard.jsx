@@ -4,6 +4,8 @@ import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus } from '@
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
+import { useDeadlineActions } from '@/api/useDeadlineActions';
+import { DeadlineTimeline } from './DeadlineTimeline';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { useTick } from '@/hooks/useTick';
 import { useAutoClear } from '@/hooks/useAutoClear';
@@ -66,6 +68,10 @@ export function ChallengeCard({
     );
     const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
     const { fillNow, loading: filling, error: fillError, clearError: clearFillError } = useFillChallenge();
+    // Advisory deadline-action preview + boost/turbo conflict flag (read-only,
+    // computed main-side). Failure yields empty actions / false — the card just
+    // renders without them, never an error surface.
+    const { actions: deadlineActions, boostBlocked } = useDeadlineActions(challenge);
 
     // Tick once a second — only meaningful when this challenge is in TIMER
     // state and we want canPlayAutoTurbo to flip to true the moment the
@@ -495,6 +501,19 @@ export function ChallengeCard({
                         </div>
                     </div>
                 )}
+
+                {/* Boost/turbo conflict — a boost is available but the only entry
+                    already has Turbo, so it can't be placed. Actionable, so it
+                    shows in both compact and detailed modes. */}
+                {boostBlocked && (
+                    <div className="alert alert-warning py-2 text-xs" role="alert">
+                        <span>{t('app.boostConflictWarning')}</span>
+                    </div>
+                )}
+
+                {/* Advisory timeline of the automation's upcoming deadline
+                    actions; compact mode collapses it to a single next-action line. */}
+                <DeadlineTimeline actions={deadlineActions} compact={isCompact} />
             </div>
         </div>
     );

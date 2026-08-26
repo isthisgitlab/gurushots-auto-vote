@@ -11,6 +11,7 @@ const miscIpc = require('./ipc/misc.handlers');
 const settingsIpc = require('./ipc/settings.handlers');
 const votingIpc = require('./ipc/voting.handlers');
 const actionsIpc = require('./ipc/actions.handlers');
+const computationsIpc = require('./ipc/computations.handlers');
 const { isTrustedSender } = require('./ipc/registerHandlers');
 const { ensureExit, focusExistingWindow, clearTokenOnQuit } = require('./windows/lifecycle');
 const { watchSettingsFile } = require('./windows/settingsWatcher');
@@ -70,6 +71,7 @@ miscIpc.register(ipcMain, {
 settingsIpc.register(ipcMain);
 votingIpc.register(ipcMain);
 actionsIpc.register(ipcMain);
+computationsIpc.register(ipcMain);
 
 function createLoginWindow() {
     // Get saved window bounds

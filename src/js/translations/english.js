@@ -129,6 +129,16 @@
             boost: 'Boost',
             boostWindowOpen: 'Boost window open',
             jumpToChallenge: 'Jump to challenge',
+            deadlineTimeline: 'Upcoming actions',
+            deadlineTimelineApprox: 'approximate — may shift as entries fill',
+            deadlineNext: 'Next',
+            deadlineDue: 'due now',
+            deadlineActionAutoFill: 'Auto-fill',
+            deadlineActionBoost: 'Boost',
+            deadlineActionTurbo: 'Turbo',
+            deadlineActionEmergencyFill: 'Emergency fill',
+            boostConflictWarning:
+                "Boost can't apply: your only entry already has Turbo (they can't share an entry). Add a second entry to use both.",
             settingHelpLabel: 'What does this mean?',
             boostTime: 'Boost Time',
             boostTimeDesc:
