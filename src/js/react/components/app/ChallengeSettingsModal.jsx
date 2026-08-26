@@ -361,6 +361,20 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                         <span>{t('app.challengeOverrideInfo')}</span>
                     </div>
 
+                    {/* Effective-settings summary: how many keys diverge from the
+                        global defaults right now. The per-row "Global default: …"
+                        hint below shows the comparison value; this is the at-a-
+                        glance count so a user doesn't have to scan every group. */}
+                    <p className="text-xs" role="status">
+                        {Object.keys(overrides).length > 0 ? (
+                            <span className="text-accent">
+                                {t('app.overridesActiveSummary').replace('{0}', String(Object.keys(overrides).length))}
+                            </span>
+                        ) : (
+                            <span className="text-base-content/60">{t('app.overridesNoneSummary')}</span>
+                        )}
+                    </p>
+
                     {/* Named profiles: apply loads a saved tactic into the form
                         state below (schema-filtered, belt-and-braces on top of
                         the facade's whitelist); the Save button persists it. */}
@@ -493,7 +507,11 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                         {hint.text}
                                                     </p>
                                                 ))}
-                                                <p className="text-xs text-base-content/40 mt-1">
+                                                <p
+                                                    className={`text-xs mt-1 ${
+                                                        hasOverride ? 'text-base-content/70' : 'text-base-content/40'
+                                                    }`}
+                                                >
                                                     {t('app.globalDefault')}:{' '}
                                                     {formatSettingDefault(globalDefault, config, t)}
                                                 </p>

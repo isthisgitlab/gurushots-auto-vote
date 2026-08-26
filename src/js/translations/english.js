@@ -430,6 +430,8 @@
             downloadInBrowser: 'Download in Browser',
             overridden: 'Overridden',
             usingGlobal: 'Using Global',
+            overridesActiveSummary: '{0} setting(s) overridden for this challenge — the rest use global defaults.',
+            overridesNoneSummary: 'This challenge uses your global defaults for every setting.',
             enableOverride: 'Enable override for this challenge',
             clearAll: 'Clear All',
             notApplicable: 'Not applicable',

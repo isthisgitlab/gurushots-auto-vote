@@ -431,6 +431,9 @@
             downloadInBrowser: 'Lejupielādēt pārlūkā',
             overridden: 'Pielāgots',
             usingGlobal: 'Izmanto globālo',
+            overridesActiveSummary:
+                '{0} iestatījums(-i) pielāgots(-i) šim izaicinājumam — pārējie izmanto globālos noklusējumus.',
+            overridesNoneSummary: 'Šis izaicinājums visiem iestatījumiem izmanto tavus globālos noklusējumus.',
             enableOverride: 'Iespējot pielāgošanu šim izaicinājumam',
             clearAll: 'Notīrīt visu',
             notApplicable: 'Nav piemērojams',
