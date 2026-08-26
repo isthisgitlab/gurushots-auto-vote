@@ -140,6 +140,12 @@
             deadlineActionEmergencyFill: 'Ārkārtas aizpilde',
             boostConflictWarning:
                 'Boost nevar pielietot: tavai vienīgajai dalībai jau ir Turbo (tie nevar dalīt vienu dalību). Pievieno otru dalību, lai izmantotu abus.',
+            statusHeaderActive: 'aktīvi',
+            statusHeaderBoosts: 'Boost gatavi',
+            statusHeaderTurbos: 'Turbo gatavi',
+            statusHeaderNext: 'Nākamā',
+            statusHeaderNotRunning: 'auto-balsošana izslēgta',
+            statusHeaderNextApprox: 'aptuveni — pārrēķina katrā ciklā',
             settingHelpLabel: 'Ko tas nozīmē?',
             boostTime: 'Boost laiks',
             boostTimeDesc:

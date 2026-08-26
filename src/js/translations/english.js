@@ -139,6 +139,12 @@
             deadlineActionEmergencyFill: 'Emergency fill',
             boostConflictWarning:
                 "Boost can't apply: your only entry already has Turbo (they can't share an entry). Add a second entry to use both.",
+            statusHeaderActive: 'active',
+            statusHeaderBoosts: 'boosts ready',
+            statusHeaderTurbos: 'turbos ready',
+            statusHeaderNext: 'Next',
+            statusHeaderNotRunning: 'autovote off',
+            statusHeaderNextApprox: 'approximate — recomputed each cycle',
             settingHelpLabel: 'What does this mean?',
             boostTime: 'Boost Time',
             boostTimeDesc:

@@ -11,12 +11,18 @@ export const ACTIONS = {
     UPDATE_LAST_RUN: 'UPDATE_LAST_RUN',
     SET_STATUS: 'SET_STATUS',
     SET_ERROR: 'SET_ERROR',
+    SET_NEXT_RUN: 'SET_NEXT_RUN',
 };
 
 export const initialState = {
     running: false,
     cycles: 0,
     lastRun: null,
+    // Absolute wall-clock ms of the next armed cycle (Date.now()-based), or null
+    // when nothing is scheduled. Set from the cadence chain's onScheduled hook;
+    // powers the status header's next-action countdown. Only meaningful while
+    // running — STOP clears it.
+    nextRunAt: null,
     status: 'Stopped',
     statusClass: 'badge-neutral',
     error: null,
@@ -36,6 +42,7 @@ export function autovoteReducer(state, action) {
             return {
                 ...state,
                 running: false,
+                nextRunAt: null,
                 status: 'Stopped',
                 statusClass: 'badge-neutral',
             };
@@ -54,6 +61,11 @@ export function autovoteReducer(state, action) {
                 ...state,
                 status: action.payload.status,
                 statusClass: action.payload.statusClass,
+            };
+        case ACTIONS.SET_NEXT_RUN:
+            return {
+                ...state,
+                nextRunAt: action.payload,
             };
         case ACTIONS.SET_ERROR:
             return {

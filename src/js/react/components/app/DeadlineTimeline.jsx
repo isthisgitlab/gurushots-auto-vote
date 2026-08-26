@@ -33,7 +33,8 @@ export function DeadlineTimeline({ actions, compact = false }) {
     if (rows.length === 0) return null;
 
     const labelFor = (action) => t(ACTION_LABEL_KEY[action] || action);
-    const remainingText = (remaining) => (remaining > 0 ? `~${formatDuration(remaining)}` : t('app.deadlineDue'));
+    const remainingText = (remaining) =>
+        remaining > 0 ? `~${formatDuration(remaining, { includeSeconds: true })}` : t('app.deadlineDue');
 
     if (compact) {
         const next = rows.filter((r) => r.remaining > 0).sort((a, b) => a.remaining - b.remaining)[0] || rows[0];

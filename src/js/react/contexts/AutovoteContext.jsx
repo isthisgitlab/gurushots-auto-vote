@@ -136,6 +136,14 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                     // of swallowing so a future regression can't fail silently.
                     cycleError: (err) => window.api.logWarning?.(`Voting cycle failed: ${err?.message || err}`),
                 },
+                // Surface the next armed cycle as an absolute wall-clock instant
+                // for the status header's countdown; null clears it. dispatch is
+                // stable across renders.
+                onScheduled: (waitMs) =>
+                    dispatch({
+                        type: ACTIONS.SET_NEXT_RUN,
+                        payload: typeof waitMs === 'number' ? Date.now() + waitMs : null,
+                    }),
             }),
         [runVotingCycle],
     );

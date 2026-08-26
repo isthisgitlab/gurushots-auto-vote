@@ -7,6 +7,7 @@ import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
 import { Navbar } from '@/components/layout/Navbar';
 import { AutoVoteControls } from '@/components/app/AutoVoteControls';
+import { StatusHeader } from '@/components/app/StatusHeader';
 import { ChallengesSection } from '@/components/app/ChallengesSection';
 import { SettingsModal } from '@/components/app/SettingsModal';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
@@ -162,6 +163,9 @@ function AppContent() {
                         cycles={autovote.cycles}
                         onToggle={handleAutovoteToggle}
                     />
+
+                    {/* At-a-glance status summary — counts + next-action countdown */}
+                    <StatusHeader challenges={challenges} nextRunAt={autovote.nextRunAt} running={autovote.running} />
 
                     {/* Challenges Section */}
                     <ChallengesSection
