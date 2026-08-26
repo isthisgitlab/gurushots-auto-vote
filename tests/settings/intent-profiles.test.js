@@ -9,8 +9,9 @@
  *   - seeding is idempotent;
  *   - seeding never clobbers a user's own same-named profile;
  *   - a deleted intent is NOT resurrected on the next run;
- *   - a structurally-invalid bundle is skipped (not thrown) and still marked
- *     seeded so it isn't retried.
+ *   - the profile cap is treated as TRANSIENT: an install already at the cap
+ *     defers seeding WITHOUT marking the intent seeded, and it seeds on a later
+ *     run once capacity frees (never permanently/silently suppressed).
  *
  * Drives the same in-memory headless-store seam as challenge-profiles.test.js
  * so loadSettings/saveSettings round-trip without touching fs.
@@ -118,6 +119,29 @@ describe('intent profile seeding', () => {
             expect(settings.getChallengeProfiles()['Finish Strong']).toBeUndefined();
             settings.seedIntentProfiles();
             expect(settings.getChallengeProfiles()['Finish Strong']).toBeUndefined();
+        });
+
+        test('defers (does not permanently suppress) when the profile cap is reached', () => {
+            const cap = settings.MAX_CHALLENGE_PROFILES;
+            for (let i = 0; i < cap; i++) {
+                expect(settings.saveChallengeProfile(`user-${i}`, { exposure: 90 })).toBe(true);
+            }
+            // At cap: no intent can be added, and none may be marked seeded.
+            settings.seedIntentProfiles();
+            const atCap = settings.getChallengeProfiles();
+            for (const intent of INTENT_PROFILES) {
+                expect(atCap[intent.name]).toBeUndefined();
+            }
+            // Free capacity for every intent, then re-run: they seed now (proving
+            // the earlier deferral was not a permanent seeded-marker suppression).
+            for (let i = 0; i < INTENT_PROFILES.length; i++) {
+                expect(settings.deleteChallengeProfile(`user-${i}`)).toBe(true);
+            }
+            settings.seedIntentProfiles();
+            const freed = settings.getChallengeProfiles();
+            for (const intent of INTENT_PROFILES) {
+                expect(freed[intent.name]).toEqual(intent.values);
+            }
         });
     });
 

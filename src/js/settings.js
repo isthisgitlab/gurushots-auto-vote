@@ -1305,9 +1305,12 @@ const applyChallengeProfile = (name, challengeId) => {
  *    already exists — a user's own same-named profile is never clobbered.
  *  - Seeding goes through saveChallengeProfile so the reserved-name guard,
  *    perChallenge whitelist, and zod + contextValidation-as-a-set all run in
- *    the vetted path. Bundles are self-contained, so a validation failure is
- *    structural (schema drift): it is logged and the intent is marked seeded
- *    anyway to avoid retrying every load.
+ *    the vetted path. Bundles are self-contained, so a save failure that is NOT
+ *    the profile cap is structural (schema drift): it is logged and the intent
+ *    is marked seeded to avoid retrying every load. The profile cap, by
+ *    contrast, is TRANSIENT — a user already at MAX_CHALLENGE_PROFILES is
+ *    pre-checked and left UN-marked so the built-in seeds on a later run once
+ *    they free capacity, rather than being permanently and silently suppressed.
  *
  * Returns true when nothing needed seeding or the seed-marker write succeeded.
  */
@@ -1318,24 +1321,47 @@ const seedIntentProfiles = () => {
         : [];
     const seededSet = new Set(priorSeeded.map(_normalizeProfileName));
     const stored = _readProfilesMap(settings);
+    // Live count of real (non-reserved) profiles, kept in step with successful
+    // saves so the cap pre-check stays accurate across the loop.
+    let profileCount = Object.keys(stored).filter(
+        (name) => !RESERVED_PROFILE_NAMES.has(_normalizeProfileName(name)),
+    ).length;
 
     let changed = false;
     for (const intent of INTENT_PROFILES) {
         const normalized = _normalizeProfileName(intent.name);
         if (seededSet.has(normalized)) continue; // already seeded once — respect a later deletion
-        // Never overwrite a user's own same-named profile.
-        if (_findProfileKey(stored, normalized) === null) {
-            const ok = saveChallengeProfile(intent.name, intent.values);
-            if (!ok) {
-                logger
-                    .withCategory('settings')
-                    .warning(
-                        `Skipped seeding intent profile "${_profileNameForLog(intent.name)}" (invalid for this install)`,
-                    );
-            }
+
+        // A user's own same-named profile — never clobber it; mark seeded so it
+        // isn't retried.
+        if (_findProfileKey(stored, normalized) !== null) {
+            seededSet.add(normalized);
+            changed = true;
+            continue;
         }
-        // Mark seeded regardless of outcome (success, name collision, or a
-        // structural validation failure) so it is attempted at most once.
+
+        // Transient cap: do NOT mark seeded, so it retries once capacity frees.
+        if (profileCount >= MAX_CHALLENGE_PROFILES) {
+            logger
+                .withCategory('settings')
+                .info(
+                    `Deferred seeding intent profile "${_profileNameForLog(intent.name)}" — profile cap (${MAX_CHALLENGE_PROFILES}) reached; will retry`,
+                );
+            continue;
+        }
+
+        const ok = saveChallengeProfile(intent.name, intent.values);
+        if (ok) {
+            profileCount += 1;
+        } else {
+            // Not the cap (pre-checked): a structural failure that won't
+            // self-heal, so mark it seeded to avoid retrying every load.
+            logger
+                .withCategory('settings')
+                .warning(
+                    `Skipped seeding intent profile "${_profileNameForLog(intent.name)}" (invalid for this install)`,
+                );
+        }
         seededSet.add(normalized);
         changed = true;
     }

@@ -478,7 +478,7 @@
             profileApplyHint:
                 'Profila pielietošana aizstāj pašreizējās formas vērtības (arī nesaglabātās izmaiņas); iestatījumi, kas profilā nav iekļauti, atgriežas uz "Izmanto globālo".',
             profileOverwriteHint: 'Saglabājot ar esošu nosaukumu, tas tiek pārrakstīts.',
-            intentBuiltIn: 'Iebūvēts sagatave',
+            intentBuiltIn: 'Iebūvēta sagatave',
             intentModified: 'Rediģēta sagatave',
             intentJustParticipate: 'Vienkārši piedalīties',
             intentJustParticipateDesc:

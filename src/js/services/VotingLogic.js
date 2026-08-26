@@ -971,6 +971,21 @@ const describeDeadlineActions = (challenge, now) => {
     const boostTimerBranch = boost.state === 'AVAILABLE' && boostHasTimeout;
     const turboState = challenge?.member?.turbo?.state;
 
+    // Boost/turbo conflict: a boost is available to place, there IS an entry to
+    // place it on, but every candidate entry is already turboed. The
+    // entries.length >= 1 guard is required — pickBoostEntry also returns null
+    // when there are simply no entries yet (a freshly joined challenge before
+    // auto-fill), which is NOT a conflict. Computed before the row gating below
+    // so the boost row can be suppressed when it can't actually be placed —
+    // otherwise the timeline would show a "Boost" row that directly contradicts
+    // the conflict warning rendered right beside it.
+    const entries = challenge?.member?.ranking?.entries;
+    const boostBlocked =
+        isBoostWindowOpen(challenge, now) &&
+        Array.isArray(entries) &&
+        entries.length >= 1 &&
+        pickBoostEntry(challenge, challengeId) === null;
+
     /**
      * @param {string} action
      * @param {number} thresholdSec
@@ -983,6 +998,9 @@ const describeDeadlineActions = (challenge, now) => {
                 return turboState === 'WON' && settings.getEffectiveSetting('useTurbo', challengeId) === true;
             case 'boost':
                 if (settings.getEffectiveSetting('autoBoost', challengeId) !== true) return false;
+                // A boost that can't be placed (only entry already turboed) must
+                // not appear as an upcoming action — the conflict warning owns it.
+                if (boostBlocked) return false;
                 // Timer branch stays positive at boostTime=0 (off); key-unlocked
                 // branch already resolves to 0 when off and is dropped above.
                 if (boostTimerBranch && !(getEffectiveBoostTime(challengeId) > 0)) return false;
@@ -1003,18 +1021,6 @@ const describeDeadlineActions = (challenge, now) => {
             thresholdSec,
             dueAt: Number.isFinite(closeTime) ? closeTime - thresholdSec : null,
         }));
-
-    // Boost/turbo conflict: a boost is available to place, there IS an entry to
-    // place it on, but every candidate entry is already turboed. The
-    // entries.length >= 1 guard is required — pickBoostEntry also returns null
-    // when there are simply no entries yet (a freshly joined challenge before
-    // auto-fill), which is NOT a conflict.
-    const entries = challenge?.member?.ranking?.entries;
-    const boostBlocked =
-        isBoostWindowOpen(challenge, now) &&
-        Array.isArray(entries) &&
-        entries.length >= 1 &&
-        pickBoostEntry(challenge, challengeId) === null;
 
     return { actions, boostBlocked };
 };

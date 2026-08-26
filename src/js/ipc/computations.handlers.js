@@ -25,6 +25,14 @@ const buildHandlers = () => ({
             if (!challenge || typeof challenge !== 'object' || Array.isArray(challenge)) {
                 return { success: false, error: 'invalid challenge' };
             }
+            // Defense-in-depth on the renderer-supplied id (used downstream as a
+            // per-challenge override lookup key): only a string/number is a valid
+            // challenge id. Rejects e.g. an object/array id before it reaches the
+            // settings facade.
+            const idType = typeof challenge.id;
+            if (idType !== 'string' && idType !== 'number') {
+                return { success: false, error: 'invalid challenge id' };
+            }
             const now = Math.floor(Date.now() / 1000);
             const { actions, boostBlocked } = votingLogic.describeDeadlineActions(challenge, now);
             return { success: true, actions, boostBlocked };

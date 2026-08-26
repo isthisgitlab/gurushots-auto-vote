@@ -81,10 +81,25 @@ describe('describeDeadlineActions — row gating', () => {
         expect(actionsOf(challenge)).toContain('boost');
     });
 
+    test('boost row shown for an available key-unlocked boost with autoBoost on', () => {
+        mockSettings({ autoBoost: true, keyUnlockedBoostTime: 900 });
+        const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, entries: [{ id: 'e1' }] });
+        expect(actionsOf(challenge)).toContain('boost');
+    });
+
     test('boost row hidden when autoBoost is off', () => {
         mockSettings({ autoBoost: false });
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' } });
         expect(actionsOf(challenge)).not.toContain('boost');
+    });
+
+    test('boost row suppressed when the boost is blocked (sole entry already turboed)', () => {
+        mockSettings({ autoBoost: true, keyUnlockedBoostTime: 900 });
+        const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, entries: [{ id: 'e1', turbo: true }] });
+        const result = VotingLogic.describeDeadlineActions(challenge, NOW);
+        // The conflict owns this case — the timeline must not also show a boost row.
+        expect(result.actions.map((a) => a.action)).not.toContain('boost');
+        expect(result.boostBlocked).toBe(true);
     });
 
     test('autoFill row hidden when autoFill is off', () => {

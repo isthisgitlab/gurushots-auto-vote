@@ -37,10 +37,15 @@ export function DeadlineTimeline({ actions, compact = false }) {
         remaining > 0 ? `~${formatDuration(remaining, { includeSeconds: true })}` : t('app.deadlineDue');
 
     if (compact) {
-        const next = rows.filter((r) => r.remaining > 0).sort((a, b) => a.remaining - b.remaining)[0] || rows[0];
+        // The soonest upcoming action; if every action is already overdue, the
+        // least-overdue one (largest remaining, i.e. closest to now) rather than
+        // an arbitrary list position.
+        const sorted = [...rows].sort((a, b) => a.remaining - b.remaining);
+        const next = sorted.find((r) => r.remaining > 0) || sorted[sorted.length - 1];
         return (
             <div className="text-xs text-base-content/70" title={t('app.deadlineTimelineApprox')}>
-                ⏳ {t('app.deadlineNext')}: {labelFor(next.action)} {remainingText(next.remaining)}
+                <span aria-hidden="true">⏳</span> {t('app.deadlineNext')}: {labelFor(next.action)}{' '}
+                {remainingText(next.remaining)}
             </div>
         );
     }
@@ -48,7 +53,7 @@ export function DeadlineTimeline({ actions, compact = false }) {
     return (
         <div className="bg-base-200 rounded p-2">
             <div className="text-xs font-medium mb-1">
-                ⏳ {t('app.deadlineTimeline')}{' '}
+                <span aria-hidden="true">⏳</span> {t('app.deadlineTimeline')}{' '}
                 <span className="font-normal text-base-content/60">({t('app.deadlineTimelineApprox')})</span>
             </div>
             <ul className="text-xs space-y-0.5">

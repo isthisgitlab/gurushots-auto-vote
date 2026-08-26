@@ -63,9 +63,13 @@ export function StatusHeader({ challenges, nextRunAt, running }) {
     if (activeCount === 0 && !running) return null;
 
     return (
+        // Deliberately NOT role="status"/aria-live: the next-action countdown
+        // inside re-renders every second, and a live region would make a screen
+        // reader re-announce the whole bar each tick. It's an ambient summary,
+        // not an alert.
         <div
             className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm rounded-lg border border-base-300 bg-base-100 px-3 py-2 mb-3"
-            role="status"
+            data-testid="status-header"
         >
             <HeaderStat icon="🏆" value={activeCount} label={t('app.statusHeaderActive')} />
             <HeaderStat icon="🚀" value={boostsAvailable} label={t('app.statusHeaderBoosts')} />

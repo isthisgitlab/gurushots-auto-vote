@@ -20,13 +20,23 @@ export function useDeadlineActions(challenge) {
 
     const boost = challenge?.member?.boost;
     const turbo = challenge?.member?.turbo;
+    const entries = challenge?.member?.ranking?.entries;
+    // boostBlocked depends on WHICH physical entry sits at the configured index
+    // and its turbo flag (pickBoostEntry resolves boostImageIndex positionally),
+    // so the server reordering entries between polls with no membership change
+    // must still refetch. Fingerprint each entry's id + turbo flag, not just the
+    // count — a resort-only poll changes this string, an unrelated re-render
+    // doesn't.
+    const entriesFingerprint = Array.isArray(entries)
+        ? entries.map((e) => `${e?.id}:${e?.turbo ? 1 : 0}`).join(',')
+        : '';
     const fingerprint = [
         challenge?.id,
         challenge?.close_time,
         boost?.state,
         boost?.timeout,
         turbo?.state,
-        challenge?.member?.ranking?.entries?.length,
+        entriesFingerprint,
         challenge?.max_photo_submits,
     ].join('|');
 
