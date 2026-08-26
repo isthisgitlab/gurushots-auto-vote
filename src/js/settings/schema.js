@@ -34,6 +34,10 @@ const { MAX_SCHEDULED_FILL_ENTRIES } = require('./limits');
  * @property {string} [group]
  * @property {string} [label]
  * @property {string} [description]
+ * @property {string} [helpKey] - Translation key for an optional deeper "explain this"
+ *   disclosure shown beside the row (e.g. the two distinct meanings of a `0` sentinel).
+ *   Display-only, like `description` — never affects validation. Forwarded by the schema
+ *   IPC projection alongside `description`.
  * @property {number} [min] - Advertised lower bound, mirroring `validation`. Forwarded to the
  *   renderer by the schema IPC projection and bound to the number input.
  * @property {number} [max] - Advertised upper bound, mirroring `validation`.
@@ -301,6 +305,7 @@ const SETTINGS_SCHEMA = {
         group: 'general',
         label: 'app.exposureTarget',
         description: 'app.exposureTargetDesc',
+        helpKey: 'app.exposureTargetHelp',
     },
     onlyBoost: {
         type: 'boolean',
@@ -353,6 +358,7 @@ const SETTINGS_SCHEMA = {
         group: 'boost',
         label: 'app.boostTime',
         description: 'app.boostTimeDesc',
+        helpKey: 'app.boostTimeHelp',
     },
     // Deliberately separate from boostTime, not a replacement for it. The two describe
     // different clocks: boostTime counts down the boost's OWN timer, while a key-unlocked
@@ -369,6 +375,7 @@ const SETTINGS_SCHEMA = {
         group: 'boost',
         label: 'app.keyUnlockedBoostTime',
         description: 'app.keyUnlockedBoostTimeDesc',
+        helpKey: 'app.keyUnlockedBoostTimeHelp',
     },
     boostImageIndex: {
         type: 'number',
@@ -423,6 +430,7 @@ const SETTINGS_SCHEMA = {
         group: 'turbo',
         label: 'app.turboTime',
         description: 'app.turboTimeDesc',
+        helpKey: 'app.turboTimeHelp',
     },
     turboImageIndex: {
         type: 'number',
@@ -519,6 +527,7 @@ const SETTINGS_SCHEMA = {
         group: 'lastHour',
         label: 'app.lastHourExposureTarget',
         description: 'app.lastHourExposureTargetDesc',
+        helpKey: 'app.lastHourExposureTargetHelp',
     },
 
     // --- Last Minute ---
@@ -678,6 +687,7 @@ const SETTINGS_SCHEMA = {
         group: 'autoFill',
         label: 'app.emergencyFill',
         description: 'app.emergencyFillDesc',
+        helpKey: 'app.emergencyFillHelp',
     },
     mustIncludeTags: {
         type: 'tags',

@@ -60,6 +60,11 @@ const DECISION_ERROR_MESSAGE = 'Error computing next cycle delay; using normal c
  *   failure (chain falls back to the random cadence)
  * @param {(error:*)=>(void|Promise<void>)} deps.log.cycleError - a voting
  *   cycle rejected
+ * @param {(waitMs:number|null)=>void} [deps.onScheduled] - OPTIONAL: called with
+ *   the delay (ms) to the next armed cycle each time one is scheduled, and with
+ *   null when the chain stops arming. Used by the GUI to surface a live
+ *   next-action countdown; Node hosts (CLI/Android) omit it, so it is
+ *   optional-chained and never required.
  * @returns {{scheduleNext:(prefetched?:*, previousCycleStartMs?:(number|null))=>Promise<void>}}
  */
 const createCadenceChain = ({
@@ -73,6 +78,7 @@ const createCadenceChain = ({
     resolveScheduledFill,
     runCycle,
     log,
+    onScheduled,
 }) => {
     // Decide how long to wait before the next cycle and arm the single timer.
     //
@@ -87,6 +93,7 @@ const createCadenceChain = ({
     const scheduleNext = async (prefetched = null, previousCycleStartMs = null) => {
         if (!isRunning()) {
             setTimer(null);
+            onScheduled?.(null);
             return;
         }
 
@@ -140,8 +147,13 @@ const createCadenceChain = ({
 
         if (!isRunning()) {
             setTimer(null);
+            onScheduled?.(null);
             return;
         }
+
+        // Surface the delay to hosts that want a live next-action countdown
+        // (GUI only). Optional-chained: Node hosts pass no onScheduled.
+        onScheduled?.(waitMs);
 
         const timeoutId = setTimeout(() => {
             void (async () => {

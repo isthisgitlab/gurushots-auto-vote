@@ -6,6 +6,7 @@ import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { useAutovote } from '@/contexts/AutovoteContext';
 import { groupSchemaEntries } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
+import { SettingHelp } from '@/components/ui/SettingHelp';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { Modal } from '@/components/ui/Modal';
@@ -420,6 +421,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                                 </span>
                                             </label>
                                             <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
+                                            <SettingHelp helpKey={config.helpKey} />
                                             <SettingInput
                                                 settingKey={key}
                                                 config={config}

@@ -28,6 +28,7 @@ const settingsHandlers = require('../ipc/settings.handlers');
 const votingHandlers = require('../ipc/voting.handlers');
 const logHandlers = require('../ipc/log.handlers');
 const actionsHandlers = require('../ipc/actions.handlers');
+const computationsHandlers = require('../ipc/computations.handlers');
 
 const settings = require('../settings');
 const logger = require('../logger');
@@ -177,11 +178,19 @@ const buildAllHandlers = () => {
         ...votingHandlers.buildHandlers(),
         ...logHandlers.buildHandlers(),
         ...actionsHandlers.buildHandlers(),
+        ...computationsHandlers.buildHandlers(),
         ...updateStubs,
     };
 };
 
 const installBridge = () => {
+    // Seed the curated intent presets once (idempotent; never fatal). Mobile
+    // has no main-process startup, so the bridge install is the boot hook.
+    try {
+        settings.seedIntentProfiles();
+    } catch (err) {
+        logger.withCategory('settings').warning('Intent profile seeding failed (non-fatal):', err);
+    }
     const handlers = buildAllHandlers();
     const api = {};
 

@@ -172,6 +172,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                         group: schema[key].group,
                         label: schema[key].label,
                         description: schema[key].description,
+                        helpKey: schema[key].helpKey,
                         min: schema[key].min,
                         max: schema[key].max,
                         unit: schema[key].unit,

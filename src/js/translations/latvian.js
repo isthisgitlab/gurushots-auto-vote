@@ -130,12 +130,33 @@
             boost: 'Boost',
             boostWindowOpen: 'Boost logs ir atvērts',
             jumpToChallenge: 'Pāriet uz izaicinājumu',
+            deadlineTimeline: 'Gaidāmās darbības',
+            deadlineTimelineApprox: 'aptuveni — var mainīties, aizpildoties dalībām',
+            deadlineNext: 'Nākamā',
+            deadlineDue: 'jau tagad',
+            deadlineActionAutoFill: 'Auto-aizpilde',
+            deadlineActionBoost: 'Boost',
+            deadlineActionTurbo: 'Turbo',
+            deadlineActionEmergencyFill: 'Ārkārtas aizpilde',
+            boostConflictWarning:
+                'Boost nevar pielietot: tavai vienīgajai dalībai jau ir Turbo (tie nevar dalīt vienu dalību). Pievieno otru dalību, lai izmantotu abus.',
+            statusHeaderActive: 'aktīvi',
+            statusHeaderBoosts: 'Boost gatavi',
+            statusHeaderTurbos: 'Turbo gatavi',
+            statusHeaderNext: 'Nākamā',
+            statusHeaderNotRunning: 'auto-balsošana izslēgta',
+            statusHeaderNextApprox: 'aptuveni — pārrēķina katrā ciklā',
+            settingHelpLabel: 'Ko tas nozīmē?',
             boostTime: 'Boost laiks',
             boostTimeDesc:
                 'Pielieto Boost, kad paša Boost taimerī ir atlicis šis laiks. Neattiecas uz Boost, kas atvērts ar atslēgu — tam nav taimera, un tas izmanto atsevišķu iestatījumu “Boost laiks (atvērts ar atslēgu)”.',
+            boostTimeHelp:
+                'Šis ir taimeris, mērīts kā laiks līdz beigām. Iestati 0, lai izslēgtu laika Boost — bots vispār nepielietos taimera Boost. Ņem vērā: šeit 0 nozīmē “izslēgts”, atšķirībā no redzamības mērķa iestatījumiem, kur 0 nozīmē “sekot slieksnim”. Attiecas tikai uz Boost, kam ir savs taimeris; Boost, kas atvērts ar atslēgu, izmanto “Boost laiks (atvērts ar atslēgu)”.',
             keyUnlockedBoostTime: 'Boost laiks (atvērts ar atslēgu)',
             keyUnlockedBoostTimeDesc:
                 'Atsevišķs logs Boost, kas atvērts ar atslēgu — tam nav sava taimera. Tā kā tas nebeidzas, to pielieto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Iestatījums “Boost laiks” uz šiem neattiecas. 0 = izslēgts.',
+            keyUnlockedBoostTimeHelp:
+                'Attiecas tikai uz Boost, kas atvērts ar atslēgu (bez sava taimera). Iestati 0, lai to nekad automātiski nepielietotu. Šis ir atsevišķs pulkstenis no “Boost laiks” — tie viens otru neaizvieto. Tāpat kā citos laika iestatījumos, 0 nozīmē “izslēgts”.',
             autoBoost: 'Auto-pielietot Boost',
             autoBoostDesc: 'Automātiski pielieto Boost šim izaicinājumam, kad tā Boost logs gatavojas aizvērties.',
             turbo: 'Turbo',
@@ -145,6 +166,8 @@
             useTurboDesc: 'Automātiski pielieto iegūto Turbo vienam no taviem foto',
             turboTime: 'Turbo pielietošanas laiks',
             turboTimeDesc: 'Pielieto Turbo, kad līdz izaicinājuma beigām ir atlicis šis laiks.',
+            turboTimeHelp:
+                'Laiks līdz beigām, kad iegūtais Turbo tiek pielietots. Iestati 0, lai izslēgtu laika Turbo pielietošanu. Tāpat kā citos laika iestatījumos, 0 šeit nozīmē “izslēgts” — nevis “sekot slieksnim”.',
             turboImageIndex: 'Turbo foto',
             turboImageIndexDesc:
                 'Kuram foto pielietot Turbo: 1 = pirmais, 2 = otrais utt. Izmanto 0 priekš pēdējā foto. Ja Boost jau ir uz šī foto, Turbo pāriet uz iepriekšējo bildi (no 1 pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusētā vērtība ir 1, tāpēc, ja abi auto-režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto.',
@@ -196,6 +219,8 @@
             emergencyFill: 'Ārkārtas aizpilde',
             emergencyFillDesc:
                 'Drošības tīkls, kas darbojas izaicinājuma pēdējās minūtēs, kad auto-aizpilde citādi atstātu foto vietas tukšas — vai nu tāpēc, ka auto-aizpilde ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un "Aizpildīt arī bez tagu sakritības" ir izslēgts. Kad izaicinājumam līdz beigām atlicis tik daudz laika, atlikušās vietas tiek aizpildītas ar labākajiem pieejamajiem foto, pat ja tie nesakrīt ar taviem tagiem. Tas apzināti ignorē šos iestatījumus, lai izaicinājums nebeigtos ar neizmantotām vietām. Šajā pašā logā tā arī izmanto jebkuru pieejamo Boost un jebkuru iegūto Turbo — pat ja "Auto-pielietot Boost" vai "Auto-pielietot Turbo" izaicinājumam ir izslēgts — lai tie netiktu izniekoti, kad izaicinājums beidzas. Grafiskajā lietotnē ievada kā stundas un minūtes. Noklusējums 5 minūtes; iestati 0, lai izslēgtu (kas izslēdz arī šo pēdējās minūtes Boost/Turbo ignorēšanu). Padoms: turi šo logu ne garāku par pēdējās minūtes slieksni (noklusējums 10 minūtes), lai lietotne bieži pārbauda visu tā laiku.',
+            emergencyFillHelp:
+                'Pēdējo minūšu drošības tīkls, mērīts kā laiks līdz beigām. Iestati 0, lai to pilnībā izslēgtu (kas izslēdz arī tā pēdējās minūtes Boost/Turbo glābšanu). Šeit 0 nozīmē “izslēgts” — atšķirībā no redzamības mērķa iestatījumiem, kur 0 nozīmē “sekot slieksnim”.',
             tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
             titleTagRules: 'Tagu noteikumi pēc nosaukuma',
             titleTagRulesDesc:
@@ -248,6 +273,8 @@
             exposureTarget: 'Redzamības mērķis',
             exposureTargetDesc:
                 'Balsot līdz šim procentam, kad nostrādā parastais redzamības noteikums (0 = tāds pats kā redzamības slieksnis)',
+            exposureTargetHelp:
+                '0 NENOZĪMĒ izslēgts. 0 nozīmē “balsot līdz redzamības sliekšņa vērtībai” — noteikums paliek aktīvs. Ievadi 1-100 tikai tad, ja gribi balsot tālāk par slieksni līdz šai redzamībai. Pretstatā laika iestatījumiem, piemēram, “Boost laiks”, kur 0 nozīmē, ka funkcija ir izslēgta.',
             fast: 'ĀTRS',
             global: 'Globāls',
             globalDefault: 'Globālais noklusējums',
@@ -388,6 +415,8 @@
             lastHourExposureTarget: 'Pēdējās stundas ekspozīcijas mērķis',
             lastHourExposureTargetDesc:
                 'Balsot līdz šim procentam, kad nostrādā pēdējās stundas noteikums (0 = tāds pats kā pēdējās stundas slieksnis)',
+            lastHourExposureTargetHelp:
+                '0 NENOZĪMĒ izslēgts. 0 nozīmē “balsot līdz pēdējās stundas redzamības slieksnim” — pēdējās stundas noteikums paliek aktīvs. Ievadi 1-100, lai balsotu tālāk par šo slieksni. Pretstatā laika iestatījumiem, kur 0 nozīmē izslēgts.',
             useLastHourExposure: 'Izmantot pēdējās stundas ekspozīciju',
             useLastHourExposureDesc:
                 'Pēdējā stundā pirms izaicinājuma beigām izmantot atsevišķo pēdējās stundas redzamības slieksni un mērķi parastā redzamības iestatījuma vietā.',
@@ -418,6 +447,9 @@
             downloadInBrowser: 'Lejupielādēt pārlūkā',
             overridden: 'Pielāgots',
             usingGlobal: 'Izmanto globālo',
+            overridesActiveSummary:
+                '{0} iestatījums(-i) pielāgots(-i) šim izaicinājumam — pārējie izmanto globālos noklusējumus.',
+            overridesNoneSummary: 'Šis izaicinājums visiem iestatījumiem izmanto tavus globālos noklusējumus.',
             enableOverride: 'Iespējot pielāgošanu šim izaicinājumam',
             clearAll: 'Notīrīt visu',
             notApplicable: 'Nav piemērojams',
@@ -446,6 +478,17 @@
             profileApplyHint:
                 'Profila pielietošana aizstāj pašreizējās formas vērtības (arī nesaglabātās izmaiņas); iestatījumi, kas profilā nav iekļauti, atgriežas uz "Izmanto globālo".',
             profileOverwriteHint: 'Saglabājot ar esošu nosaukumu, tas tiek pārrakstīts.',
+            intentBuiltIn: 'Iebūvēta sagatave',
+            intentModified: 'Rediģēta sagatave',
+            intentJustParticipate: 'Vienkārši piedalīties',
+            intentJustParticipateDesc:
+                'Uztur tavas dalības aizpildītas, bet nekad netērē Boost vai Turbo un nedzenas pēc redzamības tālāk par slieksni — maz pūļu, maz riska.',
+            intentFinishStrong: 'Nobeigt spēcīgi',
+            intentFinishStrongDesc:
+                'Lielāko izaicinājuma daļu spēlē normāli, tad pēdējā stundā izmanto Boost un Turbo un spēcīgi palielina redzamību.',
+            intentMaxExposure: 'Maksimāla redzamība',
+            intentMaxExposureDesc:
+                'Visu laiku spiež uz priekšu: balso līdz pilnai redzamībai, aizpilda dalības un izmanto Boost un Turbo.',
         },
         // Logs page specific
         logs: {

@@ -319,4 +319,51 @@ describe('createCadenceChain', () => {
     test('exports the canonical decision-error message both hosts compose their logs from', () => {
         expect(DECISION_ERROR_MESSAGE).toBe('Error computing next cycle delay; using normal cadence');
     });
+
+    // The optional onScheduled hook — the GUI's next-action countdown source.
+    // Node hosts pass none, so it must be optional-chained; when present it must
+    // fire with the armed delay on arm and null when the chain stops arming.
+    describe('onScheduled hook', () => {
+        test('fires with the armed waitMs on a normal-mode arm', async () => {
+            const onScheduled = jest.fn();
+            const deps = makeDeps({ onScheduled });
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+
+            expect(onScheduled).toHaveBeenCalledTimes(1);
+            expect(onScheduled).toHaveBeenCalledWith(FIXED_DELAY_MS);
+        });
+
+        test('fires with null when not running (before any decision)', async () => {
+            const onScheduled = jest.fn();
+            const deps = makeDeps({ onScheduled });
+            deps._setRunning(false);
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext();
+
+            expect(onScheduled).toHaveBeenCalledWith(null);
+        });
+
+        test('fires with null when running flips off mid-decision', async () => {
+            const onScheduled = jest.fn();
+            const deps = makeDeps({ onScheduled });
+            deps.loadSettings.mockImplementation(() => {
+                deps._setRunning(false);
+                return { checkFrequencyMin: FIXED_DELAY_MIN, checkFrequencyMax: FIXED_DELAY_MIN };
+            });
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+
+            expect(onScheduled).toHaveBeenLastCalledWith(null);
+        });
+
+        test('absence is fine — omitting onScheduled never throws (Node-host shape)', async () => {
+            const deps = makeDeps(); // no onScheduled
+            const chain = createCadenceChain(deps);
+            await expect(chain.scheduleNext([farChallenge()])).resolves.toBeUndefined();
+        });
+    });
 });

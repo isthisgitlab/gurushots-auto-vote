@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
 
 // How long an armed confirm button (delete / overwrite) stays armed before
 // falling back to its idle state.
@@ -74,6 +75,15 @@ export function ChallengeProfilesBar({ overrides, onApply, profileLimits }) {
 
     const names = Object.keys(profiles).sort((a, b) => a.localeCompare(b));
     const selectedProfile = selectedName && profiles[selectedName] ? profiles[selectedName] : null;
+    // Built-in "intent" presets get a localized display name, a one-line
+    // description, and a built-in/modified badge so a curated preset is
+    // distinguishable from a user's own — and from an edited copy of itself.
+    const selectedIntent = getIntentByName(selectedName);
+    const selectedIntentModified = selectedIntent ? !intentValuesMatch(selectedIntent, selectedProfile) : false;
+    const displayNameOf = (name) => {
+        const intent = getIntentByName(name);
+        return intent ? t(intent.nameKey) : name;
+    };
 
     const handleSelect = (name) => {
         setSelectedName(name);
@@ -169,7 +179,7 @@ export function ChallengeProfilesBar({ overrides, onApply, profileLimits }) {
                     <option value="">{names.length === 0 ? t('app.noProfiles') : '—'}</option>
                     {names.map((name) => (
                         <option key={name} value={name}>
-                            {`${name} (${Object.keys(profiles[name]).length})`}
+                            {`${getIntentByName(name) ? '★ ' : ''}${displayNameOf(name)} (${Object.keys(profiles[name]).length})`}
                         </option>
                     ))}
                 </select>
@@ -184,6 +194,15 @@ export function ChallengeProfilesBar({ overrides, onApply, profileLimits }) {
                     {confirming === 'delete' ? t('app.confirmDelete') : t('app.deleteProfile')}
                 </button>
             </div>
+
+            {selectedIntent && selectedProfile && (
+                <p className="text-xs">
+                    <span className={`badge badge-xs mr-1 ${selectedIntentModified ? 'badge-warning' : 'badge-info'}`}>
+                        {selectedIntentModified ? t('app.intentModified') : t('app.intentBuiltIn')}
+                    </span>
+                    {t(selectedIntent.descKey)}
+                </p>
+            )}
 
             <div className="flex flex-wrap items-center gap-2">
                 <input

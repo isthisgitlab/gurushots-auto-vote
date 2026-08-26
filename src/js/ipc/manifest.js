@@ -36,6 +36,7 @@ const invokeChannels = [
     'vote-on-challenge',
     'vote-on-challenge-manual',
     'vote-all-challenges-manual',
+    'get-deadline-actions',
     'refresh-api',
     // Logger
     'log-debug',

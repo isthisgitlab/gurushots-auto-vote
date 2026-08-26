@@ -936,6 +936,95 @@ const orderDeadlineActions = (challenge) => {
     });
 };
 
+/**
+ * Read-only, renderer-facing description of a challenge's upcoming deadline
+ * actions: the ordered actions that will ACTUALLY fire (gated on the same
+ * conditions the runner uses, not merely on a positive threshold) plus each
+ * one's absolute due instant, and the boost/turbo conflict flag.
+ *
+ * Gating matters because several threshold getters stay positive even when the
+ * feature is off or the resource isn't held:
+ *   - turbo: getEffectiveTurboTime defaults to 7200 even with no turbo — show
+ *     only when a turbo is WON and Auto-Apply Turbo is on.
+ *   - boost: getBoostThresholdSec's timer branch stays positive when
+ *     boostTime=0 ("off") — re-check that, and honour the autoBoost toggle.
+ *   - autoFill: gate on the autoFill toggle (a schedule can imply a threshold
+ *     while auto-fill is disabled).
+ *   - a threshold of 0 / -Infinity means off/n-a (auto-fill satisfied,
+ *     emergency-fill off, key-unlocked boost off) — always omitted.
+ *
+ * Purely reads the passed challenge object (never mutates it, never calls an
+ * apply path), so it cannot perturb a concurrent sequential voting pass. The
+ * entry count is read at call time, so this is a snapshot that can drift from
+ * what the runner later sees after a mid-cycle fill — callers must present it
+ * as advisory.
+ *
+ * @param {any} challenge
+ * @param {number} now - Unix timestamp in seconds
+ * @returns {{actions: Array<{action: string, thresholdSec: number, dueAt: number|null}>, boostBlocked: boolean}}
+ */
+const describeDeadlineActions = (challenge, now) => {
+    const challengeId = challenge?.id?.toString?.() || '';
+    const closeTime = Number(challenge?.close_time);
+    const boost = challenge?.member?.boost || {};
+    const boostHasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
+    const boostTimerBranch = boost.state === 'AVAILABLE' && boostHasTimeout;
+    const turboState = challenge?.member?.turbo?.state;
+
+    // Boost/turbo conflict: a boost is available to place, there IS an entry to
+    // place it on, but every candidate entry is already turboed. The
+    // entries.length >= 1 guard is required — pickBoostEntry also returns null
+    // when there are simply no entries yet (a freshly joined challenge before
+    // auto-fill), which is NOT a conflict. Computed before the row gating below
+    // so the boost row can be suppressed when it can't actually be placed —
+    // otherwise the timeline would show a "Boost" row that directly contradicts
+    // the conflict warning rendered right beside it.
+    const entries = challenge?.member?.ranking?.entries;
+    const boostBlocked =
+        isBoostWindowOpen(challenge, now) &&
+        Array.isArray(entries) &&
+        entries.length >= 1 &&
+        pickBoostEntry(challenge, challengeId) === null;
+
+    /**
+     * @param {string} action
+     * @param {number} thresholdSec
+     * @returns {boolean}
+     */
+    const isVisible = (action, thresholdSec) => {
+        if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
+        switch (action) {
+            case 'turbo':
+                return turboState === 'WON' && settings.getEffectiveSetting('useTurbo', challengeId) === true;
+            case 'boost':
+                if (settings.getEffectiveSetting('autoBoost', challengeId) !== true) return false;
+                // A boost that can't be placed (only entry already turboed) must
+                // not appear as an upcoming action — the conflict warning owns it.
+                if (boostBlocked) return false;
+                // Timer branch stays positive at boostTime=0 (off); key-unlocked
+                // branch already resolves to 0 when off and is dropped above.
+                if (boostTimerBranch && !(getEffectiveBoostTime(challengeId) > 0)) return false;
+                return true;
+            case 'autoFill':
+                return settings.getEffectiveSetting('autoFill', challengeId) === true;
+            case 'emergencyFill':
+                return true; // thresholdSec > 0 already means enabled (0 = off)
+            default:
+                return false;
+        }
+    };
+
+    const actions = orderDeadlineActions(challenge)
+        .filter(({ action, thresholdSec }) => isVisible(action, thresholdSec))
+        .map(({ action, thresholdSec }) => ({
+            action,
+            thresholdSec,
+            dueAt: Number.isFinite(closeTime) ? closeTime - thresholdSec : null,
+        }));
+
+    return { actions, boostBlocked };
+};
+
 module.exports = {
     isWithinLastHour,
     isWithinLastMinuteThreshold,
@@ -962,4 +1051,5 @@ module.exports = {
     getEmergencyFillThresholdSec,
     getBoostThresholdSec,
     orderDeadlineActions,
+    describeDeadlineActions,
 };
