@@ -129,12 +129,17 @@
             boost: 'Boost',
             boostWindowOpen: 'Boost window open',
             jumpToChallenge: 'Jump to challenge',
+            settingHelpLabel: 'What does this mean?',
             boostTime: 'Boost Time',
             boostTimeDesc:
                 'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time.',
+            boostTimeHelp:
+                'This is a timer measured as time-before-close. Set it to 0 to turn timed Boost off — the bot will not auto-apply a timer Boost at all. Note 0 means "off" here, unlike the Exposure Target settings where 0 means "follow the trigger". Only affects a Boost that has its own countdown; a key-unlocked Boost uses Key-Unlocked Boost Time instead.',
             keyUnlockedBoostTime: 'Key-Unlocked Boost Time',
             keyUnlockedBoostTimeDesc:
                 'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these. Set to 0 to never auto-apply it.',
+            keyUnlockedBoostTimeHelp:
+                'Applies only to a key-unlocked Boost (one with no timer of its own). Set to 0 to never auto-apply it. This is a separate clock from Boost Time — the two never substitute for each other. As with the other time settings, 0 means "off".',
             autoBoost: 'Auto-Apply Boost',
             autoBoostDesc: 'Automatically apply Boost on this challenge as its Boost window is about to close.',
             turbo: 'Turbo',
@@ -144,6 +149,8 @@
             useTurboDesc: 'Automatically apply an earned Turbo to one of your entries',
             turboTime: 'Turbo Apply Time',
             turboTimeDesc: 'Apply Turbo when this much time remains before the challenge closes.',
+            turboTimeHelp:
+                'Time-before-close at which an earned Turbo is applied. Set to 0 to turn timed Turbo apply off. Like the other time settings, 0 here means "off" — not "follow a trigger".',
             turboImageIndex: 'Turbo Entry',
             turboImageIndexDesc:
                 'Which entry gets Turbo: 1 = first, 2 = second, etc. Use 0 for the last entry. If Boost is already on that entry, Turbo moves to the previous entry (entry 1 wraps to the last entry). Note: both Turbo Entry and Boost Entry default to 1, so when both auto-modes fire one will land on the last entry.',
@@ -196,6 +203,8 @@
             emergencyFill: 'Emergency Fill',
             emergencyFillDesc:
                 'Safety net that runs in the last minutes of a challenge when auto-fill would otherwise leave entry slots empty — either because auto-fill is off, or because your Must Include Tags match no photo and Fill Without Tag Match is off. When a challenge is within this much time of closing, it fills the remaining slots with your best available photos anyway, even if they do not match your tags. This overrides those settings on purpose, so the challenge does not end with unused slots. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this window no longer than the Last Minute Threshold (default 10 minutes) so the app is already checking frequently for the whole of it.',
+            emergencyFillHelp:
+                'A last-minutes safety net measured as time-before-close. Set to 0 to disable it entirely (which also drops its last-minute Boost/Turbo rescue). 0 means "off" here — unlike the Exposure Target settings where 0 means "follow the trigger".',
             tagsPlaceholder: 'e.g. sunset, beach, ocean',
             titleTagRules: 'Per-Title Tag Rules',
             titleTagRulesDesc:
@@ -248,6 +257,8 @@
             exposureTarget: 'Exposure Target',
             exposureTargetDesc:
                 'Vote up to this percentage when the normal exposure rule fires (0 = same as Exposure trigger)',
+            exposureTargetHelp:
+                '0 does NOT mean off. 0 means "vote up to the Exposure trigger value" — the rule stays active. Enter 1-100 only to keep voting past the trigger up to that exposure. Contrast the time settings like Boost Time, where 0 means the feature is off.',
             fast: 'FAST',
             global: 'Global',
             globalDefault: 'Global Default',
@@ -388,6 +399,8 @@
             lastHourExposureTarget: 'Last Hour Exposure Target',
             lastHourExposureTargetDesc:
                 'Vote up to this percentage when the last-hour rule fires (0 = same as Last Hour Exposure trigger)',
+            lastHourExposureTargetHelp:
+                '0 does NOT mean off. 0 means "vote up to the Last Hour Exposure trigger" — the last-hour rule stays active. Enter 1-100 to keep voting past that trigger. Contrast the time settings, where 0 means off.',
             useLastHourExposure: 'Use Last Hour Exposure',
             useLastHourExposureDesc:
                 'In the final hour before a challenge closes, use the separate Last Hour Exposure trigger and target instead of the normal Exposure setting.',

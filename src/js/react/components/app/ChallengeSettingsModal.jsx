@@ -9,6 +9,7 @@ import { getScheduleShift } from '../../../services/scheduleRemap';
 import { occurrencesOf } from '../../../scheduling/wallClock';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { SettingInput, SCHEDULED_FILL_MAX_ENTRIES } from './SettingInput';
+import { SettingHelp } from '@/components/ui/SettingHelp';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
@@ -468,6 +469,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                 <p className="text-xs text-base-content/60 mb-2">
                                                     {t(config.description)}
                                                 </p>
+                                                <SettingHelp helpKey={config.helpKey} />
                                                 <SettingInput
                                                     settingKey={key}
                                                     config={config}
