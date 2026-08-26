@@ -14,12 +14,13 @@ This directory contains application documentation in different languages.
 
 ### **🛠️ Internals**
 
+- **[architecture.md](architecture.md)** - App invariants: voting engine, API transport, IPC, persistence, renderer & security conventions (developer reference)
 - **[scheduling.md](scheduling.md)** - How the per-platform voting schedulers work (developer reference)
 
 ## 🎯 Which Documentation to Use?
 
 - **New Users**: Start with the guide in your language.
-- **Developers**: See [CONTRIBUTING.md](../CONTRIBUTING.md) and [scheduling.md](scheduling.md).
+- **Developers**: See [CONTRIBUTING.md](../CONTRIBUTING.md), [architecture.md](architecture.md), and [scheduling.md](scheduling.md).
 
 ## 🔗 Quick Links (Latvian guide)
 
