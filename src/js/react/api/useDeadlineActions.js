@@ -33,7 +33,7 @@ export function useDeadlineActions(challenge) {
     useEffect(() => {
         let cancelled = false;
         setState((s) => ({ ...s, loading: true }));
-        (async () => {
+        void (async () => {
             try {
                 const res = await window.api.getDeadlineActions(challenge);
                 if (cancelled) return;

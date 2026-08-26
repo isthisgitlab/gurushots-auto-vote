@@ -971,6 +971,11 @@ const describeDeadlineActions = (challenge, now) => {
     const boostTimerBranch = boost.state === 'AVAILABLE' && boostHasTimeout;
     const turboState = challenge?.member?.turbo?.state;
 
+    /**
+     * @param {string} action
+     * @param {number} thresholdSec
+     * @returns {boolean}
+     */
     const isVisible = (action, thresholdSec) => {
         if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return false;
         switch (action) {
