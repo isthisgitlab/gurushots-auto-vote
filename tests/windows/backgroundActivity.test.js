@@ -59,6 +59,12 @@ describe('syncBackgroundActivity', () => {
         expect(mockPowerSaveBlocker.start).toHaveBeenCalledTimes(1);
     });
 
+    test('stopping before anything was ever started is a no-op', () => {
+        expect(syncBackgroundActivity(false)).toBe(false);
+        expect(mockPowerSaveBlocker.stop).not.toHaveBeenCalled();
+        expect(mockPowerSaveBlocker.start).not.toHaveBeenCalled();
+    });
+
     test('releases the assertion when auto-vote stops', () => {
         syncBackgroundActivity(true);
         expect(syncBackgroundActivity(false)).toBe(false);

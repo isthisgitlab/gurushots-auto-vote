@@ -105,6 +105,21 @@ describe('watchSettingsFile onSettingsChanged', () => {
         expect(mockSend).toHaveBeenCalledWith('settings-changed', { autovoteRunning: true });
     });
 
+    test('an unreadable settings file does not fire the observer (nor blame it)', async () => {
+        const onSettingsChanged = jest.fn();
+        watchSettingsFile(makeDeps(onSettingsChanged));
+
+        settings.loadSettings.mockImplementation(() => {
+            throw new Error('settings.json unreadable');
+        });
+
+        await expect(emitChange()).resolves.toBeUndefined();
+        // No snapshot exists, so there is nothing to observe. Re-reading here
+        // would just fail again and log the read error as an observer failure,
+        // naming the wrong culprit.
+        expect(onSettingsChanged).not.toHaveBeenCalled();
+    });
+
     test('omitting the observer changes nothing (pre-existing host shape)', async () => {
         watchSettingsFile({
             getMainWindow: () => ({ isDestroyed: () => false, reload: jest.fn() }),
@@ -121,5 +136,44 @@ describe('watchSettingsFile onSettingsChanged', () => {
         require('node:fs').existsSync.mockReturnValueOnce(false);
 
         expect(watchSettingsFile(makeDeps(jest.fn()))).toBeNull();
+    });
+
+    // The "recently created" guard exists to suppress a RELOAD during login.
+    // It must not also suppress the observer: someone who hits Start within
+    // two seconds of the window appearing still has to sync the main-process
+    // state that tracks the flag, or it stays wrong until an unrelated write
+    // happens to fix it — the same class of silent failure this whole branch
+    // is about.
+    describe('"window recently created" guard', () => {
+        const makeYoungWindowDeps = (onSettingsChanged) => ({
+            getMainWindow: () => ({ isDestroyed: () => false, reload: jest.fn() }),
+            getMainWindowCreatedTime: () => Date.now() - 100,
+            onSettingsChanged,
+        });
+
+        test('still fires the observer even though it skips the reload', async () => {
+            const onSettingsChanged = jest.fn();
+            watchSettingsFile(makeYoungWindowDeps(onSettingsChanged));
+
+            settings.loadSettings.mockReturnValue({ autovoteRunning: true });
+            await emitChange();
+
+            expect(onSettingsChanged).toHaveBeenCalledWith({ autovoteRunning: true });
+            // The guard's actual job is still done: nothing was broadcast and
+            // no reload happened.
+            expect(mockSend).not.toHaveBeenCalled();
+        });
+
+        test('a failed read on that path is swallowed, not thrown', async () => {
+            const onSettingsChanged = jest.fn();
+            watchSettingsFile(makeYoungWindowDeps(onSettingsChanged));
+
+            settings.loadSettings.mockImplementation(() => {
+                throw new Error('settings.json unreadable');
+            });
+
+            await expect(emitChange()).resolves.toBeUndefined();
+            expect(onSettingsChanged).not.toHaveBeenCalled();
+        });
     });
 });

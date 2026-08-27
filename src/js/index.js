@@ -150,17 +150,12 @@ function createMainWindow() {
             // require() the relative channel manifest, so it ships pre-bundled.
             preload: path.join(__dirname, '..', '..', 'dist', 'preload-bundle.js'),
             webSecurity: true,
-            // The auto-vote cadence chain is a recursive setTimeout that lives
-            // in THIS renderer (react/contexts/AutovoteContext.jsx ->
-            // scheduling/cadenceChain.js). Chromium throttles — and eventually
-            // freezes outright — timers on a hidden/occluded page, which
-            // silently stalls the whole voting loop the moment the window is
-            // backgrounded: observed as a 51-minute gap on a 3-4 minute
-            // cadence, long enough to swallow a challenge's last auto-fill
-            // slot AND its emergency-fill window. Deadline accuracy is this
-            // app's entire job, so the background CPU cost is the right trade.
-            // windows/backgroundActivity.js covers the macOS App Nap half of
-            // the same problem, which no renderer flag can reach.
+            // The auto-vote cadence chain is a recursive setTimeout living in
+            // THIS renderer, and Chromium throttles then freezes timers on a
+            // hidden page — which silently stalls the voting loop. Rationale,
+            // measurements and the App Nap half of the fix: see
+            // docs/scheduling.md "Staying schedulable" and
+            // windows/backgroundActivity.js. Do not re-enable.
             backgroundThrottling: false,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',
@@ -217,14 +212,35 @@ function createMainWindow() {
         // The renderer persists `autovoteRunning` on every start/stop, so the
         // settings file IS the signal — no extra IPC channel is needed to keep
         // the power-save blocker in step with the running session.
-        onSettingsChanged: (newSettings) => syncBackgroundActivity(newSettings.autovoteRunning === true),
+        onSettingsChanged: (newSettings) => {
+            // Liveness check, matching what the watcher's own reload and
+            // broadcast paths do. Its debounce handle is module-level and
+            // survives `close()`, so a callback armed by a routine write (a
+            // window move alone triggers one) can land AFTER 'closed' already
+            // released the blocker — re-arming an assertion for a session with
+            // no window and no cadence chain, which nothing would then release.
+            if (!mainWindow || mainWindow.isDestroyed()) return;
+            syncBackgroundActivity(newSettings.autovoteRunning === true);
+        },
     });
 
     // Adopt whatever the persisted flag already says: AutovoteContext
     // auto-resumes a session that was running when the app last closed, and
     // that resume does not re-write the flag (it is already true), so the
     // watcher above would never fire for it.
+    //
+    // This is also the ONLY sync if watchSettingsFile returned null (no
+    // settings.json yet), so say so rather than leaving a silent pin — the
+    // login flow writes settings before this window exists, which is why that
+    // path is not expected in practice.
     syncBackgroundActivity(settings.getSetting('autovoteRunning') === true);
+    if (!settingsWatcher) {
+        logger
+            .withCategory('settings')
+            .warning(
+                'No settings watcher (settings file missing at window creation) — auto-vote power management will not follow later start/stop changes until the app is restarted',
+            );
+    }
 }
 
 // Check if we should auto-login based on saved token

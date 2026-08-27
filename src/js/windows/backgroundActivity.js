@@ -51,15 +51,22 @@ const syncBackgroundActivity = (running) => {
             // would leave us believing we are protected when we are not.
             if (blockerId !== null && powerSaveBlocker.isStarted(blockerId)) return true;
             blockerId = powerSaveBlocker.start('prevent-app-suspension');
+            // INFO, not debug: this keeps the machine from idling to sleep for
+            // as long as auto-vote runs, which a laptop user is entitled to see
+            // rather than discover through battery drain. It is the honest
+            // price of hitting deadlines while the app sits in the background.
             logger
                 .withCategory('voting')
-                .debug('backgroundActivity: holding prevent-app-suspension while auto-vote runs', null);
+                .info(
+                    'Auto-vote is keeping this device awake so scheduled fills and votes are not missed; it stops when you stop auto-vote (the display can still sleep)',
+                    null,
+                );
             return true;
         }
         if (blockerId !== null) {
             if (powerSaveBlocker.isStarted(blockerId)) powerSaveBlocker.stop(blockerId);
             blockerId = null;
-            logger.withCategory('voting').debug('backgroundActivity: released prevent-app-suspension', null);
+            logger.withCategory('voting').info('Auto-vote is no longer keeping this device awake', null);
         }
         return false;
     } catch (error) {

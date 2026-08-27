@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
-import { createCadenceChain, DECISION_ERROR_MESSAGE } from '../../scheduling/cadenceChain';
+import { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } from '../../scheduling/cadenceChain';
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
@@ -138,11 +138,11 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                     // A renderer timer that fired far late means the page was
                     // throttled/frozen or the machine suspended, and every
                     // deadline inside that gap went unserved. Warning, not
-                    // debug: this is the only trace of a silently missed fill.
-                    overslept: (lateMs, waitMs) =>
-                        window.api.logWarning?.(
-                            `Cycle timer fired ${(lateMs / 60_000).toFixed(1)} min late (waited ${(waitMs / 60_000).toFixed(1)} min) — the app was suspended or throttled; any auto-fill, boost, turbo or emergency-fill window inside that gap was missed`,
-                        ),
+                    // debug: this is the only trace of a silently missed fill,
+                    // and it lands on the Logs page the user actually reads.
+                    // Wording is shared with the Node host so the two surfaces
+                    // cannot drift.
+                    overslept: (lateMs, waitMs) => window.api.logWarning?.(formatOversleptMessage(lateMs, waitMs)),
                 },
                 // Surface the next armed cycle as an absolute wall-clock instant
                 // for the status header's countdown; null clears it. dispatch is

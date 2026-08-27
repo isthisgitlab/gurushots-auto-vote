@@ -437,28 +437,80 @@ describe('createCadenceChain', () => {
 
 // The gate itself, unit-tested away from the timer plumbing.
 describe('oversleptBy', () => {
-    const { oversleptBy, OVERSLEEP_ABSOLUTE_MS } = require('../../src/js/scheduling/cadenceChain');
+    const { oversleptBy, OVERSLEEP_ABSOLUTE_MS, OVERSLEEP_ALWAYS_MS } = require('../../src/js/scheduling/cadenceChain');
 
     test('an on-time (or early) fire is never late', () => {
         expect(oversleptBy(3 * MS_PER_MINUTE, 3 * MS_PER_MINUTE)).toBe(0);
         expect(oversleptBy(3 * MS_PER_MINUTE, 3 * MS_PER_MINUTE - 500)).toBe(0);
     });
 
-    test('needs BOTH gates: a minute of slip on a long wait is noise, not a stall', () => {
-        // 45-minute wait, 90s late → past the absolute gate, under the relative one.
+    test('a minute of slip on a long wait is noise, not a stall', () => {
+        // 45-minute wait, 90s late → past the absolute floor, but a trivial
+        // fraction and nowhere near the always-report ceiling.
         expect(oversleptBy(45 * MS_PER_MINUTE, 45 * MS_PER_MINUTE + 90_000)).toBe(0);
-        // 1-minute last-minute cadence, 90s late → past both. This is the case
-        // that actually costs a deadline, so it must be reported.
+    });
+
+    test('the relative gate catches a short cadence badly overshot', () => {
+        // 1-minute last-minute cadence, 90s late. This is the case that
+        // actually costs a deadline, so it must be reported.
         expect(oversleptBy(MS_PER_MINUTE, MS_PER_MINUTE + 90_000)).toBe(90_000);
     });
 
-    test('the absolute gate is exclusive — exactly one minute late stays quiet', () => {
+    test('the absolute floor is exclusive — exactly one minute late stays quiet', () => {
         expect(oversleptBy(MS_PER_MINUTE, MS_PER_MINUTE + OVERSLEEP_ABSOLUTE_MS)).toBe(0);
         expect(oversleptBy(MS_PER_MINUTE, MS_PER_MINUTE + OVERSLEEP_ABSOLUTE_MS + 1)).toBe(OVERSLEEP_ABSOLUTE_MS + 1);
+    });
+
+    test('the relative gate is exclusive — exactly half the wait stays quiet', () => {
+        // 10-minute wait, 5 minutes late: exactly 50%, and exactly at the
+        // always-report ceiling. Both gates are strict `>`, so neither fires.
+        const waitMs = 10 * MS_PER_MINUTE;
+        expect(oversleptBy(waitMs, waitMs + waitMs * 0.5)).toBe(0);
+        expect(oversleptBy(waitMs, waitMs + waitMs * 0.5 + 1)).toBe(waitMs * 0.5 + 1);
+    });
+
+    // checkFrequencyMin/Max are user-settable with no upper bound, so the
+    // relative gate alone leaves a hole: on a long cadence a stall can be many
+    // minutes yet a small fraction. The absolute ceiling closes it.
+    test('a long cadence still reports a multi-minute stall below the relative gate', () => {
+        const waitMs = 30 * MS_PER_MINUTE;
+        const lateMs = 12 * MS_PER_MINUTE; // 40% — under the relative gate
+        expect(lateMs).toBeLessThan(waitMs * 0.5);
+        expect(oversleptBy(waitMs, waitMs + lateMs)).toBe(lateMs);
+    });
+
+    test('the always-report ceiling is exclusive at its own boundary', () => {
+        // 60-minute wait so the relative gate cannot be what fires.
+        const waitMs = 60 * MS_PER_MINUTE;
+        expect(oversleptBy(waitMs, waitMs + OVERSLEEP_ALWAYS_MS)).toBe(0);
+        expect(oversleptBy(waitMs, waitMs + OVERSLEEP_ALWAYS_MS + 1)).toBe(OVERSLEEP_ALWAYS_MS + 1);
     });
 
     test('reports the shape that was seen in production: a 51-minute freeze on a 3-minute cadence', () => {
         const waitMs = 3 * MS_PER_MINUTE;
         expect(oversleptBy(waitMs, waitMs + 51 * MS_PER_MINUTE)).toBe(51 * MS_PER_MINUTE);
+    });
+});
+
+// One wording, shared by both hosts, because it lands on the GUI's Logs page
+// where a user is trying to work out why a slot went unfilled.
+describe('formatOversleptMessage', () => {
+    const { formatOversleptMessage } = require('../../src/js/scheduling/cadenceChain');
+
+    test('states what happened, why, and what to do next', () => {
+        const message = formatOversleptMessage(51 * MS_PER_MINUTE, 3 * MS_PER_MINUTE);
+
+        expect(message).toContain('51.0 min');
+        expect(message).toContain('3.0 min');
+        expect(message).toMatch(/suspended|throttled/);
+        expect(message).toMatch(/did not happen/);
+        // The remediation half — without it the user is told they lost a fill
+        // and given nothing to do about it.
+        expect(message).toMatch(/keep the app window open/i);
+        expect(message).toMatch(/cli/i);
+    });
+
+    test('carries no emoji — every logger surface prefixes its own', () => {
+        expect(formatOversleptMessage(MS_PER_MINUTE, MS_PER_MINUTE)).not.toMatch(/⚠/);
     });
 });

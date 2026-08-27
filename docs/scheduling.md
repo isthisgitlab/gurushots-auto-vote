@@ -134,14 +134,37 @@ Deliberate semantics and caveats:
       `prevent-app-suspension` power-save blocker for exactly as long as
       `autovoteRunning` is true. Main learns the flag from the settings
       watcher's `onSettingsChanged` hook (the renderer already persists it
-      on every start/stop), so there is no extra IPC channel.
+      on every start/stop), so there is no extra IPC channel. This keeps the
+      machine from idling to sleep while auto-vote runs (the display may
+      still sleep) — a deliberate power cost, logged at INFO on both engage
+      and release so it is never a silent behaviour.
+
+    Two sharp edges in that `onSettingsChanged` wiring, both already handled
+    in `index.js` — keep them handled:
+    - The watcher's debounce handle is **module-level and outlives
+      `close()`**, so a callback armed before a window teardown still fires
+      after it. The observer must re-check the window is alive before acting,
+      exactly as the reload and broadcast paths do, or a routine settings
+      write (a window move is enough) can re-arm the blocker for a session
+      with no window — and nothing would release it.
+    - The watcher's 2-second "window recently created" guard suppresses the
+      **reload**, not the observer. `notifyObserver()` is called on that
+      early return too, so a Start clicked immediately after login still
+      syncs.
 
     When a timer _does_ fire far past its due time anyway, `cadenceChain`'s
-    `log.overslept` hook reports it as a warning on both hosts. Without it
-    the failure is invisible: the only symptom is a challenge that closed
+    `log.overslept` hook reports it as a warning on both hosts, using the
+    shared `formatOversleptMessage` so the two surfaces cannot drift. Without
+    it the failure is invisible: the only symptom is a challenge that closed
     with an unfilled slot, and nothing in the log says why. This was a real
     regression — a 51-minute gap on a 3–4 minute cadence swallowed a
     challenge's last scheduled fill _and_ its emergency-fill window.
+
+    `oversleptBy` reports a stall that is over a minute late **and** either
+    more than half the intended wait **or** more than five minutes outright.
+    The second clause is not redundant: `checkFrequencyMin/Max` have no upper
+    bound, so on a long cadence a deadline-costing stall can still be a small
+    fraction of the wait.
 
 ## Android — native Foreground Service + AlarmManager
 
