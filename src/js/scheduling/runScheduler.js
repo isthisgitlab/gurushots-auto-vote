@@ -58,6 +58,13 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 logger.withCategory('voting').warning(DECISION_ERROR_MESSAGE);
                 logger.withCategory('voting').debug('scheduleNext error details:', error);
             },
+            overslept: (lateMs, waitMs) => {
+                logger
+                    .withCategory('voting')
+                    .warning(
+                        `⚠️ Cycle timer fired ${(lateMs / 60_000).toFixed(1)} min late (waited ${(waitMs / 60_000).toFixed(1)} min) — the host was suspended or throttled; any auto-fill, boost, turbo or emergency-fill window inside that gap was missed`,
+                    );
+            },
             cycleError: (error) => {
                 logger.withCategory('voting').error('Error in scheduled voting cycle');
                 logger.withCategory('voting').debug('Full voting cycle error details:', error);

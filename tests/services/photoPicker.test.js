@@ -922,6 +922,36 @@ describe('photoPicker', () => {
     // Regression suite for the "The Farm Life picked a Sea Life photo" bug.
     // Four separate defects conspired; each gets a test so a partial revert of
     // any one of them fails loudly rather than silently degrading picks.
+    // A plural challenge title vs. a singular vision label is the FIRST thing
+    // suspected whenever an auto-fill leaves a slot empty ("the challenge said
+    // Dogs, the photo is tagged dog"). It is not the cause and must stay that
+    // way: the stemmer collapses both sides before anything compares them, on
+    // the client scorer AND on the derived server-side search term.
+    describe('plural title vs. singular label — "Let\'s See Dogs!"', () => {
+        const dogs = { title: "Let's See Dogs!", url: 'lets-see-dogs' };
+
+        test('the plural title collapses to the singular stem everywhere', () => {
+            expect(buildChallengeKeywords(dogs)).toEqual(['dog']);
+            expect(buildSearchTerms(dogs, {})).toEqual(['dog']);
+        });
+
+        test('a photo labelled with the singular scores as a match', () => {
+            expect(scorePhoto({ labels: ['Dog', 'Pet', 'Canidae'] }, buildChallengeKeywords(dogs))).toBe(1);
+        });
+
+        test('and is the pick, over a higher-view off-theme photo', () => {
+            const onTheme = { id: 'dog-1', labels: ['Dog'], views: 1, permission: { allowed: true } };
+            const offTheme = { id: 'other-1', labels: ['Skyscraper'], views: 99_999, permission: { allowed: true } };
+
+            expect(pickPhotosForChallenge(dogs, [offTheme, onTheme], 1)).toEqual(['dog-1']);
+        });
+
+        test('the reverse direction holds too — singular title, plural label', () => {
+            const dog = { title: "Let's See A Dog" };
+            expect(scorePhoto({ labels: ['Dogs'] }, buildChallengeKeywords(dog))).toBe(1);
+        });
+    });
+
     describe('theme matching — Farm Life / Sea Life regression', () => {
         const farmLife = { title: 'The Farm Life', url: 'the-farm-life' };
 

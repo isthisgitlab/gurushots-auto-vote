@@ -122,6 +122,26 @@ Deliberate semantics and caveats:
 - **Lifecycle**: tied to the renderer window. Closing the window stops
   the loop. The persisted `autovoteRunning` flag means a relaunch
   resumes voting without the user re-clicking Start.
+- **Staying schedulable** — the "never sleep past a boundary" guarantee
+  is only as good as the timer that carries it, and this chain runs in a
+  _renderer_. Two mechanisms will hold that timer for tens of minutes
+  with no error and no log line, and both must stay defeated:
+    - Chromium throttles, then outright **freezes**, timers on a
+      hidden/occluded page → `backgroundThrottling: false` on the main
+      window (`src/js/index.js`).
+    - macOS **App Nap** suspends the whole process, which no renderer flag
+      can reach → `src/js/windows/backgroundActivity.js` holds a
+      `prevent-app-suspension` power-save blocker for exactly as long as
+      `autovoteRunning` is true. Main learns the flag from the settings
+      watcher's `onSettingsChanged` hook (the renderer already persists it
+      on every start/stop), so there is no extra IPC channel.
+
+    When a timer _does_ fire far past its due time anyway, `cadenceChain`'s
+    `log.overslept` hook reports it as a warning on both hosts. Without it
+    the failure is invisible: the only symptom is a challenge that closed
+    with an unfilled slot, and nothing in the log says why. This was a real
+    regression — a 51-minute gap on a 3–4 minute cadence swallowed a
+    challenge's last scheduled fill _and_ its emergency-fill window.
 
 ## Android — native Foreground Service + AlarmManager
 

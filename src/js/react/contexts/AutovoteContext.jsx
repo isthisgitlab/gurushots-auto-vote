@@ -135,6 +135,14 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                     // invariant of a different module. Log best-effort instead
                     // of swallowing so a future regression can't fail silently.
                     cycleError: (err) => window.api.logWarning?.(`Voting cycle failed: ${err?.message || err}`),
+                    // A renderer timer that fired far late means the page was
+                    // throttled/frozen or the machine suspended, and every
+                    // deadline inside that gap went unserved. Warning, not
+                    // debug: this is the only trace of a silently missed fill.
+                    overslept: (lateMs, waitMs) =>
+                        window.api.logWarning?.(
+                            `Cycle timer fired ${(lateMs / 60_000).toFixed(1)} min late (waited ${(waitMs / 60_000).toFixed(1)} min) — the app was suspended or throttled; any auto-fill, boost, turbo or emergency-fill window inside that gap was missed`,
+                        ),
                 },
                 // Surface the next armed cycle as an absolute wall-clock instant
                 // for the status header's countdown; null clears it. dispatch is

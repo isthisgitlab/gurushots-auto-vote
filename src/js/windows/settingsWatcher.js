@@ -92,12 +92,20 @@ function compareSettings(oldSettings, newSettings) {
  * @param {{
  *   getMainWindow: () => (import('electron').BrowserWindow|null),
  *   getMainWindowCreatedTime: () => (number|null),
+ *   onSettingsChanged?: ((settings: Object) => void)|null,
  * }} deps - accessors for the window state index.js still owns; read at
  *   event time so the watcher always sees the current window/creation time.
+ *   `onSettingsChanged` is an OPTIONAL side-channel fired with every freshly
+ *   loaded snapshot (before the reload/broadcast branch), so main-process
+ *   state that must track a setting — e.g. the auto-vote power-save blocker in
+ *   windows/backgroundActivity.js — can follow a change the renderer made
+ *   without inventing a second IPC channel for it. Exceptions it throws are
+ *   swallowed: an observer must never stop the watcher from reloading or
+ *   broadcasting.
  * @returns {fs.FSWatcher|null} the watcher (caller owns closing it), or
  *   null when no settings file exists yet.
  */
-function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime }) {
+function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettingsChanged = null }) {
     const settingsPath = settings.getSettingsPath();
     let previousSettings = null;
 
@@ -184,6 +192,18 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime }) {
                     logger.withCategory('settings').error('Failed to load new settings for comparison:', error.message);
                     logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
                     shouldReload = true;
+                }
+
+                // Fire the observer on every successful load, whichever branch
+                // runs below (and even when nothing differed — a snapshot is a
+                // snapshot). Guarded so a buggy observer cannot cost the
+                // window its reload.
+                if (onSettingsChanged && newSettings) {
+                    try {
+                        onSettingsChanged(newSettings);
+                    } catch (error) {
+                        logger.withCategory('settings').warning(`Settings observer failed: ${error?.message || error}`);
+                    }
                 }
 
                 const mainWindow = getMainWindow();

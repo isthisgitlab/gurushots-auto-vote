@@ -29,6 +29,29 @@ const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 const DECISION_ERROR_MESSAGE = 'Error computing next cycle delay; using normal cadence';
 
 /**
+ * How late a timer may fire before the chain calls it out.
+ *
+ * A `setTimeout` is a floor, not a promise: an OS suspend, macOS App Nap, or
+ * Chromium's hidden-page throttling/freezing can hold a renderer timer for
+ * tens of minutes. That is not cosmetic here — the entire "never sleep past a
+ * boundary" guarantee is void for the duration, and the challenge whose
+ * auto-fill or emergency window fell inside the stall closes with an empty
+ * slot and NOTHING in the log to say why.
+ *
+ * So: report it. Late by more than a minute AND more than half the intended
+ * wait — the pair matters, since a 1-minute overshoot is noise on a 45-minute
+ * normal cadence but is the whole story on a 1-minute last-minute cadence.
+ */
+const OVERSLEEP_ABSOLUTE_MS = 60_000;
+const OVERSLEEP_RELATIVE = 0.5;
+
+const oversleptBy = (waitMs, actualMs) => {
+    const lateMs = actualMs - waitMs;
+    if (lateMs <= OVERSLEEP_ABSOLUTE_MS) return 0;
+    return lateMs > waitMs * OVERSLEEP_RELATIVE ? lateMs : 0;
+};
+
+/**
  * Create the shared cadence chain.
  *
  * @param {Object} deps - host transport
@@ -60,6 +83,10 @@ const DECISION_ERROR_MESSAGE = 'Error computing next cycle delay; using normal c
  *   failure (chain falls back to the random cadence)
  * @param {(error:*)=>(void|Promise<void>)} deps.log.cycleError - a voting
  *   cycle rejected
+ * @param {((lateMs:number, waitMs:number)=>(void|Promise<void>))} [deps.log.overslept] -
+ *   OPTIONAL: the armed timer fired far later than it was scheduled to (OS
+ *   suspend / App Nap / hidden-page throttling), so every boundary inside that
+ *   stall was missed. Hosts that omit it lose only the log line.
  * @param {(waitMs:number|null)=>void} [deps.onScheduled] - OPTIONAL: called with
  *   the delay (ms) to the next armed cycle each time one is scheduled, and with
  *   null when the chain stops arming. Used by the GUI to surface a live
@@ -155,6 +182,7 @@ const createCadenceChain = ({
         // (GUI only). Optional-chained: Node hosts pass no onScheduled.
         onScheduled?.(waitMs);
 
+        const armedAtMs = Date.now();
         const timeoutId = setTimeout(() => {
             void (async () => {
                 // A newer chain may have taken over (host re-armed / stopped);
@@ -163,6 +191,19 @@ const createCadenceChain = ({
                     return;
                 }
                 const cycleStartMs = Date.now();
+                // Say so when the timer was held far past its due time (OS
+                // suspend / App Nap / hidden-page freezing). Any boundary that
+                // fell inside the stall was missed, and this line is the only
+                // trace of it. Best-effort: an optional hook, and a throwing
+                // one must not cost us the cycle.
+                const lateMs = oversleptBy(waitMs, cycleStartMs - armedAtMs);
+                if (lateMs > 0) {
+                    try {
+                        await log.overslept?.(lateMs, waitMs);
+                    } catch {
+                        /* observability only */
+                    }
+                }
                 let cycleResult;
                 try {
                     cycleResult = await runCycle();
@@ -181,4 +222,10 @@ const createCadenceChain = ({
     return { scheduleNext };
 };
 
-module.exports = { createCadenceChain, DECISION_ERROR_MESSAGE };
+module.exports = {
+    createCadenceChain,
+    DECISION_ERROR_MESSAGE,
+    // exported for unit tests
+    oversleptBy,
+    OVERSLEEP_ABSOLUTE_MS,
+};

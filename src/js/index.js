@@ -15,6 +15,7 @@ const computationsIpc = require('./ipc/computations.handlers');
 const { isTrustedSender } = require('./ipc/registerHandlers');
 const { ensureExit, focusExistingWindow, clearTokenOnQuit } = require('./windows/lifecycle');
 const { watchSettingsFile } = require('./windows/settingsWatcher');
+const { syncBackgroundActivity } = require('./windows/backgroundActivity');
 const { createApplicationMenu } = require('./ui/applicationMenu');
 const { translationManager } = require('./translations/index');
 
@@ -149,6 +150,18 @@ function createMainWindow() {
             // require() the relative channel manifest, so it ships pre-bundled.
             preload: path.join(__dirname, '..', '..', 'dist', 'preload-bundle.js'),
             webSecurity: true,
+            // The auto-vote cadence chain is a recursive setTimeout that lives
+            // in THIS renderer (react/contexts/AutovoteContext.jsx ->
+            // scheduling/cadenceChain.js). Chromium throttles — and eventually
+            // freezes outright — timers on a hidden/occluded page, which
+            // silently stalls the whole voting loop the moment the window is
+            // backgrounded: observed as a 51-minute gap on a 3-4 minute
+            // cadence, long enough to swallow a challenge's last auto-fill
+            // slot AND its emergency-fill window. Deadline accuracy is this
+            // app's entire job, so the background CPU cost is the right trade.
+            // windows/backgroundActivity.js covers the macOS App Nap half of
+            // the same problem, which no renderer flag can reach.
+            backgroundThrottling: false,
             // Use a custom session partition to isolate storage
             partition: 'persist:gurushots',
         },
@@ -190,6 +203,9 @@ function createMainWindow() {
             settingsWatcher.close();
             settingsWatcher = null;
         }
+        // No renderer, no cadence chain — release the assertion. A relaunch or
+        // a re-created window re-adopts it from the persisted flag above.
+        syncBackgroundActivity(false);
     });
 
     // Watch settings file for changes and auto-reload with debouncing.
@@ -198,7 +214,17 @@ function createMainWindow() {
     settingsWatcher = watchSettingsFile({
         getMainWindow: () => mainWindow,
         getMainWindowCreatedTime: () => mainWindowCreatedTime,
+        // The renderer persists `autovoteRunning` on every start/stop, so the
+        // settings file IS the signal — no extra IPC channel is needed to keep
+        // the power-save blocker in step with the running session.
+        onSettingsChanged: (newSettings) => syncBackgroundActivity(newSettings.autovoteRunning === true),
     });
+
+    // Adopt whatever the persisted flag already says: AutovoteContext
+    // auto-resumes a session that was running when the app last closed, and
+    // that resume does not re-write the flag (it is already true), so the
+    // watcher above would never fire for it.
+    syncBackgroundActivity(settings.getSetting('autovoteRunning') === true);
 }
 
 // Check if we should auto-login based on saved token

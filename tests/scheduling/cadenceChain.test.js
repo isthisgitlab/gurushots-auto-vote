@@ -366,4 +366,99 @@ describe('createCadenceChain', () => {
             await expect(chain.scheduleNext([farChallenge()])).resolves.toBeUndefined();
         });
     });
+
+    // The optional overslept hook. A setTimeout is a floor, not a promise: an
+    // OS suspend, macOS App Nap, or Chromium's hidden-page freezing can hold a
+    // renderer timer for tens of minutes, during which the chain's whole
+    // "never sleep past a boundary" guarantee is void and any fill / boost /
+    // turbo / emergency window inside the gap is missed with nothing logged.
+    describe('overslept hook', () => {
+        test('fires with (lateMs, waitMs) when the host was suspended past the due time', async () => {
+            const overslept = jest.fn();
+            const deps = makeDeps();
+            deps.log.overslept = overslept;
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+
+            // Jump the wall clock WITHOUT firing the timer — exactly the shape
+            // of a suspend: time passed, the timer did not run.
+            jest.setSystemTime(Date.now() + 50 * MS_PER_MINUTE);
+            await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+            await flushMicrotasks();
+
+            expect(deps.runCycle).toHaveBeenCalledTimes(1);
+            expect(overslept).toHaveBeenCalledTimes(1);
+            expect(overslept).toHaveBeenCalledWith(50 * MS_PER_MINUTE, FIXED_DELAY_MS);
+        });
+
+        test('stays silent on a punctual timer', async () => {
+            const overslept = jest.fn();
+            const deps = makeDeps();
+            deps.log.overslept = overslept;
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+            await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+            await flushMicrotasks();
+
+            expect(deps.runCycle).toHaveBeenCalledTimes(1);
+            expect(overslept).not.toHaveBeenCalled();
+        });
+
+        test('a throwing hook still runs the cycle — observability only', async () => {
+            const deps = makeDeps();
+            deps.log.overslept = jest.fn(() => {
+                throw new Error('log sink down');
+            });
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+            jest.setSystemTime(Date.now() + 50 * MS_PER_MINUTE);
+            await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+            await flushMicrotasks();
+
+            expect(deps.runCycle).toHaveBeenCalledTimes(1);
+        });
+
+        test('absence is fine — a host without the hook still runs the cycle', async () => {
+            const deps = makeDeps(); // log.overslept undefined
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+            jest.setSystemTime(Date.now() + 50 * MS_PER_MINUTE);
+            await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+            await flushMicrotasks();
+
+            expect(deps.runCycle).toHaveBeenCalledTimes(1);
+        });
+    });
+});
+
+// The gate itself, unit-tested away from the timer plumbing.
+describe('oversleptBy', () => {
+    const { oversleptBy, OVERSLEEP_ABSOLUTE_MS } = require('../../src/js/scheduling/cadenceChain');
+
+    test('an on-time (or early) fire is never late', () => {
+        expect(oversleptBy(3 * MS_PER_MINUTE, 3 * MS_PER_MINUTE)).toBe(0);
+        expect(oversleptBy(3 * MS_PER_MINUTE, 3 * MS_PER_MINUTE - 500)).toBe(0);
+    });
+
+    test('needs BOTH gates: a minute of slip on a long wait is noise, not a stall', () => {
+        // 45-minute wait, 90s late → past the absolute gate, under the relative one.
+        expect(oversleptBy(45 * MS_PER_MINUTE, 45 * MS_PER_MINUTE + 90_000)).toBe(0);
+        // 1-minute last-minute cadence, 90s late → past both. This is the case
+        // that actually costs a deadline, so it must be reported.
+        expect(oversleptBy(MS_PER_MINUTE, MS_PER_MINUTE + 90_000)).toBe(90_000);
+    });
+
+    test('the absolute gate is exclusive — exactly one minute late stays quiet', () => {
+        expect(oversleptBy(MS_PER_MINUTE, MS_PER_MINUTE + OVERSLEEP_ABSOLUTE_MS)).toBe(0);
+        expect(oversleptBy(MS_PER_MINUTE, MS_PER_MINUTE + OVERSLEEP_ABSOLUTE_MS + 1)).toBe(OVERSLEEP_ABSOLUTE_MS + 1);
+    });
+
+    test('reports the shape that was seen in production: a 51-minute freeze on a 3-minute cadence', () => {
+        const waitMs = 3 * MS_PER_MINUTE;
+        expect(oversleptBy(waitMs, waitMs + 51 * MS_PER_MINUTE)).toBe(51 * MS_PER_MINUTE);
+    });
 });
