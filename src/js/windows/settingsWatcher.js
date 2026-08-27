@@ -92,12 +92,28 @@ function compareSettings(oldSettings, newSettings) {
  * @param {{
  *   getMainWindow: () => (import('electron').BrowserWindow|null),
  *   getMainWindowCreatedTime: () => (number|null),
+ *   onSettingsChanged?: ((settings: Object) => void)|null,
  * }} deps - accessors for the window state index.js still owns; read at
  *   event time so the watcher always sees the current window/creation time.
+ *   `onSettingsChanged` is an OPTIONAL side-channel fired with a freshly
+ *   loaded snapshot on EVERY exit of the debounced handler — the normal
+ *   reload/broadcast path and the "window recently created" early return
+ *   alike — so main-process state that must track a setting (e.g. the
+ *   auto-vote power-save blocker in windows/backgroundActivity.js) can follow
+ *   a change the renderer made without inventing a second IPC channel.
+ *   Exceptions it throws are swallowed: an observer must never stop the
+ *   watcher from reloading or broadcasting.
+ *
+ *   NOTE for implementers: the debounce handle is module-level and is NOT
+ *   cleared by the returned watcher's `close()`, so a callback armed before a
+ *   window teardown still fires afterwards. The reload and broadcast paths
+ *   below both re-check the window before acting; an observer must make the
+ *   equivalent liveness check itself (see index.js) rather than assume a
+ *   window still exists.
  * @returns {fs.FSWatcher|null} the watcher (caller owns closing it), or
  *   null when no settings file exists yet.
  */
-function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime }) {
+function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettingsChanged = null }) {
     const settingsPath = settings.getSettingsPath();
     let previousSettings = null;
 
@@ -111,6 +127,36 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime }) {
     } catch (error) {
         logger.withCategory('settings').error('Failed to load initial settings for comparison:', error.message);
     }
+
+    // Hand the observer a snapshot the caller already loaded. Never throws: a
+    // buggy observer must not cost the window its reload or the renderers
+    // their broadcast. A falsy snapshot is a no-op — the load-failure path
+    // below already logs the read error, and re-reporting it here as an
+    // "observer failed" would name the wrong culprit.
+    const notifyObserver = (snapshot) => {
+        if (!onSettingsChanged || !snapshot) return;
+        try {
+            onSettingsChanged(snapshot);
+        } catch (error) {
+            logger.withCategory('settings').warning(`Settings observer failed: ${error?.message || error}`);
+        }
+    };
+
+    // Same, for the one exit that returns before anything is loaded (the
+    // "window recently created" guard): a consumer tracking a setting must not
+    // miss a flip just because the window happens to be young. An unreadable
+    // file there is silently skipped — there is simply nothing to observe, and
+    // the next event will log it on the normal path.
+    const notifyObserverFromDisk = () => {
+        if (!onSettingsChanged) return;
+        let snapshot;
+        try {
+            snapshot = settings.loadSettings();
+        } catch {
+            return;
+        }
+        notifyObserver(snapshot);
+    };
 
     return fs.watch(settingsPath, (eventType) => {
         if (eventType === 'change') {
@@ -128,6 +174,15 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime }) {
                     logger
                         .withCategory('settings')
                         .info('🔄 Settings file changed, but skipping reload (window recently created)');
+                    // The RELOAD is what this guard exists to suppress — not the
+                    // observer. Someone who hits Start within 2s of the window
+                    // appearing (a fast post-login click) still has to sync the
+                    // main-process state that tracks the flag, or it stays wrong
+                    // until an unrelated settings write happens to fix it.
+                    // `previousSettings` is deliberately NOT advanced here, so
+                    // the skipped change is still diffed (and can still force a
+                    // reload) on the next event.
+                    notifyObserverFromDisk();
                     return;
                 }
 
@@ -185,6 +240,11 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime }) {
                     logger.withCategory('settings').info('🔄 Settings file changed, reloading main window...');
                     shouldReload = true;
                 }
+
+                // Fire the observer on every successful load, whichever branch
+                // runs below (and even when nothing differed — a snapshot is a
+                // snapshot).
+                notifyObserver(newSettings);
 
                 const mainWindow = getMainWindow();
                 if (shouldReload && mainWindow && !mainWindow.isDestroyed()) {

@@ -103,7 +103,7 @@
     "devDependencies": {
         "@capacitor/cli": "^8.5.0",
         "@eslint/js": "^10.0.1",
-        "@happy-dom/jest-environment": "^20.11.6",
+        "@happy-dom/jest-environment": "^20.11.10",
         "@jest/globals": "^30.4.1",
         "@size-limit/file": "^13.0.3",
         "@swc/jest": "^0.2.39",
@@ -113,7 +113,7 @@
         "@testing-library/preact": "^3.2.4",
         "@ttsc/graph": "0.28.2",
         "@ttsc/lint": "0.28.2",
-        "@types/node": "^26.3.0",
+        "@types/node": "^26.4.0",
         "concurrently": "^10.0.5",
         "cross-env": "^10.1.0",
         "daisyui": "^5.7.22",

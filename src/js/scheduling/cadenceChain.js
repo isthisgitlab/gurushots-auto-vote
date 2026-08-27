@@ -29,6 +29,61 @@ const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 const DECISION_ERROR_MESSAGE = 'Error computing next cycle delay; using normal cadence';
 
 /**
+ * How late a timer may fire before the chain calls it out.
+ *
+ * A `setTimeout` is a floor, not a promise: an OS suspend, macOS App Nap, or
+ * Chromium's hidden-page throttling/freezing can hold a renderer timer for
+ * tens of minutes. That is not cosmetic here — the entire "never sleep past a
+ * boundary" guarantee is void for the duration, and the challenge whose
+ * auto-fill or emergency window fell inside the stall closes with an empty
+ * slot and NOTHING in the log to say why.
+ *
+ * So: report it. The floor is a minute — below that, ordinary event-loop and
+ * scheduler jitter would spam the log. Above the floor a stall qualifies two
+ * ways, and it needs only ONE of them:
+ *
+ *   - more than half the intended wait: catches a short cadence being badly
+ *     overshot (1 minute late on a 1-minute last-minute cadence is the whole
+ *     story), while a minute of slip on a 45-minute wait stays quiet;
+ *   - OR more than OVERSLEEP_ALWAYS_MS outright, whatever the ratio. The
+ *     ratio alone has a blind spot: `checkFrequencyMin/Max` are user-settable
+ *     with no upper bound, so on a 30-minute cadence a 12-minute stall is only
+ *     40% and would go unreported — yet 12 minutes is longer than the tightest
+ *     schedule row and the whole emergency-fill window, i.e. exactly a stall
+ *     that costs a deadline. Anything on that scale is worth a line no matter
+ *     what it is a fraction of.
+ */
+const OVERSLEEP_ABSOLUTE_MS = 60_000;
+const OVERSLEEP_RELATIVE = 0.5;
+const OVERSLEEP_ALWAYS_MS = 5 * 60_000;
+
+const oversleptBy = (waitMs, actualMs) => {
+    const lateMs = actualMs - waitMs;
+    if (lateMs <= OVERSLEEP_ABSOLUTE_MS) return 0;
+    return lateMs > waitMs * OVERSLEEP_RELATIVE || lateMs > OVERSLEEP_ALWAYS_MS ? lateMs : 0;
+};
+
+/**
+ * The one wording for the overslept warning, shared by every host for the same
+ * reason DECISION_ERROR_MESSAGE is: two hand-copied templates drift, and this
+ * one is read by a user working out why a challenge closed with an empty slot.
+ *
+ * It follows what happened → why → what next, because it surfaces on the GUI's
+ * Logs page, not just in a file. No emoji: `logger.warning` (and the GUI's
+ * logWarning) already prefix one.
+ *
+ * @param {number} lateMs - how far past its due time the timer fired
+ * @param {number} waitMs - the delay that was armed
+ * @returns {string}
+ */
+const formatOversleptMessage = (lateMs, waitMs) =>
+    `Voting cycle ran ${(lateMs / 60_000).toFixed(1)} min later than scheduled ` +
+    `(waited ${(waitMs / 60_000).toFixed(1)} min) — the app was suspended or its timers were throttled, ` +
+    `so any auto-fill, boost, turbo or emergency-fill due in that gap did not happen. ` +
+    `Keep the app window open and the device awake while challenges are near their deadline, ` +
+    `or run the CLI (\`cli:start\`), which is not affected.`;
+
+/**
  * Create the shared cadence chain.
  *
  * @param {Object} deps - host transport
@@ -60,6 +115,10 @@ const DECISION_ERROR_MESSAGE = 'Error computing next cycle delay; using normal c
  *   failure (chain falls back to the random cadence)
  * @param {(error:*)=>(void|Promise<void>)} deps.log.cycleError - a voting
  *   cycle rejected
+ * @param {((lateMs:number, waitMs:number)=>(void|Promise<void>))} [deps.log.overslept] -
+ *   OPTIONAL: the armed timer fired far later than it was scheduled to (OS
+ *   suspend / App Nap / hidden-page throttling), so every boundary inside that
+ *   stall was missed. Hosts that omit it lose only the log line.
  * @param {(waitMs:number|null)=>void} [deps.onScheduled] - OPTIONAL: called with
  *   the delay (ms) to the next armed cycle each time one is scheduled, and with
  *   null when the chain stops arming. Used by the GUI to surface a live
@@ -155,6 +214,7 @@ const createCadenceChain = ({
         // (GUI only). Optional-chained: Node hosts pass no onScheduled.
         onScheduled?.(waitMs);
 
+        const armedAtMs = Date.now();
         const timeoutId = setTimeout(() => {
             void (async () => {
                 // A newer chain may have taken over (host re-armed / stopped);
@@ -163,6 +223,24 @@ const createCadenceChain = ({
                     return;
                 }
                 const cycleStartMs = Date.now();
+                // Say so when the timer was held far past its due time (OS
+                // suspend / App Nap / hidden-page freezing). Any boundary that
+                // fell inside the stall was missed, and this line is the only
+                // trace of it.
+                //
+                // Deliberately NOT awaited: on the GUI this hook is an IPC
+                // round-trip with no timeout, and this branch runs exactly when
+                // the host has just proved itself unresponsive — awaiting it
+                // would delay an already-late cycle for a log line. Fire it,
+                // swallow a sync throw and an async rejection alike, move on.
+                const lateMs = oversleptBy(waitMs, cycleStartMs - armedAtMs);
+                if (lateMs > 0) {
+                    try {
+                        void Promise.resolve(log.overslept?.(lateMs, waitMs)).catch(() => {});
+                    } catch {
+                        /* observability only */
+                    }
+                }
                 let cycleResult;
                 try {
                     cycleResult = await runCycle();
@@ -181,4 +259,12 @@ const createCadenceChain = ({
     return { scheduleNext };
 };
 
-module.exports = { createCadenceChain, DECISION_ERROR_MESSAGE };
+module.exports = {
+    createCadenceChain,
+    DECISION_ERROR_MESSAGE,
+    formatOversleptMessage,
+    // exported for unit tests
+    oversleptBy,
+    OVERSLEEP_ABSOLUTE_MS,
+    OVERSLEEP_ALWAYS_MS,
+};

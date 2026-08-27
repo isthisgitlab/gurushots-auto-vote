@@ -19,7 +19,7 @@
 
 const logger = require('../logger');
 const settings = require('../settings');
-const { createCadenceChain, DECISION_ERROR_MESSAGE } = require('./cadenceChain');
+const { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } = require('./cadenceChain');
 const { resolveThreshold, resolveScheduledFill } = require('./nodeResolvers');
 
 /**
@@ -57,6 +57,11 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
             decisionError: (error) => {
                 logger.withCategory('voting').warning(DECISION_ERROR_MESSAGE);
                 logger.withCategory('voting').debug('scheduleNext error details:', error);
+            },
+            // No emoji here: logger.warning already prefixes one (see
+            // logger.js), exactly as the decisionError callback above relies on.
+            overslept: (lateMs, waitMs) => {
+                logger.withCategory('voting').warning(formatOversleptMessage(lateMs, waitMs));
             },
             cycleError: (error) => {
                 logger.withCategory('voting').error('Error in scheduled voting cycle');
