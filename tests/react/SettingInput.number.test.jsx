@@ -11,7 +11,7 @@
  *     typed.
  *
  * The blank case matters most for the settings whose min is 0 (exposureTarget,
- * lastHourExposureTarget and the two entry-slot indexes): `Number('')` is 0, so a blank field
+ * finalWindowExposureTarget and the two entry-slot indexes): `Number('')` is 0, so a blank field
  * looked perfectly in range, no field was highlighted, and Save then showed the generic
  * "check the highlighted values" banner pointing at nothing.
  */

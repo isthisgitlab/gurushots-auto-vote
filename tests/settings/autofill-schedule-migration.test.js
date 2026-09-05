@@ -163,6 +163,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
             _autoFillScheduleBoundsV1: true,
             _scheduledFillListsMigratedV1: true,
             _scheduledFillListBoundsV1: true,
+            _finalWindowExposureRenamedV1: true,
         });
 
         const loaded = settings.loadSettings();
@@ -184,6 +185,7 @@ describe('autoFillIntervalMinutes → autoFillSchedule migration in loadSettings
             _autoFillScheduleBoundsV1: true,
             _scheduledFillListsMigratedV1: true,
             _scheduledFillListBoundsV1: true,
+            _finalWindowExposureRenamedV1: true,
         });
 
         const loaded = settings.loadSettings();

@@ -3,7 +3,7 @@
  * + settings.js facade) didn't regress the public re-export contract.
  *
  * Internal precedence (per-challenge > global > schema default) is
- * exercised end-to-end by the existing api/last-hour-exposure and
+ * exercised end-to-end by the existing api/final-window-exposure and
  * exposureTarget service tests against real settings; this file focuses
  * on what's specific to the split — the facade re-exports stay
  * referentially identical to the underlying modules.
@@ -116,9 +116,9 @@ describe('schema validation behavior', () => {
     });
 
     test('getValidationError surfaces context-aware errors via getContextError', () => {
-        // lastHourExposure must be <= exposure. Pass an invalid pair to
+        // finalWindowExposure must be <= exposure. Pass an invalid pair to
         // exercise the dedicated contextValidation/getContextError pair.
-        const err = schemaModule.getValidationError('lastHourExposure', 90, { exposure: 50 });
+        const err = schemaModule.getValidationError('finalWindowExposure', 90, { exposure: 50 });
         expect(err).toContain('VALIDATION_LESS_OR_EQUAL');
         expect(err).toContain('app.exposure');
         expect(err).toContain('50');

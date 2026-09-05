@@ -59,7 +59,7 @@ const getSchemaDefault = (key) => SETTINGS_SCHEMA[key]?.default;
  * The exposure value the exposure-dependent validators compare against:
  * the live `exposure` from allSettings when it is a valid 1–100 number,
  * otherwise the schema default. Shared by the exposureTarget and
- * lastHourExposure context validators/error builders.
+ * finalWindowExposure context validators/error builders.
  *
  * @param {any} allSettings
  * @returns {number}
@@ -108,6 +108,11 @@ const MAX_SCHEDULE_ROWS = 3;
 // can't import this zod-carrying file) — change both together.
 const MAX_SCHEDULE_COUNT = 4;
 const MAX_SCHEDULE_SECONDS = 30 * 24 * 3600; // 30 days
+// Final-window duration (seconds before close during which the final-window
+// exposure rule applies). Integer, at least 60s (a shorter window is
+// meaningless against poll cadence) and capped by the same 30-day schedule
+// ceiling as every other duration. Default is 3600 (the legacy fixed hour).
+const finalWindowDurationSec = z.number().int().min(60).max(MAX_SCHEDULE_SECONDS);
 const fillScheduleRow = z
     .object({
         count: z.number().int().min(2).max(MAX_SCHEDULE_COUNT),
@@ -465,18 +470,35 @@ const SETTINGS_SCHEMA = {
         description: 'app.turboFillNewDesc',
     },
 
-    // --- Last Hour Exposure ---
-    useLastHourExposure: {
+    // --- Final Window Exposure ---
+    // Duration of the "final window" before a challenge closes during which the
+    // final-window exposure rule applies. Default 3600s (1 hour) preserves the
+    // legacy fixed one-hour behaviour; stored as seconds via the hours/minutes
+    // input. Read per-challenge by the voting rules and the top-up scheduler.
+    finalWindowDuration: {
+        type: 'time', // hours/minutes input, stored as seconds
+        default: 3600, // 1 hour in seconds
+        perChallenge: true,
+        validation: finalWindowDurationSec,
+        min: 60,
+        max: MAX_SCHEDULE_SECONDS,
+        validationOrder: 1, // Validate first (no dependencies)
+        group: 'finalWindow',
+        label: 'app.finalWindowDuration',
+        description: 'app.finalWindowDurationDesc',
+        helpKey: 'app.finalWindowDurationHelp',
+    },
+    useFinalWindowExposure: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1, // Validate first (no dependencies)
-        group: 'lastHour',
-        label: 'app.useLastHourExposure',
-        description: 'app.useLastHourExposureDesc',
+        group: 'finalWindow',
+        label: 'app.useFinalWindowExposure',
+        description: 'app.useFinalWindowExposureDesc',
     },
-    lastHourExposure: {
+    finalWindowExposure: {
         type: 'number',
         default: 100,
         perChallenge: true,
@@ -492,13 +514,13 @@ const SETTINGS_SCHEMA = {
             `VALIDATION_LESS_OR_EQUAL|app.exposure|${effectiveExposureOf(allSettings)}`,
         dependsOn: ['exposure'],
         validationOrder: 2, // Validate after dependencies
-        group: 'lastHour',
-        label: 'app.lastHourExposure',
-        description: 'app.lastHourExposureDesc',
+        group: 'finalWindow',
+        label: 'app.finalWindowExposure',
+        description: 'app.finalWindowExposureDesc',
     },
-    lastHourExposureTarget: {
+    finalWindowExposureTarget: {
         type: 'number',
-        // 0 is a sentinel meaning "vote up to the lastHourExposure trigger value" (legacy behavior).
+        // 0 is a sentinel meaning "vote up to the finalWindowExposure trigger value" (legacy behavior).
         default: 0,
         perChallenge: true,
         validation: percentageOrZero,
@@ -507,50 +529,51 @@ const SETTINGS_SCHEMA = {
         unit: 'app.unitPercent',
         contextValidation: (value, allSettings) => {
             if (value === 0) return true;
-            const triggerValue = allSettings.lastHourExposure;
+            const triggerValue = allSettings.finalWindowExposure;
             const effectiveTrigger =
                 typeof triggerValue === 'number' && triggerValue >= 1 && triggerValue <= 100
                     ? triggerValue
-                    : getSchemaDefault('lastHourExposure');
+                    : getSchemaDefault('finalWindowExposure');
             return value >= effectiveTrigger;
         },
         getContextError: (value, allSettings) => {
-            const triggerValue = allSettings.lastHourExposure;
+            const triggerValue = allSettings.finalWindowExposure;
             const effectiveTrigger =
                 typeof triggerValue === 'number' && triggerValue >= 1 && triggerValue <= 100
                     ? triggerValue
-                    : getSchemaDefault('lastHourExposure');
-            return `VALIDATION_GREATER_OR_EQUAL|app.lastHourExposure|${effectiveTrigger}`;
+                    : getSchemaDefault('finalWindowExposure');
+            return `VALIDATION_GREATER_OR_EQUAL|app.finalWindowExposure|${effectiveTrigger}`;
         },
-        dependsOn: ['lastHourExposure'],
+        dependsOn: ['finalWindowExposure'],
         validationOrder: 2,
-        group: 'lastHour',
-        label: 'app.lastHourExposureTarget',
-        description: 'app.lastHourExposureTargetDesc',
-        helpKey: 'app.lastHourExposureTargetHelp',
+        group: 'finalWindow',
+        label: 'app.finalWindowExposureTarget',
+        description: 'app.finalWindowExposureTargetDesc',
+        helpKey: 'app.finalWindowExposureTargetHelp',
     },
     // Boolean toggle (0-is-off convention does NOT apply — this is a flag, not a
-    // duration). Only meaningful alongside useLastHourExposure: it tops the
+    // duration). Only meaningful alongside useFinalWindowExposure: it tops the
     // challenge up to the STANDARD exposure target across the boundary into the
-    // final hour, so a challenge whose exposure decayed below standard doesn't
-    // get stranded there by the last-hour rule's lower (recovery) trigger.
-    voteBeforeLastHour: {
+    // final window, so a challenge whose exposure decayed below standard doesn't
+    // get stranded there by the final-window rule's lower (recovery) trigger.
+    voteBeforeFinalWindow: {
         type: 'boolean',
         default: false,
         perChallenge: true,
         validation: zBool,
         validationOrder: 1, // Validate first (no dependencies)
-        group: 'lastHour',
-        label: 'app.voteBeforeLastHour',
-        description: 'app.voteBeforeLastHourDesc',
+        group: 'finalWindow',
+        label: 'app.voteBeforeFinalWindow',
+        description: 'app.voteBeforeFinalWindowDesc',
     },
-    // Lead minutes: half-width of the top-up window straddling the last-hour
-    // boundary — the window runs [close-3600-lead, close-3600+lead], i.e. it
-    // starts `lead` minutes BEFORE the final hour (the scheduler wakes then to
-    // guarantee the top-up) and extends `lead` minutes INTO it as a grace period
-    // for timing jitter / an app started late. Reuses the 1..59 minute validator;
-    // 0 is intentionally not allowed (a zero-width window would defeat the point).
-    voteBeforeLastHourLeadMin: {
+    // Lead minutes: half-width of the top-up window straddling the final-window
+    // boundary — the window runs [close-finalWindowDuration-lead,
+    // close-finalWindowDuration+lead], i.e. it starts `lead` minutes BEFORE the
+    // final window (the scheduler wakes then to guarantee the top-up) and extends
+    // `lead` minutes INTO it as a grace period for timing jitter / an app started
+    // late. Reuses the 1..59 minute validator; 0 is intentionally not allowed (a
+    // zero-width window would defeat the point).
+    voteBeforeFinalWindowLeadMin: {
         type: 'number',
         default: 15,
         perChallenge: true,
@@ -559,9 +582,9 @@ const SETTINGS_SCHEMA = {
         max: 59,
         unit: 'app.unitMinutes',
         validationOrder: 1, // Validate first (no dependencies)
-        group: 'lastHour',
-        label: 'app.voteBeforeLastHourLeadMin',
-        description: 'app.voteBeforeLastHourLeadMinDesc',
+        group: 'finalWindow',
+        label: 'app.voteBeforeFinalWindowLeadMin',
+        description: 'app.voteBeforeFinalWindowLeadMinDesc',
     },
 
     // --- Last Minute ---
@@ -784,7 +807,7 @@ const SETTINGS_GROUPS = [
     { id: 'general', label: 'app.groupGeneral' },
     { id: 'boost', label: 'app.groupBoost' },
     { id: 'turbo', label: 'app.groupTurbo' },
-    { id: 'lastHour', label: 'app.groupLastHour' },
+    { id: 'finalWindow', label: 'app.groupFinalWindow' },
     { id: 'lastMinute', label: 'app.groupLastMinute' },
     { id: 'scheduledFill', label: 'app.groupScheduledFill' },
     { id: 'autoFill', label: 'app.groupAutoFill' },

@@ -43,10 +43,10 @@ const mockSettings = (overrides = {}) => {
         voteOnlyInLastMinute: false,
         exposure: 90,
         lastMinuteThreshold: 10,
-        lastHourExposure: 40,
-        useLastHourExposure: false,
+        finalWindowExposure: 40,
+        useFinalWindowExposure: false,
         exposureTarget: 0,
-        lastHourExposureTarget: 0,
+        finalWindowExposureTarget: 0,
         useScheduledFill: false,
         scheduledFillReplaces: false,
         scheduledFillTime: [],
@@ -117,11 +117,11 @@ describe('voteOnNewEntry — forcing past the at-target check', () => {
         expect(result.voteReason).toContain('40% < 90%');
     });
 
-    test('the last-hour rule forces up to lastHourExposureTarget', () => {
+    test('the final-window rule forces up to finalWindowExposureTarget', () => {
         mockSettings({
-            useLastHourExposure: true,
-            lastHourExposure: 40,
-            lastHourExposureTarget: 80,
+            useFinalWindowExposure: true,
+            finalWindowExposure: 40,
+            finalWindowExposureTarget: 80,
         });
         const result = VotingLogic.evaluateVotingDecision(
             buildChallenge({ exposureFactor: 50, closeInSeconds: 1800 }),
@@ -132,7 +132,7 @@ describe('voteOnNewEntry — forcing past the at-target check', () => {
         expect(result.shouldVote).toBe(true);
         expect(result.forcedByNewEntry).toBe(true);
         expect(result.targetExposure).toBe(80);
-        expect(result.voteReason).toContain('last hour threshold');
+        expect(result.voteReason).toContain('final window threshold');
         expect(result.voteReason).toContain('50% >= 40%');
         expectNoFalseComparison(result.voteReason);
     });
@@ -155,10 +155,10 @@ describe('voteOnNewEntry — reason strings stay truthful for every rule label',
             expectText: 'lastminute threshold',
         },
         {
-            label: 'last-hour',
-            setup: () => mockSettings({ useLastHourExposure: true, lastHourExposure: 40 }),
+            label: 'final-window',
+            setup: () => mockSettings({ useFinalWindowExposure: true, finalWindowExposure: 40 }),
             challenge: () => buildChallenge({ exposureFactor: 100, closeInSeconds: 1800 }),
-            expectText: 'last hour threshold',
+            expectText: 'final window threshold',
         },
         {
             label: 'normal',

@@ -239,7 +239,7 @@ async function main() {
                 if (!key || value === undefined) {
                     console.error('Usage: pnpm settings:set-global <settingKey> <value>');
                     console.error('Example: pnpm settings:set-global exposure 80');
-                    console.error('Example: pnpm settings:set-global lastHourExposure 70');
+                    console.error('Example: pnpm settings:set-global finalWindowExposure 70');
                     process.exit(1);
                 }
 
@@ -299,7 +299,7 @@ async function main() {
                 console.log('  pnpm settings:set theme dark');
                 console.log('  pnpm settings:set stayLoggedIn true');
                 console.log('  pnpm settings:set-global exposure 80');
-                console.log('  pnpm settings:set-global lastHourExposure 70');
+                console.log('  pnpm settings:set-global finalWindowExposure 70');
                 console.log('  pnpm settings:set challengeSettings.globalDefaults.boostTime 7200');
                 console.log('  pnpm settings:reset theme');
                 console.log('  pnpm settings:reset-global boostTime');

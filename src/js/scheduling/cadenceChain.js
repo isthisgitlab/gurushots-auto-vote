@@ -103,8 +103,8 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  *   per-challenge threshold resolver for the shared math
  * @param {Function} deps.resolveScheduledFill - per-challenge scheduled-fill
  *   resolver for the shared math
- * @param {import('./thresholdWindow').ResolveLastHourTopUp} deps.resolveLastHourTopUp -
- *   per-challenge pre-last-hour top-up resolver for the shared math
+ * @param {import('./thresholdWindow').ResolveFinalWindowTopUp} deps.resolveFinalWindowTopUp -
+ *   per-challenge pre-final-window top-up resolver for the shared math
  * @param {()=>Promise<*>} deps.runCycle - run one voting cycle; the resolved
  *   value is handed to the next decision as the prefetched list candidate
  *   (any non-array means "fetch fresh"). A rejection is logged via
@@ -112,7 +112,7 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  * @param {Object} deps.log - host log adapter
  * @param {(mode:string, message:string)=>(void|Promise<void>)} deps.log.cadence -
  *   receives every cadence decision line (modes: normal / last-minute /
- *   scheduled / pre-last-hour / approaching); a host may drop modes it never logged
+ *   scheduled / pre-final-window / approaching); a host may drop modes it never logged
  * @param {(error:*)=>(void|Promise<void>)} deps.log.decisionError - decision
  *   failure (chain falls back to the random cadence)
  * @param {(error:*)=>(void|Promise<void>)} deps.log.cycleError - a voting
@@ -137,7 +137,7 @@ const createCadenceChain = ({
     resolveLastMinuteCheckMinutes,
     resolveThreshold,
     resolveScheduledFill,
-    resolveLastHourTopUp,
+    resolveFinalWindowTopUp,
     runCycle,
     log,
     onScheduled,
@@ -176,7 +176,7 @@ const createCadenceChain = ({
                 minGapMs: MIN_CYCLE_GAP_MS,
                 resolveScheduledFill,
                 timezone: settings.timezone || DEFAULT_TIMEZONE,
-                resolveLastHourTopUp,
+                resolveFinalWindowTopUp,
             });
 
             if (decision.mode === 'normal') {
@@ -192,8 +192,8 @@ const createCadenceChain = ({
                     message = `⏰ Last-minute cadence — next cycle in ${(waitMs / 60_000).toFixed(2)} min`;
                 } else if (decision.mode === 'scheduled') {
                     message = `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" (${decision.nextScheduled?.form}) — next cycle in ${Math.round(waitMs / 1000)}s`;
-                } else if (decision.mode === 'pre-last-hour') {
-                    message = `⏰ Approaching pre-last-hour top-up for "${decision.nextLastHourTopUp?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextLastHourTopUp?.leadMin}m pre-last-hour boundary)`;
+                } else if (decision.mode === 'pre-final-window') {
+                    message = `⏰ Approaching pre-final-window top-up for "${decision.nextFinalWindowTopUp?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextFinalWindowTopUp?.leadMin}m pre-final-window boundary)`;
                 } else {
                     message = `⏰ Approaching last-minute window for "${decision.nextEntry?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextEntry?.lastMinuteThreshold}m boundary)`;
                 }

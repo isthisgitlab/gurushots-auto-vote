@@ -403,7 +403,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
             });
         });
 
-        describe('pre-last-hour top-up cap', () => {
+        describe('pre-final-window top-up cap', () => {
             // Same dual-shape wrap as the scheduled-fill cap: sync on Node,
             // Promise on the WebView.
             const wrap = (config) => (resolveThreshold() instanceof Promise ? Promise.resolve(config) : config);
@@ -416,7 +416,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const result = await computeNextCycleDelayMs(challenges, now, opts());
                 expect(result.mode).toBe('normal');
                 expect(result.delayMs).toBe(NORMAL);
-                expect(result.nextLastHourTopUp).toBeNull();
+                expect(result.nextFinalWindowTopUp).toBeNull();
             });
 
             it('caps the delay to an upcoming top-up window start', async () => {
@@ -426,11 +426,11 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'TopUp', type: 'regular', close_time: now + 4620 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveLastHourTopUp: on(900),
+                    resolveFinalWindowTopUp: on(900),
                 });
-                expect(result.mode).toBe('pre-last-hour');
+                expect(result.mode).toBe('pre-final-window');
                 expect(result.delayMs).toBe(120_000);
-                expect(result.nextLastHourTopUp).toMatchObject({ challengeId: 9, leadMin: 15 });
+                expect(result.nextFinalWindowTopUp).toMatchObject({ challengeId: 9, leadMin: 15 });
             });
 
             it('does not cap when the window start is beyond the normal delay', async () => {
@@ -439,7 +439,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'Far', type: 'regular', close_time: now + 3 * 3600 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveLastHourTopUp: on(900),
+                    resolveFinalWindowTopUp: on(900),
                 });
                 expect(result.mode).toBe('normal');
                 expect(result.delayMs).toBe(NORMAL);
@@ -451,11 +451,11 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'BadLead', type: 'regular', close_time: now + 4620 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveLastHourTopUp: on(0),
+                    resolveFinalWindowTopUp: on(0),
                 });
-                expect(result.mode).toBe('pre-last-hour');
+                expect(result.mode).toBe('pre-final-window');
                 expect(result.delayMs).toBe(120_000);
-                expect(result.nextLastHourTopUp.leadMin).toBe(15);
+                expect(result.nextFinalWindowTopUp.leadMin).toBe(15);
             });
 
             it('the sooner of a threshold boundary and a top-up start wins', async () => {
@@ -466,7 +466,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 5, title: 'Both', type: 'regular', close_time: now + 4620 }];
                 const boundaryWins = await computeNextCycleDelayMs(challenges, now, {
                     ...opts({ resolveThreshold: () => 76 }), // 76m → boundary at close-4560 = 60s
-                    resolveLastHourTopUp: on(900), // top-up start at close-4500 = 120s
+                    resolveFinalWindowTopUp: on(900), // top-up start at close-4500 = 120s
                 });
                 expect(boundaryWins.mode).toBe('approaching');
                 expect(boundaryWins.delayMs).toBe(60_000);
@@ -474,9 +474,9 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 // Flip it: a wider lead pulls the top-up start earlier than the boundary.
                 const topUpWins = await computeNextCycleDelayMs(challenges, now, {
                     ...opts({ resolveThreshold: () => 76 }), // boundary still 60s
-                    resolveLastHourTopUp: on(990), // start at close-4590 = 30s
+                    resolveFinalWindowTopUp: on(990), // start at close-4590 = 30s
                 });
-                expect(topUpWins.mode).toBe('pre-last-hour');
+                expect(topUpWins.mode).toBe('pre-final-window');
                 expect(topUpWins.delayMs).toBe(30_000);
             });
 
@@ -488,7 +488,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                     ...opts(),
                     resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [4560] }),
                     timezone: 'UTC',
-                    resolveLastHourTopUp: on(900),
+                    resolveFinalWindowTopUp: on(900),
                 });
                 expect(result.mode).toBe('scheduled');
                 expect(result.delayMs).toBe(60_000);
@@ -500,9 +500,9 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 const challenges = [{ id: 9, title: 'Imminent', type: 'regular', close_time: now + 4501 }];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveLastHourTopUp: on(900),
+                    resolveFinalWindowTopUp: on(900),
                 });
-                expect(result.mode).toBe('pre-last-hour');
+                expect(result.mode).toBe('pre-final-window');
                 expect(result.delayMs).toBe(MIN_GAP);
             });
 
@@ -514,13 +514,13 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 ];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveLastHourTopUp: (id) => {
+                    resolveFinalWindowTopUp: (id) => {
                         if (id === '2') throw new Error('corrupt');
                         return wrap({ enabled: false, leadSec: 900 });
                     },
                 });
                 expect(result.mode).toBe('normal');
-                expect(result.nextLastHourTopUp).toBeNull();
+                expect(result.nextFinalWindowTopUp).toBeNull();
             });
 
             it('skips flash and already-closed challenges', async () => {
@@ -531,10 +531,10 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 ];
                 const result = await computeNextCycleDelayMs(challenges, now, {
                     ...opts(),
-                    resolveLastHourTopUp: on(900),
+                    resolveFinalWindowTopUp: on(900),
                 });
                 expect(result.mode).toBe('normal');
-                expect(result.nextLastHourTopUp).toBeNull();
+                expect(result.nextFinalWindowTopUp).toBeNull();
             });
         });
     });

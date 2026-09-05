@@ -227,7 +227,7 @@ Katram izaicinājumam ir ekspozīcijas **slieksnis** ("balsot, kamēr mana ekspo
 3. **Flash izaicinājums** — vienmēr mērķis **100%**.
 4. **Balsot tikai pēdējā minūtē** (`voteOnlyInLastMinute`) — ja iestatīts un izaicinājums _vēl nav_ savā pēdējās minūtes logā, balsošana tiek izlaista.
 5. **Pēdējās minūtes logs** — `lastMinuteThreshold` minūšu robežās pirms beigām vienmēr mērķis **100%** (ekspozīcijas griesti tiek ignorēti).
-6. **Pēdējā stunda** — ja `useLastHourExposure` ir ieslēgts un atlikusi mazāk par stundu, izmanto `lastHourExposure` slieksni un `lastHourExposureTarget` mērķi.
+6. **Pēdējā stunda** — ja `useFinalWindowExposure` ir ieslēgts un atlikusi mazāk par stundu, izmanto `finalWindowExposure` slieksni un `finalWindowExposureTarget` mērķi.
 7. **Normāli** — citādi izmanto `exposure` slieksni un `exposureTarget` mērķi.
 
 Sliekšņiem ar atsevišķu mērķi lietotne balso tikai tad, kad esat zem sliekšņa, pēc tam turpina līdz mērķim. Mērķis `0` nozīmē "apstāties pie sliekšņa" (mērķis = slieksnis).
@@ -324,9 +324,9 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 
 | Iestatījums              | Noklusējums | Diapazons / vērtības                                 | Apraksts                                                       |
 | ------------------------ | ----------- | ---------------------------------------------------- | -------------------------------------------------------------- |
-| `useLastHourExposure`    | `false`     | bool                                                 | Izmantot atsevišķu ekspozīcijas noteikumu pēdējā stundā.       |
-| `lastHourExposure`       | `100`       | 1–100 % (≤ `exposure`)                               | Slieksnis, ko izmanto pēdējā stundā.                           |
-| `lastHourExposureTarget` | `0`         | `0` vai 1–100 % (ja iestatīts, ≥ `lastHourExposure`) | Balsot līdz šim % pēdējā stundā. `0` = apstāties pie sliekšņa. |
+| `useFinalWindowExposure`    | `false`     | bool                                                 | Izmantot atsevišķu ekspozīcijas noteikumu pēdējā stundā.       |
+| `finalWindowExposure`       | `100`       | 1–100 % (≤ `exposure`)                               | Slieksnis, ko izmanto pēdējā stundā.                           |
+| `finalWindowExposureTarget` | `0`         | `0` vai 1–100 % (ja iestatīts, ≥ `finalWindowExposure`) | Balsot līdz šim % pēdējā stundā. `0` = apstāties pie sliekšņa. |
 
 **Pēdējā minūte**
 

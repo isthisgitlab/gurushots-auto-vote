@@ -73,13 +73,13 @@ const inWindowChallenge = () => ({
     close_time: Math.floor(Date.now() / 1000) + 120,
 });
 
-// Challenge whose pre-last-hour top-up window opens within the next normal
-// cadence tick → pre-last-hour mode (only when a resolveLastHourTopUp dep is
+// Challenge whose pre-final-window top-up window opens within the next normal
+// cadence tick → pre-final-window mode (only when a resolveFinalWindowTopUp dep is
 // supplied). close in 4600s, lead 900s → window start at now+100s: strictly
 // after now and inside the 3-min normal delay, so the cap fires.
 const topUpSoonChallenge = () => ({
     id: 3,
-    title: 'Pre Last Hour',
+    title: 'Pre Final Window',
     type: 'regular',
     close_time: Math.floor(Date.now() / 1000) + 4600,
 });
@@ -205,11 +205,11 @@ describe('createCadenceChain', () => {
         expect(deps.log.cadence).toHaveBeenCalledWith('last-minute', expect.stringContaining('Last-minute cadence'));
     });
 
-    test('pre-last-hour mode caps to the top-up boundary and logs the top-up branch', async () => {
-        // resolveLastHourTopUp is threaded unconditionally (unlike scheduledFill,
+    test('pre-final-window mode caps to the top-up boundary and logs the top-up branch', async () => {
+        // resolveFinalWindowTopUp is threaded unconditionally (unlike scheduledFill,
         // which is timezone-gated), so a host that supplies it arms the cap.
         const deps = makeDeps({
-            resolveLastHourTopUp: jest.fn(() => ({ enabled: true, leadSec: 900 })),
+            resolveFinalWindowTopUp: jest.fn(() => ({ enabled: true, leadSec: 900 })),
         });
         const chain = createCadenceChain(deps);
 
@@ -224,12 +224,12 @@ describe('createCadenceChain', () => {
         expect(deps.runCycle).toHaveBeenCalledTimes(1);
 
         expect(deps.log.cadence).toHaveBeenCalledWith(
-            'pre-last-hour',
-            expect.stringContaining('pre-last-hour top-up for "Pre Last Hour"'),
+            'pre-final-window',
+            expect.stringContaining('pre-final-window top-up for "Pre Final Window"'),
         );
         expect(deps.log.cadence).toHaveBeenCalledWith(
-            'pre-last-hour',
-            expect.stringContaining('15m pre-last-hour boundary'),
+            'pre-final-window',
+            expect.stringContaining('15m pre-final-window boundary'),
         );
     });
 

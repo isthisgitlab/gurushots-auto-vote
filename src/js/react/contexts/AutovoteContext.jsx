@@ -3,7 +3,7 @@ import { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } fr
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
-import { resolveThreshold, resolveScheduledFill, resolveLastHourTopUp } from './autovoteScheduler';
+import { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp } from './autovoteScheduler';
 
 const AutovoteContext = createContext(null);
 
@@ -122,7 +122,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                     window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
                 resolveThreshold,
                 resolveScheduledFill,
-                resolveLastHourTopUp,
+                resolveFinalWindowTopUp,
                 runCycle: () => runVotingCycle(),
                 log: {
                     // Best-effort parity log (optional-chained so a host without

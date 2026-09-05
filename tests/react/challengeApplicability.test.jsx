@@ -9,7 +9,7 @@ const challengeWith = (member, extra = {}) => ({ member, ...extra });
 
 describe('getGroupApplicability', () => {
     test('no challenge → every group applicable', () => {
-        for (const id of ['general', 'boost', 'turbo', 'lastHour', 'lastMinute', 'autoFill']) {
+        for (const id of ['general', 'boost', 'turbo', 'finalWindow', 'lastMinute', 'autoFill']) {
             expect(getGroupApplicability(id, null)).toEqual({ applicable: true, reasonKey: null });
         }
     });
@@ -196,12 +196,12 @@ describe('getGroupApplicability', () => {
         expect(getGroupApplicability('autoFill', challenge).applicable).toBe(true);
     });
 
-    test('general / lastHour / lastMinute always applicable, even when boost used', () => {
+    test('general / finalWindow / lastMinute always applicable, even when boost used', () => {
         const challenge = challengeWith(
             { boost: { state: 'USED' }, turbo: { state: 'USED' } },
             { max_photo_submits: 1, ranking: { entries: [{ id: '1' }] } },
         );
-        for (const id of ['general', 'lastHour', 'lastMinute']) {
+        for (const id of ['general', 'finalWindow', 'lastMinute']) {
             expect(getGroupApplicability(id, challenge)).toEqual({ applicable: true, reasonKey: null });
         }
     });

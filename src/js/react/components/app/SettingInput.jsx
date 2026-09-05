@@ -550,7 +550,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
         const hasMin = typeof config.min === 'number';
         const hasMax = typeof config.max === 'number';
         // An emptied field must count as invalid in its own right. `Number('')` is 0, so for
-        // the settings whose min is 0 (exposureTarget, lastHourExposureTarget, and the two
+        // the settings whose min is 0 (exposureTarget, finalWindowExposureTarget, and the two
         // entry-slot indexes) a blank field otherwise looked in-range: no border, no message,
         // and Save then wrote '' straight through to zod, which rejects it — producing the
         // generic "check the highlighted values" banner with nothing highlighted, the exact

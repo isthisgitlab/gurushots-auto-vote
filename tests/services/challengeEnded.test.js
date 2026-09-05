@@ -1,7 +1,7 @@
 /**
  * Tests for the "challenge has ended" guard in VotingLogic.
  *
- * `isWithinLastHour` and `isWithinLastMinuteThreshold` both require `timeUntilEnd > 0`, so
+ * `isWithinFinalWindow` and `isWithinLastMinuteThreshold` both require `timeUntilEnd > 0`, so
  * before this guard existed a challenge whose close_time had passed fell through every
  * time-window rule and landed on the *normal* threshold rule — voting on a closed challenge
  * at the ordinary exposure target. The orchestrator does no close-time filtering of its own
@@ -38,9 +38,9 @@ const mockSettings = (overrides = {}) => {
         exposure: 50,
         exposureTarget: 0,
         lastMinuteThreshold: 10,
-        lastHourExposure: 40,
-        useLastHourExposure: false,
-        lastHourExposureTarget: 0,
+        finalWindowExposure: 40,
+        useFinalWindowExposure: false,
+        finalWindowExposureTarget: 0,
         useScheduledFill: false,
         scheduledFillTime: [],
         scheduledFillBeforeEnd: [],

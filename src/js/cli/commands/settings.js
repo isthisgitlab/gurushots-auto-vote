@@ -461,7 +461,7 @@ fill window, all OR'd; older single values migrate to arrays automatically):
   scheduledFillWindowMinutes - How long each fill window stays open
                                (default: 60, range 5-720)
   scheduledFillReplaces      - true = scheduled windows become the ONLY
-                               automatic fills (normal + last-hour voting are
+                               automatic fills (normal + final-window voting are
                                blocked outside them; flash/last-minute rules
                                and manual voting still apply). A window missed
                                while the app is not running is skipped with no
