@@ -107,10 +107,11 @@ Per-challenge pre-final-window top-up (`voteBeforeFinalWindow`, default off) vot
 a challenge up to its **standard** exposure target inside a window
 straddling the final-window boundary, so a challenge whose exposure already
 decayed below that target isn't stranded there by the lower
-`finalWindowExposure` trigger when the final hour begins. The window is
-`[close − 3600 − lead, close − 3600 + lead]`, where `lead` =
-`voteBeforeFinalWindowLeadMin` (1–59 min, default 15). Only active when
-`useFinalWindowExposure` is on.
+`finalWindowExposure` trigger when the final window begins. The window is
+`[close − finalWindowDuration − lead, close − finalWindowDuration + lead]`,
+where `finalWindowDuration` is the configurable final-window width (default
+3600 s = the legacy fixed hour) and `lead` = `voteBeforeFinalWindowLeadMin`
+(1–59 min, default 15). Only active when `useFinalWindowExposure` is on.
 
 The decision side lives in `_runVotingRules`
 (`src/js/services/VotingLogic.js`): its pre-final-window branch sits **above**
@@ -126,11 +127,11 @@ skipped with no catch-up, exactly like scheduled fill).
 The cadence side lives in `soonestFinalWindowTopUpStart`
 (`src/js/scheduling/thresholdWindow.js`), fed to `computeNextCycleDelayMs`
 through a third injected resolver (`resolveFinalWindowTopUp`, sync on Node /
-async IPC on the WebView) returning `{enabled, leadSec}` per challenge.
+async IPC on the WebView) returning `{enabled, leadSec, durationSec}` per challenge.
 Unlike scheduled fill, this resolver takes **no `timezone`** and is threaded
 **unconditionally** by every host — the window is a pure offset from
 `close_time`, so there is nothing to gate. The cap targets the soonest
-upcoming window **start** (`close_time − (3600 + leadSec)`) across all
+upcoming window **start** (`close_time − (durationSec + leadSec)`) across all
 eligible challenges, producing `mode: 'pre-final-window'` and a
 `nextFinalWindowTopUp` of `{challengeId, challengeTitle, startTime, leadMin}`;
 inside the window the normal cadence covers decay top-ups (once at the
@@ -143,7 +144,8 @@ Deliberate semantics and caveats:
   guard (`soonestFinalWindowTopUpStart`, 60..3540 s) and the rule-engine guard
   (`_runVotingRules`, 1..59 min). The two same-purpose guards mirror each
   other on purpose so a corrupt override can't make the vote-rule window and
-  the scheduler cap disagree.
+  the scheduler cap disagree. A `durationSec` below its 60 s floor or
+  non-finite likewise falls back to 3600 s on both the cadence and rule sides.
 - **Fail-soft**: a challenge whose resolver throws, or whose config is
   disabled/corrupt, is skipped for the cadence cap; the rule-side read is
   optional-chained like every other per-challenge API read so one bad

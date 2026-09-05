@@ -536,6 +536,39 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 expect(result.mode).toBe('normal');
                 expect(result.nextFinalWindowTopUp).toBeNull();
             });
+
+            it('honors an explicit non-default durationSec for the window start', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // durationSec 1800 (half the 3600 default), lead 900 → start = close-2700.
+                // close+2820 → start 120s away. With the default 3600 this same close_time
+                // would put the start 1680s in the PAST (no future cap → 'normal'), so a
+                // pre-final-window cap here proves the 1800 finalWindowDuration was used.
+                const challenges = [{ id: 9, title: 'HalfHour', type: 'regular', close_time: now + 2820 }];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveFinalWindowTopUp: () => wrap({ enabled: true, leadSec: 900, durationSec: 1800 }),
+                });
+                expect(result.mode).toBe('pre-final-window');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextFinalWindowTopUp).toMatchObject({ challengeId: 9, leadMin: 15 });
+            });
+
+            it('falls back to the 3600 default when durationSec is sub-60 or non-finite', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Same geometry as the default-duration cases: lead 900 + fallback 3600 →
+                // start = close-4500 = 120s away for close+4620. Were the corrupt
+                // durationSec (30, NaN) honored the start would sit far out (→ 'normal'),
+                // so a pre-final-window cap proves the 3600 fallback took effect.
+                const challenges = [{ id: 9, title: 'BadDuration', type: 'regular', close_time: now + 4620 }];
+                for (const badDuration of [30, Number.NaN]) {
+                    const result = await computeNextCycleDelayMs(challenges, now, {
+                        ...opts(),
+                        resolveFinalWindowTopUp: () => wrap({ enabled: true, leadSec: 900, durationSec: badDuration }),
+                    });
+                    expect(result.mode).toBe('pre-final-window');
+                    expect(result.delayMs).toBe(120_000);
+                }
+            });
         });
     });
 });

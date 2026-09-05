@@ -34,7 +34,7 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 - **Automātiska balsošana** — balso jūsu aktīvajos izaicinājumos līdz konfigurējamam ekspozīcijas mērķim.
 - **Ekspozīcijas kontrole** — katram izaicinājumam ekspozīcijas slieksnis un papildu mērķis ("balsot līdz X%").
 - **Pēdējās minūtes grūdiens** — balso līdz 100% konfigurējamā logā pirms izaicinājuma beigām un automātiski sablīvē pārbaudes biežumu.
-- **Pēdējās stundas ekspozīcija** — atsevišķs, parasti zemāks ekspozīcijas slieksnis pēdējai stundai.
+- **Beigu loga ekspozīcija** — atsevišķs, parasti zemāks ekspozīcijas slieksnis konfigurējamam beigu logam (noklusējums pēdējā stunda).
 - **Boost** — automātiski pielieto boost tuvu beigām, izvēlētajai foto vietai.
 - **Turbo (iegūt + pielietot)** — automātiski spēlē mini-spēli, lai _iegūtu_ turbo, pēc tam automātiski _pielieto_ to izvēlētajai foto vietai pirms beigām.
 - **Auto-aizpilde** — iesniedz fotogrāfijas tukšajās foto vietās tuvu beigām, ar laika atstarpi, lai izvairītos no balsu atšķaidīšanas, ar tagu filtriem, tematiski atbilstošu foto izvēli un avārijas drošības tīklu.
@@ -227,7 +227,7 @@ Katram izaicinājumam ir ekspozīcijas **slieksnis** ("balsot, kamēr mana ekspo
 3. **Flash izaicinājums** — vienmēr mērķis **100%**.
 4. **Balsot tikai pēdējā minūtē** (`voteOnlyInLastMinute`) — ja iestatīts un izaicinājums _vēl nav_ savā pēdējās minūtes logā, balsošana tiek izlaista.
 5. **Pēdējās minūtes logs** — `lastMinuteThreshold` minūšu robežās pirms beigām vienmēr mērķis **100%** (ekspozīcijas griesti tiek ignorēti).
-6. **Pēdējā stunda** — ja `useFinalWindowExposure` ir ieslēgts un atlikusi mazāk par stundu, izmanto `finalWindowExposure` slieksni un `finalWindowExposureTarget` mērķi.
+6. **Beigu logs** — ja `useFinalWindowExposure` ir ieslēgts un izaicinājums ir `finalWindowDuration` robežās pirms beigām (noklusējums 1 stunda), izmanto `finalWindowExposure` slieksni un `finalWindowExposureTarget` mērķi.
 7. **Normāli** — citādi izmanto `exposure` slieksni un `exposureTarget` mērķi.
 
 Sliekšņiem ar atsevišķu mērķi lietotne balso tikai tad, kad esat zem sliekšņa, pēc tam turpina līdz mērķim. Mērķis `0` nozīmē "apstāties pie sliekšņa" (mērķis = slieksnis).
@@ -320,13 +320,16 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 | `turboApplyWhenBoostActive` | `false`       | bool                 | Atļaut turbo pielietot, kamēr ir atvērts boost logs.                                              |
 | `turboFillNew`              | `false`       | bool                 | Auto-aizpildes laikā iesniegt jaunu fotogrāfiju un uzreiz pielietot turbo šim jaunajam ierakstam. |
 
-**Pēdējā stunda**
+**Beigu logs**
 
-| Iestatījums              | Noklusējums | Diapazons / vērtības                                 | Apraksts                                                       |
-| ------------------------ | ----------- | ---------------------------------------------------- | -------------------------------------------------------------- |
-| `useFinalWindowExposure`    | `false`     | bool                                                 | Izmantot atsevišķu ekspozīcijas noteikumu pēdējā stundā.       |
-| `finalWindowExposure`       | `100`       | 1–100 % (≤ `exposure`)                               | Slieksnis, ko izmanto pēdējā stundā.                           |
-| `finalWindowExposureTarget` | `0`         | `0` vai 1–100 % (ja iestatīts, ≥ `finalWindowExposure`) | Balsot līdz šim % pēdējā stundā. `0` = apstāties pie sliekšņa. |
+| Iestatījums                    | Noklusējums | Diapazons / vērtības                                    | Apraksts                                                                                                                                                                                  |
+| ------------------------------ | ----------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useFinalWindowExposure`       | `false`     | bool                                                    | Izmantot atsevišķu ekspozīcijas noteikumu beigu logā.                                                                                                                                     |
+| `finalWindowDuration`          | `3600`      | 60 s – 30 d (glabā sekundēs)                            | Beigu loga garums pirms beigām. Noklusējums 1 stunda (mantotā fiksētā stunda).                                                                                                            |
+| `finalWindowExposure`          | `100`       | 1–100 % (≤ `exposure`)                                  | Slieksnis, ko izmanto beigu logā.                                                                                                                                                         |
+| `finalWindowExposureTarget`    | `0`         | `0` vai 1–100 % (ja iestatīts, ≥ `finalWindowExposure`) | Balsot līdz šim % beigu logā. `0` = apstāties pie sliekšņa.                                                                                                                               |
+| `voteBeforeFinalWindow`        | `false`     | bool                                                    | Papildināt līdz **parastajam** ekspozīcijas mērķim logā ap beigu loga sākumu, lai zemais beigu loga slieksnis neatstātu novecojušu ekspozīciju. Aktīvs tikai ar `useFinalWindowExposure`. |
+| `voteBeforeFinalWindowLeadMin` | `15`        | 1–59 min                                                | Pirms-beigu-loga papildināšanas loga puse (minūtēs) katrā pusē no beigu loga sākuma.                                                                                                      |
 
 **Pēdējā minūte**
 
