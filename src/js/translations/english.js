@@ -420,6 +420,12 @@
             useLastHourExposure: 'Use Last Hour Exposure',
             useLastHourExposureDesc:
                 'In the final hour before a challenge closes, use the separate Last Hour Exposure trigger and target instead of the normal Exposure setting.',
+            voteBeforeLastHour: 'Vote Before Last Hour',
+            voteBeforeLastHourDesc:
+                'Around the start of the final hour, vote up to your standard Exposure target so a challenge whose exposure already decayed below it is not left stranded there by the lower Last Hour Exposure trigger. The top-up stays active across a window that straddles the last-hour boundary — for the Lead minutes before it and the same number of minutes after — then the Last Hour Exposure rule takes over. Only applies when Use Last Hour Exposure is on.',
+            voteBeforeLastHourLeadMin: 'Vote Before Last Hour Lead',
+            voteBeforeLastHourLeadMinDesc:
+                'How many minutes around the start of the final hour the top-up stays active. The window opens this many minutes before the last hour and closes the same number of minutes into it, after which the Last Hour Exposure rule takes over.',
             validationInvalidValue: 'Invalid value',
             validationMustBeLessOrEqual: 'Must be ≤ {0} (currently {1})',
             whatsNew: "What's New:",

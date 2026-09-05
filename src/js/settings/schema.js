@@ -529,6 +529,40 @@ const SETTINGS_SCHEMA = {
         description: 'app.lastHourExposureTargetDesc',
         helpKey: 'app.lastHourExposureTargetHelp',
     },
+    // Boolean toggle (0-is-off convention does NOT apply — this is a flag, not a
+    // duration). Only meaningful alongside useLastHourExposure: it tops the
+    // challenge up to the STANDARD exposure target across the boundary into the
+    // final hour, so a challenge whose exposure decayed below standard doesn't
+    // get stranded there by the last-hour rule's lower (recovery) trigger.
+    voteBeforeLastHour: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1, // Validate first (no dependencies)
+        group: 'lastHour',
+        label: 'app.voteBeforeLastHour',
+        description: 'app.voteBeforeLastHourDesc',
+    },
+    // Lead minutes: half-width of the top-up window straddling the last-hour
+    // boundary — the window runs [close-3600-lead, close-3600+lead], i.e. it
+    // starts `lead` minutes BEFORE the final hour (the scheduler wakes then to
+    // guarantee the top-up) and extends `lead` minutes INTO it as a grace period
+    // for timing jitter / an app started late. Reuses the 1..59 minute validator;
+    // 0 is intentionally not allowed (a zero-width window would defeat the point).
+    voteBeforeLastHourLeadMin: {
+        type: 'number',
+        default: 15,
+        perChallenge: true,
+        validation: minute1to59,
+        min: 1,
+        max: 59,
+        unit: 'app.unitMinutes',
+        validationOrder: 1, // Validate first (no dependencies)
+        group: 'lastHour',
+        label: 'app.voteBeforeLastHourLeadMin',
+        description: 'app.voteBeforeLastHourLeadMinDesc',
+    },
 
     // --- Last Minute ---
     voteOnlyInLastMinute: {

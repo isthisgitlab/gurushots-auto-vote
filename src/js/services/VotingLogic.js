@@ -233,7 +233,7 @@ const getEffectiveLastHourExposureTarget = (challengeId) => {
  *     skipReason:    string | null,   // when eligible=false because a rule blocked
  *     atTarget:      true | false,    // when exposure already meets target
  *     targetExposure:number,
- *     ruleLabel:     string,          // 'flash', 'lastminute', 'last-hour', 'normal'
+ *     ruleLabel:     string,          // 'flash', 'lastminute', 'scheduled', 'pre-last-hour', 'last-hour', 'normal'
  *     thresholdInfo: object }         // small bundle of settings the wrapper formats
  *
  * @param {any} challenge
@@ -257,9 +257,32 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     const useLastHourExposure = settings.getEffectiveSetting('useLastHourExposure', challengeId);
     const effectiveExposureTarget = getEffectiveExposureTarget(challengeId);
     const effectiveLastHourExposureTarget = getEffectiveLastHourExposureTarget(challengeId);
+    const voteBeforeLastHour = settings.getEffectiveSetting('voteBeforeLastHour', challengeId) === true;
+    // Under-mocked callers / hand-edited files can yield a non-number here; the
+    // schema guarantees 1..59 otherwise. Fall back to the schema default (15)
+    // rather than propagate NaN into the window math below.
+    const rawLeadMin = settings.getEffectiveSetting('voteBeforeLastHourLeadMin', challengeId);
+    // Clamp to the schema's valid range (1..59). Anything outside — a hand-edited
+    // sub-minute value, an over-59 value, or a non-number — falls back to the
+    // default (15). The lower bound MUST match soonestLastHourTopUpStart's guard in
+    // thresholdWindow.js (>= 60s) so the vote-rule window and the scheduler's cadence
+    // cap can't disagree for the same corrupt input.
+    const voteBeforeLastHourLeadMin =
+        Number.isFinite(rawLeadMin) && rawLeadMin >= 1 && rawLeadMin <= 59 ? rawLeadMin : 15;
 
     const isWithinLastMinute = isWithinLastMinuteThreshold(challenge.close_time, now, challengeId);
     const withinLastHour = isWithinLastHour(challenge.close_time, now);
+    // Top-up window straddling the final-hour boundary: [close-3600-lead,
+    // close-3600+lead]. Only meaningful when both the last-hour feature and this
+    // opt-in are on (it exists to fix the last-hour rule's low-trigger blind spot).
+    const timeUntilEnd = challenge.close_time - now;
+    const preLastHourLeadSec = voteBeforeLastHourLeadMin * 60;
+    const withinPreLastHourTopUp =
+        voteBeforeLastHour &&
+        useLastHourExposure &&
+        timeUntilEnd > 0 &&
+        timeUntilEnd <= 3600 + preLastHourLeadSec &&
+        timeUntilEnd >= 3600 - preLastHourLeadSec;
     // Optional-chained for consistency with evaluateManualVotingToHundred and the
     // boost/turbo predicates, which all guard this same tree. An unguarded read here threw
     // out of the per-challenge loop and abandoned every remaining challenge in the pass.
@@ -352,6 +375,20 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
         return blocked('scheduled-fill-only: outside scheduled fill window');
     }
 
+    // Pre-last-hour top-up. Placed ABOVE the last-hour branch so during the
+    // in-hour grace part (where withinLastHour is already true) it overrides the
+    // last-hour rule — which, with its lower recovery trigger, would otherwise
+    // leave an already-decayed challenge stranded below standard when the hour
+    // starts. Votes to the STANDARD trigger/target. Self-limiting: the window is
+    // time-bounded and `decided` stops once exposure reaches the trigger, so no
+    // persisted "already topped up" state is needed. Scheduled fill still wins
+    // (handled above); before the boundary this is byte-identical to the normal
+    // rule (same trigger/target) — only the label differs, for the scheduler
+    // boundary and the log line.
+    if (withinPreLastHourTopUp) {
+        return decided('pre-last-hour', effectiveThreshold, effectiveExposureTarget, sharedThresholdInfo);
+    }
+
     if (withinLastHour && useLastHourExposure) {
         return decided('last-hour', effectiveLastHourExposure, effectiveLastHourExposureTarget, sharedThresholdInfo);
     }
@@ -399,6 +436,7 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
             flash: 'flash type',
             lastminute: `lastminute threshold (${effectiveLastMinuteThreshold}m)`,
             scheduled: 'scheduled fill window',
+            'pre-last-hour': 'pre-last-hour top-up',
             'last-hour': 'last hour threshold',
             normal: 'normal threshold',
         };
@@ -427,6 +465,9 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
         scheduled: r.atTarget
             ? 'scheduled fill: exposure already at 100%'
             : `scheduled fill window: exposure ${currentExposure}% < 100%`,
+        'pre-last-hour': r.eligible
+            ? `pre-last-hour top-up: exposure ${currentExposure}% < ${effectiveThreshold}%${targetSuffix(effectiveThreshold, effectiveExposureTarget)}`
+            : `pre-last-hour top-up: exposure ${currentExposure}% >= ${effectiveThreshold}%`,
         'last-hour': r.eligible
             ? `last hour threshold: exposure ${currentExposure}% < ${effectiveLastHourExposure}%${targetSuffix(effectiveLastHourExposure, effectiveLastHourExposureTarget)}`
             : `last hour threshold: exposure ${currentExposure}% >= ${effectiveLastHourExposure}%`,
@@ -469,6 +510,7 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
             flash: `Challenge "${challengeTitle}" already has 100% exposure (flash type)`,
             lastminute: `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`,
             scheduled: `Challenge "${challengeTitle}" already has 100% exposure (scheduled fill window)`,
+            'pre-last-hour': `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure (pre-last-hour top-up)`,
             'last-hour': `Challenge "${challengeTitle}" already has ${effectiveLastHourExposure}% exposure (last hour threshold)`,
             normal: `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`,
         };

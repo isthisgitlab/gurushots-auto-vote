@@ -11,8 +11,9 @@ re-introducing a separate boundary-switch timer per host.
 ## The shared cadence decision
 
 `computeNextCycleDelayMs(challenges, now, { resolveThreshold, normalDelayMs,
-lastMinuteCheckMinutes, minGapMs, resolveScheduledFill?, timezone? })`
-returns `{ delayMs, mode, nextEntry, nextScheduled }`:
+lastMinuteCheckMinutes, minGapMs, resolveScheduledFill?, resolveLastHourTopUp?,
+timezone? })` returns `{ delayMs, mode, nextEntry, nextScheduled,
+nextLastHourTopUp }`:
 
 - **last-minute**: a challenge is already inside its `lastMinuteThreshold`
   window → fixed `lastMinuteCheckMinutes` cadence.
@@ -22,6 +23,10 @@ returns `{ delayMs, mode, nextEntry, nextScheduled }`:
 - **scheduled**: the soonest upcoming scheduled-fill window start
   (see below) is closer than both the random delay and any threshold
   boundary → wait is capped to that start.
+- **pre-last-hour**: the soonest upcoming pre-last-hour top-up window start
+  (see below) is closer than the random delay and every boundary/scheduled
+  cap → wait is capped to that start so a cycle lands exactly when the
+  top-up opens.
 - **normal**: otherwise the random delay in `[checkFrequencyMin,
 checkFrequencyMax]`.
 
@@ -95,6 +100,54 @@ Deliberate semantics and caveats:
   timezone falls back to UTC inside `wallClock.js`, and
   `getScheduledFillState` is wrapped in try/catch so the per-challenge
   voting loop can never be aborted by one bad override.
+
+### Pre-last-hour top-up
+
+Per-challenge pre-last-hour top-up (`voteBeforeLastHour`, default off) votes
+a challenge up to its **standard** exposure target inside a window
+straddling the last-hour boundary, so a challenge whose exposure already
+decayed below that target isn't stranded there by the lower
+`lastHourExposure` trigger when the final hour begins. The window is
+`[close − 3600 − lead, close − 3600 + lead]`, where `lead` =
+`voteBeforeLastHourLeadMin` (1–59 min, default 15). Only active when
+`useLastHourExposure` is on.
+
+The decision side lives in `_runVotingRules`
+(`src/js/services/VotingLogic.js`): its pre-last-hour branch sits **above**
+the last-hour rule and **below** scheduled-fill/last-minute in the
+load-bearing precedence, so during the lead minutes after the boundary —
+where the top-up and last-hour windows overlap — the top-up wins and votes
+to the standard target rather than the lower last-hour trigger. It is
+**stateless**: the window bound plus the normal `decided`-at-target stop are
+the whole mechanism, no persisted "already topped up" flag (a restart inside
+the window still tops up; a window fully missed while the app was down is
+skipped with no catch-up, exactly like scheduled fill).
+
+The cadence side lives in `soonestLastHourTopUpStart`
+(`src/js/scheduling/thresholdWindow.js`), fed to `computeNextCycleDelayMs`
+through a third injected resolver (`resolveLastHourTopUp`, sync on Node /
+async IPC on the WebView) returning `{enabled, leadSec}` per challenge.
+Unlike scheduled fill, this resolver takes **no `timezone`** and is threaded
+**unconditionally** by every host — the window is a pure offset from
+`close_time`, so there is nothing to gate. The cap targets the soonest
+upcoming window **start** (`close_time − (3600 + leadSec)`) across all
+eligible challenges, producing `mode: 'pre-last-hour'` and a
+`nextLastHourTopUp` of `{challengeId, challengeTitle, startTime, leadMin}`;
+inside the window the normal cadence covers decay top-ups (once at the
+target, eligibility turns off by itself).
+
+Deliberate semantics and caveats:
+
+- **Guard parity**: an out-of-range `leadSec` (sub-minute, over 59 min, or
+  `NaN`) falls back to the 15-min schema default in **both** the cadence
+  guard (`soonestLastHourTopUpStart`, 60..3540 s) and the rule-engine guard
+  (`_runVotingRules`, 1..59 min). The two same-purpose guards mirror each
+  other on purpose so a corrupt override can't make the vote-rule window and
+  the scheduler cap disagree.
+- **Fail-soft**: a challenge whose resolver throws, or whose config is
+  disabled/corrupt, is skipped for the cadence cap; the rule-side read is
+  optional-chained like every other per-challenge API read so one bad
+  challenge never aborts the pass.
 
 ## CLI — runScheduler (single setTimeout chain)
 
