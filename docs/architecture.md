@@ -6,7 +6,7 @@ renderer, i18n, and security — the things a contributor (human or agent) must 
 alone doesn't spell out. For the three per-platform timer engines, see the companion `scheduling.md`.
 
 **Citation convention.** Each reference leads with the **symbol/function name**; any line number is a
-*secondary hint* ("around L204"), because this repo has high edit velocity and bare line ranges rot on the
+_secondary hint_ ("around L204"), because this repo has high edit velocity and bare line ranges rot on the
 next unrelated edit. If a number is stale, search by name and update it here.
 
 **Path convention.** Paths are relative to `src/js/`; renderer paths keep their `react/…` segments
@@ -22,12 +22,12 @@ this file.
 Domain terms used throughout, in reader's terms:
 
 - **exposure factor** — how much the GuruShots API has shown your photo in a challenge, 0–100%.
-- **trigger** — vote *if* current exposure is below this value.
-- **target** — vote *up to* this value (the vote loop's ceiling). Distinct from the trigger.
+- **trigger** — vote _if_ current exposure is below this value.
+- **target** — vote _up to_ this value (the vote loop's ceiling). Distinct from the trigger.
 - **auto-fill** — automatically submit new photo entries into a challenge's open slots.
 - **boost** — a one-shot exposure multiplier applied to a single entry.
 - **turbo** — a timed exposure surge on an entry.
-- **flash** — a challenge *type* that is always auto-targeted to 100%.
+- **flash** — a challenge _type_ that is always auto-targeted to 100%.
 - **last-minute / last-hour windows** — deadline-proximity windows that change both the cadence and the
   exposure targets.
 - **key-unlock** — a boost unlocked by spending a challenge key.
@@ -46,17 +46,23 @@ Domain terms used throughout, in reader's terms:
   and the consumed slot.
 - The decision engine is `_runVotingRules()` (`services/VotingLogic.js` — around L248). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
-  (→100) → scheduled-fill window → last-hour rule → normal threshold.
-- **Trigger ≠ target, and there are two *different* sentinel families — do not merge them:**
-  - `exposureTarget` / `lastHourExposureTarget`: `0` or null means **"target == trigger"** — the rule
-    stays **active**, it simply votes up to the trigger value (legacy behavior).
-    `getEffectiveExposureTarget()` (`services/VotingLogic.js` — around L209); schema note in
-    `settings/schema.js` (around L285).
-  - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
-    See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/VotingLogic.js` — around
-    L552: *"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
-    emergencyFill already use"*), and `maybeEmergencyFillChallenge()` (`services/autoFill.js` — around
-    L936: `emergencySeconds <= 0` → `'disabled'`).
+  (→100) → scheduled-fill window → **pre-last-hour top-up** → last-hour rule → normal threshold. The
+  pre-last-hour top-up (`voteBeforeLastHour`) votes to the **standard** exposure target inside a window
+  straddling the last-hour boundary — `[close − 3600 − lead, close − 3600 + lead]`, `lead` =
+  `voteBeforeLastHourLeadMin` (1–59, default 15) — so a challenge whose exposure already decayed below
+  the standard target is not stranded there by the lower last-hour trigger. It sits **above** last-hour
+  (it must win while both windows overlap in the lead minutes after the boundary) and **below**
+  scheduled-fill and last-minute (those still force 100). Only active when `useLastHourExposure` is on.
+- **Trigger ≠ target, and there are two _different_ sentinel families — do not merge them:**
+    - `exposureTarget` / `lastHourExposureTarget`: `0` or null means **"target == trigger"** — the rule
+      stays **active**, it simply votes up to the trigger value (legacy behavior).
+      `getEffectiveExposureTarget()` (`services/VotingLogic.js` — around L209); schema note in
+      `settings/schema.js` (around L285).
+    - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
+      See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/VotingLogic.js` — around
+      L552: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
+      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill.js` — around
+      L936: `emergencySeconds <= 0` → `'disabled'`).
 - Magic constants: last-hour window = 3600 s; key-unlock boost default window = 900 s when the setting is
   unusable (explicit `0` still = never).
 - Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — the
@@ -76,7 +82,7 @@ Domain terms used throughout, in reader's terms:
   past an upcoming boundary**.
 - Double-fire guard: a **stale-timer identity check** (`getTimer() !== timeoutId`) ensures only the
   current timer re-arms, so a re-armed/stopped chain can't double-fire. There is no mutex around a
-  *running* cycle — safety comes from the single-chain design plus the cancellation flag.
+  _running_ cycle — safety comes from the single-chain design plus the cancellation flag.
 - Cancellation is a **global singleton flag** (`voting/cancellation.js`) checked at multiple checkpoints in
   the pass, and it propagates by **`return`, never `throw`** — precisely so a per-challenge try/catch can't
   swallow it.
@@ -140,7 +146,7 @@ Domain terms used throughout, in reader's terms:
   Electron `preload.js` builds `contextBridge.exposeInMainWorld('api', …)`; Capacitor
   `bridge/capacitor.js` builds the identical surface in-process.
 - **Drift is CI-enforced** by `tests/ipc/manifest.test.js` — but **name-level only**: a changed
-  argument/return *signature* on a channel present in both shells passes silently.
+  argument/return _signature_ on a channel present in both shells passes silently.
 - Handler shape: every `ipc/*.handlers.js` exports `buildHandlers(deps) → {channel: impl}` **and**
   `register(ipcMain)`. **CLI and Capacitor reuse the same handler modules** (`cli/commands/*.js` lazily
   require `buildHandlers()`) — never write a parallel implementation.
@@ -181,8 +187,8 @@ Domain terms used throughout, in reader's terms:
 - **No toast library.** Error surfaces are: inline DaisyUI `alert` banners with a translated message; and
   `react/components/ui/ErrorBoundary.jsx` (an `alert alert-error` with Dismiss/Reload) wrapped around every
   major subtree. Action failures generally log via `window.api.logError` rather than showing a banner.
-- **Error-message content quality (UX).** User-facing error text follows *what happened → why → what to do
-  next*, uses a translated string, and **never** dumps raw HTTP status codes or internal result shapes at
+- **Error-message content quality (UX).** User-facing error text follows _what happened → why → what to do
+  next_, uses a translated string, and **never** dumps raw HTTP status codes or internal result shapes at
   the user — internal detail goes to `logError`, not the UI.
 - **Reuse the `react/components/ui/` primitives** rather than re-rolling: `Modal` (+`ModalActions`),
   `AsyncActionButton`, `StatusBadge` (+`ConnectionBadge`, `MockStatusBadge`), `LoadingSpinner`,
@@ -213,7 +219,7 @@ Domain terms used throughout, in reader's terms:
 
 - Every `BrowserWindow` uses `contextIsolation: on`, `nodeIntegration: off`, `webSecurity: on`
   (`index.js`), and the renderer is exposed only `window.api` via `contextBridge`, never `ipcRenderer`.
-  **Sandboxing here is Electron's default-on behavior** (unset `sandbox` + `nodeIntegration:false`), *not*
+  **Sandboxing here is Electron's default-on behavior** (unset `sandbox` + `nodeIntegration:false`), _not_
   an explicit flag at those lines — a spot-checker won't find the word "sandbox" there. Regressing
   context-isolation / node-integration is a classic severe-vuln class.
 - A defense-in-depth **sender-frame trust check** (`isTrustedSender`, `ipc/registerHandlers.js`) refuses

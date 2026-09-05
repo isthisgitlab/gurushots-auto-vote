@@ -262,7 +262,13 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     // schema guarantees 1..59 otherwise. Fall back to the schema default (15)
     // rather than propagate NaN into the window math below.
     const rawLeadMin = settings.getEffectiveSetting('voteBeforeLastHourLeadMin', challengeId);
-    const voteBeforeLastHourLeadMin = Number.isFinite(rawLeadMin) && rawLeadMin >= 1 ? rawLeadMin : 15;
+    // Clamp to the schema's valid range (1..59). Anything outside — a hand-edited
+    // sub-minute value, an over-59 value, or a non-number — falls back to the
+    // default (15). The lower bound MUST match soonestLastHourTopUpStart's guard in
+    // thresholdWindow.js (>= 60s) so the vote-rule window and the scheduler's cadence
+    // cap can't disagree for the same corrupt input.
+    const voteBeforeLastHourLeadMin =
+        Number.isFinite(rawLeadMin) && rawLeadMin >= 1 && rawLeadMin <= 59 ? rawLeadMin : 15;
 
     const isWithinLastMinute = isWithinLastMinuteThreshold(challenge.close_time, now, challengeId);
     const withinLastHour = isWithinLastHour(challenge.close_time, now);

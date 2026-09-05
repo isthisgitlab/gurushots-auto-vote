@@ -73,6 +73,17 @@ const inWindowChallenge = () => ({
     close_time: Math.floor(Date.now() / 1000) + 120,
 });
 
+// Challenge whose pre-last-hour top-up window opens within the next normal
+// cadence tick → pre-last-hour mode (only when a resolveLastHourTopUp dep is
+// supplied). close in 4600s, lead 900s → window start at now+100s: strictly
+// after now and inside the 3-min normal delay, so the cap fires.
+const topUpSoonChallenge = () => ({
+    id: 3,
+    title: 'Pre Last Hour',
+    type: 'regular',
+    close_time: Math.floor(Date.now() / 1000) + 4600,
+});
+
 describe('createCadenceChain', () => {
     beforeEach(() => {
         jest.useFakeTimers();
@@ -192,6 +203,34 @@ describe('createCadenceChain', () => {
         expect(deps.runCycle).toHaveBeenCalledTimes(1);
 
         expect(deps.log.cadence).toHaveBeenCalledWith('last-minute', expect.stringContaining('Last-minute cadence'));
+    });
+
+    test('pre-last-hour mode caps to the top-up boundary and logs the top-up branch', async () => {
+        // resolveLastHourTopUp is threaded unconditionally (unlike scheduledFill,
+        // which is timezone-gated), so a host that supplies it arms the cap.
+        const deps = makeDeps({
+            resolveLastHourTopUp: jest.fn(() => ({ enabled: true, leadSec: 900 })),
+        });
+        const chain = createCadenceChain(deps);
+
+        // Window opens at now+100s → wait is capped to ~100s, not the 3-min normal.
+        await chain.scheduleNext([topUpSoonChallenge()]);
+
+        await jest.advanceTimersByTimeAsync(100_000 - 1);
+        await flushMicrotasks();
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'pre-last-hour',
+            expect.stringContaining('pre-last-hour top-up for "Pre Last Hour"'),
+        );
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'pre-last-hour',
+            expect.stringContaining('15m pre-last-hour boundary'),
+        );
     });
 
     test('decision error → decisionError log + fallback to the plain random cadence', async () => {

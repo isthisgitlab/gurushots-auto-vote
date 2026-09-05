@@ -39,8 +39,10 @@ const { soonestScheduledStart, eligibleChallenges } = require('./scheduledFill')
  * standard target before the last-hour rule's lower trigger takes over.
  *
  * Fail-soft like the other cadence helpers: a challenge whose resolver throws or
- * whose config is disabled/corrupt is skipped; a non-positive/NaN leadSec falls
- * back to the schema default (15 min) so a bad override can't disable the cap.
+ * whose config is disabled/corrupt is skipped; an out-of-range leadSec (sub-minute,
+ * over 59 min, or NaN) falls back to the schema default (15 min) so a bad override
+ * can't disable the cap. The valid range mirrors VotingLogic's rule-engine guard
+ * (1..59 min) so the two same-purpose guards can't drift on corrupt input.
  *
  * @param {Array} eligible - already-filtered still-open non-flash challenges
  * @param {number} now - Unix timestamp (seconds)
@@ -63,7 +65,10 @@ async function soonestLastHourTopUpStart(eligible, now, resolveLastHourTopUp) {
     for (let i = 0; i < eligible.length; i++) {
         const config = configs[i];
         if (!config || config.enabled !== true) continue;
-        const leadSec = Number.isFinite(config.leadSec) && config.leadSec > 0 ? config.leadSec : 900;
+        // 60..3540s == 1..59 min; mirrors VotingLogic's rawLeadMin clamp so a
+        // corrupt sub-minute/over-max override falls back identically here.
+        const leadSec =
+            Number.isFinite(config.leadSec) && config.leadSec >= 60 && config.leadSec <= 3540 ? config.leadSec : 900;
         const challenge = eligible[i];
         const startTime = Number(challenge.close_time) - (3600 + leadSec);
         if (startTime > now && startTime < earliest) {

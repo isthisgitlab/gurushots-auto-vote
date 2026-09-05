@@ -411,4 +411,85 @@ describe('voteBeforeLastHour pre-last-hour top-up', () => {
         expect(result.shouldVote).toBe(true);
         expect(result.voteReason).toContain('pre-last-hour top-up');
     });
+
+    // Exact-boundary edges of the straddle window [close-3600-lead, close-3600+lead].
+    // Both comparisons in _runVotingRules are inclusive (<= upper, >= lower), so the
+    // instant AT each edge is inside and one second outside is not. Lead 15 → the
+    // window is [close-4500s, close-2700s].
+    test('upper edge (timeUntilEnd === 3600 + lead): inclusive — still tops up to standard', () => {
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3600 + 900, 80), now);
+        expect(result.shouldVote).toBe(true);
+        expect(result.voteReason).toContain('pre-last-hour top-up');
+        expect(result.voteReason).toContain('80% < 100%');
+    });
+
+    test('one second past the upper edge: the normal rule runs, not the top-up', () => {
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        // 4501s out is before the last hour AND outside the top-up window, so the
+        // decision falls through to the normal threshold (standard 100).
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3600 + 901, 80), now);
+        expect(result.shouldVote).toBe(true);
+        expect(result.voteReason).toContain('normal threshold');
+        expect(result.voteReason).not.toContain('pre-last-hour');
+    });
+
+    test('lower edge (timeUntilEnd === 3600 - lead): inclusive — the top-up still wins over last-hour', () => {
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        // 2700s out is inside the last hour but exactly on the grace edge; the top-up
+        // overrides the lower last-hour trigger and votes 70 up to standard.
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3600 - 900, 70), now);
+        expect(result.shouldVote).toBe(true);
+        expect(result.voteReason).toContain('pre-last-hour top-up');
+        expect(result.voteReason).toContain('70% < 100%');
+    });
+
+    test('one second past the lower edge: defers to the last-hour rule', () => {
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        // 2699s out is past the grace edge; the last-hour rule takes over and, with
+        // exposure 70 above its 60 trigger, declines.
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3600 - 901, 70), now);
+        expect(result.shouldVote).toBe(false);
+        expect(result.voteReason).toContain('last hour threshold');
+        expect(result.voteReason).toContain('70% >= 60%');
+    });
+
+    test('scheduled fill outranks the top-up: a live fill window forces 100 first', () => {
+        const now = Math.floor(Date.now() / 1000);
+        // In the top-up window (3000s out) but a before-end scheduled-fill window is
+        // also open right now (start = close - 3000 = now). Scheduled fill sits ABOVE
+        // pre-last-hour in the precedence, so the decision is 'scheduled', not the top-up.
+        mockSettings({
+            useScheduledFill: true,
+            scheduledFillBeforeEnd: [3000],
+            scheduledFillWindowMinutes: 60,
+        });
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3000, 70), now);
+        expect(result.shouldVote).toBe(true);
+        expect(result.voteReason).toContain('scheduled fill window');
+        expect(result.voteReason).not.toContain('pre-last-hour');
+    });
+
+    // Manual path reuses the same rule engine (mode 'manual'); its at-target branch
+    // must surface the pre-last-hour message, and below-target must allow the vote.
+    test('manual path: at standard target inside the window reports the pre-last-hour message', () => {
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        const result = VotingLogic.evaluateManualVotingDecision(challengeClosingIn(3000, 100), now, 'Test Challenge');
+        expect(result.shouldAllowVoting).toBe(false);
+        expect(result.errorMessage).toContain('pre-last-hour top-up');
+        expect(result.errorMessage).toContain('100%');
+    });
+
+    test('manual path: below the standard target inside the window allows voting', () => {
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        const result = VotingLogic.evaluateManualVotingDecision(challengeClosingIn(3000, 70), now, 'Test Challenge');
+        expect(result.shouldAllowVoting).toBe(true);
+        expect(result.errorMessage).toBe('');
+    });
 });

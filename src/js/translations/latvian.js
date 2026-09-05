@@ -422,10 +422,10 @@
                 'Pēdējā stundā pirms izaicinājuma beigām izmantot atsevišķo pēdējās stundas redzamības slieksni un mērķi parastā redzamības iestatījuma vietā.',
             voteBeforeLastHour: 'Balsot pirms pēdējās stundas',
             voteBeforeLastHourDesc:
-                'Tieši pirms pēdējās stundas sākuma balsot līdz parastajam redzamības mērķim, lai izaicinājums, kura redzamība jau nokritusies zem tā, netiktu atstāts zemā līmenī pēdējās stundas zemākā sliekšņa dēļ. Darbojas tikai tad, kad ieslēgts “Izmantot pēdējās stundas ekspozīciju”.',
+                'Ap pēdējās stundas sākumu balsot līdz parastajam redzamības mērķim, lai izaicinājums, kura redzamība jau nokritusies zem tā, netiktu atstāts zemā līmenī pēdējās stundas zemākā sliekšņa dēļ. Papildināšana paliek aktīva logā, kas aptver pēdējās stundas robežu — nobīdes minūtes pirms tās un tikpat daudz minūšu pēc tās — un tad pārņem pēdējās stundas redzamības noteikums. Darbojas tikai tad, kad ieslēgts "Izmantot pēdējās stundas ekspozīciju".',
             voteBeforeLastHourLeadMin: 'Balsošanas pirms pēdējās stundas nobīde',
             voteBeforeLastHourLeadMinDesc:
-                'Cik minūtes ap pēdējās stundas sākumu papildināšana paliek aktīva. Logs atveras tik minūtes pirms pēdējās stundas un aizveras tik pat minūtes pēc tās sākuma, pēc kā pārņem pēdējās stundas redzamības noteikums.',
+                'Cik minūtes ap pēdējās stundas sākumu papildināšana paliek aktīva. Logs atveras tik daudz minūšu pirms pēdējās stundas un aizveras tikpat daudz minūšu pēc tās sākuma, pēc kā pārņem pēdējās stundas redzamības noteikums.',
             validationInvalidValue: 'Nepareiza vērtība',
             validationMustBeLessOrEqual: 'Jābūt ≤ {0} (pašlaik {1})',
             whatsNew: 'Kas jauns:',
