@@ -24,4 +24,15 @@ const resolveScheduledFill = (challengeId) => ({
     beforeEndSecs: settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId),
 });
 
-module.exports = { resolveThreshold, resolveScheduledFill };
+// Per-challenge pre-last-hour top-up config for the cadence cap (./thresholdWindow.js).
+// Enabled only when BOTH the last-hour feature and this opt-in are on — matching the
+// rule engine's gate in VotingLogic._runVotingRules. leadSec is minutes → seconds;
+// thresholdWindow.js re-guards a non-positive/NaN value.
+const resolveLastHourTopUp = (challengeId) => ({
+    enabled:
+        settings.getEffectiveSetting('voteBeforeLastHour', challengeId) === true &&
+        settings.getEffectiveSetting('useLastHourExposure', challengeId) === true,
+    leadSec: Number(settings.getEffectiveSetting('voteBeforeLastHourLeadMin', challengeId)) * 60,
+});
+
+module.exports = { resolveThreshold, resolveScheduledFill, resolveLastHourTopUp };

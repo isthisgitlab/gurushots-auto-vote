@@ -307,3 +307,108 @@ describe('useLastHourExposure setting', () => {
         expect(settings.getEffectiveSetting).toHaveBeenCalledWith('useLastHourExposure', '456');
     });
 });
+
+describe('voteBeforeLastHour pre-last-hour top-up', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        settings.getEffectiveSetting = jest.fn();
+    });
+
+    // Shared mock: standard exposure 100, a LOWER last-hour trigger 60, both
+    // last-hour and the new top-up feature ON, lead 15 min. Overridable per test.
+    const mockSettings = (over = {}) => {
+        const base = {
+            onlyBoost: false,
+            voteOnlyInLastMinute: false,
+            exposure: 100,
+            lastMinuteThreshold: 10,
+            lastHourExposure: 60,
+            useLastHourExposure: true,
+            voteBeforeLastHour: true,
+            voteBeforeLastHourLeadMin: 15,
+            ...over,
+        };
+        settings.getEffectiveSetting.mockImplementation((key) => (key in base ? base[key] : undefined));
+    };
+
+    const challengeClosingIn = (secs, exposureFactor) => ({
+        id: '123',
+        title: 'Test Challenge',
+        type: 'regular',
+        close_time: Math.floor(Date.now() / 1000) + secs,
+        start_time: Math.floor(Date.now() / 1000) - 7200,
+        member: { ranking: { exposure: { exposure_factor: exposureFactor } } },
+    });
+
+    test('in-hour grace: tops up to the STANDARD target, overriding the lower last-hour trigger', () => {
+        // 50 min out → within the last hour AND within the 15-min grace (>= 45 min).
+        // Exposure 70 is ABOVE the last-hour trigger (60) — the last-hour rule alone
+        // would NOT vote — but the top-up carries it to standard (100): 70 < 100.
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3000, 70), now);
+        expect(result.shouldVote).toBe(true);
+        expect(result.voteReason).toContain('pre-last-hour top-up');
+        expect(result.voteReason).toContain('70% < 100%');
+    });
+
+    test('before the boundary: labels the decision pre-last-hour and votes to standard', () => {
+        // 61 min out → inside the [close-75m, close-45m] window, before the last hour.
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3660, 80), now);
+        expect(result.shouldVote).toBe(true);
+        expect(result.voteReason).toContain('pre-last-hour top-up');
+        expect(result.voteReason).toContain('80% < 100%');
+    });
+
+    test('after the grace window: defers to the last-hour rule', () => {
+        // 33 min out → within the last hour but past the 15-min grace (< 45 min).
+        // Exposure 70 >= last-hour trigger 60 → last-hour rule declines.
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(2000, 70), now);
+        expect(result.shouldVote).toBe(false);
+        expect(result.voteReason).toContain('last hour threshold');
+        expect(result.voteReason).toContain('70% >= 60%');
+    });
+
+    test('feature OFF: the lower last-hour trigger applies as before (no top-up)', () => {
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings({ voteBeforeLastHour: false });
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3000, 70), now);
+        expect(result.shouldVote).toBe(false);
+        expect(result.voteReason).toContain('last hour threshold');
+        expect(result.voteReason).toContain('70% >= 60%');
+    });
+
+    test('gated on useLastHourExposure: no top-up branch when the last-hour feature is off', () => {
+        // In the grace window with the top-up flag on but useLastHourExposure off,
+        // the normal rule runs (not pre-last-hour): exposure 100 >= standard 100.
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings({ useLastHourExposure: false });
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3000, 100), now);
+        expect(result.shouldVote).toBe(false);
+        expect(result.voteReason).toContain('normal threshold');
+        expect(result.voteReason).not.toContain('pre-last-hour');
+    });
+
+    test('stops at target: no vote once exposure already reached the standard target', () => {
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings();
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3000, 100), now);
+        expect(result.shouldVote).toBe(false);
+        expect(result.voteReason).toContain('pre-last-hour top-up');
+        expect(result.voteReason).toContain('100% >= 100%');
+    });
+
+    test('a NaN lead minutes falls back to the 15-min default window', () => {
+        // 50 min out is inside a 15-min grace; leave the lead unset so it resolves
+        // to undefined → NaN → the fallback keeps the window at 15 min.
+        const now = Math.floor(Date.now() / 1000);
+        mockSettings({ voteBeforeLastHourLeadMin: undefined });
+        const result = VotingLogic.evaluateVotingDecision(challengeClosingIn(3000, 70), now);
+        expect(result.shouldVote).toBe(true);
+        expect(result.voteReason).toContain('pre-last-hour top-up');
+    });
+});

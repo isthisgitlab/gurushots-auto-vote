@@ -402,5 +402,140 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 expect(result.nextScheduled).toBeNull();
             });
         });
+
+        describe('pre-last-hour top-up cap', () => {
+            // Same dual-shape wrap as the scheduled-fill cap: sync on Node,
+            // Promise on the WebView.
+            const wrap = (config) => (resolveThreshold() instanceof Promise ? Promise.resolve(config) : config);
+            // Window START = close_time - (3600 + leadSec); the cap lands a cycle there.
+            const on = (leadSec) => () => wrap({ enabled: true, leadSec });
+
+            it('omitting the resolver leaves results identical (backward compat)', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [{ id: 1, title: 'Far', type: 'regular', close_time: now + 7200 }];
+                const result = await computeNextCycleDelayMs(challenges, now, opts());
+                expect(result.mode).toBe('normal');
+                expect(result.delayMs).toBe(NORMAL);
+                expect(result.nextLastHourTopUp).toBeNull();
+            });
+
+            it('caps the delay to an upcoming top-up window start', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Close in 4620s, lead 15 min (900s) → start = close-4500 = 120s away,
+                // sooner than the 3-min random delay and the 62-min threshold boundary.
+                const challenges = [{ id: 9, title: 'TopUp', type: 'regular', close_time: now + 4620 }];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveLastHourTopUp: on(900),
+                });
+                expect(result.mode).toBe('pre-last-hour');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextLastHourTopUp).toMatchObject({ challengeId: 9, leadMin: 15 });
+            });
+
+            it('does not cap when the window start is beyond the normal delay', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Close in 3h, lead 15 min → start ~2h5m out, beyond the 3-min delay.
+                const challenges = [{ id: 9, title: 'Far', type: 'regular', close_time: now + 3 * 3600 }];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveLastHourTopUp: on(900),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.delayMs).toBe(NORMAL);
+            });
+
+            it('a non-positive/NaN leadSec falls back to the 15-min default', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // leadSec 0 → fallback 900s → start = close-4500. Close+4620 → 120s away.
+                const challenges = [{ id: 9, title: 'BadLead', type: 'regular', close_time: now + 4620 }];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveLastHourTopUp: on(0),
+                });
+                expect(result.mode).toBe('pre-last-hour');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextLastHourTopUp.leadMin).toBe(15);
+            });
+
+            it('the sooner of a threshold boundary and a top-up start wins', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Threshold boundary: close in 4560s, threshold 75m → 60s away.
+                // Top-up start: lead 900s → close-4500 = 60s... make boundary win at 60s
+                // vs top-up 120s: close 4620 gives top-up start 120s.
+                const challenges = [{ id: 5, title: 'Both', type: 'regular', close_time: now + 4620 }];
+                const boundaryWins = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts({ resolveThreshold: () => 76 }), // 76m → boundary at close-4560 = 60s
+                    resolveLastHourTopUp: on(900), // top-up start at close-4500 = 120s
+                });
+                expect(boundaryWins.mode).toBe('approaching');
+                expect(boundaryWins.delayMs).toBe(60_000);
+
+                // Flip it: a wider lead pulls the top-up start earlier than the boundary.
+                const topUpWins = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts({ resolveThreshold: () => 76 }), // boundary still 60s
+                    resolveLastHourTopUp: on(990), // start at close-4590 = 30s
+                });
+                expect(topUpWins.mode).toBe('pre-last-hour');
+                expect(topUpWins.delayMs).toBe(30_000);
+            });
+
+            it('the sooner of a scheduled start and a top-up start wins', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [{ id: 7, title: 'SchedVsTopUp', type: 'regular', close_time: now + 4620 }];
+                // Scheduled before-end start at close-4560 = 60s; top-up at close-4500 = 120s.
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveScheduledFill: () => wrap({ enabled: true, timesOfDay: [], beforeEndSecs: [4560] }),
+                    timezone: 'UTC',
+                    resolveLastHourTopUp: on(900),
+                });
+                expect(result.mode).toBe('scheduled');
+                expect(result.delayMs).toBe(60_000);
+            });
+
+            it('floors the top-up cap at minGapMs', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Start 1s away — below the 5s floor.
+                const challenges = [{ id: 9, title: 'Imminent', type: 'regular', close_time: now + 4501 }];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveLastHourTopUp: on(900),
+                });
+                expect(result.mode).toBe('pre-last-hour');
+                expect(result.delayMs).toBe(MIN_GAP);
+            });
+
+            it('disabled or throwing configs are skipped without throwing', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [
+                    { id: 1, title: 'Off', type: 'regular', close_time: now + 4620 },
+                    { id: 2, title: 'Throws', type: 'regular', close_time: now + 4620 },
+                ];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveLastHourTopUp: (id) => {
+                        if (id === '2') throw new Error('corrupt');
+                        return wrap({ enabled: false, leadSec: 900 });
+                    },
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextLastHourTopUp).toBeNull();
+            });
+
+            it('skips flash and already-closed challenges', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [
+                    { id: 1, title: 'Flash', type: 'flash', close_time: now + 4620 },
+                    { id: 2, title: 'Closed', type: 'regular', close_time: now - 10 },
+                ];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveLastHourTopUp: on(900),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextLastHourTopUp).toBeNull();
+            });
+        });
     });
 });
