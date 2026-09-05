@@ -5,7 +5,7 @@
  * (mirrors settings/limits.js).
  *
  * Each bundle is SELF-CONTAINED: it sets both sides of every cross-field pair
- * it touches (exposure/exposureTarget, lastHourExposure/lastHourExposureTarget)
+ * it touches (exposure/exposureTarget, finalWindowExposure/finalWindowExposureTarget)
  * so `_sanitizeProfileValues` validates it as a set regardless of the user's
  * customized global defaults. Values equal to a default are harmless — apply
  * prunes them when writing the per-challenge override container.
@@ -16,7 +16,7 @@
  * stays stable across languages so the built-in match keeps working.
  */
 
-// Sentinel-family note: exposureTarget / lastHourExposureTarget are family 2
+// Sentinel-family note: exposureTarget / finalWindowExposureTarget are family 2
 // (0 = "follow the trigger", rule still active); every *Time / *Fill value is
 // family 1 (0 = off). These bundles never conflate the two.
 const INTENT_PROFILES = [
@@ -41,7 +41,7 @@ const INTENT_PROFILES = [
         name: 'Finish Strong',
         nameKey: 'app.intentFinishStrong',
         descKey: 'app.intentFinishStrongDesc',
-        // Spend Boost + Turbo and push exposure hard in the final hour, but
+        // Spend Boost + Turbo and push exposure hard in the final window, but
         // play the rest of the challenge normally (exposureTarget follows the
         // trigger).
         values: {
@@ -50,9 +50,9 @@ const INTENT_PROFILES = [
             autoBoost: true,
             useTurbo: true,
             autoTurbo: true,
-            useLastHourExposure: true,
-            lastHourExposure: 100,
-            lastHourExposureTarget: 100,
+            useFinalWindowExposure: true,
+            finalWindowExposure: 100,
+            finalWindowExposureTarget: 100,
         },
     },
     {
@@ -69,9 +69,9 @@ const INTENT_PROFILES = [
             useTurbo: true,
             autoTurbo: true,
             autoFill: true,
-            useLastHourExposure: true,
-            lastHourExposure: 100,
-            lastHourExposureTarget: 100,
+            useFinalWindowExposure: true,
+            finalWindowExposure: 100,
+            finalWindowExposureTarget: 100,
         },
     },
 ];

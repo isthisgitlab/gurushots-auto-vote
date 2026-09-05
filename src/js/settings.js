@@ -385,6 +385,45 @@ const migrateScheduledFillListBounds = (mergedSettings) => {
     return true;
 };
 
+// Rename the "last hour exposure" feature keys to their "final window"
+// equivalents (the fixed 1h window became the configurable finalWindowDuration
+// setting). A pure key rename that must run BEFORE cleanupObsoleteSettings,
+// which would otherwise delete the now-schemaless old keys and lose the user's
+// persisted values. Walks all three scopes via _eachScheduledFillScope
+// (globalDefaults, every perChallenge map, every non-reserved profile). The new
+// finalWindowDuration setting needs no migration: absent → schema default 3600,
+// which reproduces the legacy fixed one-hour behaviour.
+const migrateFinalWindowExposureRename = (mergedSettings) => {
+    if (mergedSettings._finalWindowExposureRenamedV1) return false;
+
+    const RENAMES = {
+        useLastHourExposure: 'useFinalWindowExposure',
+        lastHourExposure: 'finalWindowExposure',
+        lastHourExposureTarget: 'finalWindowExposureTarget',
+        voteBeforeLastHour: 'voteBeforeFinalWindow',
+        voteBeforeLastHourLeadMin: 'voteBeforeFinalWindowLeadMin',
+    };
+
+    _eachScheduledFillScope(mergedSettings, (scope, label) => {
+        if (!scope) return;
+        for (const [oldKey, newKey] of Object.entries(RENAMES)) {
+            if (!Object.prototype.hasOwnProperty.call(scope, oldKey)) continue;
+            // Preserve an existing new-key value (already migrated / new write)
+            // over the legacy one; still drop the stale old key either way.
+            if (!Object.prototype.hasOwnProperty.call(scope, newKey)) {
+                scope[newKey] = scope[oldKey];
+                logger
+                    .withCategory('settings')
+                    .info(`Renamed ${oldKey} ${label} to ${newKey} (value ${JSON.stringify(scope[oldKey])})`, null);
+            }
+            delete scope[oldKey];
+        }
+    });
+
+    mergedSettings._finalWindowExposureRenamedV1 = true;
+    return true;
+};
+
 /**
  * Run every flag-gated migration over the merged settings (mutating them
  * in place) and persist the result when anything changed. Order matters:
@@ -401,6 +440,7 @@ const runMigrations = (mergedSettings) => {
     migrationChanges = migrateAutoFillScheduleBounds(mergedSettings) || migrationChanges;
     migrationChanges = migrateScheduledFillLists(mergedSettings) || migrationChanges;
     migrationChanges = migrateScheduledFillListBounds(mergedSettings) || migrationChanges;
+    migrationChanges = migrateFinalWindowExposureRename(mergedSettings) || migrationChanges;
 
     // If migration made changes, save the updated settings
     if (migrationChanges) {

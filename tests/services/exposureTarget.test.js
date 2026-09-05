@@ -1,8 +1,8 @@
 /**
  * Tests for the exposure trigger/target split in VotingLogic.
  *
- * Today both `exposure` and `lastHourExposure` act as a single threshold that's
- * also the loop ceiling. The new `exposureTarget` and `lastHourExposureTarget`
+ * Today both `exposure` and `finalWindowExposure` act as a single threshold that's
+ * also the loop ceiling. The new `exposureTarget` and `finalWindowExposureTarget`
  * settings let users decouple the "vote if below" trigger from the "vote up to"
  * target — with a sentinel value of 0 meaning "follow the trigger" (legacy
  * behavior, the default).
@@ -32,10 +32,10 @@ const mockSettings = (overrides = {}) => {
         voteOnlyInLastMinute: false,
         exposure: 50,
         lastMinuteThreshold: 10,
-        lastHourExposure: 40,
-        useLastHourExposure: false,
+        finalWindowExposure: 40,
+        useFinalWindowExposure: false,
         exposureTarget: 0,
-        lastHourExposureTarget: 0,
+        finalWindowExposureTarget: 0,
     };
     settings.getEffectiveSetting = jest.fn((key) => ({ ...defaults, ...overrides })[key]);
 };
@@ -86,30 +86,30 @@ describe('exposureTarget — normal rule', () => {
     });
 });
 
-describe('lastHourExposureTarget — last-hour rule', () => {
+describe('finalWindowExposureTarget — final-window rule', () => {
     beforeEach(() => jest.clearAllMocks());
 
-    test('sentinel 0 preserves legacy behavior in the last-hour window', () => {
+    test('sentinel 0 preserves legacy behavior in the final-window window', () => {
         mockSettings({
-            useLastHourExposure: true,
-            lastHourExposure: 40,
-            lastHourExposureTarget: 0,
+            useFinalWindowExposure: true,
+            finalWindowExposure: 40,
+            finalWindowExposureTarget: 0,
         });
         const challenge = buildChallenge({ exposureFactor: 25, closeInSeconds: 1800 });
         const result = VotingLogic.evaluateVotingDecision(challenge, Math.floor(Date.now() / 1000));
 
         expect(result.shouldVote).toBe(true);
         expect(result.targetExposure).toBe(40);
-        expect(result.voteReason).toContain('last hour threshold');
+        expect(result.voteReason).toContain('final window threshold');
         expect(result.voteReason).toContain('25% < 40%');
         expect(result.voteReason).not.toContain('vote up to');
     });
 
-    test('explicit higher target lifts the loop ceiling in the last-hour window', () => {
+    test('explicit higher target lifts the loop ceiling in the final-window window', () => {
         mockSettings({
-            useLastHourExposure: true,
-            lastHourExposure: 40,
-            lastHourExposureTarget: 80,
+            useFinalWindowExposure: true,
+            finalWindowExposure: 40,
+            finalWindowExposureTarget: 80,
         });
         const challenge = buildChallenge({ exposureFactor: 25, closeInSeconds: 1800 });
         const result = VotingLogic.evaluateVotingDecision(challenge, Math.floor(Date.now() / 1000));
@@ -157,13 +157,13 @@ describe('resolver helpers', () => {
         expect(VotingLogic.getEffectiveExposureTarget('999')).toBe(95);
     });
 
-    test('getEffectiveLastHourExposureTarget returns trigger when sentinel is 0', () => {
-        mockSettings({ lastHourExposure: 35, lastHourExposureTarget: 0 });
-        expect(VotingLogic.getEffectiveLastHourExposureTarget('999')).toBe(35);
+    test('getEffectiveFinalWindowExposureTarget returns trigger when sentinel is 0', () => {
+        mockSettings({ finalWindowExposure: 35, finalWindowExposureTarget: 0 });
+        expect(VotingLogic.getEffectiveFinalWindowExposureTarget('999')).toBe(35);
     });
 
-    test('getEffectiveLastHourExposureTarget returns the configured value when set', () => {
-        mockSettings({ lastHourExposure: 35, lastHourExposureTarget: 90 });
-        expect(VotingLogic.getEffectiveLastHourExposureTarget('999')).toBe(90);
+    test('getEffectiveFinalWindowExposureTarget returns the configured value when set', () => {
+        mockSettings({ finalWindowExposure: 35, finalWindowExposureTarget: 90 });
+        expect(VotingLogic.getEffectiveFinalWindowExposureTarget('999')).toBe(90);
     });
 });

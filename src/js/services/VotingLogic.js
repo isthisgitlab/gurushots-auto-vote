@@ -50,7 +50,7 @@ const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/limits');
  * a corrupt hand-edited override must degrade this one challenge's scheduled
  * fill to "off" rather than abort voting for every remaining challenge.
  *
- * Unlike isWithinLastHour/isWithinLastMinuteThreshold, the time-of-day form
+ * Unlike isWithinFinalWindow/isWithinLastMinuteThreshold, the time-of-day form
  * doesn't compare against close_time — callers only iterate the API's active
  * (still-open) challenge list, so a stale in-window verdict for a closed
  * challenge can't occur there. A future caller feeding a broader list should
@@ -159,14 +159,17 @@ const getScheduledFillState = (challenge, challengeId, now) => {
  */
 
 /**
- * Check if a challenge is within the last hour
+ * Check if a challenge is within its final window (the configurable stretch
+ * before close during which the final-window exposure rule applies).
  * @param {number} closeTime - Challenge close time (Unix timestamp)
  * @param {number} now - Current time (Unix timestamp)
- * @returns {boolean} - True if within last hour
+ * @param {number} [windowSec=3600] - Final-window duration in seconds
+ *   (finalWindowDuration). Defaults to the legacy fixed hour.
+ * @returns {boolean} - True if within the final window
  */
-const isWithinLastHour = (closeTime, now) => {
+const isWithinFinalWindow = (closeTime, now, windowSec = 3600) => {
     const timeUntilEnd = closeTime - now;
-    return timeUntilEnd <= 3600 && timeUntilEnd > 0; // 3600 seconds = 1 hour
+    return timeUntilEnd <= windowSec && timeUntilEnd > 0;
 };
 
 /**
@@ -192,12 +195,12 @@ const getEffectiveExposureThreshold = (challengeId) => {
 };
 
 /**
- * Get the effective last hour exposure threshold for a challenge
+ * Get the effective final-window exposure threshold for a challenge
  * @param {string} challengeId - Challenge ID
- * @returns {number} - Effective last hour exposure threshold
+ * @returns {number} - Effective final-window exposure threshold
  */
-const getEffectiveLastHourExposureThreshold = (challengeId) => {
-    return settings.getEffectiveSetting('lastHourExposure', challengeId);
+const getEffectiveFinalWindowExposureThreshold = (challengeId) => {
+    return settings.getEffectiveSetting('finalWindowExposure', challengeId);
 };
 
 /**
@@ -214,14 +217,14 @@ const getEffectiveExposureTarget = (challengeId) => {
 };
 
 /**
- * Resolve the effective last-hour-rule vote target. Sentinel `0` means
- * "follow the lastHourExposure trigger".
+ * Resolve the effective final-window-rule vote target. Sentinel `0` means
+ * "follow the finalWindowExposure trigger".
  * @param {string} challengeId - Challenge ID
  * @returns {number} - Effective target percentage
  */
-const getEffectiveLastHourExposureTarget = (challengeId) => {
-    const raw = settings.getEffectiveSetting('lastHourExposureTarget', challengeId);
-    return raw === 0 || raw == null ? getEffectiveLastHourExposureThreshold(challengeId) : raw;
+const getEffectiveFinalWindowExposureTarget = (challengeId) => {
+    const raw = settings.getEffectiveSetting('finalWindowExposureTarget', challengeId);
+    return raw === 0 || raw == null ? getEffectiveFinalWindowExposureThreshold(challengeId) : raw;
 };
 
 /**
@@ -233,7 +236,7 @@ const getEffectiveLastHourExposureTarget = (challengeId) => {
  *     skipReason:    string | null,   // when eligible=false because a rule blocked
  *     atTarget:      true | false,    // when exposure already meets target
  *     targetExposure:number,
- *     ruleLabel:     string,          // 'flash', 'lastminute', 'scheduled', 'pre-last-hour', 'last-hour', 'normal'
+ *     ruleLabel:     string,          // 'flash', 'lastminute', 'scheduled', 'pre-final-window', 'final-window', 'normal'
  *     thresholdInfo: object }         // small bundle of settings the wrapper formats
  *
  * @param {any} challenge
@@ -253,36 +256,43 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
     const effectiveThreshold = getEffectiveExposureThreshold(challengeId);
     const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
-    const effectiveLastHourExposure = getEffectiveLastHourExposureThreshold(challengeId);
-    const useLastHourExposure = settings.getEffectiveSetting('useLastHourExposure', challengeId);
+    const effectiveFinalWindowExposure = getEffectiveFinalWindowExposureThreshold(challengeId);
+    const useFinalWindowExposure = settings.getEffectiveSetting('useFinalWindowExposure', challengeId);
     const effectiveExposureTarget = getEffectiveExposureTarget(challengeId);
-    const effectiveLastHourExposureTarget = getEffectiveLastHourExposureTarget(challengeId);
-    const voteBeforeLastHour = settings.getEffectiveSetting('voteBeforeLastHour', challengeId) === true;
+    const effectiveFinalWindowExposureTarget = getEffectiveFinalWindowExposureTarget(challengeId);
+    const voteBeforeFinalWindow = settings.getEffectiveSetting('voteBeforeFinalWindow', challengeId) === true;
+    // Configurable final-window duration (seconds before close). Under-mocked
+    // callers / hand-edited files can yield a non-number; the schema guarantees a
+    // valid integer >= 60 otherwise. Fall back to the legacy fixed hour (3600)
+    // rather than propagate NaN into the window math below.
+    const rawFinalWindowSec = settings.getEffectiveSetting('finalWindowDuration', challengeId);
+    const finalWindowSec = Number.isFinite(rawFinalWindowSec) && rawFinalWindowSec >= 60 ? rawFinalWindowSec : 3600;
     // Under-mocked callers / hand-edited files can yield a non-number here; the
     // schema guarantees 1..59 otherwise. Fall back to the schema default (15)
     // rather than propagate NaN into the window math below.
-    const rawLeadMin = settings.getEffectiveSetting('voteBeforeLastHourLeadMin', challengeId);
+    const rawLeadMin = settings.getEffectiveSetting('voteBeforeFinalWindowLeadMin', challengeId);
     // Clamp to the schema's valid range (1..59). Anything outside — a hand-edited
     // sub-minute value, an over-59 value, or a non-number — falls back to the
-    // default (15). The lower bound MUST match soonestLastHourTopUpStart's guard in
-    // thresholdWindow.js (>= 60s) so the vote-rule window and the scheduler's cadence
-    // cap can't disagree for the same corrupt input.
-    const voteBeforeLastHourLeadMin =
+    // default (15). The lower bound MUST match soonestFinalWindowTopUpStart's guard
+    // in thresholdWindow.js (>= 60s) so the vote-rule window and the scheduler's
+    // cadence cap can't disagree for the same corrupt input.
+    const voteBeforeFinalWindowLeadMin =
         Number.isFinite(rawLeadMin) && rawLeadMin >= 1 && rawLeadMin <= 59 ? rawLeadMin : 15;
 
     const isWithinLastMinute = isWithinLastMinuteThreshold(challenge.close_time, now, challengeId);
-    const withinLastHour = isWithinLastHour(challenge.close_time, now);
-    // Top-up window straddling the final-hour boundary: [close-3600-lead,
-    // close-3600+lead]. Only meaningful when both the last-hour feature and this
-    // opt-in are on (it exists to fix the last-hour rule's low-trigger blind spot).
+    const withinFinalWindow = isWithinFinalWindow(challenge.close_time, now, finalWindowSec);
+    // Top-up window straddling the final-window boundary:
+    // [close-finalWindowSec-lead, close-finalWindowSec+lead]. Only meaningful when
+    // both the final-window feature and this opt-in are on (it exists to fix the
+    // final-window rule's low-trigger blind spot).
     const timeUntilEnd = challenge.close_time - now;
-    const preLastHourLeadSec = voteBeforeLastHourLeadMin * 60;
-    const withinPreLastHourTopUp =
-        voteBeforeLastHour &&
-        useLastHourExposure &&
+    const preFinalWindowLeadSec = voteBeforeFinalWindowLeadMin * 60;
+    const withinPreFinalWindowTopUp =
+        voteBeforeFinalWindow &&
+        useFinalWindowExposure &&
         timeUntilEnd > 0 &&
-        timeUntilEnd <= 3600 + preLastHourLeadSec &&
-        timeUntilEnd >= 3600 - preLastHourLeadSec;
+        timeUntilEnd <= finalWindowSec + preFinalWindowLeadSec &&
+        timeUntilEnd >= finalWindowSec - preFinalWindowLeadSec;
     // Optional-chained for consistency with evaluateManualVotingToHundred and the
     // boost/turbo predicates, which all guard this same tree. An unguarded read here threw
     // out of the per-challenge loop and abandoned every remaining challenge in the pass.
@@ -332,9 +342,9 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     const sharedThresholdInfo = {
         effectiveLastMinuteThreshold,
         effectiveThreshold,
-        effectiveLastHourExposure,
+        effectiveFinalWindowExposure,
         effectiveExposureTarget,
-        effectiveLastHourExposureTarget,
+        effectiveFinalWindowExposureTarget,
     };
 
     if (onlyBoost) return blocked('boost-only mode enabled');
@@ -368,29 +378,34 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     if (sched.active && sched.inWindow) {
         return decided('scheduled', 100, 100, sharedThresholdInfo);
     }
-    // Replace mode blocks the threshold rules (normal AND last-hour) outside
+    // Replace mode blocks the threshold rules (normal AND final-window) outside
     // the window — auto only, mirroring onlyBoost: a manual vote is explicit
     // user intent and is never refused just because a schedule exists.
     if (mode === 'auto' && sched.active && sched.replaces) {
         return blocked('scheduled-fill-only: outside scheduled fill window');
     }
 
-    // Pre-last-hour top-up. Placed ABOVE the last-hour branch so during the
-    // in-hour grace part (where withinLastHour is already true) it overrides the
-    // last-hour rule — which, with its lower recovery trigger, would otherwise
-    // leave an already-decayed challenge stranded below standard when the hour
-    // starts. Votes to the STANDARD trigger/target. Self-limiting: the window is
-    // time-bounded and `decided` stops once exposure reaches the trigger, so no
-    // persisted "already topped up" state is needed. Scheduled fill still wins
-    // (handled above); before the boundary this is byte-identical to the normal
-    // rule (same trigger/target) — only the label differs, for the scheduler
+    // Pre-final-window top-up. Placed ABOVE the final-window branch so during the
+    // in-window grace part (where withinFinalWindow is already true) it overrides
+    // the final-window rule — which, with its lower recovery trigger, would
+    // otherwise leave an already-decayed challenge stranded below standard when the
+    // window starts. Votes to the STANDARD trigger/target. Self-limiting: the
+    // window is time-bounded and `decided` stops once exposure reaches the trigger,
+    // so no persisted "already topped up" state is needed. Scheduled fill still
+    // wins (handled above); before the boundary this is byte-identical to the
+    // normal rule (same trigger/target) — only the label differs, for the scheduler
     // boundary and the log line.
-    if (withinPreLastHourTopUp) {
-        return decided('pre-last-hour', effectiveThreshold, effectiveExposureTarget, sharedThresholdInfo);
+    if (withinPreFinalWindowTopUp) {
+        return decided('pre-final-window', effectiveThreshold, effectiveExposureTarget, sharedThresholdInfo);
     }
 
-    if (withinLastHour && useLastHourExposure) {
-        return decided('last-hour', effectiveLastHourExposure, effectiveLastHourExposureTarget, sharedThresholdInfo);
+    if (withinFinalWindow && useFinalWindowExposure) {
+        return decided(
+            'final-window',
+            effectiveFinalWindowExposure,
+            effectiveFinalWindowExposureTarget,
+            sharedThresholdInfo
+        );
     }
 
     return decided('normal', effectiveThreshold, effectiveExposureTarget, sharedThresholdInfo);
@@ -418,10 +433,10 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
         currentExposure,
         trigger,
         effectiveThreshold,
-        effectiveLastHourExposure,
+        effectiveFinalWindowExposure,
         effectiveLastMinuteThreshold,
         effectiveExposureTarget,
-        effectiveLastHourExposureTarget,
+        effectiveFinalWindowExposureTarget,
     } = r.thresholdInfo;
 
     // A forced vote needs its own phrasing, not a suffix on the normal one. The
@@ -436,8 +451,8 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
             flash: 'flash type',
             lastminute: `lastminute threshold (${effectiveLastMinuteThreshold}m)`,
             scheduled: 'scheduled fill window',
-            'pre-last-hour': 'pre-last-hour top-up',
-            'last-hour': 'last hour threshold',
+            'pre-final-window': 'pre-final-window top-up',
+            'final-window': 'final window threshold',
             normal: 'normal threshold',
         };
         const labelText = forcedLabels[/** @type {string} */ (r.ruleLabel)];
@@ -465,12 +480,12 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
         scheduled: r.atTarget
             ? 'scheduled fill: exposure already at 100%'
             : `scheduled fill window: exposure ${currentExposure}% < 100%`,
-        'pre-last-hour': r.eligible
-            ? `pre-last-hour top-up: exposure ${currentExposure}% < ${effectiveThreshold}%${targetSuffix(effectiveThreshold, effectiveExposureTarget)}`
-            : `pre-last-hour top-up: exposure ${currentExposure}% >= ${effectiveThreshold}%`,
-        'last-hour': r.eligible
-            ? `last hour threshold: exposure ${currentExposure}% < ${effectiveLastHourExposure}%${targetSuffix(effectiveLastHourExposure, effectiveLastHourExposureTarget)}`
-            : `last hour threshold: exposure ${currentExposure}% >= ${effectiveLastHourExposure}%`,
+        'pre-final-window': r.eligible
+            ? `pre-final-window top-up: exposure ${currentExposure}% < ${effectiveThreshold}%${targetSuffix(effectiveThreshold, effectiveExposureTarget)}`
+            : `pre-final-window top-up: exposure ${currentExposure}% >= ${effectiveThreshold}%`,
+        'final-window': r.eligible
+            ? `final window threshold: exposure ${currentExposure}% < ${effectiveFinalWindowExposure}%${targetSuffix(effectiveFinalWindowExposure, effectiveFinalWindowExposureTarget)}`
+            : `final window threshold: exposure ${currentExposure}% >= ${effectiveFinalWindowExposure}%`,
         normal: r.eligible
             ? `normal threshold: exposure ${currentExposure}% < ${effectiveThreshold}%${targetSuffix(effectiveThreshold, effectiveExposureTarget)}`
             : `normal threshold: exposure ${currentExposure}% >= ${effectiveThreshold}%`,
@@ -504,14 +519,14 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
     }
 
     if (r.atTarget) {
-        const { effectiveLastMinuteThreshold, effectiveThreshold, effectiveLastHourExposure } = r.thresholdInfo;
+        const { effectiveLastMinuteThreshold, effectiveThreshold, effectiveFinalWindowExposure } = r.thresholdInfo;
         /** @type {Record<string, string>} */
         const messages = {
             flash: `Challenge "${challengeTitle}" already has 100% exposure (flash type)`,
             lastminute: `Challenge "${challengeTitle}" already has 100% exposure (lastminute threshold: ${effectiveLastMinuteThreshold}m)`,
             scheduled: `Challenge "${challengeTitle}" already has 100% exposure (scheduled fill window)`,
-            'pre-last-hour': `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure (pre-last-hour top-up)`,
-            'last-hour': `Challenge "${challengeTitle}" already has ${effectiveLastHourExposure}% exposure (last hour threshold)`,
+            'pre-final-window': `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure (pre-final-window top-up)`,
+            'final-window': `Challenge "${challengeTitle}" already has ${effectiveFinalWindowExposure}% exposure (final window threshold)`,
             normal: `Challenge "${challengeTitle}" already has ${effectiveThreshold}% exposure`,
         };
         return {
@@ -1068,12 +1083,12 @@ const describeDeadlineActions = (challenge, now) => {
 };
 
 module.exports = {
-    isWithinLastHour,
+    isWithinFinalWindow,
     isWithinLastMinuteThreshold,
     getEffectiveExposureThreshold,
-    getEffectiveLastHourExposureThreshold,
+    getEffectiveFinalWindowExposureThreshold,
     getEffectiveExposureTarget,
-    getEffectiveLastHourExposureTarget,
+    getEffectiveFinalWindowExposureTarget,
     getScheduledFillState,
     evaluateVotingDecision,
     evaluateManualVotingDecision,

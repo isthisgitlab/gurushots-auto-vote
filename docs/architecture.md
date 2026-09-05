@@ -28,7 +28,7 @@ Domain terms used throughout, in reader's terms:
 - **boost** — a one-shot exposure multiplier applied to a single entry.
 - **turbo** — a timed exposure surge on an entry.
 - **flash** — a challenge _type_ that is always auto-targeted to 100%.
-- **last-minute / last-hour windows** — deadline-proximity windows that change both the cadence and the
+- **last-minute / final-window windows** — deadline-proximity windows that change both the cadence and the
   exposure targets.
 - **key-unlock** — a boost unlocked by spending a challenge key.
 - **emergency window** — a near-deadline override that spends an otherwise-idle boost/turbo/fill so it
@@ -46,15 +46,15 @@ Domain terms used throughout, in reader's terms:
   and the consumed slot.
 - The decision engine is `_runVotingRules()` (`services/VotingLogic.js` — around L248). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
-  (→100) → scheduled-fill window → **pre-last-hour top-up** → last-hour rule → normal threshold. The
-  pre-last-hour top-up (`voteBeforeLastHour`) votes to the **standard** exposure target inside a window
-  straddling the last-hour boundary — `[close − 3600 − lead, close − 3600 + lead]`, `lead` =
-  `voteBeforeLastHourLeadMin` (1–59, default 15) — so a challenge whose exposure already decayed below
-  the standard target is not stranded there by the lower last-hour trigger. It sits **above** last-hour
+  (→100) → scheduled-fill window → **pre-final-window top-up** → final-window rule → normal threshold. The
+  pre-final-window top-up (`voteBeforeFinalWindow`) votes to the **standard** exposure target inside a window
+  straddling the final-window boundary — `[close − finalWindowDuration − lead, close − finalWindowDuration + lead]`, `lead` =
+  `voteBeforeFinalWindowLeadMin` (1–59, default 15) — so a challenge whose exposure already decayed below
+  the standard target is not stranded there by the lower final-window trigger. It sits **above** final-window
   (it must win while both windows overlap in the lead minutes after the boundary) and **below**
-  scheduled-fill and last-minute (those still force 100). Only active when `useLastHourExposure` is on.
+  scheduled-fill and last-minute (those still force 100). Only active when `useFinalWindowExposure` is on.
 - **Trigger ≠ target, and there are two _different_ sentinel families — do not merge them:**
-    - `exposureTarget` / `lastHourExposureTarget`: `0` or null means **"target == trigger"** — the rule
+    - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
       stays **active**, it simply votes up to the trigger value (legacy behavior).
       `getEffectiveExposureTarget()` (`services/VotingLogic.js` — around L209); schema note in
       `settings/schema.js` (around L285).
@@ -63,7 +63,8 @@ Domain terms used throughout, in reader's terms:
       L552: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
       emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill.js` — around
       L936: `emergencySeconds <= 0` → `'disabled'`).
-- Magic constants: last-hour window = 3600 s; key-unlock boost default window = 900 s when the setting is
+- Magic constants: final-window width defaults to 3600 s — now the `finalWindowDuration` setting's default
+  (configurable 60 s … 30 d), no longer hardcoded; key-unlock boost default window = 900 s when the setting is
   unusable (explicit `0` still = never).
 - Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — the
   older rejection-sampling could loop forever on duplicate ids) and never posts an empty ballot

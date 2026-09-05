@@ -240,7 +240,7 @@
             groupGeneral: 'General',
             groupBoost: 'Boost',
             groupTurbo: 'Turbo',
-            groupLastHour: 'Last Hour Exposure',
+            groupFinalWindow: 'Final Window Exposure',
             groupLastMinute: 'Last Minute',
             groupScheduledFill: 'Scheduled Fill',
             groupAutoFill: 'Auto Fill',
@@ -305,7 +305,7 @@
             onlyBoostDesc: 'Skip regular voting for this challenge entirely and only apply Boost.',
             voteOnNewEntry: 'Vote on New Entry',
             voteOnNewEntryDesc:
-                'When a new photo appears in this challenge — added by you on the website, or by Auto Fill, Emergency Fill, or a Boost/Turbo fill — vote once even if exposure already reads at or above your threshold. It votes up to whichever ceiling the challenge would normally use: Exposure Target (or Exposure, when Target is 0), or Last Hour Exposure Target during the final hour when Use Last Hour Exposure is on. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Fill Only: if any of those is blocking, no vote happens.',
+                'When a new photo appears in this challenge — added by you on the website, or by Auto Fill, Emergency Fill, or a Boost/Turbo fill — vote once even if exposure already reads at or above your threshold. It votes up to whichever ceiling the challenge would normally use: Exposure Target (or Exposure, when Target is 0), or Final Window Exposure Target during the final window when Use Final Window Exposure is on. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Fill Only: if any of those is blocking, no vote happens.',
             override: 'Override',
             overrideForChallenge: 'Override for Challenge',
             photo: 'photo',
@@ -398,7 +398,7 @@
                 'How long each fill window stays open after its start time. Within the window the challenge is topped up to 100% and held there; after it closes, normal rules apply again. Keep it longer than your Check Frequency so a voting cycle is guaranteed to land inside the window.',
             scheduledFillReplaces: 'Scheduled Fill Only',
             scheduledFillReplacesDesc:
-                'When on, normal and last-hour exposure voting are blocked outside the scheduled fill windows — the scheduled times become the only automatic fills. Flash challenges and the Last Minute rules still vote as usual, manual voting is unaffected, and Vote Only in Last Minute takes precedence over this setting. Warning: if the app is not running during a whole window, that fill is skipped with no catch-up and no threshold fallback, so the challenge can close under-filled.',
+                'When on, normal and final-window exposure voting are blocked outside the scheduled fill windows — the scheduled times become the only automatic fills. Flash challenges and the Last Minute rules still vote as usual, manual voting is unaffected, and Vote Only in Last Minute takes precedence over this setting. Warning: if the app is not running during a whole window, that fill is skipped with no catch-up and no threshold fallback, so the challenge can close under-filled.',
             scheduledFillNextHint: 'Next fill window: {0}–{1} ({2}) — from {3}',
             scheduledFillNoTimesHint: 'No fill time configured — scheduled fill is inactive until you set one below.',
             scheduledFillWastedWindowHint:
@@ -406,26 +406,31 @@
             scheduledFillShortWindowHint:
                 'This window is shorter than your maximum Check Frequency ({0} min) — a whole window could fall between voting cycles while the app is running unattended.',
             scheduledFillUnreachableHint:
-                'Scheduled Fill Only is on, but no fill window can still occur before this challenge closes — normal and last-hour voting stay blocked, so only the Last Minute rules will vote.',
+                'Scheduled Fill Only is on, but no fill window can still occur before this challenge closes — normal and final-window voting stay blocked, so only the Last Minute rules will vote.',
             scheduledFillProfileReplacesWarning:
                 'Applying this profile turns on Scheduled Fill Only for this challenge — review the fill times before saving.',
-            lastHourExposure: 'Last Hour Exposure',
-            lastHourExposureDesc:
-                'The exposure level that triggers voting during the final hour (only when Use Last Hour Exposure is on). Must be at or below your Exposure setting.',
-            lastHourExposureTarget: 'Last Hour Exposure Target',
-            lastHourExposureTargetDesc:
-                'Vote up to this percentage when the last-hour rule fires (0 = same as Last Hour Exposure trigger)',
-            lastHourExposureTargetHelp:
-                '0 does NOT mean off. 0 means "vote up to the Last Hour Exposure trigger" — the last-hour rule stays active. Enter 1-100 to keep voting past that trigger. Contrast the time settings, where 0 means off.',
-            useLastHourExposure: 'Use Last Hour Exposure',
-            useLastHourExposureDesc:
-                'In the final hour before a challenge closes, use the separate Last Hour Exposure trigger and target instead of the normal Exposure setting.',
-            voteBeforeLastHour: 'Vote Before Last Hour',
-            voteBeforeLastHourDesc:
-                'Around the start of the final hour, vote up to your standard Exposure target so a challenge whose exposure already decayed below it is not left stranded there by the lower Last Hour Exposure trigger. The top-up stays active across a window that straddles the last-hour boundary — for the Lead minutes before it and the same number of minutes after — then the Last Hour Exposure rule takes over. Only applies when Use Last Hour Exposure is on.',
-            voteBeforeLastHourLeadMin: 'Vote Before Last Hour Lead',
-            voteBeforeLastHourLeadMinDesc:
-                'How many minutes around the start of the final hour the top-up stays active. The window opens this many minutes before the last hour and closes the same number of minutes into it, after which the Last Hour Exposure rule takes over.',
+            finalWindowDuration: 'Final Window Duration',
+            finalWindowDurationDesc:
+                'How long the final window before a challenge closes lasts. The Final Window Exposure rule applies inside this window. Defaults to 1 hour.',
+            finalWindowDurationHelp:
+                'The length of the final window measured back from the challenge close time. Set to 1 hour to reproduce the old fixed last-hour behaviour, or shorten/lengthen it to change when the Final Window Exposure trigger and target take over.',
+            finalWindowExposure: 'Final Window Exposure',
+            finalWindowExposureDesc:
+                'The exposure level that triggers voting during the final window (only when Use Final Window Exposure is on). Must be at or below your Exposure setting.',
+            finalWindowExposureTarget: 'Final Window Exposure Target',
+            finalWindowExposureTargetDesc:
+                'Vote up to this percentage when the final-window rule fires (0 = same as Final Window Exposure trigger)',
+            finalWindowExposureTargetHelp:
+                '0 does NOT mean off. 0 means "vote up to the Final Window Exposure trigger" — the final-window rule stays active. Enter 1-100 to keep voting past that trigger. Contrast the time settings, where 0 means off.',
+            useFinalWindowExposure: 'Use Final Window Exposure',
+            useFinalWindowExposureDesc:
+                'In the final window before a challenge closes, use the separate Final Window Exposure trigger and target instead of the normal Exposure setting.',
+            voteBeforeFinalWindow: 'Vote Before Final Window',
+            voteBeforeFinalWindowDesc:
+                'Around the start of the final window, vote up to your standard Exposure target so a challenge whose exposure already decayed below it is not left stranded there by the lower Final Window Exposure trigger. The top-up stays active across a window that straddles the final-window boundary — for the Lead minutes before it and the same number of minutes after — then the Final Window Exposure rule takes over. Only applies when Use Final Window Exposure is on.',
+            voteBeforeFinalWindowLeadMin: 'Vote Before Final Window Lead',
+            voteBeforeFinalWindowLeadMinDesc:
+                'How many minutes around the start of the final window the top-up stays active. The window opens this many minutes before the final window and closes the same number of minutes into it, after which the Final Window Exposure rule takes over.',
             validationInvalidValue: 'Invalid value',
             validationMustBeLessOrEqual: 'Must be ≤ {0} (currently {1})',
             whatsNew: "What's New:",
@@ -487,7 +492,7 @@
                 'Keeps your entries filled but never spends a Boost or Turbo and does not chase exposure past the trigger — low effort, low risk.',
             intentFinishStrong: 'Finish Strong',
             intentFinishStrongDesc:
-                'Plays normally most of the challenge, then spends Boost and Turbo and pushes exposure hard in the final hour.',
+                'Plays normally most of the challenge, then spends Boost and Turbo and pushes exposure hard in the final window.',
             intentMaxExposure: 'Max Exposure',
             intentMaxExposureDesc:
                 'Pushes everything the whole way: votes to full exposure throughout, fills entries, and spends Boost and Turbo.',

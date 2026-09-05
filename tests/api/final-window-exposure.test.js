@@ -1,8 +1,8 @@
 /**
- * Test suite for lastHourExposure setting functionality
+ * Test suite for finalWindowExposure setting functionality
  *
- * This test verifies that the lastHourExposure setting is used correctly
- * when a challenge is within the last hour of its runtime.
+ * This test verifies that the finalWindowExposure setting is used correctly
+ * when a challenge is within the final window of its runtime.
  */
 
 const settings = require('../../src/js/settings');
@@ -10,7 +10,7 @@ const settings = require('../../src/js/settings');
 // Mock the settings module
 jest.mock('../../src/js/settings');
 
-describe('lastHourExposure', () => {
+describe('finalWindowExposure', () => {
     beforeEach(() => {
         jest.clearAllMocks();
 
@@ -18,18 +18,18 @@ describe('lastHourExposure', () => {
         settings.getEffectiveSetting = jest.fn();
     });
 
-    test('should use lastHourExposure threshold when within last hour', () => {
+    test('should use finalWindowExposure threshold when within final window', () => {
         // Mock challenge data
         const challenge = {
             id: '123',
             title: 'Test Challenge',
             type: 'regular',
-            close_time: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now (within last hour)
+            close_time: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now (within final window)
             start_time: Math.floor(Date.now() / 1000) - 3600, // Started 1 hour ago
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 75, // Below lastHourExposure threshold
+                        exposure_factor: 75, // Below finalWindowExposure threshold
                     },
                 },
             },
@@ -37,17 +37,17 @@ describe('lastHourExposure', () => {
 
         const now = Math.floor(Date.now() / 1000);
         const timeUntilEnd = challenge.close_time - now;
-        const isWithinLastHour = timeUntilEnd <= 3600 && timeUntilEnd > 0;
+        const isWithinFinalWindow = timeUntilEnd <= 3600 && timeUntilEnd > 0;
 
-        // Verify we're within the last hour
-        expect(isWithinLastHour).toBe(true);
+        // Verify we're within the final window
+        expect(isWithinFinalWindow).toBe(true);
 
         // Mock settings to return different values
         settings.getEffectiveSetting
             .mockReturnValueOnce(100) // exposure threshold
             .mockReturnValueOnce(10) // lastMinuteThreshold
             .mockReturnValueOnce(false) // voteOnlyInLastMinute
-            .mockReturnValueOnce(80); // lastHourExposure threshold
+            .mockReturnValueOnce(80); // finalWindowExposure threshold
 
         // Simulate the voting logic
         const effectiveExposure = settings.getEffectiveSetting('exposure', challenge.id.toString());
@@ -56,7 +56,7 @@ describe('lastHourExposure', () => {
             challenge.id.toString(),
         );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
-        const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
+        const effectiveFinalWindowExposure = settings.getEffectiveSetting('finalWindowExposure', challenge.id.toString());
 
         const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
@@ -70,13 +70,13 @@ describe('lastHourExposure', () => {
             // Vote only in last minute logic (not applicable here)
         } else if (isWithinLastMinuteThreshold) {
             // Last minute threshold logic (not applicable here)
-        } else if (isWithinLastHour) {
-            // Within last hour: use lastHourExposure threshold
-            if (challenge.member.ranking.exposure.exposure_factor < effectiveLastHourExposure) {
+        } else if (isWithinFinalWindow) {
+            // Within final window: use finalWindowExposure threshold
+            if (challenge.member.ranking.exposure.exposure_factor < effectiveFinalWindowExposure) {
                 shouldVote = true;
-                voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveLastHourExposure}%`;
+                voteReason = `final window threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveFinalWindowExposure}%`;
             } else {
-                voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveLastHourExposure}%`;
+                voteReason = `final window threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveFinalWindowExposure}%`;
             }
         } else {
             // Normal logic: use regular exposure threshold
@@ -88,24 +88,24 @@ describe('lastHourExposure', () => {
             }
         }
 
-        // Verify that lastHourExposure was used
-        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('lastHourExposure', challenge.id.toString());
+        // Verify that finalWindowExposure was used
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('finalWindowExposure', challenge.id.toString());
         expect(shouldVote).toBe(true);
-        expect(voteReason).toBe('last hour threshold: exposure 75% < 80%');
+        expect(voteReason).toBe('final window threshold: exposure 75% < 80%');
     });
 
-    test('should not vote when within last hour but exposure >= lastHourExposure threshold', () => {
+    test('should not vote when within final window but exposure >= finalWindowExposure threshold', () => {
         // Mock challenge data
         const challenge = {
             id: '123',
             title: 'Test Challenge',
             type: 'regular',
-            close_time: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now (within last hour)
+            close_time: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now (within final window)
             start_time: Math.floor(Date.now() / 1000) - 3600, // Started 1 hour ago
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 85, // Above lastHourExposure threshold
+                        exposure_factor: 85, // Above finalWindowExposure threshold
                     },
                 },
             },
@@ -113,17 +113,17 @@ describe('lastHourExposure', () => {
 
         const now = Math.floor(Date.now() / 1000);
         const timeUntilEnd = challenge.close_time - now;
-        const isWithinLastHour = timeUntilEnd <= 3600 && timeUntilEnd > 0;
+        const isWithinFinalWindow = timeUntilEnd <= 3600 && timeUntilEnd > 0;
 
-        // Verify we're within the last hour
-        expect(isWithinLastHour).toBe(true);
+        // Verify we're within the final window
+        expect(isWithinFinalWindow).toBe(true);
 
         // Mock settings
         settings.getEffectiveSetting
             .mockReturnValueOnce(100) // exposure threshold
             .mockReturnValueOnce(10) // lastMinuteThreshold
             .mockReturnValueOnce(false) // voteOnlyInLastMinute
-            .mockReturnValueOnce(80); // lastHourExposure threshold
+            .mockReturnValueOnce(80); // finalWindowExposure threshold
 
         // Simulate the voting logic
         const effectiveExposure = settings.getEffectiveSetting('exposure', challenge.id.toString());
@@ -132,7 +132,7 @@ describe('lastHourExposure', () => {
             challenge.id.toString(),
         );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
-        const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
+        const effectiveFinalWindowExposure = settings.getEffectiveSetting('finalWindowExposure', challenge.id.toString());
 
         const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
@@ -146,13 +146,13 @@ describe('lastHourExposure', () => {
             // Vote only in last minute logic (not applicable here)
         } else if (isWithinLastMinuteThreshold) {
             // Last minute threshold logic (not applicable here)
-        } else if (isWithinLastHour) {
-            // Within last hour: use lastHourExposure threshold
-            if (challenge.member.ranking.exposure.exposure_factor < effectiveLastHourExposure) {
+        } else if (isWithinFinalWindow) {
+            // Within final window: use finalWindowExposure threshold
+            if (challenge.member.ranking.exposure.exposure_factor < effectiveFinalWindowExposure) {
                 shouldVote = true;
-                voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveLastHourExposure}%`;
+                voteReason = `final window threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveFinalWindowExposure}%`;
             } else {
-                voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveLastHourExposure}%`;
+                voteReason = `final window threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveFinalWindowExposure}%`;
             }
         } else {
             // Normal logic: use regular exposure threshold
@@ -164,19 +164,19 @@ describe('lastHourExposure', () => {
             }
         }
 
-        // Verify that lastHourExposure was used and voting was skipped
-        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('lastHourExposure', challenge.id.toString());
+        // Verify that finalWindowExposure was used and voting was skipped
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('finalWindowExposure', challenge.id.toString());
         expect(shouldVote).toBe(false);
-        expect(voteReason).toBe('last hour threshold: exposure 85% >= 80%');
+        expect(voteReason).toBe('final window threshold: exposure 85% >= 80%');
     });
 
-    test('should use normal exposure threshold when outside last hour', () => {
+    test('should use normal exposure threshold when outside final window', () => {
         // Mock challenge data
         const challenge = {
             id: '123',
             title: 'Test Challenge',
             type: 'regular',
-            close_time: Math.floor(Date.now() / 1000) + 7200, // 2 hours from now (outside last hour)
+            close_time: Math.floor(Date.now() / 1000) + 7200, // 2 hours from now (outside final window)
             start_time: Math.floor(Date.now() / 1000) - 3600, // Started 1 hour ago
             member: {
                 ranking: {
@@ -189,17 +189,17 @@ describe('lastHourExposure', () => {
 
         const now = Math.floor(Date.now() / 1000);
         const timeUntilEnd = challenge.close_time - now;
-        const isWithinLastHour = timeUntilEnd <= 3600 && timeUntilEnd > 0;
+        const isWithinFinalWindow = timeUntilEnd <= 3600 && timeUntilEnd > 0;
 
-        // Verify we're outside the last hour
-        expect(isWithinLastHour).toBe(false);
+        // Verify we're outside the final window
+        expect(isWithinFinalWindow).toBe(false);
 
         // Mock settings
         settings.getEffectiveSetting
             .mockReturnValueOnce(100) // exposure threshold
             .mockReturnValueOnce(10) // lastMinuteThreshold
             .mockReturnValueOnce(false) // voteOnlyInLastMinute
-            .mockReturnValueOnce(80); // lastHourExposure threshold
+            .mockReturnValueOnce(80); // finalWindowExposure threshold
 
         // Simulate the voting logic
         const effectiveExposure = settings.getEffectiveSetting('exposure', challenge.id.toString());
@@ -221,8 +221,8 @@ describe('lastHourExposure', () => {
             // Vote only in last minute logic (not applicable here)
         } else if (isWithinLastMinuteThreshold) {
             // Last minute threshold logic (not applicable here)
-        } else if (isWithinLastHour) {
-            // Within last hour logic (not applicable here)
+        } else if (isWithinFinalWindow) {
+            // Within final window logic (not applicable here)
         } else {
             // Normal logic: use regular exposure threshold
             if (challenge.member.ranking.exposure.exposure_factor < effectiveExposure) {
@@ -239,18 +239,18 @@ describe('lastHourExposure', () => {
         expect(voteReason).toBe('normal threshold: exposure 75% < 100%');
     });
 
-    test('should handle per-challenge lastHourExposure override', () => {
+    test('should handle per-challenge finalWindowExposure override', () => {
         // Mock challenge data
         const challenge = {
             id: '123',
             title: 'Test Challenge',
             type: 'regular',
-            close_time: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now (within last hour)
+            close_time: Math.floor(Date.now() / 1000) + 1800, // 30 minutes from now (within final window)
             start_time: Math.floor(Date.now() / 1000) - 3600, // Started 1 hour ago
             member: {
                 ranking: {
                     exposure: {
-                        exposure_factor: 70, // Below per-challenge lastHourExposure threshold
+                        exposure_factor: 70, // Below per-challenge finalWindowExposure threshold
                     },
                 },
             },
@@ -258,17 +258,17 @@ describe('lastHourExposure', () => {
 
         const now = Math.floor(Date.now() / 1000);
         const timeUntilEnd = challenge.close_time - now;
-        const isWithinLastHour = timeUntilEnd <= 3600 && timeUntilEnd > 0;
+        const isWithinFinalWindow = timeUntilEnd <= 3600 && timeUntilEnd > 0;
 
-        // Verify we're within the last hour
-        expect(isWithinLastHour).toBe(true);
+        // Verify we're within the final window
+        expect(isWithinFinalWindow).toBe(true);
 
         // Mock settings with per-challenge override
         settings.getEffectiveSetting
             .mockReturnValueOnce(100) // exposure threshold
             .mockReturnValueOnce(10) // lastMinuteThreshold
             .mockReturnValueOnce(false) // voteOnlyInLastMinute
-            .mockReturnValueOnce(75); // lastHourExposure threshold (per-challenge override)
+            .mockReturnValueOnce(75); // finalWindowExposure threshold (per-challenge override)
 
         // Simulate the voting logic
         const effectiveExposure = settings.getEffectiveSetting('exposure', challenge.id.toString());
@@ -277,7 +277,7 @@ describe('lastHourExposure', () => {
             challenge.id.toString(),
         );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
-        const effectiveLastHourExposure = settings.getEffectiveSetting('lastHourExposure', challenge.id.toString());
+        const effectiveFinalWindowExposure = settings.getEffectiveSetting('finalWindowExposure', challenge.id.toString());
 
         const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
@@ -291,13 +291,13 @@ describe('lastHourExposure', () => {
             // Vote only in last minute logic (not applicable here)
         } else if (isWithinLastMinuteThreshold) {
             // Last minute threshold logic (not applicable here)
-        } else if (isWithinLastHour) {
-            // Within last hour: use lastHourExposure threshold
-            if (challenge.member.ranking.exposure.exposure_factor < effectiveLastHourExposure) {
+        } else if (isWithinFinalWindow) {
+            // Within final window: use finalWindowExposure threshold
+            if (challenge.member.ranking.exposure.exposure_factor < effectiveFinalWindowExposure) {
                 shouldVote = true;
-                voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveLastHourExposure}%`;
+                voteReason = `final window threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% < ${effectiveFinalWindowExposure}%`;
             } else {
-                voteReason = `last hour threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveLastHourExposure}%`;
+                voteReason = `final window threshold: exposure ${challenge.member.ranking.exposure.exposure_factor}% >= ${effectiveFinalWindowExposure}%`;
             }
         } else {
             // Normal logic: use regular exposure threshold
@@ -309,9 +309,9 @@ describe('lastHourExposure', () => {
             }
         }
 
-        // Verify that per-challenge lastHourExposure override was used
-        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('lastHourExposure', challenge.id.toString());
+        // Verify that per-challenge finalWindowExposure override was used
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('finalWindowExposure', challenge.id.toString());
         expect(shouldVote).toBe(true);
-        expect(voteReason).toBe('last hour threshold: exposure 70% < 75%');
+        expect(voteReason).toBe('final window threshold: exposure 70% < 75%');
     });
 });

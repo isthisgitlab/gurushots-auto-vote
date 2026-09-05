@@ -39,7 +39,7 @@ The desktop app now enforces this for GUI instances: launching it a second time 
 - **Automated voting** — votes your active challenges up to a configurable exposure target.
 - **Exposure control** — per-challenge exposure trigger and optional separate target ("vote up to X%").
 - **Last-minute push** — votes to 100% inside a configurable window before a challenge closes, and tightens the polling cadence automatically.
-- **Last-hour exposure** — a separate, usually lower exposure ceiling for the final hour.
+- **Final-window exposure** — a separate, usually lower exposure ceiling for a configurable window before close (default the final hour).
 - **Boost** — auto-applies boost near the deadline, on a chosen entry slot.
 - **Turbo (earn + apply)** — auto-plays the mini-game to _earn_ turbo, then auto-_applies_ it to a chosen entry before the deadline.
 - **Auto-fill** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, theme-aware photo selection, and an emergency safety net.
@@ -233,12 +233,12 @@ Each challenge has an exposure **trigger** ("vote while my exposure is below thi
 3. **Flash challenge** — always target **100%**.
 4. **Vote-only-in-last-minute** (`voteOnlyInLastMinute`) — if set and the challenge is _not_ yet inside its last-minute window, voting is skipped.
 5. **Last-minute window** — inside `lastMinuteThreshold` minutes of close, always target **100%** (exposure caps are ignored).
-6. **Last hour** — if `useLastHourExposure` is on and under one hour remains, use the `lastHourExposure` trigger and `lastHourExposureTarget` target.
+6. **Final window** — if `useFinalWindowExposure` is on and the challenge is within `finalWindowDuration` of close (default 1 hour), use the `finalWindowExposure` trigger and `finalWindowExposureTarget` target.
 7. **Normal** — otherwise use the `exposure` trigger and `exposureTarget` target.
 
 For triggers with a separate target, the app votes only when you're below the trigger, then keeps going up to the target. A target of `0` means "stop at the trigger" (target = trigger).
 
-**Vote on new entry** (`voteOnNewEntry`, off by default) changes only the "am I already at target?" test. When a new photo appears in a challenge — added by you on the website, or by auto-fill, emergency fill, or a boost/turbo fill — the app votes once even if your exposure already reads at or above the trigger, up to whichever target the winning rule resolved (100% for flash, last-minute, and scheduled fill; `lastHourExposureTarget` in the last hour; `exposureTarget` otherwise). Adding a photo dilutes exposure immediately, but the reported figure doesn't always catch up on the same poll, so without this the fresh entry can sit unexposed for a cycle or more.
+**Vote on new entry** (`voteOnNewEntry`, off by default) changes only the "am I already at target?" test. When a new photo appears in a challenge — added by you on the website, or by auto-fill, emergency fill, or a boost/turbo fill — the app votes once even if your exposure already reads at or above the trigger, up to whichever target the winning rule resolved (100% for flash, last-minute, and scheduled fill; `finalWindowExposureTarget` in the final window; `exposureTarget` otherwise). Adding a photo dilutes exposure immediately, but the reported figure doesn't always catch up on the same poll, so without this the fresh entry can sit unexposed for a cycle or more.
 
 It never unblocks a rule that skips voting: if **only-boost** (step 1), **not-started** (step 2), **vote-only-in-last-minute** (step 4), or **scheduled-fill-only** (`scheduledFillReplaces`, outside its window) is blocking, no vote happens and the trigger is spent. If the vote itself fails, the trigger stays armed and the next cycle retries it.
 
@@ -332,13 +332,16 @@ All of these support per-challenge overrides except where noted.
 | `turboApplyWhenBoostActive` | `false`       | bool           | Allow turbo to apply while a boost window is open.                                                                            |
 | `turboFillNew`              | `false`       | bool           | During auto-fill, submit a fresh photo and immediately turbo that new entry.                                                  |
 
-**Last hour**
+**Final window**
 
-| Setting                  | Default | Range / values                                 | Description                                                     |
-| ------------------------ | ------- | ---------------------------------------------- | --------------------------------------------------------------- |
-| `useLastHourExposure`    | `false` | bool                                           | Use a separate exposure rule during the final hour.             |
-| `lastHourExposure`       | `100`   | 1–100 % (≤ `exposure`)                         | Trigger used in the final hour.                                 |
-| `lastHourExposureTarget` | `0`     | `0`, or 1–100 % (if set, ≥ `lastHourExposure`) | Vote up to this % in the final hour. `0` = stop at the trigger. |
+| Setting                        | Default | Range / values                                    | Description                                                                                                                                                                                                |
+| ------------------------------ | ------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useFinalWindowExposure`       | `false` | bool                                              | Use a separate exposure rule during the final window.                                                                                                                                                      |
+| `finalWindowDuration`          | `3600`  | 60 s – 30 d (stored as seconds)                   | Length of the final window before close. Default 1 hour (the legacy fixed hour).                                                                                                                           |
+| `finalWindowExposure`          | `100`   | 1–100 % (≤ `exposure`)                            | Trigger used in the final window.                                                                                                                                                                          |
+| `finalWindowExposureTarget`    | `0`     | `0`, or 1–100 % (if set, ≥ `finalWindowExposure`) | Vote up to this % in the final window. `0` = stop at the trigger.                                                                                                                                          |
+| `voteBeforeFinalWindow`        | `false` | bool                                              | Top up to the **standard** exposure target in a window straddling the final-window start, so decayed exposure isn't stranded by the lower final-window trigger. Only active with `useFinalWindowExposure`. |
+| `voteBeforeFinalWindowLeadMin` | `15`    | 1–59 min                                          | Half-width (minutes) of the pre-final-window top-up window on each side of the final-window start.                                                                                                         |
 
 **Last minute**
 

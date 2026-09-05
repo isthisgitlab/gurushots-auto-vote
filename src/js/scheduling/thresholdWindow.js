@@ -25,35 +25,37 @@
 const { soonestScheduledStart, eligibleChallenges } = require('./scheduledFill');
 
 /**
- * Per-challenge pre-last-hour-top-up config for the cadence cap.
- * @callback ResolveLastHourTopUp
+ * Per-challenge pre-final-window-top-up config for the cadence cap.
+ * @callback ResolveFinalWindowTopUp
  * @param {string} challengeId - Challenge id as a string.
- * @returns {{enabled: boolean, leadSec: number}|Promise<{enabled: boolean, leadSec: number}>}
+ * @returns {{enabled: boolean, leadSec: number, durationSec: number}|Promise<{enabled: boolean, leadSec: number, durationSec: number}>}
  */
 
 /**
- * Soonest upcoming pre-last-hour top-up window START strictly after `now`
+ * Soonest upcoming pre-final-window top-up window START strictly after `now`
  * across still-open, non-flash challenges. The window opens `leadSec` before the
- * final hour, i.e. at `close_time - (3600 + leadSec)` — the scheduler caps its
- * sleep to this so a cycle lands exactly there and tops the challenge up to the
- * standard target before the last-hour rule's lower trigger takes over.
+ * final window, i.e. at `close_time - (durationSec + leadSec)` — the scheduler
+ * caps its sleep to this so a cycle lands exactly there and tops the challenge up
+ * to the standard target before the final-window rule's lower trigger takes over.
  *
  * Fail-soft like the other cadence helpers: a challenge whose resolver throws or
  * whose config is disabled/corrupt is skipped; an out-of-range leadSec (sub-minute,
  * over 59 min, or NaN) falls back to the schema default (15 min) so a bad override
  * can't disable the cap. The valid range mirrors VotingLogic's rule-engine guard
- * (1..59 min) so the two same-purpose guards can't drift on corrupt input.
+ * (1..59 min) so the two same-purpose guards can't drift on corrupt input. A
+ * corrupt durationSec (sub-minute or NaN) falls back to the legacy fixed hour
+ * (3600), mirroring VotingLogic's finalWindowSec clamp for the same input.
  *
  * @param {Array} eligible - already-filtered still-open non-flash challenges
  * @param {number} now - Unix timestamp (seconds)
- * @param {ResolveLastHourTopUp} resolveLastHourTopUp
+ * @param {ResolveFinalWindowTopUp} resolveFinalWindowTopUp
  * @returns {Promise<{challengeId, challengeTitle, startTime:number, leadMin:number}|null>}
  */
-async function soonestLastHourTopUpStart(eligible, now, resolveLastHourTopUp) {
+async function soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTopUp) {
     const configs = await Promise.all(
         eligible.map(async (challenge) => {
             try {
-                return await resolveLastHourTopUp(challenge.id.toString());
+                return await resolveFinalWindowTopUp(challenge.id.toString());
             } catch {
                 return null;
             }
@@ -69,8 +71,11 @@ async function soonestLastHourTopUpStart(eligible, now, resolveLastHourTopUp) {
         // corrupt sub-minute/over-max override falls back identically here.
         const leadSec =
             Number.isFinite(config.leadSec) && config.leadSec >= 60 && config.leadSec <= 3540 ? config.leadSec : 900;
+        // Mirrors VotingLogic's finalWindowSec clamp (>= 60s, else legacy hour).
+        const durationSec =
+            Number.isFinite(config.durationSec) && config.durationSec >= 60 ? config.durationSec : 3600;
         const challenge = eligible[i];
-        const startTime = Number(challenge.close_time) - (3600 + leadSec);
+        const startTime = Number(challenge.close_time) - (durationSec + leadSec);
         if (startTime > now && startTime < earliest) {
             earliest = startTime;
             best = {
@@ -197,8 +202,8 @@ async function isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold
  * @param {number} opts.minGapMs - hard floor on the returned delay
  * @param {import('./scheduledFill').ResolveScheduledFill|null} [opts.resolveScheduledFill] - per-challenge scheduled-fill config resolver (sync or async)
  * @param {string|null} [opts.timezone] - IANA zone for the time-of-day form
- * @param {ResolveLastHourTopUp|null} [opts.resolveLastHourTopUp] - per-challenge pre-last-hour top-up config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming top-up window start
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-last-hour'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextLastHourTopUp:(object|null)}>}
+ * @param {ResolveFinalWindowTopUp|null} [opts.resolveFinalWindowTopUp] - per-challenge pre-final-window top-up config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming top-up window start
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null)}>}
  */
 async function computeNextCycleDelayMs(
     challenges,
@@ -210,7 +215,7 @@ async function computeNextCycleDelayMs(
         minGapMs,
         resolveScheduledFill = null,
         timezone = null,
-        resolveLastHourTopUp = null,
+        resolveFinalWindowTopUp = null,
     },
 ) {
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
@@ -221,7 +226,7 @@ async function computeNextCycleDelayMs(
             mode: 'last-minute',
             nextEntry: null,
             nextScheduled: null,
-            nextLastHourTopUp: null,
+            nextFinalWindowTopUp: null,
         };
     }
 
@@ -248,26 +253,26 @@ async function computeNextCycleDelayMs(
         }
     }
 
-    // Pre-last-hour top-up boundary — same "cap to the soonest upcoming window
+    // Pre-final-window top-up boundary — same "cap to the soonest upcoming window
     // start" shape as scheduled fill above; whichever boundary is sooner wins.
-    let nextLastHourTopUp = null;
-    if (resolveLastHourTopUp) {
-        nextLastHourTopUp = await soonestLastHourTopUpStart(eligible, now, resolveLastHourTopUp);
-        if (nextLastHourTopUp) {
-            const msUntilStart = (nextLastHourTopUp.startTime - now) * 1000;
+    let nextFinalWindowTopUp = null;
+    if (resolveFinalWindowTopUp) {
+        nextFinalWindowTopUp = await soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTopUp);
+        if (nextFinalWindowTopUp) {
+            const msUntilStart = (nextFinalWindowTopUp.startTime - now) * 1000;
             if (msUntilStart < delayMs) {
                 delayMs = Math.max(minGapMs, msUntilStart);
-                mode = 'pre-last-hour';
+                mode = 'pre-final-window';
             }
         }
     }
 
-    return { delayMs, mode, nextEntry, nextScheduled, nextLastHourTopUp };
+    return { delayMs, mode, nextEntry, nextScheduled, nextFinalWindowTopUp };
 }
 
 module.exports = {
     calculateNextThresholdEntry,
     isAnyChallengeInThresholdWindow,
     computeNextCycleDelayMs,
-    soonestLastHourTopUpStart,
+    soonestFinalWindowTopUpStart,
 };

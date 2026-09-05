@@ -26,16 +26,22 @@ export const resolveScheduledFill = async (challengeId) => {
     return { enabled: enabled === true, timesOfDay, beforeEndSecs };
 };
 
-// WebView resolver for the pre-last-hour top-up cadence cap: the two per-challenge
-// keys over IPC, batched. Enabled only when BOTH the last-hour feature and this
-// opt-in are on — matching nodeResolvers.js and the rule engine's gate.
-export const resolveLastHourTopUp = async (challengeId) => {
-    const [voteBeforeLastHour, useLastHourExposure, leadMin] = await Promise.all([
-        window.api.getEffectiveSetting('voteBeforeLastHour', challengeId),
-        window.api.getEffectiveSetting('useLastHourExposure', challengeId),
-        window.api.getEffectiveSetting('voteBeforeLastHourLeadMin', challengeId),
+// WebView resolver for the pre-final-window top-up cadence cap: the per-challenge
+// keys over IPC, batched. Enabled only when BOTH the final-window feature and this
+// opt-in are on — matching nodeResolvers.js and the rule engine's gate. durationSec
+// is the configurable final-window length; thresholdWindow.js re-guards it.
+export const resolveFinalWindowTopUp = async (challengeId) => {
+    const [voteBeforeFinalWindow, useFinalWindowExposure, leadMin, durationSec] = await Promise.all([
+        window.api.getEffectiveSetting('voteBeforeFinalWindow', challengeId),
+        window.api.getEffectiveSetting('useFinalWindowExposure', challengeId),
+        window.api.getEffectiveSetting('voteBeforeFinalWindowLeadMin', challengeId),
+        window.api.getEffectiveSetting('finalWindowDuration', challengeId),
     ]);
-    return { enabled: voteBeforeLastHour === true && useLastHourExposure === true, leadSec: Number(leadMin) * 60 };
+    return {
+        enabled: voteBeforeFinalWindow === true && useFinalWindowExposure === true,
+        leadSec: Number(leadMin) * 60,
+        durationSec: Number(durationSec),
+    };
 };
 
 /**
@@ -47,7 +53,7 @@ export const resolveLastHourTopUp = async (challengeId) => {
  * @param {Array} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {{normalDelayMs:number, lastMinuteCheckMinutes:number, minGapMs:number, timezone?:(string|null)}} opts
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-last-hour'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextLastHourTopUp:(object|null)}>}
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null)}>}
  */
 export async function computeNextCycleDelayMs(
     challenges,
@@ -61,6 +67,6 @@ export async function computeNextCycleDelayMs(
         minGapMs,
         resolveScheduledFill,
         timezone,
-        resolveLastHourTopUp,
+        resolveFinalWindowTopUp,
     });
 }

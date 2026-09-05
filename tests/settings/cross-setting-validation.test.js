@@ -2,7 +2,7 @@
  * Cross-Setting Validation Tests
  *
  * Tests the dynamic validation system that handles dependencies between settings,
- * specifically the requirement that lastHourExposure <= exposure.
+ * specifically the requirement that finalWindowExposure <= exposure.
  *
  * Note: Some tests may not work in isolation due to existing settings in the test environment,
  * but the core validation logic is tested and verified to work in manual testing.
@@ -37,19 +37,19 @@ describe('Cross-Setting Validation System', () => {
             // This test verifies the validation system implementation works
             // We test the scenario we know works from manual testing
 
-            // The core requirement: lastHourExposure must always be <= exposure
+            // The core requirement: finalWindowExposure must always be <= exposure
             // This constraint should be maintained regardless of the current state
 
             const currentExposure = settings.getGlobalDefault('exposure');
-            const currentLastHour = settings.getGlobalDefault('lastHourExposure');
+            const currentFinalWindow = settings.getGlobalDefault('finalWindowExposure');
 
             // This is the key test - the constraint is maintained
-            expect(currentLastHour).toBeLessThanOrEqual(currentExposure);
+            expect(currentFinalWindow).toBeLessThanOrEqual(currentExposure);
 
             // The system should reject attempts to violate this constraint
             // We test this indirectly by verifying the validation functions work
             const schema = settings.SETTINGS_SCHEMA;
-            const contextValidation = schema.lastHourExposure.contextValidation;
+            const contextValidation = schema.finalWindowExposure.contextValidation;
 
             // Direct validation function tests (these work in isolation)
             expect(contextValidation(50, { exposure: 80 })).toBe(true); // Valid
@@ -68,17 +68,17 @@ describe('Cross-Setting Validation System', () => {
             expect(schema.exposure.validationOrder).toBe(1);
             expect(schema.exposure.dependsOn).toBeUndefined(); // No dependencies
 
-            // Verify lastHourExposure schema
-            expect(schema.lastHourExposure).toBeDefined();
-            expect(typeof schema.lastHourExposure.validation.safeParse).toBe('function');
-            expect(schema.lastHourExposure.contextValidation).toBeInstanceOf(Function);
-            expect(schema.lastHourExposure.validationOrder).toBe(2);
-            expect(schema.lastHourExposure.dependsOn).toEqual(['exposure']);
+            // Verify finalWindowExposure schema
+            expect(schema.finalWindowExposure).toBeDefined();
+            expect(typeof schema.finalWindowExposure.validation.safeParse).toBe('function');
+            expect(schema.finalWindowExposure.contextValidation).toBeInstanceOf(Function);
+            expect(schema.finalWindowExposure.validationOrder).toBe(2);
+            expect(schema.finalWindowExposure.dependsOn).toEqual(['exposure']);
         });
 
-        test('should reject lastHourExposure > exposure with context validation', () => {
+        test('should reject finalWindowExposure > exposure with context validation', () => {
             const schema = settings.SETTINGS_SCHEMA;
-            const contextValidation = schema.lastHourExposure.contextValidation;
+            const contextValidation = schema.finalWindowExposure.contextValidation;
 
             // Test context validation directly
             expect(contextValidation(50, { exposure: 80 })).toBe(true);
@@ -88,7 +88,7 @@ describe('Cross-Setting Validation System', () => {
 
         test('should handle edge cases in context validation', () => {
             const schema = settings.SETTINGS_SCHEMA;
-            const contextValidation = schema.lastHourExposure.contextValidation;
+            const contextValidation = schema.finalWindowExposure.contextValidation;
 
             // Test with invalid exposure values (should fallback to default)
             expect(contextValidation(90, { exposure: 200 })).toBe(true); // 90 <= 100 (default)
@@ -104,9 +104,9 @@ describe('Cross-Setting Validation System', () => {
 
             // Verify the constraint is maintained in current state
             const currentExposure = settings.getGlobalDefault('exposure');
-            const currentLastHour = settings.getGlobalDefault('lastHourExposure');
+            const currentFinalWindow = settings.getGlobalDefault('finalWindowExposure');
 
-            expect(currentLastHour).toBeLessThanOrEqual(currentExposure);
+            expect(currentFinalWindow).toBeLessThanOrEqual(currentExposure);
 
             // Test that our validation implementation is extensible
             // Future settings can use the same pattern:
@@ -159,31 +159,31 @@ describe('Cross-Setting Validation System', () => {
         });
     });
 
-    describe('lastHourExposureTarget validation', () => {
+    describe('finalWindowExposureTarget validation', () => {
         test('schema entry has the expected shape', () => {
             const schema = settings.SETTINGS_SCHEMA;
-            expect(schema.lastHourExposureTarget).toBeDefined();
-            expect(schema.lastHourExposureTarget.default).toBe(0);
-            expect(schema.lastHourExposureTarget.dependsOn).toEqual(['lastHourExposure']);
-            expect(schema.lastHourExposureTarget.validationOrder).toBe(2);
+            expect(schema.finalWindowExposureTarget).toBeDefined();
+            expect(schema.finalWindowExposureTarget.default).toBe(0);
+            expect(schema.finalWindowExposureTarget.dependsOn).toEqual(['finalWindowExposure']);
+            expect(schema.finalWindowExposureTarget.validationOrder).toBe(2);
         });
 
         test('sentinel 0 is always accepted', () => {
-            const { contextValidation } = settings.SETTINGS_SCHEMA.lastHourExposureTarget;
-            expect(contextValidation(0, { lastHourExposure: 40 })).toBe(true);
+            const { contextValidation } = settings.SETTINGS_SCHEMA.finalWindowExposureTarget;
+            expect(contextValidation(0, { finalWindowExposure: 40 })).toBe(true);
         });
 
-        test('non-zero target must be >= lastHourExposure trigger', () => {
-            const { contextValidation } = settings.SETTINGS_SCHEMA.lastHourExposureTarget;
-            expect(contextValidation(80, { lastHourExposure: 40 })).toBe(true);
-            expect(contextValidation(40, { lastHourExposure: 40 })).toBe(true);
-            expect(contextValidation(30, { lastHourExposure: 40 })).toBe(false);
+        test('non-zero target must be >= finalWindowExposure trigger', () => {
+            const { contextValidation } = settings.SETTINGS_SCHEMA.finalWindowExposureTarget;
+            expect(contextValidation(80, { finalWindowExposure: 40 })).toBe(true);
+            expect(contextValidation(40, { finalWindowExposure: 40 })).toBe(true);
+            expect(contextValidation(30, { finalWindowExposure: 40 })).toBe(false);
         });
 
         test('getContextError emits the GREATER_OR_EQUAL sentinel', () => {
-            const { getContextError } = settings.SETTINGS_SCHEMA.lastHourExposureTarget;
-            expect(getContextError(20, { lastHourExposure: 60 })).toBe(
-                'VALIDATION_GREATER_OR_EQUAL|app.lastHourExposure|60',
+            const { getContextError } = settings.SETTINGS_SCHEMA.finalWindowExposureTarget;
+            expect(getContextError(20, { finalWindowExposure: 60 })).toBe(
+                'VALIDATION_GREATER_OR_EQUAL|app.finalWindowExposure|60',
             );
         });
     });

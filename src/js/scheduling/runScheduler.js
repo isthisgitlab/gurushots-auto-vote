@@ -20,7 +20,7 @@
 const logger = require('../logger');
 const settings = require('../settings');
 const { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } = require('./cadenceChain');
-const { resolveThreshold, resolveScheduledFill, resolveLastHourTopUp } = require('./nodeResolvers');
+const { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp } = require('./nodeResolvers');
 
 /**
  * Create a continuous voting scheduler.
@@ -46,7 +46,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
         resolveLastMinuteCheckMinutes: () => settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
         resolveThreshold,
         resolveScheduledFill,
-        resolveLastHourTopUp,
+        resolveFinalWindowTopUp,
         // The chain hands the resolved value straight back to the next
         // decision as the prefetched-list candidate, so unwrap `challenges`
         // here; a cycle failure/legacy boolean yields a non-array → fresh fetch.

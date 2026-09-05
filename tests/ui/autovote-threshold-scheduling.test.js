@@ -83,7 +83,7 @@ describe('autovoteScheduler helpers', () => {
             expect(result.mode).toBe('normal');
             expect(result.nextScheduled).toBeNull();
             // No scheduled-fill keys are resolved without a timezone (that cap stays
-            // gated). The threshold key is always resolved; the pre-last-hour top-up
+            // gated). The threshold key is always resolved; the pre-final-window top-up
             // cap is always active (as on Node) and resolves its own keys regardless.
             const keysRead = getEffectiveSetting.mock.calls.map(([key]) => key);
             expect(keysRead).toContain('lastMinuteThreshold');

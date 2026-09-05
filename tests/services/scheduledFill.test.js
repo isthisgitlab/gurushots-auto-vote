@@ -36,10 +36,10 @@ const mockSettings = (overrides = {}) => {
         voteOnlyInLastMinute: false,
         exposure: 100,
         lastMinuteThreshold: 10,
-        lastHourExposure: 40,
-        useLastHourExposure: false,
+        finalWindowExposure: 40,
+        useFinalWindowExposure: false,
         exposureTarget: 0,
-        lastHourExposureTarget: 0,
+        finalWindowExposureTarget: 0,
         useScheduledFill: false,
         scheduledFillTime: [],
         scheduledFillBeforeEnd: [],
@@ -276,15 +276,15 @@ describe('scheduled rule — auto voting decisions', () => {
         expect(result.voteReason).toBe('scheduled-fill-only: outside scheduled fill window');
     });
 
-    test('replace mode outside the window blocks the last-hour rule too', () => {
-        // Close is 30 minutes away (inside the last hour) but the 10-minute
+    test('replace mode outside the window blocks the final-window rule too', () => {
+        // Close is 30 minutes away (inside the final window) but the 10-minute
         // before-end window has not opened yet.
         mockSettings({
             useScheduledFill: true,
             scheduledFillBeforeEnd: [600],
             scheduledFillReplaces: true,
-            useLastHourExposure: true,
-            lastHourExposure: 90,
+            useFinalWindowExposure: true,
+            finalWindowExposure: 90,
             lastMinuteThreshold: 5,
         });
         const result = VotingLogic.evaluateVotingDecision(

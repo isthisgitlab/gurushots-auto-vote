@@ -240,7 +240,7 @@
             groupGeneral: 'Vispārīgi',
             groupBoost: 'Boost',
             groupTurbo: 'Turbo',
-            groupLastHour: 'Pēdējās stundas ekspozīcija',
+            groupFinalWindow: 'Beigu loga ekspozīcija',
             groupLastMinute: 'Pēdējā minūte',
             groupScheduledFill: 'Plānotā aizpilde',
             groupAutoFill: 'Automātiskā aizpilde',
@@ -305,7 +305,7 @@
             onlyBoostDesc: 'Pilnībā izlaist parasto balsošanu šim izaicinājumam un tikai pielietot Boost.',
             voteOnNewEntry: 'Balsot par jaunu bildi',
             voteOnNewEntryDesc:
-                'Kad šajā izaicinājumā parādās jauna bilde — pievienota paša mājaslapā vai ar automātisko aizpildi, ārkārtas aizpildi vai Boost/Turbo aizpildi — nobalsot vienu reizi arī tad, ja redzamība jau ir sasniegusi vai pārsniegusi slieksni. Balso līdz tiem griestiem, ko izaicinājums izmantotu parasti: Redzamības mērķis (vai Redzamība, ja mērķis ir 0), vai Pēdējās stundas ekspozīcijas mērķis pēdējās stundas laikā, kad ieslēgts "Izmantot pēdējās stundas ekspozīciju". Nepārspēj iestatījumus Tikai "Boost" režīms, Balsot tikai pēdējās minūtes laikā vai Tikai plānotā aizpilde: ja kāds no tiem bloķē, balsojums nenotiek.',
+                'Kad šajā izaicinājumā parādās jauna bilde — pievienota paša mājaslapā vai ar automātisko aizpildi, ārkārtas aizpildi vai Boost/Turbo aizpildi — nobalsot vienu reizi arī tad, ja redzamība jau ir sasniegusi vai pārsniegusi slieksni. Balso līdz tiem griestiem, ko izaicinājums izmantotu parasti: Redzamības mērķis (vai Redzamība, ja mērķis ir 0), vai Beigu loga ekspozīcijas mērķis beigu loga laikā, kad ieslēgts "Izmantot beigu loga ekspozīciju". Nepārspēj iestatījumus Tikai "Boost" režīms, Balsot tikai pēdējās minūtes laikā vai Tikai plānotā aizpilde: ja kāds no tiem bloķē, balsojums nenotiek.',
             override: 'Pielāgots',
             overrideForChallenge: 'Pielāgot iestatījumus izaicinājumam',
             photo: 'bilde',
@@ -397,7 +397,7 @@
                 'Cik ilgi katrs aizpildes logs paliek atvērts pēc sava sākuma laika. Loga laikā izaicinājums tiek uzpildīts līdz 100% un tur noturēts; pēc tā aizvēršanās atkal darbojas parastie noteikumi. Turiet to garāku par Pārbaudes biežumu, lai balsošanas cikls garantēti trāpītu logā.',
             scheduledFillReplaces: 'Tikai plānotā aizpilde',
             scheduledFillReplacesDesc:
-                'Kad ieslēgts, parastā un pēdējās stundas ekspozīcijas balsošana ārpus plānotajiem aizpildes logiem tiek bloķēta — plānotie laiki kļūst par vienīgajām automātiskajām aizpildēm. Zibens izaicinājumi un Pēdējās minūtes noteikumi joprojām balso kā parasti, manuālā balsošana netiek ietekmēta, un "Balsot tikai pēdējās minūtes laikā" ir pārāks par šo iestatījumu. Brīdinājums: ja lietotne nedarbojas visa loga laikā, šī aizpilde tiek izlaista bez atgūšanas un bez sliekšņa rezerves, tāpēc izaicinājums var noslēgties nepilnīgi aizpildīts.',
+                'Kad ieslēgts, parastā un beigu loga ekspozīcijas balsošana ārpus plānotajiem aizpildes logiem tiek bloķēta — plānotie laiki kļūst par vienīgajām automātiskajām aizpildēm. Zibens izaicinājumi un Pēdējās minūtes noteikumi joprojām balso kā parasti, manuālā balsošana netiek ietekmēta, un "Balsot tikai pēdējās minūtes laikā" ir pārāks par šo iestatījumu. Brīdinājums: ja lietotne nedarbojas visa loga laikā, šī aizpilde tiek izlaista bez atgūšanas un bez sliekšņa rezerves, tāpēc izaicinājums var noslēgties nepilnīgi aizpildīts.',
             scheduledFillNextHint: 'Nākamais aizpildes logs: {0}–{1} ({2}) — no {3}',
             scheduledFillNoTimesHint:
                 'Nav iestatīts aizpildes laiks — plānotā aizpilde nedarbojas, kamēr nav iestatīts kāds zemāk.',
@@ -406,26 +406,31 @@
             scheduledFillShortWindowHint:
                 'Šis logs ir īsāks par jūsu maksimālo Pārbaudes biežumu ({0} min) — vesels logs var iekrist starp balsošanas cikliem, kamēr lietotne darbojas bez uzraudzības.',
             scheduledFillUnreachableHint:
-                '"Tikai plānotā aizpilde" ir ieslēgta, bet pirms šī izaicinājuma beigām vairs nevar notikt neviens aizpildes logs — parastā un pēdējās stundas balsošana paliek bloķēta, tāpēc balsos tikai Pēdējās minūtes noteikumi.',
+                '"Tikai plānotā aizpilde" ir ieslēgta, bet pirms šī izaicinājuma beigām vairs nevar notikt neviens aizpildes logs — parastā un beigu loga balsošana paliek bloķēta, tāpēc balsos tikai Pēdējās minūtes noteikumi.',
             scheduledFillProfileReplacesWarning:
                 'Šī profila piemērošana ieslēgs "Tikai plānotā aizpilde" šim izaicinājumam — pirms saglabāšanas pārskatiet aizpildes laikus.',
-            lastHourExposure: 'Pēdējās stundas ekspozīcija',
-            lastHourExposureDesc:
-                'Redzamības līmenis, kas iedarbina balsošanu pēdējā stundā (tikai kad ieslēgts "Izmantot pēdējās stundas ekspozīciju"). Jābūt vienādam vai mazākam par Redzamības iestatījumu.',
-            lastHourExposureTarget: 'Pēdējās stundas ekspozīcijas mērķis',
-            lastHourExposureTargetDesc:
-                'Balsot līdz šim procentam, kad nostrādā pēdējās stundas noteikums (0 = tāds pats kā pēdējās stundas slieksnis)',
-            lastHourExposureTargetHelp:
-                '0 NENOZĪMĒ izslēgts. 0 nozīmē “balsot līdz pēdējās stundas redzamības slieksnim” — pēdējās stundas noteikums paliek aktīvs. Ievadi 1-100, lai balsotu tālāk par šo slieksni. Pretstatā laika iestatījumiem, kur 0 nozīmē izslēgts.',
-            useLastHourExposure: 'Izmantot pēdējās stundas ekspozīciju',
-            useLastHourExposureDesc:
-                'Pēdējā stundā pirms izaicinājuma beigām izmantot atsevišķo pēdējās stundas redzamības slieksni un mērķi parastā redzamības iestatījuma vietā.',
-            voteBeforeLastHour: 'Balsot pirms pēdējās stundas',
-            voteBeforeLastHourDesc:
-                'Ap pēdējās stundas sākumu balsot līdz parastajam redzamības mērķim, lai izaicinājums, kura redzamība jau nokritusies zem tā, netiktu atstāts zemā līmenī pēdējās stundas zemākā sliekšņa dēļ. Papildināšana paliek aktīva logā, kas aptver pēdējās stundas robežu — nobīdes minūtes pirms tās un tikpat daudz minūšu pēc tās — un tad pārņem pēdējās stundas redzamības noteikums. Darbojas tikai tad, kad ieslēgts "Izmantot pēdējās stundas ekspozīciju".',
-            voteBeforeLastHourLeadMin: 'Balsošanas pirms pēdējās stundas nobīde',
-            voteBeforeLastHourLeadMinDesc:
-                'Cik minūtes ap pēdējās stundas sākumu papildināšana paliek aktīva. Logs atveras tik daudz minūšu pirms pēdējās stundas un aizveras tikpat daudz minūšu pēc tās sākuma, pēc kā pārņem pēdējās stundas redzamības noteikums.',
+            finalWindowDuration: 'Beigu loga ilgums',
+            finalWindowDurationDesc:
+                'Cik ilgs ir beigu logs pirms izaicinājuma beigām. Beigu loga ekspozīcijas noteikums darbojas šajā logā. Pēc noklusējuma 1 stunda.',
+            finalWindowDurationHelp:
+                'Beigu loga garums, skaitot atpakaļ no izaicinājuma beigu laika. Iestati 1 stundu, lai atveidotu veco fiksēto pēdējās stundas darbību, vai saīsini/pagarini to, lai mainītu, kad pārņem Beigu loga ekspozīcijas slieksnis un mērķis.',
+            finalWindowExposure: 'Beigu loga ekspozīcija',
+            finalWindowExposureDesc:
+                'Redzamības līmenis, kas iedarbina balsošanu beigu logā (tikai kad ieslēgts "Izmantot beigu loga ekspozīciju"). Jābūt vienādam vai mazākam par Redzamības iestatījumu.',
+            finalWindowExposureTarget: 'Beigu loga ekspozīcijas mērķis',
+            finalWindowExposureTargetDesc:
+                'Balsot līdz šim procentam, kad nostrādā beigu loga noteikums (0 = tāds pats kā beigu loga slieksnis)',
+            finalWindowExposureTargetHelp:
+                '0 NENOZĪMĒ izslēgts. 0 nozīmē “balsot līdz beigu loga redzamības slieksnim” — beigu loga noteikums paliek aktīvs. Ievadi 1-100, lai balsotu tālāk par šo slieksni. Pretstatā laika iestatījumiem, kur 0 nozīmē izslēgts.',
+            useFinalWindowExposure: 'Izmantot beigu loga ekspozīciju',
+            useFinalWindowExposureDesc:
+                'Beigu logā pirms izaicinājuma beigām izmantot atsevišķo beigu loga redzamības slieksni un mērķi parastā redzamības iestatījuma vietā.',
+            voteBeforeFinalWindow: 'Balsot pirms beigu loga',
+            voteBeforeFinalWindowDesc:
+                'Ap beigu loga sākumu balsot līdz parastajam redzamības mērķim, lai izaicinājums, kura redzamība jau nokritusies zem tā, netiktu atstāts zemā līmenī beigu loga zemākā sliekšņa dēļ. Papildināšana paliek aktīva logā, kas aptver beigu loga robežu — nobīdes minūtes pirms tās un tikpat daudz minūšu pēc tās — un tad pārņem beigu loga redzamības noteikums. Darbojas tikai tad, kad ieslēgts "Izmantot beigu loga ekspozīciju".',
+            voteBeforeFinalWindowLeadMin: 'Balsošanas pirms beigu loga nobīde',
+            voteBeforeFinalWindowLeadMinDesc:
+                'Cik minūtes ap beigu loga sākumu papildināšana paliek aktīva. Logs atveras tik daudz minūšu pirms beigu loga un aizveras tikpat daudz minūšu pēc tā sākuma, pēc kā pārņem beigu loga redzamības noteikums.',
             validationInvalidValue: 'Nepareiza vērtība',
             validationMustBeLessOrEqual: 'Jābūt ≤ {0} (pašlaik {1})',
             whatsNew: 'Kas jauns:',
@@ -491,7 +496,7 @@
                 'Uztur tavas dalības aizpildītas, bet nekad netērē Boost vai Turbo un nedzenas pēc redzamības tālāk par slieksni — maz pūļu, maz riska.',
             intentFinishStrong: 'Nobeigt spēcīgi',
             intentFinishStrongDesc:
-                'Lielāko izaicinājuma daļu spēlē normāli, tad pēdējā stundā izmanto Boost un Turbo un spēcīgi palielina redzamību.',
+                'Lielāko izaicinājuma daļu spēlē normāli, tad beigu logā izmanto Boost un Turbo un spēcīgi palielina redzamību.',
             intentMaxExposure: 'Maksimāla redzamība',
             intentMaxExposureDesc:
                 'Visu laiku spiež uz priekšu: balso līdz pilnai redzamībai, aizpilda dalības un izmanto Boost un Turbo.',
