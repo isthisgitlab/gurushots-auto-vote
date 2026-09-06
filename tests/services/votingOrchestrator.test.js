@@ -20,6 +20,7 @@ jest.mock('../../src/js/services/VotingLogic', () => ({
     shouldPlayAutoTurbo: jest.fn(() => false),
     orderDeadlineActions: jest.fn(() => []),
     shouldApplyBoost: jest.fn(() => false),
+    resolveBoostFillNewMode: jest.fn(() => 'no'),
     shouldApplyTurbo: jest.fn(() => ({ apply: false })),
     getEffectiveBoostTime: jest.fn(() => 3600),
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false, voteReason: 'test skip', targetExposure: 100 })),
@@ -231,6 +232,7 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([challenge]);
         votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'boost' }]);
         votingLogic.shouldApplyBoost.mockReturnValue(true);
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
         settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
         try {
             await runVotingPass('tok', null, deps(api));
@@ -279,6 +281,7 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([challenge]);
         votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'boost' }]);
         votingLogic.shouldApplyBoost.mockReturnValue(true);
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
         autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: false, imageId: null, reason: 'challenge-gone' });
         settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
         try {
@@ -320,6 +323,7 @@ describe('mock-parity behaviors on the shared path', () => {
         const api = makeApi([challenge]);
         votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'boost' }]);
         votingLogic.shouldApplyBoost.mockReturnValue(true);
+        votingLogic.resolveBoostFillNewMode.mockReturnValue('always');
         autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: true, imageId: 'fresh-1', reason: 'submitted' });
         settings.getEffectiveSetting.mockImplementation((key) => key === 'boostFillNew');
         try {

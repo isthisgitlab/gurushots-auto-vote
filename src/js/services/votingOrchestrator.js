@@ -116,11 +116,13 @@ const runBoost = async (ctx) => {
 
         try {
             const cid = challenge.id.toString();
+            // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when
+            // the only existing entry is turboed; 'no' = boost an existing entry.
+            const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid);
             let boostResult;
-            if (settings.getEffectiveSetting('boostFillNew', cid) === true) {
+            if (fillMode !== 'no') {
                 // Fill-new: submit a fresh photo and boost that entry instead
-                // of an existing one. Falls back to the configured Boost Entry
-                // when no fresh photo can be submitted (full / none / failed).
+                // of an existing one.
                 const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
                 if (filled.ok) {
                     autoFill.reflectNewEntry(challenge, filled.imageId);
@@ -136,7 +138,22 @@ const runBoost = async (ctx) => {
                         .withCategory('boost')
                         .endOperation(`boost-${challenge.id}`, null, 'challenge left the active list — boost skipped');
                     return;
+                } else if (fillMode === 'conflict') {
+                    // On-conflict mode only fires when the single existing entry is
+                    // already turboed, so there is no valid fallback target — an
+                    // applyBoost here would just fail with "only entry already has
+                    // Turbo". Skip instead of making the pointless call.
+                    logger
+                        .withCategory('boost')
+                        .endOperation(
+                            `boost-${challenge.id}`,
+                            null,
+                            `boost fill-new unavailable (${filled.reason}); only entry already has Turbo — boost skipped`,
+                        );
+                    return;
                 } else {
+                    // 'always' mode falls back to the configured Boost Entry when
+                    // no fresh photo can be submitted (full / none / failed).
                     logger
                         .withCategory('boost')
                         .info(

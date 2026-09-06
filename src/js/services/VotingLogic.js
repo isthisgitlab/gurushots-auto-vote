@@ -404,7 +404,7 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
             'final-window',
             effectiveFinalWindowExposure,
             effectiveFinalWindowExposureTarget,
-            sharedThresholdInfo
+            sharedThresholdInfo,
         );
     }
 
@@ -794,6 +794,34 @@ const pickBoostEntry = (challenge, challengeId) => {
 };
 
 /**
+ * Resolves how a boost should source its target entry for a challenge:
+ * - `'always'`  — `boostFillNew` is on: always submit a fresh photo and boost it.
+ * - `'conflict'` — `boostFillNewOnConflict` is on AND the only existing entry is
+ *   already turboed (so Boost cannot be placed on any existing entry): submit a
+ *   fresh photo purely to break that boost/turbo conflict.
+ * - `'no'` — boost an existing entry the normal way.
+ *
+ * `boostFillNew` (always) takes precedence over `boostFillNewOnConflict`, and the
+ * conflict mode only engages when the conflict actually exists — mirroring the
+ * `!picked` branch in {@link shouldApplyTurbo}, where picker-null with at least
+ * one entry means the single entry carries the other feature's flag.
+ *
+ * @param {any} challenge
+ * @param {string} challengeId
+ * @returns {'always'|'conflict'|'no'}
+ */
+const resolveBoostFillNewMode = (challenge, challengeId) => {
+    if (settings.getEffectiveSetting('boostFillNew', challengeId) === true) return 'always';
+    if (settings.getEffectiveSetting('boostFillNewOnConflict', challengeId) === true) {
+        const entries = challenge?.member?.ranking?.entries;
+        if (Array.isArray(entries) && entries.length >= 1 && pickBoostEntry(challenge, challengeId) === null) {
+            return 'conflict';
+        }
+    }
+    return 'no';
+};
+
+/**
  * Decides whether to play the Turbo mini-game on a challenge.
  * @param {any} challenge
  * @param {number} now - Unix timestamp in seconds
@@ -865,6 +893,10 @@ const shouldApplyTurbo = (challenge, now, options = {}) => {
     }
 
     const fillNew = settings.getEffectiveSetting('turboFillNew', challengeId) === true;
+    // Narrower opt-in: fill a fresh photo ONLY to break a boost/turbo conflict
+    // (the single existing entry already has Boost, so Turbo cannot go there).
+    // `turboFillNew` (always) takes precedence and is handled first below.
+    const fillNewOnConflict = settings.getEffectiveSetting('turboFillNewOnConflict', challengeId) === true;
 
     // Resolve the existing-entry pick. With fill-new on it is only the
     // fallback target (used when no fresh photo can be submitted), so an
@@ -885,6 +917,13 @@ const shouldApplyTurbo = (challenge, now, options = {}) => {
     if (!picked) {
         // The invariant (≤1 boost per challenge) means picker-null is only
         // reachable when entries.length === 1 and that entry has Boost.
+        if (fillNewOnConflict) {
+            // Submit and Turbo a fresh entry instead. imageId stays null: there
+            // is no safe fallback target (the only existing entry is boosted), so
+            // if the fresh submit can't happen the turbo runner skips this cycle
+            // rather than turboing the boosted entry.
+            return { apply: true, imageId: null, fillNew: true, reason: 'eligible (fill-new on conflict)' };
+        }
         return noop('only entry already has Boost applied');
     }
     if (!existingImageId) return noop('selected entry has no id');
@@ -1036,12 +1075,23 @@ const describeDeadlineActions = (challenge, now) => {
     // so the boost row can be suppressed when it can't actually be placed —
     // otherwise the timeline would show a "Boost" row that directly contradicts
     // the conflict warning rendered right beside it.
+    //
+    // A fill-new mode (always or the narrower on-conflict) resolves the conflict
+    // by boosting a freshly submitted photo instead — but only when there is a
+    // free slot to submit into, so the warning still shows for a truly full,
+    // conflicted challenge. Free-slot count is read inline (max_photo_submits −
+    // entries) to avoid importing autoFill and creating a require cycle.
     const entries = challenge?.member?.ranking?.entries;
+    const entryCount = Array.isArray(entries) ? entries.length : 0;
+    const maxSubmits = Number.isFinite(challenge?.max_photo_submits) ? challenge.max_photo_submits : 0;
+    const hasFreeSlot = maxSubmits - entryCount > 0;
+    const fillNewWillResolve = hasFreeSlot && resolveBoostFillNewMode(challenge, challengeId) !== 'no';
     const boostBlocked =
         isBoostWindowOpen(challenge, now) &&
         Array.isArray(entries) &&
         entries.length >= 1 &&
-        pickBoostEntry(challenge, challengeId) === null;
+        pickBoostEntry(challenge, challengeId) === null &&
+        !fillNewWillResolve;
 
     /**
      * @param {string} action
@@ -1096,6 +1146,7 @@ module.exports = {
     getEffectiveBoostTime,
     getEffectiveKeyUnlockedBoostTime,
     pickBoostEntry,
+    resolveBoostFillNewMode,
     isWithinEmergencyWindow,
     shouldApplyBoost,
     isBoostWindowOpen,

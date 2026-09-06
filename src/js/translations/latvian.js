@@ -177,11 +177,17 @@
             boostFillNew: 'Boost jaunam iesniegtam foto',
             boostFillNewDesc:
                 'Ja ieslēgts, tieši pirms Boost tiek iesniegts jauns foto (izmantojot tavus automātiskās aizpildes tagu noteikumus) un Boost tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Boost foto.',
+            boostFillNewOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
+            boostFillNewOnConflictDesc:
+                'Ja ieslēgts, jauns foto tiek iesniegts un Boost tiek pielietots tikai tad, ja tavam vienīgajam esošajam foto jau ir Turbo (tāpēc Boost nevar tur nokļūt). Parastā gadījumā Boost joprojām nonāk uz tava esošā foto. Tiek ignorēts, ja augstākā iespēja ir ieslēgta, jo tā vienmēr iesniedz jaunu foto.',
             turboApplyWhenBoostActive: 'Pielietot Turbo Boost laikā',
             turboApplyWhenBoostActiveDesc: 'Ja izslēgts, nepielieto Turbo, kamēr šim izaicinājumam ir pieejams Boost',
             turboFillNew: 'Turbo jaunam iesniegtam foto',
             turboFillNewDesc:
                 'Ja ieslēgts, tieši pirms Turbo tiek iesniegts jauns foto (izmantojot tavus automātiskās aizpildes tagu noteikumus) un Turbo tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Turbo foto; ja vēl nav neviena foto, Turbo šajā ciklā tiek izlaists.',
+            turboFillNewOnConflict: 'Turbo jaunam iesniegtam foto tikai konflikta gadījumā',
+            turboFillNewOnConflictDesc:
+                'Ja ieslēgts, jauns foto tiek iesniegts un tam tiek pielietots Turbo tikai tad, ja tavam vienīgajam esošajam foto jau ir Boost (tāpēc Turbo nevar tur nokļūt). Parastā gadījumā Turbo joprojām nonāk uz tava esošā foto. Tiek ignorēts, ja augstākā iespēja ir ieslēgta, jo tā vienmēr iesniedz jaunu foto.',
             playAutoTurbo: 'Spēlēt Turbo mini-spēli, lai iegūtu Turbo',
             autoTurboRunsWithAutovote: 'Automātiskā balsošana jau spēlē Turbo mini-spēli katrā ciklā',
             earnTurbo: 'Iegūt Turbo',
