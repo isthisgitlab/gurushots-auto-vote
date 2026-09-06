@@ -1,4 +1,4 @@
-# pnpm 11 requires explicit approval for postinstall/install scripts.
+# pnpm 12 requires explicit approval for postinstall/install scripts.
 # Each entry below is a package whose lifecycle script we permit to execute.
 # Keep this list minimal — every entry is an arbitrary-code-execution opportunity.
 allowBuilds:
@@ -15,7 +15,7 @@ allowBuilds:
     # lefthook's only build script is a convenience that auto-runs `lefthook install`;
     # our `prepare` script does that explicitly, so no lifecycle script is needed here.
     lefthook: false
-# 6h gate — deliberately below the pnpm 11 default of 1440 (24h), so this is
+# 6h gate — deliberately below the pnpm 12 default of 1440 (24h), so this is
 # looser than Dependabot's cooldown (.github/dependabot.yml) rather than aligned
 # with it. Note this only gates what pnpm resolves; `pnpm bump` (npm-check-updates)
 # ignores it entirely and will still write the newest published version.

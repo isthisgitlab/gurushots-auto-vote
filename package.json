@@ -88,7 +88,7 @@
     "engines": {
         "node": ">=26.0.0"
     },
-    "packageManager": "pnpm@11.25.0",
+    "packageManager": "pnpm@12.3.4",
     "dependencies": {
         "@capacitor/android": "^8.5.1",
         "@capacitor/core": "^8.5.1",
