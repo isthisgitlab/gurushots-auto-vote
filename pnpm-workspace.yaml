@@ -1,6 +1,9 @@
 # pnpm 12 requires explicit approval for postinstall/install scripts.
 # Each entry below is a package whose lifecycle script we permit to execute.
 # Keep this list minimal — every entry is an arbitrary-code-execution opportunity.
+# Not gated here: pnpm 12's own self-managed binary (managePackageManagerVersions,
+# recorded as @pnpm/exe.* in pnpm-lock.yaml) is the package manager itself, not a
+# dependency lifecycle script, and is integrity-pinned by per-platform sha512.
 allowBuilds:
     # esbuild bundler (build:react + build-cli SEA bundling) — postinstall sets up native binary.
     esbuild: true
