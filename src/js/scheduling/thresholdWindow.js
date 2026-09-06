@@ -72,8 +72,7 @@ async function soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTop
         const leadSec =
             Number.isFinite(config.leadSec) && config.leadSec >= 60 && config.leadSec <= 3540 ? config.leadSec : 900;
         // Mirrors VotingLogic's finalWindowSec clamp (>= 60s, else legacy hour).
-        const durationSec =
-            Number.isFinite(config.durationSec) && config.durationSec >= 60 ? config.durationSec : 3600;
+        const durationSec = Number.isFinite(config.durationSec) && config.durationSec >= 60 ? config.durationSec : 3600;
         const challenge = eligible[i];
         const startTime = Number(challenge.close_time) - (durationSec + leadSec);
         if (startTime > now && startTime < earliest) {

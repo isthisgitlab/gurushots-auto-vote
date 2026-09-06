@@ -56,7 +56,10 @@ describe('finalWindowExposure', () => {
             challenge.id.toString(),
         );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
-        const effectiveFinalWindowExposure = settings.getEffectiveSetting('finalWindowExposure', challenge.id.toString());
+        const effectiveFinalWindowExposure = settings.getEffectiveSetting(
+            'finalWindowExposure',
+            challenge.id.toString(),
+        );
 
         const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
@@ -132,7 +135,10 @@ describe('finalWindowExposure', () => {
             challenge.id.toString(),
         );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
-        const effectiveFinalWindowExposure = settings.getEffectiveSetting('finalWindowExposure', challenge.id.toString());
+        const effectiveFinalWindowExposure = settings.getEffectiveSetting(
+            'finalWindowExposure',
+            challenge.id.toString(),
+        );
 
         const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
@@ -277,7 +283,10 @@ describe('finalWindowExposure', () => {
             challenge.id.toString(),
         );
         const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challenge.id.toString());
-        const effectiveFinalWindowExposure = settings.getEffectiveSetting('finalWindowExposure', challenge.id.toString());
+        const effectiveFinalWindowExposure = settings.getEffectiveSetting(
+            'finalWindowExposure',
+            challenge.id.toString(),
+        );
 
         const isWithinLastMinuteThreshold = timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 
