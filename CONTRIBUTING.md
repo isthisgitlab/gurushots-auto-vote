@@ -7,7 +7,7 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
 ### Prerequisites
 
 - Node.js 26+ (matches `package.json` `engines.node` and `.nvmrc`; CI builds also pin to 26)
-- pnpm 11+. The repo pins the exact version via the `packageManager` field in `package.json`; enable [corepack](https://nodejs.org/api/corepack.html) to use it:
+- pnpm 12+. The repo pins the exact version via the `packageManager` field in `package.json`; enable [corepack](https://nodejs.org/api/corepack.html) to use it:
     ```bash
     corepack enable
     ```

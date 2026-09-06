@@ -1,6 +1,9 @@
-# pnpm 11 requires explicit approval for postinstall/install scripts.
+# pnpm 12 requires explicit approval for postinstall/install scripts.
 # Each entry below is a package whose lifecycle script we permit to execute.
 # Keep this list minimal — every entry is an arbitrary-code-execution opportunity.
+# Not gated here: pnpm 12's own self-managed binary (managePackageManagerVersions,
+# recorded as @pnpm/exe.* in pnpm-lock.yaml) is the package manager itself, not a
+# dependency lifecycle script, and is integrity-pinned by per-platform sha512.
 allowBuilds:
     # esbuild bundler (build:react + build-cli SEA bundling) — postinstall sets up native binary.
     esbuild: true
@@ -15,7 +18,7 @@ allowBuilds:
     # lefthook's only build script is a convenience that auto-runs `lefthook install`;
     # our `prepare` script does that explicitly, so no lifecycle script is needed here.
     lefthook: false
-# 6h gate — deliberately below the pnpm 11 default of 1440 (24h), so this is
+# 6h gate — deliberately below the pnpm 12 default of 1440 (24h), so this is
 # looser than Dependabot's cooldown (.github/dependabot.yml) rather than aligned
 # with it. Note this only gates what pnpm resolves; `pnpm bump` (npm-check-updates)
 # ignores it entirely and will still write the newest published version.
