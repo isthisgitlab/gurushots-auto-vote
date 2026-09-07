@@ -346,6 +346,34 @@ describe('mock-parity behaviors on the shared path', () => {
         expect(autoFill.reflectNewEntry).toHaveBeenCalledTimes(1);
         expect(autoFill.reflectNewEntry).toHaveBeenCalledWith(challenge, 'fresh-2');
     });
+
+    // On-conflict turbo fill-new fires only when the sole entry is already
+    // boosted (turbo can never share it). If the fresh submit then fails for a
+    // non-gone reason, imageId stays null and the only existing entry is not a
+    // valid fallback — applying turbo to it would fail with "already has Boost".
+    // The orchestrator must skip cleanly and NOT call applyTurbo on that entry.
+    test('turbo fill-new-on-conflict submit failure → skips without applyTurbo (no valid fallback)', async () => {
+        const challenge = makeChallenge({
+            member: {
+                boost: { state: 'LOCKED', timeout: 0 },
+                turbo: { state: 'WON' },
+                ranking: { entries: [{ id: 'e1', boosted: true }], exposure: { exposure_factor: 100 } },
+            },
+        });
+        const api = makeApi([challenge]);
+        votingLogic.orderDeadlineActions.mockReturnValue([{ action: 'turbo' }]);
+        votingLogic.shouldApplyTurbo.mockReturnValue({
+            apply: true,
+            fillNew: true,
+            imageId: null,
+            reason: 'eligible (fill-new on conflict)',
+        });
+        autoFill.submitNewEntryForAction.mockResolvedValueOnce({ ok: false, imageId: null, reason: 'none' });
+        const result = await runVotingPass('tok', null, deps(api));
+        expect(result.success).toBe(true);
+        expect(api.applyTurbo).not.toHaveBeenCalled();
+        expect(autoFill.reflectNewEntry).not.toHaveBeenCalled();
+    });
 });
 
 describe('cancellation checkpoints', () => {

@@ -178,7 +178,7 @@
                 'When on, this submits a new photo (using your Auto-Fill tag rules) just before boosting and boosts that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to boosting your configured Boost Entry.',
             boostFillNewOnConflict: 'Boost a Freshly Submitted Photo Only on Conflict',
             boostFillNewOnConflictDesc:
-                'When on, a new photo is submitted and boosted only when your single existing entry already has Turbo on it (so Boost cannot go there). In the normal case Boost still goes to your existing entry. Ignored when the option above is on, since that always fills a new photo.',
+                'When on, a new photo is submitted and boosted only when your single existing entry already has Turbo on it (so Boost cannot go there). In the normal case Boost still goes to your existing entry. If there is no free slot or no eligible photo to submit, Boost is skipped this cycle — there is no fallback, since your only entry already has Turbo. Ignored when the option above is on, since that always fills a new photo.',
             turboApplyWhenBoostActive: 'Apply Turbo During Boost Window',
             turboApplyWhenBoostActiveDesc:
                 'When off, skip Turbo apply if a Boost is currently available on the same challenge',
@@ -187,7 +187,7 @@
                 'When on, this submits a new photo (using your Auto-Fill tag rules) just before applying Turbo and applies Turbo to that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to your configured Turbo Entry; if you have no entry yet, Turbo is skipped this cycle.',
             turboFillNewOnConflict: 'Turbo a Freshly Submitted Photo Only on Conflict',
             turboFillNewOnConflictDesc:
-                'When on, a new photo is submitted and given Turbo only when your single existing entry already has Boost on it (so Turbo cannot go there). In the normal case Turbo still goes to your existing entry. Ignored when the option above is on, since that always fills a new photo.',
+                'When on, a new photo is submitted and given Turbo only when your single existing entry already has Boost on it (so Turbo cannot go there). In the normal case Turbo still goes to your existing entry. If there is no free slot or no eligible photo to submit, Turbo is skipped this cycle — there is no fallback, since your only entry already has Boost. Ignored when the option above is on, since that always fills a new photo.',
             playAutoTurbo: 'Play the Turbo mini-game now to earn Turbo',
             autoTurboRunsWithAutovote: 'Auto-vote already plays the Turbo mini-game on each cycle',
             earnTurbo: 'Earn Turbo',
