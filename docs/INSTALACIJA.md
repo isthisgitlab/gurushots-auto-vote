@@ -302,23 +302,25 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 
 **Boost**
 
-| Iestatījums       | Noklusējums   | Diapazons / vērtības | Apraksts                                                                                             |
-| ----------------- | ------------- | -------------------- | ---------------------------------------------------------------------------------------------------- |
-| `autoBoost`       | `true`        | bool                 | Automātiski pielietot boost tuvu beigām.                                                             |
-| `boostTime`       | `3600` s (1h) | ≥ 0                  | Pielietot taimera boost, kad atlicis tik daudz laika (vai mazāk). Grafiskajā lietotnē ievada kā h+m. |
-| `boostImageIndex` | `1`           | vesels ≥ 0           | Foto vieta boost (1 = pirmā, `0` = pēdējā). Paiet atpakaļ, ja vietai jau ir turbo.                   |
-| `boostFillNew`    | `false`       | bool                 | Auto-aizpildes laikā iesniegt jaunu fotogrāfiju un uzreiz pielietot boost šim jaunajam ierakstam.    |
+| Iestatījums              | Noklusējums   | Diapazons / vērtības | Apraksts                                                                                                                                                                                                                                                       |
+| ------------------------ | ------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoBoost`              | `true`        | bool                 | Automātiski pielietot boost tuvu beigām.                                                                                                                                                                                                                       |
+| `boostTime`              | `3600` s (1h) | ≥ 0                  | Pielietot taimera boost, kad atlicis tik daudz laika (vai mazāk). Grafiskajā lietotnē ievada kā h+m.                                                                                                                                                           |
+| `boostImageIndex`        | `1`           | vesels ≥ 0           | Foto vieta boost (1 = pirmā, `0` = pēdējā). Paiet atpakaļ, ja vietai jau ir turbo.                                                                                                                                                                             |
+| `boostFillNew`           | `false`       | bool                 | Auto-aizpildes laikā iesniegt jaunu fotogrāfiju un uzreiz pielietot boost šim jaunajam ierakstam.                                                                                                                                                              |
+| `boostFillNewOnConflict` | `false`       | bool                 | Iesniegt jaunu foto un pielietot tam boost tikai tad, ja vienīgajam esošajam ierakstam jau ir turbo (boost tur nevar nokļūt). Ja nav brīvas vietas vai piemērota foto, boost tiek izlaists (atkāpšanās iespējas nav). Ignorēts, ja `boostFillNew` ir ieslēgts. |
 
 **Turbo**
 
-| Iestatījums                 | Noklusējums   | Diapazons / vērtības | Apraksts                                                                                          |
-| --------------------------- | ------------- | -------------------- | ------------------------------------------------------------------------------------------------- |
-| `useTurbo`                  | `false`       | bool                 | Automātiski pielietot rokā esošu turbo pirms beigām.                                              |
-| `autoTurbo`                 | `true`        | bool                 | Automātiski spēlēt mini-spēli, lai iegūtu turbo, kad tāda nav rokā.                               |
-| `turboTime`                 | `7200` s (2h) | ≥ 0                  | Pielietot turbo, kad atlicis tik daudz laika (vai mazāk). Grafiskajā lietotnē ievada kā h+m.      |
-| `turboImageIndex`           | `1`           | vesels ≥ 0           | Foto vieta turbo (1 = pirmā, `0` = pēdējā). Paiet atpakaļ, ja vietai jau ir boost.                |
-| `turboApplyWhenBoostActive` | `false`       | bool                 | Atļaut turbo pielietot, kamēr ir atvērts boost logs.                                              |
-| `turboFillNew`              | `false`       | bool                 | Auto-aizpildes laikā iesniegt jaunu fotogrāfiju un uzreiz pielietot turbo šim jaunajam ierakstam. |
+| Iestatījums                 | Noklusējums   | Diapazons / vērtības | Apraksts                                                                                                                                                                                                                                                       |
+| --------------------------- | ------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useTurbo`                  | `false`       | bool                 | Automātiski pielietot rokā esošu turbo pirms beigām.                                                                                                                                                                                                           |
+| `autoTurbo`                 | `true`        | bool                 | Automātiski spēlēt mini-spēli, lai iegūtu turbo, kad tāda nav rokā.                                                                                                                                                                                            |
+| `turboTime`                 | `7200` s (2h) | ≥ 0                  | Pielietot turbo, kad atlicis tik daudz laika (vai mazāk). Grafiskajā lietotnē ievada kā h+m.                                                                                                                                                                   |
+| `turboImageIndex`           | `1`           | vesels ≥ 0           | Foto vieta turbo (1 = pirmā, `0` = pēdējā). Paiet atpakaļ, ja vietai jau ir boost.                                                                                                                                                                             |
+| `turboApplyWhenBoostActive` | `false`       | bool                 | Atļaut turbo pielietot, kamēr ir atvērts boost logs.                                                                                                                                                                                                           |
+| `turboFillNew`              | `false`       | bool                 | Auto-aizpildes laikā iesniegt jaunu fotogrāfiju un uzreiz pielietot turbo šim jaunajam ierakstam.                                                                                                                                                              |
+| `turboFillNewOnConflict`    | `false`       | bool                 | Iesniegt jaunu foto un pielietot tam turbo tikai tad, ja vienīgajam esošajam ierakstam jau ir boost (turbo tur nevar nokļūt). Ja nav brīvas vietas vai piemērota foto, turbo tiek izlaists (atkāpšanās iespējas nav). Ignorēts, ja `turboFillNew` ir ieslēgts. |
 
 **Beigu logs**
 

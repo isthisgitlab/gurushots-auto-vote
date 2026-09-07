@@ -52,6 +52,7 @@ jest.mock('../../src/js/timing', () => mockUtils);
 // Mock the voting logic service
 const mockVotingLogic = {
     shouldApplyBoost: jest.fn(),
+    resolveBoostFillNewMode: jest.fn(() => 'no'),
     getEffectiveBoostTime: jest.fn(),
     evaluateVotingDecision: jest.fn(),
     shouldPlayAutoTurbo: jest.fn(() => false),

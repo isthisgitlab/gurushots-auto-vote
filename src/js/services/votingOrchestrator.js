@@ -116,18 +116,30 @@ const runBoost = async (ctx) => {
 
         try {
             const cid = challenge.id.toString();
+            // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when
+            // the only existing entry is turboed; 'no' = boost an existing entry.
+            const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid);
             let boostResult;
-            if (settings.getEffectiveSetting('boostFillNew', cid) === true) {
+            if (fillMode !== 'no') {
                 // Fill-new: submit a fresh photo and boost that entry instead
-                // of an existing one. Falls back to the configured Boost Entry
-                // when no fresh photo can be submitted (full / none / failed).
+                // of an existing one.
                 const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
                 if (filled.ok) {
                     autoFill.reflectNewEntry(challenge, filled.imageId);
                     boostResult = await api.applyBoostToEntry(cid, filled.imageId, token);
-                    // applyBoost raises this flag itself (it owns the entry pick); the
-                    // explicit-entry call cannot, so reflect it here.
-                    if (boostResult) autoFill.reflectEntryFlag(challenge, filled.imageId, 'boosted');
+                    if (boostResult) {
+                        // applyBoost raises this flag itself (it owns the entry pick);
+                        // the explicit-entry call cannot, so reflect it here.
+                        autoFill.reflectEntryFlag(challenge, filled.imageId, 'boosted');
+                    } else {
+                        // applyBoostToEntry logs its own apply-boost-entry-* operation,
+                        // but the outer boost-<id> operation opened above would dangle
+                        // open on failure (the applyBoost fallback path closes its own).
+                        logger
+                            .withCategory('boost')
+                            .endOperation(`boost-${challenge.id}`, null, 'boost apply to fresh entry failed');
+                        return;
+                    }
                 } else if (filled.reason === 'challenge-gone') {
                     // The live re-check confirmed the challenge left the
                     // active list — boosting an existing entry on it would
@@ -136,7 +148,22 @@ const runBoost = async (ctx) => {
                         .withCategory('boost')
                         .endOperation(`boost-${challenge.id}`, null, 'challenge left the active list — boost skipped');
                     return;
+                } else if (fillMode === 'conflict') {
+                    // On-conflict mode only fires when the single existing entry is
+                    // already turboed, so there is no valid fallback target — an
+                    // applyBoost here would just fail with "only entry already has
+                    // Turbo". Skip instead of making the pointless call.
+                    logger
+                        .withCategory('boost')
+                        .endOperation(
+                            `boost-${challenge.id}`,
+                            null,
+                            `boost fill-new unavailable (${filled.reason}); only entry already has Turbo — boost skipped`,
+                        );
+                    return;
                 } else {
+                    // 'always' mode falls back to the configured Boost Entry when
+                    // no fresh photo can be submitted (full / none / failed).
                     logger
                         .withCategory('boost')
                         .info(
@@ -224,12 +251,17 @@ const runTurboApply = async (ctx) => {
         }
     }
     if (!imageId) {
-        logger
-            .withCategory('turbo')
-            .info(
-                `${logger.challengeTag(challenge)} turbo fill-new could not submit a photo and there is no existing entry — skipped`,
-                null,
-            );
+        // fill-new was requested but no fresh photo could be submitted, so
+        // imageId never resolved. The two ways to land here need different
+        // logs: in the on-conflict (or always-blocked) path an entry DOES
+        // exist — it just already has Boost, so turbo cannot go on it and
+        // there is no valid fallback; only in always mode on an empty
+        // challenge is there genuinely no entry at all.
+        const hasExistingEntry = (challenge?.member?.ranking?.entries?.length ?? 0) > 0;
+        const skipReason = hasExistingEntry
+            ? 'only entry already has Boost — turbo skipped'
+            : 'could not submit a fresh photo and there is no existing entry — turbo skipped';
+        logger.withCategory('turbo').info(`${logger.challengeTag(challenge)} turbo fill-new ${skipReason}`, null);
     } else {
         logger
             .withCategory('turbo')

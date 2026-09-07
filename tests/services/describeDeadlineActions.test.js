@@ -146,4 +146,87 @@ describe('describeDeadlineActions — boostBlocked', () => {
         const challenge = build({ boost: { state: 'AVAILABLE_KEY' }, entries: [{ id: 'e1' }] });
         expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
     });
+
+    test('false when boostFillNew (always) will resolve the conflict via a free slot', () => {
+        // Sole entry turboed, but a fresh photo can be submitted (2 slots, 1 used)
+        // and boosted instead — so there is no conflict to warn about.
+        mockSettings({ boostFillNew: true });
+        const challenge = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            entries: [{ id: 'e1', turbo: true }],
+            maxSubmits: 2,
+        });
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
+    });
+
+    test('false when boostFillNewOnConflict will resolve the conflict via a free slot', () => {
+        mockSettings({ boostFillNewOnConflict: true });
+        const challenge = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            entries: [{ id: 'e1', turbo: true }],
+            maxSubmits: 2,
+        });
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(false);
+    });
+
+    test('true when fill-new is on but there is no free slot to submit into', () => {
+        // maxSubmits equals the entry count → fill-new cannot break the conflict,
+        // so the warning must still show.
+        mockSettings({ boostFillNewOnConflict: true });
+        const challenge = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            entries: [{ id: 'e1', turbo: true }],
+            maxSubmits: 1,
+        });
+        expect(VotingLogic.describeDeadlineActions(challenge, NOW).boostBlocked).toBe(true);
+    });
+
+    test('boost row shown (not suppressed) when fill-new will place the boost on a fresh entry', () => {
+        mockSettings({ boostFillNewOnConflict: true });
+        const challenge = build({
+            boost: { state: 'AVAILABLE_KEY' },
+            entries: [{ id: 'e1', turbo: true }],
+            maxSubmits: 2,
+        });
+        expect(actionsOf(challenge)).toContain('boost');
+    });
+});
+
+describe('resolveBoostFillNewMode', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const conflicted = () => build({ entries: [{ id: 'e1', turbo: true }], maxSubmits: 2 });
+    const placeable = () => build({ entries: [{ id: 'e1' }], maxSubmits: 2 });
+
+    test("'always' when boostFillNew is on, regardless of conflict", () => {
+        mockSettings({ boostFillNew: true });
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('always');
+    });
+
+    test("'conflict' when only boostFillNewOnConflict is on AND the sole entry is turboed", () => {
+        mockSettings({ boostFillNewOnConflict: true });
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('conflict');
+    });
+
+    test("'no' when boostFillNewOnConflict is on but there is no conflict", () => {
+        mockSettings({ boostFillNewOnConflict: true });
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('no');
+    });
+
+    test("'no' when boostFillNewOnConflict is on but there are no entries (not a conflict)", () => {
+        mockSettings({ boostFillNewOnConflict: true });
+        const empty = build({ entries: [], maxSubmits: 2 });
+        expect(VotingLogic.resolveBoostFillNewMode(empty, '42')).toBe('no');
+    });
+
+    test("'no' when neither fill-new setting is on", () => {
+        mockSettings();
+        expect(VotingLogic.resolveBoostFillNewMode(conflicted(), '42')).toBe('no');
+    });
+
+    test('boostFillNew takes precedence over on-conflict', () => {
+        mockSettings({ boostFillNew: true, boostFillNewOnConflict: true });
+        expect(VotingLogic.resolveBoostFillNewMode(placeable(), '42')).toBe('always');
+    });
 });

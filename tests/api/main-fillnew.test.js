@@ -32,6 +32,7 @@ const ALL_ACTIONS = [
 jest.mock('../../src/js/services/VotingLogic', () => ({
     shouldApplyBoost: jest.fn(() => false),
     getEffectiveBoostTime: jest.fn(() => 3600),
+    resolveBoostFillNewMode: jest.fn(() => 'no'),
     shouldPlayAutoTurbo: jest.fn(() => false),
     shouldApplyTurbo: jest.fn(() => ({ apply: false, imageId: null, fillNew: false, reason: 'noop' })),
     evaluateVotingDecision: jest.fn(() => ({ shouldVote: false })),
@@ -94,19 +95,23 @@ beforeEach(() => {
     votingLogic.shouldApplyTurbo.mockReturnValue({ apply: false, imageId: null, fillNew: false, reason: 'noop' });
     votingLogic.evaluateVotingDecision.mockReturnValue({ shouldVote: false });
     votingLogic.orderDeadlineActions.mockReturnValue(ALL_ACTIONS);
+    votingLogic.resolveBoostFillNewMode.mockReturnValue('no');
 });
 
 describe('fetchChallengesAndVote — boost fill-new', () => {
-    const setup = ({ boostFillNew }) => {
+    // `mode` mirrors votingLogic.resolveBoostFillNewMode's result: 'always'
+    // (boostFillNew), 'conflict' (boostFillNewOnConflict + sole entry turboed),
+    // or 'no'. VotingLogic is mocked here, so drive the resolved mode directly.
+    const setup = ({ mode }) => {
         const challenge = makeChallenge({ boostState: 'AVAILABLE', boostTimeout: NOW() + 120 });
         getActiveChallenges.mockResolvedValue({ challenges: [challenge] });
         votingLogic.shouldApplyBoost.mockReturnValue(true);
-        settings.getEffectiveSetting.mockImplementation((key) => (key === 'boostFillNew' ? boostFillNew : undefined));
+        votingLogic.resolveBoostFillNewMode.mockReturnValue(mode);
         return challenge;
     };
 
     test('submits a fresh photo and boosts that id', async () => {
-        setup({ boostFillNew: true });
+        setup({ mode: 'always' });
         autoFill.submitNewEntryForAction.mockResolvedValue({ ok: true, imageId: 'fresh-99', reason: 'submitted' });
         applyBoostToEntry.mockResolvedValue({ success: true });
 
@@ -117,8 +122,8 @@ describe('fetchChallengesAndVote — boost fill-new', () => {
         expect(applyBoost).not.toHaveBeenCalled();
     });
 
-    test('falls back to applyBoost when a fresh photo cannot be submitted', async () => {
-        setup({ boostFillNew: true });
+    test('falls back to applyBoost when a fresh photo cannot be submitted (always mode)', async () => {
+        setup({ mode: 'always' });
         autoFill.submitNewEntryForAction.mockResolvedValue({ ok: false, imageId: null, reason: 'no-slots' });
         applyBoost.mockResolvedValue({ success: true });
 
@@ -129,14 +134,49 @@ describe('fetchChallengesAndVote — boost fill-new', () => {
         expect(applyBoostToEntry).not.toHaveBeenCalled();
     });
 
-    test('uses the existing-entry path when boostFillNew is off', async () => {
-        setup({ boostFillNew: false });
+    test('uses the existing-entry path when fill-new is off', async () => {
+        setup({ mode: 'no' });
         applyBoost.mockResolvedValue({ success: true });
 
         await fetchChallengesAndVote(TOKEN);
 
         expect(autoFill.submitNewEntryForAction).not.toHaveBeenCalled();
         expect(applyBoost).toHaveBeenCalledTimes(1);
+        expect(applyBoostToEntry).not.toHaveBeenCalled();
+    });
+
+    test('submits a fresh photo and boosts it in conflict mode', async () => {
+        setup({ mode: 'conflict' });
+        autoFill.submitNewEntryForAction.mockResolvedValue({ ok: true, imageId: 'fresh-c1', reason: 'submitted' });
+        applyBoostToEntry.mockResolvedValue({ success: true });
+
+        await fetchChallengesAndVote(TOKEN);
+
+        expect(autoFill.submitNewEntryForAction).toHaveBeenCalledTimes(1);
+        expect(applyBoostToEntry).toHaveBeenCalledWith('12345', 'fresh-c1', TOKEN);
+        expect(applyBoost).not.toHaveBeenCalled();
+    });
+
+    test('does NOT fall back to applyBoost in conflict mode when the fresh photo fails', async () => {
+        // The sole existing entry is turboed, so applyBoost would just fail with
+        // "only entry already has Turbo" — conflict mode skips it entirely.
+        setup({ mode: 'conflict' });
+        autoFill.submitNewEntryForAction.mockResolvedValue({ ok: false, imageId: null, reason: 'no-slots' });
+
+        await fetchChallengesAndVote(TOKEN);
+
+        expect(autoFill.submitNewEntryForAction).toHaveBeenCalledTimes(1);
+        expect(applyBoost).not.toHaveBeenCalled();
+        expect(applyBoostToEntry).not.toHaveBeenCalled();
+    });
+
+    test('skips (no applyBoost) in conflict mode when the challenge left the active list', async () => {
+        setup({ mode: 'conflict' });
+        autoFill.submitNewEntryForAction.mockResolvedValue({ ok: false, imageId: null, reason: 'challenge-gone' });
+
+        await fetchChallengesAndVote(TOKEN);
+
+        expect(applyBoost).not.toHaveBeenCalled();
         expect(applyBoostToEntry).not.toHaveBeenCalled();
     });
 });

@@ -36,6 +36,7 @@ const mockSettings = (overrides = {}) => {
         turboApplyWhenBoostActive: false,
         turboImageIndex: 1,
         turboFillNew: false,
+        turboFillNewOnConflict: false,
         emergencyFill: 300,
     };
     settings.getEffectiveSetting = jest.fn((key) => ({ ...defaults, ...overrides })[key]);
@@ -185,6 +186,62 @@ describe('shouldApplyTurbo', () => {
             expect(result.apply).toBe(true);
             expect(result.fillNew).toBe(true);
             expect(result.imageId).toBeNull();
+        });
+    });
+
+    describe('turboFillNewOnConflict (fill-new only to break a boost/turbo conflict)', () => {
+        test('fills a fresh photo when the only existing entry is already boosted', () => {
+            // The narrower opt-in: turbo cannot go on the single boosted entry, so
+            // submit a fresh one instead. imageId=null — there is no fallback target.
+            mockSettings({ turboFillNewOnConflict: true });
+            const challenge = buildChallenge({ closeInSeconds: 600, entries: [{ id: 'b1', boosted: true }] });
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(true);
+            expect(result.fillNew).toBe(true);
+            expect(result.imageId).toBeNull();
+            expect(result.reason).toContain('conflict');
+        });
+
+        test('does NOT fill new in the normal case — turbos the existing entry', () => {
+            // No conflict: the picked entry is free, so on-conflict stays dormant and
+            // turbo applies to the existing entry the normal way (fillNew=false).
+            mockSettings({ turboFillNewOnConflict: true });
+            const challenge = buildChallenge({ closeInSeconds: 600 }); // entry-1..3, none boosted
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(true);
+            expect(result.fillNew).toBe(false);
+            expect(result.imageId).toBe('entry-1');
+        });
+
+        test('does NOT fill new when there are simply no entries yet (not a conflict)', () => {
+            // Empty list is the "always fill-new" case, not the conflict case; the
+            // narrower toggle leaves it as the ordinary no-entries noop.
+            mockSettings({ turboFillNewOnConflict: true });
+            const challenge = buildChallenge({ closeInSeconds: 600, entries: [] });
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(false);
+            expect(result.fillNew).toBe(false);
+            expect(result.reason).toBe('no entries to apply turbo to');
+        });
+
+        test('turboFillNew (always) takes precedence over on-conflict', () => {
+            // Both on, no conflict present: the always-fill path wins and still
+            // fills new, passing the existing entry as the fallback target.
+            mockSettings({ turboFillNew: true, turboFillNewOnConflict: true });
+            const challenge = buildChallenge({ closeInSeconds: 600 }); // entry-1..3
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(true);
+            expect(result.fillNew).toBe(true);
+            expect(result.imageId).toBe('entry-1');
+        });
+
+        test('stays off by default — only boosted entry is a plain noop', () => {
+            mockSettings(); // turboFillNewOnConflict:false
+            const challenge = buildChallenge({ closeInSeconds: 600, entries: [{ id: 'b1', boosted: true }] });
+            const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+            expect(result.apply).toBe(false);
+            expect(result.fillNew).toBe(false);
+            expect(result.reason).toBe('only entry already has Boost applied');
         });
     });
 

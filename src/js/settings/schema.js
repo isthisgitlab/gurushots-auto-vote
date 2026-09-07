@@ -404,6 +404,16 @@ const SETTINGS_SCHEMA = {
         label: 'app.boostFillNew',
         description: 'app.boostFillNewDesc',
     },
+    boostFillNewOnConflict: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'boost',
+        label: 'app.boostFillNewOnConflict',
+        description: 'app.boostFillNewOnConflictDesc',
+    },
 
     // --- Turbo ---
     useTurbo: {
@@ -468,6 +478,16 @@ const SETTINGS_SCHEMA = {
         group: 'turbo',
         label: 'app.turboFillNew',
         description: 'app.turboFillNewDesc',
+    },
+    turboFillNewOnConflict: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'turbo',
+        label: 'app.turboFillNewOnConflict',
+        description: 'app.turboFillNewOnConflictDesc',
     },
 
     // --- Final Window Exposure ---
