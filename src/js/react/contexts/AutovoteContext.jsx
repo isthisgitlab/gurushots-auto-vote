@@ -70,6 +70,11 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
             }
 
             if (result?.success) {
+                // A good cycle clears any prior error and flips the badge back
+                // to Running. The loop keeps ticking after a failed cycle, so
+                // without this a transient error would leave the status stuck
+                // on 'Error' forever. Idempotent: a no-op when not in error.
+                dispatch({ type: ACTIONS.CLEAR_ERROR });
                 dispatch({ type: ACTIONS.INCREMENT_CYCLE });
                 const lastRunStr = new Date().toLocaleTimeString('lv-LV');
                 dispatch({ type: ACTIONS.UPDATE_LAST_RUN, payload: lastRunStr });

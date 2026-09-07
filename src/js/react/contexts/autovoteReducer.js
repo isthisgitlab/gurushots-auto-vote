@@ -11,6 +11,7 @@ export const ACTIONS = {
     UPDATE_LAST_RUN: 'UPDATE_LAST_RUN',
     SET_STATUS: 'SET_STATUS',
     SET_ERROR: 'SET_ERROR',
+    CLEAR_ERROR: 'CLEAR_ERROR',
     SET_NEXT_RUN: 'SET_NEXT_RUN',
 };
 
@@ -73,6 +74,24 @@ export function autovoteReducer(state, action) {
                 error: action.payload,
                 status: 'Error',
                 statusClass: 'badge-error',
+            };
+        case ACTIONS.CLEAR_ERROR:
+            // A cycle succeeded — drop a stale error and restore the running
+            // badge. Without this, a single transient failure (a network blip,
+            // a "Voting failed" cycle) pins the status to 'Error' forever: the
+            // cadence chain keeps looping, but the only actions that reset the
+            // status are START (guarded off while running) and STOP (→
+            // 'Stopped'). No-op — same reference, no re-render — when there is
+            // nothing to clear, so the common per-cycle success path does not
+            // churn the tree.
+            if (state.error === null && state.status === 'Running') {
+                return state;
+            }
+            return {
+                ...state,
+                error: null,
+                status: 'Running',
+                statusClass: 'badge-success',
             };
         default:
             return state;

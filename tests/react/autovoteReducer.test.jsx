@@ -26,3 +26,30 @@ describe('autovoteReducer — nextRunAt', () => {
         expect(stopped.running).toBe(false);
     });
 });
+
+/**
+ * A cycle failure sets the Error badge, but the cadence chain keeps looping.
+ * CLEAR_ERROR is what a subsequent successful cycle uses to recover — without
+ * it the status stays 'Error' forever (START is guarded off while running and
+ * STOP only goes to 'Stopped').
+ */
+describe('autovoteReducer — CLEAR_ERROR recovery', () => {
+    test('SET_ERROR then CLEAR_ERROR restores the running badge', () => {
+        const running = autovoteReducer(initialState, { type: ACTIONS.START });
+        const errored = autovoteReducer(running, { type: ACTIONS.SET_ERROR, payload: 'Voting failed' });
+        expect(errored.status).toBe('Error');
+        expect(errored.statusClass).toBe('badge-error');
+        expect(errored.error).toBe('Voting failed');
+
+        const recovered = autovoteReducer(errored, { type: ACTIONS.CLEAR_ERROR });
+        expect(recovered.status).toBe('Running');
+        expect(recovered.statusClass).toBe('badge-success');
+        expect(recovered.error).toBeNull();
+    });
+
+    test('CLEAR_ERROR is a no-op (same reference) when already running with no error', () => {
+        const running = autovoteReducer(initialState, { type: ACTIONS.START });
+        const after = autovoteReducer(running, { type: ACTIONS.CLEAR_ERROR });
+        expect(after).toBe(running);
+    });
+});
