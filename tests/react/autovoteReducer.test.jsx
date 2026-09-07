@@ -52,4 +52,29 @@ describe('autovoteReducer — CLEAR_ERROR recovery', () => {
         const after = autovoteReducer(running, { type: ACTIONS.CLEAR_ERROR });
         expect(after).toBe(running);
     });
+
+    test('CLEAR_ERROR never fabricates a Running badge on a stopped session', () => {
+        // A stopped session (running:false) must stay stopped — CLEAR_ERROR only
+        // recovers a *running* one. Otherwise a stray dispatch would show a green
+        // 'Running' badge next to a 'Start' button (running drives the button,
+        // status drives the badge). Guarded by the `!state.running` early-return.
+        const fromInitial = autovoteReducer(initialState, { type: ACTIONS.CLEAR_ERROR });
+        expect(fromInitial).toBe(initialState);
+
+        // Even a stopped session that still holds a stale error is left untouched.
+        const stoppedWithError = { ...initialState, status: 'Stopped', error: 'Voting failed' };
+        const after = autovoteReducer(stoppedWithError, { type: ACTIONS.CLEAR_ERROR });
+        expect(after).toBe(stoppedWithError);
+    });
+
+    test('STOP clears a lingering error so the status field matches the badge', () => {
+        const running = autovoteReducer(initialState, { type: ACTIONS.START });
+        const errored = autovoteReducer(running, { type: ACTIONS.SET_ERROR, payload: 'Voting failed' });
+        expect(errored.error).toBe('Voting failed');
+
+        const stopped = autovoteReducer(errored, { type: ACTIONS.STOP });
+        expect(stopped.status).toBe('Stopped');
+        expect(stopped.running).toBe(false);
+        expect(stopped.error).toBeNull();
+    });
 });

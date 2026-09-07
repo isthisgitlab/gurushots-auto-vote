@@ -46,6 +46,11 @@ export function autovoteReducer(state, action) {
                 nextRunAt: null,
                 status: 'Stopped',
                 statusClass: 'badge-neutral',
+                // Clear any lingering error so a stopped session never carries a
+                // stale error string alongside the 'Stopped' badge (START also
+                // resets it on the next run). Keeps the `error` field consistent
+                // with the status the same way CLEAR_ERROR does on recovery.
+                error: null,
             };
         case ACTIONS.INCREMENT_CYCLE:
             return {
@@ -76,15 +81,17 @@ export function autovoteReducer(state, action) {
                 statusClass: 'badge-error',
             };
         case ACTIONS.CLEAR_ERROR:
-            // A cycle succeeded — drop a stale error and restore the running
-            // badge. Without this, a single transient failure (a network blip,
-            // a "Voting failed" cycle) pins the status to 'Error' forever: the
-            // cadence chain keeps looping, but the only actions that reset the
-            // status are START (guarded off while running) and STOP (→
-            // 'Stopped'). No-op — same reference, no re-render — when there is
-            // nothing to clear, so the common per-cycle success path does not
-            // churn the tree.
-            if (state.error === null && state.status === 'Running') {
+            // A running cycle succeeded — drop a stale error and restore the
+            // 'Running' badge. Without this, a single transient failure (a
+            // network blip, a "Voting failed" cycle) pins the status to 'Error'
+            // forever: the cadence chain keeps looping, but the only other
+            // actions that touch status are START (guarded off while running)
+            // and STOP (→ 'Stopped'). No-op — same reference, no re-render —
+            // when there is nothing to clear: either the session is not running
+            // (never fabricate a 'Running' badge on a stopped session, which
+            // would contradict the Start/Stop button), or it is already running
+            // with no error (the common per-cycle success path, kept churn-free).
+            if (!state.running || (state.error === null && state.status === 'Running')) {
                 return state;
             }
             return {
