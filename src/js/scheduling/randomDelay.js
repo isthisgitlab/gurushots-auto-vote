@@ -16,6 +16,21 @@ const MS_PER_MINUTE = 60_000;
 // the rolled delay. Without this, an overrun would re-fire immediately and
 // hammer the API; with a small pause we recover quickly without busy-looping.
 const MIN_CYCLE_GAP_MS = 5_000;
+// Normal-mode wait ceiling applied while the API is unreachable — i.e. when a
+// cycle's challenge fetch returned `fetchFailed` (makePostRequest resolved null
+// after exhausting retries, typically a network outage). Without it the loop
+// re-arms at the full normal cadence (`checkFrequencyMin/Max`, user-settable
+// with no upper bound) after every failed cycle, so recovery — resuming voting
+// AND, on the GUI, flipping the status badge off 'Error' via the next
+// successful cycle — is gated on that whole interval: reconnect at second 5 of
+// a 30-minute cadence and the app sits idle-but-online for ~30 minutes. Capping
+// the wait to a short retry makes the next cycle re-probe within seconds of
+// connectivity returning, so recovery tracks the reconnection, not the cadence.
+// Comfortably above MIN_CYCLE_GAP_MS so a persistent outage re-probes on a calm
+// 30s beat, not a tight loop; makePostRequest's own retry/backoff adds spacing
+// on top. Shared by the cadence chain (GUI/CLI) and the Android headless loop,
+// which schedules its own alarms but must recover on the same beat.
+const OFFLINE_RETRY_MS = 30_000;
 
 const coerceMinutes = (raw, fallback) => {
     const n = Number(raw);
@@ -54,4 +69,11 @@ const anchoredWaitMs = (delayMs, previousCycleStartMs, nowMs = Date.now(), minGa
     return Math.min(delayMs, Math.max(minGapMs, remainingMs));
 };
 
-module.exports = { getRandomCheckFrequencyMs, anchoredWaitMs, DEFAULT_MINUTES, MS_PER_MINUTE, MIN_CYCLE_GAP_MS };
+module.exports = {
+    getRandomCheckFrequencyMs,
+    anchoredWaitMs,
+    DEFAULT_MINUTES,
+    MS_PER_MINUTE,
+    MIN_CYCLE_GAP_MS,
+    OFFLINE_RETRY_MS,
+};

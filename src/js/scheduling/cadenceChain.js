@@ -16,7 +16,7 @@
  * and imported by the esbuild-bundled renderer.
  */
 
-const { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS } = require('./randomDelay');
+const { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } = require('./randomDelay');
 const { computeNextCycleDelayMs } = require('./thresholdWindow');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 
@@ -57,6 +57,11 @@ const OVERSLEEP_ABSOLUTE_MS = 60_000;
 const OVERSLEEP_RELATIVE = 0.5;
 const OVERSLEEP_ALWAYS_MS = 5 * 60_000;
 
+// OFFLINE_RETRY_MS (the normal-mode wait ceiling applied while the API is
+// unreachable) is defined in ./randomDelay alongside the other cadence timing
+// constants so the Android headless loop can share it without importing the
+// chain; imported above and re-exported below for callers/tests.
+
 const oversleptBy = (waitMs, actualMs) => {
     const lateMs = actualMs - waitMs;
     if (lateMs <= OVERSLEEP_ABSOLUTE_MS) return 0;
@@ -95,8 +100,11 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  * @param {()=>(Object|Promise<Object>)} deps.loadSettings - FRESH settings
  *   snapshot; called at the top of every decision (and again for the fallback)
  * @param {(settings:Object)=>(Object|Promise<Object>)} deps.fetchChallenges -
- *   active-challenge fetch (`{challenges}` shape) used only when no prefetched
- *   list was handed over
+ *   active-challenge fetch (`{challenges, fetchFailed?}` shape) used only when
+ *   no prefetched list was handed over. `fetchFailed === true` (an outage:
+ *   makePostRequest resolved null after retries) shortens the next normal-mode
+ *   wait to OFFLINE_RETRY_MS so the loop re-probes soon after reconnection
+ *   rather than waiting out the full cadence
  * @param {()=>(number|string|Promise<number|string>)} deps.resolveLastMinuteCheckMinutes -
  *   raw global `lastMinuteCheckFrequency` value (coerced + defaulted here)
  * @param {import('./thresholdWindow').ResolveThreshold} deps.resolveThreshold -
@@ -163,9 +171,21 @@ const createCadenceChain = ({
         try {
             const settings = await loadSettings();
             const normalDelayMs = getRandomCheckFrequencyMs(settings);
-            const challenges = Array.isArray(prefetched)
-                ? prefetched
-                : (await fetchChallenges(settings))?.challenges || [];
+            // When no list was handed over we fetch fresh — and keep the
+            // fetchFailed flag, not just the list. An outage resolves to
+            // `{ challenges: [], fetchFailed: true }`, and that empty list would
+            // otherwise decide a full normal-cadence wait indistinguishable from
+            // "nothing to vote on". The flag lets the normal branch below shorten
+            // the wait so the loop re-probes soon after connectivity returns.
+            let fetchFailedNow = false;
+            let challenges;
+            if (Array.isArray(prefetched)) {
+                challenges = prefetched;
+            } else {
+                const fetched = await fetchChallenges(settings);
+                challenges = fetched?.challenges || [];
+                fetchFailedNow = fetched?.fetchFailed === true;
+            }
             const now = Math.floor(Date.now() / 1000);
             const lastMinuteCheckMinutes = Number(await resolveLastMinuteCheckMinutes()) || 1;
 
@@ -181,6 +201,14 @@ const createCadenceChain = ({
 
             if (decision.mode === 'normal') {
                 waitMs = anchoredWaitMs(decision.delayMs, previousCycleStartMs);
+                // API still down (this re-arm's own fetch failed): cap the wait
+                // to a short retry so recovery tracks reconnection, not the full
+                // (possibly very long) normal cadence. Only reachable in normal
+                // mode — a failed fetch yields an empty list, and an empty list
+                // never has a threshold/scheduled window to approach.
+                if (fetchFailedNow) {
+                    waitMs = Math.min(waitMs, OFFLINE_RETRY_MS);
+                }
                 await log.cadence(
                     'normal',
                     `Next cycle in ${(waitMs / 60_000).toFixed(2)} min (target ${(decision.delayMs / 60_000).toFixed(2)} min between starts, range ${settings.checkFrequencyMin}-${settings.checkFrequencyMax})`,
@@ -273,4 +301,5 @@ module.exports = {
     oversleptBy,
     OVERSLEEP_ABSOLUTE_MS,
     OVERSLEEP_ALWAYS_MS,
+    OFFLINE_RETRY_MS,
 };

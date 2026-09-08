@@ -14,9 +14,10 @@ jest.mock('../../src/js/settings', () => ({
 
 const apiFactory = require('../../src/js/apiFactory');
 const settings = require('../../src/js/settings');
+const { OFFLINE_RETRY_MS } = require('../../src/js/scheduling/randomDelay');
 
 // Requiring the entry installs globalThis.GS.
-require('../../src/js/headless/index');
+const { computeNextDelayMs } = require('../../src/js/headless/index');
 
 describe('headless runOneCycle', () => {
     let onCycleComplete;
@@ -186,5 +187,53 @@ describe('headless runOneCycle', () => {
 
         expect(getActiveChallenges).toHaveBeenCalledWith('tok');
         expect(lastPayload().nextDelayMs).toBe(60000);
+    });
+
+    // Network-outage recovery: on Android the headless loop schedules its own
+    // AlarmManager ticks and does NOT use the cadence chain, so it carries its
+    // own copy of the offline-retry cap. Without it a reconnection mid-cadence
+    // leaves the service idle-but-online for the full (user-settable, unbounded)
+    // interval — the Android analogue of the GUI badge stuck on 'Error'.
+    describe('offline-retry cap on fetchFailed', () => {
+        test('a failed cycle re-fetches, sees fetchFailed, and caps the next delay', async () => {
+            // The vote step failed (outage) → the cycle returns success:false with
+            // an empty list. runOneCycle must NOT reuse that []; it passes null so
+            // computeNextDelayMs re-fetches, and the re-fetch is still down
+            // (fetchFailed:true) → normal-mode wait capped to the offline retry.
+            const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: false, challenges: [] });
+            const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [], fetchFailed: true });
+            apiFactory.getApiStrategy.mockReturnValue({ fetchChallengesAndVote, getActiveChallenges });
+
+            await globalThis.GS.runOneCycle();
+
+            // Fresh fetch happened (the [] was not reused as prefetched)...
+            expect(getActiveChallenges).toHaveBeenCalledWith('tok');
+            const payload = lastPayload();
+            expect(payload.ok).toBe(false);
+            // ...and the 2-min normal random delay was capped to the 30s retry.
+            expect(payload.nextDelayMs).toBe(OFFLINE_RETRY_MS);
+        });
+
+        test('computeNextDelayMs caps a fresh-fetch outage to OFFLINE_RETRY_MS', async () => {
+            const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [], fetchFailed: true });
+            apiFactory.getApiStrategy.mockReturnValue({ getActiveChallenges });
+
+            // Non-array prefetched → fresh fetch → fetchFailed → capped.
+            const delay = await computeNextDelayMs('tok', null);
+
+            expect(delay).toBe(OFFLINE_RETRY_MS);
+        });
+
+        test('a successful re-fetch with an empty list is NOT capped (only outages retry fast)', async () => {
+            // Same empty list, but the account genuinely has no active challenges
+            // (fetchFailed falsy). The normal 2-min random cadence must stand — a
+            // short retry loop against an idle-but-reachable API would be wrong.
+            const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [], fetchFailed: false });
+            apiFactory.getApiStrategy.mockReturnValue({ getActiveChallenges });
+
+            const delay = await computeNextDelayMs('tok', null);
+
+            expect(delay).toBe(120_000); // checkFrequencyMin=max=2 → 2 min, uncapped
+        });
     });
 });

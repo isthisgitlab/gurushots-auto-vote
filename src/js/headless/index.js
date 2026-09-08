@@ -21,7 +21,7 @@
 const settings = require('../settings');
 const apiFactory = require('../apiFactory');
 const logger = require('../logger');
-const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS } = require('../scheduling/randomDelay');
+const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } = require('../scheduling/randomDelay');
 const { computeNextCycleDelayMs } = require('../scheduling/thresholdWindow');
 const { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp } = require('../scheduling/nodeResolvers');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
@@ -37,17 +37,28 @@ const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}
  *
  * `prefetched` reuses the challenge list runOneCycle's fetchChallengesAndVote
  * already fetched, avoiding a duplicate getActiveChallenges request. A non-array
- * (e.g. the vote step threw before fetching) falls back to a fresh fetch.
+ * (e.g. the vote step threw before fetching, or the cycle failed) falls back to
+ * a fresh fetch — and that fresh fetch keeps the fetchFailed flag, not just the
+ * list, so a persistent outage caps the wait to a short retry instead of the
+ * full (possibly very long) normal cadence. This mirrors the cadence chain's
+ * offline-retry cap; the headless loop schedules its own AlarmManager ticks but
+ * must recover on the same beat.
  */
 const computeNextDelayMs = async (token, prefetched = null) => {
     const userSettings = settings.loadSettings();
     try {
-        const list = Array.isArray(prefetched)
-            ? prefetched
-            : (await apiFactory.getApiStrategy().getActiveChallenges(token))?.challenges || [];
+        let list;
+        let fetchFailedNow = false;
+        if (Array.isArray(prefetched)) {
+            list = prefetched;
+        } else {
+            const fetched = await apiFactory.getApiStrategy().getActiveChallenges(token);
+            list = fetched?.challenges || [];
+            fetchFailedNow = fetched?.fetchFailed === true;
+        }
         const now = Math.floor(Date.now() / 1000);
         const lastMinuteCheckMinutes = Number(settings.getEffectiveSetting('lastMinuteCheckFrequency', 'global')) || 1;
-        const { delayMs } = await computeNextCycleDelayMs(list, now, {
+        const { delayMs, mode } = await computeNextCycleDelayMs(list, now, {
             resolveThreshold,
             normalDelayMs: getRandomCheckFrequencyMs(userSettings),
             lastMinuteCheckMinutes,
@@ -56,6 +67,13 @@ const computeNextDelayMs = async (token, prefetched = null) => {
             timezone: userSettings.timezone || DEFAULT_TIMEZONE,
             resolveFinalWindowTopUp,
         });
+        // API still down (this tick's own fetch failed): cap the wait to a short
+        // retry so recovery tracks reconnection, not the full normal cadence.
+        // Only reachable in normal mode — a failed fetch yields an empty list,
+        // and an empty list never has a threshold/scheduled window to approach.
+        if (fetchFailedNow && mode === 'normal') {
+            return Math.min(delayMs, OFFLINE_RETRY_MS);
+        }
         return delayMs;
     } catch (err) {
         log('next-delay computation failed; using normal cadence', err?.message ?? String(err));
@@ -88,7 +106,12 @@ const runOneCycle = async () => {
         log('cycle starting');
         const result = await apiFactory.getApiStrategy().fetchChallengesAndVote(token);
         const ok = result ? result.success !== false : false;
-        const nextDelayMs = await computeNextDelayMs(token, result?.challenges);
+        // Only reuse the cycle's list when it succeeded. On an outage the
+        // orchestrator returns `{ success: false, challenges: [] }`, and that
+        // empty list would look like "nothing to vote on" to computeNextDelayMs
+        // and arm a full normal-cadence wait; passing null instead forces a
+        // fresh fetch there, which detects fetchFailed and caps the retry.
+        const nextDelayMs = await computeNextDelayMs(token, ok ? result?.challenges : null);
         log('cycle complete', { ok, nextDelayMs });
         reportComplete({ ok, message: (result && (result.message || result.error)) || null, nextDelayMs });
     } catch (err) {

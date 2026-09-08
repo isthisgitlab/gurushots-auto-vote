@@ -64,10 +64,17 @@ const runVotingCycle = async (cycleNumber = 1, { isManual = false, challengeId =
             await getMiddleware().cliVoteManual();
         } else {
             const result = await getMiddleware().cliVote(challengeId);
-            challenges = Array.isArray(result?.challenges) ? result.challenges : null;
             // Reflect the strategy's real outcome rather than always reporting
             // success on the non-throw path.
             success = result?.success !== false;
+            // Only hand the list back as prefetched when the cycle succeeded.
+            // An outage resolves to `{ success: false, challenges: [] }`, and
+            // that empty list is indistinguishable from "nothing to vote on"
+            // once it reaches the scheduler — it would arm a full normal-cadence
+            // wait instead of the short offline-retry cap. Gating on success
+            // (mirroring the GUI's AutovoteContext wrapper) makes a failed cycle
+            // return null, so the scheduler re-fetches and detects fetchFailed.
+            challenges = success && Array.isArray(result?.challenges) ? result.challenges : null;
         }
         logger.withCategory('voting').endOperation(opId, `${label} cycle ${cycleNumber} completed`);
 
