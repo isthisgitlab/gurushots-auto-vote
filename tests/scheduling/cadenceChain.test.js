@@ -10,7 +10,7 @@
  * are asserted here once, against the factory itself.
  */
 
-const { createCadenceChain, DECISION_ERROR_MESSAGE } = require('../../src/js/scheduling/cadenceChain');
+const { createCadenceChain, DECISION_ERROR_MESSAGE, OFFLINE_RETRY_MS } = require('../../src/js/scheduling/cadenceChain');
 const { MS_PER_MINUTE, MIN_CYCLE_GAP_MS } = require('../../src/js/scheduling/randomDelay');
 
 const FIXED_DELAY_MIN = 3;
@@ -183,6 +183,53 @@ describe('createCadenceChain', () => {
         await flushMicrotasks();
         expect(deps.runCycle).not.toHaveBeenCalled();
         await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+    });
+
+    test('normal mode caps the wait to OFFLINE_RETRY_MS when the re-arm fetch reports an outage', async () => {
+        // The API is unreachable: the chain's own re-arm fetch returns an empty
+        // list flagged fetchFailed. Recovery to a healthy badge is gated on the
+        // NEXT successful cycle, so the wait must track reconnection (~30s), not
+        // the user's full checkFrequencyMax cadence — otherwise a reconnect can
+        // sit under an 'Error' badge for a whole cadence interval.
+        const deps = makeDeps({
+            fetchChallenges: jest.fn(async () => ({ challenges: [], fetchFailed: true })),
+        });
+        const chain = createCadenceChain(deps);
+
+        // Non-array hand-over → the chain fetches for itself and sees the outage.
+        // Previous start is "now", so an uncapped normal wait would be the full
+        // 3-min cadence; the cap must shorten it to 30s.
+        await chain.scheduleNext(false, Date.now());
+
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS - 1);
+        await flushMicrotasks();
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+
+        // Sanity: the cap is well inside the untouched normal cadence.
+        expect(OFFLINE_RETRY_MS).toBeLessThan(FIXED_DELAY_MS);
+    });
+
+    test('normal mode keeps the full cadence when the re-arm fetch succeeds (online)', async () => {
+        // Regression guard: fetchFailed absent → the offline cap must NOT apply,
+        // so a healthy connection still waits the user's full cadence.
+        const deps = makeDeps({
+            fetchChallenges: jest.fn(async () => ({ challenges: [farChallenge()] })),
+        });
+        const chain = createCadenceChain(deps);
+
+        await chain.scheduleNext(false, Date.now());
+
+        // Still armed past the 30s offline cap...
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        // ...only fires at the full 3-min normal cadence.
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS - OFFLINE_RETRY_MS);
         await flushMicrotasks();
         expect(deps.runCycle).toHaveBeenCalledTimes(1);
     });

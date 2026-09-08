@@ -57,6 +57,25 @@ const OVERSLEEP_ABSOLUTE_MS = 60_000;
 const OVERSLEEP_RELATIVE = 0.5;
 const OVERSLEEP_ALWAYS_MS = 5 * 60_000;
 
+/**
+ * Normal-mode wait ceiling applied while the API is unreachable — i.e. when the
+ * re-arm's own challenge fetch returned `fetchFailed` (makePostRequest resolved
+ * null after exhausting retries, typically a network outage).
+ *
+ * Without this cap the loop re-arms at the full normal cadence
+ * (`checkFrequencyMin/Max`, user-settable with no upper bound) after every
+ * failed cycle. Recovery — resuming voting AND, on the GUI, flipping the status
+ * badge off 'Error' via the next successful cycle's CLEAR_ERROR — is then gated
+ * on that full interval: reconnect at second 5 of a 30-minute cadence and the
+ * app sits idle-but-online, badge stuck on 'Error', for ~30 minutes. Capping
+ * the wait to a short retry while offline makes the next cycle re-probe within
+ * seconds of connectivity returning, so recovery tracks the reconnection rather
+ * than the cadence. Comfortably above MIN_CYCLE_GAP_MS so a persistent outage
+ * re-probes on a calm 30s beat, not a tight loop; the per-fetch retry/backoff
+ * inside makePostRequest adds its own spacing on top.
+ */
+const OFFLINE_RETRY_MS = 30_000;
+
 const oversleptBy = (waitMs, actualMs) => {
     const lateMs = actualMs - waitMs;
     if (lateMs <= OVERSLEEP_ABSOLUTE_MS) return 0;
@@ -163,9 +182,21 @@ const createCadenceChain = ({
         try {
             const settings = await loadSettings();
             const normalDelayMs = getRandomCheckFrequencyMs(settings);
-            const challenges = Array.isArray(prefetched)
-                ? prefetched
-                : (await fetchChallenges(settings))?.challenges || [];
+            // When no list was handed over we fetch fresh — and keep the
+            // fetchFailed flag, not just the list. An outage resolves to
+            // `{ challenges: [], fetchFailed: true }`, and that empty list would
+            // otherwise decide a full normal-cadence wait indistinguishable from
+            // "nothing to vote on". The flag lets the normal branch below shorten
+            // the wait so the loop re-probes soon after connectivity returns.
+            let fetchFailedNow = false;
+            let challenges;
+            if (Array.isArray(prefetched)) {
+                challenges = prefetched;
+            } else {
+                const fetched = await fetchChallenges(settings);
+                challenges = fetched?.challenges || [];
+                fetchFailedNow = fetched?.fetchFailed === true;
+            }
             const now = Math.floor(Date.now() / 1000);
             const lastMinuteCheckMinutes = Number(await resolveLastMinuteCheckMinutes()) || 1;
 
@@ -181,6 +212,14 @@ const createCadenceChain = ({
 
             if (decision.mode === 'normal') {
                 waitMs = anchoredWaitMs(decision.delayMs, previousCycleStartMs);
+                // API still down (this re-arm's own fetch failed): cap the wait
+                // to a short retry so recovery tracks reconnection, not the full
+                // (possibly very long) normal cadence. Only reachable in normal
+                // mode — a failed fetch yields an empty list, and an empty list
+                // never has a threshold/scheduled window to approach.
+                if (fetchFailedNow) {
+                    waitMs = Math.min(waitMs, OFFLINE_RETRY_MS);
+                }
                 await log.cadence(
                     'normal',
                     `Next cycle in ${(waitMs / 60_000).toFixed(2)} min (target ${(decision.delayMs / 60_000).toFixed(2)} min between starts, range ${settings.checkFrequencyMin}-${settings.checkFrequencyMax})`,
@@ -273,4 +312,5 @@ module.exports = {
     oversleptBy,
     OVERSLEEP_ABSOLUTE_MS,
     OVERSLEEP_ALWAYS_MS,
+    OFFLINE_RETRY_MS,
 };
