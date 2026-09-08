@@ -37,11 +37,15 @@ jest.mock('../../src/js/apiFactory', () => {
     const getActiveChallenges = jest.fn();
     const isAuthenticated = jest.fn(() => true);
     const applyBoost = jest.fn();
+    const cliVote = jest.fn();
+    const cliVoteManual = jest.fn();
     return {
         __getActiveChallenges: getActiveChallenges,
         __isAuthenticated: isAuthenticated,
         __applyBoost: applyBoost,
-        getMiddleware: jest.fn(() => ({ isAuthenticated, getActiveChallenges, applyBoost })),
+        __cliVote: cliVote,
+        __cliVoteManual: cliVoteManual,
+        getMiddleware: jest.fn(() => ({ isAuthenticated, getActiveChallenges, applyBoost, cliVote, cliVoteManual })),
         getApiStrategy: jest.fn(),
         refreshApi: jest.fn(),
     };
@@ -82,7 +86,7 @@ const votingHandlers = require('../../src/js/ipc/voting.handlers').__handlers;
 const updateChecker = require('../../src/js/services/UpdateChecker');
 
 const { boostChallenge, turboChallenge, fillChallenge } = require('../../src/js/cli/commands/actions');
-const { voteChallengeManual } = require('../../src/js/cli/commands/voting');
+const { voteChallengeManual, runVotingCycle } = require('../../src/js/cli/commands/voting');
 const { handleLogout } = require('../../src/js/cli/commands/auth');
 const { checkUpdates } = require('../../src/js/cli/commands/update');
 
@@ -253,6 +257,58 @@ describe('CLI vote --challenge (single-challenge manual)', () => {
         expect(votingHandlers['vote-on-challenge-manual']).not.toHaveBeenCalled();
         expect(result.success).toBe(false);
         expect(contains(allMsgs(), 'Run: login')).toBe(true);
+    });
+});
+
+describe('CLI runVotingCycle — challenges gated on success', () => {
+    // The scheduler reuses the returned `challenges` as the next cycle's
+    // prefetched list. On an outage the orchestrator resolves to
+    // `{ success: false, challenges: [] }`; that empty list must NOT be handed
+    // back as prefetched — it would look like "nothing to vote on" and arm a
+    // full normal-cadence wait instead of the short offline-retry cap. Gating
+    // on success (mirroring the GUI's AutovoteContext wrapper) returns null so
+    // the scheduler re-fetches and detects fetchFailed. This is the CLI half of
+    // the network-outage badge/recovery fix.
+    test('a failed strategy cycle returns challenges: null even when the list is []', async () => {
+        apiFactory.__cliVote.mockResolvedValue({ success: false, error: 'offline', challenges: [] });
+
+        const result = await runVotingCycle(1);
+
+        expect(result).toEqual({ success: false, challenges: null });
+    });
+
+    test('a failed strategy cycle returns challenges: null even with a non-empty list', async () => {
+        apiFactory.__cliVote.mockResolvedValue({ success: false, challenges: [{ id: 1 }] });
+
+        const result = await runVotingCycle(1);
+
+        expect(result).toEqual({ success: false, challenges: null });
+    });
+
+    test('a successful strategy cycle hands its fetched list back as prefetched', async () => {
+        const challenges = [{ id: 111, title: 'Sunset' }];
+        apiFactory.__cliVote.mockResolvedValue({ success: true, challenges });
+
+        const result = await runVotingCycle(1);
+
+        expect(result).toEqual({ success: true, challenges });
+    });
+
+    test('a successful cycle with a non-array list still yields null (nothing to reuse)', async () => {
+        apiFactory.__cliVote.mockResolvedValue({ success: true });
+
+        const result = await runVotingCycle(1);
+
+        expect(result).toEqual({ success: true, challenges: null });
+    });
+
+    test('not authenticated: returns failure with a null list, never calls the strategy', async () => {
+        apiFactory.__isAuthenticated.mockReturnValue(false);
+
+        const result = await runVotingCycle(1);
+
+        expect(apiFactory.__cliVote).not.toHaveBeenCalled();
+        expect(result).toEqual({ success: false, challenges: null });
     });
 });
 

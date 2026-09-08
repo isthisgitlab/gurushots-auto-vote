@@ -234,6 +234,43 @@ describe('createCadenceChain', () => {
         expect(deps.runCycle).toHaveBeenCalledTimes(1);
     });
 
+    test('a persistent outage re-caps every consecutive re-arm, then releases on reconnect', async () => {
+        // The cap must apply to EACH re-arm's own fetch, not just the first —
+        // otherwise a multi-cycle outage recovers on only the first tick and then
+        // falls back to the full cadence while still offline. runCycle returns a
+        // non-array (the default), so every re-arm re-fetches for itself. The
+        // fetcher reports the outage for the first two fetches, then reconnects.
+        let fetchCalls = 0;
+        const deps = makeDeps({
+            fetchChallenges: jest.fn(async () => {
+                fetchCalls += 1;
+                return fetchCalls <= 2 ? { challenges: [], fetchFailed: true } : { challenges: [farChallenge()] };
+            }),
+        });
+        const chain = createCadenceChain(deps);
+
+        // Initial arm: fetch #1 → outage → capped to 30s → cycle 1 fires at 30s.
+        await chain.scheduleNext(false, Date.now());
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+
+        // Re-arm after cycle 1: fetch #2 → still down → capped again → cycle 2 at +30s.
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(2);
+
+        // Re-arm after cycle 2: fetch #3 → reconnected → the cap is released, so
+        // another 30s is NOT enough to fire...
+        await jest.advanceTimersByTimeAsync(OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(2);
+        // ...only the full 3-min cadence fires cycle 3.
+        await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS - OFFLINE_RETRY_MS);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(3);
+    });
+
     test('threshold mode uses decision.delayMs raw — no anchoring to the previous start', async () => {
         const deps = makeDeps({ resolveLastMinuteCheckMinutes: jest.fn(() => 2) });
         const chain = createCadenceChain(deps);

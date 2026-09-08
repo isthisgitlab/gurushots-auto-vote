@@ -16,7 +16,7 @@
  * and imported by the esbuild-bundled renderer.
  */
 
-const { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS } = require('./randomDelay');
+const { getRandomCheckFrequencyMs, anchoredWaitMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } = require('./randomDelay');
 const { computeNextCycleDelayMs } = require('./thresholdWindow');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 
@@ -57,24 +57,10 @@ const OVERSLEEP_ABSOLUTE_MS = 60_000;
 const OVERSLEEP_RELATIVE = 0.5;
 const OVERSLEEP_ALWAYS_MS = 5 * 60_000;
 
-/**
- * Normal-mode wait ceiling applied while the API is unreachable — i.e. when the
- * re-arm's own challenge fetch returned `fetchFailed` (makePostRequest resolved
- * null after exhausting retries, typically a network outage).
- *
- * Without this cap the loop re-arms at the full normal cadence
- * (`checkFrequencyMin/Max`, user-settable with no upper bound) after every
- * failed cycle. Recovery — resuming voting AND, on the GUI, flipping the status
- * badge off 'Error' via the next successful cycle's CLEAR_ERROR — is then gated
- * on that full interval: reconnect at second 5 of a 30-minute cadence and the
- * app sits idle-but-online, badge stuck on 'Error', for ~30 minutes. Capping
- * the wait to a short retry while offline makes the next cycle re-probe within
- * seconds of connectivity returning, so recovery tracks the reconnection rather
- * than the cadence. Comfortably above MIN_CYCLE_GAP_MS so a persistent outage
- * re-probes on a calm 30s beat, not a tight loop; the per-fetch retry/backoff
- * inside makePostRequest adds its own spacing on top.
- */
-const OFFLINE_RETRY_MS = 30_000;
+// OFFLINE_RETRY_MS (the normal-mode wait ceiling applied while the API is
+// unreachable) is defined in ./randomDelay alongside the other cadence timing
+// constants so the Android headless loop can share it without importing the
+// chain; imported above and re-exported below for callers/tests.
 
 const oversleptBy = (waitMs, actualMs) => {
     const lateMs = actualMs - waitMs;
@@ -114,8 +100,11 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  * @param {()=>(Object|Promise<Object>)} deps.loadSettings - FRESH settings
  *   snapshot; called at the top of every decision (and again for the fallback)
  * @param {(settings:Object)=>(Object|Promise<Object>)} deps.fetchChallenges -
- *   active-challenge fetch (`{challenges}` shape) used only when no prefetched
- *   list was handed over
+ *   active-challenge fetch (`{challenges, fetchFailed?}` shape) used only when
+ *   no prefetched list was handed over. `fetchFailed === true` (an outage:
+ *   makePostRequest resolved null after retries) shortens the next normal-mode
+ *   wait to OFFLINE_RETRY_MS so the loop re-probes soon after reconnection
+ *   rather than waiting out the full cadence
  * @param {()=>(number|string|Promise<number|string>)} deps.resolveLastMinuteCheckMinutes -
  *   raw global `lastMinuteCheckFrequency` value (coerced + defaulted here)
  * @param {import('./thresholdWindow').ResolveThreshold} deps.resolveThreshold -
