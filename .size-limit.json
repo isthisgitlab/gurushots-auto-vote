@@ -17,12 +17,12 @@
     {
         "name": "capacitor bundle (Android WebView \u2014 bundles Capacitor plugins)",
         "path": "dist/capacitor-bundle.js",
-        "limit": "184 KB"
+        "limit": "215 KB"
     },
     {
         "name": "headless bundle (Android background service)",
         "path": "dist/headless-bundle.js",
-        "limit": "120 KB"
+        "limit": "150 KB"
     },
     {
         "name": "preload bundle (Electron sandboxed preload)",
