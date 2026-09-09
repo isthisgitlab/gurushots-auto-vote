@@ -93,6 +93,11 @@ const entrySlotIndex = z.number().int().min(0).max(MAX_ENTRY_SLOT);
 // an integer (matching prior behavior); the 59 ceiling keeps both within the hour.
 const minute1to59 = z.number().min(1).max(59);
 
+// Notification lead time (minutes before an action fires that a warning is
+// shown). 1–60; integer minutes are enough resolution for a "don't shut down
+// yet" heads-up.
+const notifyLeadMinutes = z.number().int().min(1).max(60);
+
 // Auto-fill schedule: rows of { count, seconds } meaning "have ≥ count entries
 // once ≤ seconds remain before close". Counts are 2–4: entry 1 always exists
 // (joining a challenge IS submitting a photo — there is no separate join
@@ -787,6 +792,72 @@ const SETTINGS_SCHEMA = {
         description: 'app.shouldIncludeTagsDesc',
     },
 
+    // --- Notifications ---
+    // OS desktop/mobile "action coming up" warnings. All GLOBAL (perChallenge:
+    // false) and default OFF — entirely opt-in. Each toggle gates one deadline
+    // action type; notifyLeadTime is how far ahead the warning fires. The
+    // decision + delivery live in services/deadlineNotifications.js + the
+    // per-host notify adapters. Only the enabled types are ever evaluated, so
+    // an all-off config (the default) costs nothing per cycle.
+    notifyOnBoost: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'notifications',
+        label: 'app.notifyOnBoost',
+        description: 'app.notifyOnBoostDesc',
+    },
+    notifyOnTurbo: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'notifications',
+        label: 'app.notifyOnTurbo',
+        description: 'app.notifyOnTurboDesc',
+    },
+    notifyOnAutoFill: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'notifications',
+        label: 'app.notifyOnAutoFill',
+        description: 'app.notifyOnAutoFillDesc',
+    },
+    notifyOnEmergencyFill: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'notifications',
+        label: 'app.notifyOnEmergencyFill',
+        description: 'app.notifyOnEmergencyFillDesc',
+    },
+    notifyLeadTime: {
+        type: 'number',
+        default: 5,
+        perChallenge: false,
+        validation: notifyLeadMinutes,
+        min: 1,
+        max: 60,
+        unit: 'app.unitMinutes',
+        validationOrder: 1,
+        group: 'notifications',
+        label: 'app.notifyLeadTime',
+        description: 'app.notifyLeadTimeDesc',
+        // Best-effort caveat: the app can only warn on a cycle it actually
+        // runs, so a lead longer than the check cadence near a deadline may
+        // arrive with little real lead. Surfaced so the setting can't silently
+        // over-promise (see docs / plan honest-limitation).
+        helpKey: 'app.notifyLeadTimeHelp',
+    },
+
     // --- Internal (no UI group; never rendered in a settings section) ---
     // Persisted autovote-running flag. Written on Start / Stop so a
     // relaunch of the app (Capacitor WebView destroyed + recreated,
@@ -831,6 +902,7 @@ const SETTINGS_GROUPS = [
     { id: 'lastMinute', label: 'app.groupLastMinute' },
     { id: 'scheduledFill', label: 'app.groupScheduledFill' },
     { id: 'autoFill', label: 'app.groupAutoFill' },
+    { id: 'notifications', label: 'app.groupNotifications' },
 ];
 
 /**

@@ -58,4 +58,24 @@ describe('groupSchemaEntries', () => {
         expect(groupSchemaEntries(schema, null)).toEqual([]);
         expect(groupSchemaEntries(undefined, undefined)).toEqual([]);
     });
+
+    // An ENTIRELY-global group (every entry perChallenge:false) — the shape of
+    // the new `notifications` group. It must render in the global modal (no
+    // filter) and vanish completely from the per-challenge modal, rather than
+    // rendering an empty section header there.
+    test('an all-global group renders globally and is dropped under perChallengeOnly', () => {
+        const groupsWithNotif = [...groups, { id: 'notifications', label: 'app.groupNotifications' }];
+        const schemaWithNotif = {
+            ...schema,
+            notifyOnBoost: { perChallenge: false, group: 'notifications' },
+            notifyLeadTime: { perChallenge: false, group: 'notifications' },
+        };
+
+        const global = groupSchemaEntries(schemaWithNotif, groupsWithNotif);
+        const notif = global.find((s) => s.id === 'notifications');
+        expect(keysOf(notif)).toEqual(['notifyOnBoost', 'notifyLeadTime']);
+
+        const perChallenge = groupSchemaEntries(schemaWithNotif, groupsWithNotif, { perChallengeOnly: true });
+        expect(perChallenge.some((s) => s.id === 'notifications')).toBe(false);
+    });
 });

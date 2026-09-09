@@ -75,6 +75,36 @@ export default [
         },
         rules: {
             'no-undef': 'off', // Disable no-undef for browser globals
+            // Renderer-bundle boundary. The React tree must never import
+            // Node-only, process-spawning code: node-notifier's replacement
+            // (services/notify/nodeNotify.js) requires node:child_process, and
+            // bundling it here would ship a shell-spawning path into the
+            // WebView/Electron renderer — a severe process-isolation regression.
+            // Renderer notifications go through react/notifications/
+            // deadlineNotifier.js only. The size budget is a late backstop; this
+            // is the direct guard.
+            'no-restricted-imports': [
+                'error',
+                {
+                    paths: [
+                        {
+                            name: 'child_process',
+                            message: 'The renderer must not spawn processes; use the renderer notifier instead.',
+                        },
+                        {
+                            name: 'node:child_process',
+                            message: 'The renderer must not spawn processes; use the renderer notifier instead.',
+                        },
+                    ],
+                    patterns: [
+                        {
+                            group: ['**/services/notify/nodeNotify', '**/services/notify/nodeNotify.js'],
+                            message:
+                                'nodeNotify is a Node-only (child_process) delivery module — never import it into the renderer bundle.',
+                        },
+                    ],
+                },
+            ],
         },
     },
     // Jest test files. `pnpm lint` only scans src/ + scripts/, but the lefthook

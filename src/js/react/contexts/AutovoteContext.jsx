@@ -4,6 +4,7 @@ import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
 import { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp } from './autovoteScheduler';
+import { createDeadlineNotifier, resolveRendererDelivery } from '../notifications/deadlineNotifier';
 
 const AutovoteContext = createContext(null);
 
@@ -20,6 +21,28 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     // via the shared computeNextCycleDelayMs, so there is no separate fast-mode
     // interval or boundary-switch timer to keep in sync.
     const cycleTimerRef = useRef(null);
+
+    // Per-cycle OS deadline-notifier. Created ONCE (a fresh instance each render
+    // would never dedupe): it holds the fired-key Set + re-entrancy guard across
+    // cycles. `undefined` = not yet initialized; the stored value is the notifier
+    // on Electron or `null` on native Android, where the native foreground
+    // service is authoritative — so the notifier is NOT wired there at all (that
+    // both avoids a dual-loop double-fire and the per-cycle IPC that would only
+    // be discarded). See deadlineNotifier.js header.
+    const notifierRef = useRef(undefined);
+    if (notifierRef.current === undefined) {
+        const isNativePlatform = globalThis.Capacitor?.isNativePlatform?.() === true;
+        const deliver = resolveRendererDelivery(isNativePlatform);
+        notifierRef.current = deliver
+            ? createDeadlineNotifier({
+                  getSettings: () => window.api.getSettings(),
+                  getDeadlineActions: (challenge) => window.api.getDeadlineActions(challenge),
+                  translate: (key) => globalThis.translationManager?.t?.(key) ?? key,
+                  deliver,
+                  log: (msg) => window.api.logDebug?.(msg),
+              })
+            : null;
+    }
 
     // Keep runningRef in sync with state. Publishing through a window
     // CustomEvent lets the ancestor tree (AppWithChallenges, which feeds
@@ -153,6 +176,12 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                         type: ACTIONS.SET_NEXT_RUN,
                         payload: typeof waitMs === 'number' ? Date.now() + waitMs : null,
                     }),
+                // Best-effort per-cycle OS notification for upcoming deadline
+                // actions. Stable instance (see notifierRef) so it dedupes across
+                // cycles; the chain fires it in its own isolated wrapper so a
+                // throw here can never affect scheduling. `undefined` on native
+                // Android (notifier not wired) so the chain skips the hook.
+                onCycleChallenges: notifierRef.current || undefined,
             }),
         [runVotingCycle],
     );

@@ -134,6 +134,14 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  *   null when the chain stops arming. Used by the GUI to surface a live
  *   next-action countdown; Node hosts (CLI/Android) omit it, so it is
  *   optional-chained and never required.
+ * @param {(challenges:Array, now:number)=>(void|Promise<void>)} [deps.onCycleChallenges] -
+ *   OPTIONAL: called once per cycle with the freshly-resolved active-challenge
+ *   list and the cycle's `now` (Unix seconds), for hosts that want to react to
+ *   the list without re-fetching (the OS deadline-notification layer). Invoked
+ *   in its OWN isolated, never-awaited wrapper OUTSIDE the decision try/catch —
+ *   a throw here must never reach the decision `catch`, whose fallback would
+ *   discard the boundary-aware cadence for the cycle. Hosts that omit it lose
+ *   only the notification opportunity.
  * @returns {{scheduleNext:(prefetched?:*, previousCycleStartMs?:(number|null))=>Promise<void>}}
  */
 const createCadenceChain = ({
@@ -149,6 +157,7 @@ const createCadenceChain = ({
     runCycle,
     log,
     onScheduled,
+    onCycleChallenges,
 }) => {
     // Decide how long to wait before the next cycle and arm the single timer.
     //
@@ -168,6 +177,14 @@ const createCadenceChain = ({
         }
 
         let waitMs;
+        // Captured for the best-effort onCycleChallenges hook, fired AFTER the
+        // decision try/catch so a throw in the notify path can never reach the
+        // decision `catch` (which would degrade the whole cadence to random).
+        // Assigned inside the try once the list resolves, and force-nulled in the
+        // catch so a decision failure (early OR late) always skips the hook — so
+        // both are guaranteed assigned before the guard below reads them.
+        let cycleChallenges;
+        let cycleNow;
         try {
             const settings = await loadSettings();
             const normalDelayMs = getRandomCheckFrequencyMs(settings);
@@ -187,6 +204,9 @@ const createCadenceChain = ({
                 fetchFailedNow = fetched?.fetchFailed === true;
             }
             const now = Math.floor(Date.now() / 1000);
+            // Snapshot for the post-decision notification hook (see below).
+            cycleChallenges = challenges;
+            cycleNow = now;
             const lastMinuteCheckMinutes = Number(await resolveLastMinuteCheckMinutes()) || 1;
 
             const decision = await computeNextCycleDelayMs(challenges, now, {
@@ -230,6 +250,14 @@ const createCadenceChain = ({
         } catch (error) {
             // An error deciding the delay must never kill the loop — fall back
             // to a plain random cadence; the next cycle re-reads on success.
+            // Also drop any captured challenge snapshot: a throw AFTER the list
+            // was resolved (e.g. in resolveLastMinuteCheckMinutes or
+            // computeNextCycleDelayMs) still lands here, and the notification
+            // hook must be skipped on EVERY decision failure — not just an early
+            // fetch/settings throw — so the "skipped on the catch path" invariant
+            // below holds generally.
+            cycleChallenges = null;
+            cycleNow = null;
             await log.decisionError(error);
             try {
                 waitMs = getRandomCheckFrequencyMs(await loadSettings());
@@ -247,6 +275,20 @@ const createCadenceChain = ({
         // Surface the delay to hosts that want a live next-action countdown
         // (GUI only). Optional-chained: Node hosts pass no onScheduled.
         onScheduled?.(waitMs);
+
+        // Best-effort per-cycle notification hook. Deliberately OUTSIDE the
+        // decision try/catch and never awaited: this is the exact posture of
+        // log.overslept below — a synchronous throw or an async rejection here
+        // is swallowed so it can neither kill the loop nor trip the decision
+        // fallback that would discard the boundary-aware cadence. Skipped when
+        // the decision failed (cycleChallenges left null on the catch path).
+        if (cycleChallenges && onCycleChallenges) {
+            try {
+                void Promise.resolve(onCycleChallenges(cycleChallenges, cycleNow)).catch(() => {});
+            } catch {
+                /* observability only — must never affect scheduling */
+            }
+        }
 
         const armedAtMs = Date.now();
         const timeoutId = setTimeout(() => {

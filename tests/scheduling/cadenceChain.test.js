@@ -10,7 +10,11 @@
  * are asserted here once, against the factory itself.
  */
 
-const { createCadenceChain, DECISION_ERROR_MESSAGE, OFFLINE_RETRY_MS } = require('../../src/js/scheduling/cadenceChain');
+const {
+    createCadenceChain,
+    DECISION_ERROR_MESSAGE,
+    OFFLINE_RETRY_MS,
+} = require('../../src/js/scheduling/cadenceChain');
 const { MS_PER_MINUTE, MIN_CYCLE_GAP_MS } = require('../../src/js/scheduling/randomDelay');
 
 const FIXED_DELAY_MIN = 3;
@@ -554,6 +558,115 @@ describe('createCadenceChain', () => {
             await flushMicrotasks();
 
             expect(deps.runCycle).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    // The optional onCycleChallenges hook — the OS deadline-notification layer's
+    // per-cycle entry point. It lives OUTSIDE the decision try/catch and is never
+    // awaited, so a bug in the (least-tested) notification code can neither kill
+    // the loop nor trip the decision fallback that would discard the
+    // boundary-aware cadence. These are the load-bearing safety guards.
+    describe('onCycleChallenges hook', () => {
+        test('fires once per cycle with the resolved challenge list and now (seconds)', async () => {
+            const onCycleChallenges = jest.fn();
+            const list = [farChallenge()];
+            const deps = makeDeps({ onCycleChallenges });
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext(list);
+
+            expect(onCycleChallenges).toHaveBeenCalledTimes(1);
+            const [challengesArg, nowArg] = onCycleChallenges.mock.calls[0];
+            expect(challengesArg).toBe(list);
+            expect(nowArg).toBe(Math.floor(Date.now() / 1000));
+        });
+
+        test('a synchronously-throwing hook does NOT log a decision error and does NOT degrade the cadence', async () => {
+            // In-window challenge with a 2-min last-minute cadence. If the hook's
+            // throw leaked into the decision catch, the chain would log
+            // decisionError and fall back to the plain random (3-min) cadence,
+            // discarding the fast boundary-aware cadence — the exact regression
+            // this feature must never cause.
+            const deps = makeDeps({
+                resolveLastMinuteCheckMinutes: jest.fn(() => 2),
+                onCycleChallenges: jest.fn(() => {
+                    throw new Error('notify boom');
+                }),
+            });
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([inWindowChallenge()]);
+
+            expect(deps.log.decisionError).not.toHaveBeenCalled();
+            expect(deps.log.cadence).toHaveBeenCalledWith(
+                'last-minute',
+                expect.stringContaining('Last-minute cadence'),
+            );
+
+            // Fires at the 2-min last-minute cadence, not the 3-min fallback.
+            await jest.advanceTimersByTimeAsync(2 * MS_PER_MINUTE - 1);
+            await flushMicrotasks();
+            expect(deps.runCycle).not.toHaveBeenCalled();
+            await jest.advanceTimersByTimeAsync(1);
+            await flushMicrotasks();
+            expect(deps.runCycle).toHaveBeenCalledTimes(1);
+        });
+
+        test('an async-rejecting hook is swallowed — the cycle still arms and runs', async () => {
+            const deps = makeDeps({
+                onCycleChallenges: jest.fn(async () => {
+                    throw new Error('async notify boom');
+                }),
+            });
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+            await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
+            await flushMicrotasks();
+
+            expect(deps.runCycle).toHaveBeenCalledTimes(1);
+        });
+
+        test('skipped on an EARLY decision-failure (settings throw, before the list resolves)', async () => {
+            const onCycleChallenges = jest.fn();
+            const deps = makeDeps({
+                onCycleChallenges,
+                loadSettings: jest.fn(() => {
+                    throw new Error('settings unavailable');
+                }),
+            });
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+
+            expect(deps.log.decisionError).toHaveBeenCalledTimes(1);
+            expect(onCycleChallenges).not.toHaveBeenCalled();
+        });
+
+        test('skipped on a LATE decision-failure too (throw AFTER the list is resolved)', async () => {
+            // resolveLastMinuteCheckMinutes runs after the challenge list is
+            // captured; a throw here still lands in the decision catch. The hook
+            // must be skipped on EVERY decision failure, so the catch nulls the
+            // captured snapshot. (Guards the doc/invariant the reviewer flagged.)
+            const onCycleChallenges = jest.fn();
+            const deps = makeDeps({
+                onCycleChallenges,
+                resolveLastMinuteCheckMinutes: jest.fn(() => {
+                    throw new Error('resolver boom');
+                }),
+            });
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+
+            expect(deps.log.decisionError).toHaveBeenCalledTimes(1);
+            expect(onCycleChallenges).not.toHaveBeenCalled();
+        });
+
+        test('absence is fine — omitting the hook never throws (Node-host shape)', async () => {
+            const deps = makeDeps(); // no onCycleChallenges
+            const chain = createCadenceChain(deps);
+            await expect(chain.scheduleNext([farChallenge()])).resolves.toBeUndefined();
         });
     });
 });
