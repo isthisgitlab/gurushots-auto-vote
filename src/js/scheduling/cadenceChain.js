@@ -180,9 +180,11 @@ const createCadenceChain = ({
         // Captured for the best-effort onCycleChallenges hook, fired AFTER the
         // decision try/catch so a throw in the notify path can never reach the
         // decision `catch` (which would degrade the whole cadence to random).
-        // Null on the catch path (fetch/decision failed) → hook is skipped.
-        let cycleChallenges = null;
-        let cycleNow = null;
+        // Assigned inside the try once the list resolves, and force-nulled in the
+        // catch so a decision failure (early OR late) always skips the hook — so
+        // both are guaranteed assigned before the guard below reads them.
+        let cycleChallenges;
+        let cycleNow;
         try {
             const settings = await loadSettings();
             const normalDelayMs = getRandomCheckFrequencyMs(settings);
@@ -248,6 +250,14 @@ const createCadenceChain = ({
         } catch (error) {
             // An error deciding the delay must never kill the loop — fall back
             // to a plain random cadence; the next cycle re-reads on success.
+            // Also drop any captured challenge snapshot: a throw AFTER the list
+            // was resolved (e.g. in resolveLastMinuteCheckMinutes or
+            // computeNextCycleDelayMs) still lands here, and the notification
+            // hook must be skipped on EVERY decision failure — not just an early
+            // fetch/settings throw — so the "skipped on the catch path" invariant
+            // below holds generally.
+            cycleChallenges = null;
+            cycleNow = null;
             await log.decisionError(error);
             try {
                 waitMs = getRandomCheckFrequencyMs(await loadSettings());

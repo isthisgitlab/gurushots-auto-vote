@@ -6,7 +6,11 @@
  * breaking), cross-cycle dedupe, coalescing, and the re-entrancy guard.
  */
 
-import { createDeadlineNotifier } from '@/notifications/deadlineNotifier';
+import {
+    createDeadlineNotifier,
+    deliverElectronNotification,
+    resolveRendererDelivery,
+} from '@/notifications/deadlineNotifier';
 
 const NOW = 1_000_000;
 const okActions = (...actions) => ({ success: true, actions });
@@ -133,5 +137,92 @@ describe('createDeadlineNotifier', () => {
         const notify = makeNotifier({ deliver });
         await expect(notify(null, NOW)).resolves.toBeUndefined();
         expect(deliver).not.toHaveBeenCalled();
+    });
+
+    test('a rejecting getSettings is caught, logged, and releases the guard (self-contained)', async () => {
+        const deliver = jest.fn();
+        const log = jest.fn();
+        let fail = true;
+        const getSettings = jest.fn(async () => {
+            if (fail) throw new Error('settings down');
+            return settingsBoostOn;
+        });
+        const notify = makeNotifier({ getSettings, deliver, log });
+
+        // First cycle: getSettings throws → must resolve (not reject), log, deliver nothing.
+        await expect(notify([{ id: '1', title: 'A' }], NOW)).resolves.toBeUndefined();
+        expect(log).toHaveBeenCalledTimes(1);
+        expect(deliver).not.toHaveBeenCalled();
+
+        // Guard released → a later healthy cycle still works.
+        fail = false;
+        await notify([{ id: '1', title: 'A' }], NOW);
+        expect(deliver).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('deliverElectronNotification', () => {
+    const originalNotification = globalThis.Notification;
+    afterEach(() => {
+        globalThis.Notification = originalNotification;
+    });
+
+    const stubNotification = (permission) => {
+        const ctor = jest.fn(function () {
+            this.onclick = null;
+        });
+        ctor.permission = permission;
+        ctor.requestPermission = jest.fn();
+        globalThis.Notification = ctor;
+        return ctor;
+    };
+
+    test('no Notification API → silent no-op, never throws', () => {
+        delete globalThis.Notification;
+        expect(() => deliverElectronNotification({ title: 'x', body: 'y' })).not.toThrow();
+    });
+
+    test('permission denied → skipped (does not construct)', () => {
+        const ctor = stubNotification('denied');
+        deliverElectronNotification({ title: 'x', body: 'y' });
+        expect(ctor).not.toHaveBeenCalled();
+    });
+
+    test('permission default → requests permission and still attempts', () => {
+        const ctor = stubNotification('default');
+        deliverElectronNotification({ title: 'Boost', body: 'in 5 min' });
+        expect(ctor.requestPermission).toHaveBeenCalledTimes(1);
+        expect(ctor).toHaveBeenCalledWith('Boost', { body: 'in 5 min' });
+    });
+
+    test('permission granted → constructs and wires onclick to focus the window', () => {
+        const ctor = stubNotification('granted');
+        const focus = jest.spyOn(window, 'focus').mockImplementation(() => {});
+        deliverElectronNotification({ title: 'Boost', body: 'in 5 min' });
+        expect(ctor).toHaveBeenCalledTimes(1);
+        const instance = ctor.mock.instances[0];
+        expect(typeof instance.onclick).toBe('function');
+        instance.onclick();
+        expect(focus).toHaveBeenCalled();
+        focus.mockRestore();
+    });
+
+    test('a throwing Notification constructor is swallowed', () => {
+        const ctor = jest.fn(() => {
+            throw new Error('OS blocked');
+        });
+        ctor.permission = 'granted';
+        globalThis.Notification = ctor;
+        expect(() => deliverElectronNotification({ title: 'x', body: 'y' })).not.toThrow();
+    });
+});
+
+describe('resolveRendererDelivery — platform gate', () => {
+    test('native platform → null (notifier not wired there)', () => {
+        expect(resolveRendererDelivery(true)).toBeNull();
+    });
+
+    test('non-native (Electron) → the Web Notification deliverer', () => {
+        expect(resolveRendererDelivery(false)).toBe(deliverElectronNotification);
     });
 });

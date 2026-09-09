@@ -257,7 +257,8 @@
             notifyOnTurbo: 'Notify before turbo',
             notifyOnTurboDesc: 'Warn before a turbo is played, so you can keep the app running.',
             notifyOnAutoFill: 'Notify before auto-fill',
-            notifyOnAutoFillDesc: 'Warn before an entry is auto-filled near the deadline.',
+            notifyOnAutoFillDesc:
+                'Warn before an entry is auto-filled near the deadline, so you can keep the app running.',
             notifyOnEmergencyFill: 'Notify before emergency fill',
             notifyOnEmergencyFillDesc: 'Warn before a last-second emergency fill, so you can keep the app running.',
             notifyLeadTime: 'Warn this far ahead',

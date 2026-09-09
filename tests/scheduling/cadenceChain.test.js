@@ -627,12 +627,32 @@ describe('createCadenceChain', () => {
             expect(deps.runCycle).toHaveBeenCalledTimes(1);
         });
 
-        test('skipped on the decision-failure (catch) path — no list to hand over', async () => {
+        test('skipped on an EARLY decision-failure (settings throw, before the list resolves)', async () => {
             const onCycleChallenges = jest.fn();
             const deps = makeDeps({
                 onCycleChallenges,
                 loadSettings: jest.fn(() => {
                     throw new Error('settings unavailable');
+                }),
+            });
+            const chain = createCadenceChain(deps);
+
+            await chain.scheduleNext([farChallenge()]);
+
+            expect(deps.log.decisionError).toHaveBeenCalledTimes(1);
+            expect(onCycleChallenges).not.toHaveBeenCalled();
+        });
+
+        test('skipped on a LATE decision-failure too (throw AFTER the list is resolved)', async () => {
+            // resolveLastMinuteCheckMinutes runs after the challenge list is
+            // captured; a throw here still lands in the decision catch. The hook
+            // must be skipped on EVERY decision failure, so the catch nulls the
+            // captured snapshot. (Guards the doc/invariant the reviewer flagged.)
+            const onCycleChallenges = jest.fn();
+            const deps = makeDeps({
+                onCycleChallenges,
+                resolveLastMinuteCheckMinutes: jest.fn(() => {
+                    throw new Error('resolver boom');
                 }),
             });
             const chain = createCadenceChain(deps);

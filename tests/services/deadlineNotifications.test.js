@@ -143,6 +143,12 @@ describe('sanitizeNotificationText', () => {
         expect(sanitizeNotificationText('x'.repeat(500)).length).toBe(120);
     });
 
+    test('no double space when a control char sits between two spaces', () => {
+        // 'a' SPACE CONTROL SPACE 'b' — the control strip must not leave 'a  b'.
+        const input = `a ${String.fromCharCode(1)} b`;
+        expect(sanitizeNotificationText(input)).toBe('a b');
+    });
+
     test('nullish → empty string', () => {
         expect(sanitizeNotificationText(null)).toBe('');
         expect(sanitizeNotificationText(undefined)).toBe('');
@@ -205,6 +211,13 @@ describe('formatNotification — single & coalesced', () => {
         );
         expect(out.title).toBe('Actions coming up');
         expect(out.body).toBe('2 actions in the next 2 min — keep the app open');
+    });
+
+    test('unknown action label falls back to the raw action key (defensive)', () => {
+        // Unreachable while enabled[] gates to the four known actions, but pins
+        // the fallback so a future added action type does not crash formatting.
+        const out = formatNotification([{ title: 'T', action: 'mystery', secondsUntil: 60 }], translate);
+        expect(out.body).toContain('mystery');
     });
 });
 

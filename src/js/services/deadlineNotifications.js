@@ -64,8 +64,14 @@ const MAX_TEXT_LEN = 120;
  */
 const sanitizeNotificationText = (value, maxLength = MAX_TEXT_LEN) =>
     String(value ?? '')
+        // First collapse turns CR/LF/TAB into single spaces (newlines must
+        // become a space, not vanish, or words would merge). Then strip the
+        // remaining Unicode "Other" code points (non-space controls, zero-width,
+        // RTL overrides). A control char sitting between two spaces would leave a
+        // double space, so collapse once more afterwards.
         .replace(/\s+/g, ' ')
         .replace(/\p{C}/gu, '')
+        .replace(/\s+/g, ' ')
         .replace(/^[\s-]+/, '')
         .trim()
         .slice(0, maxLength);
@@ -143,10 +149,13 @@ const computeDueNotifications = (perChallengeActions, now, opts) => {
  * so the Set stays bounded to the currently-due set across a long-running
  * session.
  *
- * NOTE (deliberate tradeoff): state is in-memory only. A process restart while
- * a window is still due may re-fire that one notification once. Accepted — do
- * NOT migrate this to a persisted store without re-litigating the tradeoff, or
- * a stale persisted key could permanently suppress a real warning.
+ * NOTE (deliberate tradeoff): state is in-memory and per-process. A process
+ * restart while a window is still due may re-fire that one notification once,
+ * and running two hosts against the same account (e.g. the CLI daemon and the
+ * desktop app at once) will each notify independently for the same window —
+ * there is no cross-process coordination. Both are accepted; do NOT migrate
+ * this to a persisted/shared store without re-litigating the tradeoff, or a
+ * stale key could permanently suppress a real warning.
  *
  * @returns {{ filterNew: (due: Array<{fireKey:string}>) => Array<any> }}
  */

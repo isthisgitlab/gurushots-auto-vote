@@ -257,7 +257,8 @@
             notifyOnTurbo: 'Paziņot pirms turbo',
             notifyOnTurboDesc: 'Brīdināt pirms turbo tiek nospēlēts, lai vari atstāt lietotni darbojamies.',
             notifyOnAutoFill: 'Paziņot pirms automātiskās aizpildes',
-            notifyOnAutoFillDesc: 'Brīdināt pirms ieraksts tiek automātiski aizpildīts tuvu beigām.',
+            notifyOnAutoFillDesc:
+                'Brīdināt pirms ieraksts tiek automātiski aizpildīts tuvu beigām, lai vari atstāt lietotni darbojamies.',
             notifyOnEmergencyFill: 'Paziņot pirms ārkārtas aizpildes',
             notifyOnEmergencyFillDesc:
                 'Brīdināt pirms pēdējā brīža ārkārtas aizpildes, lai vari atstāt lietotni darbojamies.',

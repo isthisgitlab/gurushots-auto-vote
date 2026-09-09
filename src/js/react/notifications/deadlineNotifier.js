@@ -11,15 +11,18 @@
  *   - delivery is platform-picked by the caller (Electron Web Notification).
  *
  * Fire-and-forget by contract: the chain calls this in its own isolated,
- * never-awaited wrapper, so a throw here cannot affect scheduling. We still
- * guard internally (re-entrancy + early-exit) so it is cheap and safe.
+ * never-awaited wrapper, so a throw here cannot affect scheduling. It is also
+ * self-contained — a re-entrancy guard, an early-exit when the feature is off,
+ * and its own catch (mirroring the Node twin nodeNotify.js) so it resolves
+ * quietly even if the decision code throws, rather than relying on the caller's
+ * outer .catch().
  *
- * DELIVERY SCOPE: today this is the SINGLE delivery source (Electron). On native
- * Android the app also runs a native foreground voting service; to avoid a
- * dual-loop double-fire we deliver from exactly one place. Native Android
- * delivery is intentionally NOT wired here yet (see docs/plan) — `deliver` is a
- * no-op there. If a native notifier is ever added, this renderer path MUST be
- * gated off on native Android so the two never both fire.
+ * DELIVERY SCOPE: this is the SINGLE delivery source (Electron). On native
+ * Android the app runs a native foreground voting service, so to avoid a
+ * dual-loop double-fire the caller does NOT wire this notifier there at all
+ * (resolveRendererDelivery → null → onCycleChallenges omitted), which also
+ * avoids per-cycle IPC that would only be thrown away. If a native notifier is
+ * ever added, keep that gate so the two paths never both fire.
  */
 
 import {
@@ -40,9 +43,11 @@ import {
  *   window.api.getDeadlineActions (returns the {success, actions} wrapper — never throws)
  * @param {(key:string)=>string} deps.translate - returns a raw i18n template
  * @param {(n:{title:string, body:string})=>void} deps.deliver - platform delivery
+ * @param {(message:string)=>void} [deps.log] - optional best-effort diagnostic sink
+ *   (e.g. window.api.logDebug); a failure is logged here rather than vanishing.
  * @returns {(challenges:Array, now:number)=>Promise<void>}
  */
-export function createDeadlineNotifier({ getSettings, getDeadlineActions, translate, deliver }) {
+export function createDeadlineNotifier({ getSettings, getDeadlineActions, translate, deliver, log }) {
     const dedupe = createDedupe();
     // Re-entrancy guard: per-challenge IPC round trips make a cycle's run
     // outlast a fast (last-minute) cadence tick; without this, two overlapping
@@ -63,6 +68,8 @@ export function createDeadlineNotifier({ getSettings, getDeadlineActions, transl
             for (const challenge of list) {
                 // get-deadline-actions returns {success, actions} | {success:false};
                 // it never throws. Skip anything that didn't resolve cleanly.
+                // Only id/title are read here — the challenge objects belong to
+                // the voting pass, so treat them as read-only.
                 const res = await getDeadlineActions(challenge);
                 if (!res || res.success !== true || !Array.isArray(res.actions)) continue;
                 perChallengeActions.push({ id: challenge?.id, title: challenge?.title, actions: res.actions });
@@ -72,6 +79,14 @@ export function createDeadlineNotifier({ getSettings, getDeadlineActions, transl
             const fresh = dedupe.filterNew(due);
             const notification = formatNotification(fresh, translate);
             if (notification) deliver(notification);
+        } catch (error) {
+            // Self-contained: swallow so a decision/IPC failure can neither reach
+            // the scheduler nor vanish without a trace (mirrors nodeNotify.js).
+            try {
+                log?.(`deadline notification cycle failed: ${error?.message ?? error}`);
+            } catch {
+                /* the diagnostic sink itself is best-effort */
+            }
         } finally {
             running = false;
         }
@@ -81,14 +96,29 @@ export function createDeadlineNotifier({ getSettings, getDeadlineActions, transl
 /**
  * Electron delivery: a Web Notification (renders as a native OS toast, and
  * still fires while the page is backgrounded). Clicking it focuses the app
- * window so the user can act. Best-effort — a throw (notifications disabled at
- * the OS level) is swallowed so it can never reach the scheduler.
+ * window so the user can act.
+ *
+ * Permission: if the OS-level permission was denied, `new Notification` is a
+ * silent no-op, so skip and (on the first undecided state) request it, letting
+ * later cycles deliver once granted. Best-effort throughout — any throw
+ * (notifications unavailable) is swallowed so it can never reach the scheduler.
  *
  * @param {{title:string, body:string}} notification
  */
 export function deliverElectronNotification({ title, body }) {
     try {
         if (typeof Notification === 'undefined') return;
+        if (Notification.permission === 'denied') return;
+        if (Notification.permission === 'default') {
+            // Ask once (async, fire-and-forget). Electron's file:// origin usually
+            // auto-grants, but request explicitly for platforms where it does not;
+            // subsequent cycles then deliver.
+            try {
+                void Notification.requestPermission?.();
+            } catch {
+                /* requestPermission unavailable — fall through and still try */
+            }
+        }
         const toast = new Notification(title, { body });
         toast.onclick = () => {
             try {
@@ -102,5 +132,16 @@ export function deliverElectronNotification({ title, body }) {
     }
 }
 
-/** No-op delivery for platforms not yet wired (native Android — see file header). */
-export function deliverNoop() {}
+/**
+ * Pick the renderer delivery function for the current platform. Electron gets
+ * the Web Notification deliverer; native Android gets `null`, the caller's
+ * signal NOT to wire the notifier at all (the native service is authoritative
+ * there — see the file header). Extracted + exported so the platform decision
+ * is unit-testable rather than an inline ternary a future edit could invert.
+ *
+ * @param {boolean} isNativePlatform
+ * @returns {((n:{title:string, body:string})=>void) | null}
+ */
+export function resolveRendererDelivery(isNativePlatform) {
+    return isNativePlatform ? null : deliverElectronNotification;
+}
