@@ -21,6 +21,7 @@ const logger = require('../logger');
 const settings = require('../settings');
 const { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } = require('./cadenceChain');
 const { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp } = require('./nodeResolvers');
+const { createNodeDeadlineNotifier } = require('../services/notify/nodeNotify');
 
 /**
  * Create a continuous voting scheduler.
@@ -34,6 +35,11 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
     let cycleCount = 0;
     let isRunning = false;
     let timer = null;
+
+    // One notifier per scheduler (holds the fire-once dedupe + re-entrancy
+    // guard across cycles). The chain fires it in its own isolated wrapper, so
+    // it can never disturb the cadence.
+    const notifyDeadlines = createNodeDeadlineNotifier();
 
     const chain = createCadenceChain({
         isRunning: () => isRunning,
@@ -69,6 +75,9 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
                 logger.withCategory('voting').debug('Full voting cycle error details:', error);
             },
         },
+        // OS "action coming up" notifications (opt-in; no-op when all toggles
+        // are off, which is the default).
+        onCycleChallenges: notifyDeadlines,
     });
 
     const start = async () => {

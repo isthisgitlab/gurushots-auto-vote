@@ -250,6 +250,28 @@
             groupLastMinute: 'Pēdējā minūte',
             groupScheduledFill: 'Plānotā aizpilde',
             groupAutoFill: 'Automātiskā aizpilde',
+            groupNotifications: 'Paziņojumi',
+            // Paziņojumu iestatījumi (pēc noklusējuma izslēgti)
+            notifyOnBoost: 'Paziņot pirms boost',
+            notifyOnBoostDesc: 'Brīdināt pirms boost tiek pielietots, lai vari atstāt lietotni darbojamies.',
+            notifyOnTurbo: 'Paziņot pirms turbo',
+            notifyOnTurboDesc: 'Brīdināt pirms turbo tiek nospēlēts, lai vari atstāt lietotni darbojamies.',
+            notifyOnAutoFill: 'Paziņot pirms automātiskās aizpildes',
+            notifyOnAutoFillDesc: 'Brīdināt pirms ieraksts tiek automātiski aizpildīts tuvu beigām.',
+            notifyOnEmergencyFill: 'Paziņot pirms ārkārtas aizpildes',
+            notifyOnEmergencyFillDesc:
+                'Brīdināt pirms pēdējā brīža ārkārtas aizpildes, lai vari atstāt lietotni darbojamies.',
+            notifyLeadTime: 'Brīdināt cik ilgi iepriekš',
+            notifyLeadTimeDesc: 'Cik minūtes pirms darbības tiek parādīts brīdinājums.',
+            notifyLeadTimeHelp:
+                'Pēc iespējas: lietotne var brīdināt tikai ciklā, kas patiešām izpildās, tāpēc ilgāks laiks nekā pārbaudes biežums tuvu beigām var pienākt ar mazu brīdinājumu. Visdrošāk tas darbojas pēdējās minūtes logā.',
+            // Paziņojuma virsraksta/teksta veidnes. {action} izmanto darbību
+            // nosaukumus; {title} ir izaicinājuma nosaukums; {minutes}/{count}
+            // aizpilda paziņojumu slānis.
+            notifyTitle: 'Tuvojas {action}',
+            notifyBody: '{action} izaicinājumam "{title}" pēc ~{minutes} min — atstāj lietotni atvērtu līdz tam.',
+            notifyGroupTitle: 'Tuvojas darbības',
+            notifyGroupBody: '{count} darbības nākamajās ~{minutes} min — atstāj lietotni atvērtu līdz tam.',
             challengeName: 'Izaicinājums',
             challengeOverrides: 'Specifiskie iestatījumi izaicinājumiem',
             challengeSettings: 'Izaicinājuma iestatījumi',

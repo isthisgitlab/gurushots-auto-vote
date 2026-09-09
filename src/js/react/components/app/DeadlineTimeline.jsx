@@ -1,14 +1,10 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { useTick } from '@/hooks/useTick';
-
-// Action key → translation key for its display label.
-const ACTION_LABEL_KEY = {
-    autoFill: 'app.deadlineActionAutoFill',
-    boost: 'app.deadlineActionBoost',
-    turbo: 'app.deadlineActionTurbo',
-    emergencyFill: 'app.deadlineActionEmergencyFill',
-};
+// Action key → translation-key map. Owned by the dependency-free notification
+// decision module (Node-safe) so the CLI/headless notify path reuses the same
+// mapping without pulling React in; the timeline imports it here.
+import { ACTION_LABEL_KEY } from '../../../services/deadlineNotifications';
 
 /**
  * Per-card advisory timeline of the automation's upcoming deadline actions.

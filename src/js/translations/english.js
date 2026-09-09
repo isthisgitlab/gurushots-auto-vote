@@ -250,6 +250,27 @@
             groupLastMinute: 'Last Minute',
             groupScheduledFill: 'Scheduled Fill',
             groupAutoFill: 'Auto Fill',
+            groupNotifications: 'Notifications',
+            // Notification settings (all default off, opt-in)
+            notifyOnBoost: 'Notify before boost',
+            notifyOnBoostDesc: 'Warn before a boost is applied, so you can keep the app running.',
+            notifyOnTurbo: 'Notify before turbo',
+            notifyOnTurboDesc: 'Warn before a turbo is played, so you can keep the app running.',
+            notifyOnAutoFill: 'Notify before auto-fill',
+            notifyOnAutoFillDesc: 'Warn before an entry is auto-filled near the deadline.',
+            notifyOnEmergencyFill: 'Notify before emergency fill',
+            notifyOnEmergencyFillDesc: 'Warn before a last-second emergency fill, so you can keep the app running.',
+            notifyLeadTime: 'Warn this far ahead',
+            notifyLeadTimeDesc: 'How many minutes before an action a warning is shown.',
+            notifyLeadTimeHelp:
+                'Best-effort: the app can only warn on a cycle it actually runs, so a lead longer than your check frequency near a deadline may arrive with little warning. It is most reliable within your last-minute window.',
+            // Notification title/body templates. {action} reuses the deadline
+            // action labels; {title} is the challenge name; {minutes}/{count}
+            // are filled in by the notification layer.
+            notifyTitle: '{action} coming up',
+            notifyBody: '{action} for "{title}" in ~{minutes} min — keep the app open until then.',
+            notifyGroupTitle: 'Actions coming up',
+            notifyGroupBody: '{count} actions due in the next ~{minutes} min — keep the app open until then.',
             challengeName: 'Challenge',
             challengeOverrides: 'Challenge Overrides',
             challengeSettings: 'Challenge Settings',

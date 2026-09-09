@@ -2,7 +2,7 @@
     {
         "name": "app bundle (Electron renderer)",
         "path": "dist/app-bundle.js",
-        "limit": "40 KB"
+        "limit": "41 KB"
     },
     {
         "name": "login bundle (Electron renderer)",

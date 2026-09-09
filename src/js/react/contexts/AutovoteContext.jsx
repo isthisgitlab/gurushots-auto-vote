@@ -4,6 +4,7 @@ import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
 import { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp } from './autovoteScheduler';
+import { createDeadlineNotifier, deliverElectronNotification, deliverNoop } from '../notifications/deadlineNotifier';
 
 const AutovoteContext = createContext(null);
 
@@ -20,6 +21,22 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     // via the shared computeNextCycleDelayMs, so there is no separate fast-mode
     // interval or boundary-switch timer to keep in sync.
     const cycleTimerRef = useRef(null);
+
+    // Per-cycle OS deadline-notifier. Created ONCE (a fresh instance each render
+    // would never dedupe): it holds the fired-key Set + re-entrancy guard across
+    // cycles. Delivery is platform-picked here — Web Notification on Electron; a
+    // no-op on native Android, where delivery would otherwise double-fire against
+    // the native foreground voting service (see deadlineNotifier.js header).
+    const notifierRef = useRef(null);
+    if (notifierRef.current === null) {
+        const isNativePlatform = globalThis.Capacitor?.isNativePlatform?.() === true;
+        notifierRef.current = createDeadlineNotifier({
+            getSettings: () => window.api.getSettings(),
+            getDeadlineActions: (challenge) => window.api.getDeadlineActions(challenge),
+            translate: (key) => globalThis.translationManager?.t?.(key) ?? key,
+            deliver: isNativePlatform ? deliverNoop : deliverElectronNotification,
+        });
+    }
 
     // Keep runningRef in sync with state. Publishing through a window
     // CustomEvent lets the ancestor tree (AppWithChallenges, which feeds
@@ -153,6 +170,11 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                         type: ACTIONS.SET_NEXT_RUN,
                         payload: typeof waitMs === 'number' ? Date.now() + waitMs : null,
                     }),
+                // Best-effort per-cycle OS notification for upcoming deadline
+                // actions. Stable instance (see notifierRef) so it dedupes across
+                // cycles; the chain fires it in its own isolated wrapper so a
+                // throw here can never affect scheduling.
+                onCycleChallenges: notifierRef.current,
             }),
         [runVotingCycle],
     );
