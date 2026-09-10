@@ -1,6 +1,8 @@
 import globals from 'globals';
 import pluginJs from '@eslint/js';
 import eslintConfigPrettier from 'eslint-config-prettier';
+import reactHooks from 'eslint-plugin-react-hooks';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
@@ -106,6 +108,33 @@ export default [
                 },
             ],
         },
+    },
+    // React hooks correctness for the Preact renderer (aliased to react via
+    // preact/compat). rules-of-hooks catches conditional / early-return hook
+    // calls; exhaustive-deps guards stale closures in the custom hooks
+    // (useIpcQuery, useAsyncIpcAction, useTimers). exhaustive-deps stays at warn
+    // (advisory, not every missing dep is a bug); rules-of-hooks is a real
+    // bug-class, so it errors.
+    {
+        files: ['src/js/react/**/*.jsx', 'src/js/react/**/*.js'],
+        plugins: { 'react-hooks': reactHooks },
+        rules: {
+            'react-hooks/rules-of-hooks': 'error',
+            'react-hooks/exhaustive-deps': 'warn',
+        },
+    },
+    // Accessibility lint for the renderer — surfaces the WCAG issues the app
+    // already commits to caring about (Modal focus-trap, translated labels).
+    // Introduced at WARN, not error: the recommended set flags ~10 pre-existing
+    // issues (anchors-as-buttons in LanguageSwitcher, a click-only div in
+    // UpdateDialog, an autoFocus in SettingsModal) whose fixes are real
+    // component/UX changes, not lint noise. Ratcheting in at warn matches how
+    // this repo onboarded @ts-check and the ttsc lint rules (see lint.config.ts):
+    // full CI visibility now, promote rules to error as each is fixed.
+    {
+        plugins: jsxA11y.flatConfigs.recommended.plugins,
+        files: ['src/js/react/**/*.jsx', 'src/js/react/**/*.js'],
+        rules: Object.fromEntries(Object.keys(jsxA11y.flatConfigs.recommended.rules).map((rule) => [rule, 'warn'])),
     },
     // Jest test files. `pnpm lint` only scans src/ + scripts/, but the lefthook
     // pre-commit hook lints any staged *.{js,jsx} — tests included — so the Jest

@@ -3,6 +3,11 @@
     <head>
         <meta charset="UTF-8" />
         <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+        <!-- See app.html for the rationale; script-src 'self' is the load-bearing line. -->
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        />
         <title>Login - GuruShots Auto Vote</title>
         <link href="../../dist/styles.css" rel="stylesheet" />
         <script src="../js/translations/index.js"></script>

@@ -1,14 +1,29 @@
 name: Build and Release
 
 on:
+    # No pull_request: trigger — test.yml already runs the full suite (lint,
+    # typecheck, audit, coverage, lexicon, size) on every PR. The `test` job
+    # below only exists to gate the push-triggered release chain (see its
+    # comment), which never fires on a PR, so a PR trigger here was pure
+    # duplicate spend.
     push:
         branches: [master, develop]
-    pull_request:
-        branches: [master]
 
+# Least-privilege default: read-only token for test / version-bump / the build
+# matrix / build-cli-arm / build-android (they read from GitHub for electron
+# downloads and rate limits, and upload artifacts — none of which need write).
+# Only create-release escalates (it commits the version bump and publishes the
+# release); it declares its own contents:write + actions:write block below.
 permissions:
-    contents: write
-    packages: write
+    contents: read
+
+# Serialise the stateful release pipeline per ref. Without this, two quick
+# pushes run two full version-bump → build → create-release chains in parallel,
+# both bumping/pushing/tagging from the same base — a corrupted release, not
+# just wasted minutes. Never cancel a build/release mid-flight.
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
 
 jobs:
     # NOT a duplicate of test.yml: workflows can't gate on each other
@@ -17,6 +32,7 @@ jobs:
     # build → create-release. Do not remove it as "redundant".
     test:
         runs-on: ubuntu-slim
+        timeout-minutes: 20
         steps:
             - name: Checkout code
               uses: actions/checkout@v7
@@ -29,6 +45,7 @@ jobs:
 
     version-bump:
         runs-on: ubuntu-slim
+        timeout-minutes: 15
         needs: [test]
         if: github.event_name == 'push'
         outputs:
@@ -107,6 +124,7 @@ jobs:
 
     build:
         runs-on: ${{ matrix.os }}
+        timeout-minutes: 45
         needs: [version-bump]
         if: github.event_name == 'push'
         strategy:
@@ -184,6 +202,20 @@ jobs:
               with:
                   node-version: '26'
 
+            # Cache the official nodejs.org binary that build-cli.js pulls into
+            # .cache/node-binaries (see the build-cli-arm job for the rationale).
+            - name: Resolve Node version for CLI-binary cache key
+              if: matrix.platform != 'win'
+              id: node-ver
+              run: echo "v=$(node -p 'process.versions.node')" >> "$GITHUB_OUTPUT"
+
+            - name: Cache official Node binaries (CLI SEA)
+              if: matrix.platform != 'win'
+              uses: actions/cache@v4
+              with:
+                  path: .cache/node-binaries
+                  key: node-sea-${{ runner.os }}-${{ runner.arch }}-${{ steps.node-ver.outputs.v }}
+
             - name: Build CLI app (macOS/Linux only)
               if: matrix.platform != 'win'
               run: pnpm build:cli:${{ matrix.platform }}
@@ -209,6 +241,7 @@ jobs:
 
     build-cli-arm:
         runs-on: ubuntu-24.04-arm
+        timeout-minutes: 45
         needs: [version-bump]
         if: github.event_name == 'push'
 
@@ -227,6 +260,21 @@ jobs:
               with:
                   node-version: '26'
 
+            # build-cli.js downloads the official nodejs.org binary for
+            # TARGET_NODE_VERSION (= process.versions.node) into
+            # .cache/node-binaries. Cache it so each release doesn't re-pull the
+            # ~40 MB tarball from nodejs.org. Keyed on the resolved Node version
+            # + arch so a version bump or a wrong-arch binary can never be served.
+            - name: Resolve Node version for CLI-binary cache key
+              id: node-ver
+              run: echo "v=$(node -p 'process.versions.node')" >> "$GITHUB_OUTPUT"
+
+            - name: Cache official Node binaries (CLI SEA)
+              uses: actions/cache@v4
+              with:
+                  path: .cache/node-binaries
+                  key: node-sea-${{ runner.os }}-${{ runner.arch }}-${{ steps.node-ver.outputs.v }}
+
             - name: Build CLI Linux ARM app (native arm64 runner)
               run: pnpm build:cli:linux-arm
               env:
@@ -244,6 +292,7 @@ jobs:
 
     build-android:
         runs-on: ubuntu-latest
+        timeout-minutes: 30
         needs: [version-bump]
         if: github.event_name == 'push'
         steps:
@@ -324,13 +373,15 @@ jobs:
     create-release:
         needs: [build, build-cli-arm, build-android, version-bump]
         runs-on: ubuntu-latest
+        timeout-minutes: 15
         if: github.event_name == 'push'
         # A job-level permissions block REPLACES the workflow-level set (it does
-        # not merge), so contents/packages are repeated here to preserve the
-        # access this job already had via inheritance.
+        # not merge). This job commits the version bump, pushes the tag, and
+        # publishes the release, so it escalates above the workflow-level
+        # contents:read default. packages:write is dropped — nothing here pushes
+        # to GitHub Packages.
         permissions:
             contents: write
-            packages: write
             # actions: write is the minimum scope GitHub grants for
             # workflow_dispatch via GITHUB_TOKEN — needed by the "Trigger Pages
             # rebuild" step below (gh workflow run dispatches pages.yml).

@@ -32,8 +32,13 @@ const buildHandlers = () => ({
             const strategy = apiFactory.getApiStrategy();
             return await strategy.getActiveChallenges(token);
         } catch (error) {
+            // Never throw to the renderer (architecture invariant). Return the
+            // same `{ challenges, fetchFailed }` shape the happy path uses so
+            // useActiveChallenges' "always resolves a list shape" assumption
+            // holds — a corrupted settings.json during getApiStrategy() must
+            // surface as a failed fetch, not a raw stack in the error UI.
             logger.withCategory('api').error('Error handling get-active-challenges request:', error);
-            throw error;
+            return { challenges: [], fetchFailed: true };
         }
     },
 

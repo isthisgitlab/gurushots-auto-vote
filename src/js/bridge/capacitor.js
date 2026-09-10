@@ -32,6 +32,7 @@ const computationsHandlers = require('../ipc/computations.handlers');
 
 const settings = require('../settings');
 const logger = require('../logger');
+const { isSafeExternalUrl } = require('../format/urlSafe');
 const { clearAuthToken } = require('../services/auth');
 const updateChecker = require('../services/UpdateChecker');
 const androidUpdateInstaller = require('../services/AndroidUpdateInstaller');
@@ -249,6 +250,14 @@ const installBridge = () => {
     };
     api.refreshMenu = () => Promise.resolve({ success: true }); // no menu on mobile
     api.openExternalUrl = (url) => {
+        // Same https-only scheme gate as the Electron handler (shared via
+        // format/urlSafe) — the two platforms must not diverge on this
+        // security control. Without it the Android path would open any
+        // scheme (intent:, file:, javascript:, app handlers).
+        if (!isSafeExternalUrl(url)) {
+            logger.withCategory('api').warning(`Refused openExternalUrl for non-https URL: ${url}`, null);
+            return Promise.resolve({ success: false, error: 'Only https:// URLs can be opened' });
+        }
         // Use the native browser via Capacitor when present; fall back
         // to window.open. Loaded lazily so non-Capacitor paths never
         // resolve @capacitor/browser.

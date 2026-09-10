@@ -87,4 +87,55 @@ describe('sanitizeWelcomeMessage', () => {
     test('coerces non-string inputs to string', () => {
         expect(sanitizeWelcomeMessage(123)).toBe('123');
     });
+
+    // Mutation-XSS (mXSS) regression guards. The sanitized string is fed to
+    // dangerouslySetInnerHTML, so a foreign-content / raw-text element whose
+    // serialize→re-parse round-trip differs from what the walker saw is a live
+    // sink. These vectors must be dropped whole (subtree removed), not unwrapped.
+    describe('mutation-XSS foreign-content vectors', () => {
+        const assertNeutralised = (out) => {
+            expect(out).not.toMatch(/<script/i);
+            expect(out).not.toMatch(/onerror/i);
+            expect(out).not.toMatch(/onload/i);
+            expect(out).not.toMatch(/<img/i);
+        };
+
+        test('drops <svg> and everything inside it', () => {
+            const out = sanitizeWelcomeMessage('<svg><script>alert(1)</script><desc>x</desc></svg>');
+            expect(out).not.toMatch(/<svg/i);
+            assertNeutralised(out);
+        });
+
+        test('drops <math> foreign content (MathML integration point)', () => {
+            const out = sanitizeWelcomeMessage('<math><mtext><img src=x onerror=alert(1)></mtext></math>');
+            expect(out).not.toMatch(/<math/i);
+            assertNeutralised(out);
+        });
+
+        test('drops <template> and its inert content', () => {
+            const out = sanitizeWelcomeMessage('<template><script>alert(1)</script></template>safe');
+            expect(out).toContain('safe');
+            expect(out).not.toMatch(/<template/i);
+            assertNeutralised(out);
+        });
+
+        test('drops raw-text <xmp>/<noembed>/<plaintext> payloads', () => {
+            for (const tag of ['xmp', 'noembed', 'plaintext']) {
+                const out = sanitizeWelcomeMessage(`<${tag}><img src=x onerror=alert(1)></${tag}>`);
+                assertNeutralised(out);
+            }
+        });
+
+        test('drops <mglyph>/<annotation-xml> namespace-confusion smuggling', () => {
+            const out = sanitizeWelcomeMessage(
+                '<svg><mglyph><style><img src=x onerror=alert(1)></style></mglyph></svg>',
+            );
+            assertNeutralised(out);
+        });
+
+        test('neutralises the classic style/svg namespace mXSS payload', () => {
+            const out = sanitizeWelcomeMessage('<svg></p><style><a id="</style><img src=x onerror=alert(1)>">');
+            assertNeutralised(out);
+        });
+    });
 });

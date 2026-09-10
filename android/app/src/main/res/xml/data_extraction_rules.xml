@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Excludes the app's SharedPreferences (where @capacitor/preferences stores the
+    GuruShots auth token) from BOTH Android cloud backup and device-to-device
+    transfer. Paired with android:allowBackup="false" this keeps the session token
+    from being extractable via `adb backup`, Google auto-backup, or a restore onto
+    another device — matching the deliberate 0o600 file-mode hardening applied to
+    the equivalent token store on Electron/CLI (src/js/settings/storage.js).
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+    </device-transfer>
+</data-extraction-rules>

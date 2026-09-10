@@ -334,6 +334,14 @@ const writeLog = (level, message, data = null, category = null) => {
         // Scrub credentials folded into the message string before it reaches
         // the ring buffer, disk, console, or the GUI fan-out below.
         message = redactMessage(message);
+        // Collapse CR/LF in the composed message centrally (defense-in-depth
+        // against log injection / CWE-117). Per-call-site oneLine()/challengeTag()
+        // on untrusted API strings is still the first line of defence, but a
+        // single missed call site (e.g. a raw `${challenge.title}` in a log
+        // message) must not be able to forge a fake log line in the plain-text
+        // log file. Messages are single-line by convention; structured detail
+        // goes in `data`, which is serialised separately below.
+        if (typeof message === 'string') message = oneLine(message);
         const sanitized = data ? sanitizeForLog(data) : null;
         const seq = nextSeq++;
         const entry = { seq, level, context, category: cat, timestamp, message, data: sanitized };

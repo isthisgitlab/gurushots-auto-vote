@@ -13,9 +13,12 @@ const fetchActiveChallenges = async (token) => {
     const operationId = 'get-active-challenges';
     logger.withCategory('api').startOperation(operationId, 'Fetching active challenges', 'DEBUG');
 
+    // Log only presence, never any slice of the token itself — a `tokenPrefix`
+    // field does not match the logger's SENSITIVE_KEY_RE redaction allowlist, so
+    // the first bytes of the real bearer token would land in api-*.log in
+    // cleartext (log files get pasted into bug reports). `hasToken` is enough.
     logger.withCategory('api').debug('Requesting active challenges from API', {
         hasToken: !!token,
-        tokenPrefix: token ? `${token.substring(0, 10)}...` : 'none',
     });
 
     const headers = createCommonHeaders(token);

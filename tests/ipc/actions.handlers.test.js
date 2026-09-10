@@ -80,10 +80,17 @@ describe('get-active-challenges', () => {
         expect(result).toEqual({ challenges: [{ id: 1 }] });
     });
 
-    test('rethrows strategy errors', async () => {
+    test('never throws to the renderer — returns the fetchFailed list shape on error', async () => {
+        // Architecture invariant: handlers return { success, error }-style
+        // objects, never throw. get-active-challenges returns the same
+        // { challenges, fetchFailed } shape the happy path uses so
+        // useActiveChallenges' "always resolves a list shape" holds.
         stubStrategy({ getActiveChallenges: jest.fn().mockRejectedValue(new Error('fetch fail')) });
         const handlers = buildHandlers();
-        await expect(handlers['get-active-challenges']({}, 'tok')).rejects.toThrow('fetch fail');
+        await expect(handlers['get-active-challenges']({}, 'tok')).resolves.toEqual({
+            challenges: [],
+            fetchFailed: true,
+        });
     });
 });
 

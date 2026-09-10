@@ -24,6 +24,21 @@ const ALLOWED_TAGS = new Set([
     'div',
 ]);
 
+// Removed together with everything they contain. Two groups:
+//   1. WYSIWYG-toolbar / interactive junk we never want to render
+//      (button/input/select/textarea/form) plus the classic script-bearing
+//      elements (script/style/iframe/object/embed/link/meta/noscript).
+//   2. Foreign-content / re-parsing elements that are the raw material for
+//      mutation-XSS (mXSS): the HTML parser switches namespaces inside
+//      <svg>/<math> (MathML/SVG integration points let <mglyph>,
+//      <annotation-xml>, <mtext> smuggle markup that re-parses as HTML when
+//      innerHTML is re-serialized), and <template>/<noembed>/<xmp>/<plaintext>
+//      have bespoke "raw text" / inert-DOM parsing modes whose serialize→
+//      re-parse round-trip differs from what our walker saw. Dropping the
+//      whole subtree — rather than unwrapping and keeping children — is what
+//      closes that class. `dangerouslySetInnerHTML` on the result means any
+//      differential here would be a live sink, so we strip aggressively; the
+//      CSP `script-src 'self'` in the HTML shell is the second layer.
 const STRIP_WITH_CONTENTS = new Set([
     'button',
     'input',
@@ -36,6 +51,17 @@ const STRIP_WITH_CONTENTS = new Set([
     'object',
     'embed',
     'svg',
+    'math',
+    'template',
+    'noembed',
+    'xmp',
+    'plaintext',
+    'mglyph',
+    'annotation-xml',
+    'title',
+    'base',
+    'frame',
+    'frameset',
     'link',
     'meta',
     'noscript',

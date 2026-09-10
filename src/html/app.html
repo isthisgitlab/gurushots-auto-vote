@@ -3,6 +3,17 @@
     <head>
         <meta charset="UTF-8" />
         <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+        <!--
+            Content-Security-Policy: the renderer only ever loads local (file://) bundles and
+            renders remote challenge images over https. script-src 'self' (no 'unsafe-inline',
+            no 'unsafe-eval') is the load-bearing line — it means a sanitizer bypass or a
+            supply-chain-tainted bundle cannot execute injected inline script against the full
+            window.api surface. style-src keeps 'unsafe-inline' for DaisyUI/inline element styles.
+        -->
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+        />
         <title>GuruShots Auto Vote</title>
         <link href="../../dist/styles.css" rel="stylesheet" />
         <script src="../js/translations/index.js"></script>

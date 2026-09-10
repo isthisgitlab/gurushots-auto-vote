@@ -110,9 +110,10 @@ describe('challenges', () => {
             // (the identity mock would hide a dropped or mis-arged call).
             expect(pinChallengeTitles).toHaveBeenCalledWith(mockResponse.challenges);
             expect(logger.withCategory).toHaveBeenCalledWith('api');
+            // Presence only — never a slice of the token itself (a tokenPrefix
+            // field would bypass the logger's key-based redaction).
             expect(logger.__mockDebugFn).toHaveBeenCalledWith('Requesting active challenges from API', {
                 hasToken: true,
-                tokenPrefix: 'test-token...',
             });
             expect(logger.__mockDebugFn).toHaveBeenCalledWith('Active challenges response received', {
                 challengeCount: 2,
@@ -121,7 +122,7 @@ describe('challenges', () => {
             });
         });
 
-        test('should handle short token with truncation format', async () => {
+        test('logs only token presence, never any slice of the token', async () => {
             const shortToken = 'short';
             const mockResponse = { challenges: [] };
 
@@ -130,9 +131,10 @@ describe('challenges', () => {
             await getActiveChallenges(shortToken);
 
             expect(logger.withCategory).toHaveBeenCalledWith('api');
+            // Exact-object match: proves no tokenPrefix (or any other token
+            // material) is added to the debug payload.
             expect(logger.__mockDebugFn).toHaveBeenCalledWith('Requesting active challenges from API', {
                 hasToken: true,
-                tokenPrefix: 'short...',
             });
         });
 
@@ -146,7 +148,6 @@ describe('challenges', () => {
             expect(logger.withCategory).toHaveBeenCalledWith('api');
             expect(logger.__mockDebugFn).toHaveBeenCalledWith('Requesting active challenges from API', {
                 hasToken: false,
-                tokenPrefix: 'none',
             });
             expect(createCommonHeaders).toHaveBeenCalledWith(undefined);
         });
@@ -264,7 +265,11 @@ describe('challenges', () => {
             expect(second).toEqual({ challenges: [{ id: '2' }] });
         });
 
-        test('should truncate long tokens in logs', async () => {
+        test('never writes any part of the token into the debug log payload', async () => {
+            // Security regression guard: the previous implementation logged a
+            // `tokenPrefix` slice of the real bearer token, which bypassed the
+            // logger's key-based redaction and landed in api-*.log in cleartext.
+            // No fragment of the token may appear in any logged argument.
             const longToken = 'very-long-token-that-should-be-truncated-for-security';
             const mockResponse = { challenges: [] };
 
@@ -275,8 +280,12 @@ describe('challenges', () => {
             expect(logger.withCategory).toHaveBeenCalledWith('api');
             expect(logger.__mockDebugFn).toHaveBeenCalledWith('Requesting active challenges from API', {
                 hasToken: true,
-                tokenPrefix: 'very-long-...',
             });
+            // Belt-and-suspenders: no debug call may carry even a prefix of it.
+            for (const call of logger.__mockDebugFn.mock.calls) {
+                const serialised = JSON.stringify(call);
+                expect(serialised).not.toContain(longToken.slice(0, 10));
+            }
         });
     });
 });

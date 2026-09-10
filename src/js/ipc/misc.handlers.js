@@ -8,6 +8,7 @@ const { shell } = require('electron');
 const { registerHandlers } = require('./registerHandlers');
 const logger = require('../logger');
 const { updateMenuTranslations } = require('../ui/applicationMenu');
+const { isSafeExternalUrl } = require('../format/urlSafe');
 
 const buildHandlers = (deps) => {
     const { getMainWindow, getLoginWindow } = deps;
@@ -15,11 +16,12 @@ const buildHandlers = (deps) => {
     return {
         'open-external-url': async (event, url) => {
             try {
-                // Scheme allow-list: every legitimate call site opens an
-                // https page (gurushots.com, GitHub releases). Refusing
-                // anything else keeps this from ever becoming an
-                // open-any-scheme primitive (file:, shell handlers, ...).
-                if (typeof url !== 'string' || !url.startsWith('https://')) {
+                // Scheme allow-list (shared with the Capacitor bridge via
+                // format/urlSafe): every legitimate call site opens an https
+                // page (gurushots.com, GitHub releases). Refusing anything else
+                // keeps this from ever becoming an open-any-scheme primitive
+                // (file:, shell handlers, ...).
+                if (!isSafeExternalUrl(url)) {
                     logger.withCategory('api').warning(`Refused open-external-url for non-https URL: ${url}`, null);
                     return { success: false, error: 'Only https:// URLs can be opened' };
                 }

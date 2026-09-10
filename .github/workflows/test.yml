@@ -6,6 +6,18 @@ on:
     pull_request:
         branches: [master, develop]
 
+# Least-privilege default token. `pnpm install` runs the postinstall scripts
+# opted into allowBuilds (esbuild, @swc/core, …), so a compromised transitive
+# dep here must not inherit a write-capable GITHUB_TOKEN.
+permissions:
+    contents: read
+
+# Cancel superseded runs on the same ref for PRs (fast feedback), but let
+# branch pushes finish so a green run is recorded per commit.
+concurrency:
+    group: test-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
     test:
         runs-on: ubuntu-slim
