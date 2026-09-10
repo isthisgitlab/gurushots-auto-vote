@@ -98,12 +98,12 @@
         "axios": "^1.20.0",
         "electron-updater": "^6.8.9",
         "preact": "^10.29.8",
-        "zod": "^4.5.4"
+        "zod": "^4.6.1"
     },
     "devDependencies": {
         "@capacitor/cli": "^8.5.1",
         "@eslint/js": "^10.0.1",
-        "@happy-dom/jest-environment": "^20.14.0",
+        "@happy-dom/jest-environment": "^20.14.3",
         "@jest/globals": "^30.5.1",
         "@size-limit/file": "^13.0.3",
         "@swc/jest": "^0.2.39",
@@ -111,12 +111,12 @@
         "@tailwindcss/typography": "^0.5.20",
         "@testing-library/dom": "^10.4.1",
         "@testing-library/preact": "^3.2.4",
-        "@ttsc/graph": "0.29.0",
-        "@ttsc/lint": "0.29.0",
-        "@types/node": "^26.5.0",
+        "@ttsc/graph": "0.30.0",
+        "@ttsc/lint": "0.30.0",
+        "@types/node": "^26.5.1",
         "concurrently": "^10.0.5",
         "cross-env": "^10.1.0",
-        "daisyui": "^5.7.32",
+        "daisyui": "^5.7.34",
         "electron": "^44.3.0",
         "electron-builder": "^26.16.1",
         "electronmon": "^2.0.4",
@@ -135,8 +135,8 @@
         "prettier": "4.0.0-alpha.13",
         "size-limit": "^13.0.3",
         "tailwindcss": "^4.3.3",
-        "ttsc": "0.29.0",
-        "typescript": "7.1.0-dev.20260904.1",
+        "ttsc": "0.30.0",
+        "typescript": "7.1.0-dev.20260910.1",
         "yauzl": "^3.4.0"
     },
     "electronmon": {
