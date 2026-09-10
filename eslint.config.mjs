@@ -125,12 +125,15 @@ export default [
     },
     // Accessibility lint for the renderer — surfaces the WCAG issues the app
     // already commits to caring about (Modal focus-trap, translated labels).
-    // Introduced at WARN, not error: the recommended set flags ~10 pre-existing
-    // issues (anchors-as-buttons in LanguageSwitcher, a click-only div in
-    // UpdateDialog, an autoFocus in SettingsModal) whose fixes are real
-    // component/UX changes, not lint noise. Ratcheting in at warn matches how
-    // this repo onboarded @ts-check and the ttsc lint rules (see lint.config.ts):
-    // full CI visibility now, promote rules to error as each is fixed.
+    // Introduced at WARN, not error: the recommended set flags ~39 pre-existing
+    // warnings, mostly control-has-associated-label (~18) and label-has-for
+    // (~11) on DaisyUI form controls, plus a handful of real interaction issues
+    // (anchors-as-buttons in LanguageSwitcher, a click-only div in UpdateDialog,
+    // an autoFocus in SettingsModal). Their fixes are real component/UX changes,
+    // not lint noise, so they can't all land in one pass. Ratcheting in at warn
+    // matches how this repo onboarded @ts-check and the ttsc lint rules (see
+    // lint.config.ts): full CI visibility now, promote rules to error as fixed.
+    // Track the backlog down rather than letting it normalise dozens of warnings.
     {
         plugins: jsxA11y.flatConfigs.recommended.plugins,
         files: ['src/js/react/**/*.jsx', 'src/js/react/**/*.js'],

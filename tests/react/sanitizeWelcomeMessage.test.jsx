@@ -137,5 +137,24 @@ describe('sanitizeWelcomeMessage', () => {
             const out = sanitizeWelcomeMessage('<svg></p><style><a id="</style><img src=x onerror=alert(1)>">');
             assertNeutralised(out);
         });
+
+        // Discriminates strip-with-contents from the default unwrap fallback: if
+        // any of these tags were merely unwrapped (the fate of an unknown tag),
+        // its inner TEXT would survive. Removing the whole subtree drops the
+        // marker — so this test fails if any entry is dropped from
+        // STRIP_WITH_CONTENTS, proving those entries are load-bearing.
+        test('drops the CONTENT of stripped foreign-content elements, not just their attributes', () => {
+            for (const tag of ['svg', 'math', 'template', 'xmp', 'noembed', 'mglyph']) {
+                const out = sanitizeWelcomeMessage(`before<${tag}>MARKER_${tag}</${tag}>after`);
+                expect(out).not.toContain(`MARKER_${tag}`);
+                expect(out).toContain('before');
+                expect(out).toContain('after');
+            }
+            // <plaintext> switches the parser into raw-text mode with no end, so
+            // everything after it (incl. the marker) is its content and is dropped.
+            const pt = sanitizeWelcomeMessage('before<plaintext>MARKER_plaintext</plaintext>after');
+            expect(pt).not.toContain('MARKER_plaintext');
+            expect(pt).toContain('before');
+        });
     });
 });

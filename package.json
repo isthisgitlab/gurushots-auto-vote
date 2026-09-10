@@ -339,10 +339,10 @@
                 "statements": 80
             },
             "./src/js/ipc/": {
-                "branches": 55,
-                "functions": 40,
-                "lines": 53,
-                "statements": 55
+                "branches": 58,
+                "functions": 44,
+                "lines": 57,
+                "statements": 58
             }
         }
     }

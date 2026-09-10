@@ -342,7 +342,14 @@ const writeLog = (level, message, data = null, category = null) => {
         // log file. Messages are single-line by convention; structured detail
         // goes in `data`, which is serialised separately below.
         if (typeof message === 'string') message = oneLine(message);
-        const sanitized = data ? sanitizeForLog(data) : null;
+        let sanitized = data ? sanitizeForLog(data) : null;
+        // A bare-string (or number) `data` value is written to the log file
+        // verbatim (the non-object branch below), and rendered in the GUI, so it
+        // needs the same CR/LF collapse as the message to close the log-injection
+        // (CWE-117) path — e.g. an error string echoing a malformed API/update-feed
+        // response must not forge a log line. Object data is already newline-safe:
+        // JSON.stringify escapes embedded CR/LF into a literal \n.
+        if (sanitized != null && typeof sanitized !== 'object') sanitized = oneLine(sanitized);
         const seq = nextSeq++;
         const entry = { seq, level, context, category: cat, timestamp, message, data: sanitized };
 

@@ -20,6 +20,17 @@ describe('isSafeExternalUrl', () => {
         }
     });
 
+    test('rejects https URLs with embedded credentials (lookalike-host vector)', () => {
+        expect(isSafeExternalUrl('https://gurushots.com@evil.com/')).toBe(false);
+        expect(isSafeExternalUrl('https://user:pass@evil.com/')).toBe(false);
+        expect(isSafeExternalUrl('https://user@evil.com')).toBe(false);
+    });
+
+    test('rejects malformed https strings that do not parse as URLs', () => {
+        expect(isSafeExternalUrl('https://')).toBe(false);
+        expect(isSafeExternalUrl('https:// space.com')).toBe(false);
+    });
+
     test('rejects non-string / empty input', () => {
         expect(isSafeExternalUrl(null)).toBe(false);
         expect(isSafeExternalUrl(undefined)).toBe(false);

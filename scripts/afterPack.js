@@ -33,7 +33,14 @@ exports.default = async function afterPack(context) {
     } else if (electronPlatformName === 'win32') {
         electronBinary = path.join(appOutDir, `${productName}.exe`);
     } else {
-        electronBinary = path.join(appOutDir, productName);
+        // Linux: electron-builder names the executable after the packager's
+        // executableName — appInfo.sanitizedName.toLowerCase() derived from
+        // package.json "name" ("gurushots-auto-vote"), NOT productFilename
+        // ("GuruShotsAutoVote"). Mirror app-builder-lib's own resolution
+        // (platformPackager: `this instanceof LinuxPackager ? this.executableName
+        // : productFilename`); using productName here would ENOENT and fail the
+        // whole Linux/Linux-ARM build.
+        electronBinary = path.join(appOutDir, packager.executableName);
     }
 
     await flipFuses(electronBinary, {

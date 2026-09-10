@@ -8,16 +8,21 @@
  */
 
 /**
- * Collapse CR/LF in a value before it is interpolated into a log message.
+ * Collapse line-breaking characters in a value before it is interpolated into a
+ * log message.
  *
  * Anything sourced from the GuruShots API — challenge id, challenge title — must go
  * through this. A newline inside one would otherwise start what looks like a new
  * log entry in the plain-text log file, letting a crafted value forge log lines
  * (log injection, CWE-117).
  *
+ * Collapses CR/LF plus the other characters a log viewer might treat as a line
+ * break — vertical tab, form feed, NEL (U+0085), and the Unicode line/paragraph
+ * separators (U+2028/U+2029) — not just \r\n.
+ *
  * @param {*} value
  * @returns {string}
  */
-const oneLine = (value) => String(value).replace(/[\r\n]+/g, ' ');
+const oneLine = (value) => String(value).replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
 
 module.exports = { oneLine };

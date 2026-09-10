@@ -13,9 +13,21 @@
  * releases). Refusing anything else keeps this from ever becoming an
  * open-any-scheme primitive.
  *
+ * Also rejects embedded userinfo (`https://real.com@evil.com/`): a bare
+ * startsWith('https://') check passes that, but the browser navigates to the
+ * host AFTER the `@`, so userinfo is a lookalike-host redirect vector.
+ *
  * @param {*} url
- * @returns {boolean} true only for a well-formed https:// URL string.
+ * @returns {boolean} true only for a well-formed https:// URL with no credentials.
  */
-const isSafeExternalUrl = (url) => typeof url === 'string' && url.startsWith('https://');
+const isSafeExternalUrl = (url) => {
+    if (typeof url !== 'string' || !url.startsWith('https://')) return false;
+    try {
+        const parsed = new URL(url);
+        return parsed.protocol === 'https:' && parsed.username === '' && parsed.password === '';
+    } catch {
+        return false;
+    }
+};
 
 module.exports = { isSafeExternalUrl };
