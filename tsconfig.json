@@ -9,7 +9,7 @@
         // nodenext (not commonjs) is deliberate: it honors package.json
         // "type": "commonjs" and checks these .js files as CommonJS, whereas
         // "module": "commonjs" pulls in moduleResolution "node10", which
-        // TypeScript 6 deprecates (TS5107). require()/module.exports type-check fine.
+        // node10 module resolution is deprecated (TS5107). require()/module.exports type-check fine.
         "module": "nodenext",
         "moduleResolution": "nodenext",
         "types": ["node"],
