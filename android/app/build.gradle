@@ -40,7 +40,13 @@ dependencies {
     // Native background voting plugin deps
     implementation "org.jetbrains.kotlin:kotlin-stdlib:2.4.20"
     implementation "com.squareup.okhttp3:okhttp:5.5.0"
-    implementation "org.json:json:20260814"
+    // NOTE: org.json is intentionally NOT declared as a Maven dependency. The
+    // Android platform (android.jar / the device framework) already provides
+    // org.json.*, which is all the plugin's main code uses (AutoVoteSettings.kt,
+    // AutoVoteCycle.kt) — there are no JVM unit tests that need it. A Maven
+    // `org.json:json` dep was redundant, pulled a duplicate copy of platform
+    // classes, and made every release build depend on downloading it from Maven
+    // Central (a transient 502 there killed assembleRelease). Do not re-add it.
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
