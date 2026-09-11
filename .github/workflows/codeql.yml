@@ -15,81 +15,37 @@ concurrency:
     group: codeql-${{ github.ref }}
     cancel-in-progress: false
 
+# NOTE: JS/TS only. A java-kotlin leg to scan the Android/Capacitor Kotlin was
+# attempted but reverted — CodeQL's Kotlin extractor rejects this repo's Kotlin
+# version ("Kotlin version 2.4.20 is too recent. CodeQL currently supports
+# versions below 2.4.20"), so the leg fails at compileDebugKotlin with no way to
+# configure around it. Re-add the java-kotlin matrix leg (manual build-mode,
+# `./gradlew assembleDebug` under android/, with setup-java 21 + setup-android +
+# `cap sync android`) once the CodeQL extractor supports Kotlin 2.4.20+, or if
+# the Android Kotlin is ever pinned back below that.
 jobs:
     analyze:
-        name: Analyze (${{ matrix.language }})
-        runs-on: ${{ matrix.runner }}
-        timeout-minutes: ${{ matrix.language == 'java-kotlin' && 30 || 20 }}
+        name: Analyze (javascript-typescript)
+        runs-on: ubuntu-slim
+        timeout-minutes: 20
         permissions:
             actions: read
             contents: read
             security-events: write
 
-        strategy:
-            # Independent legs — a build failure in the Android/Kotlin leg must
-            # not suppress the JS/TS SARIF upload, and vice-versa.
-            fail-fast: false
-            matrix:
-                include:
-                    - language: javascript-typescript
-                      # No compilation needed for JS/TS sources.
-                      build-mode: none
-                      runner: ubuntu-slim
-                    - language: java-kotlin
-                      # The Capacitor app ships custom Kotlin in every signed
-                      # release APK; scan it too. Manual build-mode with an
-                      # explicit debug assemble (no signing secrets needed) is
-                      # more deterministic here than autobuild finding gradlew
-                      # under android/.
-                      build-mode: manual
-                      runner: ubuntu-latest
-
         steps:
             - name: Checkout code
               uses: actions/checkout@v7
 
-            - name: Set up JDK 21
-              if: matrix.language == 'java-kotlin'
-              uses: actions/setup-java@v6
-              with:
-                  distribution: temurin
-                  java-version: '21'
-
-            - name: Set up Android SDK
-              if: matrix.language == 'java-kotlin'
-              uses: android-actions/setup-android@v4
-
-            - name: Install pnpm
-              if: matrix.language == 'java-kotlin'
-              uses: pnpm/action-setup@v6
-
-            - name: Setup Node.js
-              if: matrix.language == 'java-kotlin'
-              uses: actions/setup-node@v7
-              with:
-                  node-version: '26'
-                  cache: 'pnpm'
-
-            - name: Sync Capacitor web assets
-              if: matrix.language == 'java-kotlin'
-              run: |
-                  pnpm install --frozen-lockfile
-                  pnpm run build:prep
-                  pnpm exec cap sync android
-
             - name: Initialize CodeQL
               uses: github/codeql-action/init@v4
               with:
-                  languages: ${{ matrix.language }}
-                  build-mode: ${{ matrix.build-mode }}
+                  languages: javascript-typescript
+                  # No compilation needed for JS/TS sources.
+                  build-mode: none
                   queries: security-and-quality
-
-            - name: Build Android (manual build-mode)
-              if: matrix.language == 'java-kotlin'
-              run: ./gradlew --no-daemon assembleDebug
-              working-directory: android
 
             - name: Perform CodeQL analysis
               uses: github/codeql-action/analyze@v4
               with:
-                  category: '/language:${{ matrix.language }}'
+                  category: '/language:javascript-typescript'
