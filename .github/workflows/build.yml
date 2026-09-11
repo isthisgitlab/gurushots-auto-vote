@@ -211,7 +211,7 @@ jobs:
 
             - name: Cache official Node binaries (CLI SEA)
               if: matrix.platform != 'win'
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: .cache/node-binaries
                   key: node-sea-${{ runner.os }}-${{ runner.arch }}-${{ steps.node-ver.outputs.v }}
@@ -270,7 +270,7 @@ jobs:
               run: echo "v=$(node -p 'process.versions.node')" >> "$GITHUB_OUTPUT"
 
             - name: Cache official Node binaries (CLI SEA)
-              uses: actions/cache@v4
+              uses: actions/cache@v6
               with:
                   path: .cache/node-binaries
                   key: node-sea-${{ runner.os }}-${{ runner.arch }}-${{ steps.node-ver.outputs.v }}
