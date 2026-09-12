@@ -173,17 +173,17 @@ importers:
   .:
     dependencies:
       '@capacitor/android':
-        specifier: ^8.5.1
-        version: 8.5.1(@capacitor/core@8.5.1)
+        specifier: ^8.5.2
+        version: 8.5.2(@capacitor/core@8.5.2)
       '@capacitor/core':
-        specifier: ^8.5.1
-        version: 8.5.1
+        specifier: ^8.5.2
+        version: 8.5.2
       '@capacitor/preferences':
         specifier: ^8.0.1
-        version: 8.0.1(@capacitor/core@8.5.1)
+        version: 8.0.1(@capacitor/core@8.5.2)
       '@capawesome-team/capacitor-android-foreground-service':
         specifier: ^8.1.0
-        version: 8.1.0(@capacitor/core@8.5.1)
+        version: 8.1.0(@capacitor/core@8.5.2)
       '@preact/signals':
         specifier: ^2.11.2
         version: 2.11.2(preact@10.29.8)
@@ -201,8 +201,8 @@ importers:
         version: 4.6.2
     devDependencies:
       '@capacitor/cli':
-        specifier: ^8.5.1
-        version: 8.5.1(supports-color@10.2.2)
+        specifier: ^8.5.2
+        version: 8.5.2(supports-color@10.2.2)
       '@electron/fuses':
         specifier: ^2.1.3
         version: 2.1.3
@@ -210,8 +210,8 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.10.0(jiti@2.7.0)(supports-color@10.2.2))
       '@happy-dom/jest-environment':
-        specifier: ^20.14.3
-        version: 20.14.3(@jest/environment@30.5.1)(@jest/fake-timers@30.5.1)(@jest/types@30.5.1)(jest-mock@30.5.1)(jest-util@30.5.1)
+        specifier: ^20.14.5
+        version: 20.14.5(@jest/environment@30.5.1)(@jest/fake-timers@30.5.1)(@jest/types@30.5.1)(jest-mock@30.5.1)(jest-util@30.5.1)
       '@jest/globals':
         specifier: ^30.5.1
         version: 30.5.1(supports-color@10.2.2)
@@ -234,8 +234,8 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(preact@10.29.8)
       '@ttsc/lint':
-        specifier: 0.30.0
-        version: 0.30.0
+        specifier: 0.30.1
+        version: 0.30.1
       '@types/node':
         specifier: ^26.5.1
         version: 26.5.1
@@ -246,8 +246,8 @@ importers:
         specifier: ^10.1.0
         version: 10.1.0
       daisyui:
-        specifier: ^5.7.36
-        version: 5.7.36
+        specifier: ^5.7.37
+        version: 5.7.37
       electron:
         specifier: ^44.3.0
         version: 44.3.0(supports-color@10.2.2)
@@ -309,8 +309,8 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3
       ttsc:
-        specifier: 0.30.0
-        version: 0.30.0
+        specifier: 0.30.1
+        version: 0.30.1
       typescript:
         specifier: 7.1.0-dev.20260910.1
         version: 7.1.0-dev.20260910.1
@@ -495,18 +495,18 @@ packages:
   '@cacheable/utils@2.5.0':
     resolution: {integrity: sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA==}
 
-  '@capacitor/android@8.5.1':
-    resolution: {integrity: sha512-o8fUIPDSEASeXHHrDz26WU7OlyiRb+QqtI9KFdnLS1jUL77o5iGrvegibaZX8rWpiCyDJ6jlUhhhHlfeq3ou9A==}
+  '@capacitor/android@8.5.2':
+    resolution: {integrity: sha512-rtiaz78egCcS+vs29wkWCL3C+RhazKMSygXcjutwWP8NmO6r5UBxOvGf3Wjz5+ahobyQ723tn9gCePwRwcNDZQ==}
     peerDependencies:
       '@capacitor/core': ^8.5.0
 
-  '@capacitor/cli@8.5.1':
-    resolution: {integrity: sha512-LKQFSyLg1QbTN6CGDoFqeRtAlj8C3c9OymP8OuhwlmkbSQwh9i1HQjwUCaNyVem2XkY9rv0v2UOfVlgoxH5pAw==}
+  '@capacitor/cli@8.5.2':
+    resolution: {integrity: sha512-O2kpA5ZPJUAmliDCcmpMf8xnJwMezxlFPUrlyOAjbL3U9MFNY3l4ZpPI/UXwvyPmR8ETcVF9pFr+VdWq61rqTQ==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
-  '@capacitor/core@8.5.1':
-    resolution: {integrity: sha512-IOQ7ynG1qgrJ/RLuCO3WgyRGmkmmG/cdStRR4ftU2dWEN1FdtLrnI/XpZmZuUsOEHEnzBRJY/PmRH8eTLiXfhA==}
+  '@capacitor/core@8.5.2':
+    resolution: {integrity: sha512-agnQbGdhGw/KZFuLf7H9SY2o+oE7upkr/WPQsYaokXP6f9chaE8iVmbKkfN6SVl4w3pmz7oZ3Ur1hbkmy1hx+w==}
 
   '@capacitor/preferences@8.0.1':
     resolution: {integrity: sha512-T6no3ebi79XJCk91U3Jp/liJUwgBdvHR+s6vhvPkPxSuch7z3zx5Rv1bdWM6sWruNx+pViuEGqZvbfCdyBvcHQ==}
@@ -783,8 +783,8 @@ packages:
     resolution: {integrity: sha512-IkO+/KEUvwbVpiURZg+P7zF74z5Jxe0UgJxVni+RtoHQ6IZieXaO02kmadomap/q+l6bc/jdPGGqTjhuZnuz1Q==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
 
-  '@happy-dom/jest-environment@20.14.3':
-    resolution: {integrity: sha512-F0MgBc0emZQoF1U/O921IOISTKF9lk4d5SDwN0Zzm0FrXbeeWf5dgkfbkywKySE05G8e1KZb9u5Y/mhL8QsyDw==}
+  '@happy-dom/jest-environment@20.14.5':
+    resolution: {integrity: sha512-SJKhrvxqmiHgPahB4OD0sVgyInmPEU4XBcqLll41URSxCRgvBi2cPK65WO9wcsH5a+vUOiDj0uyQbXMDjBqgZg==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@jest/environment': '>=25.0.0'
@@ -1658,41 +1658,41 @@ packages:
     peerDependencies:
       preact: '>=10 || ^10.0.0-alpha.0 || ^10.0.0-beta.0'
 
-  '@ttsc/darwin-arm64@0.30.0':
-    resolution: {integrity: sha512-e9prFj0QQoGXpWL3saSvf2Qm6RjZevMxRjbf/klqZ/TDcqyBII0Jsf5DDtFHxiejwWHeqx39yxE4lUAFWkpG1w==}
+  '@ttsc/darwin-arm64@0.30.1':
+    resolution: {integrity: sha512-NiCw7g3XbODbAVip0y3RV0hvHEM9s8zTJZTsDn1yDHpt7cL799PtRp+Fz6Z3xHCBabRWF3FiOoifnO4/uJCl0Q==}
     cpu: [arm64]
     os: [darwin]
 
-  '@ttsc/darwin-x64@0.30.0':
-    resolution: {integrity: sha512-Cb0z4CMlpOiUDp3ys19soGiqS+kF4XnYGcMyz05lg3ih/gjA62CxjcP8kR87ryiQWuNW9hDKZHZKR/aOfZ0DZw==}
+  '@ttsc/darwin-x64@0.30.1':
+    resolution: {integrity: sha512-DT6Yj5Tw9pR4PMGRbPS/bONDkvJ4TrJQ+g84Cyy+z9ShvvrICA2AsHD9hHXuN6agN7b0lmRRAaGf18l+1KsRTw==}
     cpu: [x64]
     os: [darwin]
 
-  '@ttsc/lint@0.30.0':
-    resolution: {integrity: sha512-GmS++ZJkhDKHesuXDRMYlM9KU3AJdjepVt4+TL22yNeDrm3DcuPT5Xt/90FAzyIz3M4lKY0b+VYaLZHn46lrsA==}
+  '@ttsc/lint@0.30.1':
+    resolution: {integrity: sha512-qCNxvUDizEm/RpMeTejtVMBWKFoOvAbh1FvlobydLuoIeniqaiZT0PltwSJ2hvSM83Aa2IyGYvA+1OylxdFifQ==}
 
-  '@ttsc/linux-arm64@0.30.0':
-    resolution: {integrity: sha512-gtgmqhU7YecxwAgQxY0dE4e5mv8UvLbofT4jKHftVIXJYgi0GpnFapTIZGc4sZ8lMggaggB0Svl+9MlNvach3A==}
+  '@ttsc/linux-arm64@0.30.1':
+    resolution: {integrity: sha512-Gnlta91pz8VtMyQm8Kgo1/cpZY0EEJWaVsyMhdaVuY05Ew7rV4qE2FnW7J1/XMEVbBNEYMR8oZq4fSHVGWE7Rg==}
     cpu: [arm64]
     os: [linux]
 
-  '@ttsc/linux-arm@0.30.0':
-    resolution: {integrity: sha512-UBIHasTOKyPFeTp3YRqUVywExitYdYyHUSeFmeQTYjECchsWZ8Uq6yoMRGKi8Xwk3rvzOHCu4DDhZbGHLUIjFg==}
+  '@ttsc/linux-arm@0.30.1':
+    resolution: {integrity: sha512-EFfD+1nIKk50VsmhPBTjjYOkug5ulkrB1MDZBS+pI4KL0kCk+dsjrA4GmvfdF9LMpRDfZ+x71Dh3GSu+64i0fQ==}
     cpu: [arm]
     os: [linux]
 
-  '@ttsc/linux-x64@0.30.0':
-    resolution: {integrity: sha512-uy+VhHuDe/IXoC8TKHHHpjNXWQ+SYJa/6zMpllXk3ACcp5BOgTwPswT3MaCUc88Aj4Zv3zIebBwCY7r7BBHCCA==}
+  '@ttsc/linux-x64@0.30.1':
+    resolution: {integrity: sha512-dW8m/4nVHycFIlzQSBwXqGligh8R/exjQwuaP9abdJNISvm4iBcVQngbnqKikv7vgAWy4+ezm42QS+62qKCgBQ==}
     cpu: [x64]
     os: [linux]
 
-  '@ttsc/win32-arm64@0.30.0':
-    resolution: {integrity: sha512-uVZbAk+W91PCHzop4AN13fssUVrU6NuxYWUNTY7vcCZ5GUySSuofUvooUnhpSq6y2/NYB0KwjiKGgk7hcRiRNA==}
+  '@ttsc/win32-arm64@0.30.1':
+    resolution: {integrity: sha512-zZGEh0Rd9PRcdsAyrVKKRTRzhlb7GqI2B1+lqwud0Jk6FIUfFYgBChfIxtqsxsNtBLwsyiEdDtLFMBB8m/5M1Q==}
     cpu: [arm64]
     os: [win32]
 
-  '@ttsc/win32-x64@0.30.0':
-    resolution: {integrity: sha512-j7qEhjTv2tTzFydSq6aJ+udT04DIPf4dRKsF3yA80AEU80b3y+ijeavnCHJLWFdGsjKUipqSEJ0yPmtwm9DMAg==}
+  '@ttsc/win32-x64@0.30.1':
+    resolution: {integrity: sha512-+zn4uYNJWq0wPoixyGJrLh5/RWRHCMOywcOnak8dno4xEk6HitUpe/HR5tipnV2hoB2PGBoC6UZsHe+116mIkw==}
     cpu: [x64]
     os: [win32]
 
@@ -2363,8 +2363,8 @@ packages:
     engines: {node: '>=4'}
     hasBin: true
 
-  daisyui@5.7.36:
-    resolution: {integrity: sha512-/UkPPj1FeEOWA6I69Jno1SsSx6856E6A/w3b6eK/1i2a6xYiZ4AySsepsog3RR3feb0cyF94Lnzlq/CLOCS7Aw==}
+  daisyui@5.7.37:
+    resolution: {integrity: sha512-PVcdAcL0ni6/wmcNwvldARZuO0HdzxtjVEAT86ie9GMgFjwmqIWeXsPaM2/eYqLb4WMexqj146C5Z1xmzZDnjg==}
 
   damerau-levenshtein@1.0.8:
     resolution: {integrity: sha512-sdQSFB7+llfUcQHUQO3+B8ERRj0Oa4w9POWMI/puGtuf7gFywGmkaLCElnudfTiKZV+NvHqL0ifzdrI8Ro7ESA==}
@@ -2899,8 +2899,8 @@ packages:
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
 
-  happy-dom@20.14.3:
-    resolution: {integrity: sha512-0KMb/Eh8rsd+aMNkOk5h8LkAjo9Na1aksnEGmsuZf+GXl6UkAdIi0VbUHU7d59lXhNmawODgwwuCMiZpCxwwCw==}
+  happy-dom@20.14.5:
+    resolution: {integrity: sha512-x/RzkpWO40bTjIoT30iQtt64FLLmH/iRcUCN2X//bLx7H3ifkdfPXyqsro/OYtqzIAhiLMMA7mmiOR9C3NOKjQ==}
     engines: {node: '>=20.0.0'}
 
   has-bigints@1.1.0:
@@ -4358,8 +4358,8 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
-  ttsc@0.30.0:
-    resolution: {integrity: sha512-nbhN73nprJ5oZ5L/nkTXJA8oe2eS9TAJC7Ax8V6d+VxY8HGCrqW/b2JeuBdbuEPTlI5h5Kr9jyP+F04CZYCZlA==}
+  ttsc@0.30.1:
+    resolution: {integrity: sha512-z8OuL+3WZv7jgsgvt7eLnMSNtVjSGXFE2F4tZCTDIL5NXzR7mZKGpog6/6Re0pjsaZe4gxpj9T/y+e8JEswSdw==}
     engines: {node: '>=22.15.0'}
     hasBin: true
 
@@ -4582,8 +4582,8 @@ packages:
     resolution: {integrity: sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==}
     engines: {node: '>=18'}
 
-  yaml@2.9.0:
-    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
     engines: {node: '>= 14.6'}
     hasBin: true
 
@@ -4828,11 +4828,11 @@ snapshots:
       hashery: 1.5.1
       keyv: 5.6.0
 
-  '@capacitor/android@8.5.1(@capacitor/core@8.5.1)':
+  '@capacitor/android@8.5.2(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.5.1
+      '@capacitor/core': 8.5.2
 
-  '@capacitor/cli@8.5.1(supports-color@10.2.2)':
+  '@capacitor/cli@8.5.2(supports-color@10.2.2)':
     dependencies:
       '@ionic/cli-framework-output': 2.2.8(supports-color@10.2.2)
       '@ionic/utils-subprocess': 3.0.1(supports-color@10.2.2)
@@ -4855,17 +4855,17 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@capacitor/core@8.5.1':
+  '@capacitor/core@8.5.2':
     dependencies:
       tslib: 2.8.1
 
-  '@capacitor/preferences@8.0.1(@capacitor/core@8.5.1)':
+  '@capacitor/preferences@8.0.1(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.5.1
+      '@capacitor/core': 8.5.2
 
-  '@capawesome-team/capacitor-android-foreground-service@8.1.0(@capacitor/core@8.5.1)':
+  '@capawesome-team/capacitor-android-foreground-service@8.1.0(@capacitor/core@8.5.2)':
     dependencies:
-      '@capacitor/core': 8.5.1
+      '@capacitor/core': 8.5.2
 
   '@electron-internal/extract-zip@1.0.5': {}
 
@@ -5109,12 +5109,12 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@happy-dom/jest-environment@20.14.3(@jest/environment@30.5.1)(@jest/fake-timers@30.5.1)(@jest/types@30.5.1)(jest-mock@30.5.1)(jest-util@30.5.1)':
+  '@happy-dom/jest-environment@20.14.5(@jest/environment@30.5.1)(@jest/fake-timers@30.5.1)(@jest/types@30.5.1)(jest-mock@30.5.1)(jest-util@30.5.1)':
     dependencies:
       '@jest/environment': 30.5.1
       '@jest/fake-timers': 30.5.1
       '@jest/types': 30.5.1
-      happy-dom: 20.14.3
+      happy-dom: 20.14.5
       jest-mock: 30.5.1
       jest-util: 30.5.1
     transitivePeerDependencies:
@@ -5937,27 +5937,27 @@ snapshots:
       '@testing-library/dom': 8.20.1
       preact: 10.29.8
 
-  '@ttsc/darwin-arm64@0.30.0':
+  '@ttsc/darwin-arm64@0.30.1':
     optional: true
 
-  '@ttsc/darwin-x64@0.30.0':
+  '@ttsc/darwin-x64@0.30.1':
     optional: true
 
-  '@ttsc/lint@0.30.0': {}
+  '@ttsc/lint@0.30.1': {}
 
-  '@ttsc/linux-arm64@0.30.0':
+  '@ttsc/linux-arm64@0.30.1':
     optional: true
 
-  '@ttsc/linux-arm@0.30.0':
+  '@ttsc/linux-arm@0.30.1':
     optional: true
 
-  '@ttsc/linux-x64@0.30.0':
+  '@ttsc/linux-x64@0.30.1':
     optional: true
 
-  '@ttsc/win32-arm64@0.30.0':
+  '@ttsc/win32-arm64@0.30.1':
     optional: true
 
-  '@ttsc/win32-x64@0.30.0':
+  '@ttsc/win32-x64@0.30.1':
     optional: true
 
   '@tybys/wasm-util@0.10.3':
@@ -6637,7 +6637,7 @@ snapshots:
 
   cssesc@3.0.0: {}
 
-  daisyui@5.7.36: {}
+  daisyui@5.7.37: {}
 
   damerau-levenshtein@1.0.8: {}
 
@@ -7393,7 +7393,7 @@ snapshots:
 
   graceful-fs@4.2.11: {}
 
-  happy-dom@20.14.3:
+  happy-dom@20.14.5:
     dependencies:
       '@types/node': 26.5.1
       '@types/whatwg-mimetype': 3.0.2
@@ -8071,7 +8071,7 @@ snapshots:
       strip-json-comments: 5.0.3
       tinyglobby: 0.2.17
       unbash: 4.0.11
-      yaml: 2.9.0
+      yaml: 2.9.1
       zod: 4.6.2
 
   language-subtag-registry@0.3.23: {}
@@ -9055,18 +9055,18 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  ttsc@0.30.0:
+  ttsc@0.30.1:
     dependencies:
       acorn: 8.16.0
       cjs-module-lexer: 2.2.1
     optionalDependencies:
-      '@ttsc/darwin-arm64': 0.30.0
-      '@ttsc/darwin-x64': 0.30.0
-      '@ttsc/linux-arm': 0.30.0
-      '@ttsc/linux-arm64': 0.30.0
-      '@ttsc/linux-x64': 0.30.0
-      '@ttsc/win32-arm64': 0.30.0
-      '@ttsc/win32-x64': 0.30.0
+      '@ttsc/darwin-arm64': 0.30.1
+      '@ttsc/darwin-x64': 0.30.1
+      '@ttsc/linux-arm': 0.30.1
+      '@ttsc/linux-arm64': 0.30.1
+      '@ttsc/linux-x64': 0.30.1
+      '@ttsc/win32-arm64': 0.30.1
+      '@ttsc/win32-x64': 0.30.1
 
   type-check@0.4.0:
     dependencies:
@@ -9332,7 +9332,7 @@ snapshots:
 
   yallist@5.0.0: {}
 
-  yaml@2.9.0: {}
+  yaml@2.9.1: {}
 
   yargs-parser@21.1.1: {}
 
