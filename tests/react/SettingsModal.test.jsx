@@ -322,4 +322,22 @@ describe('SettingsModal — title-tag-rules save', () => {
         await waitFor(() => expect(onClose).toHaveBeenCalled());
         expect(window.api.setTitleRules).toHaveBeenCalledWith([rule]);
     });
+
+    test('loads saved profiles into each title rule profile selector', async () => {
+        window.api.getChallengeProfiles.mockResolvedValueOnce({ 'Portrait Tactic': { exposure: 80 } });
+        window.api.getTitleRules.mockResolvedValueOnce([
+            {
+                title: 'Portraits',
+                profile: 'Portrait Tactic',
+                mustIncludeTags: [],
+                shouldIncludeTags: [],
+            },
+        ]);
+
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        const profileSelect = await screen.findByLabelText('app.titleRuleProfile');
+        expect(profileSelect.value).toBe('Portrait Tactic');
+        expect(profileSelect.textContent).toContain('Portrait Tactic');
+    });
 });

@@ -36,7 +36,9 @@ const THIN_HANDLERS = [
     ['get-effective-setting', 'getEffectiveSetting', null, 'getting effective setting'],
     ['get-title-rules', 'getTitleRules', null, 'getting title rules'],
     ['set-title-rules', 'setTitleRules', false, 'setting title rules'],
+    ['get-title-profile', 'getTitleProfile', null, 'getting title profile'],
     ['get-challenge-overrides', 'getChallengeOverrides', null, 'getting challenge overrides'],
+    ['replace-challenge-overrides', 'replaceChallengeOverrides', false, 'replacing challenge overrides'],
     ['get-challenge-profiles', 'getChallengeProfiles', null, 'getting challenge profiles'],
     ['save-challenge-profile', 'saveChallengeProfile', false, 'saving challenge profile'],
     ['delete-challenge-profile', 'deleteChallengeProfile', false, 'deleting challenge profile'],
@@ -50,6 +52,25 @@ const THIN_HANDLERS = [
     ['is-setting-modified', 'isSettingModified', false, 'checking if setting is modified'],
     ['is-global-default-modified', 'isGlobalDefaultModified', false, 'checking if global default is modified'],
 ];
+
+// Capacitor has no filesystem watcher to rebroadcast settings mutations.
+// Notify renderer subscribers after successful user-facing writes so cards
+// immediately re-read effective global/profile/per-challenge values.
+const CHANGE_BROADCAST_CHANNELS = new Set([
+    'set-global-default',
+    'set-challenge-override',
+    'set-challenge-overrides',
+    'remove-challenge-override',
+    'set-title-rules',
+    'replace-challenge-overrides',
+    'save-challenge-profile',
+    'delete-challenge-profile',
+    'apply-challenge-profile',
+    'reset-setting',
+    'reset-global-default',
+    'reset-all-global-defaults',
+    'reset-all-settings',
+]);
 
 const buildHandlers = ({ broadcastSettingsChange } = {}) => {
     const handlers = {
@@ -211,7 +232,11 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
     THIN_HANDLERS.forEach(([channel, method, fallback, verb]) => {
         handlers[channel] = async (event, ...args) => {
             try {
-                return settings[method](...args);
+                const result = settings[method](...args);
+                if (result && CHANGE_BROADCAST_CHANNELS.has(channel) && typeof broadcastSettingsChange === 'function') {
+                    broadcastSettingsChange(settings.loadSettings());
+                }
+                return result;
             } catch (error) {
                 logger.withCategory('settings').error(`Error ${verb}:`, error);
                 return fallback;

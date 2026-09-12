@@ -14,6 +14,7 @@ let pinStore = {};
 
 jest.mock('../../src/js/settings', () => ({
     MAX_TITLE_LENGTH: 200,
+    rememberChallengeTitles: jest.fn(() => true),
     getTitlePins: jest.fn(() => ({ ...pinStore })),
     mergeTitlePins: jest.fn((adds, removeIds) => {
         for (const id of removeIds || []) {
@@ -203,18 +204,28 @@ describe('pinChallengeTitles', () => {
         expect(settings.mergeTitlePins).not.toHaveBeenCalled();
     });
 
-    test('over-length titles are bounded before compare and store (no perpetual mismatch)', () => {
+    test('over-length titles are not pinned or truncated into a false exact match', () => {
         const long = 'x'.repeat(250);
-        const bounded = 'x'.repeat(200);
 
         pinChallengeTitles([{ id: '1', title: long }]);
-        expect(pinStore).toEqual({ 1: bounded });
+        expect(pinStore).toEqual({});
 
         mockWarning.mockClear();
         const again = [{ id: '1', title: long }];
         pinChallengeTitles(again);
         expect(mockWarning).not.toHaveBeenCalled();
-        expect(again[0].title).toBe(long); // matches its pin — left as-is
+        expect(again[0].title).toBe(long);
+    });
+
+    test('a legacy boundary-length pin never replaces a longer current title', () => {
+        const legacyPrefix = 'x'.repeat(200);
+        pinStore['1'] = legacyPrefix;
+        const current = [{ id: '1', title: `${legacyPrefix}-different-title` }];
+
+        pinChallengeTitles(current);
+
+        expect(current[0].title).toBe(`${legacyPrefix}-different-title`);
+        expect(mockWarning).not.toHaveBeenCalled();
     });
 
     test('pins survive an interleaved failed fetch (no call between successes)', () => {

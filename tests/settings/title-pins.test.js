@@ -91,9 +91,9 @@ describe('settings facade — first-seen title pins', () => {
         expect(settings.getTitlePins()).toEqual({ 1: 'Original' });
     });
 
-    test('stored titles are truncated to the 200-char cap', () => {
-        settings.mergeTitlePins({ 1: 'x'.repeat(250) }, []);
-        expect(settings.getTitlePins()).toEqual({ 1: 'x'.repeat(200) });
+    test('boundary-length and over-length titles are rejected instead of becoming ambiguous pins', () => {
+        settings.mergeTitlePins({ 1: 'x'.repeat(settings.MAX_TITLE_LENGTH), 2: 'y'.repeat(250) }, []);
+        expect(settings.getTitlePins()).toEqual({});
     });
 
     test('empty/whitespace/non-string titles are not stored', () => {
@@ -107,6 +107,15 @@ describe('settings facade — first-seen title pins', () => {
         // into the persisted blob, bypassing mergeTitlePins' validation.
         const blob = JSON.parse(store.value);
         blob.challengeSettings.titlePins['2'] = '   ';
+        store.value = JSON.stringify(blob);
+
+        expect(settings.getTitlePins()).toEqual({ 1: 'Real' });
+    });
+
+    test('legacy boundary-length truncated pins are filtered on read', () => {
+        settings.mergeTitlePins({ 1: 'Real' }, []);
+        const blob = JSON.parse(store.value);
+        blob.challengeSettings.titlePins['2'] = 'x'.repeat(settings.MAX_TITLE_LENGTH);
         store.value = JSON.stringify(blob);
 
         expect(settings.getTitlePins()).toEqual({ 1: 'Real' });

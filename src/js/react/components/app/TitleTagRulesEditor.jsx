@@ -1,17 +1,39 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { TagsField } from './SettingInput';
 
+function renderTitleProfileSelect(index, rule, profiles, updateRule, t) {
+    const names = Object.keys(profiles).sort();
+    return (
+        <div className="form-control gap-1">
+            <span className="label-text text-sm">{t('app.titleRuleProfile')}</span>
+            <select
+                aria-label={t('app.titleRuleProfile')}
+                className="select select-bordered select-sm w-full"
+                value={rule.profile ?? ''}
+                onChange={(event) => updateRule(index, { profile: event.target.value })}
+            >
+                <option value="">{t('app.none')}</option>
+                {names.map((name) => (
+                    <option key={name} value={name}>
+                        {name}
+                    </option>
+                ))}
+            </select>
+        </div>
+    );
+}
+
 /**
- * Editor for title-keyed tag rules. GuruShots challenges rotate with a fresh
+ * Editor for title-keyed challenge rules. GuruShots challenges rotate with a fresh
  * id each time, so id-keyed per-challenge overrides are lost on every rotation;
- * these rules match on the (stable) challenge title and are merged into the
- * effective Must/Should Include tag lists at fill time.
+ * these rules match on the stable title, inherit an optional named profile,
+ * and merge optional Must/Should Include tags at fill time.
  *
  * Controlled: `value` is the rules array and `onChange(nextRules)` is called
  * with a new array on every edit. Each rule is
- * `{ title: string, mustIncludeTags: string[], shouldIncludeTags: string[] }`.
+ * `{ title: string, profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[] }`.
  */
-export function TitleTagRulesEditor({ value, onChange }) {
+export function TitleTagRulesEditor({ value, onChange, profiles = {} }) {
     const { t } = useTranslation();
     const rules = Array.isArray(value) ? value : [];
 
@@ -24,7 +46,7 @@ export function TitleTagRulesEditor({ value, onChange }) {
     };
 
     const addRule = () => {
-        onChange([...rules, { title: '', mustIncludeTags: [], shouldIncludeTags: [] }]);
+        onChange([...rules, { title: '', profile: '', mustIncludeTags: [], shouldIncludeTags: [] }]);
     };
 
     return (
@@ -53,7 +75,7 @@ export function TitleTagRulesEditor({ value, onChange }) {
                             ×
                         </button>
                     </div>
-
+                    {renderTitleProfileSelect(index, rule, profiles, updateRule, t)}
                     <div className="form-control">
                         <label className="label py-1">
                             <span className="label-text text-sm">{t('app.mustIncludeTags')}</span>

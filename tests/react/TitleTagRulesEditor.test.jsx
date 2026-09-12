@@ -17,7 +17,7 @@ describe('TitleTagRulesEditor', () => {
         const onChange = jest.fn();
         render(<TitleTagRulesEditor value={[]} onChange={onChange} />);
         fireEvent.click(screen.getByRole('button', { name: 'app.addTitleTagRule' }));
-        expect(onChange).toHaveBeenCalledWith([{ title: '', mustIncludeTags: [], shouldIncludeTags: [] }]);
+        expect(onChange).toHaveBeenCalledWith([{ title: '', profile: '', mustIncludeTags: [], shouldIncludeTags: [] }]);
     });
 
     test('editing the title emits the updated rule', () => {
@@ -50,5 +50,24 @@ describe('TitleTagRulesEditor', () => {
         const tagInputs = screen.getAllByPlaceholderText('app.tagsPlaceholder');
         fireEvent.change(tagInputs[0], { target: { value: 'hat, cap' } });
         expect(onChange).toHaveBeenCalledWith([{ title: 'A', mustIncludeTags: ['hat', 'cap'], shouldIncludeTags: [] }]);
+    });
+
+    test('selecting a saved profile assigns it to the title rule', () => {
+        const onChange = jest.fn();
+        const value = [{ title: 'Portraits', mustIncludeTags: [], shouldIncludeTags: [] }];
+        render(
+            <TitleTagRulesEditor
+                value={value}
+                onChange={onChange}
+                profiles={{ 'Portrait Tactic': { exposure: 80 }, Other: {} }}
+            />,
+        );
+
+        const select = screen.getByLabelText('app.titleRuleProfile');
+        select.value = 'Portrait Tactic';
+        select.dispatchEvent(new window.Event('change', { bubbles: true }));
+        expect(onChange).toHaveBeenCalledWith([
+            { title: 'Portraits', profile: 'Portrait Tactic', mustIncludeTags: [], shouldIncludeTags: [] },
+        ]);
     });
 });

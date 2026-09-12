@@ -24,15 +24,24 @@ const logger = require('../logger');
 // the IPC shell's handlers — so both sides bound strings identically.
 const sanitizeForLog = logger.sanitizeLogString;
 
-// Shared with mergeTitlePins' storage cap — the compare below only prevents
-// perpetual mismatch on over-length titles if both sides bound with the same
-// number, so never redeclare this locally.
+// Shared with mergeTitlePins' storage cap.
 const MAX_TITLE_LENGTH = /** @type {number} */ (settings.MAX_TITLE_LENGTH);
 
 // Warn once per distinct incoming title per id — repeated confirmations of
 // the same mismatch on every poll stay silent. In-memory only: durability
 // matters for the pins themselves, not for log dedup.
 let lastWarnedTitleById = new Map();
+
+/**
+ * @param {Record<string, string>} adds
+ * @param {string[]} removeIds
+ * @param {Array<{id?: string|number, title?: string}>} challenges
+ */
+const commitPinChanges = (adds, removeIds, challenges) => {
+    if (Object.keys(adds).length > 0 || removeIds.length > 0) settings.mergeTitlePins(adds, removeIds);
+    settings.rememberChallengeTitles(challenges);
+    for (const id of removeIds) lastWarnedTitleById.delete(id);
+};
 
 /**
  * Pin first-seen titles onto a freshly fetched active-challenge list.
@@ -48,7 +57,11 @@ let lastWarnedTitleById = new Map();
  * @returns {Array<{id?: string|number, title?: string}>}
  */
 const pinChallengeTitles = (challenges) => {
-    if (!Array.isArray(challenges) || challenges.length === 0) return challenges;
+    if (!Array.isArray(challenges)) return challenges;
+    if (challenges.length === 0) {
+        settings.rememberChallengeTitles(challenges);
+        return challenges;
+    }
 
     // Boundary cast: settings.js is not yet `// @ts-check`-typed, so its
     // inferred return type is too narrow (see CLAUDE.md typing policy).
@@ -63,17 +76,21 @@ const pinChallengeTitles = (challenges) => {
         activeIds.add(id);
 
         const raw = typeof challenge.title === 'string' ? challenge.title : '';
-        // Compare and store the bounded form so an over-length title never
-        // mismatches its own truncated pin on the next fetch.
-        const incoming = raw.slice(0, MAX_TITLE_LENGTH);
+        const incoming = raw;
         const hasIncoming = incoming.trim() !== '';
-        const pinned = Object.prototype.hasOwnProperty.call(pins, id) ? pins[id] : null;
+        const storedPin = Object.prototype.hasOwnProperty.call(pins, id) ? pins[id] : null;
+        // A boundary-length pin may have been truncated by an older release.
+        // Reject it defensively even if a custom settings adapter surfaces it.
+        const pinned =
+            typeof storedPin === 'string' && storedPin.trim() !== '' && storedPin.length < MAX_TITLE_LENGTH
+                ? storedPin
+                : null;
 
         if (pinned === null) {
             // First occurrence wins even within a single batch — a malformed
             // response repeating an id must not let the later entry override
             // the earlier one's first-seen title.
-            if (hasIncoming && !Object.prototype.hasOwnProperty.call(adds, id)) {
+            if (hasIncoming && incoming.length < MAX_TITLE_LENGTH && !Object.prototype.hasOwnProperty.call(adds, id)) {
                 adds[id] = incoming;
             }
             continue;
@@ -104,12 +121,7 @@ const pinChallengeTitles = (challenges) => {
     // the empty-list guard above protects against, and pruning on it would
     // wipe every pin.
     const removeIds = activeIds.size > 0 ? Object.keys(pins).filter((id) => !activeIds.has(id)) : [];
-    if (Object.keys(adds).length > 0 || removeIds.length > 0) {
-        settings.mergeTitlePins(adds, removeIds);
-    }
-    for (const id of removeIds) {
-        lastWarnedTitleById.delete(id);
-    }
+    commitPinChanges(adds, removeIds, challenges);
 
     return challenges;
 };

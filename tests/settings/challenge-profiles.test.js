@@ -16,6 +16,7 @@
  */
 
 const settings = require('../../src/js/settings');
+const logger = require('../../src/js/logger');
 
 jest.mock('../../src/js/logger', () => ({
     info: jest.fn(),
@@ -52,6 +53,7 @@ describe('settings facade — challenge profiles', () => {
             }),
         };
         globalThis.AndroidHeadlessStore = store;
+        settings.rememberChallengeTitles([]);
     });
 
     afterEach(() => {
@@ -298,6 +300,180 @@ describe('settings facade — challenge profiles', () => {
             expect(settings.applyChallengeProfile('p', '123')).toBe(false);
             // Pre-existing override untouched — no partial write.
             expect(settings.getChallengeOverrides('123')).toEqual({ autoFill: true });
+        });
+    });
+
+    describe('automatic title profile inheritance', () => {
+        beforeEach(() => {
+            settings.saveChallengeProfile('Recurring Tactic', { exposure: 80, autoFill: true });
+            settings.setTitleRules([
+                {
+                    title: 'Weekly Theme',
+                    profile: 'Recurring Tactic',
+                    mustIncludeTags: [],
+                    shouldIncludeTags: [],
+                },
+            ]);
+        });
+
+        test('inherits profile values for the current id and a rotated id with the same title', () => {
+            settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
+            expect(settings.getEffectiveSetting('exposure', '100')).toBe(80);
+            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(true);
+
+            settings.rememberChallengeTitles([{ id: 999, title: 'weekly theme' }]);
+            expect(settings.getEffectiveSetting('exposure', '999')).toBe(80);
+        });
+
+        test('keeps manual per-challenge overrides above the automatic profile', () => {
+            settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
+            expect(settings.setChallengeOverride('exposure', '100', 65)).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '100')).toBe(65);
+            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(true);
+        });
+
+        test('clears a redundant manual value against the profile baseline, not the global default', () => {
+            settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
+            settings.setChallengeOverride('exposure', '100', 65);
+
+            expect(settings.setChallengeOverride('exposure', '100', 80)).toBe(true);
+            expect(settings.getChallengeOverrides('100')).toEqual({});
+            expect(settings.getEffectiveSetting('exposure', '100')).toBe(80);
+        });
+
+        test('validates a manual override against the inherited profile as a complete setting set', () => {
+            settings.saveChallengeProfile('Strict', { exposure: 90, exposureTarget: 100 });
+            settings.setTitleRules([
+                { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
+
+            expect(settings.setChallengeOverride('exposureTarget', '123', 80)).toBe(false);
+            expect(settings.getChallengeOverrides('123')).toEqual({});
+            expect(settings.getEffectiveSetting('exposureTarget', '123')).toBe(100);
+        });
+
+        test('rejects a trigger override that would invalidate the inherited profile target', () => {
+            settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 80 });
+            settings.setTitleRules([
+                { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
+
+            expect(settings.setChallengeOverride('exposure', '123', 90)).toBe(false);
+            expect(settings.getChallengeOverrides('123')).toEqual({});
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(50);
+        });
+
+        test('batch override rejects an invalid composition without partially saving sibling values', () => {
+            settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 80, autoFill: true });
+            settings.setTitleRules([
+                { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
+
+            expect(settings.setChallengeOverrides('123', { exposure: 90, autoFill: false })).toBe(false);
+            expect(settings.getChallengeOverrides('123')).toEqual({});
+            expect(settings.getEffectiveSetting('autoFill', '123')).toBe(true);
+        });
+
+        test('rejects removing an override when the inherited trigger would exceed the remaining target', () => {
+            settings.saveChallengeProfile('Strict', { exposure: 90, exposureTarget: 100 });
+            settings.setTitleRules([
+                { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
+            settings.setChallengeOverride('exposure', '123', 70);
+            settings.setChallengeOverride('exposureTarget', '123', 80);
+
+            expect(settings.removeChallengeOverride('exposure', '123')).toBe(false);
+            expect(settings.getChallengeOverrides('123')).toEqual({ exposure: 70, exposureTarget: 80 });
+        });
+
+        test('manual profile Apply replaces the automatic profile baseline', () => {
+            settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
+            settings.saveChallengeProfile('Reset', {});
+
+            expect(settings.applyChallengeProfile('Reset', '100')).toBe(true);
+            expect(settings.getChallengeOverrides('100')).toEqual({});
+            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+            expect(settings.getTitleProfile('Weekly Theme', '100')).toEqual({
+                name: 'Recurring Tactic',
+                values: { exposure: 80, autoFill: true },
+                suppressed: true,
+            });
+        });
+
+        test('atomic form save can suppress and later restore automatic inheritance', () => {
+            settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
+
+            expect(settings.replaceChallengeOverrides('100', { exposure: 70 }, true)).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '100')).toBe(70);
+            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+
+            expect(settings.replaceChallengeOverrides('100', {}, false)).toBe(true);
+            expect(settings.getEffectiveSetting('exposure', '100')).toBe(80);
+            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(true);
+        });
+
+        test('rejects an automatic profile assignment that conflicts with existing manual values', () => {
+            settings.setGlobalDefault('exposure', 50);
+            settings.saveChallengeProfile('Strict', { exposure: 90, exposureTarget: 100 });
+            settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
+            settings.setChallengeOverride('exposureTarget', '123', 80);
+
+            expect(
+                settings.setTitleRules([
+                    { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
+                ]),
+            ).toBe(false);
+            expect(settings.getTitleRules().some((rule) => rule.title === 'Strict Theme')).toBe(false);
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(50);
+        });
+
+        test('rejects a sparse profile when it invalidates an inherited dependent value', () => {
+            settings.setGlobalDefault('exposure', 50);
+            settings.setGlobalDefault('exposureTarget', 80);
+
+            expect(settings.saveChallengeProfile('Too High', { exposure: 90 })).toBe(false);
+            expect(settings.getChallengeProfiles()['Too High']).toBeUndefined();
+        });
+
+        test('rejects an assigned profile overwrite that would conflict with manual values', () => {
+            settings.setGlobalDefault('exposure', 50);
+            settings.saveChallengeProfile('Strict', { exposure: 50, exposureTarget: 100 });
+            settings.setTitleRules([
+                { title: 'Strict Theme', profile: 'Strict', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+            settings.rememberChallengeTitles([{ id: 123, title: 'Strict Theme' }]);
+            settings.setChallengeOverride('exposureTarget', '123', 80);
+
+            expect(settings.saveChallengeProfile('STRICT', { exposure: 90, exposureTarget: 100 })).toBe(false);
+            expect(settings.getChallengeProfiles().Strict).toEqual({ exposure: 50, exposureTarget: 100 });
+            expect(settings.getEffectiveSetting('exposure', '123')).toBe(50);
+        });
+
+        test('fails closed when an assigned profile is corrupt instead of applying a valid subset', () => {
+            settings.rememberChallengeTitles([{ id: 100, title: 'Weekly Theme' }]);
+            const raw = settings.loadSettings();
+            raw.challengeSettings.profiles['Recurring Tactic'].exposure = 'corrupt';
+            settings.saveSettings(raw);
+            logger.withCategory.mockClear();
+
+            expect(settings.getTitleProfile('Weekly Theme')).toBeNull();
+            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
+            expect(settings.getEffectiveSetting('exposure', '100')).toBe(100);
+            expect(logger.withCategory).not.toHaveBeenCalled();
+        });
+
+        test('does not exact-match an over-length observed title to its 200-character prefix', () => {
+            const prefix = 'x'.repeat(settings.MAX_TITLE_LENGTH);
+            settings.saveChallengeProfile('Long', { autoFill: true });
+            settings.setTitleRules([{ title: prefix, profile: 'Long', mustIncludeTags: [], shouldIncludeTags: [] }]);
+            settings.rememberChallengeTitles([{ id: 100, title: `${prefix}-different-suffix` }]);
+
+            expect(settings.getTitleProfile(`${prefix}-different-suffix`)).toBeNull();
+            expect(settings.getEffectiveSetting('autoFill', '100')).toBe(false);
         });
     });
 });

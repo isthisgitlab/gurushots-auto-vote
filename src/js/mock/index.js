@@ -206,6 +206,9 @@ const mockApiClient = {
                     .withCategory('challenges')
                     .info(`Using cached mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
             }
+            // Match the real API's title-profile behavior without persisting
+            // mock challenge ids into the user's real settings.
+            settings.rememberChallengeTitles(sessionMockCache.challenges.challenges);
             return simulateApiResponse(sessionMockCache.challenges, 800);
         },
     ),

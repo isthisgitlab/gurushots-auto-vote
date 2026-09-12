@@ -36,7 +36,9 @@ const EXPECTED_THIN_HANDLERS = [
     ['get-effective-setting', 'getEffectiveSetting', null],
     ['get-title-rules', 'getTitleRules', null],
     ['set-title-rules', 'setTitleRules', false],
+    ['get-title-profile', 'getTitleProfile', null],
     ['get-challenge-overrides', 'getChallengeOverrides', null],
+    ['replace-challenge-overrides', 'replaceChallengeOverrides', false],
     ['get-challenge-profiles', 'getChallengeProfiles', null],
     ['save-challenge-profile', 'saveChallengeProfile', false],
     ['delete-challenge-profile', 'deleteChallengeProfile', false],
@@ -49,6 +51,22 @@ const EXPECTED_THIN_HANDLERS = [
     ['reset-all-settings', 'resetAllSettings', false],
     ['is-setting-modified', 'isSettingModified', false],
     ['is-global-default-modified', 'isGlobalDefaultModified', false],
+];
+
+const CHANGE_BROADCAST_CHANNELS = [
+    'set-global-default',
+    'set-challenge-override',
+    'set-challenge-overrides',
+    'remove-challenge-override',
+    'set-title-rules',
+    'replace-challenge-overrides',
+    'save-challenge-profile',
+    'delete-challenge-profile',
+    'apply-challenge-profile',
+    'reset-setting',
+    'reset-global-default',
+    'reset-all-global-defaults',
+    'reset-all-settings',
 ];
 
 describe('settings.handlers THIN_HANDLERS table', () => {
@@ -83,4 +101,18 @@ describe('settings.handlers THIN_HANDLERS table', () => {
             expect(result).toBe(fallback);
         },
     );
+
+    test.each(CHANGE_BROADCAST_CHANNELS)('channel "%s" broadcasts a successful mutation', async (channel) => {
+        const row = EXPECTED_THIN_HANDLERS.find(([candidate]) => candidate === channel);
+        const method = row[1];
+        const snapshot = { challengeSettings: { changed: true } };
+        const broadcastSettingsChange = jest.fn();
+        settings[method] = jest.fn().mockReturnValue(true);
+        settings.loadSettings.mockReturnValue(snapshot);
+
+        const handlers = buildHandlers({ broadcastSettingsChange });
+        await handlers[channel]({}, 'arg');
+
+        expect(broadcastSettingsChange).toHaveBeenCalledWith(snapshot);
+    });
 });

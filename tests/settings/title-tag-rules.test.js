@@ -50,6 +50,7 @@ describe('settings facade — title-keyed tag rules', () => {
             }),
         };
         globalThis.AndroidHeadlessStore = store;
+        settings.rememberChallengeTitles([]);
     });
 
     afterEach(() => {
@@ -99,6 +100,37 @@ describe('settings facade — title-keyed tag rules', () => {
             expect(settings.getTitleRules()).toEqual([
                 { title: 'Has Tags', mustIncludeTags: ['x'], shouldIncludeTags: [] },
             ]);
+        });
+
+        test('keeps a profile-only rule and canonicalizes the profile name', () => {
+            settings.saveChallengeProfile('Portrait Tactic', { exposure: 80 });
+            expect(
+                settings.setTitleRules([
+                    {
+                        title: 'Portraits',
+                        profile: 'portrait tactic',
+                        mustIncludeTags: [],
+                        shouldIncludeTags: [],
+                    },
+                ]),
+            ).toBe(true);
+            expect(settings.getTitleRules()).toEqual([
+                {
+                    title: 'Portraits',
+                    profile: 'Portrait Tactic',
+                    mustIncludeTags: [],
+                    shouldIncludeTags: [],
+                },
+            ]);
+        });
+
+        test('rejects an unknown profile without persisting', () => {
+            expect(
+                settings.setTitleRules([
+                    { title: 'Portraits', profile: 'missing', mustIncludeTags: [], shouldIncludeTags: [] },
+                ]),
+            ).toBe(false);
+            expect(settings.getTitleRules()).toEqual([]);
         });
 
         test('de-dupes by normalized title, last wins', () => {
@@ -221,6 +253,50 @@ describe('settings facade — title-keyed tag rules', () => {
             settings.setTitleRules([{ title: 'Has Title', mustIncludeTags: ['x'], shouldIncludeTags: [] }]);
 
             expect(settings.getEffectiveTagSetting('mustIncludeTags', { id: 1 })).toEqual(['base']);
+        });
+    });
+
+    describe('getTitleProfile', () => {
+        test('resolves an exact title case-insensitively and returns sanitized values', () => {
+            settings.saveChallengeProfile('Portrait Tactic', { exposure: 80, autoFill: true });
+            settings.setTitleRules([
+                {
+                    title: 'Weekly Portraits',
+                    profile: 'Portrait Tactic',
+                    mustIncludeTags: [],
+                    shouldIncludeTags: [],
+                },
+            ]);
+
+            expect(settings.getTitleProfile(' weekly PORTRAITS ')).toEqual({
+                name: 'Portrait Tactic',
+                values: { exposure: 80, autoFill: true },
+            });
+            expect(settings.getTitleProfile('Other')).toBeNull();
+        });
+
+        test('deleting an assigned profile removes only its part of each title rule', () => {
+            settings.saveChallengeProfile('Tactic', { exposure: 80 });
+            settings.setTitleRules([
+                { title: 'Profile only', profile: 'Tactic', mustIncludeTags: [], shouldIncludeTags: [] },
+                { title: 'Also tags', profile: 'Tactic', mustIncludeTags: ['hat'], shouldIncludeTags: [] },
+            ]);
+
+            expect(settings.deleteChallengeProfile('tactic')).toBe(true);
+            expect(settings.getTitleRules()).toEqual([
+                { title: 'Also tags', mustIncludeTags: ['hat'], shouldIncludeTags: [] },
+            ]);
+        });
+
+        test('profile overwrite updates assigned rule casing', () => {
+            settings.saveChallengeProfile('Tactic', { exposure: 80 });
+            settings.setTitleRules([
+                { title: 'Portraits', profile: 'Tactic', mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+
+            expect(settings.saveChallengeProfile('TACTIC', { exposure: 70 })).toBe(true);
+            expect(settings.getTitleRules()[0].profile).toBe('TACTIC');
+            expect(settings.getTitleProfile('Portraits')).toEqual({ name: 'TACTIC', values: { exposure: 70 } });
         });
     });
 });

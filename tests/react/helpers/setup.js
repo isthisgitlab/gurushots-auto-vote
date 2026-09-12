@@ -74,6 +74,7 @@ Object.assign(mockApi, {
     // Per-challenge overrides
     getChallengeOverride: jest.fn().mockResolvedValue(null),
     getChallengeOverrides: jest.fn().mockResolvedValue({}),
+    replaceChallengeOverrides: jest.fn().mockResolvedValue(true),
     setChallengeOverride: jest.fn().mockResolvedValue(true),
     removeChallengeOverride: jest.fn().mockResolvedValue(true),
     cleanupStaleChallengeSetting: jest.fn().mockResolvedValue(true),
@@ -123,6 +124,7 @@ Object.assign(mockApi, {
     // Title-keyed tag rules
     getTitleRules: jest.fn().mockResolvedValue([]),
     setTitleRules: jest.fn().mockResolvedValue(true),
+    getTitleProfile: jest.fn().mockResolvedValue(null),
 
     // Challenge profiles
     getChallengeProfiles: jest.fn().mockResolvedValue({}),

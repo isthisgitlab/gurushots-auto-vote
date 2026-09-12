@@ -213,10 +213,17 @@ const resetSetting = (key, challengeId = null) => {
     try {
         if (challengeId) {
             if (!requirePerChallenge(key)) return false;
-            settings.removeChallengeOverride(key, challengeId);
+            if (!settings.removeChallengeOverride(key, challengeId)) {
+                logger
+                    .withCategory('settings')
+                    .error(
+                        `Could not reset ${key} for challenge ${challengeId}; its remaining settings would conflict`,
+                    );
+                return false;
+            }
             logger
                 .withCategory('settings')
-                .success(`Reset ${key} for challenge ${challengeId} (now inherits the global default)`);
+                .success(`Reset ${key} for challenge ${challengeId} (now inherits its profile/global baseline)`);
             return true;
         }
         const defaultSettings = getDefaultSettings();

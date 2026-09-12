@@ -61,8 +61,14 @@ const getDefaultSettings = () => {
             // time, so id-keyed perChallenge overrides are lost on every
             // rotation; these rules match on the (stable) challenge title and
             // are merged into the effective must/should-include tag lists at
-            // fill time. Shape: [{ title, mustIncludeTags: [], shouldIncludeTags: [] }].
+            // fill time. A rule may also assign one named settings profile,
+            // which becomes the inherited baseline below any id-keyed manual
+            // overrides. Shape:
+            // [{ title, profile?, mustIncludeTags: [], shouldIncludeTags: [] }].
             titleRules: [],
+            // Challenge ids where a manually applied named profile replaces,
+            // rather than layers over, an automatic title profile.
+            titleProfileSuppressions: {},
         },
         // API headers for randomization (random per user installation)
         apiHeaders: {},
@@ -682,19 +688,25 @@ const _applyChallengeOverride = (settings, settingKey, challengeId, value, batch
         return 'invalid';
     }
 
-    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const globalDefaults = _globalChallengeValues(settings);
+    const titleProfile = _getTitleProfileForChallengeId(settings, challengeId);
+    const inheritedDefaults = { ...globalDefaults, ...(titleProfile?.values || {}) };
     const existingOverrides = settings.challengeSettings?.perChallenge?.[challengeId] || {};
     const contextSettings = batchOverrides
-        ? { ...globalDefaults, ...existingOverrides, ...batchOverrides }
-        : { ...globalDefaults, ...existingOverrides, [settingKey]: value };
+        ? { ...inheritedDefaults, ...existingOverrides, ...batchOverrides }
+        : { ...inheritedDefaults, ...existingOverrides, [settingKey]: value };
+    const candidates = batchOverrides || { [settingKey]: value };
 
-    if (!validateSetting(settingKey, value, contextSettings, challengeId)) {
+    if (!_challengeValueSetIsValid(contextSettings, candidates, challengeId)) {
         logger.withCategory('settings').error(`Invalid value for setting ${settingKey}:`, value);
         return 'invalid';
     }
 
     const container = _ensureChallengeContainer(settings, challengeId);
-    if (!valuesEqual(value, getGlobalDefault(settingKey))) {
+    const inheritedValue = Object.prototype.hasOwnProperty.call(inheritedDefaults, settingKey)
+        ? inheritedDefaults[settingKey]
+        : SETTINGS_SCHEMA[settingKey].default;
+    if (!valuesEqual(value, inheritedValue)) {
         container[settingKey] = value;
         return 'set';
     }
@@ -719,46 +731,20 @@ const setChallengeOverride = (settingKey, challengeId, value) => {
 };
 
 /**
- * Set multiple per-challenge overrides efficiently, only saving values
- * that differ from global defaults.
+ * Atomically merge multiple per-challenge overrides, saving only values that
+ * differ from the inherited global/title-profile baseline.
  */
 const setChallengeOverrides = (challengeId, overrides) => {
+    const id = challengeId === null || challengeId === undefined ? '' : String(challengeId).trim();
+    if (!id || !overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return false;
     const settings = loadSettings();
-    _ensureChallengeContainer(settings, challengeId);
-
-    const savedOverrides = [];
-    const removedOverrides = [];
-    let hasChanges = false;
-
-    for (const [settingKey, value] of Object.entries(overrides)) {
-        const result = _applyChallengeOverride(settings, settingKey, challengeId, value, overrides);
-        if (result === 'set') {
-            savedOverrides.push(`${settingKey}=${value}`);
-            hasChanges = true;
-        } else if (result === 'cleared') {
-            removedOverrides.push(settingKey);
-            hasChanges = true;
-        }
+    if (!settings.challengeSettings) settings.challengeSettings = getDefaultSettings().challengeSettings;
+    const current = settings.challengeSettings.perChallenge?.[id] || {};
+    const next = { ...current, ...overrides };
+    if (!_replaceChallengeOverridesInSettings(settings, id, next, _isTitleProfileSuppressed(settings, id))) {
+        return false;
     }
-
-    if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
-        delete settings.challengeSettings.perChallenge[challengeId];
-        logger.withCategory('settings').debug(`🗑️ Removed empty challenge settings for challenge ${challengeId}`);
-        hasChanges = true;
-    }
-
-    if (savedOverrides.length > 0) {
-        logger
-            .withCategory('general')
-            .debug(`💾 Saved overrides for challenge ${challengeId}:`, savedOverrides.join(', '));
-    }
-    if (removedOverrides.length > 0) {
-        logger
-            .withCategory('general')
-            .debug(`🗑️ Removed overrides for challenge ${challengeId}:`, removedOverrides.join(', '));
-    }
-
-    return hasChanges ? saveSettings(settings) : true;
+    return saveSettings(settings);
 };
 
 /**
@@ -774,11 +760,19 @@ const removeChallengeOverride = (settingKey, challengeId) => {
         return true; // Nothing to remove
     }
 
-    delete settings.challengeSettings.perChallenge[challengeId][settingKey];
-
-    // If challenge has no more overrides, remove the challenge entry
-    if (Object.keys(settings.challengeSettings.perChallenge[challengeId]).length === 0) {
-        delete settings.challengeSettings.perChallenge[challengeId];
+    const current = settings.challengeSettings.perChallenge[challengeId];
+    if (!Object.prototype.hasOwnProperty.call(current, settingKey)) return true;
+    const next = { ...current };
+    delete next[settingKey];
+    if (
+        !_replaceChallengeOverridesInSettings(
+            settings,
+            challengeId,
+            next,
+            _isTitleProfileSuppressed(settings, challengeId),
+        )
+    ) {
+        return false;
     }
 
     return saveSettings(settings);
@@ -807,21 +801,33 @@ const getEffectiveSetting = (settingKey, challengeId = null) => {
         return SETTINGS_SCHEMA[settingKey]?.default;
     }
 
-    // If challengeId is provided and the setting supports per-challenge overrides, check for override
+    const settings = loadSettings();
+    const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
+
+    // Explicit id-keyed settings remain the highest-precedence layer.
     if (challengeId && SETTINGS_SCHEMA[settingKey].perChallenge) {
-        const override = getChallengeOverride(settingKey, challengeId);
-        if (override !== null) {
-            return override;
+        const overrides = challengeSettings.perChallenge?.[challengeId];
+        if (overrides && Object.prototype.hasOwnProperty.call(overrides, settingKey)) {
+            return overrides[settingKey];
+        }
+
+        // An exact-title profile is an inherited baseline, not a copied
+        // per-challenge override. That makes it survive rotating challenge ids
+        // while still allowing a one-off manual override to win above it.
+        const titleProfile = _getTitleProfileForChallengeId(settings, challengeId);
+        if (titleProfile && Object.prototype.hasOwnProperty.call(titleProfile.values, settingKey)) {
+            return titleProfile.values[settingKey];
         }
     }
 
-    // Return global default
-    return getGlobalDefault(settingKey);
+    return Object.prototype.hasOwnProperty.call(challengeSettings.globalDefaults || {}, settingKey)
+        ? challengeSettings.globalDefaults[settingKey]
+        : SETTINGS_SCHEMA[settingKey].default;
 };
 
 /**
- * Title-keyed tag rules. The setting keys these rules can carry — only the
- * two tag lists are title-scoped; everything else stays id-keyed.
+ * Setting keys whose title-rule contribution is merged as a tag union. Named
+ * profiles are also title-scoped, but resolve as an inherited settings layer.
  */
 const TITLE_RULE_TAG_KEYS = ['mustIncludeTags', 'shouldIncludeTags'];
 
@@ -833,10 +839,50 @@ const TITLE_RULE_TAG_KEYS = ['mustIncludeTags', 'shouldIncludeTags'];
 const MAX_TITLE_RULES = 200;
 const MAX_TITLE_LENGTH = 200;
 
+// Current id→title observations are process-local. Real API responses also
+// persist first-seen title pins, but this cache is what lets the same resolver
+// work in mock mode without writing mock ids into the user's real settings.
+// Replacing the whole map on each successful fetch also drops stale ids.
+let activeChallengeTitles = new Map();
+
 // Stable match key for a challenge title: trimmed + lowercased. The same
 // challenge recurs with the same title (but a new id) on each rotation, so
 // this is what survives a rotation.
 const normalizeTitle = (title) => (typeof title === 'string' ? title.trim().toLowerCase() : '');
+
+/**
+ * Remember the titles from the latest successful active-challenge response.
+ * The input is API-owned/untrusted, so only bounded scalar ids/titles enter
+ * the cache and the first row for a duplicate id wins.
+ */
+const rememberChallengeTitles = (challenges) => {
+    if (!Array.isArray(challenges)) return false;
+    const next = new Map();
+    for (const challenge of challenges.slice(0, MAX_TITLE_RULES)) {
+        if (challenge?.id === null || challenge?.id === undefined) continue;
+        const id = String(challenge.id);
+        if (!id || next.has(id)) continue;
+        const title = typeof challenge?.title === 'string' ? challenge.title.trim() : '';
+        // Keep an explicit miss for unusable/over-length observations so a
+        // truncated legacy pin cannot be used as an apparently exact fallback.
+        next.set(id, title && title.length <= MAX_TITLE_LENGTH ? title : null);
+    }
+    activeChallengeTitles = next;
+    return true;
+};
+
+const _titleForChallengeId = (settings, challengeId) => {
+    const id = challengeId === null || challengeId === undefined ? '' : String(challengeId);
+    if (!id) return '';
+    if (activeChallengeTitles.has(id)) return activeChallengeTitles.get(id) || '';
+    const pinned = settings.challengeSettings?.titlePins;
+    return pinned &&
+        Object.prototype.hasOwnProperty.call(pinned, id) &&
+        typeof pinned[id] === 'string' &&
+        pinned[id].length < MAX_TITLE_LENGTH
+        ? pinned[id]
+        : '';
+};
 
 /**
  * Order-preserving union of two tag lists with the base first. A null /
@@ -858,7 +904,7 @@ const unionTags = (base, extra) => {
 };
 
 /**
- * Get the saved title→tags rules. Tolerates settings persisted before this
+ * Get the saved title rules. Tolerates settings persisted before this
  * feature existed (loadSettings shallow-merges, so an older challengeSettings
  * block overrides the default whole and has no titleRules array).
  */
@@ -878,10 +924,46 @@ const findTitleRule = (title) => {
     return getTitleRules().find((rule) => normalizeTitle(rule?.title) === key) || null;
 };
 
+const _sanitizeTitleRuleTags = (key, value) => {
+    const list = (Array.isArray(value) ? value : [])
+        .filter((tag) => typeof tag === 'string')
+        .map((tag) => tag.trim())
+        .filter(Boolean);
+    return validateSetting(key, list) ? list : null;
+};
+
+const _canonicalTitleRuleProfile = (storedProfiles, requested) => {
+    const name = typeof requested === 'string' ? requested.trim() : '';
+    if (!name) return '';
+    return _findProfileKey(storedProfiles, _normalizeProfileName(name));
+};
+
+const _sanitizeTitleRule = (rule, storedProfiles) => {
+    const title = typeof rule?.title === 'string' ? rule.title.trim() : '';
+    if (!title) return { valid: true, rule: null };
+    if (title.length > MAX_TITLE_LENGTH) return { valid: false, title };
+
+    const mustIncludeTags = _sanitizeTitleRuleTags('mustIncludeTags', rule?.mustIncludeTags);
+    const shouldIncludeTags = _sanitizeTitleRuleTags('shouldIncludeTags', rule?.shouldIncludeTags);
+    if (mustIncludeTags === null || shouldIncludeTags === null) return { valid: false, title };
+
+    const requestedProfile = typeof rule?.profile === 'string' ? rule.profile.trim() : '';
+    const profile = _canonicalTitleRuleProfile(storedProfiles, requestedProfile);
+    if (requestedProfile && profile === null) return { valid: false, title, requestedProfile };
+    if (!profile && mustIncludeTags.length === 0 && shouldIncludeTags.length === 0) {
+        return { valid: true, rule: null };
+    }
+
+    const sanitized = { title, mustIncludeTags, shouldIncludeTags };
+    if (profile) sanitized.profile = profile;
+    return { valid: true, rule: sanitized };
+};
+
 /**
- * Persist the title→tags rules. Sanitizes input: trims titles, validates each
- * tag list against the schema's tag validator, drops rules with an empty title
- * or with both tag lists empty, and de-dupes by normalized title (last wins).
+ * Persist the title rules. A rule may add tags, inherit a named profile, or do
+ * both. Sanitizes input: trims titles, validates tag lists against the schema,
+ * resolves profile names case-insensitively, drops no-op rules, and de-dupes
+ * by normalized title (last wins).
  */
 const setTitleRules = (rules) => {
     if (!Array.isArray(rules)) {
@@ -899,41 +981,33 @@ const setTitleRules = (rules) => {
     // value can't produce a huge log event (defense in depth for log shipping).
     const forLog = (title) => (title.length > 80 ? `${title.slice(0, 80)}…` : title);
 
-    const sanitizeTagList = (key, value) => {
-        const list = (Array.isArray(value) ? value : [])
-            .filter((tag) => typeof tag === 'string')
-            .map((tag) => tag.trim())
-            .filter((tag) => tag.length > 0);
-        // Reuse the schema's tags validator (tagsList: per-tag length + count caps).
-        return validateSetting(key, list) ? list : null;
-    };
-
-    // De-dupe by normalized title, last occurrence wins, preserving the
-    // user-facing title casing of that last occurrence.
+    const settings = loadSettings();
+    const storedProfiles = _readProfilesMap(settings);
     const byKey = new Map();
     for (const rule of rules) {
-        const title = typeof rule?.title === 'string' ? rule.title.trim() : '';
-        if (!title) continue;
-        if (title.length > MAX_TITLE_LENGTH) {
-            logger
-                .withCategory('settings')
-                .error(`Title rule rejected: title for "${forLog(title)}" exceeds ${MAX_TITLE_LENGTH} chars`, null);
+        const result = _sanitizeTitleRule(rule, storedProfiles);
+        if (!result.valid) {
+            const detail = result.requestedProfile
+                ? `unknown profile "${_profileNameForLog(result.requestedProfile)}"`
+                : `invalid or over-length values`;
+            logger.withCategory('settings').error(`Title rule rejected for "${forLog(result.title)}": ${detail}`, null);
             return false;
         }
-
-        const mustIncludeTags = sanitizeTagList('mustIncludeTags', rule?.mustIncludeTags);
-        const shouldIncludeTags = sanitizeTagList('shouldIncludeTags', rule?.shouldIncludeTags);
-        if (mustIncludeTags === null || shouldIncludeTags === null) {
-            logger.withCategory('settings').error(`Invalid tags in title rule for "${forLog(title)}"`, null);
-            return false;
-        }
-        // A rule that contributes no tags is a no-op — drop it.
-        if (mustIncludeTags.length === 0 && shouldIncludeTags.length === 0) continue;
-
-        byKey.set(normalizeTitle(title), { title, mustIncludeTags, shouldIncludeTags });
+        if (result.rule) byKey.set(normalizeTitle(result.rule.title), result.rule);
     }
 
-    const settings = loadSettings();
+    for (const rule of byKey.values()) {
+        if (
+            rule.profile &&
+            !_titleProfileComposesWithKnownOverrides(settings, rule.title, storedProfiles[rule.profile])
+        ) {
+            logger
+                .withCategory('settings')
+                .error(`Title profile conflicts with manual overrides for "${forLog(rule.title)}"`, null);
+            return false;
+        }
+    }
+
     if (!settings.challengeSettings) {
         settings.challengeSettings = getDefaultSettings().challengeSettings;
     }
@@ -969,7 +1043,11 @@ const getTitlePins = () => {
             // Mirror mergeTitlePins' write-side trim check so a whitespace-only
             // value in a hand-edited/corrupted blob can't become a "pin" that
             // blanks a real incoming title.
-            if (typeof title === 'string' && title.trim() !== '') {
+            // Older releases truncated pins to MAX_TITLE_LENGTH. A stored
+            // value exactly at that boundary is therefore ambiguous: it may
+            // be the prefix of a longer title and must never be restored as
+            // an exact title match.
+            if (typeof title === 'string' && title.trim() !== '' && title.length < MAX_TITLE_LENGTH) {
                 pins[id] = title;
             }
         }
@@ -981,13 +1059,15 @@ const getTitlePins = () => {
  * Merge title pins into the persisted map — never a wholesale replace. Inside
  * the write the stored map is re-read; `adds` apply only to ids with no
  * existing pin (first-seen wins, so a concurrent writer's fresh pin is never
- * clobbered) and `removeIds` are deleted. Titles are truncated to
- * MAX_TITLE_LENGTH and the map is capped at MAX_TITLE_PINS entries.
+ * clobbered) and `removeIds` are deleted. Over-length titles are rejected
+ * rather than truncated, preserving exact-match semantics. The map is capped.
  */
 const mergeTitlePins = (adds, removeIds) => {
     const addEntries =
         adds && typeof adds === 'object' && !Array.isArray(adds)
-            ? Object.entries(adds).filter(([, title]) => typeof title === 'string' && title.trim() !== '')
+            ? Object.entries(adds).filter(
+                  ([, title]) => typeof title === 'string' && title.trim() !== '' && title.length < MAX_TITLE_LENGTH,
+              )
             : [];
     const removeList = Array.isArray(removeIds) ? removeIds.filter((id) => typeof id === 'string') : [];
     if (addEntries.length === 0 && removeList.length === 0) return true;
@@ -1002,7 +1082,7 @@ const mergeTitlePins = (adds, removeIds) => {
     const pins = {};
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
         for (const id of Object.keys(stored)) {
-            if (typeof stored[id] === 'string' && stored[id].trim() !== '') {
+            if (typeof stored[id] === 'string' && stored[id].trim() !== '' && stored[id].length < MAX_TITLE_LENGTH) {
                 pins[id] = stored[id];
             }
         }
@@ -1032,7 +1112,7 @@ const mergeTitlePins = (adds, removeIds) => {
             }
             break;
         }
-        pins[id] = title.slice(0, MAX_TITLE_LENGTH);
+        pins[id] = title;
     }
     if (Object.keys(pins).length < MAX_TITLE_PINS) {
         titlePinCapWarned = false;
@@ -1098,17 +1178,81 @@ const _readProfilesMap = (settings) => {
     return stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {};
 };
 
+const _challengeValueSetIsValid = (values, candidates, challengeId = null) => {
+    const affected = new Set(Object.keys(candidates));
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const [key, config] of Object.entries(SETTINGS_SCHEMA)) {
+            if (affected.has(key) || !config.perChallenge || !config.dependsOn?.some((dep) => affected.has(dep))) {
+                continue;
+            }
+            affected.add(key);
+            changed = true;
+        }
+    }
+
+    // Enabling the final-window feature activates its inherited trigger and
+    // target even when the sparse candidate does not explicitly contain them.
+    if (values.useFinalWindowExposure === true) {
+        affected.add('finalWindowExposure');
+        affected.add('finalWindowExposureTarget');
+    }
+
+    return Array.from(affected).every((key) => {
+        const config = SETTINGS_SCHEMA[key];
+        if (!config?.perChallenge) return true;
+        // A disabled inherited final-window setting is dormant. Explicitly
+        // supplied final-window values still validate before being stored.
+        const inheritedFinalWindowValue =
+            !Object.prototype.hasOwnProperty.call(candidates, key) &&
+            (key === 'finalWindowExposure' || key === 'finalWindowExposureTarget');
+        if (inheritedFinalWindowValue && values.useFinalWindowExposure !== true) return true;
+        return validateSetting(key, values[key], values, challengeId);
+    });
+};
+
+const _profileSchemaValues = (values) => {
+    const whitelisted = {};
+    for (const key of Object.keys(values)) {
+        // Prototype-shaped keys fall out here too: SETTINGS_SCHEMA['__proto__']
+        // resolves to Object.prototype, whose .perChallenge is undefined.
+        if (SETTINGS_SCHEMA[key]?.perChallenge) whitelisted[key] = values[key];
+    }
+    return whitelisted;
+};
+
+const _logProfileValidationFailure = (logInvalid, message, value = null) => {
+    if (logInvalid) logger.withCategory('settings').error(message, value);
+};
+
+const _validatedProfileValues = (whitelisted, contextSettings, failClosed, logInvalid) => {
+    const sanitized = {};
+    for (const [key, value] of Object.entries(whitelisted)) {
+        if (validateSetting(key, value, contextSettings)) {
+            sanitized[key] = value;
+            continue;
+        }
+        if (!failClosed) continue;
+        _logProfileValidationFailure(logInvalid, `Invalid profile value for setting ${key}:`, value);
+        return null;
+    }
+    return sanitized;
+};
+
 /**
  * Sanitize a profile's values map. Keeps only keys that are perChallenge in
  * SETTINGS_SCHEMA (unknown keys validate as true in validateSetting, so the
  * whitelist is mandatory) and validates each value with the full batch as
  * context so cross-field rules (e.g. exposureTarget >= exposure) hold.
  *
- * failClosed=true (save/apply): returns null on any invalid value, logging the
- * failing key. failClosed=false (read): drops invalid values silently — the
- * schema may have evolved since the profile was saved.
+ * failClosed=true (save/apply/automatic execution): returns null on any invalid
+ * value. Mutation paths log the failing key; repeated automatic reads suppress
+ * that diagnostic so one corrupt stored profile cannot amplify logs every
+ * voting cycle. failClosed=false (profile-list display) drops invalid values
+ * silently because the schema may have evolved.
  */
-const _sanitizeProfileValues = (values, failClosed, globalDefaults) => {
+const _sanitizeProfileValues = (values, failClosed, globalDefaults, logInvalid = true) => {
     const rejected = failClosed ? null : {};
     if (!values || typeof values !== 'object' || Array.isArray(values)) {
         return rejected;
@@ -1120,24 +1264,17 @@ const _sanitizeProfileValues = (values, failClosed, globalDefaults) => {
         return rejected;
     }
 
-    const whitelisted = {};
-    for (const key of rawKeys) {
-        // Prototype-shaped keys fall out here too: SETTINGS_SCHEMA['__proto__']
-        // resolves to Object.prototype, whose .perChallenge is undefined.
-        if (SETTINGS_SCHEMA[key]?.perChallenge) {
-            whitelisted[key] = values[key];
-        }
-    }
-
+    const whitelisted = _profileSchemaValues(values);
     const contextSettings = { ...globalDefaults, ...whitelisted };
-    const sanitized = {};
-    for (const [key, value] of Object.entries(whitelisted)) {
-        if (validateSetting(key, value, contextSettings)) {
-            sanitized[key] = value;
-        } else if (failClosed) {
-            logger.withCategory('settings').error(`Invalid profile value for setting ${key}:`, value);
-            return null;
-        }
+    const sanitized = _validatedProfileValues(whitelisted, contextSettings, failClosed, logInvalid);
+    if (sanitized === null) return null;
+    // A changed trigger can invalidate an inherited dependent field that is
+    // not itself present in the sparse profile (for example exposure=90 with
+    // a global exposureTarget=80). Validate the complete effective baseline,
+    // not only the keys contributed by the profile.
+    if (failClosed && !_challengeValueSetIsValid(contextSettings, whitelisted)) {
+        _logProfileValidationFailure(logInvalid, 'Profile values conflict with inherited challenge settings');
+        return null;
     }
     return sanitized;
 };
@@ -1153,6 +1290,78 @@ const _findProfileKey = (stored, normalizedName) => {
         if (key === normalizedName) return name;
     }
     return null;
+};
+
+const _globalChallengeValues = (settings) => ({
+    ...getDefaultSettings().challengeSettings.globalDefaults,
+    ...(settings.challengeSettings?.globalDefaults || {}),
+});
+
+const _isTitleProfileSuppressed = (settings, challengeId) => {
+    const id = challengeId === null || challengeId === undefined ? '' : String(challengeId);
+    const suppressions = settings.challengeSettings?.titleProfileSuppressions;
+    return Boolean(
+        id &&
+        suppressions &&
+        typeof suppressions === 'object' &&
+        !Array.isArray(suppressions) &&
+        Object.prototype.hasOwnProperty.call(suppressions, id) &&
+        suppressions[id] === true,
+    );
+};
+
+const _titleProfileComposesWithKnownOverrides = (settings, title, rawProfileValues) => {
+    const globalValues = _globalChallengeValues(settings);
+    const profileValues = _sanitizeProfileValues(rawProfileValues, true, globalValues);
+    if (profileValues === null) return false;
+
+    const titleKey = normalizeTitle(title);
+    const perChallenge = settings.challengeSettings?.perChallenge || {};
+    return Object.entries(perChallenge).every(([challengeId, overrides]) => {
+        if (_isTitleProfileSuppressed(settings, challengeId)) return true;
+        if (normalizeTitle(_titleForChallengeId(settings, challengeId)) !== titleKey) return true;
+        if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return false;
+        const effective = { ...globalValues, ...profileValues, ...overrides };
+        return _challengeValueSetIsValid(effective, { ...profileValues, ...overrides }, challengeId);
+    });
+};
+
+/**
+ * Resolve one title rule's named profile against a supplied settings snapshot.
+ * Stale/corrupt profile references fail closed as a whole: automatic behavior
+ * never executes a partially sanitized profile.
+ */
+const _getTitleProfileFromSettings = (settings, title) => {
+    const titleKey = normalizeTitle(title);
+    if (!titleKey) return null;
+    const rules = settings.challengeSettings?.titleRules;
+    if (!Array.isArray(rules)) return null;
+    const rule = rules.find((candidate) => normalizeTitle(candidate?.title) === titleKey);
+    const normalizedProfile = _normalizeProfileName(rule?.profile);
+    if (!normalizedProfile || RESERVED_PROFILE_NAMES.has(normalizedProfile)) return null;
+
+    const stored = _readProfilesMap(settings);
+    const storedKey = _findProfileKey(stored, normalizedProfile);
+    if (storedKey === null) return null;
+    const values = _sanitizeProfileValues(stored[storedKey], true, _globalChallengeValues(settings), false);
+    if (values === null) return null;
+    return { name: storedKey, values };
+};
+
+const _getTitleProfileForChallengeId = (settings, challengeId) =>
+    _isTitleProfileSuppressed(settings, challengeId)
+        ? null
+        : _getTitleProfileFromSettings(settings, _titleForChallengeId(settings, challengeId));
+
+/**
+ * Public read model for the renderer: returns the sanitized profile inherited
+ * by an exact challenge title, or null when the title has no valid assignment.
+ */
+const getTitleProfile = (title, challengeId = null) => {
+    const settings = loadSettings();
+    const profile = _getTitleProfileFromSettings(settings, title);
+    if (!profile || challengeId === null || challengeId === undefined) return profile;
+    return { ...profile, suppressed: _isTitleProfileSuppressed(settings, challengeId) };
 };
 
 /**
@@ -1181,6 +1390,57 @@ const getChallengeOverrides = (challengeId) => {
     return overrides;
 };
 
+const _challengeOverrideEntries = (overrides) => {
+    if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return null;
+    const entries = Object.entries(overrides);
+    return entries.some(([key]) => !SETTINGS_SCHEMA[key]?.perChallenge) ? null : entries;
+};
+
+const _writeTitleProfileSuppression = (challengeSettings, challengeId, suppressed) => {
+    const prior = challengeSettings.titleProfileSuppressions;
+    const next = prior && typeof prior === 'object' && !Array.isArray(prior) ? { ...prior } : {};
+    if (suppressed) next[challengeId] = true;
+    else delete next[challengeId];
+    challengeSettings.titleProfileSuppressions = next;
+};
+
+const _replaceChallengeOverridesInSettings = (settings, challengeId, overrides, suppressTitleProfile) => {
+    const entries = _challengeOverrideEntries(overrides);
+    if (entries === null) return false;
+
+    const globalValues = _globalChallengeValues(settings);
+    const automaticProfile = suppressTitleProfile
+        ? null
+        : _getTitleProfileFromSettings(settings, _titleForChallengeId(settings, challengeId));
+    const inherited = { ...globalValues, ...(automaticProfile?.values || {}) };
+    const effective = { ...inherited, ...overrides };
+    if (!_challengeValueSetIsValid(effective, { ...(automaticProfile?.values || {}), ...overrides }, challengeId)) {
+        return false;
+    }
+
+    const container = {};
+    for (const [key, value] of entries) {
+        if (!valuesEqual(value, inherited[key])) container[key] = value;
+    }
+    const challengeSettings = settings.challengeSettings;
+    if (!challengeSettings.perChallenge) challengeSettings.perChallenge = {};
+    if (Object.keys(container).length) challengeSettings.perChallenge[challengeId] = container;
+    else delete challengeSettings.perChallenge[challengeId];
+
+    _writeTitleProfileSuppression(challengeSettings, challengeId, suppressTitleProfile);
+    return true;
+};
+
+/** Atomically replace a challenge form's manual settings and profile mode. */
+const replaceChallengeOverrides = (challengeId, overrides, suppressTitleProfile = false) => {
+    const id = challengeId === null || challengeId === undefined ? '' : String(challengeId).trim();
+    if (!id || typeof suppressTitleProfile !== 'boolean') return false;
+    const settings = loadSettings();
+    if (!settings.challengeSettings) settings.challengeSettings = getDefaultSettings().challengeSettings;
+    if (!_replaceChallengeOverridesInSettings(settings, id, overrides, suppressTitleProfile)) return false;
+    return saveSettings(settings);
+};
+
 /**
  * Get the saved profiles as `{ [displayName]: { [settingKey]: value } }`.
  * Defensive copy; values are sanitized drop-silently (stale schema keys and
@@ -1190,13 +1450,33 @@ const getChallengeOverrides = (challengeId) => {
 const getChallengeProfiles = () => {
     const settings = loadSettings();
     const stored = _readProfilesMap(settings);
-    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const globalDefaults = _globalChallengeValues(settings);
     const profiles = {};
     for (const name of Object.keys(stored)) {
         if (RESERVED_PROFILE_NAMES.has(_normalizeProfileName(name))) continue;
         profiles[name] = _sanitizeProfileValues(stored[name], false, globalDefaults);
     }
     return profiles;
+};
+
+const _updateAssignedProfileRules = (settings, normalizedName, displayName, values) => {
+    const rules = Array.isArray(settings.challengeSettings.titleRules) ? settings.challengeSettings.titleRules : [];
+    const assigned = rules.filter((rule) => _normalizeProfileName(rule?.profile) === normalizedName);
+    if (assigned.some((rule) => !_titleProfileComposesWithKnownOverrides(settings, rule.title, values))) {
+        logger
+            .withCategory('settings')
+            .error(
+                `Profile overwrite conflicts with manual challenge overrides: "${_profileNameForLog(displayName)}"`,
+                null,
+            );
+        return false;
+    }
+    if (assigned.length) {
+        settings.challengeSettings.titleRules = rules.map((rule) =>
+            _normalizeProfileName(rule?.profile) === normalizedName ? { ...rule, profile: displayName } : rule,
+        );
+    }
+    return true;
 };
 
 /**
@@ -1214,7 +1494,7 @@ const saveChallengeProfile = (name, values) => {
     }
 
     const settings = loadSettings();
-    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const globalDefaults = _globalChallengeValues(settings);
     const sanitized = _sanitizeProfileValues(values, true, globalDefaults);
     if (sanitized === null) {
         return false;
@@ -1244,6 +1524,8 @@ const saveChallengeProfile = (name, values) => {
             .error(`saveChallengeProfile rejected: profile cap of ${MAX_CHALLENGE_PROFILES} reached`, null);
         return false;
     }
+
+    if (existed && !_updateAssignedProfileRules(settings, normalized, trimmed, sanitized)) return false;
     profiles[trimmed] = sanitized;
     settings.challengeSettings.profiles = profiles;
     return saveSettings(settings);
@@ -1266,6 +1548,22 @@ const deleteChallengeProfile = (name) => {
     }
     delete stored[storedKey];
     settings.challengeSettings.profiles = stored;
+
+    // A deleted profile cannot remain as an invisible stale assignment. Keep
+    // any tags on the same title rule; drop the row only when the profile was
+    // its sole contribution.
+    const rules = settings.challengeSettings.titleRules;
+    if (Array.isArray(rules)) {
+        settings.challengeSettings.titleRules = rules.flatMap((rule) => {
+            if (_normalizeProfileName(rule?.profile) !== normalized) return [rule];
+            const withoutProfile = { ...rule };
+            delete withoutProfile.profile;
+            const hasTags =
+                (Array.isArray(withoutProfile.mustIncludeTags) && withoutProfile.mustIncludeTags.length > 0) ||
+                (Array.isArray(withoutProfile.shouldIncludeTags) && withoutProfile.shouldIncludeTags.length > 0);
+            return hasTags ? [withoutProfile] : [];
+        });
+    }
     return saveSettings(settings);
 };
 
@@ -1304,7 +1602,7 @@ const applyChallengeProfile = (name, challengeId) => {
         return false;
     }
 
-    const globalDefaults = settings.challengeSettings?.globalDefaults || {};
+    const globalDefaults = _globalChallengeValues(settings);
     // Fail-closed: _sanitizeProfileValues logs the failing key, so a
     // schema-drifted profile's failure is diagnosable from the log.
     const sanitized = _sanitizeProfileValues(stored[storedKey], true, globalDefaults);
@@ -1312,25 +1610,7 @@ const applyChallengeProfile = (name, challengeId) => {
         return false;
     }
 
-    if (!settings.challengeSettings.perChallenge) {
-        settings.challengeSettings.perChallenge = {};
-    }
-    const container = {};
-    for (const [settingKey, value] of Object.entries(sanitized)) {
-        // Same pruning rule as _applyChallengeOverride: a value equal to its
-        // effective global default is redundant as an override.
-        const defaultValue = Object.prototype.hasOwnProperty.call(globalDefaults, settingKey)
-            ? globalDefaults[settingKey]
-            : SETTINGS_SCHEMA[settingKey]?.default;
-        if (!valuesEqual(value, defaultValue)) {
-            container[settingKey] = value;
-        }
-    }
-    if (Object.keys(container).length > 0) {
-        settings.challengeSettings.perChallenge[id] = container;
-    } else {
-        delete settings.challengeSettings.perChallenge[id];
-    }
+    if (!_replaceChallengeOverridesInSettings(settings, id, sanitized, true)) return false;
     return saveSettings(settings);
 };
 
@@ -1424,14 +1704,17 @@ const seedIntentProfiles = () => {
  */
 const cleanupStaleChallengeSetting = (activeChallengeIds) => {
     const settings = loadSettings();
-    if (!settings.challengeSettings || !settings.challengeSettings.perChallenge) {
+    if (!settings.challengeSettings) {
         return true; // Nothing to cleanup
     }
 
-    const storedChallengeIds = Object.keys(settings.challengeSettings.perChallenge);
-    const staleChallengeIds = storedChallengeIds.filter((id) => !activeChallengeIds.includes(id));
+    const activeIds = new Set(activeChallengeIds);
+    const perChallenge = settings.challengeSettings.perChallenge || {};
+    const suppressions = settings.challengeSettings.titleProfileSuppressions || {};
+    const staleChallengeIds = Object.keys(perChallenge).filter((id) => !activeIds.has(id));
+    const staleSuppressionIds = Object.keys(suppressions).filter((id) => !activeIds.has(id));
 
-    if (staleChallengeIds.length === 0) {
+    if (staleChallengeIds.length === 0 && staleSuppressionIds.length === 0) {
         return true; // Nothing to cleanup
     }
 
@@ -1440,7 +1723,10 @@ const cleanupStaleChallengeSetting = (activeChallengeIds) => {
         .debug(`Cleaning up settings for ${staleChallengeIds.length} stale challenges:`, staleChallengeIds);
 
     staleChallengeIds.forEach((challengeId) => {
-        delete settings.challengeSettings.perChallenge[challengeId];
+        delete perChallenge[challengeId];
+    });
+    staleSuppressionIds.forEach((challengeId) => {
+        delete suppressions[challengeId];
     });
 
     return saveSettings(settings);
@@ -1685,11 +1971,14 @@ module.exports = {
     getTitleRules,
     setTitleRules,
     getEffectiveTagSetting,
+    getTitleProfile,
+    rememberChallengeTitles,
 
     // Named challenge-settings profiles (survive challenge rotation).
     // The caps are exported so tests and the get-settings-schema handler
     // share the same literals the facade enforces.
     getChallengeOverrides,
+    replaceChallengeOverrides,
     getChallengeProfiles,
     saveChallengeProfile,
     deleteChallengeProfile,
@@ -1700,9 +1989,7 @@ module.exports = {
 
     // First-seen challenge-title pins (internal cache — no IPC wiring).
     // MAX_TITLE_LENGTH is exported so challengeTitlePin.js bounds incoming
-    // titles with the SAME cap mergeTitlePins stores with — two drifting
-    // literals would make an over-length title permanently mismatch its own
-    // truncated pin (warn + overwrite on every fetch).
+    // titles with the same cap mergeTitlePins accepts.
     getTitlePins,
     mergeTitlePins,
     MAX_TITLE_LENGTH,

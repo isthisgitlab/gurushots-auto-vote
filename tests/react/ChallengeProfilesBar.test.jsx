@@ -176,6 +176,34 @@ describe('ChallengeProfilesBar', () => {
         expect(mockApi.deleteChallengeProfile).toHaveBeenCalledWith('tactic');
     });
 
+    test('failed Delete keeps the selection and does not notify the parent', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: { exposure: 80 } });
+        mockApi.deleteChallengeProfile.mockResolvedValue(false);
+        const onProfilesChanged = jest.fn();
+        renderBar({ onProfilesChanged });
+        await waitFor(() => expect(document.body.textContent).toContain('tactic (1)'));
+        await act(async () => changeSelect(selectEl(), 'tactic'));
+
+        await act(async () => fireEvent.click(deleteButton()));
+        await act(async () => fireEvent.click(deleteButton()));
+
+        expect(selectEl().value).toBe('tactic');
+        expect(document.body.textContent).toContain('app.profileSaveError');
+        expect(onProfilesChanged).not.toHaveBeenCalled();
+    });
+
+    test('notifies the parent after a saved profile mutation', async () => {
+        const onProfilesChanged = jest.fn();
+        renderBar({ onProfilesChanged });
+        fireEvent.change(nameInput(), { target: { value: 'new tactic' } });
+
+        await act(async () => {
+            fireEvent.click(saveButton());
+        });
+
+        await waitFor(() => expect(onProfilesChanged).toHaveBeenCalledTimes(1));
+    });
+
     test('changing the selection disarms a pending delete confirm', async () => {
         mockApi.getChallengeProfiles.mockResolvedValue({ a: {}, b: {} });
         renderBar();

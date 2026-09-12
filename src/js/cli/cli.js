@@ -248,8 +248,7 @@ const main = async () => {
                     logger.withCategory('ui').info('Usage: reset-setting <key> [--challenge=<id>]');
                     process.exit(1);
                 }
-                resetSetting(rest[0], challengeId);
-                process.exit(0);
+                process.exit(resetSetting(rest[0], challengeId) ? 0 : 1);
                 break;
             }
             case 'set-global-default':

@@ -21,7 +21,7 @@ const normalizeName = (name) => (typeof name === 'string' ? name.trim().toLowerC
  * facade enforces are never duplicated here; when absent the client checks
  * are skipped and the facade's fail-closed save still guards.
  */
-export function ChallengeProfilesBar({ overrides, onApply, profileLimits }) {
+export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = () => {}, profileLimits }) {
     const { t } = useTranslation();
     const [profiles, setProfiles] = useState({});
     const [selectedName, setSelectedName] = useState('');
@@ -75,9 +75,7 @@ export function ChallengeProfilesBar({ overrides, onApply, profileLimits }) {
 
     const names = Object.keys(profiles).sort((a, b) => a.localeCompare(b));
     const selectedProfile = selectedName && profiles[selectedName] ? profiles[selectedName] : null;
-    // Built-in "intent" presets get a localized display name, a one-line
-    // description, and a built-in/modified badge so a curated preset is
-    // distinguishable from a user's own — and from an edited copy of itself.
+    // Distinguish built-in intent presets from user profiles and edited copies.
     const selectedIntent = getIntentByName(selectedName);
     const selectedIntentModified = selectedIntent ? !intentValuesMatch(selectedIntent, selectedProfile) : false;
     const displayNameOf = (name) => {
@@ -108,9 +106,15 @@ export function ChallengeProfilesBar({ overrides, onApply, profileLimits }) {
         disarm();
         setBusy(true);
         try {
-            await window.api.deleteChallengeProfile(selectedName);
+            const deleted = await window.api.deleteChallengeProfile(selectedName);
+            if (deleted !== true) {
+                setErrorText(t('app.profileSaveError'));
+                return;
+            }
+            setErrorText('');
             setSelectedName('');
             await refreshProfiles();
+            onProfilesChanged({ name: selectedName, deleted: true });
         } catch (err) {
             await window.api.logError(`Error deleting challenge profile: ${err.message || err}`);
         } finally {
@@ -154,6 +158,7 @@ export function ChallengeProfilesBar({ overrides, onApply, profileLimits }) {
                 setNewName('');
                 await refreshProfiles();
                 setSelectedName(trimmed);
+                onProfilesChanged({ name: trimmed, values: overrides });
             } else {
                 setErrorText(t('app.profileSaveError'));
             }

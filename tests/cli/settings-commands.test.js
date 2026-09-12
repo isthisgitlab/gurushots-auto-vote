@@ -90,7 +90,14 @@ describe('CLI settings commands — per-challenge support', () => {
 
     test('resetSetting with a challengeId removes the override', () => {
         settings.removeChallengeOverride.mockReturnValue(true);
-        resetSetting('exposure', '12345');
+        expect(resetSetting('exposure', '12345')).toBe(true);
+        expect(settings.removeChallengeOverride).toHaveBeenCalledWith('exposure', '12345');
+    });
+
+    test('resetSetting reports a rejected profile-aware override removal', () => {
+        settings.removeChallengeOverride.mockReturnValue(false);
+
+        expect(resetSetting('exposure', '12345')).toBe(false);
         expect(settings.removeChallengeOverride).toHaveBeenCalledWith('exposure', '12345');
     });
 });

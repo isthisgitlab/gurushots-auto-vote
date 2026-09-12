@@ -16,6 +16,7 @@ import { mockApi } from './helpers/setup';
 // here so this suite is hermetic.
 beforeEach(() => {
     window.api = mockApi;
+    mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
 });
 
 const mockSchemaState = {
@@ -235,6 +236,81 @@ describe('ChallengeSettingsModal group applicability', () => {
 
         expect(numberInputs().every((i) => !i.disabled)).toBe(true);
         expect(document.body.textContent).not.toContain('app.notApplicable');
+    });
+
+    test('shows an automatic title profile as the inherited value below manual overrides', async () => {
+        mockApi.getTitleProfile.mockResolvedValue({ name: 'Quick Tactic', values: { boostTime: 17 } });
+        renderWithChallenge({ member: { boost: { state: 'AVAILABLE' } } });
+
+        await waitFor(() => {
+            expect(readNumberInput()).toBe('17');
+        });
+        expect(document.body.textContent).toContain('app.usingProfile');
+        expect(document.body.textContent).toContain('app.usingProfile: Quick Tactic');
+        expect(document.body.textContent).not.toContain('app.overridden');
+    });
+
+    test('Clear All does not invent an automatic profile when no title rule matches', async () => {
+        mockApi.getTitleProfile.mockResolvedValue(null);
+        renderWithChallenge({ member: { boost: { state: 'AVAILABLE' } } });
+        await waitFor(() => expect(numberInputs().length).toBeGreaterThan(0));
+
+        fireEvent.click(screen.getByRole('button', { name: 'app.clearAll' }));
+
+        expect(document.body.textContent).not.toContain('app.usingProfile:');
+    });
+
+    test('manual profile Apply replaces the automatic baseline and saves that mode atomically', async () => {
+        mockApi.getTitleProfile.mockResolvedValue({ name: 'Automatic', values: { boostTime: 17 } });
+        mockApi.getChallengeProfiles.mockResolvedValue({ Reset: {} });
+        const onClose = jest.fn();
+        render(
+            <ChallengeSettingsModal
+                isOpen={true}
+                onClose={onClose}
+                challengeId="1"
+                challengeTitle="Challenge 1"
+                challenge={{ member: { boost: { state: 'AVAILABLE' } } }}
+            />,
+        );
+        await waitFor(() => expect(document.body.textContent).toContain('Reset (0)'));
+
+        const profileSelect = screen.getByRole('combobox');
+        await act(async () => {
+            profileSelect.value = 'Reset';
+            profileSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'app.applyProfile' }));
+
+        await waitFor(() => expect(readNumberInput()).toBe('30'));
+        expect(document.body.textContent).not.toContain('app.usingProfile');
+        fireEvent.click(screen.getByRole('button', { name: 'app.save' }));
+        await waitFor(() => {
+            expect(mockApi.replaceChallengeOverrides).toHaveBeenCalledWith('1', {}, true);
+            expect(onClose).toHaveBeenCalled();
+        });
+    });
+
+    test('refreshes inherited values after deleting the assigned profile in the open modal', async () => {
+        mockApi.getTitleProfile.mockResolvedValue({ name: 'Automatic', values: { boostTime: 17 } });
+        mockApi.getChallengeProfiles.mockResolvedValue({ Automatic: { boostTime: 17 } });
+        renderWithChallenge({ member: { boost: { state: 'AVAILABLE' } } });
+        await waitFor(() => {
+            expect(readNumberInput()).toBe('17');
+            expect(document.body.textContent).toContain('Automatic (1)');
+        });
+
+        const profileSelect = screen.getByRole('combobox');
+        await act(async () => {
+            profileSelect.value = 'Automatic';
+            profileSelect.dispatchEvent(new window.Event('change', { bubbles: true }));
+        });
+        const deleteProfile = screen.getByRole('button', { name: 'app.deleteProfile' });
+        await act(async () => fireEvent.click(deleteProfile));
+        await act(async () => fireEvent.click(screen.getByRole('button', { name: 'app.confirmDelete' })));
+
+        await waitFor(() => expect(readNumberInput()).toBe('30'));
+        expect(document.body.textContent).not.toContain('app.usingProfile');
     });
 
     test('applicable group with a stored override → per-field reset button is shown', async () => {

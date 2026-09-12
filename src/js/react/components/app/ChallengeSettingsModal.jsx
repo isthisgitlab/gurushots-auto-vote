@@ -16,6 +16,26 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
 import { useAutovote } from '@/contexts/AutovoteContext';
 
+function useAppSettings(isOpen) {
+    const [appSettings, setAppSettings] = useState(null);
+    useEffect(() => {
+        if (!isOpen) return undefined;
+        let cancelled = false;
+        window.api
+            .getSettings()
+            .then((loaded) => {
+                if (!cancelled) setAppSettings(loaded || {});
+            })
+            .catch(() => {
+                if (!cancelled) setAppSettings({});
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen]);
+    return appSettings;
+}
+
 /**
  * Per-challenge settings modal
  */
@@ -38,11 +58,8 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     // True when a setChallengeOverride write was rejected by validation —
     // shown as an alert and the modal stays open so the edit isn't lost.
     const [saveError, setSaveError] = useState(false);
-    // Top-level (non-schema) settings the scheduled-fill hints need: the app
-    // timezone (the time input looks device-local but is interpreted in this
-    // zone) and checkFrequencyMax (short-window warning). Fetched per open —
-    // the schema-defaults map only covers SETTINGS_SCHEMA keys.
-    const [appSettings, setAppSettings] = useState(null);
+    const appSettings = useAppSettings(isOpen);
+    const [titleProfile, setTitleProfile] = useState(null);
     // Set when a profile Apply flips scheduledFillReplaces on for a challenge
     // that didn't have it — that one field can silently cost a challenge its
     // fills, so it gets a highlighted warning the generic apply-hint lacks.
@@ -57,22 +74,6 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             setProfileReplacesWarning(false);
         }
     }, [isOpen, refetchSchema]);
-
-    useEffect(() => {
-        if (!isOpen) return undefined;
-        let cancelled = false;
-        (async () => {
-            try {
-                const loaded = await window.api.getSettings();
-                if (!cancelled) setAppSettings(loaded || {});
-            } catch {
-                if (!cancelled) setAppSettings({});
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
-    }, [isOpen]);
 
     // Load existing overrides once per (open, challengeId) session.
     //
@@ -97,7 +98,8 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             return undefined;
         }
         if (!challengeId || !schema) return undefined;
-        if (loadedForChallengeRef.current === challengeId) return undefined;
+        const loadKey = `${challengeId}\0${challengeTitle}`;
+        if (loadedForChallengeRef.current === loadKey) return undefined;
 
         let cancelled = false;
         const load = async () => {
@@ -105,14 +107,18 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             try {
                 // Single batch IPC call (the facade's own-property-safe sparse
                 // map) instead of one round-trip per schema key.
-                const stored = await window.api.getChallengeOverrides(challengeId.toString());
+                const [stored, profile] = await Promise.all([
+                    window.api.getChallengeOverrides(challengeId.toString()),
+                    window.api.getTitleProfile(challengeTitle, challengeId.toString()),
+                ]);
                 if (cancelled) return;
                 const loaded = {};
                 for (const [key, value] of Object.entries(stored || {})) {
                     if (schema[key]?.perChallenge) loaded[key] = value;
                 }
                 setOverrides(loaded);
-                loadedForChallengeRef.current = challengeId;
+                setTitleProfile(profile);
+                loadedForChallengeRef.current = loadKey;
             } catch (err) {
                 if (cancelled) return;
                 await window.api.logError(`Error loading challenge overrides: ${err.message || err}`);
@@ -125,7 +131,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         return () => {
             cancelled = true;
         };
-    }, [isOpen, challengeId, schema]);
+    }, [isOpen, challengeId, challengeTitle, schema]);
 
     const handleOverrideChange = useCallback((key, value) => {
         setOverrides((prev) => ({ ...prev, [key]: value }));
@@ -141,6 +147,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
 
     const handleClearAll = useCallback(() => {
         setOverrides({});
+        setTitleProfile((profile) => (profile ? { ...profile, suppressed: false } : null));
     }, []);
 
     const handleSave = useCallback(async () => {
@@ -151,32 +158,16 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
 
         setSaving(true);
         try {
-            // Write the edited overrides FIRST. setChallengeOverride validates
-            // and returns false on rejection (e.g. a duplicate-count auto-fill
-            // schedule); bailing out here — before any removal below — means a
-            // rejected edit leaves the key's previously valid override intact.
-            // (The old clear-then-rewrite order silently dropped it: the clear
-            // loop ran, the invalid rewrite never did, and closing the modal
-            // lost the prior value with no trace.)
-            let anyRejected = false;
-            for (const [key, value] of Object.entries(overrides)) {
-                const saved = await window.api.setChallengeOverride(key, challengeId.toString(), value);
-                if (saved === false) anyRejected = true;
-            }
-            if (anyRejected) {
+            const saved = await window.api.replaceChallengeOverrides(
+                challengeId.toString(),
+                overrides,
+                titleProfile?.suppressed === true,
+            );
+            if (saved === false) {
                 setSaveError(true);
                 return;
             }
             setSaveError(false);
-
-            // Only after every write validated: drop the overrides the user
-            // cleared this session (per-challenge keys absent from the local
-            // overrides map).
-            for (const key of Object.keys(schema)) {
-                if (schema[key].perChallenge && !(key in overrides)) {
-                    await window.api.removeChallengeOverride(key, challengeId.toString());
-                }
-            }
 
             // Re-arm the cadence timer so a changed per-challenge threshold /
             // scheduled fill takes effect now, not after the current wait.
@@ -188,7 +179,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         } finally {
             setSaving(false);
         }
-    }, [challengeId, overrides, schema, rearmSchedule, onClose]);
+    }, [challengeId, overrides, schema, titleProfile, rearmSchedule, onClose]);
 
     if (!isOpen) return null;
 
@@ -199,7 +190,13 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     // scheduleShift hint below. Both triggers are LISTS; every entry opens
     // its own window. A failing wall-clock computation must never break the
     // modal, so the Intl math is guarded.
-    const effectiveOf = (key) => (key in overrides ? overrides[key] : (defaults?.[key] ?? schema?.[key]?.default));
+    const profileValues = titleProfile?.suppressed ? {} : (titleProfile?.values ?? {});
+    const overrideCount = Object.keys(overrides).length;
+    const inheritedOf = (key) =>
+        Object.prototype.hasOwnProperty.call(profileValues, key)
+            ? profileValues[key]
+            : (defaults?.[key] ?? schema?.[key]?.default);
+    const effectiveOf = (key) => (key in overrides ? overrides[key] : inheritedOf(key));
     const appTimezone = appSettings?.timezone || DEFAULT_TIMEZONE;
     const checkFrequencyMax = Number(appSettings?.checkFrequencyMax) || 0;
     const rawSfTimes = effectiveOf('scheduledFillTime');
@@ -366,12 +363,15 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                         hint below shows the comparison value; this is the at-a-
                         glance count so a user doesn't have to scan every group. */}
                     <p className="text-xs" role="status">
-                        {Object.keys(overrides).length > 0 ? (
-                            <span className="text-accent">
-                                {t('app.overridesActiveSummary').replace('{0}', String(Object.keys(overrides).length))}
-                            </span>
-                        ) : (
-                            <span className="text-base-content/60">{t('app.overridesNoneSummary')}</span>
+                        {t(overrideCount ? 'app.overridesActiveSummary' : 'app.overridesNoneSummary').replace(
+                            '{0}',
+                            overrideCount,
+                        )}
+                        {titleProfile && !titleProfile.suppressed && (
+                            <>
+                                {' · '}
+                                {t('app.usingProfile')}: {titleProfile.name}
+                            </>
                         )}
                     </p>
 
@@ -381,6 +381,12 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                     <ChallengeProfilesBar
                         overrides={overrides}
                         profileLimits={profileLimits}
+                        onProfilesChanged={({ name, values }) => {
+                            if (name.toLowerCase() !== titleProfile?.name?.toLowerCase()) return;
+                            setTitleProfile((profile) =>
+                                values ? { ...profile, name, values } : profile?.suppressed && { suppressed: true },
+                            );
+                        }}
                         onApply={(values) => {
                             const next = {};
                             for (const [key, value] of Object.entries(values || {})) {
@@ -389,9 +395,10 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                             const replacesWasOn =
                                 ('scheduledFillReplaces' in overrides
                                     ? overrides.scheduledFillReplaces
-                                    : defaults?.scheduledFillReplaces) === true;
+                                    : inheritedOf('scheduledFillReplaces')) === true;
                             setProfileReplacesWarning(next.scheduledFillReplaces === true && !replacesWasOn);
                             setOverrides(next);
+                            setTitleProfile((profile) => ({ ...profile, suppressed: true }));
                         }}
                     />
 
@@ -444,7 +451,11 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                     {entries.map(([key, config]) => {
                                         const hasOverride = key in overrides;
                                         const globalDefault = defaults?.[key] ?? config.default;
-                                        const currentValue = hasOverride ? overrides[key] : globalDefault;
+                                        const hasProfileValue = Object.prototype.hasOwnProperty.call(
+                                            profileValues,
+                                            key,
+                                        );
+                                        const currentValue = hasOverride ? overrides[key] : inheritedOf(key);
                                         // Live, render-time hint (same spirit as getGroupApplicability):
                                         // when this challenge allows fewer photos than the schedule
                                         // covers, the schedule end-aligns at runtime (scheduleRemap) —
@@ -472,6 +483,10 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                         {hasOverride ? (
                                                             <span className="badge badge-accent badge-xs">
                                                                 {t('app.overridden')}
+                                                            </span>
+                                                        ) : hasProfileValue ? (
+                                                            <span className="badge badge-info badge-xs">
+                                                                {t('app.usingProfile')}
                                                             </span>
                                                         ) : (
                                                             <span className="badge badge-ghost badge-xs">
