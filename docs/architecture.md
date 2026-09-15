@@ -89,6 +89,11 @@ Domain terms used throughout, in reader's terms:
   swallow it.
 - `now` is re-read per challenge (a pass can take minutes, so a single clock would miss windows that open
   mid-pass).
+- **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.js`)
+  runs inside the shared `fetchChallengesAndVote` (`api/main.js` real / `mock/index.js` mock) before the
+  voting pass, gated by the default-off global `autoJoin` setting, so all three platforms get it without
+  forking `runVotingPass`. It is skipped for a single-challenge run and never allowed to abort voting (its
+  errors are caught and logged).
 
 ## 3. GuruShots API transport
 
@@ -106,6 +111,11 @@ Domain terms used throughout, in reader's terms:
   doesn't post-process adapter results, so otherwise an error body is handed back as "success."
 - `fetchFailed` vs empty: `getActiveChallenges` distinguishes an outage from an empty account so the
   scheduler doesn't re-arm as if all is well (`services/votingOrchestrator.js`).
+- Join/bankroll endpoints (`api/join.js`, WEB profile): `get_member_challenges` (open/un-joined list),
+  `coins_unlock` (spends coins to open a paid challenge — **not** known to be idempotent), `get_bankroll`.
+  `getBankroll` normalizes the currency array to `{keys,swaps,fills,coins}` and returns **`null` on failure
+  — callers must distinguish that from a genuine zero balance** (the UI renders `—`, the handler returns
+  `success:false`). Every dynamic value is `encodeURIComponent`'d into the form body.
 
 ## 4. Semantic / lexicon
 
@@ -132,7 +142,17 @@ Domain terms used throughout, in reader's terms:
   not poison the baseline).
 - **Mock/real metadata isolation**: the metadata store is shared and un-namespaced, and mock challenge ids
   never match real ones — so mock mode passes `cleanupStaleMetadata: null` plus an in-memory tracker, or it
-  would purge/pollute the user's real `metadata.json`.
+  would purge/pollute the user's real `metadata.json`. The join flow follows the same rule: mock passes a
+  `null` join-state store and no cross-process lock.
+- **Paid-join money safety** (`services/joinChallenges.js`): the order is load-bearing — resolve an eligible
+  photo **before** any `coins_unlock` (no photo ⇒ skip, no spend); persist the unlock claim
+  (`joinState.json`) **before** the charge so a crash can never let a later pass re-unlock (idempotent
+  retry), and if the claim can't be written, don't spend; a per-process in-flight `Set` **plus** a
+  cross-process lockfile (`acquireUnlockLock`, real-fs platforms, TTL stale-recovery, fail-open) guard the
+  check→unlock→mark section; a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
+  the pass is cancellation-checked between candidates and before each spend, and each candidate is
+  independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a title-profile
+  match wins over the type-exclude veto, which in turn wins over `autoJoinAll`/include-list.
 - **Fail-soft config parsing** is pervasive: `getScheduledFillState` wraps its whole body in try/catch and
   returns inactive; corrupt window values fall back to the schema default rather than "never in window"
   (which under replace-mode would silently block all voting).
@@ -167,10 +187,13 @@ Domain terms used throughout, in reader's terms:
 - **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.js` — around L237) is
   the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
   hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, in-memory only
-  on the Android headless service. `metadata.js` is the second consumer.
+  on the Android headless service. `metadata.js` and `joinStateStore.js` (paid-unlock idempotency markers)
+  are the other consumers.
 - Write-behind is **ordered** (writes chain onto a promise) and `flushPendingWrites()` awaits durability
   before session invalidation. On Capacitor, `initializeAsync()` must be awaited before the first sync
-  read.
+  read — **each store hydrates independently**, so a new store must be wired into the Capacitor bootstrap
+  (`react/pages/Capacitor.jsx`) or its markers are invisible after relaunch. `joinState` is wired there
+  alongside settings + metadata; skipping it would double-charge a paid retry on Android.
 - Platform detection has two sides: **node-side** via `runtime.js` (`isCapacitor()`, `isHeadlessService()`,
   `getPlatform()`, `getAppUserDataPath()` — the single path resolver shared with the logger); **renderer-
   side** via `globalThis.Capacitor?.isNativePlatform?.() === true` inline, to keep node out of the browser
@@ -232,7 +255,8 @@ Domain terms used throughout, in reader's terms:
 - **Log redaction (`logger.js`) is two-layer but credential-key-keyed, not exhaustive.** `sanitizeForLog`
   recursively redacts an **allowlist** of sensitive object keys; `redactMessage` scrubs
   `token=…` / `password=…`-style fragments folded into message strings. Both run on every entry, and
-  untrusted API strings additionally pass through `logger.sanitizeLogString()` before interpolation. Known
-  gaps to keep in mind: the key allowlist does **not** match the literal `x-token` header key (so never log
-  a raw headers object), and neither layer is **PII-aware** (e.g. a username logged into a message is not
+  untrusted API strings additionally pass through `logger.sanitizeLogString()` before interpolation. The
+  allowlist now covers the literal `x-token` header key (added for the join/bankroll WEB endpoints, which
+  send `x-token`), but it is still an **allowlist** — prefer never logging a raw headers object rather than
+  relying on it — and neither layer is **PII-aware** (e.g. a username logged into a message is not
   redacted).

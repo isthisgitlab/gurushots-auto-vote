@@ -38,6 +38,8 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 - **Boost** — automātiski pielieto boost tuvu beigām, izvēlētajai foto vietai.
 - **Turbo (iegūt + pielietot)** — automātiski spēlē mini-spēli, lai _iegūtu_ turbo, pēc tam automātiski _pielieto_ to izvēlētajai foto vietai pirms beigām.
 - **Auto-aizpilde** — iesniedz fotogrāfijas tukšajās foto vietās tuvu beigām, ar laika atstarpi, lai izvairītos no balsu atšķaidīšanas, ar tagu filtriem, tematiski atbilstošu foto izvēli un avārijas drošības tīklu.
+- **Auto-pievienošanās** — atrod atvērtos (nepievienotos) izaicinājumus un pievienojas tiem automātiski (pēc noklusējuma izslēgts), ar tvērumu pēc "pievienoties visiem", tipu iekļaušanas/izslēgšanas saraksta vai saglabāta nosaukuma profila; maksas izaicinājumus ierobežo monētu limiti (par izaicinājumu un ciklā), un monētas nekad netiek tērētas bez pabeigtas pievienošanās. Pieejama arī manuāla pievienošanās — sakļaujams "Atklāt" saraksts grafiskajā lietotnē un `discover`/`join` CLI komandas.
+- **Konta atlikums** — parāda jūsu atslēgas / maiņas / aizpildes / monētas blakus taimerim grafiskajā lietotnē un ar `bankroll` (alias `coins`) CLI komandu.
 - **Iestatījumi katram izaicinājumam** — katram balsošanas iestatījumam ir globālais noklusējums, ko jebkurš izaicinājums var pārrakstīt.
 - **Tagu noteikumi pēc nosaukuma** — auto-aizpildes tagu noteikumi, kas piesaistīti izaicinājuma nosaukumam, tāpēc tie saglabājas, kad GuruShots katrā rotācijā maina izaicinājuma ID.
 - **Trīs platformas** — Electron grafiskā lietotne, `gurucli` komandrinda un Android lietotne, kas balso ar bloķētu telefonu.
@@ -178,28 +180,31 @@ Android versija **nav pieejama Google Play** — instalācija notiek caur tiešu
 
 > **⚠️** Vienlaikus darbiniet tikai VIENU instanci (grafisko lietotni vai CLI).
 
-| Komanda                                           | Ko tā dara                                                                                                                                      |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `login`                                           | Autentificējieties ar GuruShots un saglabājiet tokenu (interaktīvs; nepieciešams īsts terminālis).                                              |
-| `logout`                                          | Notīra saglabāto autentifikācijas tokenu.                                                                                                       |
-| `vote`                                            | Palaiž **vienu manuālu ciklu** — balso līdz **100%** visos aktīvajos izaicinājumos, ignorējot visus sliekšņus. Vienreizēja papildināšana.       |
-| `run [--challenge=<id>]`                          | Palaiž **vienu pilnu auto-stratēģijas ciklu** (boost / turbo / auto-aizpilde / slieksni ievērojoša balsošana). `--challenge` ierobežo uz vienu. |
-| `boost --challenge=<id> [--image=<id>]`           | Pielieto boost vienam izaicinājumam. Bez `--image` izmanto `boostImageIndex` vietu.                                                             |
-| `turbo --challenge=<id>`                          | Spēlē turbo mini-spēli, lai iegūtu turbo vienam izaicinājumam (tikai iegūšana; rokā esošu turbo pielieto `useTurbo` vai grafiskā lietotne).     |
-| `fill --challenge=<id> [--all]`                   | Iesniedz labāk ranžēto fotogrāfiju vienā tukšā vietā, vai ar `--all` aizpilda visas tukšās vietas uzreiz.                                       |
-| `check-updates`                                   | Pārbauda GitHub, vai nav pieejams jaunāks izlaidums.                                                                                            |
-| `start`                                           | Sāk **nepārtrauktu** balsošanu ar dinamisku plānošanu. Darbojas, līdz nospiežat **Ctrl+C**.                                                     |
-| `status`                                          | Parāda režīmu (MOCK/REAL), autentifikācijas statusu un galvenos iestatījumus.                                                                   |
-| `get-setting <key> [--challenge=<id>]`            | Izdrukā iestatījuma efektīvo vērtību (katram izaicinājumam ar `--challenge`).                                                                   |
-| `set-setting <key> <value> [--challenge=<id>]`    | Uzstāda iestatījumu; ar `--challenge` ieraksta pārrakstījumu konkrētam izaicinājumam.                                                           |
-| `set-global-default <key> <value>`                | Uzstāda globālo noklusējumu **ar shēmas validāciju**.                                                                                           |
-| `list-settings [--challenge=<id>]`                | Parāda visus iestatījumus un modifikācijas statusu (skats katram izaicinājumam ar `--challenge`).                                               |
-| `reset-setting <key> [--challenge=<id>]`          | Atiestata iestatījumu uz noklusējumu (vai notīra izaicinājuma pārrakstījumu ar `--challenge`).                                                  |
-| `reset-all-settings`                              | Atiestata visu uz noklusējumiem (saglabā tokenu, mock karogu un API galvenes).                                                                  |
-| `logs [--error\|--api\|--settings] [--lines=<n>]` | Izdrukā žurnālfaila beigas (noklusējums 100 rindas; noklusējuma kategorija ir lietotnes žurnāls).                                               |
-| `reset-windows`                                   | Atiestata grafiskās lietotnes logu pozīcijas uz noklusējumiem.                                                                                  |
-| `help-settings`                                   | Detalizēta palīdzība par iestatījumiem — atslēgu nosaukumi, vērtību formāti, diapazoni.                                                         |
-| `help`                                            | Parāda komandu palīdzību.                                                                                                                       |
+| Komanda                                           | Ko tā dara                                                                                                                                                     |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `login`                                           | Autentificējieties ar GuruShots un saglabājiet tokenu (interaktīvs; nepieciešams īsts terminālis).                                                             |
+| `logout`                                          | Notīra saglabāto autentifikācijas tokenu.                                                                                                                      |
+| `vote`                                            | Palaiž **vienu manuālu ciklu** — balso līdz **100%** visos aktīvajos izaicinājumos, ignorējot visus sliekšņus. Vienreizēja papildināšana.                      |
+| `run [--challenge=<id>]`                          | Palaiž **vienu pilnu auto-stratēģijas ciklu** (boost / turbo / auto-aizpilde / slieksni ievērojoša balsošana). `--challenge` ierobežo uz vienu.                |
+| `boost --challenge=<id> [--image=<id>]`           | Pielieto boost vienam izaicinājumam. Bez `--image` izmanto `boostImageIndex` vietu.                                                                            |
+| `turbo --challenge=<id>`                          | Spēlē turbo mini-spēli, lai iegūtu turbo vienam izaicinājumam (tikai iegūšana; rokā esošu turbo pielieto `useTurbo` vai grafiskā lietotne).                    |
+| `fill --challenge=<id> [--all]`                   | Iesniedz labāk ranžēto fotogrāfiju vienā tukšā vietā, vai ar `--all` aizpilda visas tukšās vietas uzreiz.                                                      |
+| `bankroll` (alias `coins`)                        | Parāda jūsu valūtu atlikumus — atslēgas / maiņas / aizpildes / monētas.                                                                                        |
+| `discover`                                        | Uzskaita atvērtos (nepievienotos) izaicinājumus, kuriem varat pievienoties, ar katra tipu un monētu izmaksu.                                                   |
+| `join <id> [--yes]`                               | Pievienojas atvērtam izaicinājumam. Bezmaksas pievienojas uzreiz; **maksas** izaicinājums izdrukā monētu izmaksu un prasa `--yes`, pirms tiek tērētas monētas. |
+| `check-updates`                                   | Pārbauda GitHub, vai nav pieejams jaunāks izlaidums.                                                                                                           |
+| `start`                                           | Sāk **nepārtrauktu** balsošanu ar dinamisku plānošanu. Darbojas, līdz nospiežat **Ctrl+C**.                                                                    |
+| `status`                                          | Parāda režīmu (MOCK/REAL), autentifikācijas statusu un galvenos iestatījumus.                                                                                  |
+| `get-setting <key> [--challenge=<id>]`            | Izdrukā iestatījuma efektīvo vērtību (katram izaicinājumam ar `--challenge`).                                                                                  |
+| `set-setting <key> <value> [--challenge=<id>]`    | Uzstāda iestatījumu; ar `--challenge` ieraksta pārrakstījumu konkrētam izaicinājumam.                                                                          |
+| `set-global-default <key> <value>`                | Uzstāda globālo noklusējumu **ar shēmas validāciju**.                                                                                                          |
+| `list-settings [--challenge=<id>]`                | Parāda visus iestatījumus un modifikācijas statusu (skats katram izaicinājumam ar `--challenge`).                                                              |
+| `reset-setting <key> [--challenge=<id>]`          | Atiestata iestatījumu uz noklusējumu (vai notīra izaicinājuma pārrakstījumu ar `--challenge`).                                                                 |
+| `reset-all-settings`                              | Atiestata visu uz noklusējumiem (saglabā tokenu, mock karogu un API galvenes).                                                                                 |
+| `logs [--error\|--api\|--settings] [--lines=<n>]` | Izdrukā žurnālfaila beigas (noklusējums 100 rindas; noklusējuma kategorija ir lietotnes žurnāls).                                                              |
+| `reset-windows`                                   | Atiestata grafiskās lietotnes logu pozīcijas uz noklusējumiem.                                                                                                 |
+| `help-settings`                                   | Detalizēta palīdzība par iestatījumiem — atslēgu nosaukumi, vērtību formāti, diapazoni.                                                                        |
+| `help`                                            | Parāda komandu palīdzību.                                                                                                                                      |
 
 Iestatījumi ir kopīgi ar grafisko lietotni: CLI veikts `set-setting` tiek pamanīts grafiskajā lietotnē un otrādi.
 
@@ -268,6 +273,22 @@ Jaunaizpildītos ierakstus boost un turbo noteikumi pamana automātiski _nākama
 ### Tikai-boost režīms
 
 `onlyBoost` (katram izaicinājumam) izslēdz normālo balsošanu šim izaicinājumam — lietotne darbojas tikai tad, kad var pielietot boost vai turbo. Noderīgi mazsvarīgiem izaicinājumiem, kuros vēlaties tērēt boost/turbo, bet ne balsis.
+
+### Auto-pievienošanās izaicinājumiem
+
+Viss iepriekšējais darbojas ar izaicinājumiem, kuriem jau esat pievienojies. **Auto-pievienošanās** (pēc noklusējuma izslēgta) katrā ciklā atrod **atvērtos, nepievienotos** izaicinājumus un pievienojas tiem, kurus vēlaties. Tā darbojas kā solis pirms balsošanas visās platformās (grafiskā lietotne, CLI `start`, Android), un pievienošanās nozīmē foto iesniegšanu — auto-pievienošanās izmanto to pašu foto izvēli kā auto-aizpilde (tagi, tematiskā meklēšana, semantiskā ranžēšana).
+
+- **Tvērums — kurus izaicinājumus pievienot.** Ieslēdziet `autoJoin`, tad izvēlieties, kā kandidāti kvalificējas (kombinējami):
+    - `autoJoinAll` — pievienoties katram atvērtajam izaicinājumam.
+    - `autoJoinTypes` — **iekļaušanas** saraksts ar izaicinājumu tipiem, atdalīti ar komatu (piem., `flash,contest`).
+    - `autoJoinExcludeTypes` — **izslēgšanas** saraksts ar tipiem, kuriem nekad nepievienoties (piem., `flash,exhibition`). Tas ņem virsroku pār `autoJoinAll` un `autoJoinTypes`. Tātad "pievienoties visam, izņemot flash un exhibition" = `autoJoinAll` ieslēgts + `autoJoinExcludeTypes = flash,exhibition`.
+    - **Saglabāts nosaukuma profils** vienmēr pievienojas savam nosaukumam (apzināta izvēle konkrētam nosaukumam) — tas uzvar pār tipu filtriem, arī pār izslēgšanas sarakstu.
+- **Maksas izaicinājumi — monētu drošība.** Maksas pievienošanās pēc noklusējuma **izslēgta** un ierobežota ar diviem limitiem, abi `0 = izslēgts`: `autoJoinMaxCoins` (maksimums monētu vienai pievienošanās reizei) un `autoJoinCycleCoinBudget` (kopējais monētu daudzums vienā ciklā). **Abiem jābūt > 0**, lai tērētu monētas. Maksas pievienošanās nekad netiek apmaksāta bez pabeigtas pievienošanās: vispirms tiek atrasta foto (nav foto ⇒ izlaist, netērēt), un ja apmaksa izdodas, bet iesniegšana neizdodas, stāvoklis tiek iegaumēts, tāpēc atkārtojums pabeidz iesniegšanu, nevis maksā vēlreiz.
+- **Manuāla pievienošanās.** Sakļauts **Atklāt** panelis zem izaicinājumu saraksta parāda atvērtos izaicinājumus; bezmaksas pievienojas ar klikšķi, maksas atver apstiprinājumu ar izmaksu un jūsu atlikušo bilanci. No CLI izmantojiet `discover`, lai tos uzskaitītu, un `join <id>` (maksas prasa `--yes`).
+
+### Konta atlikums
+
+Jūsu valūtu atlikumi — **atslēgas / maiņas / aizpildes / monētas** — parādās blakus taimerim grafiskās lietotnes galvenē (tie rāda `—`, nevis `0`, ja atlikumu nevar nolasīt, tāpēc neizdevusies nolasīšana netiek sajaukta ar "tukšu"). No CLI `bankroll` (alias `coins`) tos izdrukā.
 
 ## 🎛️ Iestatījumu atsauce
 
@@ -351,6 +372,17 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 | `emergencyFill`       | `300` s (5m)        | ≥ 0                  | Pēdējo minūšu drošības tīkls: aizpildīt atlikušās vietas pat ja noteikumi gaidītu, pārrakstot must-include tagus; pielieto arī jebkuru pieejamu Boost/iegūtu Turbo pat tad, kad `autoBoost`/`useTurbo` ir izslēgti. `0` = izslēgts (atspējo arī Boost/Turbo pārrakstīšanu). Turiet ≤ `lastMinuteThreshold`. Grafiskajā lietotnē ievada kā h+m. |
 | `mustIncludeTags`     | `[]`                | līdz 50 tagiem       | Cietais filtrs: aizpildīt tikai ar fotogrāfijām, kas atbilst visiem šiem tagiem.                                                                                                                                                                                                                                                               |
 | `shouldIncludeTags`   | `[]`                | līdz 50 tagiem       | Mīkstā preference: dot priekšroku fotogrāfijām ar šiem tagiem, bet neizslēgt citas.                                                                                                                                                                                                                                                            |
+
+**Auto-pievienošanās**
+
+| Iestatījums               | Noklusējums | Diapazons / vērtības | Apraksts                                                                                                                                                                               |
+| ------------------------- | ----------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoJoin`                | `false`     | bool (globāls)       | Galvenais slēdzis: katrā ciklā atrast un pievienoties atvērtajiem (nepievienotajiem) izaicinājumiem. Globāls, nevis katram izaicinājumam.                                              |
+| `autoJoinAll`             | `false`     | bool                 | Tvērums: pievienoties **katram** atvērtajam izaicinājumam (joprojām pakļauts izslēgšanas sarakstam un monētu limitiem).                                                                |
+| `autoJoinTypes`           | `''`        | tipi, ar komatu      | Tvērums: **iekļaut** tikai šos izaicinājumu tipus, piem., `flash,contest`. Reģistrnejutīgs; atstarpes ap komatiem tiek ignorētas.                                                      |
+| `autoJoinExcludeTypes`    | `''`        | tipi, ar komatu      | **Nekad** nepievienoties šiem tipiem, piem., `flash,exhibition`. Ņem virsroku pār `autoJoinAll` un `autoJoinTypes`. Saglabāts nosaukuma profils joprojām pievienojas savam nosaukumam. |
+| `autoJoinMaxCoins`        | `0`         | ≥ 0 (0 = izslēgts)   | Maksimums monētu vienas maksas pievienošanās reizei. `0` = tikai bezmaksas izaicinājumi.                                                                                               |
+| `autoJoinCycleCoinBudget` | `0`         | ≥ 0 (0 = izslēgts)   | Kopējais monētu daudzums, ko pievienošanās solis drīkst tērēt **vienā ciklā** (globāls). `0` = netērēt. Maksas pievienošanās prasa, lai **abi** šis un `autoJoinMaxCoins` būtu > 0.    |
 
 ## 📐 Ieteicamie iestatījumi
 

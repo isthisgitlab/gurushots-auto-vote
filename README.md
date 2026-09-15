@@ -43,6 +43,8 @@ The desktop app now enforces this for GUI instances: launching it a second time 
 - **Boost** — auto-applies boost near the deadline, on a chosen entry slot.
 - **Turbo (earn + apply)** — auto-plays the mini-game to _earn_ turbo, then auto-_applies_ it to a chosen entry before the deadline.
 - **Auto-fill** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, theme-aware photo selection, and an emergency safety net.
+- **Auto-join** — discovers open (un-joined) challenges and joins them automatically (off by default), scoped by "join all", an include/exclude type list, or a saved title profile; paid challenges are gated by per-challenge and per-cycle coin caps and never charged without a completed join. Manual joining is available too, via a collapsible "Discover" list in the GUI and the `discover`/`join` CLI commands.
+- **Bankroll display** — shows your keys / swaps / fills / coins next to the timer in the GUI and via the `bankroll` (alias `coins`) CLI command.
 - **Per-challenge overrides** — every voting setting has a global default that any individual challenge can override.
 - **Per-title tag rules** — auto-fill tag rules keyed on the challenge title, so they survive GuruShots' per-rotation challenge-ID changes.
 - **Three platforms** — Electron GUI, `gurucli` command line, and an Android app that votes with the phone locked.
@@ -184,28 +186,31 @@ The Android build is **not on Google Play** — install via direct APK download.
 
 > **⚠️** Only run ONE instance (GUI or CLI) at a time.
 
-| Command                                           | What it does                                                                                                            |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `login`                                           | Authenticate with GuruShots and save a token (interactive; needs a real terminal).                                      |
-| `logout`                                          | Clear the saved authentication token.                                                                                   |
-| `vote`                                            | Run **one manual cycle** — votes to **100%** on every active challenge, ignoring all thresholds. A one-shot top-up.     |
-| `run [--challenge=<id>]`                          | Run **one full auto-strategy cycle** (boost / turbo / auto-fill / threshold-aware vote). `--challenge` scopes to one.   |
-| `boost --challenge=<id> [--image=<id>]`           | Apply a boost to one challenge. Without `--image` it uses the `boostImageIndex` slot.                                   |
-| `turbo --challenge=<id>`                          | Play the turbo mini-game to earn turbo for one challenge (earn only; a held turbo is applied by `useTurbo` or the GUI). |
-| `fill --challenge=<id> [--all]`                   | Submit the best-ranked photo into one empty slot, or `--all` to fill every empty slot at once.                          |
-| `check-updates`                                   | Check GitHub for a newer release.                                                                                       |
-| `start`                                           | Start **continuous** voting with dynamic scheduling. Runs until you press **Ctrl+C**.                                   |
-| `status`                                          | Show mode (MOCK/REAL), auth status, and key settings.                                                                   |
-| `get-setting <key> [--challenge=<id>]`            | Print a setting's effective value (per-challenge with `--challenge`).                                                   |
-| `set-setting <key> <value> [--challenge=<id>]`    | Set a setting; with `--challenge` it writes a per-challenge override.                                                   |
-| `set-global-default <key> <value>`                | Set a global default **with schema validation**.                                                                        |
-| `list-settings [--challenge=<id>]`                | List all settings and which were modified (per-challenge view with `--challenge`).                                      |
-| `reset-setting <key> [--challenge=<id>]`          | Reset a setting to default (or clear a challenge override with `--challenge`).                                          |
-| `reset-all-settings`                              | Reset everything to defaults (preserves token, mock flag, and API headers).                                             |
-| `logs [--error\|--api\|--settings] [--lines=<n>]` | Print the tail of a log file (default 100 lines; default category is the app log).                                      |
-| `reset-windows`                                   | Reset GUI window positions to defaults.                                                                                 |
-| `help-settings`                                   | Detailed help for the settings system — key names, value formats, ranges.                                               |
-| `help`                                            | Show command help.                                                                                                      |
+| Command                                           | What it does                                                                                                                                         |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `login`                                           | Authenticate with GuruShots and save a token (interactive; needs a real terminal).                                                                   |
+| `logout`                                          | Clear the saved authentication token.                                                                                                                |
+| `vote`                                            | Run **one manual cycle** — votes to **100%** on every active challenge, ignoring all thresholds. A one-shot top-up.                                  |
+| `run [--challenge=<id>]`                          | Run **one full auto-strategy cycle** (boost / turbo / auto-fill / threshold-aware vote). `--challenge` scopes to one.                                |
+| `boost --challenge=<id> [--image=<id>]`           | Apply a boost to one challenge. Without `--image` it uses the `boostImageIndex` slot.                                                                |
+| `turbo --challenge=<id>`                          | Play the turbo mini-game to earn turbo for one challenge (earn only; a held turbo is applied by `useTurbo` or the GUI).                              |
+| `fill --challenge=<id> [--all]`                   | Submit the best-ranked photo into one empty slot, or `--all` to fill every empty slot at once.                                                       |
+| `bankroll` (alias `coins`)                        | Show your currency balances — keys / swaps / fills / coins.                                                                                          |
+| `discover`                                        | List open (un-joined) challenges you can join, with each one's type and coin cost.                                                                   |
+| `join <id> [--yes]`                               | Join an open challenge. Free challenges join immediately; a **paid** challenge prints its coin cost and requires `--yes` before any coins are spent. |
+| `check-updates`                                   | Check GitHub for a newer release.                                                                                                                    |
+| `start`                                           | Start **continuous** voting with dynamic scheduling. Runs until you press **Ctrl+C**.                                                                |
+| `status`                                          | Show mode (MOCK/REAL), auth status, and key settings.                                                                                                |
+| `get-setting <key> [--challenge=<id>]`            | Print a setting's effective value (per-challenge with `--challenge`).                                                                                |
+| `set-setting <key> <value> [--challenge=<id>]`    | Set a setting; with `--challenge` it writes a per-challenge override.                                                                                |
+| `set-global-default <key> <value>`                | Set a global default **with schema validation**.                                                                                                     |
+| `list-settings [--challenge=<id>]`                | List all settings and which were modified (per-challenge view with `--challenge`).                                                                   |
+| `reset-setting <key> [--challenge=<id>]`          | Reset a setting to default (or clear a challenge override with `--challenge`).                                                                       |
+| `reset-all-settings`                              | Reset everything to defaults (preserves token, mock flag, and API headers).                                                                          |
+| `logs [--error\|--api\|--settings] [--lines=<n>]` | Print the tail of a log file (default 100 lines; default category is the app log).                                                                   |
+| `reset-windows`                                   | Reset GUI window positions to defaults.                                                                                                              |
+| `help-settings`                                   | Detailed help for the settings system — key names, value formats, ranges.                                                                            |
+| `help`                                            | Show command help.                                                                                                                                   |
 
 Settings are shared with the GUI: a `set-setting` from the CLI is picked up by the GUI and vice-versa.
 
@@ -278,6 +283,23 @@ Newly-filled entries are picked up by the boost and turbo gates on the _next_ cy
 ### Only-boost mode
 
 `onlyBoost` (per-challenge) turns off normal voting for that challenge — the app acts only when a boost or turbo can be applied. Useful for low-priority challenges where you want to spend boosts/turbos but not votes.
+
+### Auto-join challenges
+
+Everything above operates on challenges you've already joined. **Auto-join** (off by default) discovers **open, un-joined** challenges each cycle and joins the ones you want. It runs as a pre-step before voting on every platform (GUI, CLI `start`, Android), and joining a challenge means submitting a photo — auto-join reuses the same photo picker as auto-fill (tags, themed search, semantic ranking).
+
+- **Scope — which challenges get joined.** Turn on `autoJoin`, then choose how candidates qualify (combinable):
+    - `autoJoinAll` — join every open challenge.
+    - `autoJoinTypes` — an **include** list of challenge types, comma-separated (e.g. `flash,contest`).
+    - `autoJoinExcludeTypes` — a **deny** list of types to never join (e.g. `flash,exhibition`). This overrides both `autoJoinAll` and `autoJoinTypes`. So "join everything except flash and exhibition" = `autoJoinAll` on + `autoJoinExcludeTypes = flash,exhibition`.
+    - A **saved title profile** always joins its title (a deliberate per-title opt-in) — it wins over the type filters, including the exclude list.
+- **Paid challenges — coin safety.** Paid joins are **off by default** and gated by two caps, both `0 = off`: `autoJoinMaxCoins` (most coins to spend on a single join) and `autoJoinCycleCoinBudget` (total coins the pass may spend in one cycle). **Both must be > 0** to spend any coins. A paid join never charges without a completed join: the entry photo is resolved first (no photo ⇒ skip, no spend), and if the charge succeeds but the submit fails, the state is remembered so a retry finishes the submit instead of paying again.
+- **Manual join.** A collapsed **Discover** panel below the challenge list shows open challenges; free ones join on click, paid ones open a confirmation showing the cost and your resulting balance. From the CLI use `discover` to list them and `join <id>` (paid needs `--yes`).
+- **Scoping.** The type/coin settings are per-challenge-profile-tunable (resolved by title), so a specific title can loosen or tighten the rules; `autoJoin` itself and the per-cycle budget are global.
+
+### Bankroll
+
+Your currency balances — **keys / swaps / fills / coins** — show next to the timer in the GUI header (they read `—`, not `0`, if the balance can't be fetched, so a failed read is never mistaken for "empty"). From the CLI, `bankroll` (alias `coins`) prints them.
 
 ## 🎛️ Settings Reference
 
@@ -361,6 +383,17 @@ All of these support per-challenge overrides except where noted.
 | `emergencyFill`       | `300` s (5m)        | ≥ 0            | Final-minutes safety net: fill remaining slots even if rules wait, overriding must-include tags; also applies any available Boost/won Turbo even when `autoBoost`/`useTurbo` are off. `0` = off (also disables the Boost/Turbo override). Keep ≤ `lastMinuteThreshold`. Entered as h+m in the GUI.                          |
 | `mustIncludeTags`     | `[]`                | up to 50 tags  | Hard filter: only fill with photos matching all of these tags.                                                                                                                                                                                                                                                              |
 | `shouldIncludeTags`   | `[]`                | up to 50 tags  | Soft preference: prefer photos matching these tags, but don't exclude others.                                                                                                                                                                                                                                               |
+
+**Auto join**
+
+| Setting                   | Default | Range / values | Description                                                                                                                                      |
+| ------------------------- | ------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `autoJoin`                | `false` | bool (global)  | Master switch: discover and join open (un-joined) challenges each cycle. Global, not per-challenge.                                              |
+| `autoJoinAll`             | `false` | bool           | Scope: join **every** open challenge (still subject to the exclude list and coin caps).                                                          |
+| `autoJoinTypes`           | `''`    | csv of types   | Scope: **include** only these challenge types, e.g. `flash,contest`. Case-insensitive; spaces around commas ignored.                             |
+| `autoJoinExcludeTypes`    | `''`    | csv of types   | **Never** join these types, e.g. `flash,exhibition`. Overrides `autoJoinAll` and `autoJoinTypes`. A saved title profile still joins its title.   |
+| `autoJoinMaxCoins`        | `0`     | ≥ 0 (0 = off)  | Most coins to spend joining a **single** paid challenge. `0` = free challenges only.                                                             |
+| `autoJoinCycleCoinBudget` | `0`     | ≥ 0 (0 = off)  | Total coins the join pass may spend in **one cycle** (global). `0` = no paid spend. Paid joins require **both** this and `autoJoinMaxCoins` > 0. |
 
 ## 📐 Recommended Setups
 
