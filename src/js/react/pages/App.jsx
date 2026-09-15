@@ -181,18 +181,18 @@ function AppContent() {
                         bankroll={bankroll}
                     />
 
-                    {/* Discover — un-joined challenges with manual join */}
-                    <ErrorBoundary>
-                        <DiscoverSection isLoggedIn={isLoggedIn} bankroll={bankroll} onJoined={handleJoined} />
-                    </ErrorBoundary>
-
-                    {/* Challenges Section */}
+                    {/* Challenges Section — the primary view (joined/active) */}
                     <ChallengesSection
                         timezone={timezone}
                         autovoteRunning={autovote.running}
                         isLoggedIn={isLoggedIn}
                         onChallengeSettingsClick={handleChallengeSettingsClick}
                     />
+
+                    {/* Discover — un-joined challenges, collapsed below the main list */}
+                    <ErrorBoundary>
+                        <DiscoverSection isLoggedIn={isLoggedIn} bankroll={bankroll} onJoined={handleJoined} />
+                    </ErrorBoundary>
 
                     {/* Settings Modal */}
                     <ErrorBoundary>

@@ -100,89 +100,101 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
     const list = Array.isArray(items) ? items : [];
 
     return (
-        <section className="rounded-lg border border-base-300 bg-base-100 p-3 mb-3" data-testid="discover-section">
-            <div className="flex items-center justify-between mb-2">
-                <h2 className="font-semibold">{t('app.discoverTitle')}</h2>
-                <button className="btn btn-ghost btn-xs" onClick={() => refetch()} disabled={loading}>
-                    {t('app.discoverRefresh')}
-                </button>
-            </div>
+        <>
+            <details
+                className="collapse collapse-arrow rounded-lg border border-base-300 bg-base-100 mb-3"
+                data-testid="discover-section"
+            >
+                <summary className="collapse-title min-h-0 flex items-center gap-2 py-2 px-3 text-sm font-semibold">
+                    <span>{t('app.discoverTitle')}</span>
+                    {list.length > 0 && <span className="badge badge-neutral badge-sm">{list.length}</span>}
+                </summary>
+                <div className="collapse-content px-3 pb-3">
+                    <div className="flex justify-end mb-2">
+                        <button className="btn btn-ghost btn-xs" onClick={() => refetch()} disabled={loading}>
+                            {t('app.discoverRefresh')}
+                        </button>
+                    </div>
 
-            {loading && list.length === 0 ? (
-                <InlineLoader />
-            ) : error ? (
-                <p className="text-sm text-error">{t('app.discoverUnavailableList')}</p>
-            ) : list.length === 0 ? (
-                <p className="text-sm text-base-content/60">{t('app.discoverEmpty')}</p>
-            ) : (
-                <ul className="flex flex-col gap-2">
-                    {list.map((c) => {
-                        const cost = costOf(c);
-                        const outcome = results[c.id];
-                        // Any result without a mapped status (auth-expiry, an
-                        // unexpected handler error) still shows a message rather
-                        // than failing silently on a money-adjacent action.
-                        const meta = outcome ? OUTCOME[outcome.status] || { key: null, variant: 'error' } : null;
-                        const isBusy = busyId === c.id;
-                        return (
-                            <li
-                                key={c.id}
-                                className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5"
-                            >
-                                <div className="min-w-0">
-                                    <div className="truncate font-medium">
-                                        {c.title || c.url || t('app.discoverUntitled')}
-                                    </div>
-                                    <div className="flex items-center gap-2 text-xs text-base-content/60">
-                                        {c.type && (
-                                            <StatusBadge variant="ghost" size="xs">
-                                                {c.type}
-                                            </StatusBadge>
-                                        )}
-                                        <span>
-                                            {cost > 0
-                                                ? interp(t('app.discoverCostPaid'), { coins: cost })
-                                                : t('app.discoverCostFree')}
-                                        </span>
-                                    </div>
-                                    {meta && (
-                                        <div
-                                            className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant] || TEXT_CLASS.neutral}`}
-                                        >
-                                            {meta.key
-                                                ? interp(t(meta.key), {
-                                                      coins: outcome.cost ?? cost,
-                                                      have: outcome.coins,
-                                                  })
-                                                : outcome.error || t('app.discoverGenericError')}
-                                            {outcome.status === 'charged-pending-submit' && (
-                                                <button
-                                                    className="btn btn-ghost btn-xs ml-2"
-                                                    onClick={() => doJoin(c, true)}
-                                                    disabled={isBusy}
+                    {loading && list.length === 0 ? (
+                        <InlineLoader />
+                    ) : error ? (
+                        <p className="text-sm text-error">{t('app.discoverUnavailableList')}</p>
+                    ) : list.length === 0 ? (
+                        <p className="text-sm text-base-content/60">{t('app.discoverEmpty')}</p>
+                    ) : (
+                        <ul className="flex flex-col gap-2">
+                            {list.map((c) => {
+                                const cost = costOf(c);
+                                const outcome = results[c.id];
+                                // Any result without a mapped status (auth-expiry, an
+                                // unexpected handler error) still shows a message rather
+                                // than failing silently on a money-adjacent action.
+                                const meta = outcome
+                                    ? OUTCOME[outcome.status] || { key: null, variant: 'error' }
+                                    : null;
+                                const isBusy = busyId === c.id;
+                                return (
+                                    <li
+                                        key={c.id}
+                                        className="flex flex-wrap items-center justify-between gap-2 rounded border border-base-200 px-2 py-1.5"
+                                    >
+                                        <div className="min-w-0">
+                                            <div className="truncate font-medium">
+                                                {c.title || c.url || t('app.discoverUntitled')}
+                                            </div>
+                                            <div className="flex items-center gap-2 text-xs text-base-content/60">
+                                                {c.type && (
+                                                    <StatusBadge variant="ghost" size="xs">
+                                                        {c.type}
+                                                    </StatusBadge>
+                                                )}
+                                                <span>
+                                                    {cost > 0
+                                                        ? interp(t('app.discoverCostPaid'), { coins: cost })
+                                                        : t('app.discoverCostFree')}
+                                                </span>
+                                            </div>
+                                            {meta && (
+                                                <div
+                                                    className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant] || TEXT_CLASS.neutral}`}
                                                 >
-                                                    {t('app.discoverRetrySubmit')}
-                                                </button>
+                                                    {meta.key
+                                                        ? interp(t(meta.key), {
+                                                              coins: outcome.cost ?? cost,
+                                                              have: outcome.coins,
+                                                          })
+                                                        : outcome.error || t('app.discoverGenericError')}
+                                                    {outcome.status === 'charged-pending-submit' && (
+                                                        <button
+                                                            className="btn btn-ghost btn-xs ml-2"
+                                                            onClick={() => doJoin(c, true)}
+                                                            disabled={isBusy}
+                                                        >
+                                                            {t('app.discoverRetrySubmit')}
+                                                        </button>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
-                                    )}
-                                </div>
-                                <button
-                                    className={`btn btn-sm ${cost > 0 ? 'btn-warning' : 'btn-primary'}`}
-                                    onClick={() => onJoinClick(c)}
-                                    disabled={isBusy}
-                                >
-                                    {isBusy
-                                        ? t('app.discoverJoining')
-                                        : cost > 0
-                                          ? t('app.discoverJoinPaid')
-                                          : t('app.discoverJoin')}
-                                </button>
-                            </li>
-                        );
-                    })}
-                </ul>
-            )}
+                                        <button
+                                            className={`btn btn-sm ${cost > 0 ? 'btn-warning' : 'btn-primary'}`}
+                                            onClick={() => onJoinClick(c)}
+                                            disabled={isBusy}
+                                        >
+                                            {isBusy
+                                                ? t('app.discoverJoining')
+                                                : cost > 0
+                                                  ? t('app.discoverJoinPaid')
+                                                  : t('app.discoverJoin')}
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </div>
+            </details>
 
             {/* Paid-join confirmation: names the challenge, the cost, and the
                 current → resulting coin balance before any coins are spent. */}
@@ -232,6 +244,6 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                     );
                 })()}
             </Modal>
-        </section>
+        </>
     );
 }
