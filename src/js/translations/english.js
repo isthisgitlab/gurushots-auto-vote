@@ -233,6 +233,7 @@
                 'Total coins auto-join may spend in one cycle. 0 = spend nothing (paid joins off). Both this and the per-challenge cap must be above 0 to join paid challenges.',
             // Discover (un-joined challenges)
             discoverTitle: 'Discover Challenges',
+            discoverCountLabel: 'open challenges',
             discoverRefresh: 'Refresh',
             discoverEmpty: 'No open challenges to join right now.',
             discoverUnavailableList: 'Could not load open challenges. Check your connection and try again.',

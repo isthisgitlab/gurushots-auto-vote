@@ -21,6 +21,24 @@ beforeEach(() => {
     };
 });
 
+test('renders collapsed by default with an open-count badge', async () => {
+    const { container } = render(<DiscoverSection isLoggedIn bankroll={{ coins: 500 }} onJoined={jest.fn()} />);
+    await screen.findByText('Free One');
+    const details = container.querySelector('[data-testid="discover-section"]');
+    // Compact + out of the way: a <details> that starts closed.
+    expect(details.tagName.toLowerCase()).toBe('details');
+    expect(details.hasAttribute('open')).toBe(false);
+    // Summary shows the open-challenge count (2 fixtures).
+    expect(screen.getByText('2')).toBeTruthy();
+});
+
+test('the count badge is hidden when there are no open challenges', async () => {
+    window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: true, items: [] });
+    render(<DiscoverSection isLoggedIn bankroll={{ coins: 500 }} onJoined={jest.fn()} />);
+    await screen.findByText('app.discoverEmpty');
+    expect(screen.queryByText('0')).toBeNull();
+});
+
 test('free join calls joinChallenge with spendCoins=false, no modal', async () => {
     render(<DiscoverSection isLoggedIn bankroll={{ coins: 500 }} onJoined={jest.fn()} />);
     await screen.findByText('Free One');

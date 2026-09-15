@@ -233,6 +233,7 @@
                 'Kopējais monētu daudzums, ko automātiskā pievienošanās drīkst tērēt vienā ciklā. 0 = netērēt neko (maksas izslēgta). Gan šim, gan limitam par izaicinājumu jābūt virs 0, lai pievienotos maksas izaicinājumiem.',
             // Atklāšana (nepievienotie izaicinājumi)
             discoverTitle: 'Atklāt izaicinājumus',
+            discoverCountLabel: 'atvērti izaicinājumi',
             discoverRefresh: 'Atsvaidzināt',
             discoverEmpty: 'Šobrīd nav atvērtu izaicinājumu, kuriem pievienoties.',
             discoverUnavailableList:

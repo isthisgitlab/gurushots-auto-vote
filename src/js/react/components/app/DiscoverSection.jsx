@@ -105,9 +105,23 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                 className="collapse collapse-arrow rounded-lg border border-base-300 bg-base-100 mb-3"
                 data-testid="discover-section"
             >
-                <summary className="collapse-title min-h-0 flex items-center gap-2 py-2 px-3 text-sm font-semibold">
-                    <span>{t('app.discoverTitle')}</span>
-                    {list.length > 0 && <span className="badge badge-neutral badge-sm">{list.length}</span>}
+                {/* pe-10 keeps clearance for DaisyUI's collapse-arrow (its
+                    padding-inline-end:3rem is otherwise overridden by utilities). */}
+                <summary className="collapse-title min-h-0 flex items-center gap-2 py-2 ps-3 pe-10 text-sm font-semibold">
+                    {/* h2 (not span) keeps the section discoverable by heading nav. */}
+                    <h2 className="m-0 text-sm font-semibold">{t('app.discoverTitle')}</h2>
+                    {list.length > 0 && (
+                        <span className="badge badge-neutral badge-sm" aria-label={t('app.discoverCountLabel')}>
+                            {list.length}
+                        </span>
+                    )}
+                    {/* Surface a fetch failure even while collapsed — otherwise a
+                        failed load looks identical to "no open challenges". */}
+                    {error && (
+                        <span className="badge badge-error badge-sm" title={t('app.discoverUnavailableList')}>
+                            !
+                        </span>
+                    )}
                 </summary>
                 <div className="collapse-content px-3 pb-3">
                     <div className="flex justify-end mb-2">
