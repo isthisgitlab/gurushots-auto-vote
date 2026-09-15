@@ -91,9 +91,13 @@ Domain terms used throughout, in reader's terms:
   mid-pass).
 - **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.js`)
   runs inside the shared `fetchChallengesAndVote` (`api/main.js` real / `mock/index.js` mock) before the
-  voting pass, gated by the default-off global `autoJoin` setting, so all three platforms get it without
-  forking `runVotingPass`. It is skipped for a single-challenge run and never allowed to abort voting (its
-  errors are caught and logged).
+  voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
+  single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
+  enable is **resolved per candidate by title (master → profile → per-challenge)**, not a hard global gate —
+  the master value is only the default, so a title profile can enable joining for its title with the master
+  off. The pass only short-circuits wholesale when the master is off **and** there are no title rules (so no
+  profile could turn it on); everything else (scope/coin caps) is title-profile-resolved too, except
+  `autoJoinCycleCoinBudget`, which is genuinely pass-global.
 
 ## 3. GuruShots API transport
 

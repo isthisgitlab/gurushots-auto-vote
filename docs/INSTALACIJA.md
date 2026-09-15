@@ -285,6 +285,7 @@ Viss iepriekšējais darbojas ar izaicinājumiem, kuriem jau esat pievienojies. 
     - **Saglabāts nosaukuma profils** vienmēr pievienojas savam nosaukumam (apzināta izvēle konkrētam nosaukumam) — tas uzvar pār tipu filtriem, arī pār izslēgšanas sarakstu.
 - **Maksas izaicinājumi — monētu drošība.** Maksas pievienošanās pēc noklusējuma **izslēgta** un ierobežota ar diviem limitiem, abi `0 = izslēgts`: `autoJoinMaxCoins` (maksimums monētu vienai pievienošanās reizei) un `autoJoinCycleCoinBudget` (kopējais monētu daudzums vienā ciklā). **Abiem jābūt > 0**, lai tērētu monētas. Maksas pievienošanās nekad netiek apmaksāta bez pabeigtas pievienošanās: vispirms tiek atrasta foto (nav foto ⇒ izlaist, netērēt), un ja apmaksa izdodas, bet iesniegšana neizdodas, stāvoklis tiek iegaumēts, tāpēc atkārtojums pabeidz iesniegšanu, nevis maksā vēlreiz.
 - **Manuāla pievienošanās.** Sakļauts **Atklāt** panelis zem izaicinājumu saraksta parāda atvērtos izaicinājumus; bezmaksas pievienojas ar klikšķi, maksas atver apstiprinājumu ar izmaksu un jūsu atlikušo bilanci. No CLI izmantojiet `discover`, lai tos uzskaitītu, un `join <id>` (maksas prasa `--yes`).
+- **Prioritāte.** `autoJoin` un tipu/monētu iestatījumi tiek atrisināti **master → profils → katram izaicinājumam** (pēc nosaukuma nepievienotajiem izaicinājumiem), tāpēc saglabāts nosaukuma profils var ieslēgt pievienošanos savam nosaukumam pat ar izslēgtu master noklusējumu un atsevišķam nosaukumam atslābināt vai pastiprināt noteikumus. Tikai `autoJoinCycleCoinBudget` paliek globāls — kopējam cikla tēriņa limitam nav nozīmes katram nosaukumam.
 
 ### Konta atlikums
 
@@ -375,14 +376,14 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 
 **Auto-pievienošanās**
 
-| Iestatījums               | Noklusējums | Diapazons / vērtības | Apraksts                                                                                                                                                                               |
-| ------------------------- | ----------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `autoJoin`                | `false`     | bool (globāls)       | Galvenais slēdzis: katrā ciklā atrast un pievienoties atvērtajiem (nepievienotajiem) izaicinājumiem. Globāls, nevis katram izaicinājumam.                                              |
-| `autoJoinAll`             | `false`     | bool                 | Tvērums: pievienoties **katram** atvērtajam izaicinājumam (joprojām pakļauts izslēgšanas sarakstam un monētu limitiem).                                                                |
-| `autoJoinTypes`           | `''`        | tipi, ar komatu      | Tvērums: **iekļaut** tikai šos izaicinājumu tipus, piem., `flash,contest`. Reģistrnejutīgs; atstarpes ap komatiem tiek ignorētas.                                                      |
-| `autoJoinExcludeTypes`    | `''`        | tipi, ar komatu      | **Nekad** nepievienoties šiem tipiem, piem., `flash,exhibition`. Ņem virsroku pār `autoJoinAll` un `autoJoinTypes`. Saglabāts nosaukuma profils joprojām pievienojas savam nosaukumam. |
-| `autoJoinMaxCoins`        | `0`         | ≥ 0 (0 = izslēgts)   | Maksimums monētu vienas maksas pievienošanās reizei. `0` = tikai bezmaksas izaicinājumi.                                                                                               |
-| `autoJoinCycleCoinBudget` | `0`         | ≥ 0 (0 = izslēgts)   | Kopējais monētu daudzums, ko pievienošanās solis drīkst tērēt **vienā ciklā** (globāls). `0` = netērēt. Maksas pievienošanās prasa, lai **abi** šis un `autoJoinMaxCoins` būtu > 0.    |
+| Iestatījums               | Noklusējums | Diapazons / vērtības | Apraksts                                                                                                                                                                                                                |
+| ------------------------- | ----------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoJoin`                | `false`     | bool                 | Ieslēgt auto-pievienošanos. Tiek atrisināts **master → profils → katram izaicinājumam**: nosaukuma profils (vai izaicinājuma pārrakstījums) var to ieslēgt savam nosaukumam pat tad, ja master noklusējums ir izslēgts. |
+| `autoJoinAll`             | `false`     | bool                 | Tvērums: pievienoties **katram** atvērtajam izaicinājumam (joprojām pakļauts izslēgšanas sarakstam un monētu limitiem).                                                                                                 |
+| `autoJoinTypes`           | `''`        | tipi, ar komatu      | Tvērums: **iekļaut** tikai šos izaicinājumu tipus, piem., `flash,contest`. Reģistrnejutīgs; atstarpes ap komatiem tiek ignorētas.                                                                                       |
+| `autoJoinExcludeTypes`    | `''`        | tipi, ar komatu      | **Nekad** nepievienoties šiem tipiem, piem., `flash,exhibition`. Ņem virsroku pār `autoJoinAll` un `autoJoinTypes`. Saglabāts nosaukuma profils joprojām pievienojas savam nosaukumam.                                  |
+| `autoJoinMaxCoins`        | `0`         | ≥ 0 (0 = izslēgts)   | Maksimums monētu vienas maksas pievienošanās reizei. `0` = tikai bezmaksas izaicinājumi.                                                                                                                                |
+| `autoJoinCycleCoinBudget` | `0`         | ≥ 0 (0 = izslēgts)   | Kopējais monētu daudzums, ko pievienošanās solis drīkst tērēt **vienā ciklā** (globāls). `0` = netērēt. Maksas pievienošanās prasa, lai **abi** šis un `autoJoinMaxCoins` būtu > 0.                                     |
 
 ## 📐 Ieteicamie iestatījumi
 

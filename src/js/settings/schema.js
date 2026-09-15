@@ -722,13 +722,17 @@ const SETTINGS_SCHEMA = {
     },
 
     // --- Auto Join ---
-    // Master enable for the automatic join pre-step (runs each voting cycle on
-    // every platform). Global, default off. Scope below decides WHICH open
+    // Enable for the automatic join pre-step (runs each voting cycle on every
+    // platform). Default off, but resolved master → profile → per-challenge, so a
+    // title profile can turn it on for its title. Scope below decides WHICH open
     // challenges are joined; the coin caps gate paid ones.
     autoJoin: {
         type: 'boolean',
         default: false,
-        perChallenge: false,
+        // Per-challenge/title-profile overridable: the master value is just the
+        // default. A title profile (or per-challenge override) can enable joining
+        // for its title even when the master is off — master → profile → challenge.
+        perChallenge: true,
         validation: zBool,
         validationOrder: 1,
         group: 'autoJoin',

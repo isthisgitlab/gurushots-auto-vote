@@ -73,7 +73,31 @@ const parseTypeList = (value) =>
               .filter((t) => t !== '')
         : [];
 
-/** Per-candidate scope config, resolved by title. */
+/**
+ * True when at least one saved title profile sets `autoJoin: true` — i.e. some
+ * title would auto-join even with the master default off. Used only as the
+ * pass-level fast-path check; tag-only title rules (no profile) return false.
+ */
+const anyTitleProfileEnablesAutoJoin = () => {
+    let rules;
+    try {
+        rules = settings.getTitleRules();
+    } catch {
+        return false;
+    }
+    if (!Array.isArray(rules)) return false;
+    for (const rule of rules) {
+        const title = rule?.title;
+        if (!title) continue;
+        const profile = settings.getTitleProfile(title);
+        if (profile && !profile.suppressed && profile.values && profile.values.autoJoin === true) {
+            return true;
+        }
+    }
+    return false;
+};
+
+/** Per-candidate scope/coin config, resolved by title (master → profile). */
 const resolveCandidateConfig = (challenge) => ({
     allowAll: resolveJoinSetting('autoJoinAll', challenge) === true,
     allowTypes: parseTypeList(resolveJoinSetting('autoJoinTypes', challenge)),
@@ -300,8 +324,10 @@ const performJoin = async (challenge, token, deps, needsCoins) => {
 // ---- automatic per-cycle pass ----
 
 /**
- * Automatic join pass — a pre-step in fetchChallengesAndVote, gated by the
- * global `autoJoin` setting (default off). Sequential, cancellation-aware.
+ * Automatic join pass — a pre-step in fetchChallengesAndVote. The `autoJoin`
+ * enable is resolved per candidate by title (master → profile), so a profiled
+ * title joins even when the master default is off; the pass only skips wholesale
+ * when the master is off AND no title rules exist. Sequential, cancellation-aware.
  *
  * @param {string} token
  * @param {number} now epoch ms (unused today; kept for parity with other passes)
@@ -310,10 +336,21 @@ const performJoin = async (challenge, token, deps, needsCoins) => {
  */
 const runJoinPass = async (token, now, deps) => {
     const empty = { ran: false, joined: 0, results: [] };
-    if (settings.getEffectiveSetting('autoJoin', null) !== true) {
+    if (!token) return empty;
+    // The master autoJoin is only the default; a title profile can enable joining
+    // for its title even when the master is off (resolved master → profile — an
+    // un-joined candidate has no cached id for a per-challenge override to key
+    // off). So we can only skip the pass entirely when the master is off AND no
+    // title profile turns it on. Effective per-candidate enable is resolved in
+    // the loop below.
+    const masterOn = settings.getEffectiveSetting('autoJoin', null) === true;
+    // When the master default is off, the pass is still needed if any saved title
+    // profile turns autoJoin ON for its title. Check that precisely (a tag-only
+    // title rule — the older auto-fill feature — carries no profile and can never
+    // enable joining, so it must NOT keep the pass alive every cycle).
+    if (!masterOn && !anyTitleProfileEnablesAutoJoin()) {
         return empty;
     }
-    if (!token) return empty;
 
     let candidates;
     try {
@@ -342,6 +379,12 @@ const runJoinPass = async (token, now, deps) => {
         if (cancellation.isCancelled()) {
             cat().warning('join pass cancelled by user', null);
             break;
+        }
+        // Per-candidate enable (master → profile): skip titles auto-join is off
+        // for, BEFORE resolving the rest of the config (avoid redundant work).
+        if (resolveJoinSetting('autoJoin', challenge) !== true) {
+            results.push({ id: challenge?.id, status: 'skipped:autojoin-off' });
+            continue;
         }
         const cfg = resolveCandidateConfig(challenge);
         const decision = shouldJoinChallenge({

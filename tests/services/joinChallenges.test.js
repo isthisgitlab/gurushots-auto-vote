@@ -30,6 +30,7 @@ jest.mock('../../src/js/settings', () => ({
     }),
     getTitleProfile: jest.fn(() => null),
     getEffectiveTagSetting: jest.fn(() => []),
+    getTitleRules: jest.fn(() => []),
 }));
 
 const cancellation = require('../../src/js/voting/cancellation');
@@ -74,6 +75,7 @@ beforeEach(() => {
     // Reset settings mocks to defaults so per-test overrides never leak.
     settings.getTitleProfile.mockReturnValue(null);
     settings.getEffectiveTagSetting.mockReturnValue([]);
+    settings.getTitleRules.mockReturnValue([]);
     settings.getEffectiveSetting.mockImplementation((key) => DEFAULT_SETTINGS[key]);
     inFlight.clear();
 });
@@ -227,8 +229,72 @@ describe('resolveJoinSetting — title profile (.values)', () => {
 });
 
 describe('runJoinPass', () => {
-    test('does nothing when autoJoin is off', async () => {
+    test('does nothing when the master is off AND there are no title rules', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : undefined));
+        settings.getTitleRules.mockReturnValue([]);
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash' }]) });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.ran).toBe(false);
+        expect(deps.getMemberChallenges).not.toHaveBeenCalled();
+    });
+
+    test('master off with only tag-only title rules (no join profile) → pass short-circuits, no API calls', async () => {
+        settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
+        // A tag-only rule (the older auto-fill feature) carries no profile that
+        // enables autoJoin, so getTitleProfile resolves null → pass must not run.
+        settings.getTitleRules.mockReturnValue([{ title: 'Tagged', mustIncludeTags: ['x'] }]);
+        settings.getTitleProfile.mockReturnValue(null);
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash' }]) });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.ran).toBe(false);
+        expect(deps.getMemberChallenges).not.toHaveBeenCalled();
+        expect(deps.getBankroll).not.toHaveBeenCalled();
+    });
+
+    test('master off but a title profile enables autoJoin → that title joins, others skip (master → profile)', async () => {
+        // Master default off; but title rules exist and the profiled title turns
+        // autoJoin on for itself.
+        settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
+        settings.getTitleRules.mockReturnValue([{ title: 'Joinable', profile: 'p' }]);
+        settings.getTitleProfile.mockImplementation((title) =>
+            title === 'Joinable' ? { name: 'p', values: { autoJoin: true, autoJoinAll: true } } : null,
+        );
+        const deps = makeDeps({
+            getMemberChallenges: jest.fn(async () => [
+                { id: 1, join_coins: 0, type: 'flash', title: 'Joinable' },
+                { id: 2, join_coins: 0, type: 'flash', title: 'Other' },
+            ]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status]));
+        expect(byId[1]).toBe('joined');
+        expect(byId[2]).toBe('skipped:autojoin-off');
+        expect(res.joined).toBe(1);
+    });
+
+    test('master ON but a title profile disables autoJoin → that title is skipped, others join', async () => {
+        // Safety-relevant mirror of the enable case: an explicit false in the
+        // profile must win over the master-on default (hasOwnProperty, not truthy).
+        settings.getTitleProfile.mockImplementation((title) =>
+            title === 'Excluded' ? { name: 'p', values: { autoJoin: false } } : null,
+        );
+        const deps = makeDeps({
+            getMemberChallenges: jest.fn(async () => [
+                { id: 1, join_coins: 0, type: 'flash', title: 'Excluded' },
+                { id: 2, join_coins: 0, type: 'flash', title: 'Other' },
+            ]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status]));
+        expect(byId[1]).toBe('skipped:autojoin-off');
+        expect(byId[2]).toBe('joined');
+    });
+
+    test('getTitleRules throwing with master off → pass short-circuits (fail-safe)', async () => {
+        settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
+        settings.getTitleRules.mockImplementation(() => {
+            throw new Error('corrupt settings');
+        });
         const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash' }]) });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.ran).toBe(false);

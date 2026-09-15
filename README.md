@@ -295,7 +295,7 @@ Everything above operates on challenges you've already joined. **Auto-join** (of
     - A **saved title profile** always joins its title (a deliberate per-title opt-in) — it wins over the type filters, including the exclude list.
 - **Paid challenges — coin safety.** Paid joins are **off by default** and gated by two caps, both `0 = off`: `autoJoinMaxCoins` (most coins to spend on a single join) and `autoJoinCycleCoinBudget` (total coins the pass may spend in one cycle). **Both must be > 0** to spend any coins. A paid join never charges without a completed join: the entry photo is resolved first (no photo ⇒ skip, no spend), and if the charge succeeds but the submit fails, the state is remembered so a retry finishes the submit instead of paying again.
 - **Manual join.** A collapsed **Discover** panel below the challenge list shows open challenges; free ones join on click, paid ones open a confirmation showing the cost and your resulting balance. From the CLI use `discover` to list them and `join <id>` (paid needs `--yes`).
-- **Scoping.** The type/coin settings are per-challenge-profile-tunable (resolved by title), so a specific title can loosen or tighten the rules; `autoJoin` itself and the per-cycle budget are global.
+- **Scoping / precedence.** `autoJoin` and the type/coin-cap settings are resolved **master → profile → per-challenge** (by title for un-joined challenges), so a saved title profile can enable joining for its title even with the master default off, and can loosen or tighten the rules per title. Only `autoJoinCycleCoinBudget` stays global — a per-cycle total spend cap has no per-title meaning.
 
 ### Bankroll
 
@@ -386,14 +386,14 @@ All of these support per-challenge overrides except where noted.
 
 **Auto join**
 
-| Setting                   | Default | Range / values | Description                                                                                                                                      |
-| ------------------------- | ------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `autoJoin`                | `false` | bool (global)  | Master switch: discover and join open (un-joined) challenges each cycle. Global, not per-challenge.                                              |
-| `autoJoinAll`             | `false` | bool           | Scope: join **every** open challenge (still subject to the exclude list and coin caps).                                                          |
-| `autoJoinTypes`           | `''`    | csv of types   | Scope: **include** only these challenge types, e.g. `flash,contest`. Case-insensitive; spaces around commas ignored.                             |
-| `autoJoinExcludeTypes`    | `''`    | csv of types   | **Never** join these types, e.g. `flash,exhibition`. Overrides `autoJoinAll` and `autoJoinTypes`. A saved title profile still joins its title.   |
-| `autoJoinMaxCoins`        | `0`     | ≥ 0 (0 = off)  | Most coins to spend joining a **single** paid challenge. `0` = free challenges only.                                                             |
-| `autoJoinCycleCoinBudget` | `0`     | ≥ 0 (0 = off)  | Total coins the join pass may spend in **one cycle** (global). `0` = no paid spend. Paid joins require **both** this and `autoJoinMaxCoins` > 0. |
+| Setting                   | Default | Range / values | Description                                                                                                                                                                    |
+| ------------------------- | ------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `autoJoin`                | `false` | bool           | Enable auto-join. Resolved **master → profile → per-challenge**: a title profile (or per-challenge override) can turn it on for its title even when the master default is off. |
+| `autoJoinAll`             | `false` | bool           | Scope: join **every** open challenge (still subject to the exclude list and coin caps).                                                                                        |
+| `autoJoinTypes`           | `''`    | csv of types   | Scope: **include** only these challenge types, e.g. `flash,contest`. Case-insensitive; spaces around commas ignored.                                                           |
+| `autoJoinExcludeTypes`    | `''`    | csv of types   | **Never** join these types, e.g. `flash,exhibition`. Overrides `autoJoinAll` and `autoJoinTypes`. A saved title profile still joins its title.                                 |
+| `autoJoinMaxCoins`        | `0`     | ≥ 0 (0 = off)  | Most coins to spend joining a **single** paid challenge. `0` = free challenges only.                                                                                           |
+| `autoJoinCycleCoinBudget` | `0`     | ≥ 0 (0 = off)  | Total coins the join pass may spend in **one cycle** (global). `0` = no paid spend. Paid joins require **both** this and `autoJoinMaxCoins` > 0.                               |
 
 ## 📐 Recommended Setups
 
