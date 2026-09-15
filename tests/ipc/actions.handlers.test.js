@@ -424,3 +424,64 @@ describe('apply-boost-to-entry', () => {
         expect(result).toEqual({ success: false, error: 'Failed to apply boost' });
     });
 });
+
+describe('get-bankroll', () => {
+    test('whitelists the four currencies on success (no raw payload)', async () => {
+        stubAuthGuardOk();
+        stubStrategy({
+            getBankroll: jest.fn().mockResolvedValue({ keys: 8, swaps: 41, fills: 818, coins: 17540, extra: 'x' }),
+        });
+        const handlers = buildHandlers();
+        const result = await handlers['get-bankroll']({});
+        expect(result).toEqual({ success: true, keys: 8, swaps: 41, fills: 818, coins: 17540 });
+        expect(result.extra).toBeUndefined();
+    });
+
+    test('reports failure (never 0s) when the balance cannot be read', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getBankroll: jest.fn().mockResolvedValue(null) });
+        const handlers = buildHandlers();
+        const result = await handlers['get-bankroll']({});
+        expect(result.success).toBe(false);
+    });
+
+    test('returns the auth guard response when not authenticated', async () => {
+        stubAuthGuardFail();
+        const handlers = buildHandlers();
+        const result = await handlers['get-bankroll']({});
+        expect(result).toEqual({ success: false, error: 'No authentication token found' });
+    });
+});
+
+describe('get-member-challenges', () => {
+    test('defaults the filter to "open" and returns items', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue([{ id: 1 }]) });
+        const handlers = buildHandlers();
+        const result = await handlers['get-member-challenges']({});
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'open');
+        expect(result).toEqual({ success: true, items: [{ id: 1 }] });
+    });
+});
+
+describe('join-challenge', () => {
+    test('passes challengeId + spendCoins + token through, maps joined→success', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({
+            joinChallenge: jest.fn().mockResolvedValue({ status: 'joined', cost: 100, challengeId: 5 }),
+        });
+        const handlers = buildHandlers();
+        const result = await handlers['join-challenge']({}, 5, true);
+        expect(strategy.joinChallenge).toHaveBeenCalledWith(5, true, 'tok');
+        expect(result).toMatchObject({ success: true, status: 'joined', cost: 100 });
+    });
+
+    test('a paid challenge without spendCoins does not report success (needs-confirm)', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ joinChallenge: jest.fn().mockResolvedValue({ status: 'needs-confirm', cost: 100 }) });
+        const handlers = buildHandlers();
+        const result = await handlers['join-challenge']({}, 5, false);
+        expect(result.success).toBe(false);
+        expect(result.status).toBe('needs-confirm');
+    });
+});

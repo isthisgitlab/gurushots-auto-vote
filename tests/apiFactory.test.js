@@ -16,7 +16,7 @@ jest.mock('../src/js/services/BaseMiddleware', () => {
 });
 
 jest.mock('../src/js/api/login', () => ({ authenticate: jest.fn() }));
-jest.mock('../src/js/api/main', () => ({ fetchChallengesAndVote: jest.fn() }));
+jest.mock('../src/js/api/main', () => ({ fetchChallengesAndVote: jest.fn(), joinChallenge: jest.fn() }));
 jest.mock('../src/js/api/challenges', () => ({ getActiveChallenges: jest.fn() }));
 jest.mock('../src/js/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
 jest.mock('../src/js/api/boost', () => ({ applyBoost: jest.fn(), applyBoostToEntry: jest.fn() }));
@@ -40,6 +40,9 @@ jest.mock('../src/js/mock', () => ({
         getEligiblePhotos: jest.fn(),
         getImageData: jest.fn(),
         submitToChallenge: jest.fn(),
+        getMemberChallenges: jest.fn(),
+        getBankroll: jest.fn(),
+        joinChallenge: jest.fn(),
     },
 }));
 

@@ -21,6 +21,28 @@ function HeaderStat({ icon, value, label }) {
     );
 }
 
+// Render a balance, or an em-dash when it could not be read — NEVER 0, which
+// would falsely imply an empty balance and mislead a paid-join decision.
+const fmtBalance = (v) => (Number.isFinite(v) ? v : '—');
+
+/**
+ * Bankroll pills (keys/swaps/fills/coins). Wrapped in its own polite live region
+ * — unlike the ambient countdown, a balance change after a join/spend IS worth
+ * announcing, and this node has no per-second tick to make that noisy.
+ */
+function BankrollStats({ bankroll }) {
+    const { t } = useTranslation();
+    const b = bankroll || null;
+    return (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1" role="status" aria-live="polite">
+            <HeaderStat icon="🔑" value={fmtBalance(b?.keys)} label={t('app.bankrollKeys')} />
+            <HeaderStat icon="🔄" value={fmtBalance(b?.swaps)} label={t('app.bankrollSwaps')} />
+            <HeaderStat icon="🧩" value={fmtBalance(b?.fills)} label={t('app.bankrollFills')} />
+            <HeaderStat icon="🪙" value={fmtBalance(b?.coins)} label={t('app.bankrollCoins')} />
+        </div>
+    );
+}
+
 /**
  * Isolated 1Hz countdown for the next armed autovote cycle. Kept in its own
  * component so the per-second tick re-renders ONLY this node — never the parent
@@ -51,7 +73,7 @@ function NextActionCountdown({ nextRunAt, running }) {
  * header body never re-renders on the countdown's clock. Responsive: the row
  * wraps on narrow viewports rather than using wide DaisyUI `stat` blocks.
  */
-export function StatusHeader({ challenges, nextRunAt, running }) {
+export function StatusHeader({ challenges, nextRunAt, running, bankroll }) {
     const { t } = useTranslation();
     const list = Array.isArray(challenges) ? challenges : [];
     const nowSec = Math.floor(Date.now() / 1000);
@@ -59,8 +81,12 @@ export function StatusHeader({ challenges, nextRunAt, running }) {
     const boostsAvailable = openBoostWindows(list, nowSec).length;
     const turbosAvailable = list.filter((c) => isTurboAvailable(c.member?.turbo, nowSec)).length;
 
-    // Nothing worth showing when there are no challenges and autovote is idle.
-    if (activeCount === 0 && !running) return null;
+    // Show the bar whenever there's a balance to display, even with no active
+    // challenges and autovote idle — that's exactly when a user browses Discover
+    // and needs to see their coins before a paid join. Only fully idle + no
+    // bankroll hides it.
+    const hasBankroll = bankroll !== undefined && bankroll !== null;
+    if (activeCount === 0 && !running && !hasBankroll) return null;
 
     return (
         // Deliberately NOT role="status"/aria-live: the next-action countdown
@@ -79,6 +105,7 @@ export function StatusHeader({ challenges, nextRunAt, running }) {
                 <span className="text-base-content/60">{t('app.statusHeaderNext')}:</span>
                 <NextActionCountdown nextRunAt={nextRunAt} running={running} />
             </div>
+            {hasBankroll && <BankrollStats bankroll={bankroll} />}
         </div>
     );
 }

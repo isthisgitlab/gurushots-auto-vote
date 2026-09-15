@@ -13,12 +13,13 @@ const BaseMiddleware = require('./services/BaseMiddleware');
 const logger = require('./logger');
 
 const { authenticate } = require('./api/login');
-const { fetchChallengesAndVote, runTurboMiniGame } = require('./api/main');
+const { fetchChallengesAndVote, runTurboMiniGame, joinChallenge } = require('./api/main');
 const { getActiveChallenges } = require('./api/challenges');
 const { getVoteImages, submitVotes } = require('./api/voting');
 const { applyBoost, applyBoostToEntry } = require('./api/boost');
 const { applyTurbo } = require('./api/turbo');
 const { getEligiblePhotos, getImageData, submitToChallenge } = require('./api/submissions');
+const { getMemberChallenges, getBankroll } = require('./api/join');
 const { mockApiClient } = require('./mock');
 
 /**
@@ -42,6 +43,9 @@ const { mockApiClient } = require('./mock');
  * @property {(...args: any[]) => any} getEligiblePhotos
  * @property {(...args: any[]) => any} getImageData
  * @property {(...args: any[]) => any} submitToChallenge
+ * @property {(...args: any[]) => any} getMemberChallenges
+ * @property {(...args: any[]) => any} getBankroll
+ * @property {(...args: any[]) => any} joinChallenge
  * @property {() => string} getStrategyType
  */
 
@@ -59,6 +63,9 @@ const realApi = {
     getEligiblePhotos,
     getImageData,
     submitToChallenge,
+    getMemberChallenges,
+    getBankroll,
+    joinChallenge,
     getStrategyType: () => 'RealAPI',
 };
 

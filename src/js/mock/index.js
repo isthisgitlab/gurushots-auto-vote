@@ -15,6 +15,7 @@ const { runVotingPass } = require('../services/votingOrchestrator');
 const { createMemoryEntryTracker } = require('../services/newEntryTracker');
 const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
+const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges');
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
@@ -612,6 +613,11 @@ const mockApiClient = {
                 return { ok: false, raw: { success: false, error: 'No image_ids provided' } };
             }
             await simulateApiResponse({}, 600);
+            // Fixture 900005 submits-fail after a successful unlock so the
+            // charged-pending-submit path is reachable in a live mock session.
+            if (String(challengeId) === '900005') {
+                return { ok: false, raw: { success: false, error: 'mock submit failure' } };
+            }
             return {
                 ok: true,
                 raw: {
@@ -623,6 +629,101 @@ const mockApiClient = {
                 },
             };
         },
+    ),
+
+    /**
+     * Simulate /rest/get_member_challenges (un-joined "open" challenges).
+     * Fixtures cover a free join, paid flash, paid normal, and a designated
+     * paid id (900004) whose coinsUnlock fails — so the "coins charged but
+     * submit failed" / "unlock failed" paths are exercisable without a real
+     * account. Id 900005 uses a non-COINS unlock type (must be excluded/ignored
+     * by the coin gate).
+     */
+    getMemberChallenges: mockMethod(
+        {
+            name: 'getMemberChallenges',
+            tokenArg: 0,
+            debug: (token, filter) => {
+                logger.withCategory('challenges').debug(`Filter: ${filter}`, null);
+            },
+            onNoToken: () => [],
+        },
+        async () => {
+            await simulateApiResponse({}, 400);
+            return [
+                { id: 900001, type: 'default', join_coins: 0, title: 'Mock Free Challenge', url: 'mock-free' },
+                { id: 900002, type: 'flash', join_coins: 100, title: 'Mock Flash Challenge', url: 'mock-flash' },
+                { id: 900003, type: 'default', join_coins: 250, title: 'Mock Paid Challenge', url: 'mock-paid' },
+                { id: 900004, type: 'flash', join_coins: 100, title: 'Mock Unlock-Fails Challenge', url: 'mock-fail' },
+                // 900005: unlock succeeds but submit fails → exercises the
+                // "coins charged but not joined" (charged-pending-submit) UI/CLI path.
+                {
+                    id: 900005,
+                    type: 'flash',
+                    join_coins: 100,
+                    title: 'Mock Submit-Fails Challenge',
+                    url: 'mock-submitfail',
+                },
+            ];
+        },
+    ),
+
+    /**
+     * Simulate /rest/get_bankroll. Normalized to the flat balance shape the
+     * real getBankroll returns.
+     */
+    getBankroll: mockMethod(
+        {
+            name: 'getBankroll',
+            tokenArg: 0,
+            onNoToken: () => null,
+        },
+        async () => {
+            await simulateApiResponse({}, 300);
+            return { keys: 8, swaps: 41, fills: 818, coins: 17540 };
+        },
+    ),
+
+    /**
+     * Simulate /rest/coins_unlock. Fixture 900004 fails (success:false) so the
+     * unlock-failure and charged-pending-submit paths can be tested.
+     */
+    coinsUnlock: mockMethod(
+        {
+            name: 'coinsUnlock',
+            tokenArg: 1,
+            debug: (challengeId) => {
+                logger.withCategory('challenges').debug(`Unlock challenge ID: ${challengeId}`, null);
+            },
+            onNoToken: () => ({ ok: false, raw: null }),
+        },
+        async (challengeId) => {
+            await simulateApiResponse({}, 400);
+            if (String(challengeId) === '900004') {
+                return { ok: false, raw: { success: false } };
+            }
+            return { ok: true, raw: { success: true } };
+        },
+    ),
+
+    /**
+     * Simulate a manual single join, running the SAME service the real strategy
+     * runs (services/joinChallenges.js) over the mock endpoints, with a null
+     * join-state store (no real state touched).
+     */
+    joinChallenge: mockMethod(
+        {
+            name: 'joinChallenge',
+            tokenArg: 2,
+            debug: (challengeId, spendCoins) => {
+                logger
+                    .withCategory('challenges')
+                    .debug(`Join challenge ID: ${challengeId}, spendCoins: ${!!spendCoins}`, null);
+            },
+            onNoToken: () => ({ status: 'not-authenticated', challengeId: null, cost: 0 }),
+        },
+        async (challengeId, spendCoins, token) =>
+            joinChallengeSingle(challengeId, token, mockJoinDeps(), { spendCoins: spendCoins === true }),
     ),
 
     /**
@@ -645,6 +746,15 @@ const mockApiClient = {
             // getActiveChallenges resolves { challenges: [] }, and the pass
             // completes empty. Log the condition but keep the same contract.
             logger.withCategory('authentication').error('No token provided, voting pass will find no challenges', null);
+        }
+        // Auto-join pre-step (gated by the default-off autoJoin setting), mirroring
+        // the real strategy. Skipped for a single-challenge run; never aborts voting.
+        if (challengeIdFilter === null) {
+            try {
+                await runJoinPass(token, Date.now(), mockJoinDeps());
+            } catch (error) {
+                logger.withCategory('join').warning(`Mock join pass errored: ${error?.message || error}`, null);
+            }
         }
         return runVotingPass(token, challengeIdFilter, {
             api: {
@@ -670,6 +780,20 @@ const mockApiClient = {
         });
     },
 };
+
+// Join deps over the mock endpoints. joinStateStore is null — mock mode must
+// never touch real persisted state (same rationale as cleanupStaleMetadata:null).
+const mockJoinDeps = () => ({
+    getMemberChallenges: mockApiClient.getMemberChallenges,
+    getBankroll: mockApiClient.getBankroll,
+    coinsUnlock: mockApiClient.coinsUnlock,
+    submitToChallenge: mockApiClient.submitToChallenge,
+    getEligiblePhotos: mockApiClient.getEligiblePhotos,
+    // No joinStateStore / acquireUnlockLock: mock spends no real coins and runs
+    // single-process, so idempotency persistence and the cross-process lock are
+    // unnecessary (mirrors cleanupStaleMetadata:null).
+    joinStateStore: null,
+});
 
 module.exports = {
     // Individual mock data modules

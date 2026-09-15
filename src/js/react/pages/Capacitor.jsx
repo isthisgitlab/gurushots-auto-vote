@@ -16,6 +16,7 @@ globalThis.__capacitorBootstrap = true;
 import { installBridge, subscribe } from '../../bridge/capacitor';
 import { initializeAsync as initSettings, flushPendingWrites, getSetting } from '../../settings';
 import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
+import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
 import { mountApp } from './App';
@@ -77,6 +78,10 @@ const bootstrap = async () => {
         // Metadata rides the same platform-aware transport now — hydrate its
         // cache too so per-challenge vote metadata survives relaunches.
         await initializeMetadataAsync();
+        // Join-state markers (paid-unlock idempotency) ride the same transport;
+        // hydrate them so a paid retry after relaunch never re-unlocks (double
+        // charge) on Android.
+        await initializeJoinStateAsync();
 
         // Settings writes are write-behind (cache now, persist async). When
         // the OS backgrounds or tears down the WebView, push the latest
@@ -86,6 +91,7 @@ const bootstrap = async () => {
             try {
                 flushPendingWrites();
                 flushMetadataWrites();
+                flushJoinStateWrites();
             } catch {
                 // never let a teardown handler throw
             }

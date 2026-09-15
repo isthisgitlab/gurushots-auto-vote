@@ -27,6 +27,8 @@
         "build:win": "pnpm run build:prep && cross-env NODE_ENV=production electron-builder --win",
         "bump": "pnpm dlx npm-check-updates -u && pnpm install",
         "cleanup:logs": "node scripts/cleanup-logs.js",
+        "cli:bankroll": "node src/js/cli/cli.js bankroll",
+        "cli:discover": "node src/js/cli/cli.js discover",
         "cli:help": "node src/js/cli/cli.js help",
         "cli:login": "node src/js/cli/cli.js login",
         "cli:reset-windows": "node src/js/cli/cli.js reset-windows",

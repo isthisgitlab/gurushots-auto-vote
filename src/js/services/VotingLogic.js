@@ -1132,7 +1132,74 @@ const describeDeadlineActions = (challenge, now) => {
     return { actions, boostBlocked };
 };
 
+/**
+ * Pure decision for whether to auto-join ONE un-joined challenge.
+ *
+ * No I/O: the caller resolves settings (by title-profile) and the live bankroll
+ * first, then passes the results in. `join_coins` is read from the candidate
+ * itself. COINS is the only join currency handled; a candidate whose cost is
+ * non-positive is treated as free.
+ *
+ * Fail-safe on money: a null `bankroll` (balance could not be read) blocks every
+ * paid join but still allows free joins. Both coin caps use the `0 = off`
+ * sentinel — paid joins require `maxCoins > 0` AND `remainingBudget >= cost`.
+ *
+ * @param {object} params
+ * @param {{id?: string|number, type?: string, join_coins?: number}} params.challenge
+ * @param {{coins?: number}|null} params.bankroll live balance, or null if unread
+ * @param {number} params.remainingBudget coins still spendable this cycle (0 = paid off)
+ * @param {boolean} params.allowAll `autoJoinAll` — join any open challenge
+ * @param {string[]} params.allowTypes normalized lowercase types from `autoJoinTypes`
+ * @param {number} params.maxCoins per-challenge coin cap (0 = free only)
+ * @param {boolean} params.hasProfileMatch a title rule/profile matched this title
+ * @returns {{join: boolean, needsCoins: number, reason: string}}
+ */
+const shouldJoinChallenge = ({
+    challenge,
+    bankroll,
+    remainingBudget,
+    allowAll,
+    allowTypes,
+    maxCoins,
+    hasProfileMatch,
+}) => {
+    const rawCost = Number(challenge?.join_coins);
+    const needsCoins = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
+
+    const type = typeof challenge?.type === 'string' ? challenge.type.trim().toLowerCase() : '';
+    const typeAllowed = Array.isArray(allowTypes) && type !== '' && allowTypes.includes(type);
+    const inScope = allowAll === true || hasProfileMatch === true || typeAllowed;
+    if (!inScope) {
+        return { join: false, needsCoins, reason: 'out-of-scope' };
+    }
+
+    if (needsCoins <= 0) {
+        return { join: true, needsCoins: 0, reason: 'free' };
+    }
+
+    // Paid from here down.
+    if (!Number.isFinite(maxCoins) || maxCoins <= 0) {
+        return { join: false, needsCoins, reason: 'paid-disabled' };
+    }
+    if (needsCoins > maxCoins) {
+        return { join: false, needsCoins, reason: 'over-per-challenge-cap' };
+    }
+    // Fail-safe: unknown balance never spends.
+    const coins = Number(bankroll?.coins);
+    if (bankroll == null || !Number.isFinite(coins)) {
+        return { join: false, needsCoins, reason: 'balance-unknown' };
+    }
+    if (coins < needsCoins) {
+        return { join: false, needsCoins, reason: 'insufficient-coins' };
+    }
+    if (!Number.isFinite(remainingBudget) || needsCoins > remainingBudget) {
+        return { join: false, needsCoins, reason: 'over-cycle-budget' };
+    }
+    return { join: true, needsCoins, reason: 'paid' };
+};
+
 module.exports = {
+    shouldJoinChallenge,
     isWithinFinalWindow,
     isWithinLastMinuteThreshold,
     getEffectiveExposureThreshold,

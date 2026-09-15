@@ -81,6 +81,11 @@ const zString = z.string();
 const percentage = z.number().min(1).max(100); // exposure-style trigger, 1–100
 const percentageOrZero = z.number().min(0).max(100); // target, 0 = "use trigger" sentinel
 const nonNegNumber = z.number().min(0); // time fields (seconds before close); 0 = off
+// Coin caps for the paid auto-join gate. Integer, 0 = off (no paid spend). The
+// ceiling is defense-in-depth against a corrupted settings file, well above any
+// real challenge cost / balance.
+const MAX_COIN_AMOUNT = 1_000_000;
+const coinAmount = z.number().int().min(0).max(MAX_COIN_AMOUNT);
 // Entry-slot index: 1-4 selects a slot, 0 is the "last entry" sentinel. GuruShots challenges
 // carry at most four submissions (max_photo_submits tops out at 4, which is also why the
 // auto-fill schedule only covers images 2-4), so anything above 4 could never name a real
@@ -716,6 +721,76 @@ const SETTINGS_SCHEMA = {
         description: 'app.scheduledFillReplacesDesc',
     },
 
+    // --- Auto Join ---
+    // Master enable for the automatic join pre-step (runs each voting cycle on
+    // every platform). Global, default off. Scope below decides WHICH open
+    // challenges are joined; the coin caps gate paid ones.
+    autoJoin: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoin',
+        description: 'app.autoJoinDesc',
+    },
+    // Scope: join EVERY open challenge (paid ones still subject to the caps).
+    // Profile/title-tunable so a saved tactic can broaden a single title.
+    autoJoinAll: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinAll',
+        description: 'app.autoJoinAllDesc',
+    },
+    // Scope: comma-separated challenge types to join (e.g. "flash,contest").
+    // A title matching a saved profile is always in scope regardless of this.
+    autoJoinTypes: {
+        type: 'string',
+        default: '',
+        perChallenge: true,
+        validation: zString,
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinTypes',
+        description: 'app.autoJoinTypesDesc',
+    },
+    // Per-challenge coin cap. 0 = free only (paid joins disabled). Paid joining
+    // requires BOTH this AND autoJoinCycleCoinBudget > 0.
+    autoJoinMaxCoins: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        validation: coinAmount,
+        min: 0,
+        max: MAX_COIN_AMOUNT,
+        unit: 'app.unitCoins',
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinMaxCoins',
+        description: 'app.autoJoinMaxCoinsDesc',
+    },
+    // Total coins the auto-join pass may spend in ONE cycle. 0 = spend nothing
+    // this cycle (paid disabled). Global safety guard against burning the
+    // balance across many candidates in a single pass.
+    autoJoinCycleCoinBudget: {
+        type: 'number',
+        default: 0,
+        perChallenge: false,
+        validation: coinAmount,
+        min: 0,
+        max: MAX_COIN_AMOUNT,
+        unit: 'app.unitCoins',
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinCycleCoinBudget',
+        description: 'app.autoJoinCycleCoinBudgetDesc',
+    },
+
     // --- Auto Fill ---
     autoFill: {
         type: 'boolean',
@@ -901,6 +976,7 @@ const SETTINGS_GROUPS = [
     { id: 'finalWindow', label: 'app.groupFinalWindow' },
     { id: 'lastMinute', label: 'app.groupLastMinute' },
     { id: 'scheduledFill', label: 'app.groupScheduledFill' },
+    { id: 'autoJoin', label: 'app.groupAutoJoin' },
     { id: 'autoFill', label: 'app.groupAutoFill' },
     { id: 'notifications', label: 'app.groupNotifications' },
 ];

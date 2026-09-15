@@ -10,15 +10,42 @@ const { getVoteImages, submitVotes } = require('./voting');
 const { applyBoost, applyBoostToEntry } = require('./boost');
 const { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } = require('./turbo');
 const { getEligiblePhotos, getImageData, submitToChallenge } = require('./submissions');
+const { getMemberChallenges, getBankroll, coinsUnlock } = require('./join');
 const { cleanupStaleMetadata } = require('../metadata');
 const { sleep, getRandomDelay } = require('../timing');
 const logger = require('../logger');
 const { runVotingPass } = require('../services/votingOrchestrator');
 const { createMetadataEntryTracker } = require('../services/newEntryTracker');
+const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges');
+const { joinStateStore, acquireUnlockLock } = require('../joinStateStore');
 
 // One instance for the process: the tracker is stateless (it reads and writes
 // metadata.json on each call), but building it per pass would be pointless churn.
 const metadataEntryTracker = createMetadataEntryTracker();
+
+// Deps bundle shared by the automatic join pass and the manual single-join path.
+// joinStateStore persists the paid-unlock markers; acquireUnlockLock guards the
+// unlock critical section across processes (real strategy only — mock passes a
+// null store and no lock).
+const joinDeps = {
+    getMemberChallenges,
+    getBankroll,
+    coinsUnlock,
+    submitToChallenge,
+    getEligiblePhotos,
+    joinStateStore,
+    acquireUnlockLock,
+};
+
+/**
+ * Manual single-challenge join (real strategy). Paid joins require an explicit
+ * `spendCoins` — otherwise the call returns `needs-confirm` and spends nothing.
+ * @param {string|number} challengeId
+ * @param {boolean} spendCoins
+ * @param {string} token
+ */
+const joinChallenge = (challengeId, spendCoins, token) =>
+    joinChallengeSingle(challengeId, token, joinDeps, { spendCoins: spendCoins === true });
 
 /**
  * Plays through the Turbo mini-game for a single challenge.
@@ -97,8 +124,20 @@ const runTurboMiniGame = async (challenge, token) => {
  *   filtered subset), so callers can reuse it for threshold scheduling instead of
  *   re-fetching. Absent only when the fetch itself threw before a list was obtained.
  */
-const fetchChallengesAndVote = async (token, _getExposureThreshold = null, challengeIdFilter = null) =>
-    runVotingPass(token, challengeIdFilter, {
+const fetchChallengesAndVote = async (token, _getExposureThreshold = null, challengeIdFilter = null) => {
+    // Auto-join pre-step (gated by the default-off `autoJoin` setting inside
+    // runJoinPass). Skipped for a single-challenge "Run" (challengeIdFilter set)
+    // and never allowed to abort voting — a join failure is logged, not thrown.
+    if (challengeIdFilter === null) {
+        try {
+            await runJoinPass(token, Date.now(), joinDeps);
+        } catch (error) {
+            logger
+                .withCategory('join')
+                .warning(`join pass errored (voting continues): ${error?.message || error}`, null);
+        }
+    }
+    return runVotingPass(token, challengeIdFilter, {
         api: {
             getActiveChallenges,
             getVoteImages,
@@ -118,9 +157,11 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
         // Random 2-5s spacing between challenges to mimic human behavior.
         interChallengeDelay: () => getRandomDelay(2000, 5000),
     });
+};
 
 module.exports = {
     fetchChallengesAndVote,
     applyBoostToEntry,
     runTurboMiniGame,
+    joinChallenge,
 };

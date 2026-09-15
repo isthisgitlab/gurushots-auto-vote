@@ -209,6 +209,59 @@
             settingsSaveError: 'Dažus iestatījumus neizdevās saglabāt — pārbaudi izceltās vērtības un mēģini vēlreiz.',
             unitPercent: '%',
             unitMinutes: 'min',
+            unitCoins: 'monētas',
+            // Konts (galvenes rādītāji)
+            bankrollKeys: 'atslēgas',
+            bankrollSwaps: 'maiņas',
+            bankrollFills: 'aizpildes',
+            bankrollCoins: 'monētas',
+            // Automātiskās pievienošanās iestatījumi
+            groupAutoJoin: 'Automātiskā pievienošanās',
+            autoJoin: 'Automātiski pievienoties izaicinājumiem',
+            autoJoinDesc:
+                'Katrā ciklā automātiski pievienoties atvērtajiem izaicinājumiem. Pēc noklusējuma izslēgts. Tvērums un monētu ierobežojumi zemāk nosaka, kuriem izaicinājumiem pievienoties un vai arī maksas.',
+            autoJoinAll: 'Pievienoties visiem atvērtajiem',
+            autoJoinAllDesc:
+                'Pievienoties katram atvērtajam izaicinājumam (maksas joprojām ierobežo monētu limiti zemāk). Bez šī pievienojas tikai tiem, kas atbilst saglabātam nosaukuma profilam vai zemāk norādītajiem tipiem.',
+            autoJoinTypes: 'Pievienoties šiem tipiem',
+            autoJoinTypesDesc: 'Ar komatu atdalīti izaicinājumu tipi, kuriem pievienoties, piem., "flash,contest".',
+            autoJoinMaxCoins: 'Maks. monētas par izaicinājumu',
+            autoJoinMaxCoinsDesc:
+                'Lielākā monētu cena, ko maksāt par pievienošanos vienam izaicinājumam. 0 = tikai bezmaksas. Maksas pievienošanās prasa arī cikla budžetu virs 0.',
+            autoJoinCycleCoinBudget: 'Monētu budžets ciklā',
+            autoJoinCycleCoinBudgetDesc:
+                'Kopējais monētu daudzums, ko automātiskā pievienošanās drīkst tērēt vienā ciklā. 0 = netērēt neko (maksas izslēgta). Gan šim, gan limitam par izaicinājumu jābūt virs 0, lai pievienotos maksas izaicinājumiem.',
+            // Atklāšana (nepievienotie izaicinājumi)
+            discoverTitle: 'Atklāt izaicinājumus',
+            discoverRefresh: 'Atsvaidzināt',
+            discoverEmpty: 'Šobrīd nav atvērtu izaicinājumu, kuriem pievienoties.',
+            discoverUnavailableList:
+                'Neizdevās ielādēt atvērtos izaicinājumus. Pārbaudi savienojumu un mēģini vēlreiz.',
+            discoverUntitled: 'Izaicinājums bez nosaukuma',
+            discoverCostFree: 'bezmaksas',
+            discoverCostPaid: '{coins} monētas',
+            discoverJoin: 'Pievienoties',
+            discoverJoinPaid: 'Pievienoties (maksas)',
+            discoverJoining: 'Pievienojas…',
+            discoverRetrySubmit: 'Mēģināt iesniegt vēlreiz',
+            discoverConfirmTitle: 'Pievienoties maksas izaicinājumam?',
+            discoverConfirmBody: 'Pievienošanās "{title}" maksā {coins} monētas.',
+            discoverConfirmBalance: 'Tev ir {current} monētas; tas maksā {cost}, paliks {resulting}.',
+            discoverConfirmBalanceUnknown: 'Neizdevās nolasīt tavu pašreizējo monētu atlikumu.',
+            discoverConfirmInsufficient:
+                'Tev ir {current} monētas; šis izaicinājums maksā {cost} — nepietiek, lai pievienotos.',
+            discoverConfirmSpend: 'Tērēt {coins} monētas',
+            // Atklāšanas pievienošanās rezultāti
+            discoverJoined: 'Pievienojies.',
+            discoverUnaffordable: 'Nepietiek monētu, lai pievienotos (nepieciešams {coins}, tev ir {have}).',
+            discoverGenericError: 'Neizdevās pievienoties — mēģini vēlreiz.',
+            discoverBalanceUnknown: 'Neizdevās nolasīt monētu atlikumu — nav pievienots.',
+            discoverChargedPending:
+                'Monētas tika norakstītas, bet pievienošanās nepabeidzās. Mēģini iesniegt vēlreiz — atkārtoti netiks norakstīts.',
+            discoverFailedNoCharge: 'Neizdevās pievienoties. Monētas netika norakstītas.',
+            discoverNoPhoto: 'Nav piemērota foto, ko iesniegt. Monētas netika norakstītas.',
+            discoverUnavailable: 'Šis izaicinājums vairs nav pieejams pievienošanās.',
+            discoverBusy: 'Pievienošanās jau notiek.',
             validationOutOfRange: 'Ievadi vērtību no {min} līdz {max}.',
             validationAtLeast: 'Ievadi vērtību {min} vai lielāku.',
             autoFillBadge: 'auto-aizpilde',

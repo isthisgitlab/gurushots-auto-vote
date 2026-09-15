@@ -264,6 +264,73 @@ const buildHandlers = () => ({
             return { success: false, error: error.message || 'Failed to apply boost' };
         }
     },
+
+    // Account currency balances (keys/swaps/fills/coins). success:false means
+    // the balance could not be read — the renderer/CLI must NOT render 0 in that
+    // case (0 would wrongly imply an empty balance).
+    'get-bankroll': async () => {
+        try {
+            const guard = auth.requireAuthToken('bankroll');
+            if (!guard.ok) return guard.response;
+            const strategy = apiFactory.getApiStrategy();
+            const bankroll = await strategy.getBankroll(guard.token);
+            if (!bankroll) {
+                return { success: false, error: 'Could not read your balance right now' };
+            }
+            // Whitelist the four known currencies — never forward a raw payload.
+            return {
+                success: true,
+                keys: bankroll.keys,
+                swaps: bankroll.swaps,
+                fills: bankroll.fills,
+                coins: bankroll.coins,
+            };
+        } catch (error) {
+            logger.withCategory('api').error('Error handling get-bankroll request:', error);
+            return { success: false, error: error.message || 'Failed to read bankroll' };
+        }
+    },
+
+    // List un-joined ("open") challenges for the Discover view / CLI.
+    'get-member-challenges': async (event, filter) => {
+        try {
+            const guard = auth.requireAuthToken('member challenges');
+            if (!guard.ok) return guard.response;
+            const strategy = apiFactory.getApiStrategy();
+            const items = await strategy.getMemberChallenges(guard.token, filter === undefined ? 'open' : filter);
+            return { success: true, items: Array.isArray(items) ? items : [] };
+        } catch (error) {
+            logger.withCategory('api').error('Error handling get-member-challenges request:', error);
+            return { success: false, items: [], error: error.message || 'Failed to list challenges' };
+        }
+    },
+
+    // Manual single join. Paid joins require spendCoins:true — otherwise the
+    // service returns status 'needs-confirm' and nothing is charged. The
+    // service re-fetches the live candidate and holds a shared in-flight lock,
+    // so this handler stays thin.
+    'join-challenge': async (event, challengeId, spendCoins) => {
+        const safeId = sanitizeForLog(challengeId);
+        try {
+            logger
+                .withCategory('join')
+                .info(`▶️ Join request: Challenge=${safeId}, spendCoins=${spendCoins === true}`, null);
+            const guard = auth.requireAuthToken('join');
+            if (!guard.ok) return guard.response;
+            const strategy = apiFactory.getApiStrategy();
+            const outcome = await strategy.joinChallenge(challengeId, spendCoins === true, guard.token);
+            return {
+                success: outcome?.status === 'joined',
+                status: outcome?.status,
+                cost: outcome?.cost,
+                coins: outcome?.coins,
+                challengeId: outcome?.challengeId,
+            };
+        } catch (error) {
+            logger.withCategory('join').error('Error handling join-challenge request:', error);
+            return { success: false, error: error.message || 'Failed to join challenge' };
+        }
+    },
 });
 
 const register = (ipcMain) => {

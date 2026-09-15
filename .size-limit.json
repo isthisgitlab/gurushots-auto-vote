@@ -2,7 +2,7 @@
     {
         "name": "app bundle (Electron renderer)",
         "path": "dist/app-bundle.js",
-        "limit": "41 KB"
+        "limit": "43 KB"
     },
     {
         "name": "login bundle (Electron renderer)",
@@ -17,7 +17,7 @@
     {
         "name": "capacitor bundle (Android WebView \u2014 bundles Capacitor plugins)",
         "path": "dist/capacitor-bundle.js",
-        "limit": "215 KB"
+        "limit": "219 KB"
     },
     {
         "name": "headless bundle (Android background service)",

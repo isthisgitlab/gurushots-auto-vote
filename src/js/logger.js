@@ -251,7 +251,7 @@ const formatConsoleMessage = (
 // alongside the camelCase + standard HTTP credential header names.
 // Bounded recursion depth + a seen-set prevent pathological inputs.
 const SENSITIVE_KEY_RE =
-    /^(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]auth[_-]token)$/i;
+    /^(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]auth[_-]token|x[_-]token)$/i;
 const REDACTED = '[REDACTED]';
 const MAX_SANITIZE_DEPTH = 6;
 
@@ -295,7 +295,7 @@ const sanitizeLogString = (value, maxLength = 200) =>
 // and runs on every writeLog message. The key set mirrors SENSITIVE_KEY_RE;
 // \b anchors keep `tokenizer` etc. from matching.
 const SENSITIVE_MSG_RE =
-    /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi;
+    /\b(token|auth[_-]?token|access[_-]?token|refresh[_-]?token|bearer|password|api[_-]?key|secret|cookie|authorization|x[_-]?auth[_-]?token|x[_-]?token)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|\S+)/gi;
 
 const redactMessage = (message) => {
     if (typeof message !== 'string') return message;

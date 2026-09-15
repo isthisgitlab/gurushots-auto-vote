@@ -230,6 +230,18 @@ class BaseMiddleware {
     applyTurbo(challengeId, imageId) {
         return this.apiStrategy.applyTurbo(challengeId, imageId, requireToken());
     }
+
+    getBankroll() {
+        return this.apiStrategy.getBankroll(requireToken());
+    }
+
+    getMemberChallenges(filter = 'open') {
+        return this.apiStrategy.getMemberChallenges(requireToken(), filter);
+    }
+
+    joinChallenge(challengeId, spendCoins = false) {
+        return this.apiStrategy.joinChallenge(challengeId, spendCoins === true, requireToken());
+    }
 }
 
 module.exports = BaseMiddleware;

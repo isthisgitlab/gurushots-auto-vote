@@ -24,6 +24,13 @@ const ENDPOINTS = {
     photosPrivate: `${API_BASE}/rest/get_photos_private`,
     imageData: `${API_BASE}/rest/get_image_data`,
     submitToChallenge: `${API_BASE}/rest/submit_to_challenge`,
+
+    // Join flow (WEB profile). getMemberChallenges lists un-joined challenges;
+    // coinsUnlock spends COINS to open a paid challenge before submit_to_challenge;
+    // getBankroll reports the account currency balances (keys/swaps/fills/coins).
+    getMemberChallenges: `${API_BASE}/rest/get_member_challenges`,
+    coinsUnlock: `${API_BASE}/rest/coins_unlock`,
+    getBankroll: `${API_BASE}/rest/get_bankroll`,
 };
 
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';

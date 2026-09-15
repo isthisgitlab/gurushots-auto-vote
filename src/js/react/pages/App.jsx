@@ -5,9 +5,11 @@ import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext'
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
+import { useBankroll } from '@/api/useBankroll';
 import { Navbar } from '@/components/layout/Navbar';
 import { AutoVoteControls } from '@/components/app/AutoVoteControls';
 import { StatusHeader } from '@/components/app/StatusHeader';
+import { DiscoverSection } from '@/components/app/DiscoverSection';
 import { ChallengesSection } from '@/components/app/ChallengesSection';
 import { SettingsModal } from '@/components/app/SettingsModal';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
@@ -25,8 +27,15 @@ import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 function AppContent() {
     const { ready, t } = useTranslation();
     const { settings, loading: settingsLoading, updateSetting } = useSettings();
-    const { challenges } = useChallenges();
+    const { challenges, refetch: refetchChallenges } = useChallenges();
+    const { bankroll, refetch: refetchBankroll } = useBankroll();
     const autovote = useAutovote();
+
+    // After a join changes state, refresh balances + the active-challenge list.
+    const handleJoined = useCallback(() => {
+        refetchBankroll();
+        refetchChallenges();
+    }, [refetchBankroll, refetchChallenges]);
 
     // Local state
     const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -164,8 +173,18 @@ function AppContent() {
                         onToggle={handleAutovoteToggle}
                     />
 
-                    {/* At-a-glance status summary — counts + next-action countdown */}
-                    <StatusHeader challenges={challenges} nextRunAt={autovote.nextRunAt} running={autovote.running} />
+                    {/* At-a-glance status summary — counts + next-action countdown + bankroll */}
+                    <StatusHeader
+                        challenges={challenges}
+                        nextRunAt={autovote.nextRunAt}
+                        running={autovote.running}
+                        bankroll={bankroll}
+                    />
+
+                    {/* Discover — un-joined challenges with manual join */}
+                    <ErrorBoundary>
+                        <DiscoverSection isLoggedIn={isLoggedIn} bankroll={bankroll} onJoined={handleJoined} />
+                    </ErrorBoundary>
 
                     {/* Challenges Section */}
                     <ChallengesSection

@@ -87,6 +87,9 @@ const invokeChannels = [
     'apply-boost-to-entry',
     'play-auto-turbo',
     'fill-challenge-now',
+    'get-bankroll',
+    'get-member-challenges',
+    'join-challenge',
     'reload-window',
     'refresh-menu',
     // AutoUpdater
