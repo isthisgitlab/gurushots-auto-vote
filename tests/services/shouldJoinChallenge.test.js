@@ -37,6 +37,58 @@ describe('scope', () => {
     });
 });
 
+describe('exclude types (deny wins over scope)', () => {
+    test('excluded type vetoes even with allowAll', () => {
+        const r = call({ allowAll: true, excludeTypes: ['flash'] });
+        expect(r).toMatchObject({ join: false, reason: 'excluded-type' });
+    });
+    test('a title-profile match bypasses the exclude veto (specific beats general)', () => {
+        // A profiled title is a deliberate opt-in and still joins even if its
+        // type is excluded.
+        expect(call({ hasProfileMatch: true, excludeTypes: ['flash'] })).toMatchObject({ join: true, reason: 'free' });
+    });
+    test('exclude overrides an explicit include of the same type', () => {
+        expect(call({ allowTypes: ['flash'], excludeTypes: ['flash'] }).reason).toBe('excluded-type');
+    });
+    test('a non-excluded type still joins under allowAll (the "all except X" case)', () => {
+        expect(
+            call({
+                challenge: { id: 1, type: 'contest', join_coins: 0 },
+                allowAll: true,
+                excludeTypes: ['flash', 'exhibition'],
+            }),
+        ).toMatchObject({
+            join: true,
+            reason: 'free',
+        });
+    });
+    test('exclude match is case-insensitive on the challenge type', () => {
+        expect(
+            call({ challenge: { id: 1, type: 'FLASH', join_coins: 0 }, allowAll: true, excludeTypes: ['flash'] })
+                .reason,
+        ).toBe('excluded-type');
+    });
+    test('exclusion short-circuits before the paid gate (an affordable paid excluded type is still vetoed)', () => {
+        const r = call({
+            challenge: { id: 2, type: 'flash', join_coins: 100 },
+            allowAll: true,
+            excludeTypes: ['flash'],
+            maxCoins: 250,
+            remainingBudget: 500,
+            bankroll: { coins: 500 },
+        });
+        expect(r.reason).toBe('excluded-type');
+    });
+    test('a typeless challenge is never excluded (guard: type must be non-empty)', () => {
+        expect(
+            call({ challenge: { id: 3, type: '', join_coins: 0 }, allowAll: true, excludeTypes: ['flash'] }),
+        ).toMatchObject({
+            join: true,
+            reason: 'free',
+        });
+    });
+});
+
 describe('paid gate', () => {
     const paid = { challenge: { id: 2, type: 'flash', join_coins: 100 }, allowAll: true };
 

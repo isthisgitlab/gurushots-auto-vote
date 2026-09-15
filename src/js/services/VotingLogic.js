@@ -1140,6 +1140,12 @@ const describeDeadlineActions = (challenge, now) => {
  * itself. COINS is the only join currency handled; a candidate whose cost is
  * non-positive is treated as free.
  *
+ * Scope: a candidate is in scope when allowAll, a title-profile match, or its
+ * type is in the include-list. `excludeTypes` vetoes the join over allowAll and
+ * the include-list (how "join all EXCEPT these types" is expressed) — but a
+ * title-profile match is a deliberate per-title opt-in and bypasses the veto,
+ * so a profiled title still joins even if its type is excluded.
+ *
  * Fail-safe on money: a null `bankroll` (balance could not be read) blocks every
  * paid join but still allows free joins. Both coin caps use the `0 = off`
  * sentinel — paid joins require `maxCoins > 0` AND `remainingBudget >= cost`.
@@ -1150,8 +1156,9 @@ const describeDeadlineActions = (challenge, now) => {
  * @param {number} params.remainingBudget coins still spendable this cycle (0 = paid off)
  * @param {boolean} params.allowAll `autoJoinAll` — join any open challenge
  * @param {string[]} params.allowTypes normalized lowercase types from `autoJoinTypes`
+ * @param {string[]} params.excludeTypes normalized lowercase types from `autoJoinExcludeTypes`; a match vetoes the join over allowAll/include-list, but NOT over a title-profile match
  * @param {number} params.maxCoins per-challenge coin cap (0 = free only)
- * @param {boolean} params.hasProfileMatch a title rule/profile matched this title
+ * @param {boolean} params.hasProfileMatch a title rule/profile matched this title — a deliberate opt-in that bypasses both the exclude veto and the scope check
  * @returns {{join: boolean, needsCoins: number, reason: string}}
  */
 const shouldJoinChallenge = ({
@@ -1160,6 +1167,7 @@ const shouldJoinChallenge = ({
     remainingBudget,
     allowAll,
     allowTypes,
+    excludeTypes,
     maxCoins,
     hasProfileMatch,
 }) => {
@@ -1167,10 +1175,19 @@ const shouldJoinChallenge = ({
     const needsCoins = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
 
     const type = typeof challenge?.type === 'string' ? challenge.type.trim().toLowerCase() : '';
-    const typeAllowed = Array.isArray(allowTypes) && type !== '' && allowTypes.includes(type);
-    const inScope = allowAll === true || hasProfileMatch === true || typeAllowed;
-    if (!inScope) {
-        return { join: false, needsCoins, reason: 'out-of-scope' };
+    // A saved title profile is a deliberate per-title opt-in and wins over the
+    // general type filters — it bypasses BOTH the exclude veto and the scope
+    // check. For everything else, the type-exclude vetoes the join (over
+    // "Join All" and the include-list alike): this is how "join all EXCEPT
+    // flash and exhibition" is expressed.
+    if (hasProfileMatch !== true) {
+        if (Array.isArray(excludeTypes) && type !== '' && excludeTypes.includes(type)) {
+            return { join: false, needsCoins, reason: 'excluded-type' };
+        }
+        const typeAllowed = Array.isArray(allowTypes) && type !== '' && allowTypes.includes(type);
+        if (allowAll !== true && !typeAllowed) {
+            return { join: false, needsCoins, reason: 'out-of-scope' };
+        }
     }
 
     if (needsCoins <= 0) {

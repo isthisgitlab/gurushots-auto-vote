@@ -225,6 +225,9 @@
                 'Join every open challenge (paid ones still limited by the coin caps below). Without this, only challenges matching a saved title profile or the types below are joined.',
             autoJoinTypes: 'Join These Types',
             autoJoinTypesDesc: 'Comma-separated challenge types to auto-join, e.g. "flash,contest".',
+            autoJoinExcludeTypes: 'Never Join These Types',
+            autoJoinExcludeTypesDesc:
+                'Comma-separated challenge types to never auto-join, e.g. "flash,exhibition". Overrides both "Join All Open Challenges" and "Join These Types" (a type listed in both is not joined). A challenge matched by a saved title profile still joins — a profile is a deliberate per-title opt-in.',
             autoJoinMaxCoins: 'Max Coins Per Challenge',
             autoJoinMaxCoinsDesc:
                 'Highest coin cost to pay to join a single challenge. 0 = free challenges only. Paid joins also require a per-cycle budget above 0.',

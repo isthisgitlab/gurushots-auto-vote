@@ -225,6 +225,9 @@
                 'Pievienoties katram atvērtajam izaicinājumam (maksas joprojām ierobežo monētu limiti zemāk). Bez šī pievienojas tikai tiem, kas atbilst saglabātam nosaukuma profilam vai zemāk norādītajiem tipiem.',
             autoJoinTypes: 'Pievienoties šiem tipiem',
             autoJoinTypesDesc: 'Ar komatu atdalīti izaicinājumu tipi, kuriem pievienoties, piem., "flash,contest".',
+            autoJoinExcludeTypes: 'Nekad nepievienoties šiem tipiem',
+            autoJoinExcludeTypesDesc:
+                'Ar komatu atdalīti izaicinājumu tipi, kuriem nekad automātiski nepievienoties, piem., "flash,exhibition". Tas ņem virsroku pār "Pievienoties visiem atvērtajiem" un "Pievienoties šiem tipiem" (tips, kas norādīts abos, netiks pievienots). Izaicinājums, kas atbilst saglabātam nosaukuma profilam, joprojām tiek pievienots — profils ir apzināta izvēle konkrētam nosaukumam.',
             autoJoinMaxCoins: 'Maks. monētas par izaicinājumu',
             autoJoinMaxCoinsDesc:
                 'Lielākā monētu cena, ko maksāt par pievienošanos vienam izaicinājumam. 0 = tikai bezmaksas. Maksas pievienošanās prasa arī cikla budžetu virs 0.',

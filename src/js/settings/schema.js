@@ -759,6 +759,18 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoJoinTypes',
         description: 'app.autoJoinTypesDesc',
     },
+    // Comma-separated challenge types to NEVER auto-join. Overrides scope, so
+    // "Join All" + exclude "flash,exhibition" joins everything except those.
+    autoJoinExcludeTypes: {
+        type: 'string',
+        default: '',
+        perChallenge: true,
+        validation: zString,
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinExcludeTypes',
+        description: 'app.autoJoinExcludeTypesDesc',
+    },
     // Per-challenge coin cap. 0 = free only (paid joins disabled). Paid joining
     // requires BOTH this AND autoJoinCycleCoinBudget > 0.
     autoJoinMaxCoins: {

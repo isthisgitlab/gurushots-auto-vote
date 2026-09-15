@@ -77,6 +77,7 @@ const parseTypeList = (value) =>
 const resolveCandidateConfig = (challenge) => ({
     allowAll: resolveJoinSetting('autoJoinAll', challenge) === true,
     allowTypes: parseTypeList(resolveJoinSetting('autoJoinTypes', challenge)),
+    excludeTypes: parseTypeList(resolveJoinSetting('autoJoinExcludeTypes', challenge)),
     maxCoins: Number(resolveJoinSetting('autoJoinMaxCoins', challenge)) || 0,
     hasProfileMatch: !!(challenge?.title && settings.getTitleProfile(challenge.title)),
 });
@@ -349,6 +350,7 @@ const runJoinPass = async (token, now, deps) => {
             remainingBudget,
             allowAll: cfg.allowAll,
             allowTypes: cfg.allowTypes,
+            excludeTypes: cfg.excludeTypes,
             maxCoins: cfg.maxCoins,
             hasProfileMatch: cfg.hasProfileMatch,
         });

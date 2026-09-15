@@ -263,6 +263,32 @@ describe('runJoinPass', () => {
         expect(statuses).toContain('skipped:over-cycle-budget');
     });
 
+    test('autoJoinExcludeTypes (raw string with spaces/case) excludes via the full pass wiring', async () => {
+        settings.getEffectiveSetting.mockImplementation((k) => {
+            const map = {
+                autoJoin: true,
+                autoJoinAll: true,
+                autoJoinTypes: '',
+                autoJoinExcludeTypes: ' Flash , Exhibition ', // messy raw string
+                autoJoinMaxCoins: 250,
+                autoJoinCycleCoinBudget: 300,
+                fillWithoutTagMatch: true,
+            };
+            return map[k];
+        });
+        const deps = makeDeps({
+            getMemberChallenges: jest.fn(async () => [
+                { id: 1, join_coins: 0, type: 'flash' },
+                { id: 2, join_coins: 0, type: 'contest' },
+            ]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status]));
+        expect(byId[1]).toBe('skipped:excluded-type');
+        expect(byId[2]).toBe('joined');
+        expect(res.joined).toBe(1);
+    });
+
     test('a candidate that throws does not abort the rest of the pass', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => DEFAULT_SETTINGS[k]);
         const submit = jest
