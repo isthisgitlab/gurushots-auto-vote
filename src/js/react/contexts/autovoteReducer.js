@@ -50,6 +50,9 @@ export function autovoteReducer(state, action) {
             return {
                 ...state,
                 cycles: state.cycles + 1,
+                status: 'Running',
+                statusClass: 'badge-success',
+                error: null,
             };
         case ACTIONS.UPDATE_LAST_RUN:
             return {

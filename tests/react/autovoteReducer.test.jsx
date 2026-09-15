@@ -26,3 +26,20 @@ describe('autovoteReducer — nextRunAt', () => {
         expect(stopped.running).toBe(false);
     });
 });
+
+describe('autovoteReducer — cycle recovery', () => {
+    test('clears a transient error when the next voting cycle succeeds', () => {
+        const running = autovoteReducer(initialState, { type: ACTIONS.START });
+        const failed = autovoteReducer(running, { type: ACTIONS.SET_ERROR, payload: 'API request failed' });
+
+        const recovered = autovoteReducer(failed, { type: ACTIONS.INCREMENT_CYCLE });
+
+        expect(recovered).toMatchObject({
+            running: true,
+            cycles: 1,
+            status: 'Running',
+            statusClass: 'badge-success',
+            error: null,
+        });
+    });
+});
