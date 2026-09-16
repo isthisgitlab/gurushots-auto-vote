@@ -317,16 +317,66 @@ const MAX_TOKENISE_CHARS = 4096;
 // is full of boilerplate ("shots", "best", "good luck") that drowns out the
 // real subject, so the keyword path filters it. But a user who explicitly
 // types those words as a tag means them literally — honor the input.
-const tokenise = (text, { keepStopwords = false } = {}) => {
+const toIgnoreSet = (words) => {
+    if (words instanceof Set) return words.size > 0 ? words : null;
+    if (!Array.isArray(words) || words.length === 0) return null;
+    const out = new Set();
+    for (const word of words) {
+        if (typeof word !== 'string') continue;
+        const normalised = word.trim().toLowerCase();
+        if (normalised !== '') out.add(normalised);
+    }
+    return out.size > 0 ? out : null;
+};
+
+const rawTokenise = (text, { keepStopwords = false, ignoreWords = null } = {}) => {
     if (typeof text !== 'string' || text.length === 0) return [];
+    // Matched against the RAW word, before stemming — same as STOPWORDS — so a
+    // user writing "captivating" catches it without having to know that the
+    // stemmer turns it into "captivat".
+    const ignore = toIgnoreSet(ignoreWords);
     return text
         .slice(0, MAX_TOKENISE_CHARS)
         .toLowerCase()
         .replace(/<[^>]*>/g, ' ')
         .split(/[^a-z0-9]+/)
         .map((t) => t.replace(/\d+$/, ''))
-        .filter((t) => t.length > 1 && !isPureDigit(t) && (keepStopwords || !STOPWORDS.has(t)))
-        .map(stem);
+        .filter(
+            (t) =>
+                t.length > 1 &&
+                !isPureDigit(t) &&
+                (keepStopwords || !STOPWORDS.has(t)) &&
+                !(ignore !== null && ignore.has(t)),
+        );
+};
+
+// The surface words above, stemmed. Split from rawTokenise because term
+// ORDERING needs to see the original spelling — the stemmer erases the '-ing'
+// that marks a participle (see buildSearchTerms).
+const tokenise = (text, opts) => rawTokenise(text, opts).map(stem);
+
+// Trailing '-ing' marks a participle ("running", "leading"). Length-guarded the
+// same way the stemmer's own '-ing' branch is, so short words that merely end in
+// those letters ("king", "ring", "wing" — all plausible subjects) are not caught.
+const isParticiple = (word) => word.length > 5 && word.endsWith('ing');
+
+// Series titles name the run, then the actual subject: "Color Hunt: Green",
+// "Screen Stars: Mountains", "Guru Picks: Portraits". Everything before the
+// separator is the series, so the subject is what follows it.
+//
+// Colon and the two long dashes only. A plain hyphen is NOT a separator here —
+// it shows up inside ordinary titles and compound words far too often to treat
+// as structure, and getting that wrong would silently discard a real subject.
+//
+// Falls back to the whole title when the tail carries no usable word, so
+// "Mountains: A Tribute" keeps "mountains" instead of collapsing to nothing.
+const SERIES_SEPARATOR_RE = /[:\u2013\u2014]/;
+const titleSubject = (title, ignoreWords) => {
+    if (typeof title !== 'string') return '';
+    const match = SERIES_SEPARATOR_RE.exec(title);
+    if (!match) return title;
+    const tail = title.slice(match.index + 1);
+    return tokenise(tail, { ignoreWords }).length > 0 ? tail : title;
 };
 
 // Keyword count is bounded for the same reason the per-photo stem count is (see
@@ -336,12 +386,18 @@ const tokenise = (text, { keepStopwords = false } = {}) => {
 // few nouns; a welcome_message can be arbitrarily long prose.
 const MAX_CHALLENGE_KEYWORDS = 48;
 
-const buildChallengeKeywords = (challenge) => {
-    const fromUrl = tokenise(challenge?.url);
-    const fromTitle = tokenise(challenge?.title);
-    const fromWelcome = tokenise(challenge?.welcome_message);
-    const all = [...fromUrl, ...fromTitle, ...fromWelcome];
-    // url + title first, so if the cap bites it is the long welcome_message prose
+const buildChallengeKeywords = (challenge, ignoreWords = null) => {
+    const opts = { ignoreWords };
+    // The WHOLE title, series prefix included — unlike buildThemeKeywords, which
+    // pools its keywords into one vector and so must drop everything that is not
+    // the subject. Here each keyword is matched on its own, so a series word is
+    // at worst weak evidence, and keeping it means "Mountains: A Tribute" still
+    // scores a mountain photo even though the subject heuristic reads the tail.
+    const fromTitle = tokenise(challenge?.title, opts);
+    const fromUrl = tokenise(challenge?.url, opts);
+    const fromWelcome = tokenise(challenge?.welcome_message, opts);
+    const all = [...fromTitle, ...fromUrl, ...fromWelcome];
+    // title + url first, so if the cap bites it is the long welcome_message prose
     // that gets dropped, never the title — which is where the subject actually is.
     return Array.from(new Set(all)).slice(0, MAX_CHALLENGE_KEYWORDS);
 };
@@ -364,6 +420,13 @@ const buildChallengeKeywords = (challenge) => {
  * matched independently, so extra words can only add weak evidence — they
  * cannot drag a vector around. Only pooling is fragile to them.
  *
+ * TITLE FIRST, url only as a fallback. The two normally agree (the slug is the
+ * title, slugified), but on a SERIES challenge the slug is recycled and can name
+ * the previous run's subject: the live "Color Hunt: Green" ships
+ * url="color-hunt-blue1", so pooling url+title put the wrong colour — blue — in
+ * the theme for a green challenge. The title is the authored, current field;
+ * the slug is a URL that happens to look like words.
+ *
  * Returns [] when url+title carry no subject, and deliberately does NOT fall
  * back to the welcome_message. An empty result here is informative: every
  * stopword-surviving word has been stripped, which is what a meta-challenge
@@ -376,9 +439,13 @@ const buildChallengeKeywords = (challenge) => {
  * @param {object} challenge
  * @returns {string[]}
  */
-const buildThemeKeywords = (challenge) => {
-    const subject = Array.from(new Set([...tokenise(challenge?.url), ...tokenise(challenge?.title)]));
-    return subject.slice(0, MAX_CHALLENGE_KEYWORDS);
+const buildThemeKeywords = (challenge, ignoreWords = null) => {
+    const opts = { ignoreWords };
+    const fromTitle = tokenise(titleSubject(challenge?.title, ignoreWords), opts);
+    if (fromTitle.length > 0) return Array.from(new Set(fromTitle)).slice(0, MAX_CHALLENGE_KEYWORDS);
+    // Title said nothing usable — the slug is the only signal left, and with no
+    // title to contradict it there is nothing for a stale one to poison.
+    return Array.from(new Set(tokenise(challenge?.url, opts))).slice(0, MAX_CHALLENGE_KEYWORDS);
 };
 
 // Minimum stem length for the fuzzy (prefix) branch of matches(). Below this a
@@ -527,7 +594,7 @@ const detectLetterPrefix = (title) => {
  * @returns {string[]} ordered, deduped search terms; length <= SEARCH_TERMS_CAP
  */
 const buildSearchTerms = (challenge, opts = {}) => {
-    const { mustIncludeTags, shouldIncludeTags } = opts || {};
+    const { mustIncludeTags, shouldIncludeTags, ignoreWords = null } = opts || {};
     const fromTags = (tags) =>
         Array.isArray(tags)
             ? tags
@@ -544,7 +611,23 @@ const buildSearchTerms = (challenge, opts = {}) => {
     // and the client-side letter filter in pickPhotosForChallenge narrows it. A
     // non-letter title still tokenises as before.
     if (terms.length === 0 && !detectLetterPrefix(challenge?.title)) {
-        terms = tokenise(challenge?.title);
+        // Subject segment only: on a series title the prefix ("Color Hunt") is
+        // never a tag, so searching it spends a round-trip to find nothing and
+        // burns one of the SEARCH_TERMS_CAP slots the real subject needs.
+        //
+        // HEAD-NOUN FIRST. An English title puts its subject last and its
+        // qualifiers in front — "Epic Lighthouses", "Dramatic Storms", "Melodic
+        // Instruments" — so reversing makes the subject the first term tried and
+        // the last one the cap would drop. That matters because the cap is small:
+        // "Color Hunt: Blue & Orange" used to yield [color, hunt, blue] and lose
+        // "orange" entirely.
+        const words = rawTokenise(titleSubject(challenge?.title, ignoreWords), { ignoreWords });
+        // A participle is a modifier, never the subject: "Leading with Lines" is
+        // about lines, "Cats and Dogs Running" is about cats and dogs. Sink them
+        // behind the nouns, then read the nouns right-to-left.
+        const participles = words.filter(isParticiple);
+        const heads = words.filter((w) => !isParticiple(w)).reverse();
+        terms = [...heads, ...participles].map(stem);
     }
     return Array.from(new Set(terms)).slice(0, SEARCH_TERMS_CAP);
 };
@@ -860,7 +943,7 @@ const buildScoredCandidates = (challenge, eligiblePhotos, opts = {}) => {
         return bucket >= SEMANTIC_MATCH_FLOOR ? bucket : 0;
     };
 
-    const keywords = buildChallengeKeywords(challenge);
+    const keywords = buildChallengeKeywords(challenge, opts.ignoreWords || null);
     return filtered.map(({ photo, wordStems }) => ({
         id: photo.id,
         photo,

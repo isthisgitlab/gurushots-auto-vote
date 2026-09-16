@@ -277,6 +277,9 @@
             shouldIncludeTags: 'Vēlamie tagi',
             shouldIncludeTagsDesc:
                 'Vēlamais kritērijs gan auto-aizpildei, gan manuālajai aizpildei. Priekšroku dot foto, kuru tagi sakrīt ar šiem; sakritības tiek ranžētas augstāk par automātiski noteikto izaicinājuma atslēgvārdu vērtējumu, bet neizslēdz pārējos foto. Ja neviens nesakrīt, aizpilde turpinās ar parasto ranžēšanu. Salīdzināšanai ir tie paši veselo vārdu noteikumi, kas Obligātajiem tagiem.',
+            ignoreTitleWords: 'Ignorēt šos vārdus izaicinājumu nosaukumos',
+            ignoreTitleWordsDesc:
+                'Vārdi, ko izņemt no izaicinājuma nosaukuma, pirms pēc tā meklē piemērotus foto. Izaicinājumu nosaukumi parasti tēmu papildina ar apzīmētāju, nevis tikai nosauc to — "Epic Lighthouses" ir par bākām, nevis par "epic" — un šie liekie vārdi gan aizmiglo tēmu, gan aizņem nedaudzās meklēšanas reizes uz vienu izaicinājumu. Saraksts jau ir aizpildīts ar biežākajiem; to var brīvi labot. Izņem vārdu, ja izaicinājums tiešām ir par to. Sēriju priedēkļi kā "Color Hunt:" tiek apstrādāti automātiski, un tiem ieraksts nav vajadzīgs.',
             fillWithoutTagMatch: 'Aizpildīt arī bez tagu sakritības',
             fillWithoutTagMatchDesc:
                 'Attiecas tikai tad, ja ir iestatīti obligātie tagi. Tā kā foto jāsakrīt ar visiem tagiem, tas notiek biežāk, kad pieprasīti vairāki tagi. Kad ieslēgts (noklusējums), ja neviens no taviem foto nesakrīt ar visiem šiem tagiem, tik un tā tiek pievienots labākais pieejamais foto, lai vieta nepaliek tukša. Kad izslēgts, vieta paliek tukša, līdz parādās foto, kas sakrīt ar visiem tagiem.',

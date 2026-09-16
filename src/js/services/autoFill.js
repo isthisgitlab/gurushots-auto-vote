@@ -53,8 +53,32 @@ const { getScheduleShift, remapScheduleRows } = require('./scheduleRemap');
 const resolveSemanticScores = async (challenge, eligible, deps) => {
     const scorer = (deps && deps.getSemanticScores) || getSemanticScores;
     try {
-        return await scorer(challenge, eligible);
+        return await scorer(challenge, eligible, (deps && deps.ignoreWords) || null);
     } catch {
+        return null;
+    }
+};
+
+/**
+ * The user's ignore-words list for this challenge, or null.
+ *
+ * Resolved HERE rather than threaded from each caller: mustIncludeTags and
+ * shouldIncludeTags are already read at six separate sites and passed down by
+ * hand, and a value that has to be repeated six times is a value that will be
+ * forgotten at one of them — which is exactly how tag resolution shipped wired
+ * everywhere except the shared runner. runFillAttempt already receives
+ * `settings` in deps, so one lookup here covers every fill path at once.
+ *
+ * @param {object} settings - the settings facade from deps
+ * @param {object} challenge
+ * @returns {Array<string>|null}
+ */
+const resolveIgnoreWords = (settings, challenge) => {
+    try {
+        if (!settings || typeof settings.getEffectiveIgnoreTitleWords !== 'function') return null;
+        return settings.getEffectiveIgnoreTitleWords(challenge);
+    } catch {
+        // A settings read must never fail a fill.
         return null;
     }
 };
@@ -179,6 +203,7 @@ const resolveTagsForTerms = async (terms, challenge, opts) => {
             searchTagAutocomplete,
             logger,
             logLabel,
+            ignoreWords: opts.ignoreWords || null,
         });
     } catch (error) {
         logger
@@ -227,6 +252,7 @@ const fetchCandidatesForChallenge = async (
     { getEligiblePhotos, logger, logLabel = 'autoFill', searchTagAutocomplete, getCurrentMemberProfile },
 ) => {
     const challengeId = challenge.id;
+    const ignoreWords = (tagOpts && tagOpts.ignoreWords) || null;
     const terms = buildSearchTerms(challenge, tagOpts);
     // A letter challenge ("Begins With L") yields no search terms on purpose —
     // the library is fetched unfiltered and narrowed client-side by the letter
@@ -319,6 +345,7 @@ const fetchCandidatesForChallenge = async (
             getCurrentMemberProfile,
             logger,
             logLabel,
+            ignoreWords,
         });
         if (resolved.length > 0) {
             const resolvedUnion = await searchUnion(resolved);
@@ -825,13 +852,16 @@ const runFillAttempt = async ({
     onRefreshed = null,
 }) => {
     const { logger, getEligiblePhotos, submitToChallenge, searchTagAutocomplete, getCurrentMemberProfile } = deps;
+    // One lookup for the whole fill — see resolveIgnoreWords for why it is not
+    // threaded in from each caller like the tag settings are.
+    const ignoreWords = resolveIgnoreWords(deps.settings, challenge);
 
     let eligible;
     try {
         eligible = await fetchCandidatesForChallenge(
             challenge,
             token,
-            { mustIncludeTags, shouldIncludeTags },
+            { mustIncludeTags, shouldIncludeTags, ignoreWords },
             // Forward the tag-resolution pair. This call rebuilds a fresh deps
             // object rather than spreading `deps`, so anything not named here is
             // silently dropped — which is how resolution can look wired (the
@@ -852,7 +882,7 @@ const runFillAttempt = async ({
     // Score once and reuse for every picker call in this fill (the emergency
     // probe and its actual pick rank the same eligible set, so they must see
     // the same map).
-    const semanticScores = await resolveSemanticScores(challenge, eligible, deps);
+    const semanticScores = await resolveSemanticScores(challenge, eligible, { ...deps, ignoreWords });
 
     if (probeStandDown && probeStandDown({ eligible, semanticScores })) {
         return { status: 'probe-stand-down' };
@@ -869,6 +899,7 @@ const runFillAttempt = async ({
         shouldIncludeTags,
         fillWithoutTagMatch,
         semanticScores,
+        ignoreWords,
         onFallback: makeFallbackLogger(label, challenge, logger),
     });
 
@@ -1447,6 +1478,7 @@ module.exports = {
     fetchCandidatesForChallenge,
     __resetMemberIdCache,
     resolveSemanticScores,
+    resolveIgnoreWords,
     describeSubmitFailure,
     refreshChallengeState,
 };

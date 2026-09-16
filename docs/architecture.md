@@ -121,6 +121,35 @@ Domain terms used throughout, in reader's terms:
   — callers must distinguish that from a genuine zero balance** (the UI renders `—`, the handler returns
   `success:false`). Every dynamic value is `encodeURIComponent`'d into the form body.
 
+### 3a. Reading a challenge title
+
+A title rarely just names its subject, so three rules turn it into something searchable
+(`services/photoPicker.js`):
+
+- **Series prefix.** `"Color Hunt: Green"` is about green, not colour or hunting. Everything before a
+  `:` / en dash / em dash is the series name, so the subject is what follows. A plain hyphen is NOT a
+  separator — it appears inside ordinary titles too often to treat as structure. Falls back to the whole
+  title when the tail has no usable word.
+- **Theme trusts the title over the slug.** `buildThemeKeywords` reads url only when the title yields
+  nothing. The two normally agree, but a series slug is **recycled**: the live `"Color Hunt: Green"` ships
+  `url="color-hunt-blue1"`, so pooling both put the WRONG colour in a green challenge's theme.
+  `buildChallengeKeywords` (the lexical tier) still keeps the whole title and url — there each keyword is
+  matched independently, so extra words are weak evidence rather than vector noise, and it is the safety
+  net for a title whose subject sits before the separator.
+- **Head noun first, participles last.** Search terms are capped at `SEARCH_TERMS_CAP`, so ORDER decides
+  what survives: `"Color Hunt: Blue & Orange"` used to yield `[color, hunt, blue]` and drop "orange"
+  entirely. An English title puts its subject last (`"Epic Lighthouses"`), so nouns are read
+  right-to-left — except participles (`-ing`, length-guarded so "king"/"ring" are not caught), which sink
+  to the back because the subject LEADS in `"Cats and Dogs Running"`.
+
+The user-editable `ignoreTitleWords` setting (master → profile → per-challenge) strips qualifiers the
+rules cannot know are noise — "Epic", "Dramatic", "Captivating". Matched against the RAW word before
+stemming, like `STOPWORDS`, so a user writing "captivating" does not have to know it stems to "captivat".
+The default is **seeded, not hardcoded**, so every word is visible and removable; "negative" is
+deliberately absent because "Negative Space" is a real subject. It is resolved ONCE in `runFillAttempt`
+(and once in `pickJoinPhoto`) rather than threaded from the six sites that read the tag settings — a value
+repeated six times is one that gets forgotten at one of them.
+
 ### 3b. Tag resolution (auto-fill candidate narrowing)
 
 - **The two search endpoints match differently, and that asymmetry is the whole feature.**

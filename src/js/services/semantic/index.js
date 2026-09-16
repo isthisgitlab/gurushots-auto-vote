@@ -64,14 +64,14 @@ const embedCached = (tokens) => {
  * @returns {Promise<Map<string, number>|null>} per-photo score in 0..1, or null
  *   when the lexicon is unavailable / the challenge has no usable theme text.
  */
-const getSemanticScores = async (challenge, photos) => {
+const getSemanticScores = async (challenge, photos, ignoreWords = null) => {
     try {
         if (!Array.isArray(photos) || photos.length === 0) return null;
         if (!(await lexicon.isAvailable())) return null;
 
         // Subject words only — a welcome_message would dilute the pooled theme
         // vector off its own subject (see buildThemeKeywords).
-        const keywords = buildThemeKeywords(challenge);
+        const keywords = buildThemeKeywords(challenge, ignoreWords);
         if (!keywords || keywords.length === 0) return null;
         const challengeVec = embedCached(keywords);
         if (!challengeVec) return null;

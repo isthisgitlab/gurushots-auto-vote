@@ -192,13 +192,19 @@ const pickJoinPhoto = async (challenge, token, deps) => {
     const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const fillWithoutTagMatch = resolveJoinSetting('fillWithoutTagMatch', challenge) === true;
+    // Same list the fill path uses; resolved here because join does its own
+    // fetch/score/pick rather than going through runFillAttempt.
+    // Optional-chained like every other per-challenge settings read here: a
+    // partial settings stub (or an older persisted facade) must degrade to "no
+    // list", never throw mid-join.
+    const ignoreWords = settings.getEffectiveIgnoreTitleWords?.(challenge) ?? null;
 
     let eligible;
     try {
         eligible = await fetchCandidatesForChallenge(
             challenge,
             token,
-            { mustIncludeTags, shouldIncludeTags },
+            { mustIncludeTags, shouldIncludeTags, ignoreWords },
             // logLabel 'join' so photo-library warnings are attributed to the join
             // flow, not auto-fill (the picker is shared).
             {
@@ -216,12 +222,13 @@ const pickJoinPhoto = async (challenge, token, deps) => {
         cat().warning(`could not read eligible photos for ${challenge?.id}: ${error?.message || error}`, null);
         return null;
     }
-    const semanticScores = await resolveSemanticScores(challenge, eligible, {});
+    const semanticScores = await resolveSemanticScores(challenge, eligible, { ignoreWords });
     const picked = pickPhotosForChallenge(challenge, eligible, 1, {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
         semanticScores,
+        ignoreWords,
     });
     return picked && picked[0] ? picked[0] : null;
 };

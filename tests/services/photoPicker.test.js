@@ -145,6 +145,88 @@ describe('photoPicker', () => {
         });
     });
 
+    describe('series titles and ignore words', () => {
+        test('a series prefix is dropped - the subject is what follows the colon', () => {
+            expect(buildThemeKeywords({ title: 'Color Hunt: Green' })).toEqual(['green']);
+            expect(buildThemeKeywords({ title: 'Screen Stars: Mountains' })).toEqual(['mountain']);
+        });
+
+        test('the theme trusts the title over a recycled slug', () => {
+            // The live "Color Hunt: Green" ships url="color-hunt-blue1" - the
+            // slug is reused from the previous run in the series and names the
+            // WRONG colour. Pooling url+title put "blue" in a green theme.
+            expect(buildThemeKeywords({ title: 'Color Hunt: Green', url: 'color-hunt-blue1' })).toEqual(['green']);
+        });
+
+        test('the slug is still used when the title says nothing', () => {
+            expect(buildThemeKeywords({ title: 'Best of the Best', url: 'macro-insects4' })).toEqual([
+                'macro',
+                'insect',
+            ]);
+        });
+
+        test('a tail with no usable word falls back to the whole title', () => {
+            expect(buildThemeKeywords({ title: 'Mountains: !!!' })).toEqual(['mountain']);
+        });
+
+        test('the lexical tier keeps the whole title, series prefix included', () => {
+            // It matches each keyword independently, so an extra word is weak
+            // evidence rather than vector noise - and it is the safety net for a
+            // title whose subject sits BEFORE the separator.
+            expect(buildChallengeKeywords({ title: 'Mountains: A Tribute' })).toEqual(['mountain', 'tribute']);
+        });
+
+        test('ignore words are matched on the raw word, before stemming', () => {
+            // A user types "captivating"; the stemmer turns it into "captivat",
+            // so filtering after stemming would silently never match.
+            expect(buildThemeKeywords({ title: 'Captivating Macro' }, ['captivating'])).toEqual(['macro']);
+            expect(buildThemeKeywords({ title: 'Epic Lighthouses' }, ['epic'])).toEqual(['lighthouse']);
+        });
+
+        test('ignore words are case- and whitespace-insensitive', () => {
+            expect(buildThemeKeywords({ title: 'Epic Lighthouses' }, ['  EPIC  '])).toEqual(['lighthouse']);
+        });
+
+        test('an empty or missing ignore list changes nothing', () => {
+            expect(buildThemeKeywords({ title: 'Epic Lighthouses' }, [])).toEqual(['epic', 'lighthouse']);
+            expect(buildThemeKeywords({ title: 'Epic Lighthouses' }, null)).toEqual(['epic', 'lighthouse']);
+        });
+    });
+
+    describe('search-term ordering', () => {
+        test('reads nouns right-to-left so the subject survives the cap', () => {
+            // "Color Hunt: Blue & Orange" used to yield [color, hunt, blue] and
+            // drop "orange" entirely.
+            expect(buildSearchTerms({ title: 'Color Hunt: Blue & Orange' }, {})).toEqual(['orange', 'blue']);
+            expect(buildSearchTerms({ title: 'Epic Lighthouses' }, {})).toEqual(['lighthouse', 'epic']);
+        });
+
+        test('participles sink behind the nouns', () => {
+            // The subject LEADS in "Noun Verbing" titles, so a blanket reverse
+            // would bury it.
+            expect(buildSearchTerms({ title: 'Cats and Dogs Running Jumping Playing' }, {})).toEqual([
+                'dog',
+                'cat',
+                'runn',
+            ]);
+            expect(buildSearchTerms({ title: 'Leading with Lines' }, {})).toEqual(['line', 'lead']);
+        });
+
+        test('short -ing words are subjects, not participles', () => {
+            expect(buildSearchTerms({ title: 'Kings and Rings' }, {})).toEqual(['ring', 'king']);
+        });
+
+        test('honours the ignore list', () => {
+            expect(buildSearchTerms({ title: 'Dramatic Storms' }, { ignoreWords: ['dramatic'] })).toEqual(['storm']);
+        });
+
+        test('user tags still take precedence over the title', () => {
+            expect(buildSearchTerms({ title: 'Epic Lighthouses' }, { mustIncludeTags: ['sunset'] })).toEqual([
+                'sunset',
+            ]);
+        });
+    });
+
     describe('buildThemeKeywords', () => {
         test('uses url + title and IGNORES welcome_message', () => {
             // The live "Stairs" challenge body reads "Stairs are both practical
