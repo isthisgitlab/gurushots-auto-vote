@@ -20,7 +20,6 @@ jest.mock('../../src/js/settings', () => ({
     getEffectiveSetting: jest.fn((key) => {
         const map = {
             autoJoin: true,
-            autoJoinAll: true,
             autoJoinTypes: '',
             autoJoinMaxCoins: 150,
             autoJoinCycleCoinBudget: 300,
@@ -62,7 +61,6 @@ const makeDeps = (over = {}) => ({
 
 const DEFAULT_SETTINGS = {
     autoJoin: true,
-    autoJoinAll: true,
     autoJoinTypes: '',
     autoJoinMaxCoins: 150,
     autoJoinCycleCoinBudget: 300,
@@ -279,7 +277,7 @@ describe('runJoinPass', () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         settings.getTitleRules.mockReturnValue([{ title: 'Joinable', profile: 'p' }]);
         settings.getTitleProfile.mockImplementation((title) =>
-            title === 'Joinable' ? { name: 'p', values: { autoJoin: true, autoJoinAll: true } } : null,
+            title === 'Joinable' ? { name: 'p', values: { autoJoin: true } } : null,
         );
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
@@ -328,7 +326,6 @@ describe('runJoinPass', () => {
         settings.getEffectiveSetting.mockImplementation((k) => {
             const map = {
                 autoJoin: true,
-                autoJoinAll: true,
                 autoJoinTypes: '',
                 autoJoinMaxCoins: 250,
                 autoJoinCycleCoinBudget: 300,
@@ -355,7 +352,6 @@ describe('runJoinPass', () => {
         settings.getEffectiveSetting.mockImplementation((k) => {
             const map = {
                 autoJoin: true,
-                autoJoinAll: true,
                 autoJoinTypes: '',
                 autoJoinExcludeTypes: ' Flash , Exhibition ', // messy raw string
                 autoJoinMaxCoins: 250,
@@ -373,6 +369,31 @@ describe('runJoinPass', () => {
         const res = await runJoinPass('tok', Date.now(), deps);
         const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status]));
         expect(byId[1]).toBe('skipped:excluded-type');
+        expect(byId[2]).toBe('joined');
+        expect(res.joined).toBe(1);
+    });
+
+    test('autoJoinTypes (include list) narrows the join set via the full pass wiring', async () => {
+        settings.getEffectiveSetting.mockImplementation((k) => {
+            const map = {
+                autoJoin: true,
+                autoJoinTypes: ' Contest ', // include only contest (messy raw string)
+                autoJoinExcludeTypes: '',
+                autoJoinMaxCoins: 0,
+                autoJoinCycleCoinBudget: 0,
+                fillWithoutTagMatch: true,
+            };
+            return map[k];
+        });
+        const deps = makeDeps({
+            getMemberChallenges: jest.fn(async () => [
+                { id: 1, join_coins: 0, type: 'flash' },
+                { id: 2, join_coins: 0, type: 'contest' },
+            ]),
+        });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        const byId = Object.fromEntries(res.results.map((r) => [r.id, r.status]));
+        expect(byId[1]).toBe('skipped:out-of-scope');
         expect(byId[2]).toBe('joined');
         expect(res.joined).toBe(1);
     });
@@ -415,7 +436,6 @@ describe('runJoinPass', () => {
         settings.getEffectiveSetting.mockImplementation((k) => {
             const map = {
                 autoJoin: true,
-                autoJoinAll: true,
                 autoJoinTypes: '',
                 autoJoinMaxCoins: 250,
                 autoJoinCycleCoinBudget: 300,

@@ -222,15 +222,13 @@
             groupAutoJoin: 'Auto Join',
             autoJoin: 'Auto-Join Challenges',
             autoJoinDesc:
-                'Automatically join open challenges each cycle. Off by default. The scope and coin caps below decide which challenges are joined and whether paid ones are.',
-            autoJoinAll: 'Join All Open Challenges',
-            autoJoinAllDesc:
-                'Join every open challenge (paid ones still limited by the coin caps below). Without this, only challenges matching a saved title profile or the types below are joined.',
-            autoJoinTypes: 'Join These Types',
-            autoJoinTypesDesc: 'Comma-separated challenge types to auto-join, e.g. "flash,contest".',
+                'Automatically join open challenges each voting cycle (autovote must be running). Off by default. When on, it joins ALL open challenges unless you narrow with the type lists below; paid challenges need the coin caps below (0 = free only).',
+            autoJoinTypes: 'Only These Types',
+            autoJoinTypesDesc:
+                'Comma-separated challenge types to join, e.g. "flash,contest". Leave EMPTY to join all types (the default). Case-insensitive.',
             autoJoinExcludeTypes: 'Never Join These Types',
             autoJoinExcludeTypesDesc:
-                'Comma-separated challenge types to never auto-join, e.g. "flash,exhibition". Overrides both "Join All Open Challenges" and "Join These Types" (a type listed in both is not joined). A challenge matched by a saved title profile still joins — a profile is a deliberate per-title opt-in.',
+                'Comma-separated challenge types to never auto-join, e.g. "flash,exhibition". Since the default is to join all types, this is how you get "join everything except these". A challenge matched by a saved title profile still joins — a profile is a deliberate per-title opt-in.',
             autoJoinMaxCoins: 'Max Coins Per Challenge',
             autoJoinMaxCoinsDesc:
                 'Highest coin cost to pay to join a single challenge. 0 = free challenges only. Paid joins also require a per-cycle budget above 0.',

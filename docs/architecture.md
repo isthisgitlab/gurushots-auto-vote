@@ -156,7 +156,7 @@ Domain terms used throughout, in reader's terms:
   check→unlock→mark section; a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is
   independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a title-profile
-  match wins over the type-exclude veto, which in turn wins over `autoJoinAll`/include-list.
+  match wins over the type-exclude veto; otherwise the default scope is join-all, an `autoJoinTypes` include-list (when non-empty) narrows it, and `autoJoinExcludeTypes` subtracts.
 - **Fail-soft config parsing** is pervasive: `getScheduledFillState` wraps its whole body in try/catch and
   returns inactive; corrupt window values fall back to the schema default rather than "never in window"
   (which under replace-mode would silently block all voting).

@@ -222,15 +222,13 @@
             groupAutoJoin: 'Automātiskā pievienošanās',
             autoJoin: 'Automātiski pievienoties izaicinājumiem',
             autoJoinDesc:
-                'Katrā ciklā automātiski pievienoties atvērtajiem izaicinājumiem. Pēc noklusējuma izslēgts. Tvērums un monētu ierobežojumi zemāk nosaka, kuriem izaicinājumiem pievienoties un vai arī maksas.',
-            autoJoinAll: 'Pievienoties visiem atvērtajiem',
-            autoJoinAllDesc:
-                'Pievienoties katram atvērtajam izaicinājumam (maksas joprojām ierobežo monētu limiti zemāk). Bez šī pievienojas tikai tiem, kas atbilst saglabātam nosaukuma profilam vai zemāk norādītajiem tipiem.',
-            autoJoinTypes: 'Pievienoties šiem tipiem',
-            autoJoinTypesDesc: 'Ar komatu atdalīti izaicinājumu tipi, kuriem pievienoties, piem., "flash,contest".',
+                'Katrā balsošanas ciklā automātiski pievienoties atvērtajiem izaicinājumiem (auto-balsošanai jādarbojas). Pēc noklusējuma izslēgts. Kad ieslēgts, pievienojas VISIEM atvērtajiem izaicinājumiem, ja vien nesašaurini ar tipu sarakstiem zemāk; maksas izaicinājumiem nepieciešami monētu limiti zemāk (0 = tikai bezmaksas).',
+            autoJoinTypes: 'Tikai šiem tipiem',
+            autoJoinTypesDesc:
+                'Ar komatu atdalīti izaicinājumu tipi, kuriem pievienoties, piem., "flash,contest". Atstāj TUKŠU, lai pievienotos visiem tipiem (noklusējums). Reģistrnejutīgs.',
             autoJoinExcludeTypes: 'Nekad nepievienoties šiem tipiem',
             autoJoinExcludeTypesDesc:
-                'Ar komatu atdalīti izaicinājumu tipi, kuriem nekad automātiski nepievienoties, piem., "flash,exhibition". Tas ņem virsroku pār "Pievienoties visiem atvērtajiem" un "Pievienoties šiem tipiem" (tips, kas norādīts abos, netiks pievienots). Izaicinājums, kas atbilst saglabātam nosaukuma profilam, joprojām tiek pievienots — profils ir apzināta izvēle konkrētam nosaukumam.',
+                'Ar komatu atdalīti izaicinājumu tipi, kuriem nekad automātiski nepievienoties, piem., "flash,exhibition". Tā kā noklusējums ir pievienoties visiem tipiem, šādi iegūst "pievienoties visam, izņemot šos". Izaicinājums, kas atbilst saglabātam nosaukuma profilam, joprojām tiek pievienots — profils ir apzināta izvēle konkrētam nosaukumam.',
             autoJoinMaxCoins: 'Maks. monētas par izaicinājumu',
             autoJoinMaxCoinsDesc:
                 'Lielākā monētu cena, ko maksāt par pievienošanos vienam izaicinājumam. 0 = tikai bezmaksas. Maksas pievienošanās prasa arī cikla budžetu virs 0.',

@@ -726,6 +726,13 @@ const SETTINGS_SCHEMA = {
     // platform). Default off, but resolved master → profile → per-challenge, so a
     // title profile can turn it on for its title. Scope below decides WHICH open
     // challenges are joined; the coin caps gate paid ones.
+    //
+    // NOTE: the former `autoJoinAll` boolean was removed. The scope model is now
+    // "default = all types" narrowed by autoJoinTypes; enabling autoJoin therefore
+    // joins ALL open (free) challenges unless a type list narrows it. Paid stays
+    // gated by the coin caps below (0 = free only), so no unintended spend. An
+    // orphaned autoJoinAll value in an old settings file is inert (never read;
+    // pruned by cleanupObsoleteSettings).
     autoJoin: {
         type: 'boolean',
         default: false,
@@ -739,20 +746,9 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoJoin',
         description: 'app.autoJoinDesc',
     },
-    // Scope: join EVERY open challenge (paid ones still subject to the caps).
-    // Profile/title-tunable so a saved tactic can broaden a single title.
-    autoJoinAll: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: zBool,
-        validationOrder: 1,
-        group: 'autoJoin',
-        label: 'app.autoJoinAll',
-        description: 'app.autoJoinAllDesc',
-    },
     // Scope: comma-separated challenge types to join (e.g. "flash,contest").
-    // A title matching a saved profile is always in scope regardless of this.
+    // EMPTY = all types (the default once auto-join is on). A title matching a
+    // saved profile is always in scope regardless of this.
     autoJoinTypes: {
         type: 'string',
         default: '',
@@ -763,8 +759,9 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoJoinTypes',
         description: 'app.autoJoinTypesDesc',
     },
-    // Comma-separated challenge types to NEVER auto-join. Overrides scope, so
-    // "Join All" + exclude "flash,exhibition" joins everything except those.
+    // Comma-separated challenge types to NEVER auto-join. Subtracts from the
+    // (default-all) scope, so leaving types empty + excluding "flash,exhibition"
+    // joins everything except those.
     autoJoinExcludeTypes: {
         type: 'string',
         default: '',

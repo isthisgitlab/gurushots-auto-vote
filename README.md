@@ -43,7 +43,7 @@ The desktop app now enforces this for GUI instances: launching it a second time 
 - **Boost** — auto-applies boost near the deadline, on a chosen entry slot.
 - **Turbo (earn + apply)** — auto-plays the mini-game to _earn_ turbo, then auto-_applies_ it to a chosen entry before the deadline.
 - **Auto-fill** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, theme-aware photo selection, and an emergency safety net.
-- **Auto-join** — discovers open (un-joined) challenges and joins them automatically (off by default), scoped by "join all", an include/exclude type list, or a saved title profile; paid challenges are gated by per-challenge and per-cycle coin caps and never charged without a completed join. Manual joining is available too, via a collapsible "Discover" list in the GUI and the `discover`/`join` CLI commands.
+- **Auto-join** — discovers open (un-joined) challenges and joins them automatically (off by default); once on it joins all of them by default, narrowed by an include/exclude challenge-type list or a saved title profile. Paid challenges are gated by per-challenge and per-cycle coin caps and never charged without a completed join. Manual joining is available too, via a collapsible "Discover" list in the GUI and the `discover`/`join` CLI commands.
 - **Bankroll display** — shows your keys / swaps / fills / coins next to the timer in the GUI and via the `bankroll` (alias `coins`) CLI command.
 - **Per-challenge overrides** — every voting setting has a global default that any individual challenge can override.
 - **Per-title tag rules** — auto-fill tag rules keyed on the challenge title, so they survive GuruShots' per-rotation challenge-ID changes.
@@ -288,11 +288,10 @@ Newly-filled entries are picked up by the boost and turbo gates on the _next_ cy
 
 Everything above operates on challenges you've already joined. **Auto-join** (off by default) discovers **open, un-joined** challenges each cycle and joins the ones you want. It runs as a pre-step before voting on every platform (GUI, CLI `start`, Android), and joining a challenge means submitting a photo — auto-join reuses the same photo picker as auto-fill (tags, themed search, semantic ranking).
 
-- **Scope — which challenges get joined.** Turn on `autoJoin`, then choose how candidates qualify (combinable):
-    - `autoJoinAll` — join every open challenge.
-    - `autoJoinTypes` — an **include** list of challenge types, comma-separated (e.g. `flash,contest`).
-    - `autoJoinExcludeTypes` — a **deny** list of types to never join (e.g. `flash,exhibition`). This overrides both `autoJoinAll` and `autoJoinTypes`. So "join everything except flash and exhibition" = `autoJoinAll` on + `autoJoinExcludeTypes = flash,exhibition`.
-    - A **saved title profile** always joins its title (a deliberate per-title opt-in) — it wins over the type filters, including the exclude list.
+- **Scope — which challenges get joined.** Turn on `autoJoin` and it joins **all** open challenges by default; narrow it with the type lists (optional):
+    - `autoJoinTypes` — an **include** list of challenge types, comma-separated (e.g. `flash,contest`). Leave it **empty to join all types** (the default).
+    - `autoJoinExcludeTypes` — a **deny** list of types to never join (e.g. `flash,exhibition`). Since the default is all, this alone gives "join everything except flash and exhibition".
+    - A **saved title profile** always joins its title (a deliberate per-title opt-in) — it wins over both type lists.
 - **Paid challenges — coin safety.** Paid joins are **off by default** and gated by two caps, both `0 = off`: `autoJoinMaxCoins` (most coins to spend on a single join) and `autoJoinCycleCoinBudget` (total coins the pass may spend in one cycle). **Both must be > 0** to spend any coins. A paid join never charges without a completed join: the entry photo is resolved first (no photo ⇒ skip, no spend), and if the charge succeeds but the submit fails, the state is remembered so a retry finishes the submit instead of paying again.
 - **Manual join.** A collapsed **Discover** panel below the challenge list shows open challenges; free ones join on click, paid ones open a confirmation showing the cost and your resulting balance. From the CLI use `discover` to list them and `join <id>` (paid needs `--yes`).
 - **Indicator.** While autovote is running and auto-join is armed (the master is on, or a title profile enables it), an **"auto-join on"** badge shows in the header next to the timer — it appears only when the join step will actually run each cycle, not merely when the setting is on.
@@ -387,14 +386,13 @@ All of these support per-challenge overrides except where noted.
 
 **Auto join**
 
-| Setting                   | Default | Range / values | Description                                                                                                                                                                    |
-| ------------------------- | ------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `autoJoin`                | `false` | bool           | Enable auto-join. Resolved **master → profile → per-challenge**: a title profile (or per-challenge override) can turn it on for its title even when the master default is off. |
-| `autoJoinAll`             | `false` | bool           | Scope: join **every** open challenge (still subject to the exclude list and coin caps).                                                                                        |
-| `autoJoinTypes`           | `''`    | csv of types   | Scope: **include** only these challenge types, e.g. `flash,contest`. Case-insensitive; spaces around commas ignored.                                                           |
-| `autoJoinExcludeTypes`    | `''`    | csv of types   | **Never** join these types, e.g. `flash,exhibition`. Overrides `autoJoinAll` and `autoJoinTypes`. A saved title profile still joins its title.                                 |
-| `autoJoinMaxCoins`        | `0`     | ≥ 0 (0 = off)  | Most coins to spend joining a **single** paid challenge. `0` = free challenges only.                                                                                           |
-| `autoJoinCycleCoinBudget` | `0`     | ≥ 0 (0 = off)  | Total coins the join pass may spend in **one cycle** (global). `0` = no paid spend. Paid joins require **both** this and `autoJoinMaxCoins` > 0.                               |
+| Setting                   | Default | Range / values | Description                                                                                                                                                                                           |
+| ------------------------- | ------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoJoin`                | `false` | bool           | Enable auto-join. When on, joins **all** open challenges by default. Resolved **master → profile → per-challenge**: a title profile can turn it on for its title even when the master default is off. |
+| `autoJoinTypes`           | `''`    | csv of types   | Scope: **include** only these challenge types, e.g. `flash,contest`. **Empty = all types** (the default). Case-insensitive; spaces around commas ignored.                                             |
+| `autoJoinExcludeTypes`    | `''`    | csv of types   | **Never** join these types, e.g. `flash,exhibition`. Subtracts from the default-all scope, so this alone gives "join all except these". A saved title profile still joins its title.                  |
+| `autoJoinMaxCoins`        | `0`     | ≥ 0 (0 = off)  | Most coins to spend joining a **single** paid challenge. `0` = free challenges only.                                                                                                                  |
+| `autoJoinCycleCoinBudget` | `0`     | ≥ 0 (0 = off)  | Total coins the join pass may spend in **one cycle** (global). `0` = no paid spend. Paid joins require **both** this and `autoJoinMaxCoins` > 0.                                                      |
 
 ## 📐 Recommended Setups
 

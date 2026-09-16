@@ -1140,11 +1140,13 @@ const describeDeadlineActions = (challenge, now) => {
  * itself. COINS is the only join currency handled; a candidate whose cost is
  * non-positive is treated as free.
  *
- * Scope: a candidate is in scope when allowAll, a title-profile match, or its
- * type is in the include-list. `excludeTypes` vetoes the join over allowAll and
- * the include-list (how "join all EXCEPT these types" is expressed) — but a
- * title-profile match is a deliberate per-title opt-in and bypasses the veto,
- * so a profiled title still joins even if its type is excluded.
+ * Scope (once auto-join is enabled): the DEFAULT is join everything. An
+ * `includeTypes` list, when non-empty, narrows to just those types.
+ * `excludeTypes` subtracts. A title-profile match is a deliberate per-title
+ * opt-in that bypasses both the exclude veto and any include narrowing, so a
+ * profiled title still joins even if its type is excluded or not in the include
+ * list. So "join all EXCEPT flash and exhibition" = exclude `flash,exhibition`
+ * with no include list.
  *
  * Fail-safe on money: a null `bankroll` (balance could not be read) blocks every
  * paid join but still allows free joins. Both coin caps use the `0 = off`
@@ -1154,19 +1156,17 @@ const describeDeadlineActions = (challenge, now) => {
  * @param {{id?: string|number, type?: string, join_coins?: number}} params.challenge
  * @param {{coins?: number}|null} params.bankroll live balance, or null if unread
  * @param {number} params.remainingBudget coins still spendable this cycle (0 = paid off)
- * @param {boolean} params.allowAll `autoJoinAll` — join any open challenge
- * @param {string[]} params.allowTypes normalized lowercase types from `autoJoinTypes`
- * @param {string[]} params.excludeTypes normalized lowercase types from `autoJoinExcludeTypes`; a match vetoes the join over allowAll/include-list, but NOT over a title-profile match
+ * @param {string[]} params.includeTypes normalized lowercase types from `autoJoinTypes`; EMPTY = all types
+ * @param {string[]} params.excludeTypes normalized lowercase types from `autoJoinExcludeTypes`; a match vetoes the join (unless a title-profile matches)
  * @param {number} params.maxCoins per-challenge coin cap (0 = free only)
- * @param {boolean} params.hasProfileMatch a title rule/profile matched this title — a deliberate opt-in that bypasses both the exclude veto and the scope check
+ * @param {boolean} params.hasProfileMatch a title rule/profile matched this title — a deliberate opt-in that bypasses the exclude veto and include narrowing
  * @returns {{join: boolean, needsCoins: number, reason: string}}
  */
 const shouldJoinChallenge = ({
     challenge,
     bankroll,
     remainingBudget,
-    allowAll,
-    allowTypes,
+    includeTypes,
     excludeTypes,
     maxCoins,
     hasProfileMatch,
@@ -1176,16 +1176,15 @@ const shouldJoinChallenge = ({
 
     const type = typeof challenge?.type === 'string' ? challenge.type.trim().toLowerCase() : '';
     // A saved title profile is a deliberate per-title opt-in and wins over the
-    // general type filters — it bypasses BOTH the exclude veto and the scope
-    // check. For everything else, the type-exclude vetoes the join (over
-    // "Join All" and the include-list alike): this is how "join all EXCEPT
-    // flash and exhibition" is expressed.
+    // general type filters (bypasses exclude + include narrowing). Otherwise:
+    // default is join everything; a non-empty include list narrows to those
+    // types; the exclude list always subtracts.
     if (hasProfileMatch !== true) {
         if (Array.isArray(excludeTypes) && type !== '' && excludeTypes.includes(type)) {
             return { join: false, needsCoins, reason: 'excluded-type' };
         }
-        const typeAllowed = Array.isArray(allowTypes) && type !== '' && allowTypes.includes(type);
-        if (allowAll !== true && !typeAllowed) {
+        const hasIncludeFilter = Array.isArray(includeTypes) && includeTypes.length > 0;
+        if (hasIncludeFilter && !(type !== '' && includeTypes.includes(type))) {
             return { join: false, needsCoins, reason: 'out-of-scope' };
         }
     }
