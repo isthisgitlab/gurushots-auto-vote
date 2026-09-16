@@ -356,6 +356,8 @@
             english: 'English',
             entries: 'Bildes',
             entryDetails: 'Bildes informācija',
+            entryPhoto: 'Iesniegtā bilde',
+            viewEntryPhoto: 'Skatīt iesniegto bildi',
             error: 'Kļūda',
             errorCheckingUpdates: 'Kļūda pārbaudot atjauninājumus',
             errorLoadingUiSettings: 'Kļūda UI iestatījumu ielādē',

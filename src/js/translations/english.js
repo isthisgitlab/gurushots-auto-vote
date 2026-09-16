@@ -353,6 +353,8 @@
             english: 'English',
             entries: 'Entries',
             entryDetails: 'Entry Details',
+            entryPhoto: 'Entry photo',
+            viewEntryPhoto: 'View entry photo',
             error: 'Error',
             errorCheckingUpdates: 'Error checking for updates',
             errorLoadingUiSettings: 'Error loading UI settings',
