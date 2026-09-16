@@ -107,6 +107,31 @@ describe('StatusHeader', () => {
         expect(screen.getByTestId('status-header').textContent).not.toContain('statusHeaderAutoJoin');
     });
 
+    test('bankroll renders as its own second row (separate block, not inline with the counts)', () => {
+        const { container } = wrap(
+            <StatusHeader
+                challenges={oneChallenge}
+                nextRunAt={BASE_MS + 60_000}
+                running={true}
+                bankroll={{ keys: 1, swaps: 2, fills: 3, coins: 4242 }}
+            />,
+        );
+        const header = container.querySelector('[data-testid="status-header"]');
+        const blocks = Array.from(header.children).filter((n) => n.tagName === 'DIV');
+        expect(blocks).toHaveLength(2); // row 1 (counts/timer) + row 2 (bankroll)
+        expect(blocks[1].textContent).toContain('4242'); // coin value on the second row
+        expect(blocks[0].textContent).not.toContain('4242');
+    });
+
+    test('no bankroll block when no balance is passed (single row)', () => {
+        const { container } = wrap(
+            <StatusHeader challenges={oneChallenge} nextRunAt={BASE_MS + 60_000} running={true} />,
+        );
+        const header = container.querySelector('[data-testid="status-header"]');
+        const blocks = Array.from(header.children).filter((n) => n.tagName === 'DIV');
+        expect(blocks).toHaveLength(1);
+    });
+
     test('counts active challenges and available boosts/turbos', () => {
         const challenges = [
             { id: 'a', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } } },

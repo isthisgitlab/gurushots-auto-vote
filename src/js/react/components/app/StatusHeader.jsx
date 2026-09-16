@@ -91,39 +91,48 @@ export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoi
     if (activeCount === 0 && !running && !hasBankroll) return null;
 
     return (
-        // Deliberately NOT role="status"/aria-live: the next-action countdown
+        // The card is NOT role="status"/aria-live: the next-action countdown
         // inside re-renders every second, and a live region would make a screen
         // reader re-announce the whole bar each tick. It's an ambient summary,
         // not an alert.
         <div
-            className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm rounded-lg border border-base-300 bg-base-100 px-3 py-2 mb-3"
+            className="text-sm rounded-lg border border-base-300 bg-base-100 px-3 py-2 mb-3"
             data-testid="status-header"
         >
-            <HeaderStat icon="🏆" value={activeCount} label={t('app.statusHeaderActive')} />
-            <HeaderStat icon="🚀" value={boostsAvailable} label={t('app.statusHeaderBoosts')} />
-            <HeaderStat icon="⚡" value={turbosAvailable} label={t('app.statusHeaderTurbos')} />
-            <div className="flex items-baseline gap-1 whitespace-nowrap">
-                <span aria-hidden="true">⏳</span>
-                <span className="text-base-content/60">{t('app.statusHeaderNext')}:</span>
-                <NextActionCountdown nextRunAt={nextRunAt} running={running} />
+            {/* Row 1: counts + next-action countdown + auto-join badge. */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <HeaderStat icon="🏆" value={activeCount} label={t('app.statusHeaderActive')} />
+                <HeaderStat icon="🚀" value={boostsAvailable} label={t('app.statusHeaderBoosts')} />
+                <HeaderStat icon="⚡" value={turbosAvailable} label={t('app.statusHeaderTurbos')} />
+                <div className="flex items-baseline gap-1 whitespace-nowrap">
+                    <span aria-hidden="true">⏳</span>
+                    <span className="text-base-content/60">{t('app.statusHeaderNext')}:</span>
+                    <NextActionCountdown nextRunAt={nextRunAt} running={running} />
+                </div>
+                {/* Only shown while autovote is RUNNING — that's when the join
+                    pre-step actually executes. Showing it while autovote is off (a
+                    pure settings check) would wrongly imply challenges are being
+                    joined in the background. Own polite live region so arming/disarming
+                    it mid-session is announced without making the 1Hz countdown noisy. */}
+                {autoJoinActive && running && (
+                    <span
+                        className="badge badge-success badge-sm gap-1"
+                        role="status"
+                        aria-live="polite"
+                        title={t('app.statusHeaderAutoJoinTitle')}
+                    >
+                        <span aria-hidden="true">🤝</span>
+                        {t('app.statusHeaderAutoJoin')}
+                    </span>
+                )}
             </div>
-            {/* Only shown while autovote is RUNNING — that's when the join
-                pre-step actually executes. Showing it while autovote is off (a
-                pure settings check) would wrongly imply challenges are being
-                joined in the background. Own polite live region so arming/disarming
-                it mid-session is announced without making the 1Hz countdown noisy. */}
-            {autoJoinActive && running && (
-                <span
-                    className="badge badge-success badge-sm gap-1"
-                    role="status"
-                    aria-live="polite"
-                    title={t('app.statusHeaderAutoJoinTitle')}
-                >
-                    <span aria-hidden="true">🤝</span>
-                    {t('app.statusHeaderAutoJoin')}
-                </span>
+            {/* Row 2: bankroll, always its own row so it doesn't shuffle up/down
+                with the row-1 width. */}
+            {hasBankroll && (
+                <div className="mt-1.5 border-t border-base-200 pt-1.5">
+                    <BankrollStats bankroll={bankroll} />
+                </div>
             )}
-            {hasBankroll && <BankrollStats bankroll={bankroll} />}
         </div>
     );
 }
