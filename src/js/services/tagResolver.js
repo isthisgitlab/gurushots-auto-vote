@@ -40,6 +40,10 @@ const lexicon = require('./semantic/lexicon');
 // word and a tag ("stairs"->"stair", "lighthouses"->"lighthouse") without
 // walking a long word down to a meaningless prefix.
 const MAX_BACKOFF_STEPS = 2;
+// Must match MIN_AUTOCOMPLETE_CHARS in api/tags.js — both encode the same server
+// behavior (nothing is returned below three characters). Kept local rather than
+// imported because business logic does not reach into src/js/api/*; if one
+// moves, move the other.
 const MIN_TERM_LENGTH = 3;
 
 // Resolution is a narrowing step, not a broadening one: more terms means more
@@ -74,6 +78,15 @@ const isLexicalMatch = (tag, term) => {
  * words mean one thing together), then compared with the mean-pooled challenge
  * keywords. Returns null when either side is out of vocabulary — "no signal",
  * which is not the same as a measured zero.
+ *
+ * CAVEAT ON THE FLOOR: scripts/validate-lexicon.js measures
+ * p99(unrelated) < FLOOR < p25(related) over VISION-LABEL-shaped pairs, not over
+ * member tag names. The two distributions are close enough to share a threshold
+ * — a tag and a label are both short concrete nouns from the same vocabulary —
+ * but the statistical guarantee is borrowed, not independently proven here. It
+ * is the conservative direction to borrow in: a tag that fails this check is
+ * merely not used to narrow the search, and the fill proceeds as it would have
+ * without resolution at all.
  *
  * @param {Float64Array|null} challengeVec
  * @param {string} tag
@@ -121,51 +134,69 @@ const resolveTermsToTags = async (terms, challenge, deps) => {
         // Lexicon problems must never break a fill; lexical matching still works.
     }
 
+    const usable = terms.filter((term) => typeof term === 'string' && term.length >= MIN_TERM_LENGTH);
+    if (usable.length === 0) return [];
+
+    // One backoff CHAIN per term, chains run concurrently.
+    //
+    // Within a term the probes must stay ordered — each is a looser fallback for
+    // the one before, and firing them together would both waste calls and make
+    // the winner ambiguous. Across terms there is no such dependency, and this
+    // whole path only runs on a fill that has ALREADY missed, close to a
+    // deadline. Sequential chains would stack to SEARCH_TERMS_CAP x
+    // (MAX_BACKOFF_STEPS + 1) round-trips end to end; this bounds the wall clock
+    // to the slowest single chain, the same reasoning that parallelises
+    // searchUnion in autoFill.js.
+    const chains = await Promise.all(
+        usable.map(async (term) => {
+            for (let step = 0; step <= MAX_BACKOFF_STEPS; step++) {
+                const probe = term.slice(0, term.length - step);
+                if (probe.length < MIN_TERM_LENGTH) break;
+
+                let items;
+                try {
+                    items = await searchTagAutocomplete(token, probe, memberId);
+                } catch {
+                    // api/tags.js already resolves [] on failure; this is belt-and-
+                    // braces for an injected dep that rejects. Treat as a miss.
+                    items = [];
+                }
+                if (!Array.isArray(items) || items.length === 0) continue;
+
+                // The server answered. A shorter probe can only be looser, so this
+                // chain is done either way — continuing would spend round-trips to
+                // widen a match we are about to judge off-theme.
+                return { term, probe, items };
+            }
+            return null;
+        }),
+    );
+
+    // Accept in TERM order, not completion order, so the result is deterministic
+    // regardless of which request happened to land first.
     const resolved = [];
     const seen = new Set();
+    for (const chain of chains) {
+        if (!chain) continue;
+        const { term, probe, items } = chain;
+        let acceptedHere = 0;
+        for (const tag of items) {
+            if (typeof tag !== 'string' || tag === '' || seen.has(tag)) continue;
 
-    for (const term of terms) {
-        if (typeof term !== 'string' || term.length < MIN_TERM_LENGTH) continue;
+            const lexical = isLexicalMatch(tag, term);
+            const bucket = lexical ? null : themeBucketOf(challengeVec, tag);
+            const onTheme = bucket !== null && bucket >= SEMANTIC_MATCH_FLOOR;
+            if (!lexical && !onTheme) continue;
 
-        for (let step = 0; step <= MAX_BACKOFF_STEPS; step++) {
-            const probe = term.slice(0, term.length - step);
-            if (probe.length < MIN_TERM_LENGTH) break;
-
-            let items;
-            try {
-                items = await searchTagAutocomplete(token, probe, memberId);
-            } catch {
-                // api/tags.js already resolves [] on failure; this is belt-and-
-                // braces for an injected dep that rejects. Treat as a miss.
-                items = [];
-            }
-            if (!Array.isArray(items) || items.length === 0) continue;
-
-            let acceptedHere = 0;
-            for (const tag of items) {
-                if (typeof tag !== 'string' || tag === '' || seen.has(tag)) continue;
-
-                const lexical = isLexicalMatch(tag, term);
-                const bucket = lexical ? null : themeBucketOf(challengeVec, tag);
-                const onTheme = bucket !== null && bucket >= SEMANTIC_MATCH_FLOOR;
-                if (!lexical && !onTheme) continue;
-
-                seen.add(tag);
-                resolved.push(tag);
-                acceptedHere++;
-                if (resolved.length >= MAX_RESOLVED_TAGS) break;
-            }
-
-            if (logger && acceptedHere > 0 && probe !== term) {
-                logger
-                    .withCategory(logLabel)
-                    .debug(`${logLabel}: term "${term}" resolved via shortened probe "${probe}"`, null);
-            }
-            // The server answered for this probe. A shorter probe can only be
-            // looser, so stop regardless of whether anything passed validation —
-            // continuing would spend round-trips to widen a match we just
-            // judged off-theme.
-            break;
+            seen.add(tag);
+            resolved.push(tag);
+            acceptedHere++;
+            if (resolved.length >= MAX_RESOLVED_TAGS) break;
+        }
+        if (logger && acceptedHere > 0 && probe !== term) {
+            logger
+                .withCategory(logLabel)
+                .debug(`${logLabel}: term "${term}" resolved via shortened probe "${probe}"`, null);
         }
         if (resolved.length >= MAX_RESOLVED_TAGS) break;
     }

@@ -632,8 +632,9 @@ const labelWordStems = (photo) => {
  * See getSemanticScores for the measured effect.
  *
  * Duplicate labels collapse (same stem sequence) so a repeated label cannot pay
- * the embedding cost twice, and the MAX_STEMS_PER_PHOTO budget is shared across
- * groups so total work per photo matches the flat helper's.
+ * the embedding cost twice, and groups are truncated to keep the total stem
+ * count at or under MAX_STEMS_PER_PHOTO — the same ceiling the flat helper
+ * enforces, so a photo cannot cost more work here than there.
  */
 const labelStemGroups = (photo) => {
     if (!Array.isArray(photo?.labels)) return [];
@@ -647,8 +648,12 @@ const labelStemGroups = (photo) => {
         const key = words.join(' ');
         if (seen.has(key)) continue;
         seen.add(key);
-        groups.push(words);
-        stems += words.length;
+        // Trim the boundary label rather than letting it straddle the ceiling:
+        // checking only after pushing a whole label could overshoot by up to
+        // MAX_WORDS_PER_LABEL - 1 stems.
+        const room = MAX_STEMS_PER_PHOTO - stems;
+        groups.push(words.length > room ? words.slice(0, room) : words);
+        stems += Math.min(words.length, room);
         if (stems >= MAX_STEMS_PER_PHOTO) break;
     }
     return groups;

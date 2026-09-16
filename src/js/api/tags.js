@@ -62,6 +62,16 @@ const getCurrentMemberProfile = async (token) => {
 // stops here for the same reason.
 const MIN_AUTOCOMPLETE_CHARS = 3;
 
+// Bounds on the RESPONSE. The payload is untrusted the same way challenge text
+// and photo labels are, and each returned tag goes on to be embedded, matched,
+// and interpolated into a follow-up search query. Real tags are one to three
+// words and the live endpoint returns about five of them, so these ceilings sit
+// far above anything legitimate while keeping the per-entry validation work in
+// tagResolver bounded regardless of what comes back. Mirrors the
+// MAX_TOKENISE_CHARS / MAX_LABELS_PER_PHOTO caps in photoPicker.js.
+const MAX_TAG_LENGTH = 120;
+const MAX_AUTOCOMPLETE_ITEMS = 25;
+
 /**
  * Tags in the member's own library whose text CONTAINS `term`.
  *
@@ -81,12 +91,15 @@ const searchTagAutocomplete = async (token, term, memberId) => {
     const data = `search=${encodeURIComponent(text)}&member_id=${encodeURIComponent(memberId)}`;
     const response = await makePostRequest(ENDPOINTS.searchAutocomplete, createWebHeaders(token), data);
     if (!response || !Array.isArray(response.items)) return [];
-    // The payload is untrusted: keep only non-empty strings and normalise, so a
-    // malformed entry can never reach the photo-search query string.
+    // The payload is untrusted: keep only non-empty strings, normalise, and
+    // bound both the list and each entry (see MAX_TAG_LENGTH), so neither a
+    // malformed entry nor an oversized response can reach the photo-search
+    // query string or the resolver's per-entry validation loop.
     return response.items
+        .slice(0, MAX_AUTOCOMPLETE_ITEMS)
         .filter((item) => typeof item === 'string')
         .map((item) => item.trim().toLowerCase())
-        .filter((item) => item !== '');
+        .filter((item) => item !== '' && item.length <= MAX_TAG_LENGTH);
 };
 
 module.exports = {

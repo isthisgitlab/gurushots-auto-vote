@@ -95,6 +95,17 @@ const describeSubmitFailure = (raw) => {
 const memberIdCache = new Map();
 const MAX_MEMBER_ID_CACHE = 4;
 
+// How long a FAILED identity lookup stays cached before it is retried.
+//
+// A successful id cannot change under a given token, so it is cached for the
+// process lifetime. A null is different: the common cause is a transient
+// network blip, not "this account cannot do it", and caching that permanently
+// would let one flaky request silently disable tag resolution for the whole
+// session — reverting to the off-theme fills this feature exists to stop, with
+// nothing in the UI to explain it. Expiring the negative keeps the retry cheap
+// (one call a minute at worst) without hammering a genuinely broken endpoint.
+const NEGATIVE_IDENTITY_TTL_MS = 60_000;
+
 /**
  * The member id tag resolution needs, or null when it cannot be determined.
  *
@@ -106,20 +117,44 @@ const MAX_MEMBER_ID_CACHE = 4;
  * @param {function} getCurrentMemberProfile
  * @returns {Promise<string|null>}
  */
-const resolveMemberId = async (token, getCurrentMemberProfile) => {
-    if (memberIdCache.has(token)) return memberIdCache.get(token);
-    let id = null;
-    try {
-        const profile = await getCurrentMemberProfile(token);
-        if (profile && typeof profile.id === 'string' && profile.id !== '') id = profile.id;
-    } catch {
-        // Identity is an enhancement, never a reason to fail a fill.
-    }
-    // Cache the null too: a miss is usually structural (endpoint unavailable on
-    // this account), and retrying it once per challenge would be pure latency.
+const resolveMemberId = async (token, getCurrentMemberProfile, logger, logLabel) => {
+    const cached = memberIdCache.get(token);
+    // A resolved id never expires; a cached null does (see NEGATIVE_IDENTITY_TTL_MS).
+    if (cached && (cached.expiresAt === null || cached.expiresAt > Date.now())) return cached.promise;
+
+    // Cache the PROMISE, not the value, so two fills racing on the same token
+    // share one request instead of both missing an empty cache and issuing it.
+    // A voting pass is sequential, but manual "Fill Now" is not.
+    const promise = (async () => {
+        try {
+            const profile = await getCurrentMemberProfile(token);
+            if (profile && typeof profile.id === 'string' && profile.id !== '') return profile.id;
+            return null;
+        } catch (error) {
+            // Never fails a fill — but say so at debug level, or the eventual
+            // "why did tag resolution stop firing?" has no thread to pull.
+            if (logger) {
+                logger
+                    .withCategory(logLabel || 'autoFill')
+                    .debug(
+                        `${logLabel || 'autoFill'}: identity lookup failed: ${(error && error.message) || error}`,
+                        null,
+                    );
+            }
+            return null;
+        }
+    })();
+
     if (memberIdCache.size >= MAX_MEMBER_ID_CACHE) memberIdCache.clear();
-    memberIdCache.set(token, id);
-    return id;
+    const entry = { promise, expiresAt: null };
+    memberIdCache.set(token, entry);
+    // Fire-and-forget by design: the caller awaits `promise` itself, this only
+    // stamps the expiry afterwards. `void` because the inner function catches
+    // everything and resolves to null, so there is no rejection to handle.
+    void promise.then((id) => {
+        if (id === null) entry.expiresAt = Date.now() + NEGATIVE_IDENTITY_TTL_MS;
+    });
+    return promise;
 };
 
 /**
@@ -136,7 +171,7 @@ const resolveTagsForTerms = async (terms, challenge, opts) => {
     const { token, searchTagAutocomplete, getCurrentMemberProfile, logger, logLabel } = opts;
     if (typeof searchTagAutocomplete !== 'function' || typeof getCurrentMemberProfile !== 'function') return [];
     try {
-        const memberId = await resolveMemberId(token, getCurrentMemberProfile);
+        const memberId = await resolveMemberId(token, getCurrentMemberProfile, logger, logLabel);
         if (!memberId) return [];
         return await resolveTermsToTags(terms, challenge, {
             token,
@@ -215,8 +250,9 @@ const fetchCandidatesForChallenge = async (
         logger
             .withCategory(logLabel)
             .warning(
-                `${logLabel}: ${logger.challengeTag(challenge)} has no matchable theme in its title; ` +
-                    `your most popular eligible photo will be submitted`,
+                `${logLabel}: no searchable theme for ${logger.challengeTag(challenge)} — its title is all ` +
+                    `boilerplate and no Must/Should Include Tag is usable; submitting your most popular ` +
+                    `eligible photo instead`,
                 null,
             );
     }
@@ -317,15 +353,18 @@ const fetchCandidatesForChallenge = async (
         // terms above came from the title. Reusing it keeps the two in lockstep
         // rather than re-deriving the precedence rule here.
         const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
-        const reason = fromUserTags
-            ? 'Your Must/Should Include Tags matched none of your photos.'
-            : 'No tag in your library matches this theme, so the most popular eligible photo will be used.';
+        // what happened -> why -> what next, once each. The searched terms are the
+        // STEMMED forms ("stair" for a challenge titled "Stairs"), so say that
+        // rather than letting it read like a typo of the user's own title.
+        const next = fromUserTags
+            ? 'Your Must/Should Include Tags matched none of your photos — widen or clear them to change this.'
+            : 'Tag some of your photos to match this theme to change this.';
         logger
             .withCategory(logLabel)
             .warning(
-                `${logLabel}: nothing on theme for ${logger.challengeTag(challenge)} — searched (${terms.join(', ')}) ` +
-                    `and found no matching library tag; falling back to the full library, so an off-theme photo may be ` +
-                    `submitted. ${reason}`,
+                `${logLabel}: nothing on theme for ${logger.challengeTag(challenge)} — no photo is tagged ` +
+                    `${terms.map((t) => `"${t}"`).join(' or ')} (matched as word stems) and no similar library tag ` +
+                    `exists, so your most popular eligible photo will be submitted instead. ${next}`,
                 null,
             );
     }
@@ -785,7 +824,7 @@ const runFillAttempt = async ({
     guardPick = null,
     onRefreshed = null,
 }) => {
-    const { logger, getEligiblePhotos, submitToChallenge } = deps;
+    const { logger, getEligiblePhotos, submitToChallenge, searchTagAutocomplete, getCurrentMemberProfile } = deps;
 
     let eligible;
     try {
@@ -793,7 +832,12 @@ const runFillAttempt = async ({
             challenge,
             token,
             { mustIncludeTags, shouldIncludeTags },
-            { getEligiblePhotos, logger },
+            // Forward the tag-resolution pair. This call rebuilds a fresh deps
+            // object rather than spreading `deps`, so anything not named here is
+            // silently dropped — which is how resolution can look wired (the
+            // orchestrator supplies it) while never reaching THIS path, the one
+            // that does ordinary auto-fill, emergency fill and manual fill.
+            { getEligiblePhotos, logger, searchTagAutocomplete, getCurrentMemberProfile },
         );
     } catch (error) {
         logger

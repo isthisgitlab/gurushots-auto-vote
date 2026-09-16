@@ -91,6 +91,34 @@ const isAvailable = async () => (await init()) != null;
 const stemToken = (t) => stem(String(t).toLowerCase());
 
 /**
+ * Vector for one token, tolerating the one known spelling divergence between
+ * the current stemmer and the shipped table's keys.
+ *
+ * The table is keyed by stems produced when the intermediate was generated, and
+ * that revision of stem() stripped '-es' unconditionally. The current stemmer
+ * only does so after a sibilant, correctly leaving the '-e' elsewhere — so a
+ * few stems now spell differently than their key: "buses" keys as `bus` but
+ * stems to `buse`, "clothes" keys as `cloth` but stems to `clothe`. Those
+ * lookups would silently return no vector, i.e. the semantic tier would go dark
+ * for exactly those themes.
+ *
+ * Retrying without a trailing 'e' is the precise shape of that divergence and
+ * costs one extra Map hit on a path that already missed. It only ever runs
+ * AFTER a miss, so it cannot shadow a correct key ("rose", "tree", "house" all
+ * hit first). Regenerating the 1.2 MB asset would need a network fetch of the
+ * source vectors; this is the offline-safe equivalent.
+ *
+ * @param {string} tok
+ * @returns {Float32Array|undefined}
+ */
+const vectorFor = (tok) => {
+    const key = stemToken(tok);
+    const hit = table.words.get(key);
+    if (hit) return hit;
+    return key.length > 3 && key.endsWith('e') ? table.words.get(key.slice(0, -1)) : undefined;
+};
+
+/**
  * Mean-pool the vectors of the in-vocabulary stems among `tokens`, then
  * normalize to a unit vector. Returns null when none of the tokens are in the
  * lexicon (no signal to contribute).
@@ -104,7 +132,7 @@ const embed = (tokens) => {
     const acc = new Float64Array(dims);
     let hits = 0;
     for (const tok of tokens) {
-        const vec = table.words.get(stemToken(tok));
+        const vec = vectorFor(tok);
         if (!vec) continue;
         for (let i = 0; i < dims; i++) acc[i] += vec[i];
         hits++;

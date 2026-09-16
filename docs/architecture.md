@@ -141,7 +141,12 @@ Domain terms used throughout, in reader's terms:
   theme. Without the second guard, `fac` → `["face","factory","manufacturing"]` would fill a "Faces"
   challenge from a factory photo.
 - Both deps are **optional** in `fetchCandidatesForChallenge`; omit either and behavior is exactly the
-  pre-resolution fallback. Nothing here can fail a fill.
+  pre-resolution fallback. Nothing here can fail a fill. **That optionality is a safety net, not the
+  shipping state** — every real path supplies them: `api/main.js` (the `api:` bundle `votingOrchestrator`
+  copies into `fillDeps`, and `joinDeps`), `ipc/actions.handlers.js` (manual Fill Now), and both mock
+  bundles. Note `runFillAttempt` rebuilds a fresh deps object for its
+  `fetchCandidatesForChallenge` call rather than spreading `deps`, so a dep added upstream must be named
+  there too or it is silently dropped for auto-fill, emergency fill and manual fill alike.
 
 ## 4. Semantic / lexicon
 

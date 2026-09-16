@@ -19,29 +19,31 @@ const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
-// Every distinct label the mock library carries, lowercased — the tag
-// vocabulary searchTagAutocomplete matches inside. Keep in sync with the label
-// sets in getEligiblePhotos; it is what makes resolution reproducible offline.
-const MOCK_LIBRARY_TAGS = [
-    'pink',
-    'flower',
-    'petal',
-    'plant',
-    'nature',
-    'landscape',
-    'tree',
-    'sky',
-    'architecture',
-    'building',
-    'urban',
-    'portrait',
-    'person',
-    'macro',
-    'animal',
-    'wildlife',
-    'bird',
-    'misc',
-];
+// The mock library's label sets, hoisted so the tag vocabulary below is DERIVED
+// from them instead of hand-maintained alongside them — a second list that must
+// be kept in sync is a list that eventually is not, and the whole point of the
+// mock is that searching "flow" finds no photos while autocomplete turns it
+// into "flower", which only holds while the two agree.
+const MOCK_PHOTO_LABELS = {
+    photo_pink_flower_001: ['Pink', 'Flower', 'Petal', 'Plant'],
+    photo_nature_landscape_002: ['Nature', 'Landscape', 'Tree', 'Sky'],
+    photo_urban_003: ['Architecture', 'Building', 'Urban'],
+    photo_recent_004: ['Portrait', 'Person'],
+    photo_pink_petal_005: ['Pink', 'Petal', 'Macro'],
+    photo_animal_006: ['Animal', 'Wildlife', 'Bird'],
+    photo_blocked_007: ['Pink', 'Flower'],
+    photo_old_008: ['Misc'],
+};
+
+// Every distinct tag the mock library carries, lowercased — what
+// searchTagAutocomplete matches inside.
+const MOCK_LIBRARY_TAGS = Array.from(
+    new Set(
+        Object.values(MOCK_PHOTO_LABELS)
+            .flat()
+            .map((label) => String(label).toLowerCase()),
+    ),
+).sort();
 
 const mockEntryTracker = createMemoryEntryTracker();
 
@@ -495,7 +497,7 @@ const mockApiClient = {
             const items = [
                 {
                     id: 'photo_pink_flower_001',
-                    labels: ['Pink', 'Flower', 'Petal', 'Plant'],
+                    labels: MOCK_PHOTO_LABELS.photo_pink_flower_001,
                     votes: 312,
                     views: 1820,
                     upload_date: now - 86400 * 2,
@@ -503,7 +505,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_nature_landscape_002',
-                    labels: ['Nature', 'Landscape', 'Tree', 'Sky'],
+                    labels: MOCK_PHOTO_LABELS.photo_nature_landscape_002,
                     votes: 178,
                     views: 1110,
                     upload_date: now - 86400 * 5,
@@ -511,7 +513,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_urban_003',
-                    labels: ['Architecture', 'Building', 'Urban'],
+                    labels: MOCK_PHOTO_LABELS.photo_urban_003,
                     votes: 89,
                     views: 640,
                     upload_date: now - 86400 * 7,
@@ -519,7 +521,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_recent_004',
-                    labels: ['Portrait', 'Person'],
+                    labels: MOCK_PHOTO_LABELS.photo_recent_004,
                     votes: 24,
                     views: 95,
                     upload_date: now - 3600,
@@ -527,7 +529,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_pink_petal_005',
-                    labels: ['Pink', 'Petal', 'Macro'],
+                    labels: MOCK_PHOTO_LABELS.photo_pink_petal_005,
                     votes: 401,
                     views: 2230,
                     upload_date: now - 86400 * 4,
@@ -535,7 +537,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_animal_006',
-                    labels: ['Animal', 'Wildlife', 'Bird'],
+                    labels: MOCK_PHOTO_LABELS.photo_animal_006,
                     votes: 156,
                     views: 980,
                     upload_date: now - 86400 * 10,
@@ -543,7 +545,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_blocked_007',
-                    labels: ['Pink', 'Flower'],
+                    labels: MOCK_PHOTO_LABELS.photo_blocked_007,
                     votes: 999,
                     views: 5000,
                     upload_date: now - 86400 * 1,
@@ -551,7 +553,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_old_008',
-                    labels: ['Misc'],
+                    labels: MOCK_PHOTO_LABELS.photo_old_008,
                     votes: 12,
                     views: 70,
                     upload_date: now - 86400 * 30,

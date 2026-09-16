@@ -131,7 +131,7 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
             },
         );
         expect(result).toEqual(LIBRARY);
-        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('no matchable theme in its title'), null);
+        expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('no searchable theme for'), null);
         // Nothing to resolve means no lookup is attempted at all.
         expect(searchTagAutocomplete).not.toHaveBeenCalled();
     });

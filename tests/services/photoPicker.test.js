@@ -91,6 +91,22 @@ describe('photoPicker', () => {
             // missed the lexicon, which carries 'lighthouse' and not 'lighthous'.
             expect(stem('lighthouses')).toBe('lighthouse');
         });
+        test('-o + es plurals keep a trailing e, and stay recoverable', () => {
+            // "heroes" is hero + es, so the ideal stem is "hero"; this stemmer
+            // yields "heroe". Adding 'o' to SIBILANT_ES_RE would fix it and
+            // BREAK "shoes" -> "sho" ("Shoe" is a real vision label, "hero" is
+            // not), so the residue is accepted rather than traded.
+            expect(stem('heroes')).toBe('heroe');
+            expect(stem('potatoes')).toBe('potatoe');
+            expect(stem('shoes')).toBe('shoe');
+            // It stays recoverable on every path that matters: the label still
+            // matches via the bounded-prefix branch, and tagResolver's backoff
+            // shortens the search term by one character. (The lexicon key is
+            // covered by the trailing-e retry in semantic/lexicon.js.)
+            expect(matches(stem('hero'), stem('heroes'))).toBe(true);
+            expect(matches(stem('potato'), stem('potatoes'))).toBe(true);
+        });
+
         test('-es plurals keep both letters after a sibilant base', () => {
             expect(stem('boxes')).toBe('box');
             expect(stem('dishes')).toBe('dish');
