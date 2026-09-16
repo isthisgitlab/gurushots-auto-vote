@@ -485,3 +485,30 @@ describe('join-challenge', () => {
         expect(result.status).toBe('needs-confirm');
     });
 });
+
+describe('get-auto-join-active', () => {
+    test('reports active:true when the master autoJoin setting is on', async () => {
+        settings.getEffectiveSetting = jest.fn((k) => (k === 'autoJoin' ? true : undefined));
+        settings.getTitleRules = jest.fn(() => []);
+        const handlers = buildHandlers();
+        const result = await handlers['get-auto-join-active']({});
+        expect(result).toEqual({ success: true, active: true });
+    });
+
+    test('reports active:false when off and no profile enables it', async () => {
+        settings.getEffectiveSetting = jest.fn(() => false);
+        settings.getTitleRules = jest.fn(() => []);
+        const handlers = buildHandlers();
+        const result = await handlers['get-auto-join-active']({});
+        expect(result).toEqual({ success: true, active: false });
+    });
+
+    test('fails closed to {success:false, active:false} when the check throws', async () => {
+        settings.getEffectiveSetting = jest.fn(() => {
+            throw new Error('boom');
+        });
+        const handlers = buildHandlers();
+        const result = await handlers['get-auto-join-active']({});
+        expect(result).toEqual({ success: false, active: false });
+    });
+});

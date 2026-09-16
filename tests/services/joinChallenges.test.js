@@ -41,6 +41,7 @@ const {
     runJoinPass,
     joinChallengeSingle,
     resolveJoinSetting,
+    isAutoJoinActive,
     inFlight,
 } = require('../../src/js/services/joinChallenges');
 
@@ -205,6 +206,27 @@ describe('performJoin — ordering & idempotency', () => {
         const deps = makeDeps({ acquireUnlockLock: jest.fn(() => ({ ok: true, release })) });
         await performJoin({ id: 17 }, 'tok', deps, 100);
         expect(release).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('isAutoJoinActive', () => {
+    test('true when the master default is on', () => {
+        settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? true : DEFAULT_SETTINGS[k]));
+        expect(isAutoJoinActive()).toBe(true);
+    });
+    test('true when a title profile enables it even with master off', () => {
+        settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
+        settings.getTitleRules.mockReturnValue([{ title: 'X', profile: 'p' }]);
+        settings.getTitleProfile.mockImplementation((t) =>
+            t === 'X' ? { name: 'p', values: { autoJoin: true } } : null,
+        );
+        expect(isAutoJoinActive()).toBe(true);
+    });
+    test('false when master off and no profile enables it', () => {
+        settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
+        settings.getTitleRules.mockReturnValue([{ title: 'Tagged', mustIncludeTags: ['x'] }]);
+        settings.getTitleProfile.mockReturnValue(null);
+        expect(isAutoJoinActive()).toBe(false);
     });
 });
 

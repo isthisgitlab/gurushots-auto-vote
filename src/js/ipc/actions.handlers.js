@@ -15,6 +15,7 @@ const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
 const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
+const { isAutoJoinActive } = require('../services/joinChallenges');
 const { findActiveChallenge } = require('../services/findActiveChallenge');
 
 // In-process guard that prevents two simultaneous mini-game runs on
@@ -288,6 +289,17 @@ const buildHandlers = () => ({
         } catch (error) {
             logger.withCategory('api').error('Error handling get-bankroll request:', error);
             return { success: false, error: error.message || 'Failed to read bankroll' };
+        }
+    },
+
+    // Whether auto-join is armed (master on OR a title profile enables it) —
+    // drives the header "auto-join" indicator. Settings-only, no auth needed.
+    'get-auto-join-active': async () => {
+        try {
+            return { success: true, active: isAutoJoinActive() === true };
+        } catch (error) {
+            logger.withCategory('join').error('Error handling get-auto-join-active request:', error);
+            return { success: false, active: false };
         }
     },
 

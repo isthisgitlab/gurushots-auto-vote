@@ -78,6 +78,35 @@ describe('StatusHeader', () => {
         expect(container.querySelector('[data-testid="status-header"]')).toBeNull();
     });
 
+    test('shows the auto-join indicator when armed AND autovote is running', () => {
+        wrap(
+            <StatusHeader
+                challenges={oneChallenge}
+                nextRunAt={BASE_MS + 60_000}
+                running={true}
+                autoJoinActive={true}
+            />,
+        );
+        expect(screen.getByTestId('status-header').textContent).toContain('statusHeaderAutoJoin');
+    });
+
+    test('hides the auto-join indicator when armed but autovote is NOT running (avoids implying it runs)', () => {
+        wrap(<StatusHeader challenges={oneChallenge} nextRunAt={null} running={false} autoJoinActive={true} />);
+        expect(screen.getByTestId('status-header').textContent).not.toContain('statusHeaderAutoJoin');
+    });
+
+    test('no auto-join indicator when inactive even while running', () => {
+        wrap(
+            <StatusHeader
+                challenges={oneChallenge}
+                nextRunAt={BASE_MS + 60_000}
+                running={true}
+                autoJoinActive={false}
+            />,
+        );
+        expect(screen.getByTestId('status-header').textContent).not.toContain('statusHeaderAutoJoin');
+    });
+
     test('counts active challenges and available boosts/turbos', () => {
         const challenges = [
             { id: 'a', member: { boost: { state: 'AVAILABLE_KEY' }, turbo: { state: 'WON' } } },

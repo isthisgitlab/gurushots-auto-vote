@@ -145,6 +145,9 @@
             statusHeaderTurbos: 'Turbo gatavi',
             statusHeaderNext: 'Nākamā',
             statusHeaderNotRunning: 'auto-balsošana izslēgta',
+            statusHeaderAutoJoin: 'auto-pievienošanās ieslēgta',
+            statusHeaderAutoJoinTitle:
+                'Auto-pievienošanās darbojas katrā balsošanas ciklā, kamēr auto-balsošana ir ieslēgta. Konfigurē to sadaļā Iestatījumi › Auto-pievienošanās.',
             statusHeaderNextApprox: 'aptuveni — pārrēķina katrā ciklā',
             settingHelpLabel: 'Ko tas nozīmē?',
             boostTime: 'Boost laiks',

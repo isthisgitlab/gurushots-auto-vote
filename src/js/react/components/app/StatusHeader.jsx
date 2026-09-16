@@ -73,7 +73,7 @@ function NextActionCountdown({ nextRunAt, running }) {
  * header body never re-renders on the countdown's clock. Responsive: the row
  * wraps on narrow viewports rather than using wide DaisyUI `stat` blocks.
  */
-export function StatusHeader({ challenges, nextRunAt, running, bankroll }) {
+export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoinActive }) {
     const { t } = useTranslation();
     const list = Array.isArray(challenges) ? challenges : [];
     const nowSec = Math.floor(Date.now() / 1000);
@@ -86,6 +86,8 @@ export function StatusHeader({ challenges, nextRunAt, running, bankroll }) {
     // and needs to see their coins before a paid join. Only fully idle + no
     // bankroll hides it.
     const hasBankroll = bankroll !== undefined && bankroll !== null;
+    // The auto-join badge only shows while autovote is running (see below), and
+    // when running the bar always renders — so no extra term is needed here.
     if (activeCount === 0 && !running && !hasBankroll) return null;
 
     return (
@@ -105,6 +107,22 @@ export function StatusHeader({ challenges, nextRunAt, running, bankroll }) {
                 <span className="text-base-content/60">{t('app.statusHeaderNext')}:</span>
                 <NextActionCountdown nextRunAt={nextRunAt} running={running} />
             </div>
+            {/* Only shown while autovote is RUNNING — that's when the join
+                pre-step actually executes. Showing it while autovote is off (a
+                pure settings check) would wrongly imply challenges are being
+                joined in the background. Own polite live region so arming/disarming
+                it mid-session is announced without making the 1Hz countdown noisy. */}
+            {autoJoinActive && running && (
+                <span
+                    className="badge badge-success badge-sm gap-1"
+                    role="status"
+                    aria-live="polite"
+                    title={t('app.statusHeaderAutoJoinTitle')}
+                >
+                    <span aria-hidden="true">🤝</span>
+                    {t('app.statusHeaderAutoJoin')}
+                </span>
+            )}
             {hasBankroll && <BankrollStats bankroll={bankroll} />}
         </div>
     );

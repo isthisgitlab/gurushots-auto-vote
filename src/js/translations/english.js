@@ -144,6 +144,9 @@
             statusHeaderTurbos: 'Turbos ready',
             statusHeaderNext: 'Next',
             statusHeaderNotRunning: 'autovote off',
+            statusHeaderAutoJoin: 'auto-join on',
+            statusHeaderAutoJoinTitle:
+                'Auto-join runs each voting cycle while autovote is on. Configure it in Settings › Auto Join.',
             statusHeaderNextApprox: 'approximate — recomputed each cycle',
             settingHelpLabel: 'What does this mean?',
             boostTime: 'Boost Time',

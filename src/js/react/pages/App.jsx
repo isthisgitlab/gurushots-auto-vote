@@ -6,6 +6,7 @@ import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
 import { useBankroll } from '@/api/useBankroll';
+import { useAutoJoinActive } from '@/api/useAutoJoinActive';
 import { Navbar } from '@/components/layout/Navbar';
 import { AutoVoteControls } from '@/components/app/AutoVoteControls';
 import { StatusHeader } from '@/components/app/StatusHeader';
@@ -29,6 +30,7 @@ function AppContent() {
     const { settings, loading: settingsLoading, updateSetting } = useSettings();
     const { challenges, refetch: refetchChallenges } = useChallenges();
     const { bankroll, refetch: refetchBankroll } = useBankroll();
+    const { active: autoJoinActive } = useAutoJoinActive();
     const autovote = useAutovote();
 
     // After a join changes state, refresh balances + the active-challenge list.
@@ -179,6 +181,7 @@ function AppContent() {
                         nextRunAt={autovote.nextRunAt}
                         running={autovote.running}
                         bankroll={bankroll}
+                        autoJoinActive={autoJoinActive}
                     />
 
                     {/* Challenges Section — the primary view (joined/active) */}

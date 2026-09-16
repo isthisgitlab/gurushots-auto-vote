@@ -97,6 +97,17 @@ const anyTitleProfileEnablesAutoJoin = () => {
     return false;
 };
 
+/**
+ * Whether auto-join is armed at all — the master default is on, OR some title
+ * profile enables it. Mirrors the pass short-circuit condition; used to drive
+ * the "auto-join active" UI indicator so it reflects the profile case too.
+ * @returns {boolean}
+ */
+const isAutoJoinActive = () => {
+    if (settings.getEffectiveSetting('autoJoin', null) === true) return true;
+    return anyTitleProfileEnablesAutoJoin();
+};
+
 /** Per-candidate scope/coin config, resolved by title (master → profile). */
 const resolveCandidateConfig = (challenge) => ({
     allowAll: resolveJoinSetting('autoJoinAll', challenge) === true,
@@ -483,6 +494,7 @@ const joinChallengeSingle = async (challengeId, token, deps, { spendCoins = fals
 module.exports = {
     runJoinPass,
     joinChallengeSingle,
+    isAutoJoinActive,
     // exported for tests
     performJoin,
     pickJoinPhoto,

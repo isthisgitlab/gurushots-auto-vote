@@ -90,6 +90,7 @@ const invokeChannels = [
     'get-bankroll',
     'get-member-challenges',
     'join-challenge',
+    'get-auto-join-active',
     'reload-window',
     'refresh-menu',
     // AutoUpdater
