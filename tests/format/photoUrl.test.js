@@ -30,8 +30,19 @@ describe('buildPhotoUrl', () => {
         ['a zero size', { size: 0 }, '/unsafe/200x200/'],
         ['a negative size', { size: -50 }, '/unsafe/200x200/'],
         ['a NaN size', { size: Number.NaN }, '/unsafe/200x200/'],
+        ['an Infinite size', { size: Number.POSITIVE_INFINITY }, '/unsafe/200x200/'],
+        // Regression: rounding after the positivity check let these through as
+        // a 0x0 transform request instead of falling back to the default.
+        ['a fraction that rounds to zero', { size: 0.4 }, '/unsafe/200x200/'],
+        ['the smallest positive fraction', { size: Number.MIN_VALUE }, '/unsafe/200x200/'],
     ])('handles %s', (_label, options, expected) => {
         expect(buildPhotoUrl(MEMBER, IMAGE, options)).toContain(expected);
+    });
+
+    it('never emits a zero-sized transform', () => {
+        for (const size of [0.1, 0.4, 0.49, 0, -1, Number.NaN]) {
+            expect(buildPhotoUrl(MEMBER, IMAGE, { size })).not.toContain('0x0');
+        }
     });
 
     // The ids are interpolated straight into a URL path, so a malformed one

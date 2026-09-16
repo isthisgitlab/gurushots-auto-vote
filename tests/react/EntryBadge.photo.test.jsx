@@ -52,6 +52,35 @@ describe('EntryBadge — entry thumbnail', () => {
         expect(screen.getByRole('button', { name: /photo/i })).toBeTruthy();
     });
 
+    // A challenge card renders one of these per entry, so a fixed label would
+    // repeat identically down a screen reader's control list.
+    test('the accessible name carries the rank so entries are distinguishable', () => {
+        renderBadge(photoEntry({ rank: 748 }));
+        expect(screen.getByRole('button', { name: /748/ })).toBeTruthy();
+    });
+
+    // A well-formed URL can still 404 (deleted photo, missing rendition) or
+    // fail offline. That must hide the chip, not leave a broken-image glyph.
+    test('a failed image load hides the chip entirely', async () => {
+        const RealImage = window.Image;
+        // Stand-in that reports failure as soon as a src is assigned.
+        window.Image = class {
+            set src(_value) {
+                queueMicrotask(() => this.onerror?.());
+            }
+        };
+        try {
+            renderBadge(photoEntry());
+            // Let the probe's microtask and the resulting re-render settle.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(document.querySelector('img')).toBeNull();
+            // The rest of the badge survives.
+            expect(screen.getByText(/42/)).toBeTruthy();
+        } finally {
+            window.Image = RealImage;
+        }
+    });
+
     test('hovering asks the CDN for a larger, uncropped render of the same photo', () => {
         renderBadge(photoEntry());
         expect(images()).toHaveLength(1);
@@ -61,13 +90,15 @@ describe('EntryBadge — entry thumbnail', () => {
         expect(images()).toContain(`https://photos.gurushots.com/unsafe/fit-in/400x400/${MEMBER}/3_${IMAGE}.jpg`);
     });
 
-    // The keyboard guarantee is that the photo is reachable WITHOUT a pointer:
-    // the chip is a native <button>, so Tab lands on it and Enter/Space
-    // activates it into the full-size dialog. The onFocus/onBlur peek is a
-    // pointer-parity nicety on top of that and is deliberately NOT asserted —
-    // neither fireEvent.focus, a native .focus(), nor a hand-dispatched
-    // focus/focusin (bubbling or not) reaches a preact/compat onFocus handler
-    // under happy-dom, so an assertion here would test the harness, not the app.
+    // The peek is pointer-only by design: driving it from onFocus meant Modal's
+    // focus restoration re-opened it every time the full-size view was closed.
+    // Keyboard access is via the chip itself — Tab to it, Enter for the modal.
+    test('focus alone does not open the peek', () => {
+        renderBadge(photoEntry());
+        screen.getByRole('button', { name: /photo/i }).focus();
+        expect(images()).toHaveLength(1);
+    });
+
     test('the photo is reachable without a pointer', () => {
         renderBadge(photoEntry());
         const button = screen.getByRole('button', { name: /photo/i });

@@ -63,7 +63,12 @@ const buildPhotoUrl = (memberId, imageId, options = {}) => {
         return null;
     }
     const { size = DEFAULT_EDGE_PX, fit = false } = options;
-    const edge = Number.isFinite(size) && size > 0 ? Math.min(Math.round(size), MAX_EDGE_PX) : DEFAULT_EDGE_PX;
+    // Rounded BEFORE the positivity check, not after: testing `size > 0` first
+    // lets a fraction under 0.5 pass the guard and then round down to 0, asking
+    // the CDN for a 0x0 transform. Every current caller passes a constant, so
+    // this is a trap for the next one rather than a live bug.
+    const requested = Number.isFinite(size) ? Math.round(size) : 0;
+    const edge = requested > 0 ? Math.min(requested, MAX_EDGE_PX) : DEFAULT_EDGE_PX;
     const geometry = fit ? `fit-in/${edge}x${edge}` : `${edge}x${edge}`;
     return `${PHOTO_CDN_ORIGIN}/unsafe/${geometry}/${memberId}/${RENDITION_PREFIX}${imageId}.jpg`;
 };
