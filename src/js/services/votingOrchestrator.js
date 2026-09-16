@@ -334,6 +334,10 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         getImageData: api.getImageData,
         submitToChallenge: api.submitToChallenge,
         getActiveChallenges: api.getActiveChallenges,
+        // Enables tag resolution on the themed-search miss path; omitting the
+        // pair simply falls back to the pre-resolution behavior.
+        searchTagAutocomplete: api.searchTagAutocomplete,
+        getCurrentMemberProfile: api.getCurrentMemberProfile,
     };
     // Clear the photo-stats failure breaker so a pass that hit a rate limit does
     // not disable stat enrichment for every later pass in the session.

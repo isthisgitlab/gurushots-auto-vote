@@ -184,3 +184,38 @@ describe('buildTable — v2 packed asset decode', () => {
         }
     });
 });
+
+describe('stem-spelling fallback', () => {
+    // The shipped table is keyed by stems from the revision of stem() that was
+    // current when the intermediate was generated, and that one stripped '-es'
+    // unconditionally. The stemmer now only does so after a sibilant, correctly
+    // keeping the '-e' elsewhere, so a few stems spell differently than the key
+    // that holds their vector.
+    beforeEach(async () => {
+        lexicon.__resetForTests();
+        await lexicon.isAvailable();
+    });
+
+    test('resolves a stem whose key predates the sibilant rule', () => {
+        // "buses" keys as `bus` but now stems to `buse`; "clothes" keys as
+        // `cloth` but stems to `clothe`. Without the retry the semantic tier
+        // goes dark for exactly those themes.
+        expect(lexicon.embed(['buse'])).not.toBeNull();
+        expect(lexicon.embed(['clothe'])).not.toBeNull();
+    });
+
+    test('does not invent a vector for a word that is simply absent', () => {
+        expect(lexicon.embed(['zzzqqq'])).toBeNull();
+        expect(lexicon.embed(['xqzzle'])).toBeNull();
+    });
+
+    test('never shadows a key that exists in its own right', () => {
+        // The retry only runs AFTER a miss, so "rose" must resolve to the rose
+        // vector rather than being rewritten to "ros".
+        const rose = lexicon.embed(['rose']);
+        const ros = lexicon.embed(['ros']);
+        expect(rose).not.toBeNull();
+        expect(ros).not.toBeNull();
+        expect(lexicon.cosine(rose, ros)).toBeLessThan(0.99);
+    });
+});

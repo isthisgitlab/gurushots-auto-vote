@@ -31,6 +31,7 @@ const {
     detectLetterPrefix,
 } = require('./photoPicker');
 const { getSemanticScores } = require('./semantic');
+const { resolveTermsToTags } = require('./tagResolver');
 const { enrichCandidates, resetPassState: resetPhotoStatsPassState } = require('./photoStats');
 const { oneLine } = require('../format/logSafe');
 const { getScheduleShift, remapScheduleRows } = require('./scheduleRemap');
@@ -84,6 +85,112 @@ const describeSubmitFailure = (raw) => {
     return stripHtml(JSON.stringify(raw)).slice(0, 300);
 };
 
+// Member identity for tag resolution, memoised per token.
+//
+// get_current_member_profile is a token-only read whose answer cannot change
+// within a run, while a fill pass touches every active challenge — so without
+// this the identity lookup would repeat on each one. Keyed by token so a
+// re-login naturally misses; bounded because an unbounded map keyed by a
+// credential is a leak waiting to happen, and one entry is the realistic case.
+const memberIdCache = new Map();
+const MAX_MEMBER_ID_CACHE = 4;
+
+// How long a FAILED identity lookup stays cached before it is retried.
+//
+// A successful id cannot change under a given token, so it is cached for the
+// process lifetime. A null is different: the common cause is a transient
+// network blip, not "this account cannot do it", and caching that permanently
+// would let one flaky request silently disable tag resolution for the whole
+// session — reverting to the off-theme fills this feature exists to stop, with
+// nothing in the UI to explain it. Expiring the negative keeps the retry cheap
+// (one call a minute at worst) without hammering a genuinely broken endpoint.
+const NEGATIVE_IDENTITY_TTL_MS = 60_000;
+
+/**
+ * The member id tag resolution needs, or null when it cannot be determined.
+ *
+ * Resolved from the session token rather than the login field on purpose: the
+ * app authenticates with an email, and search_autocomplete rejects an email
+ * ("Couldn't find username"). The profile's own id is what it accepts.
+ *
+ * @param {string} token
+ * @param {function} getCurrentMemberProfile
+ * @returns {Promise<string|null>}
+ */
+const resolveMemberId = async (token, getCurrentMemberProfile, logger, logLabel) => {
+    const cached = memberIdCache.get(token);
+    // A resolved id never expires; a cached null does (see NEGATIVE_IDENTITY_TTL_MS).
+    if (cached && (cached.expiresAt === null || cached.expiresAt > Date.now())) return cached.promise;
+
+    // Cache the PROMISE, not the value, so two fills racing on the same token
+    // share one request instead of both missing an empty cache and issuing it.
+    // A voting pass is sequential, but manual "Fill Now" is not.
+    const promise = (async () => {
+        try {
+            const profile = await getCurrentMemberProfile(token);
+            if (profile && typeof profile.id === 'string' && profile.id !== '') return profile.id;
+            return null;
+        } catch (error) {
+            // Never fails a fill — but say so at debug level, or the eventual
+            // "why did tag resolution stop firing?" has no thread to pull.
+            if (logger) {
+                logger
+                    .withCategory(logLabel || 'autoFill')
+                    .debug(
+                        `${logLabel || 'autoFill'}: identity lookup failed: ${(error && error.message) || error}`,
+                        null,
+                    );
+            }
+            return null;
+        }
+    })();
+
+    if (memberIdCache.size >= MAX_MEMBER_ID_CACHE) memberIdCache.clear();
+    const entry = { promise, expiresAt: null };
+    memberIdCache.set(token, entry);
+    // Fire-and-forget by design: the caller awaits `promise` itself, this only
+    // stamps the expiry afterwards. `void` because the inner function catches
+    // everything and resolves to null, so there is no rejection to handle.
+    void promise.then((id) => {
+        if (id === null) entry.expiresAt = Date.now() + NEGATIVE_IDENTITY_TTL_MS;
+    });
+    return promise;
+};
+
+/**
+ * Resolve challenge terms to real library tags, or [] when resolution is
+ * unavailable for any reason (deps not injected, no identity, nothing on
+ * theme). Never throws — the caller falls back exactly as it did before.
+ *
+ * @param {Array<string>} terms
+ * @param {object} challenge
+ * @param {object} opts
+ * @returns {Promise<Array<string>>}
+ */
+const resolveTagsForTerms = async (terms, challenge, opts) => {
+    const { token, searchTagAutocomplete, getCurrentMemberProfile, logger, logLabel } = opts;
+    if (typeof searchTagAutocomplete !== 'function' || typeof getCurrentMemberProfile !== 'function') return [];
+    try {
+        const memberId = await resolveMemberId(token, getCurrentMemberProfile, logger, logLabel);
+        if (!memberId) return [];
+        return await resolveTermsToTags(terms, challenge, {
+            token,
+            memberId,
+            searchTagAutocomplete,
+            logger,
+            logLabel,
+        });
+    } catch (error) {
+        logger
+            .withCategory(logLabel)
+            .debug(`${logLabel}: tag resolution unavailable: ${(error && error.message) || error}`, null);
+        return [];
+    }
+};
+
+// Test-only: drop the memoised identity between cases.
+const __resetMemberIdCache = () => memberIdCache.clear();
+
 /**
  * Fetch the eligible-photo candidates for a challenge, narrowed to its theme.
  *
@@ -103,16 +210,21 @@ const describeSubmitFailure = (raw) => {
  * @param {object} challenge - challenge with id and (optional) title
  * @param {string} token
  * @param {{mustIncludeTags?: string[]|null, shouldIncludeTags?: string[]|null}} tagOpts
- * @param {{getEligiblePhotos: function, logger: object, logLabel?: string}} deps
+ * @param {{getEligiblePhotos: function, logger: object, logLabel?: string,
+ *   searchTagAutocomplete?: function, getCurrentMemberProfile?: function}} deps
  *   logLabel: the calling flow ('autoFill' default, or 'join') — used as the log
  *   category and message prefix so a join's messages aren't attributed to auto-fill.
+ *   searchTagAutocomplete / getCurrentMemberProfile: OPTIONAL. Supplying both
+ *   enables tag resolution on the miss path (see the retry below). Omit either
+ *   and the function behaves exactly as it did before resolution existed, which
+ *   is what keeps every existing caller and test valid.
  * @returns {Promise<Array<object>>}
  */
 const fetchCandidatesForChallenge = async (
     challenge,
     token,
     tagOpts,
-    { getEligiblePhotos, logger, logLabel = 'autoFill' },
+    { getEligiblePhotos, logger, logLabel = 'autoFill', searchTagAutocomplete, getCurrentMemberProfile },
 ) => {
     const challengeId = challenge.id;
     const terms = buildSearchTerms(challenge, tagOpts);
@@ -128,8 +240,26 @@ const fetchCandidatesForChallenge = async (
                 `${logLabel}: letter challenge "${letter.toUpperCase()}" for ${logger.challengeTag(challenge)}; fetching full library for client-side tag filtering`,
                 null,
             );
+    } else if (terms.length === 0) {
+        // No searchable term at all: every word in the title was boilerplate or a
+        // contest-cadence word ("Guru of The Week"). There is no theme to match,
+        // so the whole library is ranked and the most popular eligible photo is
+        // submitted. That is the best available answer rather than a failure —
+        // but say so, because from the outside it looks identical to the bug
+        // where a theme existed and was missed.
+        logger
+            .withCategory(logLabel)
+            .warning(
+                `${logLabel}: no searchable theme for ${logger.challengeTag(challenge)} — its title is all ` +
+                    `boilerplate and no Must/Should Include Tag is usable; submitting your most popular ` +
+                    `eligible photo instead`,
+                null,
+            );
     }
-    if (terms.length > 0) {
+    // One search per term, unioned by id. Extracted so the resolution retry
+    // below runs the identical fetch/dedupe/fault-tolerance path rather than a
+    // second copy of it.
+    const searchUnion = async (searchTerms) => {
         // Run the per-term searches concurrently — they're independent reads and
         // serialising them would add a round-trip of latency per extra term to
         // the fill path (which can run close to a deadline). allSettled keeps the
@@ -138,7 +268,7 @@ const fetchCandidatesForChallenge = async (
         const settled = await Promise.allSettled(
             // Per-term searches are single-page (no walk), so they never emit the
             // library-walk warning that carries the label — no logLabel needed here.
-            terms.map((term) => getEligiblePhotos(challengeId, token, { search: term })),
+            searchTerms.map((term) => getEligiblePhotos(challengeId, token, { search: term })),
         );
         const byId = new Map();
         settled.forEach((result, i) => {
@@ -147,7 +277,7 @@ const fetchCandidatesForChallenge = async (
                 logger
                     .withCategory(logLabel)
                     .debug(
-                        `${logLabel}: search "${terms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && reason.message) || reason}`,
+                        `${logLabel}: search "${searchTerms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && reason.message) || reason}`,
                         null,
                     );
                 return;
@@ -164,38 +294,79 @@ const fetchCandidatesForChallenge = async (
                 }
             }
         });
-        const union = Array.from(byId.values());
-        if (union.some((p) => p && p.permission && p.permission.allowed === true && p.id)) {
+        return Array.from(byId.values());
+    };
+    const hasEligible = (list) => list.some((p) => p && p.permission && p.permission.allowed === true && p.id);
+
+    if (terms.length > 0) {
+        const union = await searchUnion(terms);
+        if (hasEligible(union)) {
             return union;
         }
-        // Terms existed but the themed search surfaced no eligible photo, so the
-        // fill is about to relax to the full library and may submit an off-theme
-        // photo. How loud that should be depends entirely on WHERE the terms came
-        // from:
+
+        // The exact-tag search found nothing. Before giving up on the theme
+        // entirely, ask the member's own tag vocabulary what these terms are
+        // actually called: get_photos_private matches a tag EXACTLY, so a
+        // "Stairs" challenge searching "stair" misses a library full of
+        // "staircase". search_autocomplete matches inside a tag and answers
+        // "stair" -> ["staircase"], which the search CAN use.
         //
-        //   - From the user's own Must/Should Include Tags: their configuration is
-        //     matching nothing. That is actionable and worth a warning — it is the
-        //     only clue they get for "why did it submit that photo?".
-        //   - From the challenge title (the default: no tags configured): this is
-        //     routine. The picker's own header notes that a title often cannot be
-        //     matched at all — vision labels are concrete nouns, titles are
-        //     abstract. Warning here would fire on the common path for every user
-        //     who never touched tag settings and train them to ignore warnings.
+        // This is strictly a repair of the miss path — on the happy path above
+        // we have already returned, so a fill that works today pays nothing.
+        const resolved = await resolveTagsForTerms(terms, challenge, {
+            token,
+            searchTagAutocomplete,
+            getCurrentMemberProfile,
+            logger,
+            logLabel,
+        });
+        if (resolved.length > 0) {
+            const resolvedUnion = await searchUnion(resolved);
+            if (hasEligible(resolvedUnion)) {
+                logger
+                    .withCategory(logLabel)
+                    .info(
+                        `${logLabel}: resolved theme (${terms.join(', ')}) to library tag(s) ${resolved.map((t) => `"${t}"`).join(', ')} for ${logger.challengeTag(challenge)} — ${resolvedUnion.length} on-theme candidate(s)`,
+                        null,
+                    );
+                return resolvedUnion;
+            }
+        }
+        // Nothing matched the theme: the exact-tag search missed AND resolving
+        // those terms against the member's own tag vocabulary produced nothing
+        // usable. The fill is about to relax to the full library, where every
+        // candidate ties at zero on theme and popularity alone decides — i.e.
+        // an off-theme photo is about to be submitted.
+        //
+        // This warns rather than whispers. It used to debug-log the title case as
+        // "routine", on the reasoning that abstract titles can't be matched and a
+        // warning would cry wolf. Resolution changes that calculus: a concrete
+        // subject now has a real chance of being found, so reaching here means
+        // either the theme is genuinely unmatchable ("Guru of The Week") or the
+        // library truly has nothing on it. Both are worth seeing, because the
+        // alternative is the user watching an unrelated photo get submitted with
+        // no explanation anywhere — which is exactly the report that prompted
+        // this. The text names the terms so the two cases are distinguishable.
         //
         // buildSearchTerms with a null challenge yields ONLY the tag-derived terms
         // (its precedence is must -> should -> title), so an empty result proves the
         // terms above came from the title. Reusing it keeps the two in lockstep
         // rather than re-deriving the precedence rule here.
         const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
-        const message =
-            `${logLabel}: themed search (${terms.join(', ')}) for ${logger.challengeTag(challenge)} found no eligible photos; ` +
-            `falling back to the full library — an off-theme photo may be submitted`;
-        const log = logger.withCategory(logLabel);
-        if (fromUserTags) {
-            log.warning(`${message}. Your Must/Should Include Tags matched none of your photos.`, null);
-        } else {
-            log.debug(message, null);
-        }
+        // what happened -> why -> what next, once each. The searched terms are the
+        // STEMMED forms ("stair" for a challenge titled "Stairs"), so say that
+        // rather than letting it read like a typo of the user's own title.
+        const next = fromUserTags
+            ? 'Your Must/Should Include Tags matched none of your photos — widen or clear them to change this.'
+            : 'Tag some of your photos to match this theme to change this.';
+        logger
+            .withCategory(logLabel)
+            .warning(
+                `${logLabel}: nothing on theme for ${logger.challengeTag(challenge)} — no photo is tagged ` +
+                    `${terms.map((t) => `"${t}"`).join(' or ')} (matched as word stems) and no similar library tag ` +
+                    `exists, so your most popular eligible photo will be submitted instead. ${next}`,
+                null,
+            );
     }
     // paginate: the unfiltered fallback is the ONLY path that walks the whole
     // library. A single page is the 100 most recently uploaded eligible photos,
@@ -653,7 +824,7 @@ const runFillAttempt = async ({
     guardPick = null,
     onRefreshed = null,
 }) => {
-    const { logger, getEligiblePhotos, submitToChallenge } = deps;
+    const { logger, getEligiblePhotos, submitToChallenge, searchTagAutocomplete, getCurrentMemberProfile } = deps;
 
     let eligible;
     try {
@@ -661,7 +832,12 @@ const runFillAttempt = async ({
             challenge,
             token,
             { mustIncludeTags, shouldIncludeTags },
-            { getEligiblePhotos, logger },
+            // Forward the tag-resolution pair. This call rebuilds a fresh deps
+            // object rather than spreading `deps`, so anything not named here is
+            // silently dropped — which is how resolution can look wired (the
+            // orchestrator supplies it) while never reaching THIS path, the one
+            // that does ordinary auto-fill, emergency fill and manual fill.
+            { getEligiblePhotos, logger, searchTagAutocomplete, getCurrentMemberProfile },
         );
     } catch (error) {
         logger
@@ -1269,6 +1445,7 @@ module.exports = {
     getEffectiveScheduleRows,
     getSlotsRemaining,
     fetchCandidatesForChallenge,
+    __resetMemberIdCache,
     resolveSemanticScores,
     describeSubmitFailure,
     refreshChallengeState,

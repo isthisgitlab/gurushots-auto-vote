@@ -19,6 +19,32 @@ const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
+// The mock library's label sets, hoisted so the tag vocabulary below is DERIVED
+// from them instead of hand-maintained alongside them — a second list that must
+// be kept in sync is a list that eventually is not, and the whole point of the
+// mock is that searching "flow" finds no photos while autocomplete turns it
+// into "flower", which only holds while the two agree.
+const MOCK_PHOTO_LABELS = {
+    photo_pink_flower_001: ['Pink', 'Flower', 'Petal', 'Plant'],
+    photo_nature_landscape_002: ['Nature', 'Landscape', 'Tree', 'Sky'],
+    photo_urban_003: ['Architecture', 'Building', 'Urban'],
+    photo_recent_004: ['Portrait', 'Person'],
+    photo_pink_petal_005: ['Pink', 'Petal', 'Macro'],
+    photo_animal_006: ['Animal', 'Wildlife', 'Bird'],
+    photo_blocked_007: ['Pink', 'Flower'],
+    photo_old_008: ['Misc'],
+};
+
+// Every distinct tag the mock library carries, lowercased — what
+// searchTagAutocomplete matches inside.
+const MOCK_LIBRARY_TAGS = Array.from(
+    new Set(
+        Object.values(MOCK_PHOTO_LABELS)
+            .flat()
+            .map((label) => String(label).toLowerCase()),
+    ),
+).sort();
+
 const mockEntryTracker = createMemoryEntryTracker();
 
 // Session-stable mock data cache to prevent regeneration within same app run
@@ -471,7 +497,7 @@ const mockApiClient = {
             const items = [
                 {
                     id: 'photo_pink_flower_001',
-                    labels: ['Pink', 'Flower', 'Petal', 'Plant'],
+                    labels: MOCK_PHOTO_LABELS.photo_pink_flower_001,
                     votes: 312,
                     views: 1820,
                     upload_date: now - 86400 * 2,
@@ -479,7 +505,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_nature_landscape_002',
-                    labels: ['Nature', 'Landscape', 'Tree', 'Sky'],
+                    labels: MOCK_PHOTO_LABELS.photo_nature_landscape_002,
                     votes: 178,
                     views: 1110,
                     upload_date: now - 86400 * 5,
@@ -487,7 +513,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_urban_003',
-                    labels: ['Architecture', 'Building', 'Urban'],
+                    labels: MOCK_PHOTO_LABELS.photo_urban_003,
                     votes: 89,
                     views: 640,
                     upload_date: now - 86400 * 7,
@@ -495,7 +521,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_recent_004',
-                    labels: ['Portrait', 'Person'],
+                    labels: MOCK_PHOTO_LABELS.photo_recent_004,
                     votes: 24,
                     views: 95,
                     upload_date: now - 3600,
@@ -503,7 +529,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_pink_petal_005',
-                    labels: ['Pink', 'Petal', 'Macro'],
+                    labels: MOCK_PHOTO_LABELS.photo_pink_petal_005,
                     votes: 401,
                     views: 2230,
                     upload_date: now - 86400 * 4,
@@ -511,7 +537,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_animal_006',
-                    labels: ['Animal', 'Wildlife', 'Bird'],
+                    labels: MOCK_PHOTO_LABELS.photo_animal_006,
                     votes: 156,
                     views: 980,
                     upload_date: now - 86400 * 10,
@@ -519,7 +545,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_blocked_007',
-                    labels: ['Pink', 'Flower'],
+                    labels: MOCK_PHOTO_LABELS.photo_blocked_007,
                     votes: 999,
                     views: 5000,
                     upload_date: now - 86400 * 1,
@@ -527,7 +553,7 @@ const mockApiClient = {
                 },
                 {
                     id: 'photo_old_008',
-                    labels: ['Misc'],
+                    labels: MOCK_PHOTO_LABELS.photo_old_008,
                     votes: 12,
                     views: 70,
                     upload_date: now - 86400 * 30,
@@ -539,10 +565,13 @@ const mockApiClient = {
             if (search === '') {
                 return items;
             }
+            // EXACT tag match, matching the live endpoint. get_photos_private
+            // answers "staircase" with 23 photos but "stair" and "stairs" with
+            // none — it is a tag lookup, not a text search. This used to be a
+            // substring test, which quietly made mock mode SUCCEED on terms the
+            // real API rejects and hid the whole reason tagResolver exists.
             return items.filter((item) =>
-                (Array.isArray(item.labels) ? item.labels : []).some((label) =>
-                    String(label).toLowerCase().includes(search),
-                ),
+                (Array.isArray(item.labels) ? item.labels : []).some((label) => String(label).toLowerCase() === search),
             );
         },
     ),
@@ -685,6 +714,46 @@ const mockApiClient = {
     ),
 
     /**
+     * Simulate /rest/get_current_member_profile — the token-only identity read
+     * that supplies member_id for searchTagAutocomplete below.
+     */
+    getCurrentMemberProfile: mockMethod(
+        {
+            name: 'getCurrentMemberProfile',
+            tokenArg: 0,
+            onNoToken: () => null,
+        },
+        async () => {
+            await simulateApiResponse({}, 150);
+            return { id: 'mock_member_c1d1f773', userName: 'mockguru' };
+        },
+    ),
+
+    /**
+     * Simulate /rest/search_autocomplete: SUBSTRING match over the tags the
+     * mock library actually carries, capped like the live endpoint.
+     *
+     * The pairing with getEligiblePhotos above is the point — that one matches
+     * a tag exactly, this one matches inside it — so mock mode reproduces the
+     * real resolution problem: searching "flow" finds no photos, autocomplete
+     * turns it into "flower", and THAT finds photos.
+     */
+    searchTagAutocomplete: mockMethod(
+        {
+            name: 'searchTagAutocomplete',
+            tokenArg: 0,
+            onNoToken: () => [],
+        },
+        async (token, term) => {
+            await simulateApiResponse({}, 150);
+            const text = typeof term === 'string' ? term.trim().toLowerCase() : '';
+            // The live endpoint answers nothing under three characters.
+            if (text.length < 3) return [];
+            return MOCK_LIBRARY_TAGS.filter((tag) => tag.includes(text)).slice(0, 5);
+        },
+    ),
+
+    /**
      * Simulate /rest/coins_unlock. Fixture 900004 fails (success:false) so the
      * unlock-failure and charged-pending-submit paths can be tested.
      */
@@ -768,6 +837,8 @@ const mockApiClient = {
                 getImageData: mockApiClient.getImageData,
                 submitToChallenge: mockApiClient.submitToChallenge,
                 runTurboMiniGame: mockApiClient.runTurboMiniGame,
+                searchTagAutocomplete: mockApiClient.searchTagAutocomplete,
+                getCurrentMemberProfile: mockApiClient.getCurrentMemberProfile,
             },
             cleanupStaleMetadata: null,
             // In-memory for the same reason cleanupStaleMetadata is null: the
@@ -789,6 +860,8 @@ const mockJoinDeps = () => ({
     coinsUnlock: mockApiClient.coinsUnlock,
     submitToChallenge: mockApiClient.submitToChallenge,
     getEligiblePhotos: mockApiClient.getEligiblePhotos,
+    searchTagAutocomplete: mockApiClient.searchTagAutocomplete,
+    getCurrentMemberProfile: mockApiClient.getCurrentMemberProfile,
     // No joinStateStore / acquireUnlockLock: mock spends no real coins and runs
     // single-process, so idempotency persistence and the cross-process lock are
     // unnecessary (mirrors cleanupStaleMetadata:null).

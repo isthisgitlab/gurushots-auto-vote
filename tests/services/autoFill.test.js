@@ -107,6 +107,38 @@ const makeSettings = ({
     }),
 });
 
+describe('tag-resolution deps reach the real fill path', () => {
+    // REGRESSION: runFillAttempt rebuilds a fresh deps object for
+    // fetchCandidatesForChallenge instead of spreading `deps`, so a dep the
+    // orchestrator supplies is silently dropped unless it is named there too.
+    // That made tag resolution live for the join flow while never firing for
+    // ordinary auto-fill — the exact flow the feature exists to fix — and the
+    // fallback warning then blamed "no tag in your library" for a lookup that
+    // was never attempted. Drive the real entry point, not
+    // fetchCandidatesForChallenge directly, or the gap is invisible.
+    test('maybeAutoFillChallenge forwards searchTagAutocomplete and getCurrentMemberProfile', async () => {
+        const challenge = makeChallenge({ closeIn: 300, entries: [{ id: 'e1' }] });
+        const searchTagAutocomplete = jest.fn(async () => []);
+        const getCurrentMemberProfile = jest.fn(async () => ({ id: 'member-hash', userName: 'guru' }));
+
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            // Themed searches miss; the unfiltered library still has a photo, so
+            // the fill proceeds and the resolution attempt is reached.
+            getEligiblePhotos: jest.fn(async (_id, _tok, opts) =>
+                opts && opts.search ? [] : [allowedPhoto('p1', ['Misc'])],
+            ),
+            submitToChallenge: jest.fn(async () => ({ success: true })),
+            searchTagAutocomplete,
+            getCurrentMemberProfile,
+        });
+
+        expect(getCurrentMemberProfile).toHaveBeenCalled();
+        expect(searchTagAutocomplete).toHaveBeenCalled();
+    });
+});
+
 describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('returns disabled when autoFill setting is false', async () => {
         const challenge = makeChallenge({ entries: [{ id: 'e1' }] });
@@ -1529,7 +1561,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     // nouns, titles are abstract) and must stay at debug — otherwise every user who
     // never configured tags gets warnings on the common path and learns to ignore
     // them, which would bury the case that actually matters.
-    describe('themed-search-empty fallback — log level depends on the term source', () => {
+    describe('themed-search-empty fallback — always warns, reason depends on the term source', () => {
         // makeLogger() returns a fresh object per withCategory() call, so the spies
         // are unreachable. Use a logger with a stable category object instead.
         const makeSpyLogger = () => {
@@ -1545,7 +1577,12 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         const emptySearch = () =>
             jest.fn(async (_id, _tok, opts) => (opts && opts.search ? [] : [allowedPhoto('full', ['Misc'])]));
 
-        test('terms from the challenge title → debug, not warning (the common path)', async () => {
+        test('terms from the challenge title → warning naming the searched terms', async () => {
+            // This used to debug-log, on the reasoning that an abstract title is
+            // unmatchable and warning would cry wolf. Tag resolution changed that:
+            // reaching the fallback now means the term was searched AND no library
+            // tag could be resolved for it, so the off-theme submission that
+            // follows is worth surfacing rather than burying.
             const { logger, category } = makeSpyLogger();
             await fetchCandidatesForChallenge(
                 { id: 'c1', title: 'Pink In Nature' },
@@ -1553,9 +1590,12 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
                 {}, // no user tags — terms derive from the title
                 { getEligiblePhotos: emptySearch(), logger },
             );
-            expect(category.warning).not.toHaveBeenCalled();
-            expect(category.debug).toHaveBeenCalledWith(
-                expect.stringContaining('falling back to the full library'),
+            expect(category.warning).toHaveBeenCalledWith(
+                expect.stringContaining('nothing on theme for [Challenge c1]'),
+                null,
+            );
+            expect(category.warning).toHaveBeenCalledWith(
+                expect.stringContaining('Tag some of your photos to match this theme'),
                 null,
             );
         });

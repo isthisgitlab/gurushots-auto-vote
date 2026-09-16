@@ -201,7 +201,16 @@ const pickJoinPhoto = async (challenge, token, deps) => {
             { mustIncludeTags, shouldIncludeTags },
             // logLabel 'join' so photo-library warnings are attributed to the join
             // flow, not auto-fill (the picker is shared).
-            { getEligiblePhotos: deps.getEligiblePhotos, logger, logLabel: 'join' },
+            {
+                getEligiblePhotos: deps.getEligiblePhotos,
+                logger,
+                logLabel: 'join',
+                // Passed through so a join narrows to on-theme photos the same
+                // way a fill does — the picker is shared, so the candidate set
+                // has to be too.
+                searchTagAutocomplete: deps.searchTagAutocomplete,
+                getCurrentMemberProfile: deps.getCurrentMemberProfile,
+            },
         );
     } catch (error) {
         cat().warning(`could not read eligible photos for ${challenge?.id}: ${error?.message || error}`, null);

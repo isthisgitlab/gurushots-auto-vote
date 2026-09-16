@@ -10,6 +10,7 @@ const { getVoteImages, submitVotes } = require('./voting');
 const { applyBoost, applyBoostToEntry } = require('./boost');
 const { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } = require('./turbo');
 const { getEligiblePhotos, getImageData, submitToChallenge } = require('./submissions');
+const { getCurrentMemberProfile, searchTagAutocomplete } = require('./tags');
 const { getMemberChallenges, getBankroll, coinsUnlock } = require('./join');
 const { cleanupStaleMetadata } = require('../metadata');
 const { sleep, getRandomDelay } = require('../timing');
@@ -33,6 +34,11 @@ const joinDeps = {
     coinsUnlock,
     submitToChallenge,
     getEligiblePhotos,
+    // Tag resolution for the join flow's photo pick. pickJoinPhoto reads these
+    // off deps and no-ops without them, so omitting the pair here silently
+    // reverts joins to unfiltered-library behavior.
+    getCurrentMemberProfile,
+    searchTagAutocomplete,
     joinStateStore,
     acquireUnlockLock,
 };
@@ -149,6 +155,10 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
             getImageData,
             submitToChallenge,
             runTurboMiniGame,
+            // votingOrchestrator copies these into fillDeps; without them the
+            // auto-fill path loses tag resolution in real mode only.
+            getCurrentMemberProfile,
+            searchTagAutocomplete,
         },
         cleanupStaleMetadata,
         // Real mode persists new-entry snapshots to metadata.json, where

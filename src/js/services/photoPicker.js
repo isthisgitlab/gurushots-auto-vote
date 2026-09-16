@@ -166,6 +166,18 @@ const STOPWORDS = new Set([
     'earning',
     'participation',
     'participate',
+    // Recurring-award / cadence words. "Photographer of the Week", "Guru of The
+    // Week" name a CONTEST PERIOD, never a visual subject, and left in they are
+    // the whole theme — a challenge whose only keyword is "week" scores random
+    // photos at 0.48 purely on vector noise, which then outranks the user's own
+    // best photo on a challenge nothing can legitimately match.
+    'week',
+    'weekly',
+    'month',
+    'monthly',
+    'year',
+    'yearly',
+    'daily',
     // Welcome-message boilerplate verbs
     'capture',
     'captured',
@@ -240,6 +252,12 @@ const STOPWORDS = new Set([
 
 const isPureDigit = (token) => /^\d+$/.test(token);
 
+// Bases that take '-es' rather than a bare '-s'. 'ss' is listed explicitly
+// because a single trailing 's' is ambiguous — 'glass'+es vs 'hous'+e+s — and
+// only the doubled form is reliably a sibilant base ('glasses'→'glass' while
+// 'houses'→'house').
+const SIBILANT_ES_RE = /(?:x|z|ch|sh|ss)$/;
+
 /**
  * Light suffix stemmer covering the common inflected forms that show
  * up in challenge text vs. vision labels: plurals (flowers→flower),
@@ -247,14 +265,41 @@ const isPureDigit = (token) => /^\d+$/.test(token);
  * (categories→category). Keeps the algorithm dependency-free; the residue it
  * leaves ('runn' from 'running') is absorbed by the bounded-prefix branch of
  * matches(), which is what the MAX_STEM_PREFIX_DELTA allowance exists for.
+ *
+ * SIBILANT RULE (see SIBILANT_ES_RE): '-es' is only a plural SUFFIX after a
+ * sibilant — box→boxes, dish→dishes, church→churches, glass→glasses. A word
+ * that already ends in '-e' just takes '-s' (face→faces, tree→trees,
+ * lighthouse→lighthouses), so stripping a blanket two characters there ate a
+ * real letter and produced a non-word: 'faces'→'fac', 'trees'→'tre',
+ * 'lighthouses'→'lighthous'. That was not cosmetic. Those stems are what the
+ * auto-fill search term and the semantic lexicon key are BOTH derived from, so
+ * a "Lighthouses" challenge searched the exact tag 'lighthous' (no such tag —
+ * zero candidates, fell back to the whole library) AND missed the lexicon,
+ * which has 'lighthouse' but no 'lighthous'. Both failures disappear with the
+ * correct stem.
  */
 const stem = (word) => {
     if (typeof word !== 'string' || word.length < 4) return word || '';
     const w = word;
     if (w.length > 5 && w.endsWith('ing')) return w.slice(0, -3);
-    if (w.length > 5 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
+    // length > 4, not > 5: at 5 this rule was skipped entirely and the word fell
+    // through to the '-es' branch, so "skies" stemmed to "ski" (and, once the
+    // sibilant rule landed, "skie") — never "sky". A "Dramatic Skies" challenge
+    // therefore could not match a "Sky" label at all. Every 5-letter '-ies' word
+    // is a y-plural (skies, flies, cries, tries, spies); the '-ie' + s words that
+    // this rule genuinely mis-stems (movies, cookies) are all 6+ and were already
+    // mis-stemmed before, so widening to 5 adds no new failure.
+    if (w.length > 4 && w.endsWith('ies')) return `${w.slice(0, -3)}y`;
     if (w.length > 4 && w.endsWith('ed')) return w.slice(0, -2);
-    if (w.length > 4 && w.endsWith('es')) return w.slice(0, -2);
+    if (w.length > 4 && w.endsWith('es')) {
+        // Drop the whole '-es' only when what precedes it is a sibilant, i.e.
+        // the base could not have taken a bare '-s'. Otherwise the base ends
+        // in '-e' and only the '-s' is inflection. 'buses'→'buse' is the known
+        // residue of not having a dictionary; the bounded-prefix branch of
+        // matches() absorbs it exactly as it absorbs 'runn'.
+        const base = w.slice(0, -2);
+        return SIBILANT_ES_RE.test(base) ? base : w.slice(0, -1);
+    }
     if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
     return w;
 };
@@ -299,6 +344,41 @@ const buildChallengeKeywords = (challenge) => {
     // url + title first, so if the cap bites it is the long welcome_message prose
     // that gets dropped, never the title — which is where the subject actually is.
     return Array.from(new Set(all)).slice(0, MAX_CHALLENGE_KEYWORDS);
+};
+
+/**
+ * The challenge's SUBJECT words — url + title only, no welcome_message.
+ *
+ * FOR THE SEMANTIC TIER ONLY. That tier mean-pools its keywords into a single
+ * theme vector, and a welcome_message is prose: the live "Stairs" challenge
+ * reads "Stairs are both practical and ornamental... made of wood or stone...
+ * with people on them", which contributes thirteen words that are examples of
+ * VARIATION, not the subject. Averaging them in drags the theme vector off the
+ * subject and toward generic scene description — measured against the shipped
+ * lexicon, the similarity between that challenge and the tag "staircase" falls
+ * from 0.94 to 0.25, i.e. from a confident match to below the floor. The effect
+ * is the challenge-side twin of the label-bag dilution documented in
+ * services/semantic/index.js.
+ *
+ * The lexical tier keeps using buildChallengeKeywords: there each keyword is
+ * matched independently, so extra words can only add weak evidence — they
+ * cannot drag a vector around. Only pooling is fragile to them.
+ *
+ * Returns [] when url+title carry no subject, and deliberately does NOT fall
+ * back to the welcome_message. An empty result here is informative: every
+ * stopword-surviving word has been stripped, which is what a meta-challenge
+ * ("Guru of The Week") looks like. Handing such a challenge the body prose
+ * instead would rebuild exactly the diluted vector this function exists to
+ * avoid, and would score photos against marketing copy. With [] the semantic
+ * tier goes inert and the honest signals — lexical match, then popularity —
+ * decide, which is the right answer for a challenge with no visual subject.
+ *
+ * @param {object} challenge
+ * @returns {string[]}
+ */
+const buildThemeKeywords = (challenge) => {
+    const subject = Array.from(new Set([...tokenise(challenge?.url), ...tokenise(challenge?.title)]));
+    return subject.slice(0, MAX_CHALLENGE_KEYWORDS);
 };
 
 // Minimum stem length for the fuzzy (prefix) branch of matches(). Below this a
@@ -378,10 +458,17 @@ const tokeniseTagList = (tags) => {
  * 0.49, while a few honestly-related sibling pairs sit low. The floor is
  * placed by the pre-committed gate p99(unrelated) < FLOOR < p25(related),
  * which scripts/validate-lexicon.js re-derives from the real asset on every
- * build (measured at 0.406 < 0.425 < 0.445) and fails if the gap closes, so
+ * build (measured at 0.448 < 0.455 < 0.476) and fails if the gap closes, so
  * this constant can never quietly drift out of the valid range.
+ *
+ * CALIBRATED FOR MAX-POOLING. The value is only meaningful for the pooling the
+ * validator measured it under, and services/semantic/index.js now scores each
+ * label independently and keeps the best rather than averaging the whole label
+ * bag. Both distributions shifted up when that changed, so this moved 43 -> 46.
+ * If the pooling changes again, re-run `pnpm verify:lexicon` and move this with
+ * it — never one without the other.
  */
-const SEMANTIC_MATCH_FLOOR = 43;
+const SEMANTIC_MATCH_FLOOR = 46;
 
 // Issue at most a few server-side searches per fill: a title rarely has more
 // than two or three subject nouns, and tag lists are short. The cap bounds the
@@ -530,6 +617,46 @@ const labelWordStems = (photo) => {
         }
     }
     return Array.from(out);
+};
+
+/**
+ * Label word-stems grouped PER LABEL, bounded exactly like labelWordStems
+ * ("Sea Life" stays [["sea","life"]] rather than collapsing into the photo's
+ * flat stem bag).
+ *
+ * EXISTS FOR THE SEMANTIC TIER. Vision labels are an unordered bag in which
+ * only one or two entries are ever on theme; mean-pooling the whole bag into a
+ * single vector asks "is this entire scene about the theme", which a 24-label
+ * photo can never answer yes to. Scoring each label separately and keeping the
+ * best asks "does ANY label mean this", which is the question the tier is for.
+ * See getSemanticScores for the measured effect.
+ *
+ * Duplicate labels collapse (same stem sequence) so a repeated label cannot pay
+ * the embedding cost twice, and groups are truncated to keep the total stem
+ * count at or under MAX_STEMS_PER_PHOTO — the same ceiling the flat helper
+ * enforces, so a photo cannot cost more work here than there.
+ */
+const labelStemGroups = (photo) => {
+    if (!Array.isArray(photo?.labels)) return [];
+    const groups = [];
+    const seen = new Set();
+    let stems = 0;
+    for (const label of photo.labels.slice(0, MAX_LABELS_PER_PHOTO)) {
+        if (typeof label !== 'string' && typeof label !== 'number') continue;
+        const words = tokenise(String(label), { keepStopwords: true }).slice(0, MAX_WORDS_PER_LABEL);
+        if (words.length === 0) continue;
+        const key = words.join(' ');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        // Trim the boundary label rather than letting it straddle the ceiling:
+        // checking only after pushing a whole label could overshoot by up to
+        // MAX_WORDS_PER_LABEL - 1 stems.
+        const room = MAX_STEMS_PER_PHOTO - stems;
+        groups.push(words.length > room ? words.slice(0, room) : words);
+        stems += Math.min(words.length, room);
+        if (stems >= MAX_STEMS_PER_PHOTO) break;
+    }
+    return groups;
 };
 
 // ALL (AND) semantics: a photo qualifies only when every target stem is
@@ -832,12 +959,14 @@ module.exports = {
     buildSearchTerms,
     detectLetterPrefix,
     labelWordStems,
+    labelStemGroups,
     SEMANTIC_MATCH_FLOOR,
     // exported for unit tests
     tokenise,
     stem,
     matches,
     buildChallengeKeywords,
+    buildThemeKeywords,
     scorePhoto,
     tokeniseTagList,
     wholeLabelStems,

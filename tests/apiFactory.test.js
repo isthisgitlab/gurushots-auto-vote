@@ -42,6 +42,8 @@ jest.mock('../src/js/mock', () => ({
         submitToChallenge: jest.fn(),
         getMemberChallenges: jest.fn(),
         getBankroll: jest.fn(),
+        getCurrentMemberProfile: jest.fn(),
+        searchTagAutocomplete: jest.fn(),
         joinChallenge: jest.fn(),
     },
 }));

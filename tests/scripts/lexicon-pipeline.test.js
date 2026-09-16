@@ -139,15 +139,28 @@ describe('fetch-embeddings pure pipeline', () => {
         const { bySurface, collisions } = collectAuthoredWords({
             concepts: [
                 { id: 'cat', parent: 'pet', words: ['Cat', 'kitten'] },
-                { id: 'sky', parent: 'sky', words: ['skies'] }, // "skies" stems to "ski"
-                { id: 'skiing', parent: 'wintersport', words: ['ski'] },
+                { id: 'flower', parent: 'plant', words: ['roses'] }, // "roses" stems to "rose"
+                { id: 'rosecolor', parent: 'color', words: ['rose'] },
             ],
             extraWords: ['sofa'],
         });
         expect(bySurface.get('cat')).toBe('cat');
         expect(bySurface.get('sofa')).toBe('extraWords');
         expect(collisions).toHaveLength(1);
-        expect(collisions[0]).toContain('ski');
+        expect(collisions[0]).toContain('rose');
+    });
+
+    test('skies/ski is NOT a collision — they are different concepts', () => {
+        // This pair used to collide because "skies" stemmed to "ski": the '-ies'
+        // rule required length > 5 and "skies" is 5, so it fell through to '-es'.
+        // A "Dramatic Skies" challenge could not match a "Sky" label as a result.
+        const { collisions } = collectAuthoredWords({
+            concepts: [
+                { id: 'sky', parent: 'sky', words: ['skies'] },
+                { id: 'skiing', parent: 'wintersport', words: ['ski'] },
+            ],
+        });
+        expect(collisions).toEqual([]);
     });
 
     test('parseGloveLine parses a valid line and rejects malformed ones', () => {
