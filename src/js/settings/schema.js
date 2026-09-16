@@ -879,6 +879,58 @@ const SETTINGS_SCHEMA = {
         label: 'app.shouldIncludeTags',
         description: 'app.shouldIncludeTagsDesc',
     },
+    // Words to drop from a challenge TITLE before it is used as a theme.
+    //
+    // Challenge titles qualify their subject rather than just naming it — "Epic
+    // Lighthouses", "Dramatic Storms", "Captivating Macro". The qualifier is not
+    // a subject: it dilutes the pooled theme vector and, because only
+    // SEARCH_TERMS_CAP terms are searched, it can push the real subject out
+    // entirely. The series prefix in "Color Hunt: Green" is handled structurally
+    // (see titleSubject in services/photoPicker.js) and needs no entry here.
+    //
+    // Seeded rather than hardcoded on purpose: every word is visible and
+    // removable. Delete one if a challenge genuinely IS about it — "Negative
+    // Space" is a real photographic subject, which is why "negative" is not in
+    // this list.
+    ignoreTitleWords: {
+        type: 'tags',
+        default: [
+            'epic',
+            'dramatic',
+            'captivating',
+            'fascinating',
+            'powerful',
+            'beautiful',
+            'amazing',
+            'stunning',
+            'incredible',
+            'breathtaking',
+            'gorgeous',
+            'glorious',
+            'spectacular',
+            'magical',
+            'majestic',
+            'striking',
+            'wonderful',
+            'awesome',
+            'lovely',
+            'perfect',
+            'ultimate',
+            'extreme',
+            'favorite',
+            'favourite',
+            'melodic',
+            'little',
+            'creative',
+            'creatively',
+        ],
+        perChallenge: true,
+        validation: tagsList,
+        validationOrder: 1,
+        group: 'autoFill',
+        label: 'app.ignoreTitleWords',
+        description: 'app.ignoreTitleWordsDesc',
+    },
 
     // --- Notifications ---
     // OS desktop/mobile "action coming up" warnings. All GLOBAL (perChallenge:

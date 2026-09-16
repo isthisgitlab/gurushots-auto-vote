@@ -118,7 +118,7 @@ const themeBucketOf = (challengeVec, tag) => {
  *   when nothing survived — caller then behaves exactly as before.
  */
 const resolveTermsToTags = async (terms, challenge, deps) => {
-    const { token, memberId, searchTagAutocomplete, logger, logLabel = 'autoFill' } = deps || {};
+    const { token, memberId, searchTagAutocomplete, logger, logLabel = 'autoFill', ignoreWords = null } = deps || {};
     if (!Array.isArray(terms) || terms.length === 0) return [];
     if (!token || !memberId || typeof searchTagAutocomplete !== 'function') return [];
 
@@ -128,7 +128,7 @@ const resolveTermsToTags = async (terms, challenge, deps) => {
     let challengeVec = null;
     try {
         if (await lexicon.isAvailable()) {
-            challengeVec = lexicon.embed(buildThemeKeywords(challenge));
+            challengeVec = lexicon.embed(buildThemeKeywords(challenge, ignoreWords));
         }
     } catch {
         // Lexicon problems must never break a fill; lexical matching still works.

@@ -1143,6 +1143,23 @@ const getEffectiveTagSetting = (settingKey, challenge) => {
     return unionTags(base, ruleTags);
 };
 
+/**
+ * The ignore-words list for a challenge title, or null when empty.
+ *
+ * Thin wrapper over getEffectiveSetting (master -> profile -> per-challenge) so
+ * both the fill and join paths read it the same way without either importing
+ * the other. Returns null rather than [] because the picker treats null as
+ * "no list" and skips the Set construction entirely.
+ *
+ * @param {object} challenge
+ * @returns {Array<string>|null}
+ */
+const getEffectiveIgnoreTitleWords = (challenge) => {
+    const challengeId = challenge?.id != null ? String(challenge.id) : null;
+    const words = getEffectiveSetting('ignoreTitleWords', challengeId);
+    return Array.isArray(words) && words.length > 0 ? words : null;
+};
+
 // Named challenge-settings profiles ("save this tactic, recall it later").
 // Stored as challengeSettings.profiles = { [displayName]: { [settingKey]: value } }
 // — name-keyed, NOT challenge-id-keyed, because ids rotate and id-keyed state
@@ -1971,6 +1988,7 @@ module.exports = {
     getTitleRules,
     setTitleRules,
     getEffectiveTagSetting,
+    getEffectiveIgnoreTitleWords,
     getTitleProfile,
     rememberChallengeTitles,
 

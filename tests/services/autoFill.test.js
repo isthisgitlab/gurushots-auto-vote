@@ -87,6 +87,7 @@ const makeSettings = ({
     shouldIncludeTags = [],
     fillWithoutTagMatch = true, // mirrors the schema default
     emergencyFill = 300, // mirrors the schema default (5 minutes in seconds)
+    ignoreTitleWords = [],
 } = {}) => ({
     getEffectiveSetting: jest.fn((key) => {
         if (key === 'autoFill') return autoFill;
@@ -105,6 +106,53 @@ const makeSettings = ({
         if (key === 'shouldIncludeTags') return shouldIncludeTags;
         return null;
     }),
+    getEffectiveIgnoreTitleWords: jest.fn(() => (ignoreTitleWords.length > 0 ? ignoreTitleWords : null)),
+});
+
+describe('ignore-words setting reaches the real fill path', () => {
+    // Same class of gap as the tag-resolution one below: the value is resolved
+    // in runFillAttempt and handed to three separate consumers, so assert it
+    // through maybeAutoFillChallenge rather than trusting the plumbing by eye.
+    test('a title word on the ignore list is not searched', async () => {
+        const challenge = makeChallenge({ title: 'Epic Lighthouses', closeIn: 300, entries: [{ id: 'e1' }] });
+        const searches = [];
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true, ignoreTitleWords: ['epic'] }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(async (_id, _tok, opts) => {
+                if (opts && opts.search) {
+                    searches.push(opts.search);
+                    return [];
+                }
+                return [allowedPhoto('p1', ['Misc'])];
+            }),
+            submitToChallenge: jest.fn(async () => ({ success: true })),
+        });
+
+        expect(searches).toContain('lighthouse');
+        expect(searches).not.toContain('epic');
+    });
+
+    test('without the setting the qualifier is still searched', async () => {
+        const challenge = makeChallenge({ title: 'Epic Lighthouses', closeIn: 300, entries: [{ id: 'e1' }] });
+        const searches = [];
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn(async (_id, _tok, opts) => {
+                if (opts && opts.search) {
+                    searches.push(opts.search);
+                    return [];
+                }
+                return [allowedPhoto('p1', ['Misc'])];
+            }),
+            submitToChallenge: jest.fn(async () => ({ success: true })),
+        });
+
+        // Head-noun first either way, so the subject leads the list.
+        expect(searches[0]).toBe('lighthouse');
+        expect(searches).toContain('epic');
+    });
 });
 
 describe('tag-resolution deps reach the real fill path', () => {

@@ -275,6 +275,9 @@
             shouldIncludeTags: 'Should Include Tags',
             shouldIncludeTagsDesc:
                 'Soft preference for both auto-fill and manual fill. Prefer photos whose labels match these tags; matches rank above the auto-detected challenge keyword score but do not exclude other photos. If nothing matches, fill proceeds with the normal ranking. Matching follows the same whole-word rules as Must Include Tags.',
+            ignoreTitleWords: 'Ignore These Words in Challenge Titles',
+            ignoreTitleWordsDesc:
+                'Words to strip from a challenge title before it is used to find matching photos. Challenge titles usually qualify their subject rather than just naming it — "Epic Lighthouses" is about lighthouses, not "epic" — and those extra words both blur the theme and use up the small number of searches per challenge. The list is pre-filled with common ones; edit it freely. Remove a word if a challenge really is about it. Series prefixes like "Color Hunt:" are handled automatically and do not need an entry.',
             fillWithoutTagMatch: 'Fill Even Without a Tag Match',
             fillWithoutTagMatchDesc:
                 'Only matters when Must Include Tags is set. Because a photo must match every tag, this triggers more often when several tags are required. When on (default), if none of your photos match all those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a fully matching photo exists.',
