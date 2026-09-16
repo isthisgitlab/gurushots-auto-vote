@@ -13,6 +13,8 @@ const {
     stem,
     matches,
     buildChallengeKeywords,
+    buildThemeKeywords,
+    labelStemGroups,
     scorePhoto,
     tokeniseTagList,
     labelWordStems,
@@ -64,8 +66,8 @@ describe('photoPicker', () => {
             expect(tokenise('Earn rewards: 10 coins, Elite Level reward')).toEqual([]);
         });
         test('stems plurals, gerunds, and past tense', () => {
-            // 'athletes' → 'athlet', 'runners' → 'runner', 'jumping' → 'jump'
-            expect(tokenise('athletes runners jumping caught')).toEqual(['athlet', 'runner', 'jump', 'caught']);
+            // 'athletes' → 'athlete', 'runners' → 'runner', 'jumping' → 'jump'
+            expect(tokenise('athletes runners jumping caught')).toEqual(['athlete', 'runner', 'jump', 'caught']);
         });
     });
 
@@ -76,7 +78,26 @@ describe('photoPicker', () => {
             expect(stem('cats')).toBe('cat');
         });
         test('-es plurals', () => {
-            expect(stem('athletes')).toBe('athlet');
+            // '-es' is only a suffix after a sibilant. Elsewhere the base ends
+            // in '-e' and only the '-s' is inflection, so stripping two ate a
+            // real letter ('athletes' → 'athlet', 'faces' → 'fac').
+            expect(stem('athletes')).toBe('athlete');
+            expect(stem('faces')).toBe('face');
+            expect(stem('trees')).toBe('tree');
+            expect(stem('houses')).toBe('house');
+            expect(stem('horses')).toBe('horse');
+            // The stems that actually drove auto-fill off theme: a "Lighthouses"
+            // challenge searched the exact tag 'lighthous' (no such tag) and
+            // missed the lexicon, which carries 'lighthouse' and not 'lighthous'.
+            expect(stem('lighthouses')).toBe('lighthouse');
+        });
+        test('-es plurals keep both letters after a sibilant base', () => {
+            expect(stem('boxes')).toBe('box');
+            expect(stem('dishes')).toBe('dish');
+            expect(stem('churches')).toBe('church');
+            // 'ss' is the disambiguator: a single trailing 's' is ambiguous
+            // ('glass'+es vs 'hous'+e+s) and only the doubled form is reliable.
+            expect(stem('glasses')).toBe('glass');
         });
         test('-ies → -y', () => {
             expect(stem('categories')).toBe('category');
@@ -92,6 +113,53 @@ describe('photoPicker', () => {
             expect(stem('run')).toBe('run');
             expect(stem('cat')).toBe('cat');
             expect(stem('')).toBe('');
+        });
+    });
+
+    describe('labelStemGroups', () => {
+        test('keeps each label separate and collapses duplicates', () => {
+            expect(labelStemGroups({ labels: ['Sea Life', 'Staircase', 'Staircase'] })).toEqual([
+                ['sea', 'life'],
+                ['staircase'],
+            ]);
+        });
+        test('is empty for a photo with no labels', () => {
+            expect(labelStemGroups({ labels: [] })).toEqual([]);
+            expect(labelStemGroups({})).toEqual([]);
+        });
+    });
+
+    describe('buildThemeKeywords', () => {
+        test('uses url + title and IGNORES welcome_message', () => {
+            // The live "Stairs" challenge body reads "Stairs are both practical
+            // and ornamental... made of wood or stone... with people on them".
+            // Mean-pooled into the theme vector those thirteen words drag it off
+            // its own subject: measured against the shipped lexicon the
+            // similarity to the tag "staircase" falls from 0.94 to 0.25.
+            const challenge = {
+                url: 'stairs38',
+                title: 'Stairs',
+                welcome_message:
+                    'Stairs are both practical and ornamental, made of wood or stone, with people on them.',
+            };
+            expect(buildThemeKeywords(challenge)).toEqual(['stair']);
+            // The lexical tier still sees the body — there each keyword matches
+            // independently, so extra words cannot drag a vector around.
+            expect(buildChallengeKeywords(challenge)).toEqual(expect.arrayContaining(['stair', 'wood', 'stone']));
+        });
+
+        test('returns [] for a contest-cadence title rather than falling back to the body', () => {
+            // An empty result is informative: it means every word was
+            // boilerplate, which is what a meta-challenge looks like. The
+            // semantic tier then goes inert instead of scoring photos against
+            // marketing copy.
+            expect(
+                buildThemeKeywords({
+                    title: 'Guru of The Week',
+                    welcome_message: 'Win coins and badges for your best flower photos!',
+                }),
+            ).toEqual([]);
+            expect(buildThemeKeywords({ title: 'Photographer of the Month' })).toEqual([]);
         });
     });
 
@@ -114,9 +182,9 @@ describe('photoPicker', () => {
                 title: 'Action Shots',
                 welcome_message: 'Capture athletes mid-jump and runners in motion!',
             });
-            // After stemming: athletes→athlet, runners→runner
+            // After stemming: athletes→athlete, runners→runner
             // Stopwords filter: capture, in
-            expect(keys).toEqual(expect.arrayContaining(['action', 'athlet', 'jump', 'runner', 'motion']));
+            expect(keys).toEqual(expect.arrayContaining(['action', 'athlete', 'jump', 'runner', 'motion']));
             expect(keys).not.toContain('shots');
             expect(keys).not.toContain('capture');
         });
@@ -244,10 +312,10 @@ describe('photoPicker', () => {
             const photo = { labels: ['Flowers'] };
             expect(scorePhoto(photo, ['flower'])).toBe(1);
         });
-        test('matches Athlete (label) against athletes (keyword stem athlet)', () => {
+        test('matches Athlete (label) against athletes (keyword stem athlete)', () => {
             const photo = { labels: ['Athlete', 'Sport'] };
-            // stem('athletes') = 'athlet'; label 'athlete' contains 'athlet'
-            expect(scorePhoto(photo, ['athlet'])).toBe(1);
+            // stem('athletes') = 'athlete', which equals the label's own stem.
+            expect(scorePhoto(photo, ['athlete'])).toBe(1);
         });
         test('matches Running (label) against run (keyword)', () => {
             // stem('running') = 'runn'; substring match: 'runn'.includes('run')

@@ -209,6 +209,8 @@ const buildHandlers = () => ({
                 getEligiblePhotos: strategy.getEligiblePhotos,
                 getImageData: strategy.getImageData,
                 submitToChallenge: strategy.submitToChallenge,
+                searchTagAutocomplete: strategy.searchTagAutocomplete,
+                getCurrentMemberProfile: strategy.getCurrentMemberProfile,
             });
 
             return {

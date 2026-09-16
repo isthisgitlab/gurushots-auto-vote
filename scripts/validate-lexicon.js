@@ -26,9 +26,12 @@
  *                  neighbor outscoring a genuine lexical hit, so the report
  *                  prints how many near-misses the floor lets through.
  *
- * Everything is rebuilt from the REAL committed asset, in the same mean-pooled
- * shape the matcher actually compares (a couple of challenge keywords vs a
- * photo's several labels). Fails non-zero if the gate does not hold. Run:
+ * Everything is rebuilt from the REAL committed asset, in the same MAX-POOLED
+ * shape the matcher actually compares: a couple of challenge keywords (mean-
+ * pooled, as a title is one phrase) against a photo's several labels scored
+ * INDEPENDENTLY, keeping the best. This must track services/semantic/index.js —
+ * the floor is only meaningful for the pooling it was measured under, and the
+ * two distributions move a long way between mean and max. Fails non-zero if the gate does not hold. Run:
  * `pnpm verify:lexicon` (and in CI, where the asset is rebuilt first so this
  * validates exactly what ships).
  *
@@ -125,7 +128,21 @@ const main = async () => {
     // Keywords come from the *front* of the cluster (the canonical name), which
     // is what a challenge title would actually say ("farm", not "homestead").
     const challengeVecOf = (c) => lexicon.embed(c.words.slice(0, MAX_CHALLENGE_KEYWORDS));
-    const photoVecOf = (c) => lexicon.embed(c.words.slice(0, MAX_PHOTO_LABELS));
+
+    // A photo is its labels, each scored on its own and the best kept — the
+    // runtime shape (see services/semantic/index.js). Returns null when no
+    // label is in vocabulary, which is "no signal", not a zero.
+    const bestLabelSim = (challengeVec, words) => {
+        let best = null;
+        for (const word of words) {
+            const vec = lexicon.embed([word]);
+            if (!vec) continue;
+            const sim = lexicon.cosine(challengeVec, vec);
+            if (Number.isFinite(sim) && (best === null || sim > best)) best = sim;
+        }
+        return best;
+    };
+    const photoSimOf = (challengeVec, c) => bestLabelSim(challengeVec, c.words.slice(0, MAX_PHOTO_LABELS));
 
     const related = [];
     const unrelated = [];
@@ -139,19 +156,14 @@ const main = async () => {
         // possible for clusters with spare words beyond the challenge slice.
         if (challenge.words.length > MAX_CHALLENGE_KEYWORDS) {
             const rest = challenge.words.slice(MAX_CHALLENGE_KEYWORDS, MAX_CHALLENGE_KEYWORDS + MAX_PHOTO_LABELS);
-            const restVec = lexicon.embed(rest);
-            if (restVec) {
-                const sim = lexicon.cosine(challengeVec, restVec);
-                if (Number.isFinite(sim)) related.push(sim);
-            }
+            const sim = bestLabelSim(challengeVec, rest);
+            if (sim !== null) related.push(sim);
         }
 
         for (const photo of concepts) {
             if (photo.id === challenge.id) continue;
-            const photoVec = photoVecOf(photo);
-            if (!photoVec) continue;
-            const sim = lexicon.cosine(challengeVec, photoVec);
-            if (!Number.isFinite(sim)) continue;
+            const sim = photoSimOf(challengeVec, photo);
+            if (sim === null) continue;
 
             if (challenge.parent === photo.parent) {
                 // Siblings: a farm challenge vs a livestock photo — must read
@@ -212,8 +224,9 @@ const main = async () => {
             console.error(`❌ nearMissPairs references unknown concept id: ${aId} / ${bId}`);
             process.exit(1);
         }
-        const sim = lexicon.cosine(challengeVecOf(a), photoVecOf(b));
-        if (Number.isFinite(sim)) nearMisses.push({ pair: `${aId}<->${bId}`, sim });
+        const challengeVec = challengeVecOf(a);
+        const sim = challengeVec ? photoSimOf(challengeVec, b) : null;
+        if (sim !== null) nearMisses.push({ pair: `${aId}<->${bId}`, sim });
     }
     if (nearMisses.length) {
         const above = nearMisses.filter((m) => m.sim >= floor);

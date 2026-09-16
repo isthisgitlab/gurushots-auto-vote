@@ -19,6 +19,30 @@ const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
+// Every distinct label the mock library carries, lowercased — the tag
+// vocabulary searchTagAutocomplete matches inside. Keep in sync with the label
+// sets in getEligiblePhotos; it is what makes resolution reproducible offline.
+const MOCK_LIBRARY_TAGS = [
+    'pink',
+    'flower',
+    'petal',
+    'plant',
+    'nature',
+    'landscape',
+    'tree',
+    'sky',
+    'architecture',
+    'building',
+    'urban',
+    'portrait',
+    'person',
+    'macro',
+    'animal',
+    'wildlife',
+    'bird',
+    'misc',
+];
+
 const mockEntryTracker = createMemoryEntryTracker();
 
 // Session-stable mock data cache to prevent regeneration within same app run
@@ -539,10 +563,13 @@ const mockApiClient = {
             if (search === '') {
                 return items;
             }
+            // EXACT tag match, matching the live endpoint. get_photos_private
+            // answers "staircase" with 23 photos but "stair" and "stairs" with
+            // none — it is a tag lookup, not a text search. This used to be a
+            // substring test, which quietly made mock mode SUCCEED on terms the
+            // real API rejects and hid the whole reason tagResolver exists.
             return items.filter((item) =>
-                (Array.isArray(item.labels) ? item.labels : []).some((label) =>
-                    String(label).toLowerCase().includes(search),
-                ),
+                (Array.isArray(item.labels) ? item.labels : []).some((label) => String(label).toLowerCase() === search),
             );
         },
     ),
@@ -685,6 +712,46 @@ const mockApiClient = {
     ),
 
     /**
+     * Simulate /rest/get_current_member_profile — the token-only identity read
+     * that supplies member_id for searchTagAutocomplete below.
+     */
+    getCurrentMemberProfile: mockMethod(
+        {
+            name: 'getCurrentMemberProfile',
+            tokenArg: 0,
+            onNoToken: () => null,
+        },
+        async () => {
+            await simulateApiResponse({}, 150);
+            return { id: 'mock_member_c1d1f773', userName: 'mockguru' };
+        },
+    ),
+
+    /**
+     * Simulate /rest/search_autocomplete: SUBSTRING match over the tags the
+     * mock library actually carries, capped like the live endpoint.
+     *
+     * The pairing with getEligiblePhotos above is the point — that one matches
+     * a tag exactly, this one matches inside it — so mock mode reproduces the
+     * real resolution problem: searching "flow" finds no photos, autocomplete
+     * turns it into "flower", and THAT finds photos.
+     */
+    searchTagAutocomplete: mockMethod(
+        {
+            name: 'searchTagAutocomplete',
+            tokenArg: 0,
+            onNoToken: () => [],
+        },
+        async (token, term) => {
+            await simulateApiResponse({}, 150);
+            const text = typeof term === 'string' ? term.trim().toLowerCase() : '';
+            // The live endpoint answers nothing under three characters.
+            if (text.length < 3) return [];
+            return MOCK_LIBRARY_TAGS.filter((tag) => tag.includes(text)).slice(0, 5);
+        },
+    ),
+
+    /**
      * Simulate /rest/coins_unlock. Fixture 900004 fails (success:false) so the
      * unlock-failure and charged-pending-submit paths can be tested.
      */
@@ -768,6 +835,8 @@ const mockApiClient = {
                 getImageData: mockApiClient.getImageData,
                 submitToChallenge: mockApiClient.submitToChallenge,
                 runTurboMiniGame: mockApiClient.runTurboMiniGame,
+                searchTagAutocomplete: mockApiClient.searchTagAutocomplete,
+                getCurrentMemberProfile: mockApiClient.getCurrentMemberProfile,
             },
             cleanupStaleMetadata: null,
             // In-memory for the same reason cleanupStaleMetadata is null: the
@@ -789,6 +858,8 @@ const mockJoinDeps = () => ({
     coinsUnlock: mockApiClient.coinsUnlock,
     submitToChallenge: mockApiClient.submitToChallenge,
     getEligiblePhotos: mockApiClient.getEligiblePhotos,
+    searchTagAutocomplete: mockApiClient.searchTagAutocomplete,
+    getCurrentMemberProfile: mockApiClient.getCurrentMemberProfile,
     // No joinStateStore / acquireUnlockLock: mock spends no real coins and runs
     // single-process, so idempotency persistence and the cross-process lock are
     // unnecessary (mirrors cleanupStaleMetadata:null).

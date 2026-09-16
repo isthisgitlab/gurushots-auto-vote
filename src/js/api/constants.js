@@ -31,6 +31,13 @@ const ENDPOINTS = {
     getMemberChallenges: `${API_BASE}/rest/get_member_challenges`,
     coinsUnlock: `${API_BASE}/rest/coins_unlock`,
     getBankroll: `${API_BASE}/rest/get_bankroll`,
+
+    // Tag resolution for auto-fill (WEB profile). searchAutocomplete maps a
+    // partial word onto the tags that actually exist on the member's own
+    // photos; currentMemberProfile supplies the member_id it requires. See
+    // api/tags.js for why the pair exists.
+    searchAutocomplete: `${API_BASE}/rest/search_autocomplete`,
+    currentMemberProfile: `${API_BASE}/rest/get_current_member_profile`,
 };
 
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';

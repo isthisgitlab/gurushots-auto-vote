@@ -121,17 +121,47 @@ Domain terms used throughout, in reader's terms:
   — callers must distinguish that from a genuine zero balance** (the UI renders `—`, the handler returns
   `success:false`). Every dynamic value is `encodeURIComponent`'d into the form body.
 
+### 3b. Tag resolution (auto-fill candidate narrowing)
+
+- **The two search endpoints match differently, and that asymmetry is the whole feature.**
+  `get_photos_private?search=` matches a library tag **EXACTLY** (`staircase` → 23 photos, `stair` → 0,
+  `stairs` → 0), while `search_autocomplete` matches a **SUBSTRING** of a tag (`stair` → `["staircase"]`,
+  `case` → `["staircase"]`, and `stairs` → `[]` because no tag _contains_ it).
+- Consequence, and the bug this fixes: a "Stairs" challenge stems to `stair`, the exact search misses, and
+  auto-fill falls back to an unfiltered library walk ranked by popularity — an off-theme submission with no
+  explanation. `services/tagResolver.js` runs the miss path's terms through autocomplete to recover the real
+  tag. **It only runs after the exact search has already failed**, so a fill that works today pays nothing.
+- `search_autocomplete` needs `member_id`, which is a member identity — the account's `user_name` or its
+  opaque id hash. **An email is rejected** (`Couldn't find username`), and the app logs in with one, so the
+  login field is not a usable source: identity comes from `get_current_member_profile` (token-only) and is
+  memoised per token in `autoFill.js`.
+- Resolution is guarded twice because substring matching is blunt: **bounded backoff** (a missing term is
+  retried at most `MAX_BACKOFF_STEPS` shorter, never below the server's own 3-char floor) and **mandatory
+  validation** — a candidate is kept only if it is a lexical match for the term or the lexicon puts it on
+  theme. Without the second guard, `fac` → `["face","factory","manufacturing"]` would fill a "Faces"
+  challenge from a factory photo.
+- Both deps are **optional** in `fetchCandidatesForChallenge`; omit either and behavior is exactly the
+  pre-resolution fallback. Nothing here can fail a fill.
+
 ## 4. Semantic / lexicon
 
 - `getSemanticScores()` (`services/semantic/index.js`) ranks **auto-fill candidate photos only — it is NOT
-  part of the vote decision.** It returns cosine similarity between mean-pooled word-vector embeddings of
-  the challenge theme and each photo's vision labels.
+  part of the vote decision.** It scores each of a photo's labels against the challenge theme separately and
+  keeps the **best** (max-pooling); words WITHIN one multi-word label are still mean-pooled.
+- **Both sides pool narrowly, and that is load-bearing.** A photo's labels are a bag in which one or two
+  entries carry the theme and the rest are scene furniture, so averaging them measured how _generic_ a photo
+  was: a real staircase photo scored 0.389 (under the floor, no credit) while a yoga photo scored 0.583 and
+  was promoted as on-theme. Symmetrically the challenge vector comes from `buildThemeKeywords()` — url +
+  title only, **never `welcome_message`** — because body prose ("made of wood or stone, with people on them")
+  drags the pooled theme off its own subject: same challenge, same tag, 0.94 → 0.25.
 - It **never breaks a fill**: any failure (missing asset, no theme text, no in-vocab labels) resolves to
-  `null` and the caller ranks lexically as before.
-- `SEMANTIC_MATCH_FLOOR = 43` (`services/photoPicker.js` — around L384) is **build-gated by
+  `null` and the caller ranks lexically as before. `buildThemeKeywords()` returning `[]` — every title word
+  was boilerplate or contest cadence, e.g. "Guru of The Week" — is that "no theme text" case, on purpose.
+- `SEMANTIC_MATCH_FLOOR = 46` (`services/photoPicker.js`) is **build-gated by
   `scripts/validate-lexicon.js`** (a statistical gate: `p99(unrelated) < FLOOR < p25(related)`), **not
   hand-tuned**. Scores below the floor are forced to 0 (sub-floor cosine is indistinguishable from vector
-  noise), not merely ranked low.
+  noise), not merely ranked low. **The floor is calibrated per pooling shape** — the validator pools exactly
+  as the matcher does, so changing one without re-deriving the other silently admits the noise tail.
 - Labels must be **stemmed word tokens** — the lexicon has no multi-word keys, so a raw multi-word label
   always misses.
 

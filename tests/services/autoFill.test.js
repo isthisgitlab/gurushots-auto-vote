@@ -1529,7 +1529,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
     // nouns, titles are abstract) and must stay at debug — otherwise every user who
     // never configured tags gets warnings on the common path and learns to ignore
     // them, which would bury the case that actually matters.
-    describe('themed-search-empty fallback — log level depends on the term source', () => {
+    describe('themed-search-empty fallback — always warns, reason depends on the term source', () => {
         // makeLogger() returns a fresh object per withCategory() call, so the spies
         // are unreachable. Use a logger with a stable category object instead.
         const makeSpyLogger = () => {
@@ -1545,7 +1545,12 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         const emptySearch = () =>
             jest.fn(async (_id, _tok, opts) => (opts && opts.search ? [] : [allowedPhoto('full', ['Misc'])]));
 
-        test('terms from the challenge title → debug, not warning (the common path)', async () => {
+        test('terms from the challenge title → warning naming the searched terms', async () => {
+            // This used to debug-log, on the reasoning that an abstract title is
+            // unmatchable and warning would cry wolf. Tag resolution changed that:
+            // reaching the fallback now means the term was searched AND no library
+            // tag could be resolved for it, so the off-theme submission that
+            // follows is worth surfacing rather than burying.
             const { logger, category } = makeSpyLogger();
             await fetchCandidatesForChallenge(
                 { id: 'c1', title: 'Pink In Nature' },
@@ -1553,9 +1558,12 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
                 {}, // no user tags — terms derive from the title
                 { getEligiblePhotos: emptySearch(), logger },
             );
-            expect(category.warning).not.toHaveBeenCalled();
-            expect(category.debug).toHaveBeenCalledWith(
-                expect.stringContaining('falling back to the full library'),
+            expect(category.warning).toHaveBeenCalledWith(
+                expect.stringContaining('nothing on theme for [Challenge c1]'),
+                null,
+            );
+            expect(category.warning).toHaveBeenCalledWith(
+                expect.stringContaining('No tag in your library matches this theme'),
                 null,
             );
         });
