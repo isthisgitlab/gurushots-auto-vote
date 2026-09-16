@@ -5,10 +5,17 @@
 
 import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
 import { formatDuration } from '../../format/duration';
+import { entryPhotoUrl } from '../../format/photoUrl';
 
 // Re-exported from the shared core so the renderer, the CLI, and api/main all
 // format durations identically — see src/js/format/duration.js.
 export { formatDuration };
+
+// Entry thumbnails. Re-exported here rather than imported straight into the
+// component so the renderer keeps one door onto the shared core, matching
+// formatDuration above — see src/js/format/photoUrl.js for why the URL has to
+// be built client-side at all.
+export { entryPhotoUrl };
 
 /**
  * Format a setting value for the read-only "Global default" hint so it reads
