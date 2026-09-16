@@ -69,7 +69,9 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search }) => {
  *
  * @param {string|number} challengeId
  * @param {string} token
- * @param {{limit?: number, start?: number, search?: string, paginate?: boolean}} [options]
+ * @param {{limit?: number, start?: number, search?: string, paginate?: boolean, logLabel?: string}} [options]
+ *   logLabel: prefix for the paginated-walk warnings (default 'autoFill'); the
+ *   join flow passes 'join' so its messages aren't attributed to auto-fill.
  *   search: optional free-text term; when a non-empty string, the server
  *   filters the library against its own tag index (mirrors the web UI's
  *   `search=hat`) so auto-fill can prefer on-theme photos.
@@ -111,7 +113,11 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
     // Dedupe across pages: offset pagination over a live, date-ordered list can
     // repeat a row when the underlying set shifts between requests.
     const byId = new Map();
-    const warn = (message) => logger.withCategory('api').warning(`autoFill: ${message}`, null);
+    // Prefix the library-walk warnings with the calling flow (auto-fill vs join)
+    // so a "10-page limit" message from a join isn't mislabeled as auto-fill.
+    const logLabel =
+        typeof options.logLabel === 'string' && options.logLabel.trim() ? options.logLabel.trim() : 'autoFill';
+    const warn = (message) => logger.withCategory('api').warning(`${logLabel}: ${message}`, null);
     let page = 0;
     let stoppedEarly = false;
     for (; page < MAX_LIBRARY_PAGES; page++) {

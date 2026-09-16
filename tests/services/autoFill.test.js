@@ -767,7 +767,7 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         });
         expect(result).toBe('submitted');
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'sunset' });
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // unfiltered fallback
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // unfiltered fallback
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['off'], 'tok');
     });
 
@@ -1504,7 +1504,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'cat' });
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'dog' });
         // Search produced allowed candidates → the unfiltered fallback is not used.
-        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true });
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
     });
 
     test('falls back to the unfiltered library when every search is empty', async () => {
@@ -1519,7 +1519,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         );
         expect(out.map((p) => p.id)).toEqual(['full']);
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'pink' });
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // unfiltered fallback
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // unfiltered fallback
     });
 
     // The themed-search-empty fallback is the path that may submit an off-theme
@@ -1587,7 +1587,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { getEligiblePhotos, logger: makeLogger() },
         );
         expect(out.map((p) => p.id)).toEqual(['full']);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
     });
 
     test('goes straight to the unfiltered fetch when no terms are derivable', async () => {
@@ -1600,7 +1600,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
         );
         expect(out.map((p) => p.id)).toEqual(['x']);
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
     });
 
     test('tolerates a single search term throwing (other terms still contribute)', async () => {
@@ -1616,7 +1616,7 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { getEligiblePhotos, logger: makeLogger() },
         );
         expect(out.map((p) => p.id)).toEqual(['p2']);
-        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // dog matched → no fallback
+        expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // dog matched → no fallback
     });
 });
 
@@ -1737,7 +1737,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         );
         expect(out.map((p) => p.id)).toEqual(['best', 'landscape']);
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // no { search } term
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // no { search } term
         expect(debug).toHaveBeenCalledWith(expect.stringContaining('letter challenge "L"'), null);
     });
 
@@ -1763,7 +1763,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         });
         expect(result).toBe('submitted');
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // no themed search
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // no themed search
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['landscape'], 'tok');
     });
 
@@ -1788,7 +1788,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
         });
         expect(result).toBe('submitted');
         expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // no themed search
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // no themed search
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['lion'], 'tok');
     });
 
@@ -1836,7 +1836,7 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
             submitToChallenge,
         });
         expect(result).toBe('submitted');
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true }); // no themed search
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // no themed search
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['castle'], 'tok');
     });
 

@@ -157,6 +157,15 @@ describe('submissions', () => {
             expect(makePostRequest).toHaveBeenCalledTimes(MAX_LIBRARY_PAGES);
             expect(photos.map((p) => p.id)).toEqual(['a', 'b']);
             expect(log.warning).toHaveBeenCalledWith(expect.stringContaining(`${MAX_LIBRARY_PAGES}-page limit`), null);
+            // Default flow label is auto-fill.
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('autoFill:'), null);
+        });
+
+        test('the walk warning is prefixed with the caller flow (logLabel)', async () => {
+            makePostRequest.mockResolvedValue(page('a', 'b'));
+            await getEligiblePhotos('c1', token, { limit: 2, paginate: true, logLabel: 'join' });
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('join:'), null);
+            expect(log.warning).not.toHaveBeenCalledWith(expect.stringContaining('autoFill:'), null);
         });
 
         test('abandons the walk when it outruns its wall-clock budget', async () => {

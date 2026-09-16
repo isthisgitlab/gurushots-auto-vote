@@ -199,7 +199,9 @@ const pickJoinPhoto = async (challenge, token, deps) => {
             challenge,
             token,
             { mustIncludeTags, shouldIncludeTags },
-            { getEligiblePhotos: deps.getEligiblePhotos, logger },
+            // logLabel 'join' so photo-library warnings are attributed to the join
+            // flow, not auto-fill (the picker is shared).
+            { getEligiblePhotos: deps.getEligiblePhotos, logger, logLabel: 'join' },
         );
     } catch (error) {
         cat().warning(`could not read eligible photos for ${challenge?.id}: ${error?.message || error}`, null);

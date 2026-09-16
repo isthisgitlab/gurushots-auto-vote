@@ -103,10 +103,17 @@ const describeSubmitFailure = (raw) => {
  * @param {object} challenge - challenge with id and (optional) title
  * @param {string} token
  * @param {{mustIncludeTags?: string[]|null, shouldIncludeTags?: string[]|null}} tagOpts
- * @param {{getEligiblePhotos: function, logger: object}} deps
+ * @param {{getEligiblePhotos: function, logger: object, logLabel?: string}} deps
+ *   logLabel: the calling flow ('autoFill' default, or 'join') — used as the log
+ *   category and message prefix so a join's messages aren't attributed to auto-fill.
  * @returns {Promise<Array<object>>}
  */
-const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligiblePhotos, logger }) => {
+const fetchCandidatesForChallenge = async (
+    challenge,
+    token,
+    tagOpts,
+    { getEligiblePhotos, logger, logLabel = 'autoFill' },
+) => {
     const challengeId = challenge.id;
     const terms = buildSearchTerms(challenge, tagOpts);
     // A letter challenge ("Begins With L") yields no search terms on purpose —
@@ -116,9 +123,9 @@ const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligi
     const letter = detectLetterPrefix(challenge?.title);
     if (letter && terms.length === 0) {
         logger
-            .withCategory('autoFill')
+            .withCategory(logLabel)
             .debug(
-                `autoFill: letter challenge "${letter.toUpperCase()}" for ${logger.challengeTag(challenge)}; fetching full library for client-side tag filtering`,
+                `${logLabel}: letter challenge "${letter.toUpperCase()}" for ${logger.challengeTag(challenge)}; fetching full library for client-side tag filtering`,
                 null,
             );
     }
@@ -129,6 +136,8 @@ const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligi
         // per-term fault tolerance: one term erroring is logged and skipped, the
         // others still contribute, and the unfiltered fallback below still runs.
         const settled = await Promise.allSettled(
+            // Per-term searches are single-page (no walk), so they never emit the
+            // library-walk warning that carries the label — no logLabel needed here.
             terms.map((term) => getEligiblePhotos(challengeId, token, { search: term })),
         );
         const byId = new Map();
@@ -136,9 +145,9 @@ const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligi
             if (result.status === 'rejected') {
                 const reason = result.reason;
                 logger
-                    .withCategory('autoFill')
+                    .withCategory(logLabel)
                     .debug(
-                        `autoFill: search "${terms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && reason.message) || reason}`,
+                        `${logLabel}: search "${terms[i]}" failed for ${logger.challengeTag(challenge)}: ${(reason && reason.message) || reason}`,
                         null,
                     );
                 return;
@@ -179,9 +188,9 @@ const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligi
         // rather than re-deriving the precedence rule here.
         const fromUserTags = buildSearchTerms(null, tagOpts).length > 0;
         const message =
-            `autoFill: themed search (${terms.join(', ')}) for ${logger.challengeTag(challenge)} found no eligible photos; ` +
+            `${logLabel}: themed search (${terms.join(', ')}) for ${logger.challengeTag(challenge)} found no eligible photos; ` +
             `falling back to the full library — an off-theme photo may be submitted`;
-        const log = logger.withCategory('autoFill');
+        const log = logger.withCategory(logLabel);
         if (fromUserTags) {
             log.warning(`${message}. Your Must/Should Include Tags matched none of your photos.`, null);
         } else {
@@ -194,7 +203,7 @@ const fetchCandidatesForChallenge = async (challenge, token, tagOpts, { getEligi
     // candidate. The themed searches above stay single-page on purpose: they are
     // already narrowed by the server's own index, and paging each of them would
     // multiply sequential round-trips on a path that can run close to a deadline.
-    return getEligiblePhotos(challengeId, token, { paginate: true });
+    return getEligiblePhotos(challengeId, token, { paginate: true, logLabel });
 };
 
 const getEntries = (challenge) => {
