@@ -333,8 +333,8 @@
             groupDisplay: 'Display',
             tierCore: 'Core',
             tierEntries: 'Entries',
-            tierOverrides: 'Timing overrides',
-            tierOverridesDesc: 'All off by default — turn one on only to replace the normal exposure rule.',
+            tierOverrides: 'Timing Overrides',
+            tierOverridesDesc: 'All off by default — turn one on only to change when the normal exposure rule applies.',
             tierApp: 'App',
             // Notification settings (all default off, opt-in)
             notifyOnBoost: 'Notify before boost',
@@ -420,7 +420,7 @@
             onlyBoostDesc: 'Skip regular voting for this challenge entirely and only apply Boost.',
             voteOnNewEntry: 'Vote on New Entry',
             voteOnNewEntryDesc:
-                'When a new photo appears in this challenge — added by you on the website, or by Auto Fill, Emergency Fill, or a Boost/Turbo fill — vote once even if exposure already reads at or above your threshold. It votes up to whichever ceiling the challenge would normally use: Exposure Target (or Exposure, when Target is 0), or Final Window Exposure Target during the final window when Use Final Window Exposure is on. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Fill Only: if any of those is blocking, no vote happens.',
+                'When a new photo appears in this challenge — added by you on the website, or by Auto Fill, Emergency Fill, or a Boost/Turbo fill — vote once even if exposure already reads at or above your threshold. It votes up to whichever ceiling the challenge would normally use: Exposure Target (or Exposure, when Target is 0), or Final Window Exposure Target during the final window when Use Final Window Exposure is on. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Voting Only: if any of those is blocking, no vote happens.',
             override: 'Override',
             overrideForChallenge: 'Override for Challenge',
             photo: 'photo',
@@ -492,12 +492,12 @@
                 'How often (in minutes) to re-check a challenge once it is inside the Last Minute Threshold. The default 1 checks every minute so the final push is not missed.',
             useScheduledFill: 'Use Scheduled Voting',
             useScheduledFillDesc:
-                "Vote exposure up to 100% at chosen times instead of only when it drops below the Exposure threshold. This schedules voting only — it never submits a photo (that is Auto-Fill). Two trigger lists are available and can be combined: one or more daily Voting Times and one or more one-shot Vote Before End offsets. Each entry opens its own independent voting window — e.g. offsets of 10h and 4h before the end vote twice on closing day. During a window the challenge is voted up to 100% and held there; times are interpreted in the app Timezone setting (not this device's clock). Has no effect until at least one time below is set, and never applies to flash challenges or challenges in Boost Only mode. If the app is not running during a whole window, that window is skipped — there is no catch-up.",
+                "Vote exposure up to 100% at chosen times instead of only when it drops below the Exposure threshold. This schedules voting only — it never submits a photo (that is Auto-Fill). Two trigger lists are available and can be combined: one or more daily Voting Times and one or more one-shot Voting Before End offsets. Each entry opens its own independent voting window — e.g. offsets of 10h and 4h before the end vote twice on closing day. During a window the challenge is voted up to 100% and held there; times are interpreted in the app Timezone setting (not this device's clock). Has no effect until at least one time below is set, and never applies to flash challenges or challenges in Boost Only mode. If the app is not running during a whole window, that window is skipped — there is no catch-up.",
             scheduledFillTime: 'Voting Times',
             scheduledFillTimeDesc:
                 "Daily wall-clock times (24h) at which voting windows open, in the app Timezone setting — not this device's clock. Each time opens its own window every day; remove all rows to turn this trigger off. Around a daylight-saving switch the actual instant can shift by up to an hour on the changeover day.",
             scheduledFillTimeOff: 'no times set — this trigger is off',
-            scheduledFillBeforeEnd: 'Vote Before End',
+            scheduledFillBeforeEnd: 'Voting Before End',
             scheduledFillBeforeEndDesc:
                 "Open one-shot voting windows these long before the challenge closes — e.g. 10h 0m and 4h 0m to vote twice on closing day. Entered as hours and minutes in the GUI; remove all rows to turn this trigger off. These are relative to each challenge's own deadline — re-check them when reusing a saved profile on a challenge with a different timeline.",
             scheduledFillBeforeEndOff: 'no offsets set — this trigger is off',

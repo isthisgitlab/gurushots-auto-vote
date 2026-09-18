@@ -27,11 +27,18 @@ export function SettingsTierHeading({ id, label, level = 'h5' }) {
     const Heading = level;
     return (
         <div className="mt-4 mb-2">
-            <Heading className="font-semibold text-sm uppercase tracking-wide opacity-50">{t(label)}</Heading>
+            {/* Full-strength on purpose. The group headings nested under this one
+                are `opacity-70`, so dimming the band below that would render a
+                parent fainter than its own children and invert the hierarchy the
+                heading levels declare. Uppercase + tracking already separate it
+                from the group headings without spending contrast to do it. */}
+            <Heading className="font-semibold text-sm uppercase tracking-wide text-base-content">{t(label)}</Heading>
             {/* Only the overrides band carries a sub-line: it is the one band whose
                 members are all off by default, which is the fact that justifies it
-                sitting below the features a user actually edits. */}
-            {id === 'overrides' && <p className="text-xs text-base-content/50">{t('app.tierOverridesDesc')}</p>}
+                sitting below the features a user actually edits. `/70` matches the
+                group headings — at text-xs this is normal-size text for WCAG 1.4.3,
+                so it needs the full 4.5:1, not the large-text allowance. */}
+            {id === 'overrides' && <p className="text-xs text-base-content/70">{t('app.tierOverridesDesc')}</p>}
         </div>
     );
 }
