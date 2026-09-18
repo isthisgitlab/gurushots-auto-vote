@@ -269,6 +269,7 @@
             validationAtLeast: 'Enter a value of {min} or more.',
             autoFillBadge: 'auto-fill',
             customBadge: 'custom',
+            customSettingsHint: 'Has custom settings',
             mustIncludeTags: 'Must Include Tags',
             mustIncludeTagsDesc:
                 'Hard filter for both auto-fill and the manual fill buttons. Only consider photos whose auto-detected labels match all of these tags. Leave empty to consider all eligible photos. Matching is case-insensitive and whole-word: plurals and word endings still match ("cat" matches "cats"), but a tag will not match a longer, unrelated word ("cat" does not match "catamaran"). Multi-word tags match per word, so "sea life" requires both.',
