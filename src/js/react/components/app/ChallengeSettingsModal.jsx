@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
-import { groupSchemaEntries, settingCellClass, SETTINGS_GRID_CLASS } from '@/utils/groupSettings';
+import { groupSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
 import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
@@ -542,7 +542,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                 : 0;
 
                                         return (
-                                            <div key={key} className={settingCellClass(config)}>
+                                            <div key={key} className={SETTING_CELL_CLASS}>
                                                 <label className="label">
                                                     <span className="label-text font-medium">{t(config.label)}</span>
                                                     <div className="flex gap-1">
