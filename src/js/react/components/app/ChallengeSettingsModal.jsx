@@ -250,6 +250,10 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             duration: 'scheduledFillWindowMinutes',
         },
         60,
+        // Scheduled fill's own policy, stated explicitly: substitute the default
+        // on corruption, no ceiling (an oversized fill window just means
+        // "always fill", which is harmless).
+        { onCorruptDuration: 'default', maxDurationMin: null },
     );
     const { beforeEnds: sfBeforeEnds, durationMin: sfWindowMin, durationSec: sfWindowSec } = sf;
     const { enabled: sfEnabled, timeOccs: sfTimeOccs, timeSet: sfTimeSet, active: sfActive, next: sfNext } = sf;
@@ -376,6 +380,24 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             hints.push({ tone: 'text-warning font-medium', text: t('app.votingPauseAllDayHint') });
         }
         return hints;
+    };
+
+    /**
+     * The pause's counterpart to scheduledFillShortWindowHint, and it matters
+     * MORE here: the pause is deliberately not a cadence input (see
+     * docs/scheduling.md), so the scheduler never wakes for a pause boundary.
+     * A pause shorter than the longest gap between cycles can therefore be
+     * stepped straight over, and voting proceeds as if it were never set.
+     */
+    const votingPauseDurationHints = (key) => {
+        if (key !== 'votingPauseDurationMinutes') return [];
+        if (!vp.active || !(checkFrequencyMax > 0) || vp.durationMin >= checkFrequencyMax) return [];
+        return [
+            {
+                tone: 'text-warning',
+                text: t('app.votingPauseShortWindowHint').replace('{0}', String(checkFrequencyMax)),
+            },
+        ];
     };
 
     return (
@@ -561,7 +583,11 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                             )}
                                                     </p>
                                                 )}
-                                                {[...scheduledFillHints(key), ...votingPauseHints(key)].map((hint) => (
+                                                {[
+                                                    ...scheduledFillHints(key),
+                                                    ...votingPauseHints(key),
+                                                    ...votingPauseDurationHints(key),
+                                                ].map((hint) => (
                                                     <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
                                                         {hint.text}
                                                     </p>

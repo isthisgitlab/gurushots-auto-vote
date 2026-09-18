@@ -648,6 +648,65 @@ describe('voteOnNewEntry — gate, arm, record', () => {
         expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
     });
 
+    test('a pause DEFERS the trigger instead of consuming it, and the vote lands once it lifts', async () => {
+        // The voting pause is the one block that lifts into the NORMAL threshold
+        // rule, which won't vote while exposure is at/above the trigger — so
+        // consuming the trigger here would drop a photo submitted mid-pause
+        // rather than postponing its vote. Asserted end-to-end because the
+        // VotingLogic-level flag is only half the mechanism; the orchestrator's
+        // recordEntrySnapshot guard is the half that actually preserves it.
+        enableSetting();
+        const tracker = makeTracker({ 101: ['a'] });
+
+        // Pass 1 — inside the pause: blocked, and the baseline must NOT advance.
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: false,
+            voteReason: 'voting paused: inside configured pause window',
+            targetExposure: 100,
+            forcedByNewEntry: false,
+            preservesNewEntryTrigger: true,
+        });
+        const pausedApi = makeApi([withEntries(['a', 'b'])]);
+        await runVotingPass('tok', null, deps(pausedApi, { entryTracker: tracker }));
+
+        expect(pausedApi.submitVotes).not.toHaveBeenCalled();
+        expect(tracker.set).not.toHaveBeenCalled();
+
+        // Pass 2 — pause over: the still-armed trigger forces the vote, and only
+        // now does the baseline advance.
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: true,
+            voteReason: 'new entry detected',
+            targetExposure: 100,
+            forcedByNewEntry: true,
+        });
+        const resumedApi = makeApi([withEntries(['a', 'b'])]);
+        await runVotingPass('tok', null, deps(resumedApi, { entryTracker: tracker }));
+
+        expect(resumedApi.submitVotes).toHaveBeenCalled();
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a', 'b']);
+    });
+
+    test('preservesNewEntryTrigger without a new entry still records the baseline', async () => {
+        // The guard is gated on hasNewEntry: a pause with nothing new to defer
+        // must not freeze the baseline forever, or the first entry seen after
+        // the pause would look "new" on every later cycle.
+        enableSetting();
+        const api = makeApi([withEntries(['a'])]);
+        const tracker = makeTracker({ 101: ['a'] });
+        votingLogic.evaluateVotingDecision.mockReturnValue({
+            shouldVote: false,
+            voteReason: 'voting paused: inside configured pause window',
+            targetExposure: 100,
+            forcedByNewEntry: false,
+            preservesNewEntryTrigger: true,
+        });
+
+        await runVotingPass('tok', null, deps(api, { entryTracker: tracker }));
+
+        expect(tracker.set).toHaveBeenCalledWith('101', ['a']);
+    });
+
     test('disable then re-enable fires exactly one catch-up vote, then goes quiet', async () => {
         const tracker = makeTracker();
 

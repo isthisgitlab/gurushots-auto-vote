@@ -517,7 +517,10 @@
             votingPauseDurationMinutesDesc:
                 'Cik ilgi katra pauze turpinās no sava sākuma laika. Kad tā beidzas, atkal darbojas parastie noteikumi un ekspozīcija tiek uzpildīta nākamajā balsošanas ciklā. Piemērs: 270 minūtes, sākot 01:30, notur pauzi līdz 06:00.',
             votingPauseNextHint: 'Nākamā pauze: {0}–{1} ({2}) — no {3}',
-            votingPauseActiveHint: 'Pauze ir aktīva līdz {0} ({1}) — balsos tikai Pēdējās minūtes un zibens noteikumi.',
+            votingPauseActiveHint:
+                'Pauze ir aktīva līdz {0} ({1}) — balsos tikai Pēdējās minūtes un zibens noteikumi. Boost un Turbo joprojām tiek pielietoti pēc saviem taimeriem.',
+            votingPauseShortWindowHint:
+                'Šī pauze ir īsāka par jūsu maksimālo Pārbaudes biežumu ({0} min) — balsošanas cikls to var pilnībā pārlēkt, un balsošana turpināsies tā, it kā pauze nebūtu iestatīta.',
             votingPauseNoTimesHint:
                 'Nav iestatīts pauzes laiks — balsošanas pauze nedarbojas, kamēr nav iestatīts kāds zemāk.',
             votingPauseAllDayHint:

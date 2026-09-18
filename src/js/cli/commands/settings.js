@@ -493,9 +493,12 @@ few votes. Same per-challenge scoping and JSON value format):
                                5-720). For a 01:30-06:00 night pause use
                                votingPauseTime '["01:30"]' with 270 here.
   Flash challenges, the Last Minute rules, Boost and Turbo are NOT paused — a
-  challenge that closes mid-pause still gets its final fill. Manual voting from
-  the GUI is never blocked. "cli vote" runs the normal automatic pass, so it
-  DOES respect an open pause (same as onlyBoost and scheduledFillReplaces).
+  challenge that closes mid-pause still gets its final fill.
+  Which commands respect a pause: "run"/"start" (the automatic schedule) and
+  "vote --challenge=<id>" do. Plain "vote" does NOT — it is the manual
+  vote-to-100% path, the same one the GUI's manual button uses, and manual
+  voting is never blocked by a pause. So do not script plain "vote" on an
+  external cron expecting the pause to hold it back; use "run" instead.
     set-global-default votingPauseTime '["01:30"]'
     set-global-default votingPauseDurationMinutes 270
 

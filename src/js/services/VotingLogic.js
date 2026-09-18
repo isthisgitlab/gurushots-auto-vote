@@ -31,6 +31,11 @@ const { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } = require('../set
 // which must not stay silent: the orchestrator's per-challenge catch logs its
 // own errors, so a swallowed one here would be strictly less visible.
 const logger = /** @type {any} */ (require('../logger'));
+// CR/LF-collapse API-sourced values before they reach a log message (CWE-117).
+// Imported directly rather than off the logger, matching newEntryTracker.js —
+// the logger is mocked across much of the test suite, and its own oneLine() on
+// the finished message is a backstop, not the first line of defence.
+const { oneLine: oneLineId } = require('../format/logSafe');
 
 /**
  * Shared trigger-window evaluation for the two features built on the same pair
@@ -98,7 +103,7 @@ const _triggerWindowState = (challenge, challengeId, now, keys) => {
         logger
             .withCategory('voting')
             .warning(
-                `${keys.durationKey} for challenge ${challengeId} is not a positive number (${JSON.stringify(rawDuration)}) — treating the feature as off for this challenge`,
+                `${keys.durationKey} for challenge ${oneLineId(challengeId)} is not a positive number (${oneLineId(JSON.stringify(rawDuration))}) — treating the feature as off for this challenge`,
                 null,
             );
         return { active: false, inWindow: false };
@@ -114,7 +119,7 @@ const _triggerWindowState = (challenge, challengeId, now, keys) => {
         logger
             .withCategory('voting')
             .warning(
-                `${keys.durationKey} for challenge ${challengeId} is ${effectiveDurationMin}m, above the ${keys.maxDurationMin}m maximum — clamping`,
+                `${keys.durationKey} for challenge ${oneLineId(challengeId)} is ${effectiveDurationMin}m, above the ${keys.maxDurationMin}m maximum — clamping`,
                 null,
             );
         effectiveDurationMin = keys.maxDurationMin;
@@ -197,7 +202,10 @@ const getScheduledFillState = (challenge, challengeId, now) => {
     } catch (error) {
         logger
             .withCategory('voting')
-            .warning(`Scheduled-fill evaluation failed for challenge ${challengeId} — treating it as off`, error);
+            .warning(
+                `Scheduled-fill evaluation failed for challenge ${oneLineId(challengeId)} — treating it as off`,
+                error,
+            );
         return inactive;
     }
 };
@@ -249,7 +257,10 @@ const getVotingPauseState = (challenge, challengeId, now) => {
     } catch (error) {
         logger
             .withCategory('voting')
-            .warning(`Voting-pause evaluation failed for challenge ${challengeId} — treating it as not paused`, error);
+            .warning(
+                `Voting-pause evaluation failed for challenge ${oneLineId(challengeId)} — treating it as not paused`,
+                error,
+            );
         return notPaused;
     }
 };
@@ -317,6 +328,30 @@ const isWithinFinalWindow = (closeTime, now, windowSec = 3600) => {
 };
 
 /**
+ * The last-minute threshold in minutes, clamped to the schema's range (1..59),
+ * mirroring finalWindowDuration and voteBeforeFinalWindowLeadMin in
+ * _runVotingRules.
+ *
+ * Without the clamp a corrupt or under-mocked value makes the window
+ * comparison NaN-false, so the last-minute rule NEVER fires. That used to
+ * merely demote the challenge to the normal threshold rule; now that the
+ * voting pause sits above final-window it is the difference between "votes
+ * late" and "never votes at all", because last-minute is the one rule a pause
+ * deliberately cannot block.
+ *
+ * Shared by the gate and by the log/message strings so the two can't disagree:
+ * reading it raw for display while gating on the clamped value would print
+ * "lastminute threshold (NaNm)" on a rule that had just fired at 10m.
+ *
+ * @param {string} challengeId
+ * @returns {number}
+ */
+const getEffectiveLastMinuteThreshold = (challengeId) => {
+    const threshold = Number(settings.getEffectiveSetting('lastMinuteThreshold', challengeId));
+    return Number.isFinite(threshold) && threshold >= 1 && threshold <= 59 ? threshold : 10;
+};
+
+/**
  * Check if a challenge is within the last minute threshold
  * @param {number} closeTime - Challenge close time (Unix timestamp)
  * @param {number} now - Current time (Unix timestamp)
@@ -324,19 +359,8 @@ const isWithinFinalWindow = (closeTime, now, windowSec = 3600) => {
  * @returns {boolean} - True if within last minute threshold
  */
 const isWithinLastMinuteThreshold = (closeTime, now, challengeId) => {
-    const rawThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
-    // Clamp to the schema's range (1..59), mirroring finalWindowDuration and
-    // voteBeforeFinalWindowLeadMin in _runVotingRules. Without this a corrupt
-    // or under-mocked value makes the comparison NaN-false, so the last-minute
-    // rule NEVER fires. That used to merely demote the challenge to the normal
-    // threshold rule; now that the voting pause sits above final-window, it is
-    // the difference between "votes late" and "never votes at all", because
-    // last-minute is the one rule a pause deliberately cannot block.
-    const threshold = Number(rawThreshold);
-    const effectiveLastMinuteThreshold =
-        Number.isFinite(threshold) && threshold >= 1 && threshold <= 59 ? threshold : 10;
     const timeUntilEnd = closeTime - now;
-    return timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
+    return timeUntilEnd <= getEffectiveLastMinuteThreshold(challengeId) * 60 && timeUntilEnd > 0;
 };
 
 /**
@@ -409,7 +433,9 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     const onlyBoost = mode === 'auto' && settings.getEffectiveSetting('onlyBoost', challengeId);
     const voteOnlyInLastMinute = settings.getEffectiveSetting('voteOnlyInLastMinute', challengeId);
     const effectiveThreshold = getEffectiveExposureThreshold(challengeId);
-    const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
+    // Same clamped value the gate uses, so a message can never quote a
+    // threshold the rule didn't actually apply.
+    const effectiveLastMinuteThreshold = getEffectiveLastMinuteThreshold(challengeId);
     const effectiveFinalWindowExposure = getEffectiveFinalWindowExposureThreshold(challengeId);
     const useFinalWindowExposure = settings.getEffectiveSetting('useFinalWindowExposure', challengeId);
     const effectiveExposureTarget = getEffectiveExposureTarget(challengeId);

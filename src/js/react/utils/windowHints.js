@@ -55,8 +55,11 @@ export function deriveWindowHints({
     timezone,
     nowSec,
     closeTime,
-    onCorruptDuration = 'default',
-    maxDurationMin = null,
+    // Required, not defaulted — same guardrail as _triggerWindowState's: a
+    // future third caller must state its corruption direction explicitly
+    // rather than silently inherit scheduled fill's.
+    onCorruptDuration,
+    maxDurationMin,
 }) {
     const rawTimes = effectiveOf(keys.times);
     const times = (Array.isArray(rawTimes) ? rawTimes : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);

@@ -339,6 +339,80 @@ describe('voting pause never abandons a closing challenge', () => {
     });
 });
 
+describe('the last-minute rescue survives a corrupt lastMinuteThreshold', () => {
+    // Regression guard for the clamp in getEffectiveLastMinuteThreshold. Before
+    // it, a corrupt value made the comparison NaN-false so the last-minute rule
+    // never fired — which used to mean "demoted to the normal rule", but with
+    // the pause sitting above final-window it means the challenge never votes.
+    test.each([['soon'], [NaN], [0], [999], [null], [undefined]])(
+        'lastMinuteThreshold %p falls back to the 10m default, so a closing challenge still votes',
+        (threshold) => {
+            mockSettings({
+                lastMinuteThreshold: threshold,
+                useVotingPause: true,
+                votingPauseBeforeEnd: [600],
+                votingPauseDurationMinutes: 240,
+            });
+            // 5 minutes to close — inside the defaulted 10m window.
+            const decision = VotingLogic.evaluateVotingDecision(buildChallenge({ closeInSeconds: 300 }), NOW);
+            expect(decision.shouldVote).toBe(true);
+            expect(decision.targetExposure).toBe(100);
+            // And the message quotes the threshold that actually applied, not the
+            // raw corrupt value.
+            expect(decision.voteReason).toContain('10m');
+        },
+    );
+
+    test('a valid in-range threshold is still honoured as configured', () => {
+        mockSettings({ lastMinuteThreshold: 30, useVotingPause: false });
+        // 20 minutes out: inside a 30m threshold, outside the 10m default.
+        const decision = VotingLogic.evaluateVotingDecision(buildChallenge({ closeInSeconds: 1200 }), NOW);
+        expect(decision.voteReason).toContain('30m');
+    });
+});
+
+describe('precedence against neighbouring rules', () => {
+    test('voteOnlyInLastMinute is evaluated BEFORE the pause', () => {
+        // Mirrors scheduledFill.test.js's equivalent. Both block, but the
+        // reported reason must be the vote-only one so the log explains the
+        // setting the user actually set.
+        mockSettings({
+            voteOnlyInLastMinute: true,
+            lastMinuteThreshold: 10,
+            useVotingPause: true,
+            votingPauseBeforeEnd: [7200],
+        });
+        const decision = VotingLogic.evaluateVotingDecision(buildChallenge({ closeInSeconds: 7200 }), NOW);
+        expect(decision.shouldVote).toBe(false);
+        expect(decision.voteReason).toMatch(/vote-only-in-last-threshold/);
+    });
+
+    test('a daily pause still resolves across a DST changeover', () => {
+        // Europe/Riga springs forward 2026-03-29 at 03:00 local. The pause is a
+        // recurring nightly window, so it crosses this twice a year; wallClock
+        // documents that the instant can shift by up to an hour on the
+        // changeover day. What must NOT happen is the entry failing to resolve
+        // at all (which would read as "pause off" and vote through the night).
+        settings.getEffectiveSetting = jest.fn(
+            (key) =>
+                ({
+                    useVotingPause: true,
+                    votingPauseTime: ['01:30'],
+                    votingPauseBeforeEnd: [],
+                    votingPauseDurationMinutes: 270,
+                })[key],
+        );
+        settings.getSetting = jest.fn((key) => (key === 'timezone' ? 'Europe/Riga' : undefined));
+        // 02:00 UTC on the changeover day — inside the local 01:30 pause either
+        // side of the shift.
+        const dstNow = Math.floor(Date.UTC(2026, 2, 29, 2, 0, 0) / 1000);
+        const challenge = buildChallenge({ closeInSeconds: 86400 });
+        challenge.close_time = dstNow + 86400;
+        const state = VotingLogic.getVotingPauseState(challenge, '777', dstNow);
+        expect(state.active).toBe(true);
+    });
+});
+
 describe('voting pause is independent of scheduled fill', () => {
     test('scheduled fill still fills when only the FILL window is open', () => {
         mockSettings({

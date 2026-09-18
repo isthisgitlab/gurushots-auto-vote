@@ -514,7 +514,10 @@
             votingPauseDurationMinutesDesc:
                 'How long each pause lasts from its start time. When it ends, normal rules apply again and exposure is topped up on the next voting cycle. Example: 270 minutes starting at 01:30 pauses until 06:00.',
             votingPauseNextHint: 'Next pause: {0}–{1} ({2}) — from {3}',
-            votingPauseActiveHint: 'Paused now until {0} ({1}) — only Last Minute and flash voting will run.',
+            votingPauseActiveHint:
+                'Paused now until {0} ({1}) — only Last Minute and flash voting will run. Boost and Turbo still apply on their own timers.',
+            votingPauseShortWindowHint:
+                'This pause is shorter than your maximum Check Frequency ({0} min) — a voting cycle may skip over it entirely, so voting would continue as if no pause were set.',
             votingPauseNoTimesHint: 'No pause time configured — voting pause is inactive until you set one below.',
             votingPauseAllDayHint:
                 'These pauses cover the whole day — outside the Last Minute rules this challenge would never vote automatically.',
