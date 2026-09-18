@@ -29,7 +29,7 @@ const mockSettings = (overrides = {}) => {
         useTurbo: true,
         autoFill: true,
         boostImageIndex: 1,
-        mustIncludeTags: null,
+        mustIncludeTags: [], // mirrors the schema default
     };
     const merged = { ...defaults, ...overrides };
     settings.getEffectiveSetting = jest.fn((key) => merged[key]);
@@ -121,8 +121,18 @@ describe('describeDeadlineActions — row gating', () => {
         // The common configuration: auto-fill on, no must-include filter. The
         // runner returns 'skipped' before any network call, so the row would be
         // permanent noise on every challenge.
-        mockSettings({ autoFill: true, mustIncludeTags: null });
+        mockSettings({ autoFill: true, mustIncludeTags: [] });
         expect(actionsOf(build())).not.toContain('emergencyFill');
+    });
+
+    test('the must-include lookup receives the challenge OBJECT, not its id', () => {
+        // The second argument drives the title-rule union in getEffectiveTagSetting,
+        // so passing challengeId here would silently break title-rule-driven
+        // mustIncludeTags for this row. Same contract the runner's own tests lock.
+        mockSettings({ autoFill: false });
+        const challenge = build();
+        VotingLogic.describeDeadlineActions(challenge, NOW);
+        expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
     });
 
     test('emergency-fill row shown when auto-fill is off (nothing else fills the slot)', () => {

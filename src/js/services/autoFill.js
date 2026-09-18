@@ -1115,6 +1115,58 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
 };
 
 /**
+ * Whether emergency fill stands down on LIVE STATE alone, independent of timing.
+ * Owned here, beside the runner that enforces it, and exported so the read-only
+ * renderer view (VotingLogic.describeDeadlineActions, which drives the deadline
+ * timeline and the desktop notifications) decides row visibility from the very
+ * same code instead of a second copy that can silently drift.
+ *
+ * Covers the three state-only stand-downs maybeEmergencyFillChallenge takes
+ * before any network call:
+ *   - no challenge id (`undefined`/`null`, exactly the runner's own guard — an
+ *     empty-string id is NOT one of them, so callers that normalise a missing id
+ *     to '' must pass the raw id instead),
+ *   - no free slot left to fill, and
+ *   - "normal auto-fill already owns this challenge": auto-fill on with no
+ *     must-include filter, the common configuration, in which the staggered
+ *     path fills the slots and emergency fill has nothing to add.
+ *
+ * Deliberately NOT covered — the caller owns these:
+ *   - the timing/enabled checks (`emergencyFill` seconds, close_time, whether
+ *     `now` is inside the window), because the view expresses them as a
+ *     threshold and a due instant rather than a boolean, and
+ *   - the runner's final stand-down, a dry-run probe of whether the
+ *     must-include filter would actually leave the slot empty. That needs the
+ *     eligible-photo list over the network, so a read-only caller must treat
+ *     "filter set" as "may fill" rather than "will fill".
+ *
+ * Returns the two settings it resolved alongside the verdict so the runner can
+ * reuse them: every `getEffectiveSetting` is an uncached `readFileSync` +
+ * merge + migrate (settings/storage.js readRaw), so re-reading them would add
+ * real synchronous I/O to a path that runs seconds before a deadline. Nothing is
+ * read until after the id and free-slot checks, keeping the stand-down paths
+ * cheaper than a caller that resolved them up front. `settings` is a parameter
+ * because this module takes the facade via `deps` while VotingLogic requires it
+ * directly.
+ *
+ * @param {object} challenge
+ * @param {string|number|null|undefined} challengeId raw id; do not normalise it
+ * @param {{getEffectiveSetting: function, getEffectiveTagSetting: function}} settings
+ * @returns {{standDown: boolean, autoFillEnabled: boolean, mustIncludeTags: unknown}}
+ *   standDown true = would do nothing, so never advertise it as upcoming
+ */
+const evaluateEmergencyFill = (challenge, challengeId, settings) => {
+    const inert = { standDown: true, autoFillEnabled: false, mustIncludeTags: null };
+    if (challengeId === undefined || challengeId === null) return inert;
+    if (getSlotsRemaining(challenge) <= 0) return inert;
+
+    const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
+    const autoFillEnabled = settings.getEffectiveSetting('autoFill', String(challengeId)) === true;
+    const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
+    return { standDown: autoFillEnabled && !mustActive, autoFillEnabled, mustIncludeTags };
+};
+
+/**
  * Emergency fill — a safety net for the two cases the staggered
  * auto-fill path deliberately leaves empty right up to the deadline:
  *   (a) auto-fill is off for the challenge, or
@@ -1157,21 +1209,19 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
     if (secondsRemaining <= 0) return 'skipped';
     if (secondsRemaining > emergencySeconds) return 'skipped'; // not in the emergency window yet
 
-    let slotsRemaining = getSlotsRemaining(challenge);
-    if (slotsRemaining <= 0) return 'skipped';
+    // Stand down before any network call on the state-only conditions: no free
+    // slot, and normal auto-fill already owning this challenge (auto-fill on
+    // with no must-include filter — the common configuration, where the early
+    // return avoids fetching eligible photos every cycle just to discard them).
+    // Shared with the read-only timeline view so the two cannot drift; it hands
+    // back the settings it resolved so nothing below re-reads them.
+    const gate = evaluateEmergencyFill(challenge, challengeId, settings);
+    if (gate.standDown) return 'skipped';
+    const { autoFillEnabled, mustIncludeTags } = gate;
 
-    const autoFillEnabled = settings.getEffectiveSetting('autoFill', String(challengeId)) === true;
-    const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
+    let slotsRemaining = getSlotsRemaining(challenge);
     const shouldIncludeTags = settings.getEffectiveTagSetting('shouldIncludeTags', challenge);
     const fillWithoutTagMatch = settings.getEffectiveSetting('fillWithoutTagMatch', String(challengeId));
-
-    // Stand down before any network call when normal auto-fill already owns
-    // this challenge: auto-fill on with no must-include filter means the
-    // staggered path fills the slots, so emergency fill has nothing to add.
-    // This is the common configuration, so the early return avoids fetching
-    // eligible photos every cycle just to discard them.
-    const mustActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
-    if (autoFillEnabled && !mustActive) return 'skipped';
 
     const attempt = await runFillAttempt({
         label: 'emergencyFill',
@@ -1472,6 +1522,9 @@ module.exports = {
     reflectEntryFlag,
     resolveScheduleTarget,
     getNextScheduleThresholdSec,
+    // Shared with VotingLogic.describeDeadlineActions so the timeline/notify
+    // view and this runner cannot drift on when emergency fill does nothing.
+    evaluateEmergencyFill,
     // exported for tests
     getEffectiveScheduleRows,
     getSlotsRemaining,

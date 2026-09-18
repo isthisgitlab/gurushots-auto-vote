@@ -15,7 +15,9 @@ const settings = /** @type {any} */ (require('../settings'));
 // Single source of truth for the auto-fill schedule threshold math (no import
 // cycle: autoFill.js does not require VotingLogic). Cast for the same
 // boundary reason as settings above — autoFill.js isn't `// @ts-check`ed yet.
-const { getNextScheduleThresholdSec } = /** @type {any} */ (require('./autoFill'));
+const { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } = /** @type {any} */ (
+    require('./autoFill')
+);
 // Pure wall-clock math for the scheduled-fill feature (no import cycle:
 // wallClock.js imports nothing). Cast for the same boundary reason as the
 // two imports above — wallClock.js isn't `// @ts-check`ed yet.
@@ -1321,36 +1323,6 @@ const getEmergencyFillThresholdSec = (challengeId) => {
 };
 
 /**
- * Whether an ENABLED emergency fill would actually do something — the live-state
- * half that getEmergencyFillThresholdSec (a fixed setting) cannot express.
- * Mirrors the two stand-downs maybeEmergencyFillChallenge takes before any
- * network call:
- *   - no free slot left to fill (`getSlotsRemaining <= 0`), and
- *   - "normal auto-fill already owns this challenge": auto-fill on with no
- *     must-include filter, the common configuration, in which the staggered path
- *     does the filling and emergency fill has nothing to add.
- *
- * Its third stand-down is a network probe of whether the must-include filter
- * would leave the slot empty; that needs the eligible-photo list, so a
- * read-only caller must treat "filter set" as "may fill" rather than "will".
- *
- * Callers establish the feature is on first (threshold > 0); this answers only
- * the live-state half, and `hasFreeSlot` is passed in because callers already
- * compute it.
- *
- * @param {any} challenge
- * @param {string} challengeId
- * @param {boolean} hasFreeSlot
- * @returns {boolean}
- */
-const emergencyFillWouldAct = (challenge, challengeId, hasFreeSlot) => {
-    if (!hasFreeSlot) return false;
-    const mustIncludeTags = settings.getEffectiveTagSetting('mustIncludeTags', challenge);
-    const mustIncludeActive = Array.isArray(mustIncludeTags) && mustIncludeTags.length > 0;
-    return mustIncludeActive || settings.getEffectiveSetting('autoFill', challengeId) !== true;
-};
-
-/**
  * Effective seconds-before-close at which boost becomes due. Key-unlocked
  * boosts apply inside their own `keyUnlockedBoostTime` closing window (default
  * 15m); timer-based boosts apply
@@ -1429,8 +1401,9 @@ const orderDeadlineActions = (challenge) => {
  *   - autoFill: gate on the autoFill toggle (a schedule can imply a threshold
  *     while auto-fill is disabled).
  *   - emergencyFill: its threshold is a fixed setting that never reflects live
- *     state, so defer to emergencyFillWouldAct for the runner's own
- *     stand-downs (no free slot; normal auto-fill already owns the fill).
+ *     state, so defer to the runner's own evaluateEmergencyFill (no id, no free
+ *     slot, or normal auto-fill already owning the fill). Shared code, not a
+ *     copy, so the row cannot drift from what actually runs.
  *   - a threshold of 0 / -Infinity means off/n-a (auto-fill satisfied,
  *     emergency-fill off, key-unlocked boost off) — always omitted.
  *
@@ -1464,12 +1437,11 @@ const describeDeadlineActions = (challenge, now) => {
     // A fill-new mode (always or the narrower on-conflict) resolves the conflict
     // by boosting a freshly submitted photo instead — but only when there is a
     // free slot to submit into, so the warning still shows for a truly full,
-    // conflicted challenge. Free-slot count is read inline (max_photo_submits −
-    // entries) to avoid importing autoFill and creating a require cycle.
+    // conflicted challenge. The free-slot count comes from autoFill's own
+    // getSlotsRemaining (this module already imports that module — there is no
+    // cycle) so the fill paths and this view can never disagree on "full".
     const entries = challenge?.member?.ranking?.entries;
-    const entryCount = Array.isArray(entries) ? entries.length : 0;
-    const maxSubmits = Number.isFinite(challenge?.max_photo_submits) ? challenge.max_photo_submits : 0;
-    const hasFreeSlot = maxSubmits - entryCount > 0;
+    const hasFreeSlot = getSlotsRemaining(challenge) > 0;
     const fillNewWillResolve = hasFreeSlot && resolveBoostFillNewMode(challenge, challengeId) !== 'no';
     const boostBlocked =
         isBoostWindowOpen(challenge, now) &&
@@ -1500,8 +1472,13 @@ const describeDeadlineActions = (challenge, now) => {
             case 'autoFill':
                 return settings.getEffectiveSetting('autoFill', challengeId) === true;
             case 'emergencyFill':
-                // thresholdSec > 0 already means enabled (0 = off).
-                return emergencyFillWouldAct(challenge, challengeId, hasFreeSlot);
+                // thresholdSec > 0 already means enabled (0 = off); the runner
+                // owns the state-only stand-downs, so ask it rather than keeping
+                // a second copy here that could drift from what actually runs.
+                // The RAW id goes in, not the '' -normalised challengeId above:
+                // the shared check treats undefined/null as "no id" exactly as
+                // the runner does, and must not learn this view's normalisation.
+                return !evaluateEmergencyFill(challenge, challenge?.id, settings).standDown;
             default:
                 return false;
         }
