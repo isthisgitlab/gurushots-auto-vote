@@ -136,4 +136,55 @@ describe('TitleTagRulesEditor', () => {
             expect(screen.getByLabelText('app.titleRuleJoinWindow').value).toBe('0');
         });
     });
+
+    describe('match mode and challenge tag', () => {
+        const rowWith = (over = {}) => [{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], ...over }];
+
+        test('a rule with no match key shows as exact', () => {
+            render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+            expect(screen.getByLabelText('app.titleRuleMatch').value).toBe('exact');
+        });
+
+        test('choosing a mode emits it', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            const select = screen.getByLabelText('app.titleRuleMatch');
+            select.value = 'contains';
+            select.dispatchEvent(new window.Event('change', { bubbles: true }));
+            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ match: 'contains' })]);
+        });
+
+        test('a saved mode renders back', () => {
+            render(<TitleTagRulesEditor value={rowWith({ match: 'starts' })} onChange={jest.fn()} />);
+            expect(screen.getByLabelText('app.titleRuleMatch').value).toBe('starts');
+        });
+
+        test('editing the challenge tag emits it', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            fireEvent.change(screen.getByLabelText('app.titleRuleChallengeTag'), {
+                target: { value: 'Exhibition' },
+            });
+            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ challengeTag: 'Exhibition' })]);
+        });
+
+        test('the challenge-tag field is distinct from the photo tag fields', () => {
+            // Three tag-ish inputs in a row: challenge tag (its own labelled
+            // field) plus Must/Should photo tags (the shared placeholder).
+            render(<TitleTagRulesEditor value={rowWith({ challengeTag: 'Turbo' })} onChange={jest.fn()} />);
+            expect(screen.getByLabelText('app.titleRuleChallengeTag').value).toBe('Turbo');
+            expect(screen.getAllByPlaceholderText('app.tagsPlaceholder')).toHaveLength(2);
+        });
+
+        test('a tag-only rule renders with an empty title', () => {
+            render(
+                <TitleTagRulesEditor
+                    value={[{ challengeTag: 'Exhibition', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                    onChange={jest.fn()}
+                />,
+            );
+            expect(screen.getByLabelText('app.titleTagRuleTitle').value).toBe('');
+            expect(screen.getByLabelText('app.titleRuleChallengeTag').value).toBe('Exhibition');
+        });
+    });
 });

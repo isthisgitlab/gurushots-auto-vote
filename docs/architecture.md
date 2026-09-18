@@ -129,6 +129,26 @@ Domain terms used throughout, in reader's terms:
   candidate's actual field names once per pass. Unlike the type filters, a title opt-in does **not** bypass
   the window (bypassing an explicit "join late" would invert it), and the manual single-join path ignores the
   window entirely — a click is the user overriding timing.
+- **Title rules match on conditions, not just an exact title.** A rule carries a title condition (with a
+  `match` mode: `exact` — the default and the pre-existing behavior — `starts`, or `contains`), a
+  `challengeTag` condition, or both; every condition present must hold (AND), and a rule with neither
+  matches nothing. Because several rules can now match one challenge, `_findRuleIn` picks a deterministic
+  winner by **specificity**: exact (3) > starts (2) > contains (1) > tag-only (0), +1 for carrying both
+  conditions, ties broken by the longer title pattern and then by the earlier position — never by Map or
+  object iteration order. Rules de-duplicate on the whole condition (title + mode + tag), so `abc`/exact and
+  `abc`/contains coexist. `_findRuleIn` takes its rules array explicitly because the validation paths match
+  against an in-progress settings **snapshot** rather than what is on disk.
+- **Challenge tags ≠ photo tags — the two must not be conflated.** `mustIncludeTags`/`shouldIncludeTags`
+  choose which of the user's PHOTOS to submit; a rule's `challengeTag` and the `autoJoinChallengeTags` /
+  `autoJoinExcludeChallengeTags` settings choose which CHALLENGES to act on, from the API's own classifiers
+  (`Exhibition`, `Comm`, `No comm`, `Turbo`, `Magazine`, `special 4 pic`, `N photos`, `MV`, `Strong`).
+  The join-scope lists mirror the type lists exactly (empty include = all, exclude subtracts, a title opt-in
+  bypasses both), and types and tags are independent axes that must BOTH pass.
+- **Tag resolution for id-keyed callers** rides an in-memory `activeChallengeTags` map filled by
+  `rememberChallengeTitles` alongside the title cache — deliberately NOT the persisted `titlePins` blob,
+  which exists to defeat a mid-challenge server-side rename and would only grow. Joined challenges carry
+  `tags` too (verified 18/18), so a tag-keyed rule drives auto-fill and per-challenge settings, not just
+  auto-join.
 - **`get_member_challenges('open')` payload (verified against live 2026-09-19, 12/12 items).** Every open
   challenge carries `close_time` **and** `start_time` as epoch seconds, so the join window rests on a field
   that is actually there and a percent-elapsed anchor is implementable if ever wanted. Also present on every

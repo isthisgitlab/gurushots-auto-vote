@@ -246,6 +246,12 @@
             autoJoinExcludeTypes: 'Nekad nepievienoties šiem tipiem',
             autoJoinExcludeTypesDesc:
                 'Ar komatu atdalīti izaicinājumu tipi, kuriem nekad automātiski nepievienoties, piem., "flash,exhibition". Tā kā noklusējums ir pievienoties visiem tipiem, šādi iegūst "pievienoties visam, izņemot šos". Izaicinājums, kas atbilst saglabātam nosaukuma profilam, joprojām tiek pievienots — profils ir apzināta izvēle konkrētam nosaukumam.',
+            autoJoinChallengeTags: 'Tikai izaicinājumi ar tagiem',
+            autoJoinChallengeTagsDesc:
+                'Ar komatu atdalīti IZAICINĀJUMA tagi, kuriem pievienoties, piem., "Exhibition,Turbo". Šie ir tagi, ko izaicinājumam piešķir GuruShots (Exhibition, Comm, No comm, Turbo, Magazine, "special 4 pic"), nevis tavu foto tagi. Atstāj TUKŠU, lai atļautu visus. Izaicinājums atbilst, ja tam ir JEBKURŠ tags no saraksta. Nav reģistrjutīgs.',
+            autoJoinExcludeChallengeTags: 'Nekad izaicinājumi ar tagiem',
+            autoJoinExcludeChallengeTagsDesc:
+                'Ar komatu atdalīti IZAICINĀJUMA tagi, kuriem nekad automātiski nepievienoties, piem., "Comm". Atņem no augšējā tvēruma — šādi iegūst "pievienoties visam, izņemot šos". Nosaukuma noteikums, kas ieslēdz pievienošanos, joprojām pievienojas — tā ir apzināta izvēle konkrētam nosaukumam.',
             autoJoinWithinHoursOfEnd: 'Pievienoties tikai tuvu beigām',
             autoJoinWithinHoursOfEndDesc:
                 'Nogaidīt, līdz izaicinājumam līdz beigām atlicis tik stundu, un tikai tad pievienoties, nevis pievienoties uzreiz, tiklīdz tas parādās. 0 = pievienoties uzreiz.',
@@ -319,6 +325,14 @@
                 'Neizdevās saglabāt noteikumus. Pārbaudi profilus, nosaukumu/tagu garumu un pretrunas ar atvērtu izaicinājumu manuālajiem iestatījumiem. Pārējie iestatījumi saglabāti.',
             titleTagRuleTitle: 'Izaicinājuma nosaukums',
             titleTagRuleTitlePlaceholder: "piem., Let's See Hats",
+            titleRuleMatch: 'Nosaukuma atbilstība',
+            titleRuleMatchExact: 'Ir tieši',
+            titleRuleMatchStarts: 'Sākas ar',
+            titleRuleMatchContains: 'Satur',
+            titleRuleChallengeTag: 'Izaicinājuma tags',
+            titleRuleChallengeTagPlaceholder: 'piem., Exhibition',
+            titleRuleChallengeTagHint:
+                'Paša izaicinājuma tags, nevis foto tags. Atstāj nosaukumu tukšu, lai atbilstu tikai pēc taga.',
             titleRuleProfile: 'Automātiskais profils',
             titleRuleInherit: 'Mantot',
             titleRuleOn: 'Ieslēgts',

@@ -83,19 +83,26 @@ function renderTitleProfileSelect(index, rule, profiles, updateRule, t) {
 }
 
 /**
- * Editor for title-keyed challenge rules. GuruShots challenges rotate with a fresh
- * id each time, so id-keyed per-challenge overrides are lost on every rotation;
- * these rules match on the stable title, inherit an optional named profile,
- * and merge optional Must/Should Include tags at fill time.
+ * Editor for challenge rules. GuruShots challenges rotate with a fresh id each
+ * time, so id-keyed per-challenge overrides are lost on every rotation; these
+ * rules match on what survives a rotation instead.
  *
- * Beyond tags, a rule may override behaviour for its title INLINE — auto-join,
- * auto-fill, and the join window — without needing a named profile. Inline wins
- * over the profile, which wins over the global default. An omitted key means
- * "inherit"; the editor spells that as '' and the settings sanitizer drops it.
+ * MATCHING: a rule matches on a title (with a `match` mode — is-exactly, which
+ * is the default, starts-with, or contains) and/or on a `challengeTag` — the
+ * challenge's OWN classifier from the API (Exhibition, Comm, Turbo, …), not a
+ * photo tag. Both present means both must hold. When several rules match one
+ * challenge the most specific wins (see settings.js `_findRuleIn`).
+ *
+ * BEHAVIOUR: a rule inherits an optional named profile, merges optional
+ * Must/Should Include PHOTO tags at fill time, and may override auto-join,
+ * auto-fill and the join window INLINE. Inline wins over the profile, which
+ * wins over the global default. An omitted key means "inherit"; the editor
+ * spells that as '' and the settings sanitizer drops it.
  *
  * Controlled: `value` is the rules array and `onChange(nextRules)` is called
  * with a new array on every edit. Each rule is
- * `{ title: string, profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[],
+ * `{ title: string, match?: 'exact'|'starts'|'contains', challengeTag?: string,
+ *    profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[],
  *    autoJoin?: boolean, autoFill?: boolean, autoJoinWithinHoursOfEnd?: number }`.
  */
 export function TitleTagRulesEditor({ value, onChange, profiles = {} }) {
@@ -123,6 +130,16 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {} }) {
                 // inputs and TagsField's prop-fingerprint re-sync keep values correct.
                 <div key={index} className="rounded-box border border-base-300 p-3 space-y-3">
                     <div className="flex items-center gap-2">
+                        <select
+                            aria-label={t('app.titleRuleMatch')}
+                            className="select select-bordered select-sm w-32"
+                            value={rule.match ?? 'exact'}
+                            onChange={(e) => updateRule(index, { match: e.target.value })}
+                        >
+                            <option value="exact">{t('app.titleRuleMatchExact')}</option>
+                            <option value="starts">{t('app.titleRuleMatchStarts')}</option>
+                            <option value="contains">{t('app.titleRuleMatchContains')}</option>
+                        </select>
                         <input
                             type="text"
                             className="input input-bordered input-sm flex-1"
@@ -139,6 +156,18 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {} }) {
                         >
                             ×
                         </button>
+                    </div>
+                    <div className="form-control gap-1">
+                        <span className="label-text text-sm">{t('app.titleRuleChallengeTag')}</span>
+                        <input
+                            type="text"
+                            className="input input-bordered input-sm w-full"
+                            placeholder={t('app.titleRuleChallengeTagPlaceholder')}
+                            aria-label={t('app.titleRuleChallengeTag')}
+                            value={rule.challengeTag ?? ''}
+                            onChange={(e) => updateRule(index, { challengeTag: e.target.value })}
+                        />
+                        <span className="label-text-alt text-xs opacity-60">{t('app.titleRuleChallengeTagHint')}</span>
                     </div>
                     {renderTitleProfileSelect(index, rule, profiles, updateRule, t)}
                     <div className="space-y-2">

@@ -291,6 +291,180 @@ describe('settings facade — title-keyed tag rules', () => {
         });
     });
 
+    /**
+     * Match modes + challenge-tag conditions. A rule carries a title condition,
+     * a challenge-tag condition, or both; every condition present must hold.
+     * Back-compat is the load-bearing case: a rule saved before match modes
+     * existed has no `match` key and must keep matching EXACTLY.
+     */
+    describe('match modes and challenge-tag conditions', () => {
+        const save = (...rules) =>
+            settings.setTitleRules(rules.map((r) => ({ mustIncludeTags: [], shouldIncludeTags: [], ...r })));
+
+        describe('title match modes', () => {
+            test('a rule with no match key stays exact (back-compat)', () => {
+                save({ title: 'abc', autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'abc' })).toEqual({ autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'The ABC Challenge' })).toEqual({});
+            });
+
+            test('contains matches a substring, case-insensitively', () => {
+                save({ title: 'abc', match: 'contains', autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'The ABC Challenge' })).toEqual({ autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'nothing here' })).toEqual({});
+            });
+
+            test('starts matches only at the beginning', () => {
+                save({ title: 'photo', match: 'starts', autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'Photographer of the Week' })).toEqual({
+                    autoJoin: true,
+                });
+                expect(settings.getTitleRuleOverrides({ title: 'Best Photo' })).toEqual({});
+            });
+
+            test('the default mode is not persisted, a non-default one is', () => {
+                save({ title: 'a', autoJoin: true }, { title: 'b', match: 'contains', autoJoin: true });
+                const [exact, contains] = settings.getTitleRules();
+                expect(exact).not.toHaveProperty('match');
+                expect(contains.match).toBe('contains');
+            });
+
+            test('an unknown match mode is rejected rather than silently narrowed', () => {
+                expect(settings.setTitleRules([{ title: 'a', match: 'regex', mustIncludeTags: [] }])).toBe(false);
+                expect(settings.getTitleRules()).toEqual([]);
+            });
+        });
+
+        describe('challenge-tag conditions', () => {
+            test('a tag-only rule matches any challenge carrying that tag', () => {
+                save({ challengeTag: 'Exhibition', autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'Anything', tags: ['Exhibition', 'Comm'] })).toEqual({
+                    autoJoin: true,
+                });
+                expect(settings.getTitleRuleOverrides({ title: 'Anything', tags: ['Turbo'] })).toEqual({});
+            });
+
+            test('tag comparison is case- and whitespace-insensitive', () => {
+                save({ challengeTag: '  exhibition ', autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'x', tags: ['EXHIBITION'] })).toEqual({
+                    autoJoin: true,
+                });
+            });
+
+            test('a rule with BOTH conditions requires both to hold', () => {
+                save({ title: 'photo', match: 'starts', challengeTag: 'Turbo', autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'Photo of the Week', tags: ['Turbo'] })).toEqual({
+                    autoJoin: true,
+                });
+                // Title matches, tag does not.
+                expect(settings.getTitleRuleOverrides({ title: 'Photo of the Week', tags: ['Comm'] })).toEqual({});
+                // Tag matches, title does not.
+                expect(settings.getTitleRuleOverrides({ title: 'Going Viral', tags: ['Turbo'] })).toEqual({});
+            });
+
+            test('a challenge with no tags cannot satisfy a tag condition', () => {
+                save({ challengeTag: 'Exhibition', autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'x' })).toEqual({});
+                expect(settings.getTitleRuleOverrides({ title: 'x', tags: [] })).toEqual({});
+            });
+
+            test('a tag-only rule survives the save (it has no title to key on)', () => {
+                save({ challengeTag: 'Exhibition', autoJoin: true });
+                expect(settings.getTitleRules()).toHaveLength(1);
+                expect(settings.getTitleRules()[0]).toMatchObject({ challengeTag: 'Exhibition', autoJoin: true });
+            });
+
+            test('a rule with neither condition is dropped', () => {
+                save({ autoJoin: true });
+                expect(settings.getTitleRules()).toEqual([]);
+            });
+        });
+
+        describe('precedence when several rules match', () => {
+            test('exact beats starts beats contains beats tag-only', () => {
+                save(
+                    { challengeTag: 'Turbo', autoJoinWithinHoursOfEnd: 1 },
+                    { title: 'pho', match: 'contains', autoJoinWithinHoursOfEnd: 2 },
+                    { title: 'photo', match: 'starts', autoJoinWithinHoursOfEnd: 3 },
+                    { title: 'photo of the week', autoJoinWithinHoursOfEnd: 4 },
+                );
+                const target = { title: 'Photo of the Week', tags: ['Turbo'] };
+                expect(settings.getTitleRuleOverrides(target)).toEqual({ autoJoinWithinHoursOfEnd: 4 });
+            });
+
+            test('with the exact rule gone, starts-with wins', () => {
+                save(
+                    { challengeTag: 'Turbo', autoJoinWithinHoursOfEnd: 1 },
+                    { title: 'pho', match: 'contains', autoJoinWithinHoursOfEnd: 2 },
+                    { title: 'photo', match: 'starts', autoJoinWithinHoursOfEnd: 3 },
+                );
+                expect(settings.getTitleRuleOverrides({ title: 'Photo of the Week', tags: ['Turbo'] })).toEqual({
+                    autoJoinWithinHoursOfEnd: 3,
+                });
+            });
+
+            test('carrying both conditions outranks the same title mode alone', () => {
+                save(
+                    { title: 'pho', match: 'contains', autoJoinWithinHoursOfEnd: 2 },
+                    { title: 'pho', match: 'contains', challengeTag: 'Turbo', autoJoinWithinHoursOfEnd: 9 },
+                );
+                expect(settings.getTitleRuleOverrides({ title: 'Photo of the Week', tags: ['Turbo'] })).toEqual({
+                    autoJoinWithinHoursOfEnd: 9,
+                });
+            });
+
+            test('same mode and specificity: the longer pattern wins', () => {
+                save(
+                    { title: 'pho', match: 'contains', autoJoinWithinHoursOfEnd: 2 },
+                    { title: 'photo of', match: 'contains', autoJoinWithinHoursOfEnd: 7 },
+                );
+                expect(settings.getTitleRuleOverrides({ title: 'Photo of the Week' })).toEqual({
+                    autoJoinWithinHoursOfEnd: 7,
+                });
+            });
+
+            test('a total tie resolves to the earliest rule, not an arbitrary one', () => {
+                save(
+                    { challengeTag: 'Turbo', autoJoinWithinHoursOfEnd: 1 },
+                    { challengeTag: 'Comm', autoJoinWithinHoursOfEnd: 2 },
+                );
+                expect(settings.getTitleRuleOverrides({ title: 'x', tags: ['Turbo', 'Comm'] })).toEqual({
+                    autoJoinWithinHoursOfEnd: 1,
+                });
+            });
+        });
+
+        describe('de-duplication', () => {
+            test('same title with different modes are kept as distinct rules', () => {
+                save(
+                    { title: 'abc', autoJoinWithinHoursOfEnd: 1 },
+                    { title: 'abc', match: 'contains', autoJoinWithinHoursOfEnd: 2 },
+                );
+                expect(settings.getTitleRules()).toHaveLength(2);
+            });
+
+            test('an identical condition still collapses, last wins', () => {
+                save(
+                    { title: 'abc', match: 'contains', autoJoinWithinHoursOfEnd: 1 },
+                    { title: 'abc', match: 'contains', autoJoinWithinHoursOfEnd: 2 },
+                );
+                const rules = settings.getTitleRules();
+                expect(rules).toHaveLength(1);
+                expect(rules[0].autoJoinWithinHoursOfEnd).toBe(2);
+            });
+
+            test('two tag-only rules for different tags both survive', () => {
+                save({ challengeTag: 'Turbo', autoJoin: true }, { challengeTag: 'Comm', autoJoin: false });
+                expect(settings.getTitleRules()).toHaveLength(2);
+            });
+        });
+
+        test('a bare title string still resolves (callers that have no challenge)', () => {
+            save({ title: 'abc', match: 'contains', autoJoin: true });
+            expect(settings.getTitleRuleOverrides('The ABC Challenge')).toEqual({ autoJoin: true });
+        });
+    });
+
     describe('getEffectiveTagSetting', () => {
         test('with no rules, equals the global default ("no filter" = empty)', () => {
             const challenge = { id: 1, title: 'Anything' };

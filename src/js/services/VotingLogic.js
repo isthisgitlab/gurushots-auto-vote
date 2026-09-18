@@ -1565,13 +1565,15 @@ const joinWindowRefusal = (challenge, joinWithinSec, nowSec) => {
  * sentinel — paid joins require `maxCoins > 0` AND `remainingBudget >= cost`.
  *
  * @param {object} params
- * @param {{id?: string|number, type?: string, join_coins?: number, close_time?: number}} params.challenge
+ * @param {{id?: string|number, type?: string, join_coins?: number, close_time?: number, tags?: string[]}} params.challenge
  * @param {{coins?: number}|null} params.bankroll live balance, or null if unread
  * @param {number} params.remainingBudget coins still spendable this cycle (0 = paid off)
  * @param {string[]} params.includeTypes normalized lowercase types from `autoJoinTypes`; EMPTY = all types
  * @param {string[]} params.excludeTypes normalized lowercase types from `autoJoinExcludeTypes`; a match vetoes the join (unless a title-profile matches)
  * @param {number} params.maxCoins per-challenge coin cap (0 = free only)
  * @param {boolean} params.hasProfileMatch a title rule/profile matched this title — a deliberate opt-in that bypasses the exclude veto and include narrowing
+ * @param {string[]} [params.includeTags] normalized lowercase CHALLENGE tags from `autoJoinChallengeTags`; EMPTY = any
+ * @param {string[]} [params.excludeTags] normalized lowercase CHALLENGE tags from `autoJoinExcludeChallengeTags`; any match vetoes the join
  * @param {number} [params.joinWithinSec] join only within this many seconds of `close_time` (0/absent = off)
  * @param {number} [params.nowSec] current time in epoch SECONDS (matches `close_time`'s unit); required when `joinWithinSec` > 0
  * @returns {{join: boolean, needsCoins: number, reason: string}}
@@ -1584,6 +1586,8 @@ const shouldJoinChallenge = ({
     excludeTypes,
     maxCoins,
     hasProfileMatch,
+    includeTags = [],
+    excludeTags = [],
     joinWithinSec = 0,
     nowSec = 0,
 }) => {
@@ -1591,10 +1595,14 @@ const shouldJoinChallenge = ({
     const needsCoins = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
 
     const type = typeof challenge?.type === 'string' ? challenge.type.trim().toLowerCase() : '';
+    const tags = Array.isArray(challenge?.tags)
+        ? challenge.tags.filter((tag) => typeof tag === 'string').map((tag) => tag.trim().toLowerCase())
+        : [];
     // A saved title profile is a deliberate per-title opt-in and wins over the
-    // general type filters (bypasses exclude + include narrowing). Otherwise:
-    // default is join everything; a non-empty include list narrows to those
-    // types; the exclude list always subtracts.
+    // general type/tag filters (bypasses exclude + include narrowing).
+    // Otherwise: default is join everything; a non-empty include list narrows;
+    // the exclude list always subtracts. Types and challenge tags are two
+    // independent axes and BOTH must pass.
     if (hasProfileMatch !== true) {
         if (Array.isArray(excludeTypes) && type !== '' && excludeTypes.includes(type)) {
             return { join: false, needsCoins, reason: 'excluded-type' };
@@ -1602,6 +1610,15 @@ const shouldJoinChallenge = ({
         const hasIncludeFilter = Array.isArray(includeTypes) && includeTypes.length > 0;
         if (hasIncludeFilter && !(type !== '' && includeTypes.includes(type))) {
             return { join: false, needsCoins, reason: 'out-of-scope' };
+        }
+        if (Array.isArray(excludeTags) && excludeTags.some((tag) => tags.includes(tag))) {
+            return { join: false, needsCoins, reason: 'excluded-tag' };
+        }
+        const hasTagFilter = Array.isArray(includeTags) && includeTags.length > 0;
+        // A challenge with NO tags can never satisfy a require-list, the same
+        // way a typeless one cannot satisfy an include-list.
+        if (hasTagFilter && !includeTags.some((tag) => tags.includes(tag))) {
+            return { join: false, needsCoins, reason: 'tag-out-of-scope' };
         }
     }
 

@@ -846,19 +846,32 @@ const MAX_TITLE_LENGTH = 200;
 // Replacing the whole map on each successful fetch also drops stale ids.
 let activeChallengeTitles = new Map();
 
+// Parallel id -> challenge-tag cache, refreshed by the same function. Defensive
+// per-challenge cap: real lists carry a handful of tags (the live vocabulary is
+// Exhibition / Comm / No comm / Turbo / Magazine / "special N pic" / "N photos").
+const MAX_CHALLENGE_TAGS = 24;
+let activeChallengeTags = new Map();
+
 // Stable match key for a challenge title: trimmed + lowercased. The same
 // challenge recurs with the same title (but a new id) on each rotation, so
 // this is what survives a rotation.
 const normalizeTitle = (title) => (typeof title === 'string' ? title.trim().toLowerCase() : '');
 
 /**
- * Remember the titles from the latest successful active-challenge response.
- * The input is API-owned/untrusted, so only bounded scalar ids/titles enter
- * the cache and the first row for a duplicate id wins.
+ * Remember the titles AND challenge tags from the latest successful
+ * active-challenge response. The input is API-owned/untrusted, so only bounded
+ * scalar ids/titles/tags enter the cache and the first row for a duplicate id
+ * wins.
+ *
+ * Tags live here rather than in the persisted `titlePins` blob on purpose: a
+ * pin exists to defeat a server-side RENAME mid-challenge, while tags are only
+ * needed to resolve a rule for a challenge in the current list. An in-memory
+ * map costs no settings-file growth and cannot go stale across restarts.
  */
 const rememberChallengeTitles = (challenges) => {
     if (!Array.isArray(challenges)) return false;
     const next = new Map();
+    const nextTags = new Map();
     for (const challenge of challenges.slice(0, MAX_TITLE_RULES)) {
         if (challenge?.id === null || challenge?.id === undefined) continue;
         const id = String(challenge.id);
@@ -867,9 +880,26 @@ const rememberChallengeTitles = (challenges) => {
         // Keep an explicit miss for unusable/over-length observations so a
         // truncated legacy pin cannot be used as an apparently exact fallback.
         next.set(id, title && title.length <= MAX_TITLE_LENGTH ? title : null);
+        // Bound the per-challenge tag list the same way titles are bounded: an
+        // anomalous payload must not park an unbounded array in memory.
+        nextTags.set(
+            id,
+            (Array.isArray(challenge?.tags) ? challenge.tags : [])
+                .slice(0, MAX_CHALLENGE_TAGS)
+                .filter((tag) => typeof tag === 'string' && tag.trim() !== '' && tag.length <= MAX_TITLE_LENGTH)
+                .map((tag) => tag.trim()),
+        );
     }
     activeChallengeTitles = next;
+    activeChallengeTags = nextTags;
     return true;
+};
+
+/** The remembered challenge tags for an id, or [] when unknown. */
+const _tagsForChallengeId = (challengeId) => {
+    const id = challengeId === null || challengeId === undefined ? '' : String(challengeId);
+    if (!id) return [];
+    return activeChallengeTags.get(id) || [];
 };
 
 const _titleForChallengeId = (settings, challengeId) => {
@@ -915,15 +945,101 @@ const getTitleRules = () => {
     return Array.isArray(rules) ? rules : [];
 };
 
+// How a rule's `title` is compared. 'exact' is the default and the historical
+// behavior — a rule saved before match modes existed has no `match` key and must
+// keep matching exactly, or every old rule would silently widen.
+const TITLE_MATCH_MODES = ['exact', 'contains', 'starts'];
+
+const ruleMatchMode = (rule) => (TITLE_MATCH_MODES.includes(rule?.match) ? rule.match : 'exact');
+
+// Challenge tags are API-owned strings ("Exhibition", "No comm", "special 4 pic").
+// Compared trimmed + lowercased, like titles.
+const normalizeTag = (tag) => (typeof tag === 'string' ? tag.trim().toLowerCase() : '');
+
+const normalizeTagList = (tags) => (Array.isArray(tags) ? tags.map(normalizeTag).filter(Boolean) : []);
+
 /**
- * Find the first title rule matching a challenge title (exact, case-insensitive,
- * trimmed). Returns null when there is no title or no match.
+ * Does the rule's TITLE condition hold? Returns null when the rule sets no
+ * title at all (a tag-only rule) — distinct from false, which means the rule
+ * has a title condition that did NOT match.
  */
-const findTitleRule = (title) => {
-    const key = normalizeTitle(title);
-    if (!key) return null;
-    return getTitleRules().find((rule) => normalizeTitle(rule?.title) === key) || null;
+const titleConditionMatches = (rule, titleKey) => {
+    const pattern = normalizeTitle(rule?.title);
+    if (!pattern) return null;
+    if (!titleKey) return false;
+    if (ruleMatchMode(rule) === 'contains') return titleKey.includes(pattern);
+    if (ruleMatchMode(rule) === 'starts') return titleKey.startsWith(pattern);
+    return titleKey === pattern;
 };
+
+/** Same three-valued contract for the CHALLENGE-TAG condition. */
+const tagConditionMatches = (rule, tagKeys) => {
+    const wanted = normalizeTag(rule?.challengeTag);
+    if (!wanted) return null;
+    return tagKeys.includes(wanted);
+};
+
+// Specificity, so that when several rules match one challenge the winner is
+// deterministic and matches intuition: a rule naming the exact title beats one
+// naming a prefix, which beats a substring, which beats a rule keyed only on a
+// tag shared by dozens of challenges. Carrying BOTH conditions is one notch
+// more specific than the title alone.
+const TITLE_MODE_SCORE = { exact: 3, starts: 2, contains: 1 };
+
+const ruleSpecificity = (rule) => {
+    let score = 0;
+    if (normalizeTitle(rule?.title)) score += TITLE_MODE_SCORE[ruleMatchMode(rule)];
+    if (normalizeTag(rule?.challengeTag)) score += 1;
+    return score;
+};
+
+/**
+ * Find the rule in `rules` that best matches a challenge.
+ *
+ * A rule may carry a title condition, a challenge-tag condition, or both; every
+ * condition it DOES carry must hold (AND), and a rule carrying neither matches
+ * nothing. Ties break by specificity, then by the longer title pattern, then by
+ * the earlier position in the list — so the outcome never depends on Map or
+ * object ordering.
+ *
+ * Takes the rules array explicitly because the validation paths match against
+ * an in-progress settings SNAPSHOT, not against what is currently on disk.
+ *
+ * @param {Array<object>} rules
+ * @param {{title?: string, tags?: string[]}|string} target a challenge (or just its title)
+ * @returns {object|null}
+ */
+const _findRuleIn = (rules, target) => {
+    if (!Array.isArray(rules)) return null;
+    const challenge = typeof target === 'string' ? { title: target } : target;
+    const titleKey = normalizeTitle(challenge?.title);
+    const tagKeys = normalizeTagList(challenge?.tags);
+    if (!titleKey && tagKeys.length === 0) return null;
+
+    let best = null;
+    let bestScore = -1;
+    let bestLength = -1;
+    for (const rule of rules) {
+        const byTitle = titleConditionMatches(rule, titleKey);
+        const byTag = tagConditionMatches(rule, tagKeys);
+        // No conditions at all, or a present condition that failed.
+        if (byTitle === null && byTag === null) continue;
+        if (byTitle === false || byTag === false) continue;
+
+        const score = ruleSpecificity(rule);
+        const length = normalizeTitle(rule?.title).length;
+        // Strict > on both keys keeps the EARLIEST rule on a total tie.
+        if (score > bestScore || (score === bestScore && length > bestLength)) {
+            best = rule;
+            bestScore = score;
+            bestLength = length;
+        }
+    }
+    return best;
+};
+
+/** `_findRuleIn` against the persisted rules — the normal runtime entry point. */
+const findTitleRule = (target) => _findRuleIn(getTitleRules(), target);
 
 /**
  * Settings a title rule may override INLINE, without going through a named
@@ -958,13 +1074,17 @@ const _sanitizeTitleRuleInline = (rule) => {
 };
 
 /**
- * The inline overrides saved on the title rule matching this title, or an empty
+ * The inline overrides saved on the rule matching this challenge, or an empty
  * object. Read by the join pass, which resolves inline → profile → global.
- * @param {string} title
+ *
+ * Takes a challenge (or a bare title, for callers that only have one) so a
+ * tag-keyed rule can resolve — an un-joined candidate carries its own `tags`.
+ *
+ * @param {{title?: string, tags?: string[]}|string} target
  * @returns {object}
  */
-const getTitleRuleOverrides = (title) => {
-    const rule = findTitleRule(title);
+const getTitleRuleOverrides = (target) => {
+    const rule = findTitleRule(target);
     if (!rule) return {};
     // Re-validate on read: a hand-edited settings file can hold anything, and
     // automation must never act on a value the schema would reject.
@@ -985,10 +1105,24 @@ const _canonicalTitleRuleProfile = (storedProfiles, requested) => {
     return _findProfileKey(storedProfiles, _normalizeProfileName(name));
 };
 
+// Identity of a rule's match condition. "\u0000" cannot occur in a trimmed
+// title or tag, so it is a safe separator that no user value can forge.
+const _titleRuleKey = (rule) =>
+    [normalizeTitle(rule?.title), ruleMatchMode(rule), normalizeTag(rule?.challengeTag)].join('\u0000');
+
 const _sanitizeTitleRule = (rule, storedProfiles) => {
     const title = typeof rule?.title === 'string' ? rule.title.trim() : '';
-    if (!title) return { valid: true, rule: null };
-    if (title.length > MAX_TITLE_LENGTH) return { valid: false, title };
+    const challengeTag = typeof rule?.challengeTag === 'string' ? rule.challengeTag.trim() : '';
+    // A rule needs at least one condition. Historically that was always a title;
+    // now a tag-only rule is legitimate, so emptiness is judged on both.
+    if (!title && !challengeTag) return { valid: true, rule: null };
+    if (title.length > MAX_TITLE_LENGTH || challengeTag.length > MAX_TITLE_LENGTH) {
+        return { valid: false, title: title || challengeTag };
+    }
+    // An unrecognised mode is a rejection, not a silent fall back to 'exact':
+    // quietly narrowing a rule the user meant to widen is the worse failure.
+    const match = rule?.match === undefined || rule?.match === null || rule?.match === '' ? 'exact' : rule.match;
+    if (!TITLE_MATCH_MODES.includes(match)) return { valid: false, title: title || challengeTag };
 
     const mustIncludeTags = _sanitizeTitleRuleTags('mustIncludeTags', rule?.mustIncludeTags);
     const shouldIncludeTags = _sanitizeTitleRuleTags('shouldIncludeTags', rule?.shouldIncludeTags);
@@ -999,7 +1133,7 @@ const _sanitizeTitleRule = (rule, storedProfiles) => {
     if (requestedProfile && profile === null) return { valid: false, title, requestedProfile };
 
     const inline = _sanitizeTitleRuleInline(rule);
-    if (inline === null) return { valid: false, title };
+    if (inline === null) return { valid: false, title: title || challengeTag };
 
     // A rule that does nothing is dropped rather than stored. Inline overrides
     // now count as "does something" — a rule whose only content is
@@ -1010,6 +1144,10 @@ const _sanitizeTitleRule = (rule, storedProfiles) => {
     }
 
     const sanitized = { title, mustIncludeTags, shouldIncludeTags, ...inline };
+    // Only persist a non-default match mode, and only alongside a title — an
+    // orphan `match` on a tag-only rule would read as meaningful and isn't.
+    if (title && match !== 'exact') sanitized.match = match;
+    if (challengeTag) sanitized.challengeTag = challengeTag;
     if (profile) sanitized.profile = profile;
     return { valid: true, rule: sanitized };
 };
@@ -1048,14 +1186,14 @@ const setTitleRules = (rules) => {
             logger.withCategory('settings').error(`Title rule rejected for "${forLog(result.title)}": ${detail}`, null);
             return false;
         }
-        if (result.rule) byKey.set(normalizeTitle(result.rule.title), result.rule);
+        // De-dupe on the whole CONDITION, not the title alone: "abc"/exact and
+        // "abc"/contains are different rules, and a tag-only rule has no title
+        // to key on at all. Last wins within one identical condition.
+        if (result.rule) byKey.set(_titleRuleKey(result.rule), result.rule);
     }
 
     for (const rule of byKey.values()) {
-        if (
-            rule.profile &&
-            !_titleProfileComposesWithKnownOverrides(settings, rule.title, storedProfiles[rule.profile])
-        ) {
+        if (rule.profile && !_titleProfileComposesWithKnownOverrides(settings, rule, storedProfiles[rule.profile])) {
             logger
                 .withCategory('settings')
                 .error(`Title profile conflicts with manual overrides for "${forLog(rule.title)}"`, null);
@@ -1191,7 +1329,9 @@ const getEffectiveTagSetting = (settingKey, challenge) => {
     const base = getEffectiveSetting(settingKey, challengeId);
     if (!TITLE_RULE_TAG_KEYS.includes(settingKey)) return base;
 
-    const rule = findTitleRule(challenge?.title);
+    // Pass the whole challenge, not just its title: a rule may be keyed on the
+    // challenge's own tags, and a joined challenge carries them in the payload.
+    const rule = findTitleRule(challenge);
     const ruleTags = rule?.[settingKey];
     if (!Array.isArray(ruleTags) || ruleTags.length === 0) return base;
 
@@ -1382,16 +1522,23 @@ const _isTitleProfileSuppressed = (settings, challengeId) => {
     );
 };
 
-const _titleProfileComposesWithKnownOverrides = (settings, title, rawProfileValues) => {
+const _titleProfileComposesWithKnownOverrides = (settings, rule, rawProfileValues) => {
     const globalValues = _globalChallengeValues(settings);
     const profileValues = _sanitizeProfileValues(rawProfileValues, true, globalValues);
     if (profileValues === null) return false;
 
-    const titleKey = normalizeTitle(title);
     const perChallenge = settings.challengeSettings?.perChallenge || {};
     return Object.entries(perChallenge).every(([challengeId, overrides]) => {
         if (_isTitleProfileSuppressed(settings, challengeId)) return true;
-        if (normalizeTitle(_titleForChallengeId(settings, challengeId)) !== titleKey) return true;
+        // Applicability must use the REAL matcher, not an exact title compare:
+        // a contains/starts or tag-keyed rule reaches challenges whose title is
+        // not the rule's own, and skipping those would let a conflicting
+        // profile+override combination save unvalidated.
+        const applies = _findRuleIn([rule], {
+            title: _titleForChallengeId(settings, challengeId),
+            tags: _tagsForChallengeId(challengeId),
+        });
+        if (!applies) return true;
         if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return false;
         const effective = { ...globalValues, ...profileValues, ...overrides };
         return _challengeValueSetIsValid(effective, { ...profileValues, ...overrides }, challengeId);
@@ -1403,12 +1550,15 @@ const _titleProfileComposesWithKnownOverrides = (settings, title, rawProfileValu
  * Stale/corrupt profile references fail closed as a whole: automatic behavior
  * never executes a partially sanitized profile.
  */
-const _getTitleProfileFromSettings = (settings, title) => {
-    const titleKey = normalizeTitle(title);
-    if (!titleKey) return null;
+const _getTitleProfileFromSettings = (settings, target) => {
+    const challenge = typeof target === 'string' ? { title: target } : target;
+    if (!normalizeTitle(challenge?.title) && normalizeTagList(challenge?.tags).length === 0) return null;
     const rules = settings.challengeSettings?.titleRules;
     if (!Array.isArray(rules)) return null;
-    const rule = rules.find((candidate) => normalizeTitle(candidate?.title) === titleKey);
+    // Same matcher (and same precedence) the rest of the facade uses, so a
+    // profile can never resolve from a different rule than the inline overrides
+    // — but against THIS snapshot's rules, which may not be the persisted ones.
+    const rule = _findRuleIn(rules, challenge);
     const normalizedProfile = _normalizeProfileName(rule?.profile);
     if (!normalizedProfile || RESERVED_PROFILE_NAMES.has(normalizedProfile)) return null;
 
@@ -1423,15 +1573,31 @@ const _getTitleProfileFromSettings = (settings, title) => {
 const _getTitleProfileForChallengeId = (settings, challengeId) =>
     _isTitleProfileSuppressed(settings, challengeId)
         ? null
-        : _getTitleProfileFromSettings(settings, _titleForChallengeId(settings, challengeId));
+        : _getTitleProfileFromSettings(settings, {
+              title: _titleForChallengeId(settings, challengeId),
+              // From the in-memory cache, so a tag-keyed rule resolves for a
+              // JOINED challenge too (the id-keyed callers have no payload).
+              tags: _tagsForChallengeId(challengeId),
+          });
 
 /**
  * Public read model for the renderer: returns the sanitized profile inherited
- * by an exact challenge title, or null when the title has no valid assignment.
+ * by a challenge, or null when nothing matches.
+ *
+ * Accepts a challenge object or a bare title. With only a title, a tag-keyed
+ * rule can still resolve when `challengeId` is given, because the tags come
+ * from the remembered active-challenge list.
+ *
+ * @param {{title?: string, tags?: string[]}|string} target
+ * @param {string|number|null} [challengeId]
  */
-const getTitleProfile = (title, challengeId = null) => {
+const getTitleProfile = (target, challengeId = null) => {
     const settings = loadSettings();
-    const profile = _getTitleProfileFromSettings(settings, title);
+    const challenge = typeof target === 'string' ? { title: target } : { ...target };
+    if (!Array.isArray(challenge?.tags) && challengeId !== null && challengeId !== undefined) {
+        challenge.tags = _tagsForChallengeId(challengeId);
+    }
+    const profile = _getTitleProfileFromSettings(settings, challenge);
     if (!profile || challengeId === null || challengeId === undefined) return profile;
     return { ...profile, suppressed: _isTitleProfileSuppressed(settings, challengeId) };
 };
@@ -1534,7 +1700,7 @@ const getChallengeProfiles = () => {
 const _updateAssignedProfileRules = (settings, normalizedName, displayName, values) => {
     const rules = Array.isArray(settings.challengeSettings.titleRules) ? settings.challengeSettings.titleRules : [];
     const assigned = rules.filter((rule) => _normalizeProfileName(rule?.profile) === normalizedName);
-    if (assigned.some((rule) => !_titleProfileComposesWithKnownOverrides(settings, rule.title, values))) {
+    if (assigned.some((rule) => !_titleProfileComposesWithKnownOverrides(settings, rule, values))) {
         logger
             .withCategory('settings')
             .error(

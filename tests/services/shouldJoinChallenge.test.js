@@ -43,6 +43,61 @@ describe('scope (default = all)', () => {
     });
 });
 
+/**
+ * Challenge-tag scope: the same include/exclude shape as the type lists, over
+ * the challenge's OWN tags (Exhibition / Comm / Turbo / …). Types and tags are
+ * independent axes — both must pass.
+ */
+describe('challenge-tag scope', () => {
+    const tagged = (...tags) => ({ id: 1, type: 'flash', join_coins: 0, tags });
+
+    test('no tag lists = all tags allowed (default)', () => {
+        expect(call({ challenge: tagged('Comm') })).toMatchObject({ join: true, reason: 'free' });
+    });
+    test('a non-empty require-list narrows to challenges carrying any of them', () => {
+        expect(call({ challenge: tagged('Exhibition'), includeTags: ['exhibition'] }).join).toBe(true);
+        expect(call({ challenge: tagged('Turbo'), includeTags: ['exhibition'] }).reason).toBe('tag-out-of-scope');
+    });
+    test('ANY listed tag is enough, not all of them', () => {
+        expect(call({ challenge: tagged('Turbo', 'Comm'), includeTags: ['exhibition', 'comm'] }).join).toBe(true);
+    });
+    test('an excluded tag vetoes', () => {
+        expect(call({ challenge: tagged('Comm', 'Turbo'), excludeTags: ['comm'] })).toMatchObject({
+            join: false,
+            reason: 'excluded-tag',
+        });
+    });
+    test('a challenge with no tags passes an empty filter but never a require-list', () => {
+        expect(call({ challenge: { id: 1, type: 'flash', join_coins: 0 } }).join).toBe(true);
+        expect(call({ challenge: { id: 1, type: 'flash', join_coins: 0 }, includeTags: ['comm'] }).reason).toBe(
+            'tag-out-of-scope',
+        );
+    });
+    test('a title opt-in bypasses both tag lists, as it does the type lists', () => {
+        expect(call({ challenge: tagged('Comm'), excludeTags: ['comm'], hasProfileMatch: true }).join).toBe(true);
+        expect(call({ challenge: tagged('Turbo'), includeTags: ['exhibition'], hasProfileMatch: true }).join).toBe(
+            true,
+        );
+    });
+    test('types and tags are independent — a type veto still applies to an allowed tag', () => {
+        expect(
+            call({ challenge: tagged('Exhibition'), includeTags: ['exhibition'], excludeTypes: ['flash'] }).reason,
+        ).toBe('excluded-type');
+    });
+    test('the type veto is reported before the tag veto', () => {
+        expect(call({ challenge: tagged('Comm'), excludeTypes: ['flash'], excludeTags: ['comm'] }).reason).toBe(
+            'excluded-type',
+        );
+    });
+    test('a non-string tag in the payload is ignored, not crashed on', () => {
+        expect(call({ challenge: { id: 1, type: 'flash', join_coins: 0, tags: [null, 42, 'Comm'] } }).join).toBe(true);
+        expect(
+            call({ challenge: { id: 1, type: 'flash', join_coins: 0, tags: [null, 'Comm'] }, excludeTags: ['comm'] })
+                .reason,
+        ).toBe('excluded-tag');
+    });
+});
+
 describe('exclude types (default-all minus excludes)', () => {
     test('excluded type is skipped', () => {
         expect(call({ excludeTypes: ['flash'] })).toMatchObject({ join: false, reason: 'excluded-type' });
