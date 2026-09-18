@@ -204,6 +204,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                     schema: serializableSchema,
                     defaults,
                     groups: settings.SETTINGS_GROUPS,
+                    tiers: settings.SETTINGS_TIERS,
                     // Profile caps travel with the schema so the renderer's
                     // client-side pre-validation never hardcodes the literals
                     // the facade enforces.

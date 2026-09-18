@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
-import { groupSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
+import { tierSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
 import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
@@ -15,6 +15,7 @@ import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
+import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
 import { useAutovote } from '@/contexts/AutovoteContext';
 
 function useAppSettings(isOpen) {
@@ -47,6 +48,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         schema,
         defaults,
         groups,
+        tiers,
         profileLimits,
         refetch: refetchSchema,
         loading: schemaLoading,
@@ -502,141 +504,160 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                         already used, all entry slots full) are greyed out and
                         their inputs disabled — a live, render-time hint derived
                         from the challenge prop, never persisted. */}
-                    {groupSchemaEntries(schema, groups, { perChallengeOnly: true }).map(({ id, label, entries }) => {
-                        const { applicable, reasonKey } = getGroupApplicability(id, challenge);
-                        // When a group can't apply, tie its heading + reason note to
-                        // the section via role="group"/aria-* so assistive tech
-                        // announces *why* the inputs are disabled, not just that
-                        // they are (WCAG 1.3.1 — the relationship must be
-                        // programmatic, not only visual).
-                        const headingId = `challenge-group-${id}`;
-                        const reasonId = applicable ? undefined : `challenge-group-reason-${id}`;
+                    {tierSchemaEntries(schema, groups, tiers, { perChallengeOnly: true }).map((band) => (
+                        <div key={band.id ?? '_'}>
+                            <SettingsTierHeading id={band.id} label={band.label} level="h4" />
+                            {band.groups.map(({ id, label, entries }) => {
+                                const { applicable, reasonKey } = getGroupApplicability(id, challenge);
+                                // When a group can't apply, tie its heading + reason note to
+                                // the section via role="group"/aria-* so assistive tech
+                                // announces *why* the inputs are disabled, not just that
+                                // they are (WCAG 1.3.1 — the relationship must be
+                                // programmatic, not only visual).
+                                const headingId = `challenge-group-${id}`;
+                                const reasonId = applicable ? undefined : `challenge-group-reason-${id}`;
 
-                        return (
-                            <div
-                                key={id}
-                                role={applicable ? undefined : 'group'}
-                                aria-labelledby={applicable ? undefined : headingId}
-                                aria-describedby={reasonId}
-                            >
-                                <h4
-                                    id={headingId}
-                                    className="font-semibold text-base mb-3 border-b border-base-300 pb-2 flex items-center justify-between gap-2"
-                                >
-                                    <span>{t(label)}</span>
-                                    {!applicable && (
-                                        <span className="badge badge-ghost badge-xs">{t('app.notApplicable')}</span>
-                                    )}
-                                </h4>
-                                {/* Heading, badge and reason note stay at full opacity so the
+                                return (
+                                    <div
+                                        key={id}
+                                        role={applicable ? undefined : 'group'}
+                                        aria-labelledby={applicable ? undefined : headingId}
+                                        aria-describedby={reasonId}
+                                    >
+                                        <h5
+                                            id={headingId}
+                                            className="font-semibold text-base mb-3 border-b border-base-300 pb-2 flex items-center justify-between gap-2"
+                                        >
+                                            <span>{t(label)}</span>
+                                            {!applicable && (
+                                                <span className="badge badge-ghost badge-xs">
+                                                    {t('app.notApplicable')}
+                                                </span>
+                                            )}
+                                        </h5>
+                                        {/* Heading, badge and reason note stay at full opacity so the
                                     *why* remains readable; only the inert inputs below are dimmed.
                                     Dimming the whole group would compound with the muted text
                                     colours and push the explanation below WCAG AA contrast. */}
-                                {!applicable && (
-                                    <div id={reasonId} className="mb-3">
-                                        <p className="text-xs text-base-content/80">{t(reasonKey)}</p>
-                                        {/* Reassure that a stored override on this (now-inert) group is
+                                        {!applicable && (
+                                            <div id={reasonId} className="mb-3">
+                                                <p className="text-xs text-base-content/80">{t(reasonKey)}</p>
+                                                {/* Reassure that a stored override on this (now-inert) group is
                                             not lost — the "Overridden" badge below still shows it. */}
-                                        <p className="text-xs text-base-content/70 mt-0.5">
-                                            {t('app.notApplicableHint')}
-                                        </p>
-                                    </div>
-                                )}
-                                <div className={applicable ? SETTINGS_GRID_CLASS : `${SETTINGS_GRID_CLASS} opacity-60`}>
-                                    {entries.map(([key, config]) => {
-                                        const hasOverride = key in overrides;
-                                        const globalDefault = defaults?.[key] ?? config.default;
-                                        const hasProfileValue = Object.prototype.hasOwnProperty.call(
-                                            profileValues,
-                                            key,
-                                        );
-                                        const currentValue = hasOverride ? overrides[key] : inheritedOf(key);
-                                        // Live, render-time hint (same spirit as getGroupApplicability):
-                                        // when this challenge allows fewer photos than the schedule
-                                        // covers, the schedule end-aligns at runtime (scheduleRemap) —
-                                        // say so here, where a user puzzled by a fill time would look.
-                                        // The `>= 2` gate does double duty. Null guard: `challenge`
-                                        // goes null when it drops off the live 60s poll while the
-                                        // modal is open (App.jsx derives it as find(...) ?? null), and
-                                        // without the gate getScheduleShift would treat max as 0 and
-                                        // render the hint into a null dereference. Accuracy guard: on
-                                        // a single-photo challenge every remapped row lands below
-                                        // count 2 and is dropped, so no image time governs anything —
-                                        // a "final photo uses the Image N time" hint would be false.
-                                        const scheduleShift =
-                                            key === 'autoFillSchedule' &&
-                                            Number.isInteger(challenge?.max_photo_submits) &&
-                                            challenge.max_photo_submits >= 2
-                                                ? getScheduleShift(currentValue, challenge.max_photo_submits)
-                                                : 0;
-
-                                        return (
-                                            <div key={key} className={SETTING_CELL_CLASS}>
-                                                <label className="label">
-                                                    <span className="label-text font-medium">{t(config.label)}</span>
-                                                    <div className="flex gap-1">
-                                                        {hasOverride ? (
-                                                            <span className="badge badge-accent badge-xs">
-                                                                {t('app.overridden')}
-                                                            </span>
-                                                        ) : hasProfileValue ? (
-                                                            <span className="badge badge-info badge-xs">
-                                                                {t('app.usingProfile')}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="badge badge-ghost badge-xs">
-                                                                {t('app.usingGlobal')}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </label>
-                                                <p className="text-xs text-base-content/60 mb-2">
-                                                    {t(config.description)}
-                                                </p>
-                                                <SettingHelp helpKey={config.helpKey} />
-                                                <SettingInput
-                                                    settingKey={key}
-                                                    config={config}
-                                                    value={currentValue}
-                                                    onChange={handleOverrideChange}
-                                                    onReset={applicable && hasOverride ? handleClearOverride : null}
-                                                    disabled={!applicable}
-                                                />
-                                                {scheduleShift > 0 && (
-                                                    <p className="text-xs text-info mt-1">
-                                                        {t('app.autoFillScheduleShiftHint')
-                                                            .replace('{0}', String(challenge.max_photo_submits))
-                                                            .replace(
-                                                                '{1}',
-                                                                String(challenge.max_photo_submits + scheduleShift),
-                                                            )}
-                                                    </p>
-                                                )}
-                                                {[
-                                                    ...scheduledFillHints(key),
-                                                    ...votingPauseHints(key),
-                                                    ...votingPauseDurationHints(key),
-                                                    ...boostPrefillHints(key),
-                                                ].map((hint) => (
-                                                    <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
-                                                        {hint.text}
-                                                    </p>
-                                                ))}
-                                                <p
-                                                    className={`text-xs mt-1 ${
-                                                        hasOverride ? 'text-base-content/70' : 'text-base-content/40'
-                                                    }`}
-                                                >
-                                                    {t('app.globalDefault')}:{' '}
-                                                    {formatSettingDefault(globalDefault, config, t)}
+                                                <p className="text-xs text-base-content/70 mt-0.5">
+                                                    {t('app.notApplicableHint')}
                                                 </p>
                                             </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        );
-                    })}
+                                        )}
+                                        <div
+                                            className={
+                                                applicable ? SETTINGS_GRID_CLASS : `${SETTINGS_GRID_CLASS} opacity-60`
+                                            }
+                                        >
+                                            {entries.map(([key, config]) => {
+                                                const hasOverride = key in overrides;
+                                                const globalDefault = defaults?.[key] ?? config.default;
+                                                const hasProfileValue = Object.prototype.hasOwnProperty.call(
+                                                    profileValues,
+                                                    key,
+                                                );
+                                                const currentValue = hasOverride ? overrides[key] : inheritedOf(key);
+                                                // Live, render-time hint (same spirit as getGroupApplicability):
+                                                // when this challenge allows fewer photos than the schedule
+                                                // covers, the schedule end-aligns at runtime (scheduleRemap) —
+                                                // say so here, where a user puzzled by a fill time would look.
+                                                // The `>= 2` gate does double duty. Null guard: `challenge`
+                                                // goes null when it drops off the live 60s poll while the
+                                                // modal is open (App.jsx derives it as find(...) ?? null), and
+                                                // without the gate getScheduleShift would treat max as 0 and
+                                                // render the hint into a null dereference. Accuracy guard: on
+                                                // a single-photo challenge every remapped row lands below
+                                                // count 2 and is dropped, so no image time governs anything —
+                                                // a "final photo uses the Image N time" hint would be false.
+                                                const scheduleShift =
+                                                    key === 'autoFillSchedule' &&
+                                                    Number.isInteger(challenge?.max_photo_submits) &&
+                                                    challenge.max_photo_submits >= 2
+                                                        ? getScheduleShift(currentValue, challenge.max_photo_submits)
+                                                        : 0;
+
+                                                return (
+                                                    <div key={key} className={SETTING_CELL_CLASS}>
+                                                        <label className="label">
+                                                            <span className="label-text font-medium">
+                                                                {t(config.label)}
+                                                            </span>
+                                                            <div className="flex gap-1">
+                                                                {hasOverride ? (
+                                                                    <span className="badge badge-accent badge-xs">
+                                                                        {t('app.overridden')}
+                                                                    </span>
+                                                                ) : hasProfileValue ? (
+                                                                    <span className="badge badge-info badge-xs">
+                                                                        {t('app.usingProfile')}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="badge badge-ghost badge-xs">
+                                                                        {t('app.usingGlobal')}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </label>
+                                                        <p className="text-xs text-base-content/60 mb-2">
+                                                            {t(config.description)}
+                                                        </p>
+                                                        <SettingHelp helpKey={config.helpKey} />
+                                                        <SettingInput
+                                                            settingKey={key}
+                                                            config={config}
+                                                            value={currentValue}
+                                                            onChange={handleOverrideChange}
+                                                            onReset={
+                                                                applicable && hasOverride ? handleClearOverride : null
+                                                            }
+                                                            disabled={!applicable}
+                                                        />
+                                                        {scheduleShift > 0 && (
+                                                            <p className="text-xs text-info mt-1">
+                                                                {t('app.autoFillScheduleShiftHint')
+                                                                    .replace('{0}', String(challenge.max_photo_submits))
+                                                                    .replace(
+                                                                        '{1}',
+                                                                        String(
+                                                                            challenge.max_photo_submits + scheduleShift,
+                                                                        ),
+                                                                    )}
+                                                            </p>
+                                                        )}
+                                                        {[
+                                                            ...scheduledFillHints(key),
+                                                            ...votingPauseHints(key),
+                                                            ...votingPauseDurationHints(key),
+                                                            ...boostPrefillHints(key),
+                                                        ].map((hint) => (
+                                                            <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
+                                                                {hint.text}
+                                                            </p>
+                                                        ))}
+                                                        <p
+                                                            className={`text-xs mt-1 ${
+                                                                hasOverride
+                                                                    ? 'text-base-content/70'
+                                                                    : 'text-base-content/40'
+                                                            }`}
+                                                        >
+                                                            {t('app.globalDefault')}:{' '}
+                                                            {formatSettingDefault(globalDefault, config, t)}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
 
                     {/* Action Buttons */}
                     <ModalActionRow

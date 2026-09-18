@@ -326,10 +326,16 @@
             groupTurbo: 'Turbo',
             groupFinalWindow: 'Final Window Exposure',
             groupLastMinute: 'Last Minute',
-            groupScheduledFill: 'Scheduled Fill',
+            groupScheduledFill: 'Scheduled Voting',
             groupVotingPause: 'Voting Pause',
             groupAutoFill: 'Auto Fill',
             groupNotifications: 'Notifications',
+            groupDisplay: 'Display',
+            tierCore: 'Core',
+            tierEntries: 'Entries',
+            tierOverrides: 'Timing Overrides',
+            tierOverridesDesc: 'All off by default — turn one on only to change when the normal exposure rule applies.',
+            tierApp: 'App',
             // Notification settings (all default off, opt-in)
             notifyOnBoost: 'Notify before boost',
             notifyOnBoostDesc: 'Warn before a boost is applied, so you can keep the app running.',
@@ -414,7 +420,7 @@
             onlyBoostDesc: 'Skip regular voting for this challenge entirely and only apply Boost.',
             voteOnNewEntry: 'Vote on New Entry',
             voteOnNewEntryDesc:
-                'When a new photo appears in this challenge — added by you on the website, or by Auto Fill, Emergency Fill, or a Boost/Turbo fill — vote once even if exposure already reads at or above your threshold. It votes up to whichever ceiling the challenge would normally use: Exposure Target (or Exposure, when Target is 0), or Final Window Exposure Target during the final window when Use Final Window Exposure is on. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Fill Only: if any of those is blocking, no vote happens.',
+                'When a new photo appears in this challenge — added by you on the website, or by Auto Fill, Emergency Fill, or a Boost/Turbo fill — vote once even if exposure already reads at or above your threshold. It votes up to whichever ceiling the challenge would normally use: Exposure Target (or Exposure, when Target is 0), or Final Window Exposure Target during the final window when Use Final Window Exposure is on. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Voting Only: if any of those is blocking, no vote happens.',
             override: 'Override',
             overrideForChallenge: 'Override for Challenge',
             photo: 'photo',
@@ -484,16 +490,16 @@
             lastMinuteCheckFrequency: 'Last Minute Check Frequency',
             lastMinuteCheckFrequencyDesc:
                 'How often (in minutes) to re-check a challenge once it is inside the Last Minute Threshold. The default 1 checks every minute so the final push is not missed.',
-            useScheduledFill: 'Use Scheduled Fill',
+            useScheduledFill: 'Use Scheduled Voting',
             useScheduledFillDesc:
-                "Fill exposure at chosen times instead of only when it drops below the Exposure threshold. Two trigger lists are available and can be combined: one or more daily Fill Times and one or more one-shot Fill Before End offsets. Each entry opens its own independent fill window — e.g. offsets of 10h and 4h before the end fill twice on closing day. During a window the challenge is voted up to 100% and held there; times are interpreted in the app Timezone setting (not this device's clock). Has no effect until at least one time below is set, and never applies to flash challenges or challenges in Boost Only mode. If the app is not running during a whole window, that fill is skipped — there is no catch-up.",
-            scheduledFillTime: 'Fill Times',
+                "Vote exposure up to 100% at chosen times instead of only when it drops below the Exposure threshold. This schedules voting only — it never submits a photo (that is Auto-Fill). Two trigger lists are available and can be combined: one or more daily Voting Times and one or more one-shot Voting Before End offsets. Each entry opens its own independent voting window — e.g. offsets of 10h and 4h before the end vote twice on closing day. During a window the challenge is voted up to 100% and held there; times are interpreted in the app Timezone setting (not this device's clock). Has no effect until at least one time below is set, and never applies to flash challenges or challenges in Boost Only mode. If the app is not running during a whole window, that window is skipped — there is no catch-up.",
+            scheduledFillTime: 'Voting Times',
             scheduledFillTimeDesc:
-                "Daily wall-clock times (24h) at which fill windows open, in the app Timezone setting — not this device's clock. Each time opens its own window every day; remove all rows to turn this trigger off. Around a daylight-saving switch the actual instant can shift by up to an hour on the changeover day.",
+                "Daily wall-clock times (24h) at which voting windows open, in the app Timezone setting — not this device's clock. Each time opens its own window every day; remove all rows to turn this trigger off. Around a daylight-saving switch the actual instant can shift by up to an hour on the changeover day.",
             scheduledFillTimeOff: 'no times set — this trigger is off',
-            scheduledFillBeforeEnd: 'Fill Before End',
+            scheduledFillBeforeEnd: 'Voting Before End',
             scheduledFillBeforeEndDesc:
-                "Open one-shot fill windows these long before the challenge closes — e.g. 10h 0m and 4h 0m to fill twice on closing day. Entered as hours and minutes in the GUI; remove all rows to turn this trigger off. These are relative to each challenge's own deadline — re-check them when reusing a saved profile on a challenge with a different timeline.",
+                "Open one-shot voting windows these long before the challenge closes — e.g. 10h 0m and 4h 0m to vote twice on closing day. Entered as hours and minutes in the GUI; remove all rows to turn this trigger off. These are relative to each challenge's own deadline — re-check them when reusing a saved profile on a challenge with a different timeline.",
             scheduledFillBeforeEndOff: 'no offsets set — this trigger is off',
             scheduledFillAddTime: 'Add time',
             scheduledFillAddBeforeEnd: 'Add offset',
@@ -502,22 +508,23 @@
             scheduledFillDuplicateEntry: 'duplicate — this entry is ignored',
             scheduledFillMaxEntries: 'Maximum of {0} entries reached.',
             scheduledFillSourceBeforeEnd: '{0} before end',
-            scheduledFillWindowMinutes: 'Fill Window (minutes)',
+            scheduledFillWindowMinutes: 'Voting Window (minutes)',
             scheduledFillWindowMinutesDesc:
-                'How long each fill window stays open after its start time. Within the window the challenge is topped up to 100% and held there; after it closes, normal rules apply again. Keep it longer than your Check Frequency so a voting cycle is guaranteed to land inside the window.',
-            scheduledFillReplaces: 'Scheduled Fill Only',
+                'How long each voting window stays open after its start time. Within the window the challenge is topped up to 100% and held there; after it closes, normal rules apply again. Keep it longer than your Check Frequency so a voting cycle is guaranteed to land inside the window.',
+            scheduledFillReplaces: 'Scheduled Voting Only',
             scheduledFillReplacesDesc:
-                'When on, normal and final-window exposure voting are blocked outside the scheduled fill windows — the scheduled times become the only automatic fills. Flash challenges and the Last Minute rules still vote as usual, manual voting is unaffected, and Vote Only in Last Minute takes precedence over this setting. Warning: if the app is not running during a whole window, that fill is skipped with no catch-up and no threshold fallback, so the challenge can close under-filled.',
-            scheduledFillNextHint: 'Next fill window: {0}–{1} ({2}) — from {3}',
-            scheduledFillNoTimesHint: 'No fill time configured — scheduled fill is inactive until you set one below.',
+                'When on, normal and final-window exposure voting are blocked outside the scheduled voting windows — the scheduled times become the only automatic voting. Flash challenges and the Last Minute rules still vote as usual, manual voting is unaffected, and Vote Only in Last Minute takes precedence over this setting. Warning: if the app is not running during a whole window, that window is skipped with no catch-up and no threshold fallback, so the challenge can close under-exposed.',
+            scheduledFillNextHint: 'Next voting window: {0}–{1} ({2}) — from {3}',
+            scheduledFillNoTimesHint:
+                'No voting time configured — scheduled voting is inactive until you set one below.',
             scheduledFillWastedWindowHint:
                 'The windows for {0} extend past the challenge deadline — only the part before the close is usable.',
             scheduledFillShortWindowHint:
                 'This window is shorter than your maximum Check Frequency ({0} min) — a whole window could fall between voting cycles while the app is running unattended.',
             scheduledFillUnreachableHint:
-                'Scheduled Fill Only is on, but no fill window can still occur before this challenge closes — normal and final-window voting stay blocked, so only the Last Minute rules will vote.',
+                'Scheduled Voting Only is on, but no voting window can still occur before this challenge closes — normal and final-window voting stay blocked, so only the Last Minute rules will vote.',
             scheduledFillProfileReplacesWarning:
-                'Applying this profile turns on Scheduled Fill Only for this challenge — review the fill times before saving.',
+                'Applying this profile turns on Scheduled Voting Only for this challenge — review the voting times before saving.',
             useVotingPause: 'Pause Voting',
             useVotingPauseDesc:
                 "Stop automatic voting during chosen windows — meant for the overnight gap between match rounds, where filled exposure earns very few votes and those swipes are better spent once the next round opens. Two trigger lists are available and can be combined: one or more daily Pause Times and one or more one-shot Pause Before End offsets. Each entry starts its own pause lasting the Pause Duration below; times are interpreted in the app Timezone setting (not this device's clock). Has no effect until at least one time below is set. Flash challenges and the Last Minute rules still vote, so a challenge that actually closes during a pause is never abandoned, and Boost and Turbo still apply on their own timers. Manual voting is never blocked.",
@@ -596,7 +603,7 @@
             naTurboUsed: "Turbo already used for this challenge — these settings won't take effect.",
             naSlotsFull: 'All entry slots are full — auto-fill has nothing to add.',
             naFlashNoBoost: "Flash challenges don't support Boost.",
-            naFlashNoScheduledFill: 'Flash challenges always vote to 100% — scheduled fill never applies.',
+            naFlashNoScheduledFill: 'Flash challenges always vote to 100% — scheduled voting never applies.',
             naFlashNoVotingPause: 'Flash challenges always vote to 100% — the voting pause never applies.',
             naFlashNoTurbo: "Flash challenges don't support Turbo.",
             challengeProfiles: 'Profiles',

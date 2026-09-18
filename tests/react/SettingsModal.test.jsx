@@ -341,3 +341,86 @@ describe('SettingsModal — title-tag-rules save', () => {
         expect(profileSelect.textContent).toContain('Portrait Tactic');
     });
 });
+
+/**
+ * Tier bands in the GLOBAL modal. The default mockSchemaState carries an empty
+ * schema so the SettingInput-driven section renders nothing, which left this
+ * whole path uncovered — SettingsModal renders bands at a different heading
+ * depth than ChallengeSettingsModal (h5 band over h6 group, because it nests
+ * under its own h4 "Challenge Defaults" section), so the per-challenge modal's
+ * test does not stand in for it.
+ */
+describe('SettingsModal tier bands', () => {
+    const schemaFixture = {
+        exposure: {
+            type: 'number',
+            default: 100,
+            perChallenge: true,
+            group: 'general',
+            label: 'app.exposure',
+            description: 'app.exposureDesc',
+        },
+        voteOnlyInLastMinute: {
+            type: 'boolean',
+            default: false,
+            perChallenge: true,
+            group: 'lastMinute',
+            label: 'app.voteOnlyInLastMinute',
+            description: 'app.voteOnlyInLastMinuteDesc',
+        },
+    };
+
+    beforeEach(() => {
+        Object.assign(mockSchemaState, {
+            schema: schemaFixture,
+            defaults: { exposure: 100, voteOnlyInLastMinute: false },
+            groups: [
+                { id: 'general', label: 'app.groupGeneral', tier: 'core' },
+                { id: 'lastMinute', label: 'app.groupLastMinute', tier: 'overrides' },
+            ],
+            tiers: [
+                { id: 'core', label: 'app.tierCore' },
+                { id: 'overrides', label: 'app.tierOverrides' },
+            ],
+        });
+    });
+
+    // mockSchemaState is module-level and never touched by resetHookState, so
+    // restore it or every later suite inherits this fixture.
+    afterEach(() => {
+        Object.assign(mockSchemaState, { schema: {}, defaults: {}, groups: undefined, tiers: undefined });
+    });
+
+    test('renders each band heading above its group, at the right depth', async () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        // Bands are h5 here (under the h4 "Challenge Defaults" section);
+        // group headings drop to h6.
+        const bands = await screen.findAllByRole('heading', { level: 5 });
+        expect(bands.map((h) => h.textContent)).toEqual(['app.tierCore', 'app.tierOverrides']);
+
+        const groups = screen.getAllByRole('heading', { level: 6 });
+        expect(groups.map((h) => h.textContent)).toEqual(['app.groupGeneral', 'app.groupLastMinute']);
+    });
+
+    test('shows the off-by-default sub-line on the overrides band only', async () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        await screen.findByRole('heading', { level: 5, name: 'app.tierOverrides' });
+        // Keyed off the tier id in SettingsTierHeading, so a renamed tier id
+        // would silently drop this line without this assertion.
+        expect(screen.getAllByText('app.tierOverridesDesc')).toHaveLength(1);
+    });
+
+    // Version skew: a main process predating the `tiers` IPC field. Every
+    // section must still render, just without band headings.
+    test('renders every group unbanded when the main process sends no tiers', async () => {
+        Object.assign(mockSchemaState, { tiers: undefined });
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        const groups = await screen.findAllByRole('heading', { level: 6 });
+        expect(groups.map((h) => h.textContent)).toEqual(['app.groupGeneral', 'app.groupLastMinute']);
+        expect(screen.queryByRole('heading', { level: 5, name: 'app.tierCore' })).toBeNull();
+        expect(screen.queryByText('app.tierOverridesDesc')).toBeNull();
+    });
+});
