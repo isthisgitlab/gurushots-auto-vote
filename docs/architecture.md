@@ -46,15 +46,27 @@ Domain terms used throughout, in reader's terms:
   and the consumed slot.
 - The decision engine is `_runVotingRules()` (`services/VotingLogic.js` — around L248). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
-  (→100) → **voting pause** → scheduled-fill window → **pre-final-window top-up** → final-window rule →
-  normal threshold. The **voting pause** (`useVotingPause`) is the inverse of scheduled fill — an opt-in
+  (→100) → **pre-boost fill** (→100) → **voting pause** → scheduled-fill window → **pre-final-window top-up** →
+  final-window rule → normal threshold. The **pre-boost fill** (`voteBeforeBoost`, default off) votes to
+  **100%** for `voteBeforeBoostLeadMin` (1–59, default 15) minutes before an available Boost is auto-applied,
+  so the Boost multiplies a full entry rather than a decayed one — a Boost is one per challenge and is spent
+  on whatever the entry has at that instant. The apply instant is not re-derived: it comes from the same
+  `boostApplyThreshold` (`voting/boostWindow.js`) that `getBoostThresholdSec` uses, so the fill can never aim
+  at a moment the boost runner disagrees with. `getBoostPrefillState` gates it on the opt-in, `autoBoost`, a
+  genuinely AVAILABLE boost, and the `0 = off` sentinel on whichever window the branch measures against
+  (`boostTime` for a timer boost, `keyUnlockedBoostTime` for a key-unlocked one) — `boostApplyThreshold`
+  deliberately does not apply that sentinel itself, so `orderDeadlineActions` keeps sorting on a pure function
+  of the settings. It sits **above** the voting pause for the same reason flash/last-minute do: the Boost is
+  spent on the challenge's schedule whatever the pause says, so a pause swallowing the fill would not defer a
+  cost but permanently waste the Boost. Auto only. Deliberately NOT gated on the boost/turbo conflict — unlike
+  a wasted Boost, the exposure bought still counts either way. The **voting pause** (`useVotingPause`) is the inverse of scheduled fill — an opt-in
   window in which automatic voting is _refused_, for the overnight gap between match rounds where filled
   exposure earns almost no votes. Same two trigger lists (`votingPauseTime` daily 'HH:MM' starts +
   `votingPauseBeforeEnd` seconds-before-close starts), each lasting `votingPauseDurationMinutes`, all OR'd.
   It sits **below** flash/last-minute deliberately — a challenge that genuinely closes mid-pause must still
   get its final fill, since a lost placement is permanent while a skipped night top-up only defers votes —
   and **above** scheduled fill and all three threshold rules, which are exactly the discretionary exposure
-  maintenance it exists to defer. Auto only (manual voting is never refused); boost/turbo are untouched
+  maintenance it exists to defer. It sits **below** the pre-boost fill for the reason given above. Auto only (manual voting is never refused); boost/turbo are untouched
   because they run on the orchestrator's own path ahead of this and their timers expire on the
   challenge's schedule. The
   pre-final-window top-up (`voteBeforeFinalWindow`) votes to the **standard** exposure target inside a window

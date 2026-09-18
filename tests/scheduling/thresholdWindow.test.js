@@ -570,5 +570,191 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
                 }
             });
         });
+
+        describe('pre-boost fill cap', () => {
+            // Same dual-shape wrap as the caps above: sync on Node, Promise on the WebView.
+            const wrap = (config) => (resolveThreshold() instanceof Promise ? Promise.resolve(config) : config);
+            const on =
+                (extra = {}) =>
+                () =>
+                    wrap({ enabled: true, leadSec: 900, boostTimeSec: 3600, keyUnlockedBoostTimeSec: 900, ...extra });
+
+            // Timer-branch geometry used throughout: apply instant in
+            // seconds-before-close = close_time - boost.timeout + boostTimeSec. With
+            // close+7200, timeout+4620 and boostTimeSec 3600 that is 6180s before
+            // close, so the 900s lead window opens at close-7080 = now+120 — inside
+            // the 3-min random delay, and well ahead of the 5-min threshold boundary.
+            const timerBoost = (now) => [
+                {
+                    id: 9,
+                    title: 'Boosting',
+                    type: 'regular',
+                    close_time: now + 7200,
+                    member: { boost: { state: 'AVAILABLE', timeout: now + 4620 } },
+                },
+            ];
+
+            it('omitting the resolver leaves results identical (backward compat)', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, opts());
+                expect(result.mode).toBe('normal');
+                expect(result.delayMs).toBe(NORMAL);
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('caps the delay to an upcoming pre-boost window start', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on(),
+                });
+                expect(result.mode).toBe('pre-boost');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextBoostPrefill).toMatchObject({ challengeId: 9, leadMin: 15 });
+            });
+
+            it('does not cap when disabled', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: () => wrap({ enabled: false, leadSec: 900, boostTimeSec: 3600 }),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('honours the 0 = off sentinel on boostTime, so it never wakes for a boost that will not fire', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on({ boostTimeSec: 0 }),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('skips a challenge with no boost available to apply', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const challenges = [
+                    {
+                        id: 9,
+                        title: 'NoBoost',
+                        type: 'regular',
+                        close_time: now + 7200,
+                        member: { boost: { state: 'NONE', timeout: 0 } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveBoostPrefill: on(),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('measures a key-unlocked boost against close time', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Applies with 900s left, lead 900 → window opens at close-1800 = now+120.
+                const challenges = [
+                    {
+                        id: 9,
+                        title: 'KeyBoost',
+                        type: 'regular',
+                        close_time: now + 1920,
+                        member: { boost: { state: 'AVAILABLE_KEY' } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveBoostPrefill: on(),
+                });
+                expect(result.mode).toBe('pre-boost');
+                expect(result.delayMs).toBe(120_000);
+            });
+
+            it('a corrupt leadSec falls back to the 15-min default', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on({ leadSec: Number.NaN }),
+                });
+                expect(result.mode).toBe('pre-boost');
+                expect(result.delayMs).toBe(120_000);
+                expect(result.nextBoostPrefill.leadMin).toBe(15);
+            });
+
+            it('falls back to the 900s default for a corrupt keyUnlockedBoostTimeSec, matching the rule side', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Rule side (getEffectiveKeyUnlockedBoostTime) falls back to 900 for a
+                // missing/NaN value; skipping the challenge here instead would arm the
+                // rule for a boundary the scheduler never wakes for.
+                const challenges = [
+                    {
+                        id: 9,
+                        title: 'KeyBoost',
+                        type: 'regular',
+                        close_time: now + 1920,
+                        member: { boost: { state: 'AVAILABLE_KEY' } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveBoostPrefill: on({ keyUnlockedBoostTimeSec: Number.NaN }),
+                });
+                expect(result.mode).toBe('pre-boost');
+                expect(result.delayMs).toBe(120_000);
+            });
+
+            it('skips malformed data where the boost outlives the challenge', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // timeout after close → apply instant negative; mirrors the rule-side
+                // guard asserted in tests/services/boostPrefill.test.js.
+                const challenges = [
+                    {
+                        id: 9,
+                        title: 'Malformed',
+                        type: 'regular',
+                        close_time: now + 3600,
+                        member: { boost: { state: 'AVAILABLE', timeout: now + 7200 } },
+                    },
+                ];
+                const result = await computeNextCycleDelayMs(challenges, now, {
+                    ...opts(),
+                    resolveBoostPrefill: on({ boostTimeSec: 60 }),
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+
+            it('a nearer pre-final-window cap wins, but nextBoostPrefill is still reported', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                // Pre-boost window opens at now+120 (see timerBoost); the top-up window
+                // for the same challenge (close+7200, lead 900, duration 3600) opens at
+                // close-4500 = now+2700 — later. Invert it by giving the top-up a much
+                // wider lead so it opens sooner: duration 3600 + lead 3540 → now+60.
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: on(),
+                    resolveFinalWindowTopUp: () => wrap({ enabled: true, leadSec: 3540, durationSec: 3600 }),
+                });
+                expect(result.mode).toBe('pre-final-window');
+                expect(result.delayMs).toBe(60_000);
+                // Informational: the pre-boost boundary is still computed and surfaced
+                // even though a nearer cap won.
+                expect(result.nextBoostPrefill).toMatchObject({ challengeId: 9 });
+            });
+
+            it('a throwing resolver is skipped rather than killing the decision', async () => {
+                const now = Math.floor(Date.now() / 1000);
+                const result = await computeNextCycleDelayMs(timerBoost(now), now, {
+                    ...opts(),
+                    resolveBoostPrefill: () => {
+                        throw new Error('boom');
+                    },
+                });
+                expect(result.mode).toBe('normal');
+                expect(result.nextBoostPrefill).toBeNull();
+            });
+        });
     });
 });

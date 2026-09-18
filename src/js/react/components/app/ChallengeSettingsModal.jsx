@@ -389,6 +389,35 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
      * A pause shorter than the longest gap between cycles can therefore be
      * stepped straight over, and voting proceeds as if it were never set.
      */
+    /**
+     * Conditional inline hints for the pre-boost fill; [] for other keys.
+     *
+     * Mirrors the global settings modal: the fill spends votes, so any setting
+     * that blocks voting above the pre-boost branch in _runVotingRules cancels
+     * it silently, and a per-challenge override is exactly where that pairing
+     * gets made (overriding onlyBoost for one challenge while voteBeforeBoost is
+     * inherited on). All of it hangs off the master-toggle row.
+     */
+    const boostPrefillHints = (key) => {
+        const hints = [];
+        if (key !== 'voteBeforeBoost' || effectiveOf('voteBeforeBoost') !== true) return hints;
+        if (effectiveOf('onlyBoost') === true) {
+            hints.push({ tone: 'text-warning font-medium', text: t('app.voteBeforeBoostOnlyBoostHint') });
+        }
+        if (effectiveOf('autoBoost') !== true) {
+            hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostNoAutoBoostHint') });
+        }
+        if (effectiveOf('voteOnlyInLastMinute') === true) {
+            hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostLastMinuteOnlyHint') });
+        }
+        // Both boost clocks off (0 = off on each) means no boost is ever
+        // auto-applied, so there is no instant to fill ahead of.
+        if (Number(effectiveOf('boostTime')) === 0 && Number(effectiveOf('keyUnlockedBoostTime')) === 0) {
+            hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostNoBoostTimeHint') });
+        }
+        return hints;
+    };
+
     const votingPauseDurationHints = (key) => {
         if (key !== 'votingPauseDurationMinutes') return [];
         if (!vp.active || !(checkFrequencyMax > 0) || vp.durationMin >= checkFrequencyMax) return [];
@@ -587,6 +616,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                     ...scheduledFillHints(key),
                                                     ...votingPauseHints(key),
                                                     ...votingPauseDurationHints(key),
+                                                    ...boostPrefillHints(key),
                                                 ].map((hint) => (
                                                     <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
                                                         {hint.text}

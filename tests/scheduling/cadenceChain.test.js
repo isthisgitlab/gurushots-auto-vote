@@ -88,6 +88,20 @@ const topUpSoonChallenge = () => ({
     close_time: Math.floor(Date.now() / 1000) + 4600,
 });
 
+// cadence tick → pre-boost mode (only when a resolveBoostPrefill dep is supplied).
+// close+7200 with a boost timer expiring in 4600s and boostTime 3600 puts the apply
+// instant at 6200s-before-close, so the 900s lead window opens at now+100.
+const boostSoonChallenge = () => {
+    const now = Math.floor(Date.now() / 1000);
+    return {
+        id: 4,
+        title: 'Pre Boost',
+        type: 'regular',
+        close_time: now + 7200,
+        member: { boost: { state: 'AVAILABLE', timeout: now + 4600 } },
+    };
+};
+
 describe('createCadenceChain', () => {
     beforeEach(() => {
         jest.useFakeTimers();
@@ -319,6 +333,36 @@ describe('createCadenceChain', () => {
             'pre-final-window',
             expect.stringContaining('15m pre-final-window boundary'),
         );
+    });
+
+    test('pre-boost mode caps to the fill boundary and logs the pre-boost branch', async () => {
+        const deps = makeDeps({
+            resolveBoostPrefill: jest.fn(() => ({
+                enabled: true,
+                leadSec: 900,
+                boostTimeSec: 3600,
+                keyUnlockedBoostTimeSec: 900,
+            })),
+        });
+        const chain = createCadenceChain(deps);
+
+        // Window opens at now+100s → wait is capped to ~100s, not the 3-min normal.
+        await chain.scheduleNext([boostSoonChallenge()]);
+
+        await jest.advanceTimersByTimeAsync(100_000 - 1);
+        await flushMicrotasks();
+        expect(deps.runCycle).not.toHaveBeenCalled();
+        await jest.advanceTimersByTimeAsync(1);
+        await flushMicrotasks();
+        expect(deps.runCycle).toHaveBeenCalledTimes(1);
+
+        // Pins the message's interpolations — a typo in nextBoostPrefill?.challengeTitle
+        // or ?.leadMin would otherwise only ever surface in a production log line.
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'pre-boost',
+            expect.stringContaining('pre-boost fill for "Pre Boost"'),
+        );
+        expect(deps.log.cadence).toHaveBeenCalledWith('pre-boost', expect.stringContaining('15m pre-boost boundary'));
     });
 
     test('decision error → decisionError log + fallback to the plain random cadence', async () => {

@@ -51,4 +51,49 @@ const openBoostWindows = (challenges, now) =>
             return a.remaining - b.remaining;
         });
 
-module.exports = { isBoostWindowOpen, openBoostWindows };
+/**
+ * Seconds-before-close at which an available boost is auto-applied, plus which
+ * clock that figure came from.
+ *
+ * Pure and settings-free so the two callers that need the same instant can share
+ * one formula instead of each carrying a copy: services/VotingLogic
+ * (getBoostThresholdSec, resolving the windows from settings) and
+ * scheduling/thresholdWindow (the pre-boost cadence cap, whose config arrives via
+ * a platform resolver and which must stay free of settings I/O for the WebView
+ * bundle).
+ *
+ * The two branches measure different clocks, exactly as shouldApplyBoost does:
+ *   - key-unlocked (AVAILABLE_KEY, or AVAILABLE with no timeout) has no timer of
+ *     its own, so the window is measured straight against close time;
+ *   - timer-based (AVAILABLE with a positive timeout) converts the boost's own
+ *     expiry into a seconds-before-close figure so it is comparable with every
+ *     other deadline action. `boost.timeout` is an absolute Unix-epoch timestamp,
+ *     NOT a countdown; the formula assumes the normal `closeTime > timeout` case
+ *     and malformed data (expiry after close) merely yields a negative figure.
+ *
+ * The `0 = off` sentinel on both window settings is deliberately NOT applied
+ * here. getBoostThresholdSec's historical contract is to stay a pure function of
+ * the configured numbers so orderDeadlineActions sorts on settings rather than on
+ * live state; the callers that care (describeDeadlineActions, the pre-boost fill)
+ * re-check the sentinel themselves, which `branch` is returned for.
+ *
+ * @param {object|null|undefined} boost - challenge.member.boost
+ * @param {number} closeTime - challenge close time (Unix seconds)
+ * @param {{boostTimeSec: number, keyUnlockedBoostTimeSec: number}} windows - the
+ *   two configured windows, already resolved by the caller
+ * @returns {{thresholdSec: number, branch: 'timer'|'key'|null}} `-Infinity` /
+ *   `null` when no boost is available to apply, so the action sorts last
+ */
+const boostApplyThreshold = (boost, closeTime, { boostTimeSec, keyUnlockedBoostTimeSec }) => {
+    const b = boost || {};
+    const hasTimeout = typeof b.timeout === 'number' && b.timeout > 0;
+    if (b.state === 'AVAILABLE_KEY' || (b.state === 'AVAILABLE' && !hasTimeout)) {
+        return { thresholdSec: keyUnlockedBoostTimeSec, branch: 'key' };
+    }
+    if (b.state === 'AVAILABLE' && hasTimeout) {
+        return { thresholdSec: Number(closeTime) - b.timeout + boostTimeSec, branch: 'timer' };
+    }
+    return { thresholdSec: -Infinity, branch: null };
+};
+
+module.exports = { isBoostWindowOpen, openBoostWindows, boostApplyThreshold };

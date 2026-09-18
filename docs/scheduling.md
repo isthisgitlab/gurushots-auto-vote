@@ -12,8 +12,8 @@ re-introducing a separate boundary-switch timer per host.
 
 `computeNextCycleDelayMs(challenges, now, { resolveThreshold, normalDelayMs,
 lastMinuteCheckMinutes, minGapMs, resolveScheduledFill?, resolveFinalWindowTopUp?,
-timezone? })` returns `{ delayMs, mode, nextEntry, nextScheduled,
-nextFinalWindowTopUp }`:
+resolveBoostPrefill?, timezone? })` returns `{ delayMs, mode, nextEntry, nextScheduled,
+nextFinalWindowTopUp, nextBoostPrefill }`:
 
 - **last-minute**: a challenge is already inside its `lastMinuteThreshold`
   window → fixed `lastMinuteCheckMinutes` cadence.
@@ -27,6 +27,9 @@ nextFinalWindowTopUp }`:
   (see below) is closer than the random delay and every boundary/scheduled
   cap → wait is capped to that start so a cycle lands exactly when the
   top-up opens.
+- **pre-boost**: the soonest upcoming pre-boost fill window start (see below)
+  is closer than the random delay and every other cap → wait is capped to that
+  start so a cycle lands when the fill opens, while the Boost is still unspent.
 - **normal**: otherwise the random delay in `[checkFrequencyMin,
 checkFrequencyMax]`.
 
@@ -116,8 +119,9 @@ A 01:30–06:00 night pause is `votingPauseTime: ['01:30']` with a duration of 2
 The decision side lives in `getVotingPauseState`
 (`src/js/services/VotingLogic.js`), which shares `_triggerWindowState` with
 `getScheduledFillState` so the two can never drift on entry/corruption
-semantics. Its branch in `_runVotingRules` sits **below** flash and last-minute
-(a challenge that really closes mid-pause still gets its final fill) and
+semantics. Its branch in `_runVotingRules` sits **below** flash, last-minute
+and the pre-boost fill (a challenge that really closes mid-pause still gets its
+final fill, and a Boost spent mid-pause still lands on a full entry) and
 **above** scheduled fill, the pre-final-window top-up, final-window and the
 normal threshold. Auto only; manual voting is never blocked. Boost and turbo are
 unaffected — they run ahead of this on the orchestrator's own path.
@@ -197,6 +201,41 @@ Deliberate semantics and caveats:
   disabled/corrupt, is skipped for the cadence cap; the rule-side read is
   optional-chained like every other per-challenge API read so one bad
   challenge never aborts the pass.
+
+## Pre-boost fill cadence
+
+Per-challenge pre-boost fill (`voteBeforeBoost`, default off) votes a challenge
+to **100%** for `voteBeforeBoostLeadMin` (1–59, default 15) minutes before an
+available Boost is auto-applied, so the Boost multiplies a full entry rather
+than a decayed one. The cadence side is `soonestBoostPrefillStart`, fed by a
+fourth injected resolver (`resolveBoostPrefill`, sync on Node / async IPC on the
+WebView) returning `{enabled, leadSec, boostTimeSec, keyUnlockedBoostTimeSec}`
+per challenge. The cap targets the soonest upcoming window **start**
+(`close_time − (applyThresholdSec + leadSec)`), producing `mode: 'pre-boost'`
+and a `nextBoostPrefill` of `{challengeId, challengeTitle, startTime, leadMin}`.
+
+Deliberate semantics and caveats:
+
+- **Live state, unlike every other boundary**: the apply instant comes from the
+  challenge's own `member.boost` via the shared `boostApplyThreshold`
+  (`voting/boostWindow.js`), not from `close_time` alone, so this boundary can
+  appear, move or vanish as the Boost's timer is refreshed server-side. That is
+  fine — it is recomputed from scratch every cycle and the rule re-checks the
+  same window before acting. The resolver carries only settings, keeping
+  `thresholdWindow.js` free of settings I/O for the WebView bundle.
+- **Sentinel parity**: the `0 = off` sentinel on `boostTime` (timer boost) and
+  `keyUnlockedBoostTime` (key-unlocked) is honoured in **both**
+  `soonestBoostPrefillStart` and `VotingLogic.getBoostPrefillState`, so the
+  scheduler never wakes for a fill the rule would then decline. The shared
+  `boostApplyThreshold` deliberately does not encode it, because
+  `getBoostThresholdSec`/`orderDeadlineActions` must stay a pure function of the
+  configured numbers.
+- **Guard parity**: an out-of-range `leadSec` (sub-minute, over 59 min, or
+  `NaN`) falls back to the 15-min schema default in **both** the cadence guard
+  (`soonestBoostPrefillStart`, 60..3540 s) and the rule-engine guard
+  (`getBoostPrefillLeadSec`, 1..59 min).
+- **Fail-soft**: a challenge whose resolver throws, or whose config is
+  disabled/corrupt or whose boost is unavailable, is skipped for the cadence cap.
 
 ## CLI — runScheduler (single setTimeout chain)
 

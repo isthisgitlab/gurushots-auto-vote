@@ -159,6 +159,22 @@
                 'Separate window for a key-unlocked Boost — one with no timer of its own. Because it never expires, it is applied only when this much time remains before the challenge closes, so it lands as late as possible. Boost Time does not apply to these. Set to 0 to never auto-apply it.',
             keyUnlockedBoostTimeHelp:
                 'Applies only to a key-unlocked Boost (one with no timer of its own). Set to 0 to never auto-apply it. This is a separate clock from Boost Time — the two never substitute for each other. As with the other time settings, 0 means "off".',
+            voteBeforeBoost: 'Fill Exposure Before Boost',
+            voteBeforeBoostDesc:
+                'Vote this challenge up to 100% exposure for a short window before Boost is auto-applied, so the Boost lands on a fully exposed entry instead of a decayed one.',
+            voteBeforeBoostHelp:
+                'A Boost multiplies whatever the entry has at the moment it lands, and you only get one per challenge — so applying it to an entry whose exposure has decayed wastes it. With this on, the bot votes to 100% during the lead you set below, then the Boost is applied as usual. It needs Auto-Apply Boost to be on, and it does nothing when the matching Boost time is set to 0 ("off"). Exposure does not jump to 100% in one pass, so leave enough lead for several voting cycles.',
+            voteBeforeBoostOnlyBoostHint:
+                'Only Boost Mode is on, so the bot never votes — this fill will never run. Turn off Only Boost Mode (in General) to use it.',
+            voteBeforeBoostNoAutoBoostHint:
+                'Auto-Apply Boost is off, so no Boost is applied automatically and there is nothing to fill ahead of.',
+            voteBeforeBoostLastMinuteOnlyHint:
+                'Vote Only In Last Minutes is on, so the bot does not vote before then — this fill runs only if the Boost happens to land inside that window, where voting already goes to 100% anyway.',
+            voteBeforeBoostNoBoostTimeHint:
+                'Both Boost Time and Key-Unlocked Boost Time are 0 (off), so no Boost is ever applied automatically and there is no moment to fill ahead of. Set at least one of them above 0.',
+            voteBeforeBoostLeadMin: 'Fill Before Boost Lead',
+            voteBeforeBoostLeadMinDesc:
+                'How long before the Boost is applied the fill starts. Allow enough time for several voting rounds — exposure does not reach 100% in one go.',
             autoBoost: 'Auto-Apply Boost',
             autoBoostDesc: 'Automatically apply Boost on this challenge as its Boost window is about to close.',
             turbo: 'Turbo',

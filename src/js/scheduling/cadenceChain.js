@@ -113,6 +113,8 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  *   resolver for the shared math
  * @param {import('./thresholdWindow').ResolveFinalWindowTopUp} deps.resolveFinalWindowTopUp -
  *   per-challenge pre-final-window top-up resolver for the shared math
+ * @param {import('./thresholdWindow').ResolveBoostPrefill} deps.resolveBoostPrefill -
+ *   per-challenge pre-boost fill resolver for the shared math
  * @param {()=>Promise<*>} deps.runCycle - run one voting cycle; the resolved
  *   value is handed to the next decision as the prefetched list candidate
  *   (any non-array means "fetch fresh"). A rejection is logged via
@@ -120,7 +122,8 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  * @param {Object} deps.log - host log adapter
  * @param {(mode:string, message:string)=>(void|Promise<void>)} deps.log.cadence -
  *   receives every cadence decision line (modes: normal / last-minute /
- *   scheduled / pre-final-window / approaching); a host may drop modes it never logged
+ *   scheduled / pre-final-window / pre-boost / approaching); a host may drop
+ *   modes it never logged
  * @param {(error:*)=>(void|Promise<void>)} deps.log.decisionError - decision
  *   failure (chain falls back to the random cadence)
  * @param {(error:*)=>(void|Promise<void>)} deps.log.cycleError - a voting
@@ -154,6 +157,7 @@ const createCadenceChain = ({
     resolveThreshold,
     resolveScheduledFill,
     resolveFinalWindowTopUp,
+    resolveBoostPrefill,
     runCycle,
     log,
     onScheduled,
@@ -217,6 +221,7 @@ const createCadenceChain = ({
                 resolveScheduledFill,
                 timezone: settings.timezone || DEFAULT_TIMEZONE,
                 resolveFinalWindowTopUp,
+                resolveBoostPrefill,
             });
 
             if (decision.mode === 'normal') {
@@ -240,6 +245,8 @@ const createCadenceChain = ({
                     message = `⏰ Last-minute cadence — next cycle in ${(waitMs / 60_000).toFixed(2)} min`;
                 } else if (decision.mode === 'scheduled') {
                     message = `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" (${decision.nextScheduled?.form}) — next cycle in ${Math.round(waitMs / 1000)}s`;
+                } else if (decision.mode === 'pre-boost') {
+                    message = `⏰ Approaching pre-boost fill for "${decision.nextBoostPrefill?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextBoostPrefill?.leadMin}m pre-boost boundary)`;
                 } else if (decision.mode === 'pre-final-window') {
                     message = `⏰ Approaching pre-final-window top-up for "${decision.nextFinalWindowTopUp?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextFinalWindowTopUp?.leadMin}m pre-final-window boundary)`;
                 } else {
