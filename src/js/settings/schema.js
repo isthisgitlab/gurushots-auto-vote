@@ -891,6 +891,32 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoJoinExcludeTypes',
         description: 'app.autoJoinExcludeTypesDesc',
     },
+    // Scope by the challenge's OWN tags — the API-supplied classifiers on each
+    // challenge ("Exhibition", "Comm", "No comm", "Turbo", "Magazine",
+    // "special 4 pic"). These are NOT the photo tags of mustIncludeTags /
+    // shouldIncludeTags: those pick which of YOUR photos to submit, these pick
+    // which CHALLENGES to join. Same shape as the type lists above: empty
+    // include = all, exclude subtracts, a title opt-in bypasses both.
+    autoJoinChallengeTags: {
+        type: 'string',
+        default: '',
+        perChallenge: true,
+        validation: zString,
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinChallengeTags',
+        description: 'app.autoJoinChallengeTagsDesc',
+    },
+    autoJoinExcludeChallengeTags: {
+        type: 'string',
+        default: '',
+        perChallenge: true,
+        validation: zString,
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinExcludeChallengeTags',
+        description: 'app.autoJoinExcludeChallengeTagsDesc',
+    },
     // Join-timing gate: only join a candidate once it is within this many hours
     // of its close_time. 0 = off (join as soon as the candidate is seen — the
     // historical behavior), so this is the "0 = feature off" sentinel family,

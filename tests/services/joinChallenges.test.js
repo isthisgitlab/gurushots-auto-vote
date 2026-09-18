@@ -45,6 +45,11 @@ const {
     inFlight,
 } = require('../../src/js/services/joinChallenges');
 
+// The facade's rule readers take a CHALLENGE (so a tag-keyed rule can match on
+// its tags) and still accept a bare title. Mocks must honour both, or they test
+// a signature the real module no longer has.
+const titleOf = (target) => (typeof target === 'string' ? target : target?.title);
+
 const makeStore = () => {
     let s = null;
     return { readRaw: () => s, writeRaw: (d) => (s = d) };
@@ -218,7 +223,7 @@ describe('isAutoJoinActive', () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         settings.getTitleRules.mockReturnValue([{ title: 'X', profile: 'p' }]);
         settings.getTitleProfile.mockImplementation((t) =>
-            t === 'X' ? { name: 'p', values: { autoJoin: true } } : null,
+            titleOf(t) === 'X' ? { name: 'p', values: { autoJoin: true } } : null,
         );
         expect(isAutoJoinActive()).toBe(true);
     });
@@ -324,8 +329,8 @@ describe('runJoinPass', () => {
         // autoJoin on for itself.
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         settings.getTitleRules.mockReturnValue([{ title: 'Joinable', profile: 'p' }]);
-        settings.getTitleProfile.mockImplementation((title) =>
-            title === 'Joinable' ? { name: 'p', values: { autoJoin: true } } : null,
+        settings.getTitleProfile.mockImplementation((target) =>
+            titleOf(target) === 'Joinable' ? { name: 'p', values: { autoJoin: true } } : null,
         );
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
@@ -343,8 +348,8 @@ describe('runJoinPass', () => {
     test('master ON but a title profile disables autoJoin → that title is skipped, others join', async () => {
         // Safety-relevant mirror of the enable case: an explicit false in the
         // profile must win over the master-on default (hasOwnProperty, not truthy).
-        settings.getTitleProfile.mockImplementation((title) =>
-            title === 'Excluded' ? { name: 'p', values: { autoJoin: false } } : null,
+        settings.getTitleProfile.mockImplementation((target) =>
+            titleOf(target) === 'Excluded' ? { name: 'p', values: { autoJoin: false } } : null,
         );
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
@@ -562,8 +567,8 @@ describe('runJoinPass — join window', () => {
         // Global says "join on sight"; the rule for this title says "only in the
         // last 24h" — the title must still be deferred.
         withWindow(0);
-        settings.getTitleRuleOverrides.mockImplementation((title) =>
-            title === 'abc' ? { autoJoinWithinHoursOfEnd: 24 } : {},
+        settings.getTitleRuleOverrides.mockImplementation((target) =>
+            titleOf(target) === 'abc' ? { autoJoinWithinHoursOfEnd: 24 } : {},
         );
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
@@ -663,7 +668,7 @@ describe('runJoinPass — inline rule arming', () => {
     test('master off but an inline autoJoin:true rule arms the pass', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         settings.getTitleRules.mockReturnValue([{ title: 'Joinable', autoJoin: true }]);
-        settings.getTitleRuleOverrides.mockImplementation((title) => (title === 'Joinable' ? { autoJoin: true } : {}));
+        settings.getTitleRuleOverrides.mockImplementation((t) => (titleOf(t) === 'Joinable' ? { autoJoin: true } : {}));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
                 { id: 1, join_coins: 0, type: 'flash', title: 'Joinable' },
@@ -693,7 +698,7 @@ describe('runJoinPass — inline rule arming', () => {
         settings.getEffectiveSetting.mockImplementation((k) =>
             k === 'autoJoinExcludeTypes' ? 'flash' : DEFAULT_SETTINGS[k],
         );
-        settings.getTitleRuleOverrides.mockImplementation((title) => (title === 'Wanted' ? { autoJoin: true } : {}));
+        settings.getTitleRuleOverrides.mockImplementation((t) => (titleOf(t) === 'Wanted' ? { autoJoin: true } : {}));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
                 { id: 1, join_coins: 0, type: 'flash', title: 'Wanted' },
@@ -715,6 +720,84 @@ describe('runJoinPass — inline rule arming', () => {
         });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.results[0].status).toBe('skipped:excluded-type');
+    });
+});
+
+/**
+ * Challenge-tag rules through the whole pass: the global filters, and a rule
+ * keyed on the candidate's own tags rather than its title.
+ */
+describe('runJoinPass — challenge tags', () => {
+    const candidates = () => [
+        { id: 1, join_coins: 0, type: 'default', title: 'Going Viral', tags: ['Turbo'] },
+        { id: 2, join_coins: 0, type: 'exhibition', title: 'My Best Shot', tags: ['Exhibition', 'Comm'] },
+    ];
+
+    test('a global require-list narrows to challenges carrying the tag', async () => {
+        settings.getEffectiveSetting.mockImplementation((k) =>
+            k === 'autoJoinChallengeTags' ? 'exhibition' : DEFAULT_SETTINGS[k],
+        );
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => candidates()) });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results[0].status).toBe('skipped:tag-out-of-scope');
+        expect(res.results[1].status).toBe('joined');
+    });
+
+    test('a global exclude-list vetoes', async () => {
+        settings.getEffectiveSetting.mockImplementation((k) =>
+            k === 'autoJoinExcludeChallengeTags' ? 'comm' : DEFAULT_SETTINGS[k],
+        );
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => candidates()) });
+        const res = await runJoinPass('tok', Date.now(), deps);
+        expect(res.results[0].status).toBe('joined');
+        expect(res.results[1].status).toBe('skipped:excluded-tag');
+    });
+
+    test('the candidate object (not just its title) reaches the rule lookup', async () => {
+        // A tag-keyed rule has no title to match on, so this only passes if the
+        // pass hands the whole candidate to the facade.
+        const seen = [];
+        settings.getTitleRuleOverrides.mockImplementation((target) => {
+            seen.push(target);
+            return {};
+        });
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => candidates()) });
+        await runJoinPass('tok', Date.now(), deps);
+        expect(seen.some((t) => Array.isArray(t?.tags) && t.tags.includes('Turbo'))).toBe(true);
+    });
+
+    test('a tag-keyed rule can set the join window for every challenge carrying that tag', async () => {
+        const HOUR = 3600;
+        const nowMs = 1_700_000_000_000;
+        const nowSec = nowMs / 1000;
+        settings.getTitleRuleOverrides.mockImplementation((target) =>
+            (target?.tags || []).includes('Exhibition') ? { autoJoinWithinHoursOfEnd: 24 } : {},
+        );
+        const deps = makeDeps({
+            getMemberChallenges: jest.fn(async () => [
+                // Tagged Exhibition and far from closing -> deferred by the rule.
+                {
+                    id: 2,
+                    join_coins: 0,
+                    type: 'exhibition',
+                    title: 'My Best Shot',
+                    tags: ['Exhibition'],
+                    close_time: nowSec + 200 * HOUR,
+                },
+                // Not tagged Exhibition -> no window -> joins on sight.
+                {
+                    id: 1,
+                    join_coins: 0,
+                    type: 'default',
+                    title: 'Going Viral',
+                    tags: ['Turbo'],
+                    close_time: nowSec + 200 * HOUR,
+                },
+            ]),
+        });
+        const res = await runJoinPass('tok', nowMs, deps);
+        expect(res.results[0].status).toBe('skipped:too-early');
+        expect(res.results[1].status).toBe('joined');
     });
 });
 

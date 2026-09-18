@@ -60,19 +60,21 @@ const cat = () => logger.withCategory('join');
  * a whole profile.
  */
 const resolveJoinSetting = (key, challenge) => {
-    const title = challenge?.title;
-    if (title) {
+    // Pass the whole candidate, never just its title: a rule may be keyed on the
+    // challenge's own `tags`, and an un-joined candidate carries them.
+    const hasMatchable = !!(challenge?.title || (Array.isArray(challenge?.tags) && challenge.tags.length > 0));
+    if (hasMatchable) {
         // Optional-chained like every other per-challenge settings read here: an
         // older persisted facade (or a partial stub in a test) must degrade to
         // "no inline override", never throw mid-pass.
-        const inline = settings.getTitleRuleOverrides?.(title);
+        const inline = settings.getTitleRuleOverrides?.(challenge);
         if (inline && Object.prototype.hasOwnProperty.call(inline, key)) {
             return inline[key];
         }
     }
     // getTitleProfile returns { name, values } (or null) — the overrides live
     // under `.values`, so read from there, not off the profile object itself.
-    const profile = title ? settings.getTitleProfile(title) : null;
+    const profile = hasMatchable ? settings.getTitleProfile(challenge) : null;
     const values = profile && !profile.suppressed ? profile.values : null;
     if (values && Object.prototype.hasOwnProperty.call(values, key)) {
         return values[key];
@@ -106,17 +108,17 @@ const anyTitleRuleEnablesAutoJoin = () => {
     }
     if (!Array.isArray(rules)) return false;
     for (const rule of rules) {
-        const title = rule?.title;
-        if (!title) continue;
-        // Inline first — it is what resolveJoinSetting would pick, so the arming
-        // check and the per-candidate decision cannot disagree. Notably an
-        // inline `autoJoin: false` must NOT be rescued by a profile that says
-        // true, or the pass would arm for a title it then always skips.
-        const inline = settings.getTitleRuleOverrides?.(title);
-        if (inline && Object.prototype.hasOwnProperty.call(inline, 'autoJoin')) {
-            if (inline.autoJoin === true) return true;
+        // Read the rule's OWN inline value directly. Going back through the
+        // matcher here would be wrong: a `contains` or tag-keyed rule has no
+        // single challenge to match against at arming time, and a more specific
+        // rule could win and hide this one's `autoJoin: true`. Arming only asks
+        // "could any rule ever turn joining on?", which the rule answers itself.
+        if (rule && Object.prototype.hasOwnProperty.call(rule, 'autoJoin')) {
+            if (rule.autoJoin === true) return true;
             continue;
         }
+        const title = rule?.title;
+        if (!title) continue;
         const profile = settings.getTitleProfile(title);
         if (profile && !profile.suppressed && profile.values && profile.values.autoJoin === true) {
             return true;
@@ -147,17 +149,19 @@ const isAutoJoinActive = () => {
  * says when, not whether, so it must not smuggle an excluded type into scope.
  */
 const hasTitleOptIn = (challenge) => {
-    const title = challenge?.title;
-    if (!title) return false;
-    if (settings.getTitleRuleOverrides?.(title)?.autoJoin === true) return true;
-    return !!settings.getTitleProfile(title);
+    if (!challenge?.title && !(Array.isArray(challenge?.tags) && challenge.tags.length > 0)) return false;
+    if (settings.getTitleRuleOverrides?.(challenge)?.autoJoin === true) return true;
+    return !!settings.getTitleProfile(challenge);
 };
 
-/** Per-candidate scope/coin/timing config, resolved by title (inline → profile → global). */
+/** Per-candidate scope/coin/timing config, resolved by rule (inline → profile → global). */
 const resolveCandidateConfig = (challenge) => ({
     // Empty include list = all types (the default scope once auto-join is on).
     includeTypes: parseTypeList(resolveJoinSetting('autoJoinTypes', challenge)),
     excludeTypes: parseTypeList(resolveJoinSetting('autoJoinExcludeTypes', challenge)),
+    // The challenge's OWN tags (Exhibition / Comm / Turbo / …), not photo tags.
+    includeTags: parseTypeList(resolveJoinSetting('autoJoinChallengeTags', challenge)),
+    excludeTags: parseTypeList(resolveJoinSetting('autoJoinExcludeChallengeTags', challenge)),
     maxCoins: Number(resolveJoinSetting('autoJoinMaxCoins', challenge)) || 0,
     // Hours → seconds, to match close_time's unit. A non-finite/negative value
     // degrades to 0 = "no window", i.e. the historical join-on-sight behavior.
@@ -506,6 +510,8 @@ const runJoinPass = async (token, now, deps) => {
             excludeTypes: cfg.excludeTypes,
             maxCoins: cfg.maxCoins,
             hasProfileMatch: cfg.hasProfileMatch,
+            includeTags: cfg.includeTags,
+            excludeTags: cfg.excludeTags,
             joinWithinSec: cfg.joinWithinSec,
             nowSec,
         });

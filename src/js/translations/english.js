@@ -246,6 +246,12 @@
             autoJoinExcludeTypes: 'Never Join These Types',
             autoJoinExcludeTypesDesc:
                 'Comma-separated challenge types to never auto-join, e.g. "flash,exhibition". Since the default is to join all types, this is how you get "join everything except these". A challenge matched by a saved title profile still joins — a profile is a deliberate per-title opt-in.',
+            autoJoinChallengeTags: 'Only Challenges Tagged',
+            autoJoinChallengeTagsDesc:
+                'Comma-separated CHALLENGE tags to join, e.g. "Exhibition,Turbo". These are the tags GuruShots puts on a challenge (Exhibition, Comm, No comm, Turbo, Magazine, "special 4 pic"), not the tags on your photos. Leave EMPTY to allow all tags. A challenge matches if it carries ANY tag in the list. Case-insensitive.',
+            autoJoinExcludeChallengeTags: 'Never Challenges Tagged',
+            autoJoinExcludeChallengeTagsDesc:
+                'Comma-separated CHALLENGE tags to never auto-join, e.g. "Comm". Subtracts from the scope above, so this is how you get "join everything except these". A title rule that turns auto-join on still joins — that is a deliberate per-title opt-in.',
             autoJoinWithinHoursOfEnd: 'Join Only Near The End',
             autoJoinWithinHoursOfEndDesc:
                 'Wait until a challenge is this many hours from ending before joining it, instead of joining the moment it appears. 0 = join as soon as it is seen.',
@@ -317,6 +323,14 @@
                 'Could not save title rules. Check profile names, title/tag lengths, and conflicts with manual settings for open challenges. Other settings were saved.',
             titleTagRuleTitle: 'Challenge title',
             titleTagRuleTitlePlaceholder: "e.g. Let's See Hats",
+            titleRuleMatch: 'Title match',
+            titleRuleMatchExact: 'Is exactly',
+            titleRuleMatchStarts: 'Starts with',
+            titleRuleMatchContains: 'Contains',
+            titleRuleChallengeTag: 'Challenge tag',
+            titleRuleChallengeTagPlaceholder: 'e.g. Exhibition',
+            titleRuleChallengeTagHint:
+                "The challenge's own tag, not a photo tag. Leave the title empty to match on the tag alone.",
             titleRuleProfile: 'Automatic profile',
             titleRuleInherit: 'Inherit',
             titleRuleOn: 'On',
