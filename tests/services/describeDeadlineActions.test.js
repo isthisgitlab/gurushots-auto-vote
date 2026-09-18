@@ -29,8 +29,13 @@ const mockSettings = (overrides = {}) => {
         useTurbo: true,
         autoFill: true,
         boostImageIndex: 1,
+        mustIncludeTags: null,
     };
-    settings.getEffectiveSetting = jest.fn((key) => ({ ...defaults, ...overrides })[key]);
+    const merged = { ...defaults, ...overrides };
+    settings.getEffectiveSetting = jest.fn((key) => merged[key]);
+    // Tag lists go through the title-aware reader; the title-rule union is not
+    // under test here, so resolve it off the same map.
+    settings.getEffectiveTagSetting = jest.fn((key) => merged[key]);
 };
 
 const build = ({
@@ -110,6 +115,34 @@ describe('describeDeadlineActions — row gating', () => {
     test('emergency-fill row omitted when off (0)', () => {
         mockSettings({ emergencyFill: 0 });
         expect(actionsOf(build())).not.toContain('emergencyFill');
+    });
+
+    test('no phantom emergency-fill row when normal auto-fill already owns the challenge', () => {
+        // The common configuration: auto-fill on, no must-include filter. The
+        // runner returns 'skipped' before any network call, so the row would be
+        // permanent noise on every challenge.
+        mockSettings({ autoFill: true, mustIncludeTags: null });
+        expect(actionsOf(build())).not.toContain('emergencyFill');
+    });
+
+    test('emergency-fill row shown when auto-fill is off (nothing else fills the slot)', () => {
+        mockSettings({ autoFill: false });
+        expect(actionsOf(build())).toContain('emergencyFill');
+    });
+
+    test('emergency-fill row shown with auto-fill on when a must-include filter is set', () => {
+        // The filter may leave the slot empty; only a network probe can tell, so
+        // the advisory row stays.
+        mockSettings({ autoFill: true, mustIncludeTags: ['sunset'] });
+        expect(actionsOf(build())).toContain('emergencyFill');
+    });
+
+    test('no phantom emergency-fill row when every slot is already full', () => {
+        // 2/2 entries — getSlotsRemaining hits 0 and the runner skips. auto-fill
+        // is off so the stand-down above cannot be what hides the row.
+        mockSettings({ autoFill: false });
+        const full = build({ entries: [{ id: 'e1' }, { id: 'e2' }], maxSubmits: 2 });
+        expect(actionsOf(full)).not.toContain('emergencyFill');
     });
 
     test('dueAt = close_time − thresholdSec', () => {
