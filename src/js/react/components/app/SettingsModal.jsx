@@ -4,13 +4,7 @@ import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { useAutovote } from '@/contexts/AutovoteContext';
-import {
-    groupSchemaEntries,
-    settingCellClass,
-    SETTINGS_GRID_CLASS,
-    SETTING_CELL_CLASS,
-    SETTING_CELL_CLASS_WIDE,
-} from '@/utils/groupSettings';
+import { groupSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { deriveWindowHints } from '@/utils/windowHints';
@@ -366,7 +360,7 @@ export function SettingsModal({ isOpen, onClose }) {
                             </div>
 
                             {/* Check Frequency */}
-                            <div className={SETTING_CELL_CLASS_WIDE}>
+                            <div className={SETTING_CELL_CLASS}>
                                 <label className="label">
                                     <span className="label-text font-medium">{t('app.checkFrequency')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
@@ -412,7 +406,7 @@ export function SettingsModal({ isOpen, onClose }) {
                             </div>
 
                             {/* Reliability — API retry / backoff */}
-                            <div className={SETTING_CELL_CLASS_WIDE}>
+                            <div className={SETTING_CELL_CLASS}>
                                 <label className="label">
                                     <span className="label-text font-medium">{t('app.reliability')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
@@ -465,7 +459,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                 <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(label)}</h5>
                                 <div className={SETTINGS_GRID_CLASS}>
                                     {entries.map(([key, config]) => (
-                                        <div key={key} className={settingCellClass(config)}>
+                                        <div key={key} className={SETTING_CELL_CLASS}>
                                             <label className="label">
                                                 <span className="label-text font-medium">{t(config.label)}</span>
                                                 <span className="badge badge-ghost badge-xs ml-2">
