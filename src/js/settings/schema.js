@@ -217,6 +217,12 @@ const beforeEndList = z
     .max(MAX_SCHEDULED_FILL_ENTRIES, `at most ${MAX_SCHEDULED_FILL_ENTRIES} offsets`)
     .refine((v) => new Set(v).size === v.length, 'duplicate offsets');
 const windowMinutes = z.number().int().min(5).max(720);
+// The voting-pause group reuses all four validators above verbatim: its
+// triggers are the same two forms (daily 'HH:MM' + seconds-before-close), it
+// shares MAX_SCHEDULED_FILL_ENTRIES, and its duration has the same 5m..12h
+// bounds as a fill window. The ONLY difference is what the window does —
+// scheduled fill votes inside it, the pause refuses to. Keep them sharing
+// these validators so the two features can never drift on bounds or messages.
 
 /**
  * Clamp a persisted scheduledFillTime list to the current bounds — the
@@ -721,6 +727,71 @@ const SETTINGS_SCHEMA = {
         description: 'app.scheduledFillReplacesDesc',
     },
 
+    // --- Voting Pause ---
+    // The inverse of scheduled fill: windows in which automatic voting is
+    // REFUSED rather than forced. Motivated by the overnight gap between match
+    // rounds — exposure filled at 03:00 buys almost no votes, so the votes are
+    // better spent after the morning round opens.
+    //
+    // Same two trigger forms, same lists-of-entries shape, same validators and
+    // same entry cap as scheduled fill (see the validator block above), with
+    // votingPauseDurationMinutes playing the scheduledFillWindowMinutes role.
+    // The decision-side consumer is getVotingPauseState in
+    // services/VotingLogic.js.
+    //
+    // Deliberately NOT a cadence input: the pass still runs on its normal
+    // schedule during a pause and each paused challenge is skipped with a
+    // reason. Suppressing the wake instead would have to out-rank every other
+    // scheduling boundary (boost timers, last-minute cadence), which is the
+    // one thing the scheduler's "never sleep past a boundary" invariant
+    // forbids.
+    useVotingPause: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'votingPause',
+        label: 'app.useVotingPause',
+        description: 'app.useVotingPauseDesc',
+    },
+    votingPauseTime: {
+        type: 'timeOfDayList',
+        default: [], // [] = this form off
+        perChallenge: true,
+        validation: timeOfDayList,
+        validationOrder: 1,
+        group: 'votingPause',
+        label: 'app.votingPauseTime',
+        description: 'app.votingPauseTimeDesc',
+    },
+    votingPauseBeforeEnd: {
+        type: 'timeList', // rows of hours/minutes inputs, stored as seconds each
+        default: [], // [] = this form off
+        perChallenge: true,
+        validation: beforeEndList,
+        validationOrder: 1,
+        group: 'votingPause',
+        label: 'app.votingPauseBeforeEnd',
+        description: 'app.votingPauseBeforeEndDesc',
+    },
+    votingPauseDurationMinutes: {
+        type: 'number',
+        default: 240,
+        perChallenge: true,
+        validation: windowMinutes,
+        // 5 is the real floor (what saving enforces and what the CLI documents);
+        // getVotingPauseState still honours a smaller hand-edited value, matching
+        // scheduledFillWindowMinutes' escape hatch.
+        min: 5,
+        max: 720,
+        unit: 'app.unitMinutes',
+        validationOrder: 1,
+        group: 'votingPause',
+        label: 'app.votingPauseDurationMinutes',
+        description: 'app.votingPauseDurationMinutesDesc',
+    },
+
     // --- Auto Join ---
     // Enable for the automatic join pre-step (runs each voting cycle on every
     // platform). Default off, but resolved master → profile → per-challenge, so a
@@ -1041,6 +1112,7 @@ const SETTINGS_GROUPS = [
     { id: 'finalWindow', label: 'app.groupFinalWindow' },
     { id: 'lastMinute', label: 'app.groupLastMinute' },
     { id: 'scheduledFill', label: 'app.groupScheduledFill' },
+    { id: 'votingPause', label: 'app.groupVotingPause' },
     { id: 'autoJoin', label: 'app.groupAutoJoin' },
     { id: 'autoFill', label: 'app.groupAutoFill' },
     { id: 'notifications', label: 'app.groupNotifications' },

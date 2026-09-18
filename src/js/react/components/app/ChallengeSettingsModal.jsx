@@ -6,9 +6,9 @@ import { getGroupApplicability } from '@/utils/challengeApplicability';
 import { formatSettingDefault } from '@/utils/formatters';
 import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
 import { getScheduleShift } from '../../../services/scheduleRemap';
-import { occurrencesOf } from '../../../scheduling/wallClock';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
-import { SettingInput, SCHEDULED_FILL_MAX_ENTRIES } from './SettingInput';
+import { SettingInput } from './SettingInput';
+import { deriveWindowHints } from '@/utils/windowHints';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
@@ -199,35 +199,9 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     const effectiveOf = (key) => (key in overrides ? overrides[key] : inheritedOf(key));
     const appTimezone = appSettings?.timezone || DEFAULT_TIMEZONE;
     const checkFrequencyMax = Number(appSettings?.checkFrequencyMax) || 0;
-    const rawSfTimes = effectiveOf('scheduledFillTime');
-    const sfTimes = (Array.isArray(rawSfTimes) ? rawSfTimes : []).slice(0, SCHEDULED_FILL_MAX_ENTRIES);
-    const rawSfBeforeEnds = effectiveOf('scheduledFillBeforeEnd');
-    const sfBeforeEnds = (Array.isArray(rawSfBeforeEnds) ? rawSfBeforeEnds : [])
-        .slice(0, SCHEDULED_FILL_MAX_ENTRIES)
-        .map(Number)
-        .filter((sec) => sec > 0);
-    const sfWindowMin = Number(effectiveOf('scheduledFillWindowMinutes')) || 60;
-    const sfWindowSec = sfWindowMin * 60;
-    const sfEnabled = effectiveOf('useScheduledFill') === true;
     const sfReplaces = effectiveOf('scheduledFillReplaces') === true;
     const nowSec = Math.floor(Date.now() / 1000);
     const closeTime = Number(challenge?.close_time) || 0;
-    // Explicit arrow (never `map(occurrencesOf)`): map's (element, index,
-    // array) signature would bind the index to the timeZone parameter. Each
-    // occurrence stays PAIRED with its source entry before the invalid ones
-    // are filtered out — a filter-then-reindex against sfTimes would mislabel
-    // every hint source after the first unparseable entry.
-    const sfTimeOccs = (() => {
-        try {
-            return sfTimes
-                .map((entry) => ({ entry, occ: occurrencesOf(entry, appTimezone, nowSec) }))
-                .filter((pair) => pair.occ);
-        } catch {
-            return [];
-        }
-    })();
-    const sfTimeSet = sfTimeOccs.length > 0;
-    const sfActive = sfEnabled && (sfTimeSet || sfBeforeEnds.length > 0);
     const formatInTz = (epochSec) => {
         try {
             return new Intl.DateTimeFormat(undefined, {
@@ -240,29 +214,47 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             return new Date(epochSec * 1000).toISOString().slice(11, 16);
         }
     };
-    // Next-window candidates from BOTH lists: per time entry the open-or-next
-    // occurrence, per before-end entry its one-shot start while the window is
-    // still at least partly ahead. Each carries its producing trigger so the
-    // hint can name whose window is shown.
-    const sfCandidates = [];
-    for (const { entry, occ } of sfTimeOccs) {
-        const start = nowSec - occ.prev <= sfWindowSec ? occ.prev : occ.next;
-        sfCandidates.push({ start, source: entry });
-    }
-    for (const sec of sfBeforeEnds) {
-        if (closeTime <= nowSec) continue;
-        const start = closeTime - sec;
-        if (nowSec <= start + sfWindowSec) {
-            sfCandidates.push({
-                start,
-                source: t('app.scheduledFillSourceBeforeEnd').replace(
-                    '{0}',
-                    formatSecondsAsHoursMinutes(sec, t('app.hours'), t('app.minutes')),
-                ),
-            });
-        }
-    }
-    const sfNext = sfCandidates.reduce((best, c) => (best === null || c.start < best.start ? c : best), null);
+    // The trigger-window derivation itself lives in utils/windowHints.js, which
+    // mirrors _triggerWindowState in services/VotingLogic.js so a hint can never
+    // claim a window the decision path won't open.
+    const derive = (keys, defaultDurationMin) =>
+        deriveWindowHints({ keys, defaultDurationMin, effectiveOf, timezone: appTimezone, nowSec, closeTime });
+    /** Render a window's producing trigger: a daily 'HH:MM' or an offset label. */
+    const sourceLabel = (source) =>
+        source?.kind === 'beforeEnd'
+            ? t('app.scheduledFillSourceBeforeEnd').replace(
+                  '{0}',
+                  formatSecondsAsHoursMinutes(source.seconds, t('app.hours'), t('app.minutes')),
+              )
+            : (source?.value ?? '');
+
+    const sf = derive(
+        {
+            enabled: 'useScheduledFill',
+            times: 'scheduledFillTime',
+            beforeEnd: 'scheduledFillBeforeEnd',
+            duration: 'scheduledFillWindowMinutes',
+        },
+        60,
+    );
+    const { beforeEnds: sfBeforeEnds, durationMin: sfWindowMin, durationSec: sfWindowSec } = sf;
+    const { enabled: sfEnabled, timeOccs: sfTimeOccs, timeSet: sfTimeSet, active: sfActive, next: sfNext } = sf;
+
+    const vp = derive(
+        {
+            enabled: 'useVotingPause',
+            times: 'votingPauseTime',
+            beforeEnd: 'votingPauseBeforeEnd',
+            duration: 'votingPauseDurationMinutes',
+        },
+        240,
+    );
+    // A pause open RIGHT NOW is reported as an END time — "voting resumes at …"
+    // is what the user actually wants to know.
+    const vpOpenUntil = vp.openNow ? vp.next.start + vp.durationSec : null;
+    // Daily pauses that leave no uncovered moment — outside the last-minute
+    // rules such a challenge would never vote automatically at all.
+    const vpAllDay = vp.coversWholeDay;
     // With replace mode on, is any fill window still reachable for THIS
     // challenge? Unreachable means replace mode keeps blocking threshold
     // voting with no fill ever coming (e.g. a "5h before end" profile applied
@@ -294,7 +286,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                         .replace('{0}', formatInTz(sfNext.start))
                         .replace('{1}', formatInTz(sfNext.start + sfWindowSec))
                         .replace('{2}', appTimezone)
-                        .replace('{3}', sfNext.source),
+                        .replace('{3}', sourceLabel(sfNext.source)),
                 });
             }
         }
@@ -330,6 +322,41 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             if (sfUnreachable) {
                 hints.push({ tone: 'text-warning', text: t('app.scheduledFillUnreachableHint') });
             }
+        }
+        return hints;
+    };
+
+    /**
+     * Conditional inline hints for the voting-pause keys; [] for other keys.
+     * All feature-level status sits on the master-toggle row for the same
+     * reason scheduled fill's does: a before-end-only config would never see a
+     * hint rendered on the daily-times row.
+     */
+    const votingPauseHints = (key) => {
+        const hints = [];
+        if (key !== 'useVotingPause') return hints;
+        if (vp.enabled && !vp.timeSet && vp.beforeEnds.length === 0) {
+            hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
+        }
+        if (vpOpenUntil) {
+            hints.push({
+                tone: 'text-warning',
+                text: t('app.votingPauseActiveHint')
+                    .replace('{0}', formatInTz(vpOpenUntil))
+                    .replace('{1}', appTimezone),
+            });
+        } else if (vp.active && vp.next) {
+            hints.push({
+                tone: 'text-info',
+                text: t('app.votingPauseNextHint')
+                    .replace('{0}', formatInTz(vp.next.start))
+                    .replace('{1}', formatInTz(vp.next.start + vp.durationSec))
+                    .replace('{2}', appTimezone)
+                    .replace('{3}', sourceLabel(vp.next.source)),
+            });
+        }
+        if (vpAllDay) {
+            hints.push({ tone: 'text-warning font-medium', text: t('app.votingPauseAllDayHint') });
         }
         return hints;
     };
@@ -517,7 +544,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                             )}
                                                     </p>
                                                 )}
-                                                {scheduledFillHints(key).map((hint) => (
+                                                {[...scheduledFillHints(key), ...votingPauseHints(key)].map((hint) => (
                                                     <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
                                                         {hint.text}
                                                     </p>

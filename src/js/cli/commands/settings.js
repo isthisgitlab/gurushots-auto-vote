@@ -477,6 +477,28 @@ fill window, all OR'd; older single values migrate to arrays automatically):
     set-global-default scheduledFillTime '["09:00","21:30"]'
     set-setting scheduledFillBeforeEnd '[14400,36000]' --challenge=12345
 
+Voting pause (the inverse of scheduled fill: refuse to vote inside the window
+— for the overnight gap between match rounds, where filled exposure earns very
+few votes. Same per-challenge scoping and JSON value format):
+  useVotingPause             - Master switch (default: false). Inert until a
+                               time below is set.
+  votingPauseTime            - JSON array of daily 24h "HH:MM" pause STARTS in
+                               the app timezone setting, NOT the device clock.
+                               e.g. '["01:30"]' ([] = off, max 6, no duplicates)
+  votingPauseBeforeEnd       - JSON array of SECONDS-before-close offsets, each
+                               starting a one-shot pause. e.g. '[7200]' pauses
+                               starting 2h before the end ([] = off, max 6, no
+                               duplicates, each 1s..30 days)
+  votingPauseDurationMinutes - How long each pause lasts (default: 240, range
+                               5-720). For a 01:30-06:00 night pause use
+                               votingPauseTime '["01:30"]' with 270 here.
+  Flash challenges, the Last Minute rules, Boost and Turbo are NOT paused — a
+  challenge that closes mid-pause still gets its final fill. Manual voting from
+  the GUI is never blocked. "cli vote" runs the normal automatic pass, so it
+  DOES respect an open pause (same as onlyBoost and scheduledFillReplaces).
+    set-global-default votingPauseTime '["01:30"]'
+    set-global-default votingPauseDurationMinutes 270
+
 Auto-fill schedule (JSON array of {count, seconds} rows; replaces the old
 autoFillIntervalMinutes — existing values are migrated automatically):
   autoFillSchedule     - Each row: have at least <count> entries once <seconds>

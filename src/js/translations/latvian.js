@@ -312,6 +312,7 @@
             groupFinalWindow: 'Beigu loga ekspozīcija',
             groupLastMinute: 'Pēdējā minūte',
             groupScheduledFill: 'Plānotā aizpilde',
+            groupVotingPause: 'Balsošanas pauze',
             groupAutoFill: 'Automātiskā aizpilde',
             groupNotifications: 'Paziņojumi',
             // Paziņojumu iestatījumi (pēc noklusējuma izslēgti)
@@ -503,6 +504,24 @@
                 '"Tikai plānotā aizpilde" ir ieslēgta, bet pirms šī izaicinājuma beigām vairs nevar notikt neviens aizpildes logs — parastā un beigu loga balsošana paliek bloķēta, tāpēc balsos tikai Pēdējās minūtes noteikumi.',
             scheduledFillProfileReplacesWarning:
                 'Šī profila piemērošana ieslēgs "Tikai plānotā aizpilde" šim izaicinājumam — pirms saglabāšanas pārskatiet aizpildes laikus.',
+            useVotingPause: 'Balsošanas pauze',
+            useVotingPauseDesc:
+                'Apturēt automātisko balsošanu izvēlētajos logos — domāts nakts pārtraukumam starp mačiem, kad aizpildītā ekspozīcija savāc ļoti maz balsu un tās pašas balsis ir vērtīgāk iztērētas pēc nākamā mača sākuma. Pieejami divi palaidēju saraksti, kurus var apvienot: viens vai vairāki ikdienas Pauzes laiki un viens vai vairāki vienreizēji Pauze pirms beigām intervāli. Katrs ieraksts sāk savu pauzi, kas ilgst zemāk norādīto Pauzes ilgumu; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens laiks zemāk. Zibens izaicinājumi un Pēdējās minūtes noteikumi joprojām balso, tāpēc izaicinājums, kas patiešām beidzas pauzes laikā, netiek pamests, un Boost un Turbo joprojām tiek pielietoti pēc saviem taimeriem. Manuālā balsošana nekad netiek bloķēta.',
+            votingPauseTime: 'Pauzes laiki',
+            votingPauseTimeDesc:
+                'Ikdienas pulksteņa laiki (24h), kuros sākas pauze, lietotnes Laika joslas iestatījumā — nevis šīs ierīces pulkstenī. Katrs laiks katru dienu sāk savu pauzi; noņemiet visas rindas, lai izslēgtu šo palaidēju. Nakts pauzei no 01:30 līdz 06:00 iestatiet šeit 01:30 un Pauzes ilgumu 270 minūtes. Ap vasaras/ziemas laika maiņu faktiskais brīdis maiņas dienā var nobīdīties līdz pat stundai.',
+            votingPauseBeforeEnd: 'Pauze pirms beigām',
+            votingPauseBeforeEndDesc:
+                'Sākt vienreizēju pauzi tik ilgi pirms izaicinājuma beigām. GUI ievada stundās un minūtēs; noņemiet visas rindas, lai izslēgtu šo palaidēju. Tie ir relatīvi pret katra izaicinājuma termiņu — pārbaudiet tos vēlreiz, kad izmantojat saglabātu profilu izaicinājumam ar citu laika grafiku. Pauze, kas sniedzas pāri termiņam, tāpat padodas Pēdējās minūtes noteikumiem, kuri balso vienmēr.',
+            votingPauseDurationMinutes: 'Pauzes ilgums (minūtes)',
+            votingPauseDurationMinutesDesc:
+                'Cik ilgi katra pauze turpinās no sava sākuma laika. Kad tā beidzas, atkal darbojas parastie noteikumi un ekspozīcija tiek uzpildīta nākamajā balsošanas ciklā. Piemērs: 270 minūtes, sākot 01:30, notur pauzi līdz 06:00.',
+            votingPauseNextHint: 'Nākamā pauze: {0}–{1} ({2}) — no {3}',
+            votingPauseActiveHint: 'Pauze ir aktīva līdz {0} ({1}) — balsos tikai Pēdējās minūtes un zibens noteikumi.',
+            votingPauseNoTimesHint:
+                'Nav iestatīts pauzes laiks — balsošanas pauze nedarbojas, kamēr nav iestatīts kāds zemāk.',
+            votingPauseAllDayHint:
+                'Šīs pauzes aizņem visu diennakti — ārpus Pēdējās minūtes noteikumiem šis izaicinājums nekad automātiski nebalsotu.',
             finalWindowDuration: 'Beigu loga ilgums',
             finalWindowDurationDesc:
                 'Cik ilgs ir beigu logs pirms izaicinājuma beigām. Beigu loga ekspozīcijas noteikums darbojas šajā logā. Pēc noklusējuma 1 stunda.',
@@ -563,6 +582,7 @@
             naSlotsFull: 'Visas bilžu vietas ir aizpildītas — automātiskajai aizpildei nav ko pievienot.',
             naFlashNoBoost: 'Flash izaicinājumi neatbalsta Boost.',
             naFlashNoScheduledFill: 'Flash izaicinājumi vienmēr balso līdz 100% — plānotā aizpilde nekad nedarbojas.',
+            naFlashNoVotingPause: 'Flash izaicinājumi vienmēr balso līdz 100% — balsošanas pauze nekad nedarbojas.',
             naFlashNoTurbo: 'Flash izaicinājumi neatbalsta Turbo.',
             naExhibitionNoTurbo: 'Izstādes izaicinājumi neatbalsta Turbo.',
             naBoostSinglePhoto: 'Viena foto izaicinājumi nekad neatbloķē Boost — šie iestatījumi nedarbosies.',

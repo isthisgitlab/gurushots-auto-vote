@@ -28,27 +28,26 @@ const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/limits');
 
 /**
- * Scheduled-fill state for a challenge at `now`.
+ * Shared trigger-window evaluation for the two features built on the same pair
+ * of trigger LISTS: scheduled fill (vote inside the window) and the voting
+ * pause (refuse to vote inside it). Only the setting KEYS and the fallback
+ * duration differ, so both read this — a second copy of the entry loops would
+ * let the two drift on corruption handling, which is where all the subtlety is.
  *
- * Both triggers are LISTS (issue #26 follow-up): every scheduledFillTime
- * entry opens its own daily window and every scheduledFillBeforeEnd entry its
- * own one-shot window, all sharing scheduledFillWindowMinutes, all OR'd —
- * `inWindow` is true when `now` sits inside ANY entry's
- * `[start, start + window]` interval.
+ * Every time entry opens its own daily window and every before-end entry its
+ * own one-shot window, all sharing one duration, all OR'd — `inWindow` is true
+ * when `now` sits inside ANY entry's `[start, start + duration]` interval.
  *
- * `active` is true only when useScheduledFill is on AND at least one USABLE
- * entry exists across both lists (a parseable 'HH:MM', or an offset > 0).
- * This is what keeps "enabled with no times" a harmless no-op: an
- * `active = useScheduledFill` shortcut would let replace mode permanently
- * block all threshold voting with no window ever opening. A corrupt entry
- * inside a list is skipped (contributing nothing, not even `active`); a
- * whole value that isn't an array turns that form off.
+ * `active` is true only when the master switch is on AND at least one USABLE
+ * entry exists across both lists (a parseable 'HH:MM', or an offset > 0). This
+ * is what keeps "enabled with no times" a harmless no-op: an
+ * `active = enabled` shortcut would let scheduled fill's replace mode block
+ * all threshold voting with no window ever opening, and would make a pause
+ * with no times readable as "paused forever". A corrupt entry inside a list is
+ * skipped (contributing nothing, not even `active`); a whole value that isn't
+ * an array turns that form off.
  *
- * The whole body is wrapped in try/catch returning the inactive state — the
- * same posture (and reason) as getExposureResolver in settings.js: this runs
- * inside the per-challenge voting loop, which has no per-iteration catch, so
- * a corrupt hand-edited override must degrade this one challenge's scheduled
- * fill to "off" rather than abort voting for every remaining challenge.
+ * Callers wrap this in the try/catch — see getScheduledFillState.
  *
  * Unlike isWithinFinalWindow/isWithinLastMinuteThreshold, the time-of-day form
  * doesn't compare against close_time — callers only iterate the API's active
@@ -59,60 +58,131 @@ const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/limits');
  * @param {any} challenge
  * @param {string} challengeId
  * @param {number} now - Current time (Unix timestamp, seconds)
+ * @param {{enabledKey: string, timesKey: string, beforeEndKey: string,
+ *          durationKey: string, defaultDurationMin: number}} keys
+ * @returns {{active: boolean, inWindow: boolean}}
+ */
+const _triggerWindowState = (challenge, challengeId, now, keys) => {
+    if (settings.getEffectiveSetting(keys.enabledKey, challengeId) !== true) {
+        return { active: false, inWindow: false };
+    }
+
+    // Corrupt duration minutes fail soft to the schema default rather than to
+    // "never in window" — a NaN duration would otherwise silently disable the
+    // feature (for scheduled fill's replace mode, blocking all threshold
+    // voting; for the pause, quietly voting straight through the night).
+    // Deliberately no schema-floor clamp: a hand-edited finite positive value
+    // below the schema's min(5) is honored as typed (it's out of range, not
+    // corrupt) — only non-numeric/non-positive values fall back.
+    const durationMin = Number(settings.getEffectiveSetting(keys.durationKey, challengeId));
+    const durationSec = (Number.isFinite(durationMin) && durationMin > 0 ? durationMin : keys.defaultDurationMin) * 60;
+    const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
+    // Both triggers are LISTS — every entry opens its own window, all OR'd.
+    // Non-array corruption = form off; a corrupt ENTRY inside the array is
+    // skipped (contributes nothing, not even `active`). The slice bounds
+    // per-cycle Intl work against a post-migration hand-edited oversized
+    // array (the write path and the load-time bounds pass both cap at
+    // MAX_SCHEDULED_FILL_ENTRIES already).
+    const rawTimes = settings.getEffectiveSetting(keys.timesKey, challengeId);
+    const times = (Array.isArray(rawTimes) ? rawTimes : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
+    const rawBefores = settings.getEffectiveSetting(keys.beforeEndKey, challengeId);
+    const befores = (Array.isArray(rawBefores) ? rawBefores : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
+
+    let active = false;
+    let inWindow = false;
+
+    // Time-of-day entries: unparseable values yield null → entry skipped.
+    for (const entry of times) {
+        const occ = occurrencesOf(entry, timezone, now);
+        if (!occ) continue;
+        active = true;
+        if (now - occ.prev <= durationSec) inWindow = true;
+    }
+    // Before-end entries: NaN and non-positives fail the > 0 gate → skipped.
+    for (const entry of befores) {
+        const beforeEndSec = Number(entry);
+        if (!(beforeEndSec > 0)) continue;
+        active = true;
+        const start = Number(challenge.close_time) - beforeEndSec;
+        if (now >= start && now - start <= durationSec) inWindow = true;
+    }
+
+    // `inWindow` can only have been set inside a loop that already set
+    // `active`, so it never needs a separate guard here.
+    return { active, inWindow };
+};
+
+/**
+ * Scheduled-fill state for a challenge at `now`.
+ *
+ * Both triggers are LISTS (issue #26 follow-up): every scheduledFillTime
+ * entry opens its own daily window and every scheduledFillBeforeEnd entry its
+ * own one-shot window, all sharing scheduledFillWindowMinutes, all OR'd. See
+ * _triggerWindowState for the entry semantics.
+ *
+ * The whole body is wrapped in try/catch returning the inactive state — the
+ * same posture (and reason) as getExposureResolver in settings.js: this runs
+ * inside the per-challenge voting loop, which has no per-iteration catch, so
+ * a corrupt hand-edited override must degrade this one challenge's scheduled
+ * fill to "off" rather than abort voting for every remaining challenge. The
+ * `replaces` read is INSIDE the try for that same reason.
+ *
+ * @param {any} challenge
+ * @param {string} challengeId
+ * @param {number} now - Current time (Unix timestamp, seconds)
  * @returns {{active: boolean, inWindow: boolean, replaces: boolean}}
  */
 const getScheduledFillState = (challenge, challengeId, now) => {
     const inactive = { active: false, inWindow: false, replaces: false };
     try {
-        if (settings.getEffectiveSetting('useScheduledFill', challengeId) !== true) return inactive;
-
-        // Corrupt window minutes fail soft to the schema default rather than
-        // to "never in window" — with replace mode on, a NaN window would
-        // otherwise silently block all threshold voting for the challenge.
-        // Deliberately no schema-floor clamp: a hand-edited finite positive
-        // value below the schema's min(5) is honored as typed (it's out of
-        // range, not corrupt) — only non-numeric/non-positive values fall back.
-        const windowMin = Number(settings.getEffectiveSetting('scheduledFillWindowMinutes', challengeId));
-        const windowSec = (Number.isFinite(windowMin) && windowMin > 0 ? windowMin : 60) * 60;
-        const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
-        // Both triggers are LISTS — every entry opens its own window, all OR'd.
-        // Non-array corruption = form off; a corrupt ENTRY inside the array is
-        // skipped (contributes nothing, not even `active`). The slice bounds
-        // per-cycle Intl work against a post-migration hand-edited oversized
-        // array (the write path and the load-time bounds pass both cap at
-        // MAX_SCHEDULED_FILL_ENTRIES already).
-        const rawTimes = settings.getEffectiveSetting('scheduledFillTime', challengeId);
-        const times = (Array.isArray(rawTimes) ? rawTimes : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
-        const rawBefores = settings.getEffectiveSetting('scheduledFillBeforeEnd', challengeId);
-        const befores = (Array.isArray(rawBefores) ? rawBefores : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
-
-        let active = false;
-        let inWindow = false;
-
-        // Time-of-day entries: unparseable values yield null → entry skipped.
-        for (const entry of times) {
-            const occ = occurrencesOf(entry, timezone, now);
-            if (!occ) continue;
-            active = true;
-            if (now - occ.prev <= windowSec) inWindow = true;
-        }
-        // Before-end entries: NaN and non-positives fail the > 0 gate → skipped.
-        for (const entry of befores) {
-            const beforeEndSec = Number(entry);
-            if (!(beforeEndSec > 0)) continue;
-            active = true;
-            const start = Number(challenge.close_time) - beforeEndSec;
-            if (now >= start && now - start <= windowSec) inWindow = true;
-        }
-
-        if (!active) return inactive;
+        const state = _triggerWindowState(challenge, challengeId, now, {
+            enabledKey: 'useScheduledFill',
+            timesKey: 'scheduledFillTime',
+            beforeEndKey: 'scheduledFillBeforeEnd',
+            durationKey: 'scheduledFillWindowMinutes',
+            defaultDurationMin: 60,
+        });
+        if (!state.active) return inactive;
         return {
-            active,
-            inWindow,
+            ...state,
             replaces: settings.getEffectiveSetting('scheduledFillReplaces', challengeId) === true,
         };
     } catch {
         return inactive;
+    }
+};
+
+/**
+ * Voting-pause state for a challenge at `now` — the inverse of scheduled fill.
+ *
+ * Motivation: between the overnight match rounds almost nobody is voting, so
+ * exposure filled at 03:00 buys far fewer votes than the same swipes spent
+ * after the morning round opens. Each votingPauseTime entry opens a daily
+ * pause and each votingPauseBeforeEnd entry a one-shot pause, both lasting
+ * votingPauseDurationMinutes, all OR'd.
+ *
+ * Same fail-soft posture as getScheduledFillState: a corrupt override degrades
+ * this one challenge's pause to "off" (i.e. keep voting) rather than aborting
+ * the pass. Failing OPEN is the deliberate direction — a broken pause costs
+ * some votes at a bad hour, a pause that failed CLOSED would silently stop
+ * voting entirely.
+ *
+ * @param {any} challenge
+ * @param {string} challengeId
+ * @param {number} now - Current time (Unix timestamp, seconds)
+ * @returns {{active: boolean, inWindow: boolean}}
+ */
+const getVotingPauseState = (challenge, challengeId, now) => {
+    try {
+        return _triggerWindowState(challenge, challengeId, now, {
+            enabledKey: 'useVotingPause',
+            timesKey: 'votingPauseTime',
+            beforeEndKey: 'votingPauseBeforeEnd',
+            durationKey: 'votingPauseDurationMinutes',
+            defaultDurationMin: 240,
+        });
+    } catch {
+        return { active: false, inWindow: false };
     }
 };
 
@@ -307,7 +377,9 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
         ruleLabel: null,
         thresholdInfo: null,
         // A new entry never defeats a block — onlyBoost, vote-only-in-last-minute,
-        // scheduled-fill-only and not-yet-started are all explicit opt-outs.
+        // scheduled-fill-only, voting-paused and not-yet-started are all explicit
+        // opt-outs. For the pause specifically this is the point: a new entry
+        // appearing at 03:00 is the exact case the user asked not to spend votes on.
         forcedByNewEntry: false,
     });
     // Eligibility uses the trigger ("vote if below"); the loop ceiling uses the target
@@ -369,6 +441,28 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
 
     if (isWithinLastMinute) {
         return decided('lastminute', 100, 100, sharedThresholdInfo);
+    }
+
+    // Voting pause: an opt-in window in which automatic voting is refused, so
+    // exposure isn't spent during the overnight lull between match rounds.
+    //
+    // Precedence is deliberate and load-bearing. It sits BELOW flash and
+    // last-minute so a challenge that genuinely closes mid-pause still gets its
+    // final fill — dropping a placement is a permanent loss, while skipping a
+    // night top-up only defers votes to a better hour, and a user pausing
+    // 01:30-06:00 is describing the dead time BETWEEN rounds, not asking to
+    // forfeit a challenge that ends inside it. It sits ABOVE scheduled fill and
+    // all three threshold rules (normal, pre-final-window top-up,
+    // final-window), which are exactly the discretionary exposure maintenance
+    // the pause exists to defer.
+    //
+    // Auto only, mirroring onlyBoost: a manual vote is explicit user intent and
+    // is never refused because a pause is configured. Boost/turbo are untouched
+    // — they run ahead of this on the orchestrator's own path, and their timers
+    // expire on the challenge's schedule rather than the user's.
+    const pause = getVotingPauseState(challenge, challengeId, now);
+    if (mode === 'auto' && pause.active && pause.inWindow) {
+        return blocked('voting paused: inside configured pause window');
     }
 
     // Scheduled fill sits below flash/last-minute (which always win) and above
@@ -1223,6 +1317,7 @@ module.exports = {
     getEffectiveExposureTarget,
     getEffectiveFinalWindowExposureTarget,
     getScheduledFillState,
+    getVotingPauseState,
     evaluateVotingDecision,
     evaluateManualVotingDecision,
     evaluateManualVotingToHundred,
