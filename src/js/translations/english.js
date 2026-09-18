@@ -310,6 +310,7 @@
             groupFinalWindow: 'Final Window Exposure',
             groupLastMinute: 'Last Minute',
             groupScheduledFill: 'Scheduled Fill',
+            groupVotingPause: 'Voting Pause',
             groupAutoFill: 'Auto Fill',
             groupNotifications: 'Notifications',
             // Notification settings (all default off, opt-in)
@@ -500,6 +501,26 @@
                 'Scheduled Fill Only is on, but no fill window can still occur before this challenge closes — normal and final-window voting stay blocked, so only the Last Minute rules will vote.',
             scheduledFillProfileReplacesWarning:
                 'Applying this profile turns on Scheduled Fill Only for this challenge — review the fill times before saving.',
+            useVotingPause: 'Pause Voting',
+            useVotingPauseDesc:
+                "Stop automatic voting during chosen windows — meant for the overnight gap between match rounds, where filled exposure earns very few votes and those swipes are better spent once the next round opens. Two trigger lists are available and can be combined: one or more daily Pause Times and one or more one-shot Pause Before End offsets. Each entry starts its own pause lasting the Pause Duration below; times are interpreted in the app Timezone setting (not this device's clock). Has no effect until at least one time below is set. Flash challenges and the Last Minute rules still vote, so a challenge that actually closes during a pause is never abandoned, and Boost and Turbo still apply on their own timers. Manual voting is never blocked.",
+            votingPauseTime: 'Pause Times',
+            votingPauseTimeDesc:
+                "Daily wall-clock times (24h) at which a pause starts, in the app Timezone setting — not this device's clock. Each time starts its own pause every day; remove all rows to turn this trigger off. For a 01:30-06:00 night pause, set 01:30 here and a Pause Duration of 270 minutes. Around a daylight-saving switch the actual instant can shift by up to an hour on the changeover day.",
+            votingPauseBeforeEnd: 'Pause Before End',
+            votingPauseBeforeEndDesc:
+                "Start a one-shot pause this long before the challenge closes. Entered as hours and minutes in the GUI; remove all rows to turn this trigger off. These are relative to each challenge's own deadline — re-check them when reusing a saved profile on a challenge with a different timeline. A pause reaching past the deadline still yields to the Last Minute rules, which always vote.",
+            votingPauseDurationMinutes: 'Pause Duration (minutes)',
+            votingPauseDurationMinutesDesc:
+                'How long each pause lasts from its start time. When it ends, normal rules apply again and exposure is topped up on the next voting cycle. Example: 270 minutes starting at 01:30 pauses until 06:00.',
+            votingPauseNextHint: 'Next pause: {0}–{1} ({2}) — from {3}',
+            votingPauseActiveHint:
+                'Paused now until {0} ({1}) — only Last Minute and flash voting will run. Boost and Turbo still apply on their own timers.',
+            votingPauseShortWindowHint:
+                'This pause is shorter than your maximum Check Frequency ({0} min) — a voting cycle may skip over it entirely, so voting would continue as if no pause were set.',
+            votingPauseNoTimesHint: 'No pause time configured — voting pause is inactive until you set one below.',
+            votingPauseAllDayHint:
+                'These pauses cover the whole day — outside the Last Minute rules this challenge would never vote automatically.',
             finalWindowDuration: 'Final Window Duration',
             finalWindowDurationDesc:
                 'How long the final window before a challenge closes lasts. The Final Window Exposure rule applies inside this window. Defaults to 1 hour.',
@@ -559,6 +580,7 @@
             naSlotsFull: 'All entry slots are full — auto-fill has nothing to add.',
             naFlashNoBoost: "Flash challenges don't support Boost.",
             naFlashNoScheduledFill: 'Flash challenges always vote to 100% — scheduled fill never applies.',
+            naFlashNoVotingPause: 'Flash challenges always vote to 100% — the voting pause never applies.',
             naFlashNoTurbo: "Flash challenges don't support Turbo.",
             challengeProfiles: 'Profiles',
             applyProfile: 'Apply',

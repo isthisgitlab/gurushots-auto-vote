@@ -21,6 +21,9 @@
  *   - autoFill group → all entry slots full
  *   - scheduledFill group → flash challenge (the flash voting rule intercepts
  *                      before the scheduled-fill check ever runs)
+ *   - votingPause group → flash challenge (same reason: the flash rule returns
+ *                      before the pause check, so a flash challenge is never
+ *                      paused)
  * Deliberately NOT boost/turbo UNAVAILABLE/LOCKED on multi-photo challenges, where
  * those states are transient ("not unlocked yet") and can still flip to AVAILABLE
  * later, so the user must remain able to pre-configure them. The single-photo and
@@ -70,6 +73,11 @@ export function getGroupApplicability(groupId, challenge) {
         case 'scheduledFill':
             return challenge.type === 'flash'
                 ? { applicable: false, reasonKey: 'app.naFlashNoScheduledFill' }
+                : applicable;
+
+        case 'votingPause':
+            return challenge.type === 'flash'
+                ? { applicable: false, reasonKey: 'app.naFlashNoVotingPause' }
                 : applicable;
 
         default:

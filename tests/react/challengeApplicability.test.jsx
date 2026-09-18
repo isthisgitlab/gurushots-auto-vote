@@ -224,4 +224,19 @@ describe('getGroupApplicability', () => {
             expect(getGroupApplicability('scheduledFill', challenge)).toEqual({ applicable: true, reasonKey: null });
         }
     });
+
+    test('votingPause: flash challenge → not applicable (flash rule intercepts first)', () => {
+        const challenge = challengeWith({}, { type: 'flash' });
+        expect(getGroupApplicability('votingPause', challenge)).toEqual({
+            applicable: false,
+            reasonKey: 'app.naFlashNoVotingPause',
+        });
+    });
+
+    test('votingPause: regular / exhibition challenges → applicable', () => {
+        for (const type of ['regular', 'default', 'exhibition', undefined]) {
+            const challenge = challengeWith({}, type ? { type } : {});
+            expect(getGroupApplicability('votingPause', challenge)).toEqual({ applicable: true, reasonKey: null });
+        }
+    });
 });

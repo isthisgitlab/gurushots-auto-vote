@@ -101,6 +101,53 @@ Deliberate semantics and caveats:
   `getScheduledFillState` is wrapped in try/catch so the per-challenge
   voting loop can never be aborted by one bad override.
 
+### Voting pause
+
+Per-challenge voting pause (`useVotingPause`, default off) is the inverse of
+scheduled fill: inside its windows automatic voting is **refused** rather than
+forced. It exists for the overnight gap between match rounds, where exposure
+filled at 03:00 collects very few votes and the same swipes are worth more once
+the next round opens. The triggers mirror scheduled fill exactly — daily
+`votingPauseTime` 'HH:MM' starts (app `timezone`, not device-local) and one-shot
+`votingPauseBeforeEnd` seconds-before-close starts — each lasting
+`votingPauseDurationMinutes`, all OR'd, capped at `MAX_SCHEDULED_FILL_ENTRIES`.
+A 01:30–06:00 night pause is `votingPauseTime: ['01:30']` with a duration of 270.
+
+The decision side lives in `getVotingPauseState`
+(`src/js/services/VotingLogic.js`), which shares `_triggerWindowState` with
+`getScheduledFillState` so the two can never drift on entry/corruption
+semantics. Its branch in `_runVotingRules` sits **below** flash and last-minute
+(a challenge that really closes mid-pause still gets its final fill) and
+**above** scheduled fill, the pre-final-window top-up, final-window and the
+normal threshold. Auto only; manual voting is never blocked. Boost and turbo are
+unaffected — they run ahead of this on the orchestrator's own path.
+
+**There is no cadence side, deliberately.** The pause is _not_ an input to
+`computeNextCycleDelayMs`: the pass still runs on its normal schedule during a
+pause and each paused challenge is simply skipped with a reason. Suppressing the
+wake instead would mean out-ranking every other scheduling boundary (boost
+timers, last-minute cadence, a challenge closing inside the pause), which is
+precisely what the "never sleep past a boundary" invariant forbids. The cost is
+some idle cycles overnight; the benefit is that no other deadline can be missed
+because a pause was open.
+
+**Fail-soft, and note the direction.** Every degraded path returns "not paused".
+That asymmetry with scheduled fill is deliberate and is enforced at four points:
+a corrupt duration turns the pause **off** rather than substituting the default
+(substituting would hand a user a 4-hour outage they never configured); an
+over-range duration is **clamped** to `MAX_VOTING_PAUSE_MINUTES`, because an
+unbounded window swallows every future cycle and stops voting for good; a
+challenge whose `close_time` isn't finite is never paused, since the last-minute
+rule that would rescue it needs that same value; and all of these log. Related:
+`isWithinLastMinuteThreshold` clamps `lastMinuteThreshold` to 1–59 for the same
+reason — with the pause above final-window, a corrupt value there would be the
+difference between "votes late" and "never votes".
+
+Note the limit of the guarantee: a _valid_ configuration can still cover the
+whole day (two 12h pauses 12h apart). That is the user's explicit choice, not a
+failure, and last-minute/flash voting still runs; the modal warns about it via
+`coversWholeDay`.
+
 ### Pre-final-window top-up
 
 Per-challenge pre-final-window top-up (`voteBeforeFinalWindow`, default off) votes

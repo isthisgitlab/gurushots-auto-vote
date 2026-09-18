@@ -500,18 +500,28 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                         : null;
                 const previousIds = tracking ? entryTracker.get(challengeId) : null;
                 const hasNewEntry = tracking ? newEntryTracker.hasNewEntries(previousIds, tracking) : false;
+                // Use the centralized voting logic service
+                const { shouldVote, voteReason, targetExposure, forcedByNewEntry, preservesNewEntryTrigger } =
+                    votingLogic.evaluateVotingDecision(challenge, now, { hasNewEntry });
+
+                // Logged AFTER the decision so the line matches the outcome. It used
+                // to claim "forcing a vote this cycle" off `hasNewEntry` alone, which
+                // was already loose for the blocked cases and became actively
+                // misleading with the voting pause: the pause holds the trigger armed,
+                // so that claim would repeat every cycle for the whole pause, directly
+                // above a "Skipping voting - voting paused" line saying the opposite.
                 if (hasNewEntry) {
+                    const outcome = forcedByNewEntry
+                        ? 'forcing a vote this cycle'
+                        : preservesNewEntryTrigger
+                          ? 'vote deferred until the pause ends — trigger stays armed'
+                          : shouldVote
+                            ? 'already eligible on its own'
+                            : 'not voting this cycle';
                     logger
                         .withCategory('voting')
-                        .info(`${logger.challengeTag(challenge)} New entry detected — forcing a vote this cycle`, null);
+                        .info(`${logger.challengeTag(challenge)} New entry detected — ${outcome}`, null);
                 }
-
-                // Use the centralized voting logic service
-                const { shouldVote, voteReason, targetExposure, forcedByNewEntry } = votingLogic.evaluateVotingDecision(
-                    challenge,
-                    now,
-                    { hasNewEntry },
-                );
                 let voteThrew = false;
 
                 // Record the entry snapshot, which disarms the trigger. Called from the
@@ -531,8 +541,15 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 //     scheduled-fill-only / not started), which consumes the trigger.
                 //     Every block that can later lift, lifts into a rule that already
                 //     votes to 100% or re-reads exposure from scratch, so nothing is lost.
+                //
+                // The exception to that last point is a block that sets
+                // `preservesNewEntryTrigger` — today only the voting pause. It lifts
+                // into the NORMAL threshold rule, which votes only while exposure is
+                // below the trigger, so consuming the trigger here would drop the new
+                // entry's vote entirely instead of deferring it past the pause.
                 const recordEntrySnapshot = () => {
                     if (!tracking || (forcedByNewEntry && voteThrew)) return;
+                    if (preservesNewEntryTrigger && hasNewEntry) return;
                     if (!newEntryTracker.shouldRecordSnapshot(previousIds, tracking)) return;
                     entryTracker.set(challengeId, tracking);
                 };

@@ -7,6 +7,8 @@ import { useAutovote } from '@/contexts/AutovoteContext';
 import { groupSchemaEntries } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
 import { SettingHelp } from '@/components/ui/SettingHelp';
+import { deriveWindowHints } from '@/utils/windowHints';
+import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 import { Modal } from '@/components/ui/Modal';
@@ -185,6 +187,42 @@ export function SettingsModal({ isOpen, onClose }) {
     ]);
 
     if (!isOpen) return null;
+
+    // Voting-pause warnings for the GLOBAL defaults. A nightly pause is most
+    // naturally configured here rather than per challenge, so without these the
+    // typical user would never see "enabled but no time set" or "this covers the
+    // whole day". Only the daily entries can be judged globally — before-end
+    // offsets are relative to a specific challenge's deadline, hence closeTime 0,
+    // which yields no before-end candidates. The corruption policy must match
+    // getVotingPauseState's, or the hint would describe a pause that never opens.
+    const vpGlobal = deriveWindowHints({
+        keys: {
+            enabled: 'useVotingPause',
+            times: 'votingPauseTime',
+            beforeEnd: 'votingPauseBeforeEnd',
+            duration: 'votingPauseDurationMinutes',
+        },
+        defaultDurationMin: 240,
+        effectiveOf: (key) => formValues[key] ?? schema?.[key]?.default,
+        timezone: uiValues.timezone || DEFAULT_TIMEZONE,
+        nowSec: Math.floor(Date.now() / 1000),
+        closeTime: 0,
+        onCorruptDuration: 'off',
+        maxDurationMin: MAX_VOTING_PAUSE_MINUTES,
+    });
+    const votingPauseHints = (key) => {
+        if (key !== 'useVotingPause') return [];
+        const hints = [];
+        const noTriggers =
+            (formValues.votingPauseTime ?? []).length === 0 && (formValues.votingPauseBeforeEnd ?? []).length === 0;
+        if (formValues.useVotingPause === true && noTriggers) {
+            hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
+        }
+        if (vpGlobal.coversWholeDay) {
+            hints.push({ tone: 'text-warning font-medium', text: t('app.votingPauseAllDayHint') });
+        }
+        return hints;
+    };
 
     return (
         <Modal isOpen={isOpen} onClose={handleCancel} title={t('app.globalSettings')}>
@@ -437,6 +475,11 @@ export function SettingsModal({ isOpen, onClose }) {
                                                 onChange={handleFormChange}
                                                 onReset={handleResetGlobal}
                                             />
+                                            {votingPauseHints(key).map((hint) => (
+                                                <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
+                                                    {hint.text}
+                                                </p>
+                                            ))}
                                         </div>
                                     ))}
                                 </div>

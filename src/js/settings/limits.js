@@ -23,4 +23,13 @@
 // offering an "add" row at it.
 const MAX_SCHEDULED_FILL_ENTRIES = 6;
 
-module.exports = { MAX_SCHEDULED_FILL_ENTRIES };
+// Longest a single voting pause may last, in minutes (12h). schema.js uses it
+// as votingPauseDurationMinutes' upper bound and getVotingPauseState clamps to
+// it on the decision side — deliberately the one bound the pause does NOT treat
+// as an advisory escape hatch. A hand-edited oversized fill window merely means
+// "always fill", but an oversized PAUSE window swallows every future cycle and
+// stops voting for good, so the two must not share a policy. Keep this and the
+// schema bound as the same constant so they can never drift apart.
+const MAX_VOTING_PAUSE_MINUTES = 720;
+
+module.exports = { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES };

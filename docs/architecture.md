@@ -46,7 +46,17 @@ Domain terms used throughout, in reader's terms:
   and the consumed slot.
 - The decision engine is `_runVotingRules()` (`services/VotingLogic.js` — around L248). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
-  (→100) → scheduled-fill window → **pre-final-window top-up** → final-window rule → normal threshold. The
+  (→100) → **voting pause** → scheduled-fill window → **pre-final-window top-up** → final-window rule →
+  normal threshold. The **voting pause** (`useVotingPause`) is the inverse of scheduled fill — an opt-in
+  window in which automatic voting is _refused_, for the overnight gap between match rounds where filled
+  exposure earns almost no votes. Same two trigger lists (`votingPauseTime` daily 'HH:MM' starts +
+  `votingPauseBeforeEnd` seconds-before-close starts), each lasting `votingPauseDurationMinutes`, all OR'd.
+  It sits **below** flash/last-minute deliberately — a challenge that genuinely closes mid-pause must still
+  get its final fill, since a lost placement is permanent while a skipped night top-up only defers votes —
+  and **above** scheduled fill and all three threshold rules, which are exactly the discretionary exposure
+  maintenance it exists to defer. Auto only (manual voting is never refused); boost/turbo are untouched
+  because they run on the orchestrator's own path ahead of this and their timers expire on the
+  challenge's schedule. The
   pre-final-window top-up (`voteBeforeFinalWindow`) votes to the **standard** exposure target inside a window
   straddling the final-window boundary — `[close − finalWindowDuration − lead, close − finalWindowDuration + lead]`, `lead` =
   `voteBeforeFinalWindowLeadMin` (1–59, default 15) — so a challenge whose exposure already decayed below
@@ -221,9 +231,15 @@ repeated six times is one that gets forgotten at one of them.
   the pass is cancellation-checked between candidates and before each spend, and each candidate is
   independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a title-profile
   match wins over the type-exclude veto; otherwise the default scope is join-all, an `autoJoinTypes` include-list (when non-empty) narrows it, and `autoJoinExcludeTypes` subtracts.
-- **Fail-soft config parsing** is pervasive: `getScheduledFillState` wraps its whole body in try/catch and
-  returns inactive; corrupt window values fall back to the schema default rather than "never in window"
-  (which under replace-mode would silently block all voting).
+- **Fail-soft config parsing** is pervasive: `getScheduledFillState` and `getVotingPauseState` (both built on
+  the shared `_triggerWindowState`) wrap their whole body in try/catch and return inactive. The two fail in
+  _opposite_ user-visible directions, deliberately: a broken scheduled fill stops forcing 100%, a broken
+  pause keeps voting. So the corrupt-value policy is per-feature, not shared — scheduled fill substitutes
+  the schema default (failing to "never in window" would, under replace mode, block all threshold voting),
+  while the pause turns **off** (`onCorruptDuration: 'off'`) and clamps an over-range duration
+  (`maxDurationMin`), because substituting or honouring those would both be fail-_closed_ and could stop
+  voting for good. Both catches **log**: the orchestrator has a per-challenge catch that reports the errors
+  it sees, so a silent swallow here would be the least visible failure in the pass.
 - **Log-injection guard**: API-sourced challenge ids/titles are CR/LF-collapsed via `format/logSafe.oneLine()`
   before interpolation (imported directly, not off the logger, because the logger is mocked in much of the
   test suite).
