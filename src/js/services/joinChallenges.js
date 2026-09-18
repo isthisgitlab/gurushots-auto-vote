@@ -168,11 +168,12 @@ const resolveCandidateConfig = (challenge) => ({
 /**
  * Report a candidate the join window could not evaluate.
  *
- * The open-challenge payload is not known to carry close_time (nothing else in
- * the app reads one off an un-joined candidate). If a window is set and the
- * field is missing, the fail-closed gate skips the candidate — which would be
- * indistinguishable from "nothing to join" without this. Naming the fields that
- * ARE present makes one real run enough to settle whether the field exists.
+ * The live get_member_challenges response DOES carry close_time (and start_time)
+ * on every open challenge — verified 2026-09-19 — so this should never fire in
+ * practice. It stays because the fail-closed gate skips such a candidate, which
+ * would otherwise be indistinguishable from "nothing to join": if GuruShots ever
+ * drops or renames the field, the window would silently stop every join. Naming
+ * the fields that ARE present makes that diagnosable from one run.
  */
 const warnMissingCloseTime = (challenge) => {
     const fields = Object.keys(challenge || {}).join(', ') || '(none)';

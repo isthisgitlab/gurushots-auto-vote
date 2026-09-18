@@ -126,11 +126,18 @@ Domain terms used throughout, in reader's terms:
   is only joined once it is within that many hours of its own `close_time`; outside it the candidate is
   _deferred_ (`skipped:too-early`) and reconsidered next cycle, not rejected. It is **fail-closed**: a
   candidate whose `close_time` cannot be read is not joined while a window is set, and the pass logs that
-  candidate's actual field names once per pass. That diagnostic exists because the open-challenge payload is
-  **not confirmed to carry `close_time`** — nothing else in the app reads one off an un-joined candidate, and
-  the mock fixtures supply it so the path is runnable, which is not evidence about the live API. Unlike the
-  type filters, a title opt-in does **not** bypass the window (bypassing an explicit "join late" would invert
-  it), and the manual single-join path ignores the window entirely — a click is the user overriding timing.
+  candidate's actual field names once per pass. Unlike the type filters, a title opt-in does **not** bypass
+  the window (bypassing an explicit "join late" would invert it), and the manual single-join path ignores the
+  window entirely — a click is the user overriding timing.
+- **`get_member_challenges('open')` payload (verified against live 2026-09-19, 12/12 items).** Every open
+  challenge carries `close_time` **and** `start_time` as epoch seconds, so the join window rests on a field
+  that is actually there and a percent-elapsed anchor is implementable if ever wanted. Also present on every
+  item: `id`, `title`, `type`, `url`, `join_coins`, `tags`, `entries`, `players`, `max_photo_submits`,
+  `member`, `time_left`, and the `*_enable` capability flags (`boost_enable`, `turbo_enable`, `swap_enable`,
+  `fill_enable`, …). The fail-closed branch above therefore guards against the field going away upstream,
+  not against the normal case. Note `getMemberChallenges` returns `[]` for **both** an empty list and an auth
+  rejection (`{success:false, error_code:1000}` has no `items` array), so an expired token makes the join
+  pass look like an idle account.
 
 ## 3. GuruShots API transport
 

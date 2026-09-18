@@ -900,7 +900,9 @@ const SETTINGS_SCHEMA = {
     // read is NOT joined (see VotingLogic.shouldJoinChallenge). An un-joined
     // candidate that never proves it is inside the window must not be joined by
     // default — that would spend the entry (and possibly coins) at exactly the
-    // moment the user asked to avoid.
+    // moment the user asked to avoid. The live payload does carry close_time on
+    // every open challenge (verified 2026-09-19), so this guards against the
+    // field going away upstream, not against the normal case.
     autoJoinWithinHoursOfEnd: {
         type: 'number',
         default: 0,

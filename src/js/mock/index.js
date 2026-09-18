@@ -679,17 +679,13 @@ const mockApiClient = {
         },
         async () => {
             await simulateApiResponse({}, 400);
-            // close_time is epoch SECONDS, matching joined challenges. Spread
+            // close_time / start_time are epoch SECONDS, matching joined
+            // challenges. VERIFIED against the live get_member_challenges
+            // response (2026-09-19): both are present on every open challenge,
+            // alongside type/title/join_coins/tags/entries/players. Spread
             // across the join window so `autoJoinWithinHoursOfEnd` is
             // exercisable in mock mode: 900001 ends in 3h (inside any window),
             // the rest end in 2-5 days (outside a 24h one).
-            //
-            // CAVEAT: the real get_member_challenges payload is not confirmed to
-            // carry close_time — nothing else in the app reads one off an
-            // un-joined candidate. These values make the timing path runnable
-            // here; they are not evidence the field exists upstream. The join
-            // pass logs a candidate's real fields once when a window is set and
-            // close_time is missing.
             const nowSec = Math.floor(Date.now() / 1000);
             return [
                 {
@@ -698,6 +694,7 @@ const mockApiClient = {
                     join_coins: 0,
                     title: 'Mock Free Challenge',
                     url: 'mock-free',
+                    start_time: nowSec - 5 * 86400,
                     close_time: nowSec + 3 * 3600,
                 },
                 {
@@ -706,6 +703,7 @@ const mockApiClient = {
                     join_coins: 100,
                     title: 'Mock Flash Challenge',
                     url: 'mock-flash',
+                    start_time: nowSec - 1 * 86400,
                     close_time: nowSec + 2 * 86400,
                 },
                 {
@@ -714,6 +712,7 @@ const mockApiClient = {
                     join_coins: 250,
                     title: 'Mock Paid Challenge',
                     url: 'mock-paid',
+                    start_time: nowSec - 2 * 86400,
                     close_time: nowSec + 5 * 86400,
                 },
                 {
@@ -722,6 +721,7 @@ const mockApiClient = {
                     join_coins: 100,
                     title: 'Mock Unlock-Fails Challenge',
                     url: 'mock-fail',
+                    start_time: nowSec - 3 * 86400,
                     close_time: nowSec + 3 * 86400,
                 },
                 // 900005: unlock succeeds but submit fails → exercises the
@@ -732,6 +732,7 @@ const mockApiClient = {
                     join_coins: 100,
                     title: 'Mock Submit-Fails Challenge',
                     url: 'mock-submitfail',
+                    start_time: nowSec - 4 * 86400,
                     close_time: nowSec + 4 * 86400,
                 },
             ];
