@@ -210,16 +210,43 @@ export function SettingsModal({ isOpen, onClose }) {
         onCorruptDuration: 'off',
         maxDurationMin: MAX_VOTING_PAUSE_MINUTES,
     });
-    const votingPauseHints = (key) => {
-        if (key !== 'useVotingPause') return [];
+    // Per-setting inline warnings for the GLOBAL defaults, keyed by the setting the
+    // warning belongs UNDER. Kept as one dispatch so the render site stays a single
+    // map — add a case here rather than a second hint list.
+    const settingHints = (key) => {
+        const effective = (k) => formValues[k] ?? schema?.[k]?.default;
         const hints = [];
-        const noTriggers =
-            (formValues.votingPauseTime ?? []).length === 0 && (formValues.votingPauseBeforeEnd ?? []).length === 0;
-        if (formValues.useVotingPause === true && noTriggers) {
-            hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
+        if (key === 'useVotingPause') {
+            const noTriggers =
+                (formValues.votingPauseTime ?? []).length === 0 && (formValues.votingPauseBeforeEnd ?? []).length === 0;
+            if (formValues.useVotingPause === true && noTriggers) {
+                hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
+            }
+            if (vpGlobal.coversWholeDay) {
+                hints.push({ tone: 'text-warning font-medium', text: t('app.votingPauseAllDayHint') });
+            }
         }
-        if (vpGlobal.coversWholeDay) {
-            hints.push({ tone: 'text-warning font-medium', text: t('app.votingPauseAllDayHint') });
+        // The pre-boost fill spends votes, so onlyBoost ("never vote, only boost")
+        // blocks it outright — it sits at the very top of the rule engine, above
+        // every rule including this one. Two settings that each look correct alone
+        // silently cancelling out is exactly what an inline warning is for.
+        if (key === 'voteBeforeBoost' && effective('voteBeforeBoost') === true) {
+            if (effective('onlyBoost') === true) {
+                hints.push({ tone: 'text-warning font-medium', text: t('app.voteBeforeBoostOnlyBoostHint') });
+            }
+            if (effective('autoBoost') !== true) {
+                hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostNoAutoBoostHint') });
+            }
+            // voteOnlyInLastMinute blocks above the pre-boost branch too, so it
+            // cancels the fill just as silently as onlyBoost does.
+            if (effective('voteOnlyInLastMinute') === true) {
+                hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostLastMinuteOnlyHint') });
+            }
+            // Both boost clocks off (0 = off on each) means no boost is ever
+            // auto-applied, so there is no instant to fill ahead of.
+            if (Number(effective('boostTime')) === 0 && Number(effective('keyUnlockedBoostTime')) === 0) {
+                hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostNoBoostTimeHint') });
+            }
         }
         return hints;
     };
@@ -475,7 +502,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                                 onChange={handleFormChange}
                                                 onReset={handleResetGlobal}
                                             />
-                                            {votingPauseHints(key).map((hint) => (
+                                            {settingHints(key).map((hint) => (
                                                 <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
                                                     {hint.text}
                                                 </p>

@@ -20,7 +20,7 @@ const { getNextScheduleThresholdSec } = /** @type {any} */ (require('./autoFill'
 // wallClock.js imports nothing). Cast for the same boundary reason as the
 // two imports above — wallClock.js isn't `// @ts-check`ed yet.
 const { occurrencesOf } = /** @type {any} */ (require('../scheduling/wallClock'));
-const { isBoostWindowOpen: boostWindowOpen } = require('../voting/boostWindow');
+const { isBoostWindowOpen: boostWindowOpen, boostApplyThreshold } = require('../voting/boostWindow');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 // From settings/limits (not settings/schema) — keeps zod out of any bundle
 // that reaches this module. No `any` cast needed: limits.js exports a plain
@@ -406,6 +406,113 @@ const getEffectiveFinalWindowExposureTarget = (challengeId) => {
 };
 
 /**
+ * Lead seconds before the boost-apply instant during which the pre-boost fill
+ * runs. Clamped to the schema's 1..59 minute range; anything outside it (a
+ * hand-edited file, an under-mocked caller, a non-number) falls back to the
+ * schema default of 15 minutes. The lower bound MUST match
+ * soonestBoostPrefillStart's guard in thresholdWindow.js (>= 60s) so the vote
+ * rule and the scheduler's cadence cap can't disagree for the same corrupt input.
+ * @param {string} challengeId
+ * @returns {number} lead in seconds
+ */
+const getBoostPrefillLeadSec = (challengeId) => {
+    // Coerced, not read raw: both cadence resolvers hand thresholdWindow.js a
+    // `Number(...) * 60`, so reading the raw value here would let a hand-edited
+    // string ("20") clamp to the 15m default on this side while the scheduler
+    // capped on 20m. Coercing keeps the two guards genuinely identical.
+    const raw = Number(settings.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId));
+    return Number.isFinite(raw) && raw >= 1 && raw <= 59 ? raw * 60 : 900;
+};
+
+/**
+ * Pre-boost fill state for a challenge at `now`.
+ *
+ * Motivation: a boost multiplies what the entry has at the moment it lands, so
+ * spending it on an entry whose exposure has decayed wastes a scarce, one-per-
+ * challenge resource. When enabled, the configured lead before the boost is
+ * auto-applied becomes a vote-to-100% window.
+ *
+ * The apply instant is not re-derived here — it comes from the same
+ * boostApplyThreshold formula getBoostThresholdSec uses, so the fill can never
+ * aim at a moment the boost runner disagrees with.
+ *
+ * Gating mirrors describeDeadlineActions' boost row, because a fill ahead of a
+ * boost that never fires is pure waste:
+ *   - the opt-in itself, and the autoBoost toggle;
+ *   - a boost actually AVAILABLE (branch null = nothing to apply);
+ *   - the `0 = off` sentinel on whichever window the branch measures against —
+ *     boostApplyThreshold deliberately doesn't apply it (see its note), and the
+ *     timer branch stays positive at boostTime=0.
+ *
+ * Deliberately NOT gated on the boost/turbo conflict (every candidate entry
+ * already turboed): that check needs live entry state, and unlike a wasted boost
+ * the exposure bought here still counts toward the challenge either way. This
+ * keeps the window a function of timers and toggles, matching
+ * orderDeadlineActions' stance.
+ *
+ * Known blind spot, shared with orderDeadlineActions/describeDeadlineActions: the
+ * Emergency Fill override in shouldApplyBoost applies an available boost as soon
+ * as the challenge is inside the emergency window, ignoring autoBoost and
+ * boostTime. boostApplyThreshold does not model that, so a user who raises
+ * `emergencyFill` above the effective boost window gets the boost spent BEFORE
+ * this fill window opens. Not the default (emergencyFill 300s sits below both
+ * boost windows), and the cost is a fill that arrives too late rather than a
+ * wrong action.
+ *
+ * @param {any} challenge
+ * @param {string} challengeId
+ * @param {number} now - Current time (Unix timestamp, seconds)
+ * @returns {{active: boolean, inWindow: boolean}}
+ */
+const getBoostPrefillState = (challenge, challengeId, now) => {
+    const inactive = { active: false, inWindow: false };
+    try {
+        if (settings.getEffectiveSetting('voteBeforeBoost', challengeId) !== true) return inactive;
+        if (settings.getEffectiveSetting('autoBoost', challengeId) !== true) return inactive;
+
+        const closeTime = Number(challenge?.close_time);
+        if (!Number.isFinite(closeTime)) return inactive;
+
+        const boostTimeSec = getEffectiveBoostTime(challengeId);
+        const keyUnlockedBoostTimeSec = getEffectiveKeyUnlockedBoostTime(challengeId);
+        const { thresholdSec, branch } = boostApplyThreshold(challenge?.member?.boost, closeTime, {
+            boostTimeSec,
+            keyUnlockedBoostTimeSec,
+        });
+        if (branch === null) return inactive;
+
+        // `0 = off` on the window this branch actually measures against.
+        const windowSec = branch === 'timer' ? boostTimeSec : keyUnlockedBoostTimeSec;
+        if (!Number.isFinite(windowSec) || windowSec <= 0) return inactive;
+        // A non-positive apply instant means the boost is already due or the data is
+        // malformed (expiry after close) — either way there is no lead left to fill in.
+        if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return inactive;
+
+        const timeUntilEnd = closeTime - now;
+        return {
+            active: true,
+            // Strictly before the apply instant: at or past it the boost fires this
+            // very cycle (deadline actions run ahead of the vote decision in the
+            // orchestrator), so filling then would be too late to be the point.
+            inWindow: timeUntilEnd > thresholdSec && timeUntilEnd <= thresholdSec + getBoostPrefillLeadSec(challengeId),
+        };
+    } catch (error) {
+        // Fail-soft, matching getScheduledFillState/getVotingPauseState: degrade to
+        // "no pre-boost window" and let the remaining rules evaluate. Letting this
+        // throw would escape _runVotingRules into the orchestrator's per-challenge
+        // catch, which abandons the WHOLE challenge for the cycle — losing even the
+        // ordinary threshold vote over an optional extra.
+        logger
+            .withCategory('voting')
+            .warning(
+                `Pre-boost fill evaluation failed for challenge ${oneLineId(challengeId)} — treating it as off`,
+                error,
+            );
+        return inactive;
+    }
+};
+
+/**
  * Shared rule engine for the auto-vote and manual-vote evaluators.
  * Returns an intermediate result the per-mode wrappers map onto their
  * caller-facing shape:
@@ -566,12 +673,38 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
         return decided('lastminute', 100, 100, sharedThresholdInfo);
     }
 
+    // Pre-boost fill: vote to 100% for the configured lead before an available
+    // boost is auto-applied, so the boost multiplies a full entry rather than a
+    // decayed one.
+    //
+    // Precedence is deliberate. It sits BELOW flash and last-minute, which
+    // already vote to 100% anyway, so the ordering is only about which label the
+    // log line carries. It sits ABOVE the voting pause for the same reason flash
+    // and last-minute do: the boost is spent on the challenge's schedule whatever
+    // the user's pause says (boost runs on the orchestrator's own path, ahead of
+    // these rules and untouched by the pause), so letting a pause swallow the
+    // fill would not defer the cost — it would land the boost on a decayed entry
+    // and permanently waste a one-per-challenge resource. And it sits above
+    // scheduled fill and all three threshold rules, which vote to lower targets.
+    //
+    // Auto only, and the guard is load-bearing rather than decorative: a manual
+    // vote on a non-flash challenge outside its last-minute window reaches this
+    // line, and letting it take the pre-boost path would relabel every such
+    // manual skip message as a boost concern. Manual voting has its own
+    // to-100% semantics and is never shaped by a boost timer.
+    const boostPrefill = mode === 'auto' ? getBoostPrefillState(challenge, challengeId, now) : { inWindow: false };
+    if (boostPrefill.inWindow) {
+        return decided('pre-boost', 100, 100, sharedThresholdInfo);
+    }
+
     // Voting pause: an opt-in window in which automatic voting is refused, so
     // exposure isn't spent during the overnight lull between match rounds.
     //
-    // Precedence is deliberate and load-bearing. It sits BELOW flash and
-    // last-minute so a challenge that genuinely closes mid-pause still gets its
-    // final fill — dropping a placement is a permanent loss, while skipping a
+    // Precedence is deliberate and load-bearing. It sits BELOW flash,
+    // last-minute and the pre-boost fill so a challenge that genuinely closes
+    // mid-pause still gets its final fill, and a boost spent mid-pause still
+    // lands on a full entry — dropping a placement is a permanent loss and so
+    // is wasting a boost, while skipping a
     // night top-up only defers votes to a better hour, and a user pausing
     // 01:30-06:00 is describing the dead time BETWEEN rounds, not asking to
     // forfeit a challenge that ends inside it. It sits ABOVE scheduled fill and
@@ -664,13 +797,14 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
     // per-label templates below choose their comparison from `eligible`/`atTarget`,
     // and forcing flips those — so reusing them would emit a literally false
     // sentence ("exposure 100% < 90%") for precisely the case someone is reading
-    // the log to understand. Any of the five labels can be forced, so this branch
+    // the log to understand. Any of the labels can be forced, so this branch
     // covers all of them before the map is consulted.
     if (r.forcedByNewEntry) {
         /** @type {Record<string, string>} */
         const forcedLabels = {
             flash: 'flash type',
             lastminute: `lastminute threshold (${effectiveLastMinuteThreshold}m)`,
+            'pre-boost': 'pre-boost fill',
             scheduled: 'scheduled fill window',
             'pre-final-window': 'pre-final-window top-up',
             'final-window': 'final window threshold',
@@ -698,6 +832,9 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
         lastminute: r.atTarget
             ? `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure already at 100%`
             : `lastminute threshold (${effectiveLastMinuteThreshold}m): exposure ${currentExposure}% < 100%`,
+        'pre-boost': r.atTarget
+            ? 'pre-boost fill: exposure already at 100%'
+            : `pre-boost fill: exposure ${currentExposure}% < 100%`,
         scheduled: r.atTarget
             ? 'scheduled fill: exposure already at 100%'
             : `scheduled fill window: exposure ${currentExposure}% < 100%`,
@@ -1185,7 +1322,8 @@ const getEmergencyFillThresholdSec = (challengeId) => {
 
 /**
  * Effective seconds-before-close at which boost becomes due. Key-unlocked
- * boosts apply inside the fixed 15m closing window; timer-based boosts apply
+ * boosts apply inside their own `keyUnlockedBoostTime` closing window (default
+ * 15m); timer-based boosts apply
  * when `timeUntilBoostExpires <= boostTime`, converted to a seconds-before-close
  * figure (`close_time - boost.timeout + boostTime`) so it's comparable to the
  * other deadline actions. `boost.timeout` is an absolute Unix-epoch timestamp
@@ -1199,18 +1337,11 @@ const getEmergencyFillThresholdSec = (challengeId) => {
  * @param {string} challengeId
  * @returns {number}
  */
-const getBoostThresholdSec = (challenge, challengeId) => {
-    const boost = challenge?.member?.boost || {};
-    const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
-    if (boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout)) {
-        return getEffectiveKeyUnlockedBoostTime(challengeId); // mirrors shouldApplyBoost
-    }
-    if (boost.state === 'AVAILABLE' && hasTimeout) {
-        const boostTime = getEffectiveBoostTime(challengeId);
-        return Number(challenge.close_time) - boost.timeout + boostTime;
-    }
-    return -Infinity;
-};
+const getBoostThresholdSec = (challenge, challengeId) =>
+    boostApplyThreshold(challenge?.member?.boost, challenge?.close_time, {
+        boostTimeSec: getEffectiveBoostTime(challengeId),
+        keyUnlockedBoostTimeSec: getEffectiveKeyUnlockedBoostTime(challengeId),
+    }).thresholdSec;
 
 /**
  * Order the per-challenge deadline actions by the seconds-before-close at which
@@ -1445,6 +1576,7 @@ module.exports = {
     getEffectiveFinalWindowExposureTarget,
     getScheduledFillState,
     getVotingPauseState,
+    getBoostPrefillState,
     evaluateVotingDecision,
     evaluateManualVotingDecision,
     evaluateManualVotingToHundred,

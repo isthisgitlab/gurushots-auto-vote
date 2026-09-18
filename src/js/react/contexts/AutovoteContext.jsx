@@ -3,7 +3,12 @@ import { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } fr
 import * as foregroundService from '../../services/ForegroundServiceController';
 import * as nativeAutovote from '../../services/NativeAutovoteBridge';
 import { ACTIONS, initialState, autovoteReducer } from './autovoteReducer';
-import { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp } from './autovoteScheduler';
+import {
+    resolveThreshold,
+    resolveScheduledFill,
+    resolveFinalWindowTopUp,
+    resolveBoostPrefill,
+} from './autovoteScheduler';
 import { createDeadlineNotifier, resolveRendererDelivery } from '../notifications/deadlineNotifier';
 
 const AutovoteContext = createContext(null);
@@ -146,6 +151,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                 resolveThreshold,
                 resolveScheduledFill,
                 resolveFinalWindowTopUp,
+                resolveBoostPrefill,
                 runCycle: () => runVotingCycle(),
                 log: {
                     // Best-effort parity log (optional-chained so a host without

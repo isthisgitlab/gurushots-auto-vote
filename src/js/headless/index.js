@@ -23,7 +23,12 @@ const apiFactory = require('../apiFactory');
 const logger = require('../logger');
 const { getRandomCheckFrequencyMs, MIN_CYCLE_GAP_MS, OFFLINE_RETRY_MS } = require('../scheduling/randomDelay');
 const { computeNextCycleDelayMs } = require('../scheduling/thresholdWindow');
-const { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp } = require('../scheduling/nodeResolvers');
+const {
+    resolveThreshold,
+    resolveScheduledFill,
+    resolveFinalWindowTopUp,
+    resolveBoostPrefill,
+} = require('../scheduling/nodeResolvers');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 
 const log = (msg, data) => logger.withCategory('voting').info(`[headless] ${msg}`, data);
@@ -66,6 +71,7 @@ const computeNextDelayMs = async (token, prefetched = null) => {
             resolveScheduledFill,
             timezone: userSettings.timezone || DEFAULT_TIMEZONE,
             resolveFinalWindowTopUp,
+            resolveBoostPrefill,
         });
         // API still down (this tick's own fetch failed): cap the wait to a short
         // retry so recovery tracks reconnection, not the full normal cadence.

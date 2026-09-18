@@ -20,7 +20,12 @@
 const logger = require('../logger');
 const settings = require('../settings');
 const { createCadenceChain, DECISION_ERROR_MESSAGE, formatOversleptMessage } = require('./cadenceChain');
-const { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp } = require('./nodeResolvers');
+const {
+    resolveThreshold,
+    resolveScheduledFill,
+    resolveFinalWindowTopUp,
+    resolveBoostPrefill,
+} = require('./nodeResolvers');
 const { createNodeDeadlineNotifier } = require('../services/notify/nodeNotify');
 
 /**
@@ -53,6 +58,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
         resolveThreshold,
         resolveScheduledFill,
         resolveFinalWindowTopUp,
+        resolveBoostPrefill,
         // The chain hands the resolved value straight back to the next
         // decision as the prefetched-list candidate, so unwrap `challenges`
         // here; a cycle failure/legacy boolean yields a non-array → fresh fetch.

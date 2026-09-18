@@ -160,6 +160,22 @@
                 'Atsevišķs logs Boost, kas atvērts ar atslēgu — tam nav sava taimera. Tā kā tas nebeidzas, to pielieto tikai tad, kad līdz izaicinājuma beigām atlicis šis laiks, lai tas nostrādātu pēc iespējas vēlāk. Iestatījums “Boost laiks” uz šiem neattiecas. 0 = izslēgts.',
             keyUnlockedBoostTimeHelp:
                 'Attiecas tikai uz Boost, kas atvērts ar atslēgu (bez sava taimera). Iestati 0, lai to nekad automātiski nepielietotu. Šis ir atsevišķs pulkstenis no “Boost laiks” — tie viens otru neaizvieto. Tāpat kā citos laika iestatījumos, 0 nozīmē “izslēgts”.',
+            voteBeforeBoost: 'Uzpildīt redzamību pirms Boost',
+            voteBeforeBoostDesc:
+                'Īsu brīdi pirms Boost automātiskās pielietošanas nobalso šo izaicinājumu līdz 100% redzamībai, lai Boost nostrādātu uz pilnībā redzama foto, nevis uz tāda, kura redzamība jau sarukusi.',
+            voteBeforeBoostHelp:
+                'Boost pareizina to, kas foto ir tajā brīdī, kad tas nostrādā, un katram izaicinājumam tas ir tikai viens — tāpēc pielietot to foto ar sarukušu redzamību nozīmē to izšķērdēt. Kad šis ir ieslēgts, bots zemāk norādītajā nobīdē nobalso līdz 100%, un tad Boost tiek pielietots kā parasti. Nepieciešams ieslēgts “Auto-pielietot Boost”, un tas nedarbojas, ja attiecīgais Boost laiks ir 0 (“izslēgts”). Redzamība nesasniedz 100% vienā piegājienā, tāpēc atstāj nobīdi, kas pietiek vairākiem balsošanas cikliem.',
+            voteBeforeBoostOnlyBoostHint:
+                'Ieslēgts “Tikai "Boost" režīms”, tāpēc bots nebalso — šī uzpilde nekad nenotiks. Izslēdz to (sadaļā “Vispārīgi”), lai izmantotu šo uzpildi.',
+            voteBeforeBoostNoAutoBoostHint:
+                'Izslēgts “Auto-pielietot Boost”, tāpēc neviens Boost netiek pielietots automātiski un nav, pirms kā uzpildīt.',
+            voteBeforeBoostLastMinuteOnlyHint:
+                'Ieslēgts “Balsot tikai pēdējās minūtēs”, tāpēc bots pirms tam nebalso — šī uzpilde nostrādās tikai tad, ja Boost gadīsies iekrist tajā logā, kur balsošana tik un tā iet līdz 100%.',
+            voteBeforeBoostNoBoostTimeHint:
+                'Gan “Boost laiks”, gan “Boost laiks (atvērts ar atslēgu)” ir 0 (izslēgts), tāpēc neviens Boost netiek pielietots automātiski un nav brīža, pirms kā uzpildīt. Iestati vismaz vienu no tiem lielāku par 0.',
+            voteBeforeBoostLeadMin: 'Nobīde pirms Boost',
+            voteBeforeBoostLeadMinDesc:
+                'Cik ilgi pirms Boost pielietošanas sākas uzpilde. Atvēli pietiekami laika vairākām balsošanas kārtām — redzamība nesasniedz 100% vienā piegājienā.',
             autoBoost: 'Auto-pielietot Boost',
             autoBoostDesc: 'Automātiski pielieto Boost šim izaicinājumam, kad tā Boost logs gatavojas aizvērties.',
             turbo: 'Turbo',

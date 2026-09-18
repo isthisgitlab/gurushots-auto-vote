@@ -44,6 +44,29 @@ export const resolveFinalWindowTopUp = async (challengeId) => {
     };
 };
 
+// WebView resolver for the pre-boost fill cadence cap: the per-challenge keys over
+// IPC, batched. Enabled only when the opt-in and autoBoost are on AND onlyBoost is
+// off — matching nodeResolvers.js and the rule engine's gate (onlyBoost blocks every
+// vote ahead of the pre-boost branch, so waking for it could only no-op). Both boost
+// windows go through as numbers; thresholdWindow.js computes the apply instant from
+// live boost state and re-guards the `0 = off` sentinel.
+export const resolveBoostPrefill = async (challengeId) => {
+    const [voteBeforeBoost, autoBoost, onlyBoost, leadMin, boostTime, keyUnlockedBoostTime] = await Promise.all([
+        window.api.getEffectiveSetting('voteBeforeBoost', challengeId),
+        window.api.getEffectiveSetting('autoBoost', challengeId),
+        window.api.getEffectiveSetting('onlyBoost', challengeId),
+        window.api.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId),
+        window.api.getEffectiveSetting('boostTime', challengeId),
+        window.api.getEffectiveSetting('keyUnlockedBoostTime', challengeId),
+    ]);
+    return {
+        enabled: voteBeforeBoost === true && autoBoost === true && onlyBoost !== true,
+        leadSec: Number(leadMin) * 60,
+        boostTimeSec: Number(boostTime),
+        keyUnlockedBoostTimeSec: Number(keyUnlockedBoostTime),
+    };
+};
+
 /**
  * Delay (ms) until the next voting cycle, using the shared decision: fast fixed
  * cadence while in-window, otherwise the rolled random delay capped to the
@@ -53,7 +76,7 @@ export const resolveFinalWindowTopUp = async (challengeId) => {
  * @param {Array} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {{normalDelayMs:number, lastMinuteCheckMinutes:number, minGapMs:number, timezone?:(string|null)}} opts
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null)}>}
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null)}>}
  */
 export async function computeNextCycleDelayMs(
     challenges,
@@ -68,5 +91,6 @@ export async function computeNextCycleDelayMs(
         resolveScheduledFill,
         timezone,
         resolveFinalWindowTopUp,
+        resolveBoostPrefill,
     });
 }

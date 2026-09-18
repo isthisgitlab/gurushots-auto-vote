@@ -23,6 +23,7 @@
  */
 
 const { soonestScheduledStart, eligibleChallenges } = require('./scheduledFill');
+const { boostApplyThreshold } = require('../voting/boostWindow');
 
 /**
  * Per-challenge pre-final-window-top-up config for the cadence cap.
@@ -75,6 +76,99 @@ async function soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTop
         const durationSec = Number.isFinite(config.durationSec) && config.durationSec >= 60 ? config.durationSec : 3600;
         const challenge = eligible[i];
         const startTime = Number(challenge.close_time) - (durationSec + leadSec);
+        if (startTime > now && startTime < earliest) {
+            earliest = startTime;
+            best = {
+                challengeId: challenge.id,
+                // Fall back to the id so a missing title never logs as "undefined".
+                challengeTitle: challenge.title || `challenge ${challenge.id}`,
+                startTime,
+                leadMin: Math.round(leadSec / 60),
+            };
+        }
+    }
+    return best;
+}
+
+/**
+ * Per-challenge pre-boost-fill config for the cadence cap. The two boost windows
+ * come through as already-resolved numbers so this module stays free of settings
+ * I/O (it is bundled into the WebView); the apply instant itself is computed from
+ * the challenge's own live boost state via the shared boostApplyThreshold.
+ * @callback ResolveBoostPrefill
+ * @param {string} challengeId - Challenge id as a string.
+ * @returns {{enabled: boolean, leadSec: number, boostTimeSec: number, keyUnlockedBoostTimeSec: number}|Promise<{enabled: boolean, leadSec: number, boostTimeSec: number, keyUnlockedBoostTimeSec: number}>}
+ */
+
+/**
+ * Soonest upcoming pre-boost fill window START strictly after `now` across
+ * still-open, non-flash challenges. The window opens `leadSec` before the boost
+ * is auto-applied, i.e. at `close_time - (applyThresholdSec + leadSec)` — the
+ * scheduler caps its sleep to this so a cycle lands there and can start voting
+ * the challenge to 100% before the boost is spent on it.
+ *
+ * Unlike the other cadence boundaries this one depends on LIVE challenge state
+ * (`member.boost`), not on close_time alone, so it can appear, move or vanish as
+ * the boost's own timer is refreshed server-side. That is fine: it is recomputed
+ * from scratch every cycle, and the vote rule re-checks the same window before
+ * acting.
+ *
+ * Fail-soft like the other cadence helpers: a challenge whose resolver throws or
+ * whose config is disabled is skipped. An out-of-range leadSec (sub-minute, over
+ * 59 min, or NaN) falls back to the schema default (15 min) so a bad override
+ * can't disable the cap — the valid range mirrors VotingLogic's
+ * getBoostPrefillLeadSec so the two same-purpose guards can't drift. The
+ * `0 = off` sentinel on whichever boost window the branch measures against is
+ * honoured here exactly as the vote rule honours it, so the scheduler never wakes
+ * for a fill the rule would then decline to perform.
+ *
+ * @param {Array} eligible - already-filtered still-open non-flash challenges
+ * @param {number} now - Unix timestamp (seconds)
+ * @param {ResolveBoostPrefill} resolveBoostPrefill
+ * @returns {Promise<{challengeId, challengeTitle, startTime:number, leadMin:number}|null>}
+ */
+async function soonestBoostPrefillStart(eligible, now, resolveBoostPrefill) {
+    const configs = await Promise.all(
+        eligible.map(async (challenge) => {
+            try {
+                return await resolveBoostPrefill(challenge.id.toString());
+            } catch {
+                return null;
+            }
+        }),
+    );
+
+    let best = null;
+    let earliest = Infinity;
+    for (let i = 0; i < eligible.length; i++) {
+        const config = configs[i];
+        if (!config || config.enabled !== true) continue;
+        const challenge = eligible[i];
+        const closeTime = Number(challenge.close_time);
+        if (!Number.isFinite(closeTime)) continue;
+
+        const boostTimeSec = Number(config.boostTimeSec);
+        // Mirrors VotingLogic.getEffectiveKeyUnlockedBoostTime: an explicit 0 is the
+        // off sentinel and must be honoured, but a missing/negative/NaN value falls
+        // back to the schema default rather than skipping the challenge — otherwise
+        // the rule would be armed at 900s for a boundary the scheduler never wakes for.
+        const rawKeyUnlocked = Number(config.keyUnlockedBoostTimeSec);
+        const keyUnlockedBoostTimeSec = Number.isFinite(rawKeyUnlocked) && rawKeyUnlocked >= 0 ? rawKeyUnlocked : 900;
+        const { thresholdSec, branch } = boostApplyThreshold(challenge.member?.boost, closeTime, {
+            boostTimeSec,
+            keyUnlockedBoostTimeSec,
+        });
+        if (branch === null) continue;
+        // `0 = off` on the window this branch actually measures against; mirrors
+        // VotingLogic.getBoostPrefillState.
+        const windowSec = branch === 'timer' ? boostTimeSec : keyUnlockedBoostTimeSec;
+        if (!Number.isFinite(windowSec) || windowSec <= 0) continue;
+        if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) continue;
+
+        // 60..3540s == 1..59 min; mirrors VotingLogic's getBoostPrefillLeadSec.
+        const leadSec =
+            Number.isFinite(config.leadSec) && config.leadSec >= 60 && config.leadSec <= 3540 ? config.leadSec : 900;
+        const startTime = closeTime - (thresholdSec + leadSec);
         if (startTime > now && startTime < earliest) {
             earliest = startTime;
             best = {
@@ -202,7 +296,8 @@ async function isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold
  * @param {import('./scheduledFill').ResolveScheduledFill|null} [opts.resolveScheduledFill] - per-challenge scheduled-fill config resolver (sync or async)
  * @param {string|null} [opts.timezone] - IANA zone for the time-of-day form
  * @param {ResolveFinalWindowTopUp|null} [opts.resolveFinalWindowTopUp] - per-challenge pre-final-window top-up config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming top-up window start
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null)}>}
+ * @param {ResolveBoostPrefill|null} [opts.resolveBoostPrefill] - per-challenge pre-boost fill config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming pre-boost window start
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null)}>}
  */
 async function computeNextCycleDelayMs(
     challenges,
@@ -215,6 +310,7 @@ async function computeNextCycleDelayMs(
         resolveScheduledFill = null,
         timezone = null,
         resolveFinalWindowTopUp = null,
+        resolveBoostPrefill = null,
     },
 ) {
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
@@ -226,6 +322,7 @@ async function computeNextCycleDelayMs(
             nextEntry: null,
             nextScheduled: null,
             nextFinalWindowTopUp: null,
+            nextBoostPrefill: null,
         };
     }
 
@@ -266,7 +363,21 @@ async function computeNextCycleDelayMs(
         }
     }
 
-    return { delayMs, mode, nextEntry, nextScheduled, nextFinalWindowTopUp };
+    // Pre-boost fill boundary — same "cap to the soonest upcoming window start"
+    // shape as the two caps above; whichever boundary is sooner wins.
+    let nextBoostPrefill = null;
+    if (resolveBoostPrefill) {
+        nextBoostPrefill = await soonestBoostPrefillStart(eligible, now, resolveBoostPrefill);
+        if (nextBoostPrefill) {
+            const msUntilStart = (nextBoostPrefill.startTime - now) * 1000;
+            if (msUntilStart < delayMs) {
+                delayMs = Math.max(minGapMs, msUntilStart);
+                mode = 'pre-boost';
+            }
+        }
+    }
+
+    return { delayMs, mode, nextEntry, nextScheduled, nextFinalWindowTopUp, nextBoostPrefill };
 }
 
 module.exports = {
@@ -274,4 +385,5 @@ module.exports = {
     isAnyChallengeInThresholdWindow,
     computeNextCycleDelayMs,
     soonestFinalWindowTopUpStart,
+    soonestBoostPrefillStart,
 };

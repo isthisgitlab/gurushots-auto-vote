@@ -37,4 +37,22 @@ const resolveFinalWindowTopUp = (challengeId) => ({
     durationSec: Number(settings.getEffectiveSetting('finalWindowDuration', challengeId)),
 });
 
-module.exports = { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp };
+// Per-challenge pre-boost fill config for the cadence cap (./thresholdWindow.js).
+// Enabled only when the opt-in and autoBoost are on AND onlyBoost is off — matching the
+// rule engine, so the scheduler never wakes for a fill the rule would decline. onlyBoost
+// is part of the gate because it blocks every vote ahead of the pre-boost branch in
+// _runVotingRules, which would otherwise make this cap wake a cycle that can only no-op.
+// Both boost windows are passed through as numbers because the apply instant depends on
+// the challenge's live boost state, which only thresholdWindow.js sees; it re-guards the
+// `0 = off` sentinel and an out-of-range leadSec.
+const resolveBoostPrefill = (challengeId) => ({
+    enabled:
+        settings.getEffectiveSetting('voteBeforeBoost', challengeId) === true &&
+        settings.getEffectiveSetting('autoBoost', challengeId) === true &&
+        settings.getEffectiveSetting('onlyBoost', challengeId) !== true,
+    leadSec: Number(settings.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId)) * 60,
+    boostTimeSec: Number(settings.getEffectiveSetting('boostTime', challengeId)),
+    keyUnlockedBoostTimeSec: Number(settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId)),
+});
+
+module.exports = { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp, resolveBoostPrefill };
