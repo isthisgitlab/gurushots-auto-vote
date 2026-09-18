@@ -131,10 +131,22 @@ precisely what the "never sleep past a boundary" invariant forbids. The cost is
 some idle cycles overnight; the benefit is that no other deadline can be missed
 because a pause was open.
 
-**Fail-soft, and note the direction**: like scheduled fill it is wrapped in
-try/catch and corrupt values fall back to the schema default — but the pause
-fails **open** (keep voting). A pause that failed closed would silently stop
-voting entirely, which is far worse than a few votes spent at a bad hour.
+**Fail-soft, and note the direction.** Every degraded path returns "not paused".
+That asymmetry with scheduled fill is deliberate and is enforced at four points:
+a corrupt duration turns the pause **off** rather than substituting the default
+(substituting would hand a user a 4-hour outage they never configured); an
+over-range duration is **clamped** to `MAX_VOTING_PAUSE_MINUTES`, because an
+unbounded window swallows every future cycle and stops voting for good; a
+challenge whose `close_time` isn't finite is never paused, since the last-minute
+rule that would rescue it needs that same value; and all of these log. Related:
+`isWithinLastMinuteThreshold` clamps `lastMinuteThreshold` to 1–59 for the same
+reason — with the pause above final-window, a corrupt value there would be the
+difference between "votes late" and "never votes".
+
+Note the limit of the guarantee: a _valid_ configuration can still cover the
+whole day (two 12h pauses 12h apart). That is the user's explicit choice, not a
+failure, and last-minute/flash voting still runs; the modal warns about it via
+`coversWholeDay`.
 
 ### Pre-final-window top-up
 

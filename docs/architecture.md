@@ -232,11 +232,14 @@ repeated six times is one that gets forgotten at one of them.
   independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a title-profile
   match wins over the type-exclude veto; otherwise the default scope is join-all, an `autoJoinTypes` include-list (when non-empty) narrows it, and `autoJoinExcludeTypes` subtracts.
 - **Fail-soft config parsing** is pervasive: `getScheduledFillState` and `getVotingPauseState` (both built on
-  the shared `_triggerWindowState`) wrap their whole body in try/catch and return inactive; corrupt window
-  values fall back to the schema default rather than "never in window" (which under replace-mode would
-  silently block all voting). Note the two fail in _opposite_ user-visible directions and that is deliberate:
-  a broken scheduled fill stops forcing 100%, a broken pause keeps voting — the pause fails **open** so a
-  corrupt override can never silently stop voting altogether.
+  the shared `_triggerWindowState`) wrap their whole body in try/catch and return inactive. The two fail in
+  _opposite_ user-visible directions, deliberately: a broken scheduled fill stops forcing 100%, a broken
+  pause keeps voting. So the corrupt-value policy is per-feature, not shared — scheduled fill substitutes
+  the schema default (failing to "never in window" would, under replace mode, block all threshold voting),
+  while the pause turns **off** (`onCorruptDuration: 'off'`) and clamps an over-range duration
+  (`maxDurationMin`), because substituting or honouring those would both be fail-_closed_ and could stop
+  voting for good. Both catches **log**: the orchestrator has a per-challenge catch that reports the errors
+  it sees, so a silent swallow here would be the least visible failure in the pass.
 - **Log-injection guard**: API-sourced challenge ids/titles are CR/LF-collapsed via `format/logSafe.oneLine()`
   before interpolation (imported directly, not off the logger, because the logger is mocked in much of the
   test suite).

@@ -25,7 +25,12 @@ const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 // From settings/limits (not settings/schema) — keeps zod out of any bundle
 // that reaches this module. No `any` cast needed: limits.js exports a plain
 // number literal, so inference is already exact.
-const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/limits');
+const { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } = require('../settings/limits');
+// Cast at the boundary for the same reason as the imports above — logger.js
+// isn't `// @ts-check`ed yet. Used only on the corrupt-config paths below,
+// which must not stay silent: the orchestrator's per-challenge catch logs its
+// own errors, so a swallowed one here would be strictly less visible.
+const logger = /** @type {any} */ (require('../logger'));
 
 /**
  * Shared trigger-window evaluation for the two features built on the same pair
@@ -59,7 +64,12 @@ const { MAX_SCHEDULED_FILL_ENTRIES } = require('../settings/limits');
  * @param {string} challengeId
  * @param {number} now - Current time (Unix timestamp, seconds)
  * @param {{enabledKey: string, timesKey: string, beforeEndKey: string,
- *          durationKey: string, defaultDurationMin: number}} keys
+ *          durationKey: string, defaultDurationMin: number,
+ *          onCorruptDuration: 'default'|'off', maxDurationMin: number|null}} keys
+ *   `onCorruptDuration` and `maxDurationMin` are the per-feature corruption
+ *   policy — see the duration block below for why the two features must not
+ *   share one. Both are required rather than optional so a future third caller
+ *   has to state its direction explicitly instead of inheriting one silently.
  * @returns {{active: boolean, inWindow: boolean}}
  */
 const _triggerWindowState = (challenge, challengeId, now, keys) => {
@@ -67,15 +77,49 @@ const _triggerWindowState = (challenge, challengeId, now, keys) => {
         return { active: false, inWindow: false };
     }
 
-    // Corrupt duration minutes fail soft to the schema default rather than to
-    // "never in window" — a NaN duration would otherwise silently disable the
-    // feature (for scheduled fill's replace mode, blocking all threshold
-    // voting; for the pause, quietly voting straight through the night).
-    // Deliberately no schema-floor clamp: a hand-edited finite positive value
-    // below the schema's min(5) is honored as typed (it's out of range, not
-    // corrupt) — only non-numeric/non-positive values fall back.
-    const durationMin = Number(settings.getEffectiveSetting(keys.durationKey, challengeId));
-    const durationSec = (Number.isFinite(durationMin) && durationMin > 0 ? durationMin : keys.defaultDurationMin) * 60;
+    // Corrupt duration handling is per-feature, because the two features must
+    // fail in OPPOSITE directions and a shared fallback would get one of them
+    // backwards:
+    //   - scheduled fill (`onCorruptDuration: 'default'`) falls back to the
+    //     schema default. Failing to "never in window" would, under replace
+    //     mode, silently block all threshold voting.
+    //   - the voting pause (`onCorruptDuration: 'off'`) turns the feature OFF.
+    //     Substituting a default here would be fail-CLOSED: a user with a
+    //     30-minute pause whose value got corrupted would silently get the
+    //     4-hour default instead — a longer outage than they ever configured.
+    // Deliberately no schema-FLOOR clamp either way: a finite positive value
+    // below the schema's min(5) is honored as typed (out of range, not corrupt).
+    const rawDuration = settings.getEffectiveSetting(keys.durationKey, challengeId);
+    const durationMin = Number(rawDuration);
+    let effectiveDurationMin;
+    if (Number.isFinite(durationMin) && durationMin > 0) {
+        effectiveDurationMin = durationMin;
+    } else if (keys.onCorruptDuration === 'off') {
+        logger
+            .withCategory('voting')
+            .warning(
+                `${keys.durationKey} for challenge ${challengeId} is not a positive number (${JSON.stringify(rawDuration)}) — treating the feature as off for this challenge`,
+                null,
+            );
+        return { active: false, inWindow: false };
+    } else {
+        effectiveDurationMin = keys.defaultDurationMin;
+    }
+    // Ceiling clamp, opt-in per feature. The pause sets one because an
+    // oversized hand-edited value there means "never vote again" — an
+    // unbounded window swallows every comparison below. Scheduled fill passes
+    // none: an oversized fill window just means "always fill", which is
+    // harmless, and clamping it would change long-standing behavior.
+    if (keys.maxDurationMin && effectiveDurationMin > keys.maxDurationMin) {
+        logger
+            .withCategory('voting')
+            .warning(
+                `${keys.durationKey} for challenge ${challengeId} is ${effectiveDurationMin}m, above the ${keys.maxDurationMin}m maximum — clamping`,
+                null,
+            );
+        effectiveDurationMin = keys.maxDurationMin;
+    }
+    const durationSec = effectiveDurationMin * 60;
     const timezone = settings.getSetting('timezone') || DEFAULT_TIMEZONE;
     // Both triggers are LISTS — every entry opens its own window, all OR'd.
     // Non-array corruption = form off; a corrupt ENTRY inside the array is
@@ -121,11 +165,12 @@ const _triggerWindowState = (challenge, challengeId, now, keys) => {
  * _triggerWindowState for the entry semantics.
  *
  * The whole body is wrapped in try/catch returning the inactive state — the
- * same posture (and reason) as getExposureResolver in settings.js: this runs
- * inside the per-challenge voting loop, which has no per-iteration catch, so
- * a corrupt hand-edited override must degrade this one challenge's scheduled
- * fill to "off" rather than abort voting for every remaining challenge. The
- * `replaces` read is INSIDE the try for that same reason.
+ * same posture (and reason) as getExposureResolver in settings.js: a corrupt
+ * hand-edited override must degrade this one challenge's scheduled fill to
+ * "off" rather than take the whole evaluation down. The `replaces` read is
+ * INSIDE the try for that same reason. The catch LOGS: the orchestrator's
+ * per-challenge catch reports the errors it sees, so swallowing one silently
+ * here would make this the least visible failure in the pass.
  *
  * @param {any} challenge
  * @param {string} challengeId
@@ -141,13 +186,18 @@ const getScheduledFillState = (challenge, challengeId, now) => {
             beforeEndKey: 'scheduledFillBeforeEnd',
             durationKey: 'scheduledFillWindowMinutes',
             defaultDurationMin: 60,
+            onCorruptDuration: 'default',
+            maxDurationMin: null,
         });
         if (!state.active) return inactive;
         return {
             ...state,
             replaces: settings.getEffectiveSetting('scheduledFillReplaces', challengeId) === true,
         };
-    } catch {
+    } catch (error) {
+        logger
+            .withCategory('voting')
+            .warning(`Scheduled-fill evaluation failed for challenge ${challengeId} — treating it as off`, error);
         return inactive;
     }
 };
@@ -161,11 +211,18 @@ const getScheduledFillState = (challenge, challengeId, now) => {
  * pause and each votingPauseBeforeEnd entry a one-shot pause, both lasting
  * votingPauseDurationMinutes, all OR'd.
  *
- * Same fail-soft posture as getScheduledFillState: a corrupt override degrades
- * this one challenge's pause to "off" (i.e. keep voting) rather than aborting
- * the pass. Failing OPEN is the deliberate direction — a broken pause costs
- * some votes at a bad hour, a pause that failed CLOSED would silently stop
- * voting entirely.
+ * Everything here fails OPEN — every degraded path returns "not paused", i.e.
+ * keep voting. That direction is the whole safety argument: a broken pause
+ * costs some votes at a bad hour, while a pause that failed CLOSED would
+ * silently stop voting altogether, which looks exactly like the app being
+ * broken. Hence the differences from getScheduledFillState:
+ *   - a corrupt duration turns the pause OFF rather than substituting a
+ *     default (`onCorruptDuration: 'off'`),
+ *   - an over-range duration is CLAMPED, so no hand-edited value can open a
+ *     window wide enough to swallow every future cycle (`maxDurationMin`),
+ *   - a challenge with no usable close_time is never paused, because the
+ *     last-minute rule that would otherwise rescue it also needs that value.
+ * Every one of those paths logs; a silent pause is indistinguishable from a bug.
  *
  * @param {any} challenge
  * @param {string} challengeId
@@ -173,16 +230,27 @@ const getScheduledFillState = (challenge, challengeId, now) => {
  * @returns {{active: boolean, inWindow: boolean}}
  */
 const getVotingPauseState = (challenge, challengeId, now) => {
+    const notPaused = { active: false, inWindow: false };
     try {
+        // A non-finite close_time defeats the deadline rules (last-minute and
+        // final-window both compare against it), so a pause must not apply
+        // either — the time-of-day form doesn't read close_time at all and
+        // would otherwise pause such a challenge with nothing left to rescue it.
+        if (!Number.isFinite(Number(challenge?.close_time))) return notPaused;
         return _triggerWindowState(challenge, challengeId, now, {
             enabledKey: 'useVotingPause',
             timesKey: 'votingPauseTime',
             beforeEndKey: 'votingPauseBeforeEnd',
             durationKey: 'votingPauseDurationMinutes',
             defaultDurationMin: 240,
+            onCorruptDuration: 'off',
+            maxDurationMin: MAX_VOTING_PAUSE_MINUTES,
         });
-    } catch {
-        return { active: false, inWindow: false };
+    } catch (error) {
+        logger
+            .withCategory('voting')
+            .warning(`Voting-pause evaluation failed for challenge ${challengeId} — treating it as not paused`, error);
+        return notPaused;
     }
 };
 
@@ -200,6 +268,9 @@ const getVotingPauseState = (challenge, challengeId, now) => {
  *   actually CHANGED the outcome: exposure was at/above the trigger and the vote
  *   happens anyway. False on every blocked path, and false when the challenge was
  *   already eligible on its own.
+ * @property {boolean} [preservesNewEntryTrigger] - Set on a blocked path that
+ *   DEFERS rather than cancels: the orchestrator must keep any new-entry trigger
+ *   armed instead of disarming it. Only the voting pause sets it.
  */
 
 /**
@@ -211,6 +282,9 @@ const getVotingPauseState = (challenge, challengeId, now) => {
  *   new-entry-forced vote from an organic one without re-deriving the rule. It
  *   only preserves the trigger (skips recording the entry snapshot) when a FORCED
  *   vote throws; an organic vote's eligibility recurs by itself next cycle.
+ * @property {boolean} [preservesNewEntryTrigger] - True when the decision was
+ *   blocked by something that DEFERS the vote (the voting pause) rather than
+ *   cancelling it, so the orchestrator keeps the new-entry trigger armed.
  */
 
 /**
@@ -250,7 +324,17 @@ const isWithinFinalWindow = (closeTime, now, windowSec = 3600) => {
  * @returns {boolean} - True if within last minute threshold
  */
 const isWithinLastMinuteThreshold = (closeTime, now, challengeId) => {
-    const effectiveLastMinuteThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
+    const rawThreshold = settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
+    // Clamp to the schema's range (1..59), mirroring finalWindowDuration and
+    // voteBeforeFinalWindowLeadMin in _runVotingRules. Without this a corrupt
+    // or under-mocked value makes the comparison NaN-false, so the last-minute
+    // rule NEVER fires. That used to merely demote the challenge to the normal
+    // threshold rule; now that the voting pause sits above final-window, it is
+    // the difference between "votes late" and "never votes at all", because
+    // last-minute is the one rule a pause deliberately cannot block.
+    const threshold = Number(rawThreshold);
+    const effectiveLastMinuteThreshold =
+        Number.isFinite(threshold) && threshold >= 1 && threshold <= 59 ? threshold : 10;
     const timeUntilEnd = closeTime - now;
     return timeUntilEnd <= effectiveLastMinuteThreshold * 60 && timeUntilEnd > 0;
 };
@@ -368,8 +452,12 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     // out of the per-challenge loop and abandoned every remaining challenge in the pass.
     const currentExposure = challenge?.member?.ranking?.exposure?.exposure_factor ?? 0;
 
-    /** @param {string} skipReason @returns {VotingRuleResult} */
-    const blocked = (skipReason) => ({
+    /**
+     * @param {string} skipReason
+     * @param {boolean} [preservesNewEntryTrigger] - See the field's note below.
+     * @returns {VotingRuleResult}
+     */
+    const blocked = (skipReason, preservesNewEntryTrigger = false) => ({
         eligible: false,
         atTarget: false,
         skipReason,
@@ -381,6 +469,15 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
         // opt-outs. For the pause specifically this is the point: a new entry
         // appearing at 03:00 is the exact case the user asked not to spend votes on.
         forcedByNewEntry: false,
+        // ...but DEFERRING the vote is not the same as forfeiting it. The
+        // orchestrator disarms the new-entry trigger on a blocked decision,
+        // which is safe for every other block because each lifts into a rule
+        // that votes to 100% anyway. The pause is the one block that lifts into
+        // the NORMAL threshold rule, which votes only while exposure is below
+        // the trigger — so disarming there would lose the new entry's vote
+        // outright. This flag asks the orchestrator to keep the trigger armed
+        // until the pause ends.
+        preservesNewEntryTrigger,
     });
     // Eligibility uses the trigger ("vote if below"); the loop ceiling uses the target
     // ("vote up to"). For flash and lastminute they are intentionally both 100.
@@ -462,7 +559,10 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     // expire on the challenge's schedule rather than the user's.
     const pause = getVotingPauseState(challenge, challengeId, now);
     if (mode === 'auto' && pause.active && pause.inWindow) {
-        return blocked('voting paused: inside configured pause window');
+        // `true` = keep any new-entry trigger armed across the pause, so the
+        // vote a new entry earns is DEFERRED to the end of the pause rather
+        // than silently dropped (see `blocked`).
+        return blocked('voting paused: inside configured pause window', true);
     }
 
     // Scheduled fill sits below flash/last-minute (which always win) and above
@@ -521,6 +621,7 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
             voteReason: r.skipReason,
             targetExposure: r.targetExposure,
             forcedByNewEntry: false,
+            preservesNewEntryTrigger: r.preservesNewEntryTrigger === true,
         };
 
     const {

@@ -48,7 +48,16 @@ import { MAX_SCHEDULED_FILL_ENTRIES } from '../../settings/limits';
  * @param {number} params.closeTime - Challenge close time, or 0 when unknown.
  * @returns {WindowHintState}
  */
-export function deriveWindowHints({ keys, defaultDurationMin, effectiveOf, timezone, nowSec, closeTime }) {
+export function deriveWindowHints({
+    keys,
+    defaultDurationMin,
+    effectiveOf,
+    timezone,
+    nowSec,
+    closeTime,
+    onCorruptDuration = 'default',
+    maxDurationMin = null,
+}) {
     const rawTimes = effectiveOf(keys.times);
     const times = (Array.isArray(rawTimes) ? rawTimes : []).slice(0, MAX_SCHEDULED_FILL_ENTRIES);
     const rawBeforeEnds = effectiveOf(keys.beforeEnd);
@@ -56,9 +65,19 @@ export function deriveWindowHints({ keys, defaultDurationMin, effectiveOf, timez
         .slice(0, MAX_SCHEDULED_FILL_ENTRIES)
         .map(Number)
         .filter((sec) => sec > 0);
-    const durationMin = Number(effectiveOf(keys.duration)) || defaultDurationMin;
+    // Duration resolution mirrors _triggerWindowState exactly, INCLUDING the
+    // per-feature corruption policy — a `Number(x) || default` shortcut here
+    // would silently honour a negative hand-edited value the engine rejects,
+    // and would show a scheduled-fill-style fallback for a pause the engine
+    // turns off. Diverging on this is precisely how a hint starts promising a
+    // window that never opens.
+    const rawDuration = Number(effectiveOf(keys.duration));
+    const durationValid = Number.isFinite(rawDuration) && rawDuration > 0;
+    const durationCorruptDisables = !durationValid && onCorruptDuration === 'off';
+    let durationMin = durationValid ? rawDuration : defaultDurationMin;
+    if (maxDurationMin && durationMin > maxDurationMin) durationMin = maxDurationMin;
     const durationSec = durationMin * 60;
-    const enabled = effectiveOf(keys.enabled) === true;
+    const enabled = effectiveOf(keys.enabled) === true && !durationCorruptDisables;
 
     // Explicit arrow (never `map(occurrencesOf)`): map's (element, index,
     // array) signature would bind the index to the timeZone parameter. Each
@@ -125,13 +144,19 @@ export function deriveWindowHints({ keys, defaultDurationMin, effectiveOf, timez
  * @returns {boolean}
  */
 function coversWholeDay(timeOccs, durationSec) {
-    if (timeOccs.length < 2) return durationSec >= 86400;
-    const starts = timeOccs
-        .map(({ entry }) => {
-            const [h, m] = entry.split(':');
-            return Number(h) * 3600 + Number(m) * 60;
-        })
-        .sort((a, b) => a - b);
+    // Deduped first: two identical starts would each see a zero gap to the
+    // other and report full coverage off a single window. The validator's
+    // dedupe makes that unreachable through the save path, but a hand-edited
+    // file must not produce a bogus warning.
+    const starts = [
+        ...new Set(
+            timeOccs.map(({ entry }) => {
+                const [h, m] = entry.split(':');
+                return Number(h) * 3600 + Number(m) * 60;
+            }),
+        ),
+    ].sort((a, b) => a - b);
+    if (starts.length < 2) return durationSec >= 86400;
     return starts.every((start, i) => {
         const nextStart = starts[(i + 1) % starts.length];
         // Circular distance to the next start; 0 for a duplicate entry, which

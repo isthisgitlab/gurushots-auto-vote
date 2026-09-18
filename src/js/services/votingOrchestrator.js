@@ -507,11 +507,8 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 }
 
                 // Use the centralized voting logic service
-                const { shouldVote, voteReason, targetExposure, forcedByNewEntry } = votingLogic.evaluateVotingDecision(
-                    challenge,
-                    now,
-                    { hasNewEntry },
-                );
+                const { shouldVote, voteReason, targetExposure, forcedByNewEntry, preservesNewEntryTrigger } =
+                    votingLogic.evaluateVotingDecision(challenge, now, { hasNewEntry });
                 let voteThrew = false;
 
                 // Record the entry snapshot, which disarms the trigger. Called from the
@@ -531,8 +528,15 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 //     scheduled-fill-only / not started), which consumes the trigger.
                 //     Every block that can later lift, lifts into a rule that already
                 //     votes to 100% or re-reads exposure from scratch, so nothing is lost.
+                //
+                // The exception to that last point is a block that sets
+                // `preservesNewEntryTrigger` — today only the voting pause. It lifts
+                // into the NORMAL threshold rule, which votes only while exposure is
+                // below the trigger, so consuming the trigger here would drop the new
+                // entry's vote entirely instead of deferring it past the pause.
                 const recordEntrySnapshot = () => {
                     if (!tracking || (forcedByNewEntry && voteThrew)) return;
+                    if (preservesNewEntryTrigger && hasNewEntry) return;
                     if (!newEntryTracker.shouldRecordSnapshot(previousIds, tracking)) return;
                     entryTracker.set(challengeId, tracking);
                 };

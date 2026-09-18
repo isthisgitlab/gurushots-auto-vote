@@ -18,7 +18,7 @@ const PAUSE_KEYS = {
     duration: 'votingPauseDurationMinutes',
 };
 
-const derive = (values, { closeTime = NOW + 7200, nowSec = NOW } = {}) =>
+const derive = (values, { closeTime = NOW + 7200, nowSec = NOW, ...policy } = {}) =>
     deriveWindowHints({
         keys: PAUSE_KEYS,
         defaultDurationMin: 240,
@@ -26,6 +26,7 @@ const derive = (values, { closeTime = NOW + 7200, nowSec = NOW } = {}) =>
         timezone: 'UTC',
         nowSec,
         closeTime,
+        ...policy,
     });
 
 describe('deriveWindowHints', () => {
@@ -91,6 +92,55 @@ describe('deriveWindowHints', () => {
             votingPauseDurationMinutes: 60,
         });
         expect(state.next.source).toEqual({ kind: 'beforeEnd', seconds: 7200 });
+    });
+
+    describe('duration policy matches the decision path', () => {
+        test("onCorruptDuration 'off' disables the feature, as getVotingPauseState does", () => {
+            const state = derive(
+                { useVotingPause: true, votingPauseTime: ['11:30'], votingPauseDurationMinutes: 'soon' },
+                { onCorruptDuration: 'off' },
+            );
+            expect(state.enabled).toBe(false);
+            expect(state.active).toBe(false);
+        });
+
+        test("onCorruptDuration 'default' substitutes, as getScheduledFillState does", () => {
+            const state = derive({
+                useVotingPause: true,
+                votingPauseTime: ['11:30'],
+                votingPauseDurationMinutes: 'soon',
+            });
+            expect(state.durationMin).toBe(240);
+            expect(state.active).toBe(true);
+        });
+
+        test('a NEGATIVE duration is corrupt here too, matching the engine', () => {
+            // A `Number(x) || default` shortcut would have honoured -30 and
+            // produced a window the decision path never opens.
+            const state = derive({
+                useVotingPause: true,
+                votingPauseTime: ['11:30'],
+                votingPauseDurationMinutes: -30,
+            });
+            expect(state.durationMin).toBe(240);
+        });
+
+        test('maxDurationMin clamps, as getVotingPauseState does', () => {
+            const state = derive(
+                { useVotingPause: true, votingPauseTime: ['11:30'], votingPauseDurationMinutes: 100000 },
+                { maxDurationMin: 720 },
+            );
+            expect(state.durationMin).toBe(720);
+        });
+    });
+
+    test('duplicate daily starts do not fake whole-day coverage', () => {
+        const state = derive({
+            useVotingPause: true,
+            votingPauseTime: ['01:00', '01:00'],
+            votingPauseDurationMinutes: 720,
+        });
+        expect(state.coversWholeDay).toBe(false);
     });
 
     test('corrupt values degrade rather than throw', () => {

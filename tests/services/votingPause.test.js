@@ -146,14 +146,56 @@ describe('getVotingPauseState — corrupt values fail OPEN (keep voting)', () =>
         });
     });
 
-    test('a corrupt duration falls back to the schema default instead of pausing forever', () => {
-        // 11:30 + the 240m default covers NOW (12:00); a NaN duration must not
-        // widen or void the window.
-        mockSettings({ useVotingPause: true, votingPauseTime: ['11:30'], votingPauseDurationMinutes: 'soon' });
-        expect(VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW)).toEqual({
-            active: true,
-            inWindow: true,
+    test.each([['soon'], [null], [0], [-30], [{}], [undefined]])(
+        'a corrupt duration (%p) turns the pause OFF rather than substituting a default',
+        (duration) => {
+            // The opposite of scheduled fill's policy, deliberately. Substituting
+            // the 240m default here would be fail-CLOSED: a user with a 30-minute
+            // pause whose value got corrupted would silently get a 4-hour outage
+            // they never configured. 11:30 + 240m would otherwise cover NOW (12:00).
+            mockSettings({
+                useVotingPause: true,
+                votingPauseTime: ['11:30'],
+                votingPauseDurationMinutes: duration,
+            });
+            expect(VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW)).toEqual({
+                active: false,
+                inWindow: false,
+            });
+        },
+    );
+
+    test('an over-range duration is CLAMPED so it cannot pause forever', () => {
+        // A hand-edited value past the schema max would otherwise swallow every
+        // future cycle: the window comparisons are unbounded above.
+        mockSettings({
+            useVotingPause: true,
+            votingPauseTime: ['11:30'],
+            votingPauseDurationMinutes: 100000,
         });
+        // 11:30 + the 720m ceiling still covers 12:00 — the clamp bounds the
+        // window, it does not void it.
+        expect(VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW).inWindow).toBe(true);
+        // ...but 13 hours later it has expired, which an unclamped value never would.
+        const thirteenHoursOn = NOW + 13 * 3600;
+        expect(VotingLogic.getVotingPauseState(buildChallenge(), '777', thirteenHoursOn).inWindow).toBe(false);
+    });
+
+    test('a sub-floor duration is still honoured as typed (the documented escape hatch)', () => {
+        // 11:59 + 2m covers 12:00. Only the CEILING is enforced.
+        mockSettings({ useVotingPause: true, votingPauseTime: ['11:59'], votingPauseDurationMinutes: 2 });
+        expect(VotingLogic.getVotingPauseState(buildChallenge(), '777', NOW).inWindow).toBe(true);
+    });
+
+    test('a challenge with no usable close_time is never paused', () => {
+        // The deadline rules that would rescue it (last-minute, final-window) all
+        // compare against close_time, so a pause must not apply either.
+        mockSettings({ useVotingPause: true, votingPauseTime: ['11:30'] });
+        const broken = buildChallenge();
+        broken.close_time = undefined;
+        expect(VotingLogic.getVotingPauseState(broken, '777', NOW)).toEqual({ active: false, inWindow: false });
+        broken.close_time = 'tomorrow';
+        expect(VotingLogic.getVotingPauseState(broken, '777', NOW)).toEqual({ active: false, inWindow: false });
     });
 
     test('a throwing settings read degrades to "not paused" rather than aborting the pass', () => {
@@ -230,13 +272,36 @@ describe('voting pause in the auto rule chain', () => {
         expect(decision.voteReason).toMatch(/paused/i);
     });
 
-    test('a new entry does NOT defeat the pause', () => {
+    test('a new entry does NOT defeat the pause, but its trigger is DEFERRED not dropped', () => {
         mockSettings({ ...pausedNow, exposure: 100 });
         const decision = VotingLogic.evaluateVotingDecision(buildChallenge({ closeInSeconds: 7200 }), NOW, {
             hasNewEntry: true,
         });
         expect(decision.shouldVote).toBe(false);
         expect(decision.forcedByNewEntry).toBe(false);
+        // The orchestrator disarms the new-entry trigger on a blocked decision.
+        // That is safe for every other block because each lifts into a rule that
+        // votes to 100% anyway — but the pause lifts into the NORMAL threshold
+        // rule, which won't vote while exposure is at/above the trigger. Without
+        // this flag a photo submitted at 02:00 would silently lose its vote.
+        expect(decision.preservesNewEntryTrigger).toBe(true);
+    });
+
+    test('other blocks do NOT preserve the new-entry trigger', () => {
+        // onlyBoost lifts into nothing; scheduled-fill-only lifts into a 100/100
+        // rule. Neither needs the trigger held, and holding it would change
+        // long-standing behavior.
+        mockSettings({ onlyBoost: true });
+        const onlyBoost = VotingLogic.evaluateVotingDecision(buildChallenge(), NOW, { hasNewEntry: true });
+        expect(onlyBoost.shouldVote).toBe(false);
+        expect(onlyBoost.preservesNewEntryTrigger).toBe(false);
+
+        mockSettings({ useScheduledFill: true, scheduledFillBeforeEnd: [60], scheduledFillReplaces: true });
+        const fillOnly = VotingLogic.evaluateVotingDecision(buildChallenge({ closeInSeconds: 7200 }), NOW, {
+            hasNewEntry: true,
+        });
+        expect(fillOnly.shouldVote).toBe(false);
+        expect(fillOnly.preservesNewEntryTrigger).toBe(false);
     });
 });
 

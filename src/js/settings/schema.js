@@ -3,7 +3,7 @@ const { z } = require('zod');
 // Bounds live in the dependency-free limits.js so renderer-reachable modules
 // can read them without pulling zod in through this file. Re-exported below to
 // keep this module's public surface unchanged.
-const { MAX_SCHEDULED_FILL_ENTRIES } = require('./limits');
+const { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } = require('./limits');
 
 /**
  * Centralized Settings Schema
@@ -217,6 +217,9 @@ const beforeEndList = z
     .max(MAX_SCHEDULED_FILL_ENTRIES, `at most ${MAX_SCHEDULED_FILL_ENTRIES} offsets`)
     .refine((v) => new Set(v).size === v.length, 'duplicate offsets');
 const windowMinutes = z.number().int().min(5).max(720);
+// Same shape for the pause, but bound to the shared constant the decision path
+// clamps against, so the validator and the runtime ceiling can't drift apart.
+const pauseDurationMinutes = z.number().int().min(5).max(MAX_VOTING_PAUSE_MINUTES);
 // The voting-pause group reuses all four validators above verbatim: its
 // triggers are the same two forms (daily 'HH:MM' + seconds-before-close), it
 // shares MAX_SCHEDULED_FILL_ENTRIES, and its duration has the same 5m..12h
@@ -779,12 +782,14 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 240,
         perChallenge: true,
-        validation: windowMinutes,
+        validation: pauseDurationMinutes,
         // 5 is the real floor (what saving enforces and what the CLI documents);
-        // getVotingPauseState still honours a smaller hand-edited value, matching
-        // scheduledFillWindowMinutes' escape hatch.
+        // getVotingPauseState still honours a SMALLER hand-edited value, matching
+        // scheduledFillWindowMinutes' escape hatch. The ceiling is NOT an escape
+        // hatch though — getVotingPauseState clamps to it, because an oversized
+        // pause window swallows every future cycle and stops voting for good.
         min: 5,
-        max: 720,
+        max: MAX_VOTING_PAUSE_MINUTES,
         unit: 'app.unitMinutes',
         validationOrder: 1,
         group: 'votingPause',

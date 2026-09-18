@@ -9,6 +9,7 @@ import { getScheduleShift } from '../../../services/scheduleRemap';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { SettingInput } from './SettingInput';
 import { deriveWindowHints } from '@/utils/windowHints';
+import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
@@ -203,22 +204,35 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     const nowSec = Math.floor(Date.now() / 1000);
     const closeTime = Number(challenge?.close_time) || 0;
     const formatInTz = (epochSec) => {
+        // Range-guard BEFORE formatting: the toISOString fallback throws
+        // RangeError past ±8.64e15 ms, so an out-of-range input would take the
+        // whole modal into the ErrorBoundary rather than degrade to a label.
+        const ms = Number(epochSec) * 1000;
+        if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '—';
         try {
             return new Intl.DateTimeFormat(undefined, {
                 timeZone: appTimezone,
                 hour: '2-digit',
                 minute: '2-digit',
                 hourCycle: 'h23',
-            }).format(epochSec * 1000);
+            }).format(ms);
         } catch {
-            return new Date(epochSec * 1000).toISOString().slice(11, 16);
+            return new Date(ms).toISOString().slice(11, 16);
         }
     };
     // The trigger-window derivation itself lives in utils/windowHints.js, which
     // mirrors _triggerWindowState in services/VotingLogic.js so a hint can never
     // claim a window the decision path won't open.
-    const derive = (keys, defaultDurationMin) =>
-        deriveWindowHints({ keys, defaultDurationMin, effectiveOf, timezone: appTimezone, nowSec, closeTime });
+    const derive = (keys, defaultDurationMin, policy = {}) =>
+        deriveWindowHints({
+            keys,
+            defaultDurationMin,
+            effectiveOf,
+            timezone: appTimezone,
+            nowSec,
+            closeTime,
+            ...policy,
+        });
     /** Render a window's producing trigger: a daily 'HH:MM' or an offset label. */
     const sourceLabel = (source) =>
         source?.kind === 'beforeEnd'
@@ -248,6 +262,9 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             duration: 'votingPauseDurationMinutes',
         },
         240,
+        // Must match getVotingPauseState's policy or the hint would advertise a
+        // pause the decision path refuses to open.
+        { onCorruptDuration: 'off', maxDurationMin: MAX_VOTING_PAUSE_MINUTES },
     );
     // A pause open RIGHT NOW is reported as an END time — "voting resumes at …"
     // is what the user actually wants to know.
