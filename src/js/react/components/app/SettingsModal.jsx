@@ -4,7 +4,13 @@ import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { useAutovote } from '@/contexts/AutovoteContext';
-import { groupSchemaEntries } from '@/utils/groupSettings';
+import {
+    groupSchemaEntries,
+    settingCellClass,
+    SETTINGS_GRID_CLASS,
+    SETTING_CELL_CLASS,
+    SETTING_CELL_CLASS_WIDE,
+} from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { deriveWindowHints } from '@/utils/windowHints';
@@ -225,7 +231,7 @@ export function SettingsModal({ isOpen, onClose }) {
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleCancel} title={t('app.globalSettings')}>
+        <Modal isOpen={isOpen} onClose={handleCancel} title={t('app.globalSettings')} size="2xl">
             {schemaLoading ? (
                 <LoadingSpinner text={t('common.loading')} />
             ) : (
@@ -249,9 +255,9 @@ export function SettingsModal({ isOpen, onClose }) {
                         <h4 className="font-semibold text-base mb-3 border-b border-base-300 pb-2">
                             {t('app.applicationSettings')}
                         </h4>
-                        <div className="space-y-4">
+                        <div className={SETTINGS_GRID_CLASS}>
                             {/* Theme */}
-                            <div className="form-control">
+                            <div className={SETTING_CELL_CLASS}>
                                 <label className="label">
                                     <span className="label-text font-medium">{t('app.theme')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
@@ -271,7 +277,7 @@ export function SettingsModal({ isOpen, onClose }) {
                             </div>
 
                             {/* Language */}
-                            <div className="form-control">
+                            <div className={SETTING_CELL_CLASS}>
                                 <label className="label">
                                     <span className="label-text font-medium">{t('app.language')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
@@ -291,13 +297,13 @@ export function SettingsModal({ isOpen, onClose }) {
                             </div>
 
                             {/* Timezone */}
-                            <div className="form-control">
+                            <div className={SETTING_CELL_CLASS}>
                                 <label className="label">
                                     <span className="label-text font-medium">{t('app.timezone')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
                                 </label>
                                 <p className="text-xs text-base-content/60 mb-2">{t('app.timezoneDesc')}</p>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                     <select
                                         className="select select-bordered select-sm w-48"
                                         value={uiValues.timezone}
@@ -360,13 +366,13 @@ export function SettingsModal({ isOpen, onClose }) {
                             </div>
 
                             {/* Check Frequency */}
-                            <div className="form-control">
+                            <div className={SETTING_CELL_CLASS_WIDE}>
                                 <label className="label">
                                     <span className="label-text font-medium">{t('app.checkFrequency')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
                                 </label>
                                 <p className="text-xs text-base-content/60 mb-2">{t('app.checkFrequencyDesc')}</p>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-sm">{t('app.checkFrequencyMin')}</span>
                                     <input
                                         type="number"
@@ -406,13 +412,13 @@ export function SettingsModal({ isOpen, onClose }) {
                             </div>
 
                             {/* Reliability — API retry / backoff */}
-                            <div className="form-control">
+                            <div className={SETTING_CELL_CLASS_WIDE}>
                                 <label className="label">
                                     <span className="label-text font-medium">{t('app.reliability')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
                                 </label>
                                 <p className="text-xs text-base-content/60 mb-2">{t('app.apiMaxRetriesDesc')}</p>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-sm">{t('app.apiMaxRetries')}</span>
                                     <input
                                         type="number"
@@ -457,9 +463,9 @@ export function SettingsModal({ isOpen, onClose }) {
                         {groupSchemaEntries(schema, groups).map(({ id, label, entries }) => (
                             <div key={id} className="mb-4">
                                 <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(label)}</h5>
-                                <div className="space-y-4">
+                                <div className={SETTINGS_GRID_CLASS}>
                                     {entries.map(([key, config]) => (
-                                        <div key={key} className="form-control">
+                                        <div key={key} className={settingCellClass(config)}>
                                             <label className="label">
                                                 <span className="label-text font-medium">{t(config.label)}</span>
                                                 <span className="badge badge-ghost badge-xs ml-2">

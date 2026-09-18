@@ -15,12 +15,16 @@ const closeLabel = () => window.translationManager?.t?.('common.closeModal') || 
  * and focus restoration to the triggering element when the modal closes.
  */
 export function Modal({ isOpen, onClose, title, children, size = 'md', className = '', showCloseButton = true }) {
+    // DaisyUI's .modal-box is `width: 91.666667%` capped by its max-width, so a
+    // larger cap here fills more of a desktop window without hurting phones —
+    // the percentage keeps the gutter on narrow viewports either way.
     const sizeClass =
         {
             sm: 'max-w-sm',
             md: 'max-w-lg',
             lg: 'max-w-2xl',
             xl: 'max-w-4xl',
+            '2xl': 'max-w-6xl',
         }[size] || 'max-w-lg';
 
     // Per-instance id so aria-labelledby is unique even when two titled modals
