@@ -11,6 +11,7 @@ const logger = require('./logger');
 const {
     SETTINGS_SCHEMA,
     SETTINGS_GROUPS,
+    SETTINGS_TIERS,
     validateSetting,
     getValidationError,
     getSettingsSchema,
@@ -2033,4 +2034,5 @@ module.exports = {
     // Schema
     SETTINGS_SCHEMA,
     SETTINGS_GROUPS,
+    SETTINGS_TIERS,
 };

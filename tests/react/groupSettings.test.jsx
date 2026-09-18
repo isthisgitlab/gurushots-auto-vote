@@ -2,12 +2,17 @@
  * Unit tests for groupSchemaEntries — the pure helper that buckets settings
  * schema entries into ordered UI sections for both settings modals.
  */
-import { groupSchemaEntries } from '@/utils/groupSettings';
+import { groupSchemaEntries, tierSchemaEntries } from '@/utils/groupSettings';
 
 const groups = [
-    { id: 'general', label: 'app.groupGeneral' },
-    { id: 'boost', label: 'app.groupBoost' },
-    { id: 'empty', label: 'app.groupEmpty' },
+    { id: 'general', label: 'app.groupGeneral', tier: 'core' },
+    { id: 'boost', label: 'app.groupBoost', tier: 'core' },
+    { id: 'empty', label: 'app.groupEmpty', tier: 'core' },
+];
+
+const tiers = [
+    { id: 'core', label: 'app.tierCore' },
+    { id: 'overrides', label: 'app.tierOverrides' },
 ];
 
 // boostTime is declared first on purpose, even though `general` comes first in
@@ -77,5 +82,62 @@ describe('groupSchemaEntries', () => {
 
         const perChallenge = groupSchemaEntries(schemaWithNotif, groupsWithNotif, { perChallengeOnly: true });
         expect(perChallenge.some((s) => s.id === 'notifications')).toBe(false);
+    });
+});
+
+describe('tierSchemaEntries', () => {
+    const bandIds = (bands) => bands.map((b) => b.id);
+    const groupIdsIn = (band) => band.groups.map((g) => g.id);
+
+    test('bands groups under their tier, in tiers order', () => {
+        const withOverride = [...groups, { id: 'lastMinute', label: 'app.groupLastMinute', tier: 'overrides' }];
+        const withEntry = { ...schema, voteOnlyInLastMinute: { perChallenge: true, group: 'lastMinute' } };
+
+        const bands = tierSchemaEntries(withEntry, withOverride, tiers);
+        expect(bandIds(bands)).toEqual(['core', 'overrides']);
+        expect(bands[0].label).toBe('app.tierCore');
+        expect(groupIdsIn(bands[0])).toEqual(['general', 'boost']);
+        expect(groupIdsIn(bands[1])).toEqual(['lastMinute']);
+    });
+
+    // A tier whose every group filtered out must not render a bare heading.
+    test('skips a tier left with no groups', () => {
+        const bands = tierSchemaEntries(schema, groups, tiers);
+        expect(bandIds(bands)).toEqual(['core']);
+    });
+
+    // Losing a section would HIDE settings, so an unmatched tier degrades to a
+    // trailing unlabelled band instead of being dropped.
+    test('collects groups with an unknown tier into a trailing unlabelled band', () => {
+        const stray = [...groups, { id: 'display', label: 'app.groupDisplay', tier: 'nope' }];
+        const withEntry = { ...schema, compactCards: { perChallenge: true, group: 'display' } };
+
+        const bands = tierSchemaEntries(withEntry, stray, tiers);
+        expect(bandIds(bands)).toEqual(['core', null]);
+        const trailing = bands[bands.length - 1];
+        expect(trailing.label).toBeNull();
+        expect(groupIdsIn(trailing)).toEqual(['display']);
+    });
+
+    // An older main process that predates the `tiers` IPC field sends none —
+    // everything must still render, as one flat unlabelled band.
+    test('falls back to a single unlabelled band when tiers is missing', () => {
+        for (const missing of [null, undefined]) {
+            const bands = tierSchemaEntries(schema, groups, missing);
+            expect(bands).toHaveLength(1);
+            expect(bands[0].label).toBeNull();
+            expect(groupIdsIn(bands[0])).toEqual(['general', 'boost']);
+        }
+    });
+
+    test('forwards perChallengeOnly to the group filter', () => {
+        const bands = tierSchemaEntries(schema, groups, tiers, { perChallengeOnly: true });
+        const general = bands[0].groups.find((g) => g.id === 'general');
+        expect(general.entries.map(([key]) => key)).toEqual(['exposure', 'onlyBoost']);
+    });
+
+    test('returns [] when schema or groups is missing', () => {
+        expect(tierSchemaEntries(null, groups, tiers)).toEqual([]);
+        expect(tierSchemaEntries(schema, null, tiers)).toEqual([]);
     });
 });

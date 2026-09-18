@@ -41,12 +41,46 @@ export const SETTING_CELL_CLASS = 'form-control rounded-box border border-base-3
 export function groupSchemaEntries(schema, groups, { perChallengeOnly = false } = {}) {
     if (!schema || !groups) return [];
     return groups
-        .map(({ id, label }) => ({
+        .map(({ id, label, tier }) => ({
             id,
             label,
+            tier,
             entries: Object.entries(schema).filter(
                 ([, config]) => config.group === id && (!perChallengeOnly || config.perChallenge),
             ),
         }))
         .filter((group) => group.entries.length > 0);
+}
+
+/**
+ * Band the output of groupSchemaEntries into the ordered tiers the settings
+ * modals render as headings. Same contract as groupSchemaEntries — empty tiers
+ * are skipped, so a per-challenge modal that filters every group out of a tier
+ * never renders its heading.
+ *
+ * Groups whose `tier` matches no entry in `tiers` are appended as a single
+ * trailing untitled band (`{ id: null, label: null }`) rather than dropped:
+ * losing a section entirely would hide settings, whereas an unlabelled band is
+ * merely ugly and self-evidently wrong in review. `tiers` being null/absent —
+ * an older main process that predates the `tiers` IPC field — puts every group
+ * in that one band, which degrades to exactly the flat list this replaced.
+ *
+ * @param {Object|null} schema - serialized schema (key -> config with `group`)
+ * @param {Array|null} groups - ordered [{ id, label, tier }]
+ * @param {Array|null} tiers - ordered [{ id, label }]
+ * @param {{ perChallengeOnly?: boolean }} [options]
+ * @returns {Array<{ id: string|null, label: string|null, groups: Array }>}
+ */
+export function tierSchemaEntries(schema, groups, tiers, { perChallengeOnly = false } = {}) {
+    const rendered = groupSchemaEntries(schema, groups, { perChallengeOnly });
+    if (!rendered.length) return [];
+
+    const order = Array.isArray(tiers) ? tiers : [];
+    const known = new Set(order.map((tier) => tier.id));
+    const banded = order
+        .map(({ id, label }) => ({ id, label, groups: rendered.filter((group) => group.tier === id) }))
+        .filter((band) => band.groups.length > 0);
+
+    const orphans = rendered.filter((group) => !known.has(group.tier));
+    return orphans.length ? [...banded, { id: null, label: null, groups: orphans }] : banded;
 }

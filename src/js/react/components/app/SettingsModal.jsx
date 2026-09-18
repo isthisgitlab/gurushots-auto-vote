@@ -4,7 +4,7 @@ import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { useAutovote } from '@/contexts/AutovoteContext';
-import { groupSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
+import { tierSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { SettingInput } from './SettingInput';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { deriveWindowHints } from '@/utils/windowHints';
@@ -15,6 +15,7 @@ import { Modal } from '@/components/ui/Modal';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
+import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
 
 function useTitleRuleEditorState(isOpen) {
     const [titleRules, setTitleRules] = useState([]);
@@ -52,7 +53,7 @@ export function SettingsModal({ isOpen, onClose }) {
     const { t, language, setLanguage } = useTranslation();
     const { rearmSchedule } = useAutovote();
     const { settings, updateSetting, refetch: refetchSettings } = useSettings();
-    const { schema, defaults, groups, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
+    const { schema, defaults, groups, tiers, refetch: refetchSchema, loading: schemaLoading } = useSettingsSchema();
 
     const {
         formValues,
@@ -481,35 +482,44 @@ export function SettingsModal({ isOpen, onClose }) {
                         <h4 className="font-semibold text-base mb-3 border-b border-base-300 pb-2">
                             {t('app.challengeDefaults')}
                         </h4>
-                        {groupSchemaEntries(schema, groups).map(({ id, label, entries }) => (
-                            <div key={id} className="mb-4">
-                                <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(label)}</h5>
-                                <div className={SETTINGS_GRID_CLASS}>
-                                    {entries.map(([key, config]) => (
-                                        <div key={key} className={SETTING_CELL_CLASS}>
-                                            <label className="label">
-                                                <span className="label-text font-medium">{t(config.label)}</span>
-                                                <span className="badge badge-ghost badge-xs ml-2">
-                                                    {t('app.globalDefault')}
-                                                </span>
-                                            </label>
-                                            <p className="text-xs text-base-content/60 mb-2">{t(config.description)}</p>
-                                            <SettingHelp helpKey={config.helpKey} />
-                                            <SettingInput
-                                                settingKey={key}
-                                                config={config}
-                                                value={formValues[key] ?? config.default}
-                                                onChange={handleFormChange}
-                                                onReset={handleResetGlobal}
-                                            />
-                                            {settingHints(key).map((hint) => (
-                                                <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
-                                                    {hint.text}
-                                                </p>
+                        {tierSchemaEntries(schema, groups, tiers).map((band) => (
+                            <div key={band.id ?? '_'} className="mb-6">
+                                <SettingsTierHeading id={band.id} label={band.label} level="h5" />
+                                {band.groups.map(({ id, label, entries }) => (
+                                    <div key={id} className="mb-4">
+                                        <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(label)}</h5>
+                                        <div className={SETTINGS_GRID_CLASS}>
+                                            {entries.map(([key, config]) => (
+                                                <div key={key} className={SETTING_CELL_CLASS}>
+                                                    <label className="label">
+                                                        <span className="label-text font-medium">
+                                                            {t(config.label)}
+                                                        </span>
+                                                        <span className="badge badge-ghost badge-xs ml-2">
+                                                            {t('app.globalDefault')}
+                                                        </span>
+                                                    </label>
+                                                    <p className="text-xs text-base-content/60 mb-2">
+                                                        {t(config.description)}
+                                                    </p>
+                                                    <SettingHelp helpKey={config.helpKey} />
+                                                    <SettingInput
+                                                        settingKey={key}
+                                                        config={config}
+                                                        value={formValues[key] ?? config.default}
+                                                        onChange={handleFormChange}
+                                                        onReset={handleResetGlobal}
+                                                    />
+                                                    {settingHints(key).map((hint) => (
+                                                        <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
+                                                            {hint.text}
+                                                        </p>
+                                                    ))}
+                                                </div>
                                             ))}
                                         </div>
-                                    ))}
-                                </div>
+                                    </div>
+                                ))}
                             </div>
                         ))}
                     </div>

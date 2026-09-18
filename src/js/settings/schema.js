@@ -357,7 +357,10 @@ const SETTINGS_SCHEMA = {
         perChallenge: true,
         validation: zBool,
         validationOrder: 1,
-        group: 'general',
+        // Display-only: it changes how the challenge card is drawn, not how the
+        // challenge is voted, so it sits in the `display` group rather than
+        // among the exposure knobs it used to be listed beside.
+        group: 'display',
         label: 'app.compactCards',
         description: 'app.compactCardsDesc',
     },
@@ -1139,22 +1142,52 @@ const SETTINGS_SCHEMA = {
 };
 
 /**
+ * Ordered tiers the groups below are rendered under. A tier is presentation
+ * only — nothing branches on it — but the order encodes the rule the section
+ * list follows: settings a user always touches come before ones that only
+ * matter once a specific feature is switched on.
+ *
+ * - `core`      — on by default, or the value everyone edits first.
+ * - `entries`   — what gets submitted into a challenge (photos, joins).
+ * - `overrides` — timing rules that replace the normal exposure decision.
+ *                 Every enable flag in this tier defaults to false.
+ * - `app`       — application-level preferences, not voting behaviour.
+ *
+ * @type {ReadonlyArray<{ id: string, label: string }>}
+ */
+const SETTINGS_TIERS = [
+    { id: 'core', label: 'app.tierCore' },
+    { id: 'entries', label: 'app.tierEntries' },
+    { id: 'overrides', label: 'app.tierOverrides' },
+    { id: 'app', label: 'app.tierApp' },
+];
+
+/**
  * Ordered UI grouping for the settings modals. Each schema entry's `group`
  * field matches an `id` here; the modals render one static section per group
- * in this order. Entries with no `group` (e.g. autovoteRunning) are
- * intentionally excluded from every section.
+ * in this order, banded under its `tier` (see SETTINGS_TIERS). Entries with no
+ * `group` (e.g. autovoteRunning) are intentionally excluded from every section.
+ *
+ * Group ids are persisted-adjacent — `getGroupApplicability` switches on them
+ * and tests assert on them — so ordering and labels change here freely, but an
+ * id does not. In particular `scheduledFill` keeps its id while its labels now
+ * read "Scheduled Voting": it is an exposure-voting rule (it returns a
+ * `decided('scheduled', ...)` from `_runVotingRules`), not an entry fill like
+ * autoFill/emergencyFill, and sharing the word "fill" with them read as if the
+ * three were siblings.
  */
 const SETTINGS_GROUPS = [
-    { id: 'general', label: 'app.groupGeneral' },
-    { id: 'boost', label: 'app.groupBoost' },
-    { id: 'turbo', label: 'app.groupTurbo' },
-    { id: 'finalWindow', label: 'app.groupFinalWindow' },
-    { id: 'lastMinute', label: 'app.groupLastMinute' },
-    { id: 'scheduledFill', label: 'app.groupScheduledFill' },
-    { id: 'votingPause', label: 'app.groupVotingPause' },
-    { id: 'autoJoin', label: 'app.groupAutoJoin' },
-    { id: 'autoFill', label: 'app.groupAutoFill' },
-    { id: 'notifications', label: 'app.groupNotifications' },
+    { id: 'general', label: 'app.groupGeneral', tier: 'core' },
+    { id: 'boost', label: 'app.groupBoost', tier: 'core' },
+    { id: 'turbo', label: 'app.groupTurbo', tier: 'core' },
+    { id: 'autoFill', label: 'app.groupAutoFill', tier: 'entries' },
+    { id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' },
+    { id: 'finalWindow', label: 'app.groupFinalWindow', tier: 'overrides' },
+    { id: 'lastMinute', label: 'app.groupLastMinute', tier: 'overrides' },
+    { id: 'scheduledFill', label: 'app.groupScheduledFill', tier: 'overrides' },
+    { id: 'votingPause', label: 'app.groupVotingPause', tier: 'overrides' },
+    { id: 'notifications', label: 'app.groupNotifications', tier: 'app' },
+    { id: 'display', label: 'app.groupDisplay', tier: 'app' },
 ];
 
 /**
@@ -1230,6 +1263,7 @@ const getSettingsSchema = async () => SETTINGS_SCHEMA;
 module.exports = {
     SETTINGS_SCHEMA,
     SETTINGS_GROUPS,
+    SETTINGS_TIERS,
     getSchemaDefault,
     validateSetting,
     getValidationError,
