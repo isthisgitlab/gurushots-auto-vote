@@ -1496,6 +1496,40 @@ const describeDeadlineActions = (challenge, now) => {
 };
 
 /**
+ * The join-window half of the auto-join decision, split out so the main
+ * decision reads as one list of vetoes.
+ *
+ * Returns the refusal reason, or null when the window does not veto — either
+ * because no window is set (`joinWithinSec` 0 = off, the historical
+ * join-on-sight behavior) or because the candidate is inside it.
+ *
+ * FAIL-CLOSED: a candidate that cannot prove it is inside the window (no
+ * readable `close_time`, no readable clock, or already past its close) is
+ * refused. "Join only near the end" must never degrade into "join now" on a
+ * payload this could not read.
+ *
+ * @param {{close_time?: number}} challenge
+ * @param {number} joinWithinSec seconds before close_time to start joining (0 = off)
+ * @param {number} nowSec current time in epoch SECONDS (close_time's unit)
+ * @returns {string|null}
+ */
+const joinWindowRefusal = (challenge, joinWithinSec, nowSec) => {
+    const withinSec = Number(joinWithinSec);
+    if (!Number.isFinite(withinSec) || withinSec <= 0) return null;
+
+    const closeTime = Number(challenge?.close_time);
+    const now = Number(nowSec);
+    if (!Number.isFinite(closeTime) || closeTime <= 0 || !Number.isFinite(now) || now <= 0) {
+        return 'close-time-unknown';
+    }
+    const secondsLeft = closeTime - now;
+    // Already closed (a stale entry in the open list) — joining would burn a
+    // submission on a dead challenge.
+    if (secondsLeft <= 0) return 'already-closed';
+    return secondsLeft > withinSec ? 'too-early' : null;
+};
+
+/**
  * Pure decision for whether to auto-join ONE un-joined challenge.
  *
  * No I/O: the caller resolves settings (by title-profile) and the live bankroll
@@ -1511,18 +1545,35 @@ const describeDeadlineActions = (challenge, now) => {
  * list. So "join all EXCEPT flash and exhibition" = exclude `flash,exhibition`
  * with no include list.
  *
+ * Timing (`joinWithinSec`, the `0 = off` sentinel): above 0, a candidate is only
+ * joined once it is within that many seconds of its own `close_time`, so entries
+ * land late in a challenge's life instead of the moment it appears. Unlike the
+ * type filters, a title match does NOT bypass this — the window is itself a
+ * deliberate per-title instruction, so bypassing it would invert the user's
+ * intent. It is a pure gate on WHEN: it never looks at cost, and the coin caps
+ * below still decide whether a paid join happens at all.
+ *
+ * Timing is FAIL-CLOSED. A candidate that cannot prove it is inside the window
+ * (`close_time` missing, unparseable, or already past) is not joined while a
+ * window is set. "Join only near the end" must never degrade into "join now" on
+ * a payload the caller could not read — that is precisely the spend the setting
+ * exists to prevent. With `joinWithinSec` 0 the field is not read at all, so the
+ * historical behavior is untouched.
+ *
  * Fail-safe on money: a null `bankroll` (balance could not be read) blocks every
  * paid join but still allows free joins. Both coin caps use the `0 = off`
  * sentinel — paid joins require `maxCoins > 0` AND `remainingBudget >= cost`.
  *
  * @param {object} params
- * @param {{id?: string|number, type?: string, join_coins?: number}} params.challenge
+ * @param {{id?: string|number, type?: string, join_coins?: number, close_time?: number}} params.challenge
  * @param {{coins?: number}|null} params.bankroll live balance, or null if unread
  * @param {number} params.remainingBudget coins still spendable this cycle (0 = paid off)
  * @param {string[]} params.includeTypes normalized lowercase types from `autoJoinTypes`; EMPTY = all types
  * @param {string[]} params.excludeTypes normalized lowercase types from `autoJoinExcludeTypes`; a match vetoes the join (unless a title-profile matches)
  * @param {number} params.maxCoins per-challenge coin cap (0 = free only)
  * @param {boolean} params.hasProfileMatch a title rule/profile matched this title — a deliberate opt-in that bypasses the exclude veto and include narrowing
+ * @param {number} [params.joinWithinSec] join only within this many seconds of `close_time` (0/absent = off)
+ * @param {number} [params.nowSec] current time in epoch SECONDS (matches `close_time`'s unit); required when `joinWithinSec` > 0
  * @returns {{join: boolean, needsCoins: number, reason: string}}
  */
 const shouldJoinChallenge = ({
@@ -1533,6 +1584,8 @@ const shouldJoinChallenge = ({
     excludeTypes,
     maxCoins,
     hasProfileMatch,
+    joinWithinSec = 0,
+    nowSec = 0,
 }) => {
     const rawCost = Number(challenge?.join_coins);
     const needsCoins = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
@@ -1550,6 +1603,15 @@ const shouldJoinChallenge = ({
         if (hasIncludeFilter && !(type !== '' && includeTypes.includes(type))) {
             return { join: false, needsCoins, reason: 'out-of-scope' };
         }
+    }
+
+    // Timing window, after the scope filters (so an out-of-scope candidate still
+    // reports WHY it is out of scope) and before the cost branch (timing gates
+    // free and paid candidates identically). Deliberately NOT bypassed by
+    // hasProfileMatch — see the header.
+    const timingRefusal = joinWindowRefusal(challenge, joinWithinSec, nowSec);
+    if (timingRefusal) {
+        return { join: false, needsCoins, reason: timingRefusal };
     }
 
     if (needsCoins <= 0) {

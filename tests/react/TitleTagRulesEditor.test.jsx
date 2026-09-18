@@ -70,4 +70,70 @@ describe('TitleTagRulesEditor', () => {
             { title: 'Portraits', profile: 'Portrait Tactic', mustIncludeTags: [], shouldIncludeTags: [] },
         ]);
     });
+
+    /**
+     * Inline per-title overrides. The three-way selects and the window field all
+     * spell "inherit" as '', which the settings sanitizer drops — so the editor
+     * must emit '' rather than a defaulted false/0, which would be a DIFFERENT,
+     * explicit instruction.
+     */
+    describe('inline overrides', () => {
+        const rowWith = (over = {}) => [{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], ...over }];
+        const pick = (label, next) => {
+            const select = screen.getByLabelText(label);
+            select.value = next;
+            select.dispatchEvent(new window.Event('change', { bubbles: true }));
+        };
+
+        test('auto-join defaults to inherit when the rule does not set it', () => {
+            render(<TitleTagRulesEditor value={rowWith()} onChange={jest.fn()} />);
+            expect(screen.getByLabelText('app.titleRuleAutoJoin').value).toBe('');
+        });
+
+        test('an explicit false shows as Off, not as inherit', () => {
+            render(<TitleTagRulesEditor value={rowWith({ autoJoin: false })} onChange={jest.fn()} />);
+            expect(screen.getByLabelText('app.titleRuleAutoJoin').value).toBe('off');
+        });
+
+        test('choosing On emits a real boolean', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            pick('app.titleRuleAutoJoin', 'on');
+            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoin: true })]);
+        });
+
+        test('choosing Off emits false, not inherit', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            pick('app.titleRuleAutoFill', 'off');
+            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoFill: false })]);
+        });
+
+        test('returning to Inherit emits the empty sentinel the sanitizer drops', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith({ autoJoin: true })} onChange={onChange} />);
+            pick('app.titleRuleAutoJoin', '');
+            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoin: '' })]);
+        });
+
+        test('the join window emits a number', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith()} onChange={onChange} />);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow'), { target: { value: '24' } });
+            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: 24 })]);
+        });
+
+        test('clearing the join window emits inherit, NOT 0', () => {
+            // 0 means "join on sight" — an empty field must not silently become it.
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 24 })} onChange={onChange} />);
+            fireEvent.change(screen.getByLabelText('app.titleRuleJoinWindow'), { target: { value: '' } });
+            expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ autoJoinWithinHoursOfEnd: '' })]);
+        });
+
+        test('an explicit 0 window renders as 0, not as an empty (inherit) field', () => {
+            render(<TitleTagRulesEditor value={rowWith({ autoJoinWithinHoursOfEnd: 0 })} onChange={jest.fn()} />);
+            expect(screen.getByLabelText('app.titleRuleJoinWindow').value).toBe('0');
+        });
+    });
 });

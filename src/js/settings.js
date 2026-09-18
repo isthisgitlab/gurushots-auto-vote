@@ -925,6 +925,52 @@ const findTitleRule = (title) => {
     return getTitleRules().find((rule) => normalizeTitle(rule?.title) === key) || null;
 };
 
+/**
+ * Settings a title rule may override INLINE, without going through a named
+ * profile. Deliberately a short allowlist rather than "every perChallenge key":
+ * these are the ones that decide whether an UN-JOINED candidate is acted on at
+ * all, and an un-joined challenge has no cached id for a per-challenge override
+ * to key off — so a title rule is the only place they can be expressed. Richer
+ * per-title setups still belong in a named profile, which this composes with
+ * (inline wins; see resolveJoinSetting in services/joinChallenges.js).
+ */
+const TITLE_RULE_INLINE_KEYS = ['autoJoin', 'autoFill', 'autoJoinWithinHoursOfEnd'];
+
+/**
+ * Pull the inline overrides off one rule, validated against the schema. Returns
+ * null when a value is present but invalid, so setTitleRules can reject the
+ * whole rule rather than silently persist a value automation would later read.
+ * An absent key means "inherit" — it is never written as a default, so a rule
+ * cannot freeze today's default into storage.
+ */
+const _sanitizeTitleRuleInline = (rule) => {
+    const out = {};
+    for (const key of TITLE_RULE_INLINE_KEYS) {
+        if (!rule || !Object.prototype.hasOwnProperty.call(rule, key)) continue;
+        const value = rule[key];
+        // An empty string / null is how the editor spells "inherit" for a
+        // cleared number or an unset select; treat it as absent, not as 0.
+        if (value === null || value === undefined || value === '') continue;
+        if (!validateSetting(key, value)) return null;
+        out[key] = value;
+    }
+    return out;
+};
+
+/**
+ * The inline overrides saved on the title rule matching this title, or an empty
+ * object. Read by the join pass, which resolves inline → profile → global.
+ * @param {string} title
+ * @returns {object}
+ */
+const getTitleRuleOverrides = (title) => {
+    const rule = findTitleRule(title);
+    if (!rule) return {};
+    // Re-validate on read: a hand-edited settings file can hold anything, and
+    // automation must never act on a value the schema would reject.
+    return _sanitizeTitleRuleInline(rule) || {};
+};
+
 const _sanitizeTitleRuleTags = (key, value) => {
     const list = (Array.isArray(value) ? value : [])
         .filter((tag) => typeof tag === 'string')
@@ -951,11 +997,19 @@ const _sanitizeTitleRule = (rule, storedProfiles) => {
     const requestedProfile = typeof rule?.profile === 'string' ? rule.profile.trim() : '';
     const profile = _canonicalTitleRuleProfile(storedProfiles, requestedProfile);
     if (requestedProfile && profile === null) return { valid: false, title, requestedProfile };
-    if (!profile && mustIncludeTags.length === 0 && shouldIncludeTags.length === 0) {
+
+    const inline = _sanitizeTitleRuleInline(rule);
+    if (inline === null) return { valid: false, title };
+
+    // A rule that does nothing is dropped rather than stored. Inline overrides
+    // now count as "does something" — a rule whose only content is
+    // `autoJoin: true` is a complete, meaningful rule.
+    const hasInline = Object.keys(inline).length > 0;
+    if (!profile && !hasInline && mustIncludeTags.length === 0 && shouldIncludeTags.length === 0) {
         return { valid: true, rule: null };
     }
 
-    const sanitized = { title, mustIncludeTags, shouldIncludeTags };
+    const sanitized = { title, mustIncludeTags, shouldIncludeTags, ...inline };
     if (profile) sanitized.profile = profile;
     return { valid: true, rule: sanitized };
 };
@@ -1988,6 +2042,8 @@ module.exports = {
     // Title-keyed tag rules (survive challenge rotation)
     getTitleRules,
     setTitleRules,
+    getTitleRuleOverrides,
+    TITLE_RULE_INLINE_KEYS,
     getEffectiveTagSetting,
     getEffectiveIgnoreTitleWords,
     getTitleProfile,

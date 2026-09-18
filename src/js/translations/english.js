@@ -228,6 +228,7 @@
             settingsSaveError: 'Some settings could not be saved — check the highlighted values and try again.',
             unitPercent: '%',
             unitMinutes: 'min',
+            unitHours: 'h',
             unitCoins: 'coins',
             // Bankroll (header pills)
             bankrollKeys: 'keys',
@@ -245,6 +246,11 @@
             autoJoinExcludeTypes: 'Never Join These Types',
             autoJoinExcludeTypesDesc:
                 'Comma-separated challenge types to never auto-join, e.g. "flash,exhibition". Since the default is to join all types, this is how you get "join everything except these". A challenge matched by a saved title profile still joins — a profile is a deliberate per-title opt-in.',
+            autoJoinWithinHoursOfEnd: 'Join Only Near The End',
+            autoJoinWithinHoursOfEndDesc:
+                'Wait until a challenge is this many hours from ending before joining it, instead of joining the moment it appears. 0 = join as soon as it is seen.',
+            autoJoinWithinHoursOfEndHelp:
+                'A challenge outside the window is not skipped for good — it is reconsidered every cycle and joined once it enters the window. If a challenge does not report an end time, it is left alone while a window is set rather than joined early.',
             autoJoinMaxCoins: 'Max Coins Per Challenge',
             autoJoinMaxCoinsDesc:
                 'Highest coin cost to pay to join a single challenge. 0 = free challenges only. Paid joins also require a per-cycle budget above 0.',
@@ -312,6 +318,14 @@
             titleTagRuleTitle: 'Challenge title',
             titleTagRuleTitlePlaceholder: "e.g. Let's See Hats",
             titleRuleProfile: 'Automatic profile',
+            titleRuleInherit: 'Inherit',
+            titleRuleOn: 'On',
+            titleRuleOff: 'Off',
+            titleRuleAutoJoin: 'Auto-join this title',
+            titleRuleAutoFill: 'Auto-fill this title',
+            titleRuleJoinWindow: 'Join within hours of end',
+            titleRuleJoinWindowPlaceholder: 'inherit',
+            titleRuleOverridesLabel: 'Per-title behaviour',
             addTitleTagRule: 'Add rule',
             removeTitleTagRule: 'Remove rule',
             noTitleTagRules: 'No rules yet. Add one for a challenge title.',

@@ -174,6 +174,123 @@ describe('settings facade — title-keyed tag rules', () => {
         });
     });
 
+    /**
+     * Inline overrides: a rule may set behaviour for its title directly, without
+     * a named profile. An OMITTED key means "inherit" and must never be written
+     * as a default — otherwise a rule saved today would freeze today's default
+     * and silently stop following a later change to the global setting.
+     */
+    describe('inline rule overrides', () => {
+        test('round-trips autoJoin, autoFill and the join window', () => {
+            const ok = settings.setTitleRules([
+                {
+                    title: 'abc',
+                    mustIncludeTags: [],
+                    shouldIncludeTags: [],
+                    autoJoin: true,
+                    autoFill: false,
+                    autoJoinWithinHoursOfEnd: 24,
+                },
+            ]);
+            expect(ok).toBe(true);
+            expect(settings.getTitleRules()[0]).toMatchObject({
+                title: 'abc',
+                autoJoin: true,
+                autoFill: false,
+                autoJoinWithinHoursOfEnd: 24,
+            });
+        });
+
+        test('a rule whose ONLY content is an inline override is kept, not dropped as a no-op', () => {
+            settings.setTitleRules([{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], autoJoin: true }]);
+            expect(settings.getTitleRules()).toHaveLength(1);
+        });
+
+        test('an omitted key stays omitted (inherit), never defaulted into storage', () => {
+            settings.setTitleRules([{ title: 'abc', mustIncludeTags: ['hat'], shouldIncludeTags: [] }]);
+            const [rule] = settings.getTitleRules();
+            expect(rule).not.toHaveProperty('autoJoin');
+            expect(rule).not.toHaveProperty('autoJoinWithinHoursOfEnd');
+        });
+
+        test("the editor's empty-string 'inherit' is dropped rather than coerced to 0/false", () => {
+            settings.setTitleRules([
+                {
+                    title: 'abc',
+                    mustIncludeTags: ['hat'],
+                    shouldIncludeTags: [],
+                    autoJoin: '',
+                    autoJoinWithinHoursOfEnd: '',
+                },
+            ]);
+            const [rule] = settings.getTitleRules();
+            expect(rule).not.toHaveProperty('autoJoin');
+            expect(rule).not.toHaveProperty('autoJoinWithinHoursOfEnd');
+        });
+
+        test('an explicit 0 window is preserved — it means "join on sight", not "inherit"', () => {
+            settings.setTitleRules([
+                { title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], autoJoinWithinHoursOfEnd: 0 },
+            ]);
+            expect(settings.getTitleRules()[0].autoJoinWithinHoursOfEnd).toBe(0);
+        });
+
+        test('an explicit false is preserved and distinct from inherit', () => {
+            settings.setTitleRules([{ title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], autoJoin: false }]);
+            expect(settings.getTitleRules()[0].autoJoin).toBe(false);
+        });
+
+        test('rejects the whole save when an inline value fails schema validation', () => {
+            expect(
+                settings.setTitleRules([
+                    { title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], autoJoin: 'yes please' },
+                ]),
+            ).toBe(false);
+            expect(
+                settings.setTitleRules([
+                    { title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], autoJoinWithinHoursOfEnd: -5 },
+                ]),
+            ).toBe(false);
+            expect(
+                settings.setTitleRules([
+                    { title: 'abc', mustIncludeTags: [], shouldIncludeTags: [], autoJoinWithinHoursOfEnd: 99999 },
+                ]),
+            ).toBe(false);
+            expect(settings.getTitleRules()).toEqual([]);
+        });
+
+        test('only allowlisted keys are stored — an arbitrary setting is not smuggled in', () => {
+            settings.setTitleRules([
+                { title: 'abc', mustIncludeTags: ['hat'], shouldIncludeTags: [], exposure: 80, nonsense: 1 },
+            ]);
+            const [rule] = settings.getTitleRules();
+            expect(rule).not.toHaveProperty('exposure');
+            expect(rule).not.toHaveProperty('nonsense');
+        });
+
+        describe('getTitleRuleOverrides', () => {
+            test('returns the inline values for a matching title, case-insensitively', () => {
+                settings.setTitleRules([
+                    {
+                        title: 'ABC',
+                        mustIncludeTags: [],
+                        shouldIncludeTags: [],
+                        autoJoin: true,
+                        autoJoinWithinHoursOfEnd: 24,
+                    },
+                ]);
+                expect(settings.getTitleRuleOverrides('abc')).toEqual({ autoJoin: true, autoJoinWithinHoursOfEnd: 24 });
+            });
+
+            test('returns {} for an unknown title and for a tag-only rule', () => {
+                settings.setTitleRules([{ title: 'abc', mustIncludeTags: ['hat'], shouldIncludeTags: [] }]);
+                expect(settings.getTitleRuleOverrides('abc')).toEqual({});
+                expect(settings.getTitleRuleOverrides('nope')).toEqual({});
+                expect(settings.getTitleRuleOverrides('')).toEqual({});
+            });
+        });
+    });
+
     describe('getEffectiveTagSetting', () => {
         test('with no rules, equals the global default ("no filter" = empty)', () => {
             const challenge = { id: 1, title: 'Anything' };
