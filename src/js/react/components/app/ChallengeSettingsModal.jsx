@@ -506,7 +506,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                         from the challenge prop, never persisted. */}
                     {tierSchemaEntries(schema, groups, tiers, { perChallengeOnly: true }).map((band) => (
                         <div key={band.id ?? '_'}>
-                            <SettingsTierHeading id={band.id} label={band.label} level="h3" />
+                            <SettingsTierHeading id={band.id} label={band.label} level="h4" />
                             {band.groups.map(({ id, label, entries }) => {
                                 const { applicable, reasonKey } = getGroupApplicability(id, challenge);
                                 // When a group can't apply, tie its heading + reason note to
@@ -524,7 +524,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                         aria-labelledby={applicable ? undefined : headingId}
                                         aria-describedby={reasonId}
                                     >
-                                        <h4
+                                        <h5
                                             id={headingId}
                                             className="font-semibold text-base mb-3 border-b border-base-300 pb-2 flex items-center justify-between gap-2"
                                         >
@@ -534,7 +534,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                     {t('app.notApplicable')}
                                                 </span>
                                             )}
-                                        </h4>
+                                        </h5>
                                         {/* Heading, badge and reason note stay at full opacity so the
                                     *why* remains readable; only the inert inputs below are dimmed.
                                     Dimming the whole group would compound with the muted text

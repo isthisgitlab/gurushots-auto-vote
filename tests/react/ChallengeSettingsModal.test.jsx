@@ -37,7 +37,8 @@ const mockSchemaState = {
         },
     },
     defaults: { boostTime: 30 },
-    groups: [{ id: 'boost', label: 'app.groupBoost' }],
+    groups: [{ id: 'boost', label: 'app.groupBoost', tier: 'core' }],
+    tiers: [{ id: 'core', label: 'app.tierCore' }],
     refetch: jest.fn(),
     loading: false,
 };
@@ -158,6 +159,29 @@ describe('ChallengeSettingsModal group applicability', () => {
                 challenge={challenge}
             />,
         );
+
+    // The tier band heading is what orders the section list (SETTINGS_TIERS);
+    // without this the mocked schema would only ever exercise the no-tiers
+    // fallback, where tierSchemaEntries renders one unlabelled band.
+    test('renders the tier band heading above its groups', async () => {
+        renderWithChallenge({ member: {} });
+
+        await waitFor(() => {
+            expect(numberInputs().length).toBeGreaterThan(0);
+        });
+
+        // Heading outline: h3 is the modal's own title (ui/Modal.jsx), h4 is a
+        // section — the pre-existing "Challenge Profiles" block and each tier
+        // band are siblings at that level — and group headings are h5 below.
+        // Match the band by text, not position, so the profiles section above
+        // it can move without breaking this.
+        const h4s = Array.from(document.querySelectorAll('h4')).map((h) => h.textContent);
+        expect(h4s).toContain('app.tierCore');
+
+        const groupHeading = document.querySelector('h5');
+        expect(groupHeading).not.toBeNull();
+        expect(groupHeading.textContent).toContain('app.groupBoost');
+    });
 
     test('disables a group whose action is already used (boost USED)', async () => {
         renderWithChallenge({ member: { boost: { state: 'USED' } } });

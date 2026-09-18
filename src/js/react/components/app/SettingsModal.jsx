@@ -487,7 +487,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                 <SettingsTierHeading id={band.id} label={band.label} level="h5" />
                                 {band.groups.map(({ id, label, entries }) => (
                                     <div key={id} className="mb-4">
-                                        <h5 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(label)}</h5>
+                                        <h6 className="font-medium text-sm opacity-70 mb-2 mt-3">{t(label)}</h6>
                                         <div className={SETTINGS_GRID_CLASS}>
                                             {entries.map(([key, config]) => (
                                                 <div key={key} className={SETTING_CELL_CLASS}>

@@ -11,12 +11,14 @@ import { useTranslation } from '@/contexts/TranslationContext';
  * their settings, just without a heading, so the null check lives here rather
  * than being repeated at each call site.
  *
- * `level` picks the heading element so each modal keeps a valid outline: the
- * global modal nests bands under its own h4 section heading (so the band is an
- * h5), while the per-challenge modal renders group headings as h4 and needs the
- * band above them to be an h3.
+ * `level` picks the heading element so each modal keeps a valid outline. Both
+ * modals title themselves with an h3 (see ui/Modal.jsx), so a band is never an
+ * h3: the global modal nests bands under its own h4 section heading ("Challenge
+ * Defaults") and passes h5, while the per-challenge modal has no section layer
+ * and passes h4. Each modal's group headings sit one level below whatever it
+ * passes here.
  *
- * @param {{ id: string|null, label: string|null, level?: 'h3'|'h5' }} props
+ * @param {{ id: string|null, label: string|null, level?: 'h4'|'h5' }} props
  */
 export function SettingsTierHeading({ id, label, level = 'h5' }) {
     const { t } = useTranslation();
