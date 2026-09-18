@@ -6,16 +6,20 @@
  *   - lists every challenge by title, in the order given
  *   - clicking an entry scrolls the matching challenge-<id> element into view
  *   - challenges with a per-challenge override are marked, others are not
+ *   - the marker refreshes when a settings-changed event fires
  */
 
-import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
+import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 
 const challenge = (id, title) => ({ id, title });
 
 describe('ChallengeNav', () => {
     beforeEach(() => {
+        window.api.getChallengeOverrides.mockReset();
         window.api.getChallengeOverrides.mockResolvedValue({});
+        window.api.onSettingsChanged.mockReset();
+        window.api.onSettingsChanged.mockReturnValue(undefined);
     });
 
     afterEach(() => jest.restoreAllMocks());
@@ -78,5 +82,36 @@ describe('ChallengeNav', () => {
 
         await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('7'));
         expect(screen.getByRole('button', { name: /Solo/ }).className).not.toMatch(/btn-accent/);
+    });
+
+    test('picks up an override saved after mount, via settings-changed', async () => {
+        // The modal saving an override broadcasts settings-changed; the marker
+        // has to follow without a remount.
+        let fireSettingsChanged;
+        window.api.onSettingsChanged.mockImplementation((cb) => {
+            fireSettingsChanged = cb;
+            return () => {};
+        });
+
+        render(<ChallengeNav challenges={[challenge(5, 'Later')]} />);
+
+        const chip = screen.getByRole('button', { name: /Later/ });
+        await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('5'));
+        expect(chip.className).not.toMatch(/btn-accent/);
+
+        window.api.getChallengeOverrides.mockResolvedValue({ exposureTarget: 80 });
+        await act(async () => {
+            fireSettingsChanged();
+        });
+
+        await waitFor(() => expect(chip.className).toMatch(/btn-accent/));
+        expect(chip.textContent).toMatch(/⚙️/);
+    });
+
+    test('reads each id once when the list repeats one', async () => {
+        render(<ChallengeNav challenges={[challenge(3, 'Dup A'), challenge(3, 'Dup B')]} />);
+
+        await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('3'));
+        expect(window.api.getChallengeOverrides).toHaveBeenCalledTimes(1);
     });
 });
