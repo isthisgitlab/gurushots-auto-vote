@@ -51,10 +51,25 @@ const cat = () => logger.withCategory('join');
  * Resolve one setting for an un-joined candidate. The id-keyed
  * getEffectiveSetting(key, id) cannot see a title profile for a challenge the
  * user has not joined (its id was never cached from get_my_active_challenges),
- * so we read the title profile directly and fall back to the global default.
+ * so we read the title rule directly and fall back to the global default.
+ *
+ * Precedence, most specific first: the title rule's own INLINE override → the
+ * named profile that rule inherits → the global default. Inline wins because it
+ * is written against this one title, while a profile is shared across every
+ * title that names it — so editing one title's window must not require forking
+ * a whole profile.
  */
 const resolveJoinSetting = (key, challenge) => {
     const title = challenge?.title;
+    if (title) {
+        // Optional-chained like every other per-challenge settings read here: an
+        // older persisted facade (or a partial stub in a test) must degrade to
+        // "no inline override", never throw mid-pass.
+        const inline = settings.getTitleRuleOverrides?.(title);
+        if (inline && Object.prototype.hasOwnProperty.call(inline, key)) {
+            return inline[key];
+        }
+    }
     // getTitleProfile returns { name, values } (or null) — the overrides live
     // under `.values`, so read from there, not off the profile object itself.
     const profile = title ? settings.getTitleProfile(title) : null;
@@ -74,11 +89,15 @@ const parseTypeList = (value) =>
         : [];
 
 /**
- * True when at least one saved title profile sets `autoJoin: true` — i.e. some
- * title would auto-join even with the master default off. Used only as the
- * pass-level fast-path check; tag-only title rules (no profile) return false.
+ * True when at least one saved title rule turns auto-join ON for its title —
+ * either inline on the rule or through the named profile it inherits — i.e.
+ * some title would auto-join even with the master default off. Used only as the
+ * pass-level fast-path check.
+ *
+ * A tag-only rule (the older auto-fill feature: no inline autoJoin, no profile)
+ * still returns false, so it must never keep the pass alive every cycle.
  */
-const anyTitleProfileEnablesAutoJoin = () => {
+const anyTitleRuleEnablesAutoJoin = () => {
     let rules;
     try {
         rules = settings.getTitleRules();
@@ -89,6 +108,15 @@ const anyTitleProfileEnablesAutoJoin = () => {
     for (const rule of rules) {
         const title = rule?.title;
         if (!title) continue;
+        // Inline first — it is what resolveJoinSetting would pick, so the arming
+        // check and the per-candidate decision cannot disagree. Notably an
+        // inline `autoJoin: false` must NOT be rescued by a profile that says
+        // true, or the pass would arm for a title it then always skips.
+        const inline = settings.getTitleRuleOverrides?.(title);
+        if (inline && Object.prototype.hasOwnProperty.call(inline, 'autoJoin')) {
+            if (inline.autoJoin === true) return true;
+            continue;
+        }
         const profile = settings.getTitleProfile(title);
         if (profile && !profile.suppressed && profile.values && profile.values.autoJoin === true) {
             return true;
@@ -99,23 +127,61 @@ const anyTitleProfileEnablesAutoJoin = () => {
 
 /**
  * Whether auto-join is armed at all — the master default is on, OR some title
- * profile enables it. Mirrors the pass short-circuit condition; used to drive
- * the "auto-join active" UI indicator so it reflects the profile case too.
+ * rule enables it (inline or via its profile). Mirrors the pass short-circuit
+ * condition; used to drive the "auto-join active" UI indicator so it reflects
+ * the per-title case too.
  * @returns {boolean}
  */
 const isAutoJoinActive = () => {
     if (settings.getEffectiveSetting('autoJoin', null) === true) return true;
-    return anyTitleProfileEnablesAutoJoin();
+    return anyTitleRuleEnablesAutoJoin();
 };
 
-/** Per-candidate scope/coin config, resolved by title (master → profile). */
+/**
+ * A per-title opt-in deliberate enough to bypass the type filters: a named
+ * profile on the title, or an inline `autoJoin: true` on its rule. Both are the
+ * user naming this exact title and saying "join it", which is the same intent
+ * the profile bypass already encodes.
+ *
+ * An inline WINDOW alone is deliberately not enough — "join this title late"
+ * says when, not whether, so it must not smuggle an excluded type into scope.
+ */
+const hasTitleOptIn = (challenge) => {
+    const title = challenge?.title;
+    if (!title) return false;
+    if (settings.getTitleRuleOverrides?.(title)?.autoJoin === true) return true;
+    return !!settings.getTitleProfile(title);
+};
+
+/** Per-candidate scope/coin/timing config, resolved by title (inline → profile → global). */
 const resolveCandidateConfig = (challenge) => ({
     // Empty include list = all types (the default scope once auto-join is on).
     includeTypes: parseTypeList(resolveJoinSetting('autoJoinTypes', challenge)),
     excludeTypes: parseTypeList(resolveJoinSetting('autoJoinExcludeTypes', challenge)),
     maxCoins: Number(resolveJoinSetting('autoJoinMaxCoins', challenge)) || 0,
-    hasProfileMatch: !!(challenge?.title && settings.getTitleProfile(challenge.title)),
+    // Hours → seconds, to match close_time's unit. A non-finite/negative value
+    // degrades to 0 = "no window", i.e. the historical join-on-sight behavior.
+    joinWithinSec: Math.max(0, Number(resolveJoinSetting('autoJoinWithinHoursOfEnd', challenge)) || 0) * 3600,
+    hasProfileMatch: hasTitleOptIn(challenge),
 });
+
+/**
+ * Report a candidate the join window could not evaluate.
+ *
+ * The open-challenge payload is not known to carry close_time (nothing else in
+ * the app reads one off an un-joined candidate). If a window is set and the
+ * field is missing, the fail-closed gate skips the candidate — which would be
+ * indistinguishable from "nothing to join" without this. Naming the fields that
+ * ARE present makes one real run enough to settle whether the field exists.
+ */
+const warnMissingCloseTime = (challenge) => {
+    const fields = Object.keys(challenge || {}).join(', ') || '(none)';
+    cat().warning(
+        `join window set but ${logger.challengeTag(challenge)} has no readable close_time — ` +
+            `candidate deferred. Fields present: ${fields}`,
+        null,
+    );
+};
 
 // ---- persisted unlock marker (idempotency) ----
 
@@ -354,12 +420,19 @@ const performJoin = async (challenge, token, deps, needsCoins) => {
 
 /**
  * Automatic join pass — a pre-step in fetchChallengesAndVote. The `autoJoin`
- * enable is resolved per candidate by title (master → profile), so a profiled
- * title joins even when the master default is off; the pass only skips wholesale
- * when the master is off AND no title rules exist. Sequential, cancellation-aware.
+ * enable is resolved per candidate by title (rule-inline → profile → master), so
+ * a titled candidate joins even when the master default is off; the pass only
+ * skips wholesale when the master is off AND no title rule turns it on.
+ * Sequential, cancellation-aware.
+ *
+ * Candidates are additionally gated by the join WINDOW
+ * (`autoJoinWithinHoursOfEnd`, 0 = off): a candidate outside it is deferred with
+ * `skipped:too-early` and reconsidered next cycle, so entries land near a
+ * challenge's end rather than the moment it appears.
  *
  * @param {string} token
- * @param {number} now epoch ms (unused today; kept for parity with other passes)
+ * @param {number} now epoch ms — the clock the join window is measured against
+ *   (converted to seconds to match `close_time`); defaults to Date.now()
  * @param {object} deps
  * @returns {Promise<{ran:boolean, joined:number, results:Array<object>}>}
  */
@@ -377,7 +450,7 @@ const runJoinPass = async (token, now, deps) => {
     // profile turns autoJoin ON for its title. Check that precisely (a tag-only
     // title rule — the older auto-fill feature — carries no profile and can never
     // enable joining, so it must NOT keep the pass alive every cycle).
-    if (!masterOn && !anyTitleProfileEnablesAutoJoin()) {
+    if (!masterOn && !anyTitleRuleEnablesAutoJoin()) {
         return empty;
     }
 
@@ -402,6 +475,14 @@ const runJoinPass = async (token, now, deps) => {
     }
     let remainingBudget = Number(settings.getEffectiveSetting('autoJoinCycleCoinBudget', null)) || 0;
 
+    // close_time is epoch SECONDS everywhere in this codebase; `now` arrives as
+    // epoch ms. A caller that omits it falls back to the wall clock rather than
+    // computing a window against 0, which would fail every candidate closed.
+    const nowSec = Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
+
+    // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
+    let missingCloseTimeLogged = false;
+
     const results = [];
     let joined = 0;
     for (const challenge of candidates) {
@@ -424,8 +505,14 @@ const runJoinPass = async (token, now, deps) => {
             excludeTypes: cfg.excludeTypes,
             maxCoins: cfg.maxCoins,
             hasProfileMatch: cfg.hasProfileMatch,
+            joinWithinSec: cfg.joinWithinSec,
+            nowSec,
         });
         if (!decision.join) {
+            if (decision.reason === 'close-time-unknown' && !missingCloseTimeLogged) {
+                missingCloseTimeLogged = true;
+                warnMissingCloseTime(challenge);
+            }
             results.push({ id: challenge?.id, status: `skipped:${decision.reason}` });
             continue;
         }
@@ -458,7 +545,11 @@ const runJoinPass = async (token, now, deps) => {
 // ---- manual single join (explicit paid consent) ----
 
 /**
- * Join ONE challenge by id, on user request. Re-fetches the live candidate so a
+ * Join ONE challenge by id, on user request. The `autoJoinWithinHoursOfEnd`
+ * window deliberately does NOT apply here — it defers the AUTOMATIC pass, and an
+ * explicit click is the user overriding that timing on purpose.
+ *
+ * Re-fetches the live candidate so a
  * stale/closed entry in the renderer's cached list cannot trigger a wasted
  * spend. A paid challenge without `spendCoins` returns `needs-confirm` (with the
  * cost) and spends nothing.

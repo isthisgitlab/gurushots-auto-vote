@@ -115,11 +115,22 @@ Domain terms used throughout, in reader's terms:
   runs inside the shared `fetchChallengesAndVote` (`api/main.js` real / `mock/index.js` mock) before the
   voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
   single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
-  enable is **resolved per candidate by title (master → profile → per-challenge)**, not a hard global gate —
-  the master value is only the default, so a title profile can enable joining for its title with the master
-  off. The pass only short-circuits wholesale when the master is off **and** there are no title rules (so no
-  profile could turn it on); everything else (scope/coin caps) is title-profile-resolved too, except
-  `autoJoinCycleCoinBudget`, which is genuinely pass-global.
+  enable is **resolved per candidate by title (rule-inline → profile → master)**, not a hard global gate —
+  the master value is only the default, so a title rule can enable joining for its title with the master
+  off, either inline on the rule itself or through the named profile it inherits. Inline wins because it is
+  written against one title while a profile is shared by every title naming it. The pass only short-circuits
+  wholesale when the master is off **and** no title rule turns it on (a tag-only rule never does);
+  everything else (scope/coin caps/join window) is title-resolved too, except `autoJoinCycleCoinBudget`,
+  which is genuinely pass-global.
+- **The join window (`autoJoinWithinHoursOfEnd`, `0` = off) gates WHEN, never WHETHER.** Above 0, a candidate
+  is only joined once it is within that many hours of its own `close_time`; outside it the candidate is
+  _deferred_ (`skipped:too-early`) and reconsidered next cycle, not rejected. It is **fail-closed**: a
+  candidate whose `close_time` cannot be read is not joined while a window is set, and the pass logs that
+  candidate's actual field names once per pass. That diagnostic exists because the open-challenge payload is
+  **not confirmed to carry `close_time`** — nothing else in the app reads one off an un-joined candidate, and
+  the mock fixtures supply it so the path is runnable, which is not evidence about the live API. Unlike the
+  type filters, a title opt-in does **not** bypass the window (bypassing an explicit "join late" would invert
+  it), and the manual single-join path ignores the window entirely — a click is the user overriding timing.
 
 ## 3. GuruShots API transport
 
@@ -241,8 +252,12 @@ repeated six times is one that gets forgotten at one of them.
   cross-process lockfile (`acquireUnlockLock`, real-fs platforms, TTL stale-recovery, fail-open) guard the
   check→unlock→mark section; a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is
-  independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a title-profile
-  match wins over the type-exclude veto; otherwise the default scope is join-all, an `autoJoinTypes` include-list (when non-empty) narrows it, and `autoJoinExcludeTypes` subtracts.
+  independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a title opt-in
+  (a named profile, or an inline `autoJoin: true` on the rule) wins over the type-exclude veto; otherwise the
+  default scope is join-all, an `autoJoinTypes` include-list (when non-empty) narrows it, and
+  `autoJoinExcludeTypes` subtracts. The join window (`joinWindowRefusal`) is evaluated **after** the scope
+  filters — so an out-of-scope candidate still reports why it is out of scope — and **before** the cost
+  branch, so it gates free and paid candidates identically and defers a paid one before any `coins_unlock`.
 - **Fail-soft config parsing** is pervasive: `getScheduledFillState` and `getVotingPauseState` (both built on
   the shared `_triggerWindowState`) wrap their whole body in try/catch and return inactive. The two fail in
   _opposite_ user-visible directions, deliberately: a broken scheduled fill stops forcing 100%, a broken

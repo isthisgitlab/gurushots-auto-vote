@@ -228,6 +228,7 @@
             settingsSaveError: 'Dažus iestatījumus neizdevās saglabāt — pārbaudi izceltās vērtības un mēģini vēlreiz.',
             unitPercent: '%',
             unitMinutes: 'min',
+            unitHours: 'h',
             unitCoins: 'monētas',
             // Konts (galvenes rādītāji)
             bankrollKeys: 'atslēgas',
@@ -245,6 +246,11 @@
             autoJoinExcludeTypes: 'Nekad nepievienoties šiem tipiem',
             autoJoinExcludeTypesDesc:
                 'Ar komatu atdalīti izaicinājumu tipi, kuriem nekad automātiski nepievienoties, piem., "flash,exhibition". Tā kā noklusējums ir pievienoties visiem tipiem, šādi iegūst "pievienoties visam, izņemot šos". Izaicinājums, kas atbilst saglabātam nosaukuma profilam, joprojām tiek pievienots — profils ir apzināta izvēle konkrētam nosaukumam.',
+            autoJoinWithinHoursOfEnd: 'Pievienoties tikai tuvu beigām',
+            autoJoinWithinHoursOfEndDesc:
+                'Nogaidīt, līdz izaicinājumam līdz beigām atlicis tik stundu, un tikai tad pievienoties, nevis pievienoties uzreiz, tiklīdz tas parādās. 0 = pievienoties uzreiz.',
+            autoJoinWithinHoursOfEndHelp:
+                'Izaicinājums ārpus loga netiek izlaists pavisam — tas tiek pārvērtēts katrā ciklā un pievienots, tiklīdz nonāk logā. Ja izaicinājums nenorāda beigu laiku, tas netiek pievienots pāragri, kamēr logs ir iestatīts.',
             autoJoinMaxCoins: 'Maks. monētas par izaicinājumu',
             autoJoinMaxCoinsDesc:
                 'Lielākā monētu cena, ko maksāt par pievienošanos vienam izaicinājumam. 0 = tikai bezmaksas. Maksas pievienošanās prasa arī cikla budžetu virs 0.',
@@ -314,6 +320,14 @@
             titleTagRuleTitle: 'Izaicinājuma nosaukums',
             titleTagRuleTitlePlaceholder: "piem., Let's See Hats",
             titleRuleProfile: 'Automātiskais profils',
+            titleRuleInherit: 'Mantot',
+            titleRuleOn: 'Ieslēgts',
+            titleRuleOff: 'Izslēgts',
+            titleRuleAutoJoin: 'Automātiski pievienoties šim nosaukumam',
+            titleRuleAutoFill: 'Automātiski aizpildīt šo nosaukumu',
+            titleRuleJoinWindow: 'Pievienoties, kad līdz beigām atlicis (h)',
+            titleRuleJoinWindowPlaceholder: 'mantot',
+            titleRuleOverridesLabel: 'Uzvedība šim nosaukumam',
             addTitleTagRule: 'Pievienot noteikumu',
             removeTitleTagRule: 'Noņemt noteikumu',
             noTitleTagRules: 'Vēl nav noteikumu. Pievieno vienu izaicinājuma nosaukumam.',

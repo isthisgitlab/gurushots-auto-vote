@@ -86,6 +86,12 @@ const nonNegNumber = z.number().min(0); // time fields (seconds before close); 0
 // real challenge cost / balance.
 const MAX_COIN_AMOUNT = 1_000_000;
 const coinAmount = z.number().int().min(0).max(MAX_COIN_AMOUNT);
+// Auto-join timing window, in hours before a candidate's close_time. 0 = off
+// (join as soon as the candidate is seen). The ceiling is 30 days — longer than
+// any real GuruShots challenge runs, so any value at or above it behaves as
+// "always in window" while still bounding a corrupted settings file.
+const MAX_JOIN_WINDOW_HOURS = 720;
+const joinWindowHours = z.number().min(0).max(MAX_JOIN_WINDOW_HOURS);
 // Entry-slot index: 1-4 selects a slot, 0 is the "last entry" sentinel. GuruShots challenges
 // carry at most four submissions (max_photo_submits tops out at 4, which is also why the
 // auto-fill schedule only covers images 2-4), so anything above 4 could never name a real
@@ -884,6 +890,30 @@ const SETTINGS_SCHEMA = {
         group: 'autoJoin',
         label: 'app.autoJoinExcludeTypes',
         description: 'app.autoJoinExcludeTypesDesc',
+    },
+    // Join-timing gate: only join a candidate once it is within this many hours
+    // of its close_time. 0 = off (join as soon as the candidate is seen — the
+    // historical behavior), so this is the "0 = feature off" sentinel family,
+    // NOT the exposureTarget "0 = same as trigger" one.
+    //
+    // FAIL-CLOSED: while this is above 0, a candidate whose close_time cannot be
+    // read is NOT joined (see VotingLogic.shouldJoinChallenge). An un-joined
+    // candidate that never proves it is inside the window must not be joined by
+    // default — that would spend the entry (and possibly coins) at exactly the
+    // moment the user asked to avoid.
+    autoJoinWithinHoursOfEnd: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        validation: joinWindowHours,
+        min: 0,
+        max: MAX_JOIN_WINDOW_HOURS,
+        unit: 'app.unitHours',
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinWithinHoursOfEnd',
+        description: 'app.autoJoinWithinHoursOfEndDesc',
+        helpKey: 'app.autoJoinWithinHoursOfEndHelp',
     },
     // Per-challenge coin cap. 0 = free only (paid joins disabled). Paid joining
     // requires BOTH this AND autoJoinCycleCoinBudget > 0.

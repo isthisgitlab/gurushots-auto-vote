@@ -116,3 +116,84 @@ describe('paid gate', () => {
         });
     });
 });
+
+/**
+ * Join window: `joinWithinSec` (0 = off) defers a candidate until it is within
+ * that many seconds of its own close_time, so entries land near the end of a
+ * challenge instead of the moment it appears. Fail-closed — a candidate that
+ * cannot prove it is inside the window is never joined while one is set.
+ */
+describe('join window (timing)', () => {
+    const HOUR = 3600;
+    const NOW = 1_700_000_000;
+    const far = { id: 5, type: 'flash', join_coins: 0, close_time: NOW + 48 * HOUR };
+    const near = { id: 5, type: 'flash', join_coins: 0, close_time: NOW + 5 * HOUR };
+    // A 24h window evaluated at a fixed clock — the shape of "join 24h from end".
+    const win = (over) => call({ joinWithinSec: 24 * HOUR, nowSec: NOW, ...over });
+
+    test('a window of 0 is off — the candidate joins on sight (historical behavior)', () => {
+        expect(call({ challenge: far, joinWithinSec: 0, nowSec: NOW })).toMatchObject({ join: true, reason: 'free' });
+    });
+    test('an absent window is off, and close_time is never read', () => {
+        expect(call({ challenge: { id: 5, type: 'flash', join_coins: 0 } })).toMatchObject({
+            join: true,
+            reason: 'free',
+        });
+    });
+    test('outside the window the candidate is deferred', () => {
+        expect(win({ challenge: far })).toMatchObject({ join: false, reason: 'too-early' });
+    });
+    test('inside the window it joins', () => {
+        expect(win({ challenge: near })).toMatchObject({ join: true, reason: 'free' });
+    });
+    test('the window boundary is inclusive', () => {
+        const exactly = { id: 5, type: 'flash', join_coins: 0, close_time: NOW + 24 * HOUR };
+        expect(win({ challenge: exactly })).toMatchObject({ join: true, reason: 'free' });
+        const oneSecondOut = { id: 5, type: 'flash', join_coins: 0, close_time: NOW + 24 * HOUR + 1 };
+        expect(win({ challenge: oneSecondOut }).reason).toBe('too-early');
+    });
+
+    describe('fail-closed', () => {
+        test('a missing close_time is not joined while a window is set', () => {
+            expect(win({ challenge: { id: 5, type: 'flash', join_coins: 0 } })).toMatchObject({
+                join: false,
+                reason: 'close-time-unknown',
+            });
+        });
+        test('an unparseable close_time is not joined either', () => {
+            for (const bad of ['soon', null, NaN, 0, -1]) {
+                expect(win({ challenge: { id: 5, type: 'flash', join_coins: 0, close_time: bad } }).join).toBe(false);
+            }
+        });
+        test('an already-closed candidate is refused, not treated as "in window"', () => {
+            const dead = { id: 5, type: 'flash', join_coins: 0, close_time: NOW - 60 };
+            expect(win({ challenge: dead })).toMatchObject({ join: false, reason: 'already-closed' });
+        });
+        test('a missing clock refuses rather than measuring against epoch 0', () => {
+            expect(call({ challenge: near, joinWithinSec: 24 * HOUR, nowSec: 0 }).reason).toBe('close-time-unknown');
+        });
+    });
+
+    test('a title opt-in does NOT bypass the window (unlike the type filters)', () => {
+        // hasProfileMatch bypasses include/exclude, but the window says WHEN, not
+        // WHETHER — bypassing it would invert the user's explicit instruction.
+        expect(win({ challenge: far, hasProfileMatch: true })).toMatchObject({ join: false, reason: 'too-early' });
+    });
+
+    test('timing gates paid candidates identically, before the coin caps', () => {
+        const paidFar = { id: 5, type: 'flash', join_coins: 100, close_time: NOW + 48 * HOUR };
+        expect(win({ challenge: paidFar, maxCoins: 150 })).toMatchObject({ join: false, reason: 'too-early' });
+        const paidNear = { id: 5, type: 'flash', join_coins: 100, close_time: NOW + 5 * HOUR };
+        expect(win({ challenge: paidNear, maxCoins: 150 })).toMatchObject({ join: true, reason: 'paid' });
+    });
+
+    test('scope filters still report their own reason ahead of timing', () => {
+        expect(win({ challenge: far, excludeTypes: ['flash'] }).reason).toBe('excluded-type');
+    });
+
+    test('the coin caps still veto a paid candidate that IS inside the window', () => {
+        const paidNear = { id: 5, type: 'flash', join_coins: 100, close_time: NOW + 5 * HOUR };
+        expect(win({ challenge: paidNear, maxCoins: 0 }).reason).toBe('paid-disabled');
+        expect(win({ challenge: paidNear, maxCoins: 150, remainingBudget: 10 }).reason).toBe('over-cycle-budget');
+    });
+});
