@@ -331,7 +331,6 @@ All of these support per-challenge overrides except where noted.
 | `exposureTarget` | `0`     | `0`, or 1–100 % (if set, ≥ `exposure`) | Vote up to this % when the normal rule fires. `0` = stop at the trigger.                                                                                                                                                       |
 | `onlyBoost`      | `false` | bool                                   | Skip normal voting; only apply boost/turbo.                                                                                                                                                                                    |
 | `voteOnNewEntry` | `false` | bool                                   | When a new photo appears, vote once even if exposure is already at/above the trigger, up to whichever target the winning rule resolves. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Voting Only. |
-| `compactCards`   | `false` | bool                                   | Compact challenge-card layout (GUI display only).                                                                                                                                                                              |
 
 **Boost**
 
@@ -393,6 +392,12 @@ All of these support per-challenge overrides except where noted.
 | `autoJoinExcludeTypes`    | `''`    | csv of types   | **Never** join these types, e.g. `flash,exhibition`. Subtracts from the default-all scope, so this alone gives "join all except these". A saved title profile still joins its title.                  |
 | `autoJoinMaxCoins`        | `0`     | ≥ 0 (0 = off)  | Most coins to spend joining a **single** paid challenge. `0` = free challenges only.                                                                                                                  |
 | `autoJoinCycleCoinBudget` | `0`     | ≥ 0 (0 = off)  | Total coins the join pass may spend in **one cycle** (global). `0` = no paid spend. Paid joins require **both** this and `autoJoinMaxCoins` > 0.                                                      |
+
+**Display**
+
+| Setting        | Default | Range / values | Description                                       |
+| -------------- | ------- | -------------- | ------------------------------------------------- |
+| `compactCards` | `false` | bool           | Compact challenge-card layout (GUI display only). |
 
 ## 📐 Recommended Setups
 

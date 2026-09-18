@@ -173,14 +173,10 @@ describe('ChallengeSettingsModal group applicability', () => {
         // Heading outline: h3 is the modal's own title (ui/Modal.jsx), h4 is a
         // section — the pre-existing "Challenge Profiles" block and each tier
         // band are siblings at that level — and group headings are h5 below.
-        // Match the band by text, not position, so the profiles section above
-        // it can move without breaking this.
-        const h4s = Array.from(document.querySelectorAll('h4')).map((h) => h.textContent);
-        expect(h4s).toContain('app.tierCore');
-
-        const groupHeading = document.querySelector('h5');
-        expect(groupHeading).not.toBeNull();
-        expect(groupHeading.textContent).toContain('app.groupBoost');
+        // Queried by role and accessible name rather than by tag position, so
+        // unrelated markup added elsewhere in the modal can't shift the match.
+        expect(screen.getByRole('heading', { level: 4, name: 'app.tierCore' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 5, name: 'app.groupBoost' })).toBeTruthy();
     });
 
     test('disables a group whose action is already used (boost USED)', async () => {

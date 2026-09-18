@@ -23,8 +23,12 @@ export const SETTING_CELL_CLASS = 'form-control rounded-box border border-base-3
 
 /**
  * Bucket schema entries into ordered UI sections for the settings modals.
- * Shared by SettingsModal (global) and ChallengeSettingsModal (per-challenge)
- * so both render the same grouping from a single source.
+ *
+ * No component calls this directly any more — both modals go through
+ * `tierSchemaEntries`, which bands this function's output under SETTINGS_TIERS.
+ * It stays exported as that function's building block and as the pure unit
+ * under direct test, so a grep for call sites finding none is expected, not a
+ * sign it is dead.
  *
  * - Sections follow the order of `groups` (the SETTINGS_GROUPS list).
  * - Within a section, entries keep schema declaration order.
