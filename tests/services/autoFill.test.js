@@ -20,6 +20,7 @@ jest.mock('../../src/js/settings/storage', () => ({
 const {
     maybeAutoFillChallenge,
     maybeEmergencyFillChallenge,
+    evaluateEmergencyFill,
     fillChallengeNow,
     submitNewEntryForAction,
     reflectNewEntry,
@@ -791,6 +792,109 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     });
 });
 
+describe('evaluateEmergencyFill — the state-only stand-downs, shared with the timeline view', () => {
+    // This predicate is the single source of truth for "emergency fill would do
+    // nothing": the runner below returns 'skipped' on it, and
+    // VotingLogic.describeDeadlineActions hides the timeline row (and its desktop
+    // notification) on it. Testing it directly is what keeps those two honest.
+    const full = () => makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }, { id: 'e2' }] });
+    const open = () => makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }] });
+
+    test('stands down when there is no free slot left', () => {
+        expect(evaluateEmergencyFill(full(), 'c1', makeSettings({ autoFill: false })).standDown).toBe(true);
+    });
+
+    test('acts when a slot is free and auto-fill is off', () => {
+        expect(evaluateEmergencyFill(open(), 'c1', makeSettings({ autoFill: false })).standDown).toBe(false);
+    });
+
+    test('stands down when auto-fill is on with no must-include filter', () => {
+        // The common configuration — the staggered path owns the fill.
+        expect(evaluateEmergencyFill(open(), 'c1', makeSettings({ autoFill: true })).standDown).toBe(true);
+    });
+
+    test('acts when auto-fill is on but a must-include filter is set', () => {
+        const settings = makeSettings({ autoFill: true, mustIncludeTags: ['sunset'] });
+        expect(evaluateEmergencyFill(open(), 'c1', settings).standDown).toBe(false);
+    });
+
+    test('a non-array truthy mustIncludeTags counts as no filter (corrupt settings blob)', () => {
+        // Settings are read back without zod re-validation, so a corrupted value
+        // must not be mistaken for an active filter and re-enable the feature.
+        const settings = makeSettings({ autoFill: true, mustIncludeTags: 'sunset' });
+        expect(evaluateEmergencyFill(open(), 'c1', settings).standDown).toBe(true);
+    });
+
+    test('an empty-array mustIncludeTags counts as no filter', () => {
+        expect(
+            evaluateEmergencyFill(open(), 'c1', makeSettings({ autoFill: true, mustIncludeTags: [] })).standDown,
+        ).toBe(true);
+    });
+
+    test.each([
+        ['undefined', undefined],
+        ['null', null],
+    ])('stands down on a challenge with no id (%s)', (_label, challengeId) => {
+        // Exactly the runner's own guard, so the view must not advertise a fill
+        // the runner would refuse outright. describeDeadlineActions therefore
+        // passes the RAW id rather than its ''-normalised one.
+        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoFill: false })).standDown).toBe(true);
+    });
+
+    test.each([
+        ['numeric 0', 0],
+        ['empty string', ''],
+    ])('treats a falsy-but-present id as usable (%s)', (_label, challengeId) => {
+        // The guard names undefined/null explicitly rather than testing
+        // falsiness, matching maybeEmergencyFillChallenge — widening it to ''
+        // would silently stop the runner filling such a challenge.
+        expect(evaluateEmergencyFill(open(), challengeId, makeSettings({ autoFill: false })).standDown).toBe(false);
+    });
+
+    test('hands back the settings it resolved so the runner need not re-read them', () => {
+        // Every getEffectiveSetting is an uncached readFileSync + merge; the
+        // runner reuses these instead of paying for them twice near a deadline.
+        const settings = makeSettings({ autoFill: true, mustIncludeTags: ['sunset'] });
+        const gate = evaluateEmergencyFill(open(), 'c1', settings);
+        expect(gate).toEqual({ standDown: false, autoFillEnabled: true, mustIncludeTags: ['sunset'] });
+        expect(settings.getEffectiveSetting).toHaveBeenCalledTimes(1);
+        expect(settings.getEffectiveTagSetting).toHaveBeenCalledTimes(1);
+    });
+
+    test('reads no settings at all when it can decide from state alone', () => {
+        const settings = makeSettings({ autoFill: false });
+        expect(evaluateEmergencyFill(full(), 'c1', settings).standDown).toBe(true);
+        expect(settings.getEffectiveSetting).not.toHaveBeenCalled();
+        expect(settings.getEffectiveTagSetting).not.toHaveBeenCalled();
+    });
+
+    test('an array of blank tags still counts as an active filter', () => {
+        // Array.isArray + length is deliberately coarse: the read-only view errs
+        // toward showing the row ("may fill") rather than hiding a fill that the
+        // runner's own photo probe is the real authority on.
+        const settings = makeSettings({ autoFill: true, mustIncludeTags: [''] });
+        expect(evaluateEmergencyFill(open(), 'c1', settings).standDown).toBe(false);
+    });
+
+    test('reads the must-include list with the challenge OBJECT so title rules apply', () => {
+        const settings = makeSettings({ autoFill: true });
+        const challenge = open();
+        evaluateEmergencyFill(challenge, 'c1', settings);
+        expect(settings.getEffectiveTagSetting).toHaveBeenCalledWith('mustIncludeTags', challenge);
+    });
+
+    test('a challenge missing max_photo_submits and entries counts as no free slot', () => {
+        // Both assertions route through the one getSlotsRemaining, so this pins
+        // the malformed-data BEHAVIOUR, not agreement between two implementations
+        // — there is only one left. The cross-module proof that the timeline view
+        // reaches the same verdict lives in describeDeadlineActions.test.js
+        // ('no phantom emergency-fill row when every slot is already full').
+        const malformed = { id: 'c1', close_time: 1_000_000 + 600 };
+        expect(getSlotsRemaining(malformed)).toBe(0);
+        expect(evaluateEmergencyFill(malformed, 'c1', makeSettings({ autoFill: false })).standDown).toBe(true);
+    });
+});
+
 describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () => {
     test('returns disabled when emergencyFill is 0 (off)', async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 3 * 60 });
@@ -1000,6 +1104,23 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
         });
         expect(result).toBe('submitted');
         expect(submitToChallenge.mock.calls[0][1]).toHaveLength(2);
+    });
+
+    test("an empty-string id still fills — the shared gate must not widen the runner's no-id guard", async () => {
+        // Regression guard: the runner's own guard rejects only undefined/null,
+        // so '' reaches the fill. The gate is shared with the read-only timeline
+        // view, which normalises a missing id to '' — teaching the gate to treat
+        // '' as "no id" would silently stop filling such a challenge here.
+        const challenge = makeChallenge({ id: '', maxSubmits: 2, entries: [], closeIn: 3 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const result = await maybeEmergencyFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: false, emergencyFill: 300 }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1', ['Cat'])]),
+            submitToChallenge,
+        });
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalled();
     });
 
     test('returns skipped when no slots remaining (does not fetch photos)', async () => {
