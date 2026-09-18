@@ -5,14 +5,19 @@
  *   - renders nothing when there are no challenges
  *   - lists every challenge by title, in the order given
  *   - clicking an entry scrolls the matching challenge-<id> element into view
+ *   - challenges with a per-challenge override are marked, others are not
  */
 
-import { render, screen, fireEvent } from './helpers/test-utils';
+import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 
 const challenge = (id, title) => ({ id, title });
 
 describe('ChallengeNav', () => {
+    beforeEach(() => {
+        window.api.getChallengeOverrides.mockResolvedValue({});
+    });
+
     afterEach(() => jest.restoreAllMocks());
 
     test('renders nothing when there are no challenges', () => {
@@ -45,5 +50,33 @@ describe('ChallengeNav', () => {
 
         expect(getById).toHaveBeenCalledWith('challenge-42');
         expect(fakeCard.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    });
+
+    test('marks only the challenges that carry a per-challenge override', async () => {
+        window.api.getChallengeOverrides.mockImplementation(async (id) => (id === '2' ? { exposureTarget: 90 } : {}));
+
+        render(<ChallengeNav challenges={[challenge(1, 'Plain'), challenge(2, 'Tuned')]} />);
+
+        const tuned = screen.getByRole('button', { name: /Tuned/ });
+        const plain = screen.getByRole('button', { name: /Plain/ });
+
+        await waitFor(() => expect(tuned.className).toMatch(/btn-accent/));
+        expect(tuned.textContent).toMatch(/⚙️/);
+        expect(tuned.getAttribute('title')).toBeTruthy();
+
+        expect(plain.className).not.toMatch(/btn-accent/);
+        expect(plain.textContent).not.toMatch(/⚙️/);
+        expect(plain.getAttribute('title')).toBeNull();
+    });
+
+    test('marks nothing when a per-challenge override read fails', async () => {
+        // The IPC handler falls back to null on error — a failed read must not
+        // light up the chip.
+        window.api.getChallengeOverrides.mockResolvedValue(null);
+
+        render(<ChallengeNav challenges={[challenge(7, 'Solo')]} />);
+
+        await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('7'));
+        expect(screen.getByRole('button', { name: /Solo/ }).className).not.toMatch(/btn-accent/);
     });
 });

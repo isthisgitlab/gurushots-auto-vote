@@ -19,13 +19,16 @@ export function ChipListPanel({ icon, label, count, children }) {
 /**
  * One anchor chip: a small button that smooth-scrolls to the matching
  * ChallengeCard (id="challenge-<id>"). Content is caller-supplied so a
- * chip can carry extra detail (e.g. the boost countdown).
+ * chip can carry extra detail (e.g. the boost countdown); `className`
+ * appends DaisyUI button modifiers so a caller can set a chip apart
+ * (e.g. the per-challenge-override marker in ChallengeNav).
  */
-export function ChallengeChip({ challengeId, children }) {
+export function ChallengeChip({ challengeId, className = '', title, children }) {
     return (
         <button
             type="button"
-            className="btn btn-xs h-auto whitespace-normal text-left"
+            title={title}
+            className={`btn btn-xs h-auto whitespace-normal text-left${className ? ` ${className}` : ''}`}
             onClick={() => scrollToChallenge(challengeId)}
         >
             {children}

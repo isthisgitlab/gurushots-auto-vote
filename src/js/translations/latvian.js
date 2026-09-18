@@ -271,6 +271,7 @@
             validationAtLeast: 'Ievadi vērtību {min} vai lielāku.',
             autoFillBadge: 'auto-aizpilde',
             customBadge: 'pielāgots',
+            customSettingsHint: 'Ir pielāgoti iestatījumi',
             mustIncludeTags: 'Obligātie tagi',
             mustIncludeTagsDesc:
                 'Striktais filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Apsvērt tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar visiem šiem tagiem. Atstāj tukšu, lai apsvērtu visus piemērotos foto. Salīdzināšana nav reģistrjutīga un notiek pa veseliem vārdiem: galotnes un daudzskaitlis joprojām sakrīt ("cat" sakrīt ar "cats"), bet tags nesakritīs ar garāku, nesaistītu vārdu ("cat" nesakrīt ar "catamaran"). Vairāku vārdu tagi sakrīt pa vārdiem, tāpēc "sea life" prasa abus. Tagi jāraksta angliski — automātiski noteiktie foto tagi vienmēr ir angļu valodā.',
