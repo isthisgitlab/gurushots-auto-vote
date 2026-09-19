@@ -444,7 +444,11 @@ describe('SettingsModal \u2014 category rules placement', () => {
     };
 
     afterEach(() => {
+        // Mirrors the tier-bands describe's reset exactly, `defaults` included.
+        // This describe never touches `defaults`, but an incomplete teardown is
+        // a trap for whatever describe gets inserted after it.
         mockSchemaState.schema = {};
+        mockSchemaState.defaults = {};
         mockSchemaState.groups = undefined;
         mockSchemaState.tiers = undefined;
     });
@@ -466,9 +470,27 @@ describe('SettingsModal \u2014 category rules placement', () => {
         expect(group.contains(marker)).toBe(true);
     });
 
-    test('with no auto-join group rendered, the editor is not orphaned elsewhere', () => {
-        // Empty schema (the suite default): the group loop renders nothing, so
-        // the editor must not appear detached in some other part of the modal.
+    test('the editor does not leak into a DIFFERENT group', () => {
+        // A rendered group that is NOT auto-join. This is the case that actually
+        // exercises the `id === 'autoJoin'` comparison: with the suite's empty
+        // default schema tierSchemaEntries returns [] and the loop never runs at
+        // all, so that version proved nothing about the id check.
+        mockSchemaState.schema = {
+            mockMode: { type: 'boolean', default: false, group: 'general', label: 'app.mockMode' },
+        };
+        mockSchemaState.groups = [{ id: 'general', label: 'app.groupGeneral', tier: 'entries' }];
+        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
+
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        // The group really did render — otherwise the absence below is vacuous.
+        expect(screen.getByText('app.groupGeneral')).not.toBeNull();
+        expect(screen.queryByText('app.noCategoryRules')).toBeNull();
+    });
+
+    test('with nothing rendered at all, the editor is not orphaned outside the loop', () => {
+        // Empty schema: guards against a standalone always-rendered section
+        // being reintroduced outside the tier-band loop (what this replaced).
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         expect(screen.queryByText('app.noCategoryRules')).toBeNull();
     });

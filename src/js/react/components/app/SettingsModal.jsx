@@ -568,12 +568,34 @@ export function SettingsModal({ isOpen, onClose }) {
                                             of the schema-driven grid above (a rule ARRAY is not a
                                             settings entry — it persists in challengeSettings over
                                             its own IPC channel), so the group renders them itself
-                                            rather than exiling them to a section of their own. */}
+                                            rather than exiling them to a section of their own.
+
+                                            Coupling to know about: tierSchemaEntries drops a group
+                                            with no visible entries, so if the autoJoin group were
+                                            ever pruned to zero settings this editor would silently
+                                            stop rendering while its rules still load and save. The
+                                            autoJoin toggle itself keeps the group non-empty today.
+                                            Move this if that stops being true. */}
                                         {id === 'autoJoin' && (
-                                            <div className="mt-4 rounded-box bg-base-200/40 p-3">
-                                                <h6 className="font-medium text-sm opacity-70 mb-1">
+                                            // A labelled region, NOT a second <h6>: the group's own
+                                            // title above is already an h6, and h6 is the deepest
+                                            // level HTML has - so a nested one would appear as its
+                                            // SIBLING in a screen reader's heading outline and hide
+                                            // that these rules are scoped to auto-join. role=group +
+                                            // aria-labelledby announces the label without adding a
+                                            // false section boundary. Rendered once, so a static id
+                                            // cannot collide.
+                                            <div
+                                                className="mt-4 rounded-box bg-base-200/40 p-3"
+                                                role="group"
+                                                aria-labelledby="category-rules-label"
+                                            >
+                                                <p
+                                                    id="category-rules-label"
+                                                    className="font-medium text-sm opacity-70 mb-1"
+                                                >
                                                     {t('app.categoryRules')}
-                                                </h6>
+                                                </p>
                                                 <p className="text-xs text-base-content/60 mb-3">
                                                     {t('app.categoryRulesDesc')}
                                                 </p>

@@ -273,7 +273,7 @@
             categoryRuleJoinWindow: 'Vai stundas pirms beigām',
             categoryRuleInheritPlaceholder: 'Mantot',
             categoryRuleHint:
-                'Atstāj lauku tukšu, lai mantotu globālo iestatījumu. Ja aizpildīti abi, tiek izmantoti procenti. Fotoattēlu skaits labi norāda garumu: 4 fotoattēlu izaicinājumi parasti ilgst dienu, 2 fotoattēlu — divas dienas, 3 fotoattēlu — trīs.',
+                'Atstāj lauku tukšu, lai mantotu globālo iestatījumu; ievadi 0, lai šai kategorijai izslēgtu attiecīgo aizstājumu. Ja aizpildīti abi, tiek izmantoti procenti. Fotoattēlu skaits labi norāda garumu: 4 fotoattēlu izaicinājumi parasti ilgst dienu, 2 fotoattēlu — divas dienas, 3 fotoattēlu — trīs.',
             autoJoinAfterPercentElapsed: 'Pievienoties pēc % no izaicinājuma',
             autoJoinAfterPercentElapsedDesc:
                 'Nogaidīt, līdz pagājusi šī daļa no izaicinājuma, un tikai tad pievienoties — procentos no tā paša garuma. 75 nozīmē "pievienoties, kad pagājušas trīs ceturtdaļas". 0 = izslēgts.',

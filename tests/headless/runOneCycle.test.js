@@ -42,7 +42,10 @@ describe('headless runOneCycle', () => {
     });
 
     afterEach(() => {
-        Date.now.mockRestore();
+        // Guarded: if beforeEach ever threw before the spy was installed, an
+        // unconditional restore would throw on the real Date.now and bury the
+        // original failure.
+        Date.now.mockRestore?.();
         delete globalThis.AndroidHeadlessBridge;
     });
 

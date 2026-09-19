@@ -273,7 +273,7 @@
             categoryRuleJoinWindow: 'Or Hours Before End',
             categoryRuleInheritPlaceholder: 'Inherit',
             categoryRuleHint:
-                'Leave a field empty to inherit the global setting. When both are filled the percentage is used. Photo count is a good stand-in for length: 4-photo challenges usually run a day, 2-photo ones two days, 3-photo ones three.',
+                'Leave a field empty to inherit the global setting; enter 0 to turn that override off for this category. When both are filled the percentage is used. Photo count is a good stand-in for length: 4-photo challenges usually run a day, 2-photo ones two days, 3-photo ones three.',
             autoJoinAfterPercentElapsed: 'Join After % Of Challenge Has Run',
             autoJoinAfterPercentElapsedDesc:
                 'Wait until this much of a challenge has already run before joining it, as a percentage of its own length. 75 means "join once three-quarters is over". 0 = off.',
