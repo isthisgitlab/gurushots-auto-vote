@@ -424,3 +424,52 @@ describe('SettingsModal tier bands', () => {
         expect(screen.queryByText('app.tierOverridesDesc')).toBeNull();
     });
 });
+
+/**
+ * Category join-timing rules render INSIDE the auto-join group, not as a
+ * section of their own — they override nothing but that group's timing keys,
+ * so splitting them off puts the rules far from the setting they modify.
+ *
+ * Worth pinning because the placement is a string comparison on the group id:
+ * a typo there hides the whole editor with no error anywhere, and the rest of
+ * this suite renders an empty schema, so nothing else would notice.
+ */
+describe('SettingsModal \u2014 category rules placement', () => {
+    const withAutoJoinGroup = () => {
+        mockSchemaState.schema = {
+            autoJoin: { type: 'boolean', default: false, group: 'autoJoin', label: 'app.autoJoin' },
+        };
+        mockSchemaState.groups = [{ id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' }];
+        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
+    };
+
+    afterEach(() => {
+        mockSchemaState.schema = {};
+        mockSchemaState.groups = undefined;
+        mockSchemaState.tiers = undefined;
+    });
+
+    test('the editor renders within the auto-join group, not as a standalone section', () => {
+        withAutoJoinGroup();
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        // The editor is present at all (its empty-state line is the cheapest
+        // stable marker — the translation manager returns keys in tests).
+        const marker = screen.getByText('app.noCategoryRules');
+        expect(marker).not.toBeNull();
+
+        // ...and it is nested under the auto-join group's heading rather than a
+        // sibling of it. Walking up from the editor must reach the element that
+        // also contains the group heading.
+        const groupHeading = screen.getByText('app.groupAutoJoin');
+        const group = groupHeading.parentElement;
+        expect(group.contains(marker)).toBe(true);
+    });
+
+    test('with no auto-join group rendered, the editor is not orphaned elsewhere', () => {
+        // Empty schema (the suite default): the group loop renders nothing, so
+        // the editor must not appear detached in some other part of the modal.
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(screen.queryByText('app.noCategoryRules')).toBeNull();
+    });
+});

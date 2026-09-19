@@ -563,6 +563,35 @@ export function SettingsModal({ isOpen, onClose }) {
                                                 </div>
                                             ))}
                                         </div>
+                                        {/* Category rules belong to this group: they override
+                                            nothing but its join-timing keys. They cannot be part
+                                            of the schema-driven grid above (a rule ARRAY is not a
+                                            settings entry — it persists in challengeSettings over
+                                            its own IPC channel), so the group renders them itself
+                                            rather than exiling them to a section of their own. */}
+                                        {id === 'autoJoin' && (
+                                            <div className="mt-4 rounded-box bg-base-200/40 p-3">
+                                                <h6 className="font-medium text-sm opacity-70 mb-1">
+                                                    {t('app.categoryRules')}
+                                                </h6>
+                                                <p className="text-xs text-base-content/60 mb-3">
+                                                    {t('app.categoryRulesDesc')}
+                                                </p>
+                                                {categoryRulesError && (
+                                                    <div className="alert alert-error mb-3 py-2 text-sm" role="alert">
+                                                        <span>{t('app.categoryRulesSaveError')}</span>
+                                                    </div>
+                                                )}
+                                                <CategoryRulesEditor
+                                                    value={categoryRules}
+                                                    types={CATEGORY_RULE_TYPE_SUGGESTIONS}
+                                                    onChange={(next) => {
+                                                        if (categoryRulesError) setCategoryRulesError(false);
+                                                        setCategoryRules(next);
+                                                    }}
+                                                />
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -586,27 +615,6 @@ export function SettingsModal({ isOpen, onClose }) {
                             onChange={(next) => {
                                 if (titleRulesError) setTitleRulesError(false);
                                 setTitleRules(next);
-                            }}
-                        />
-                    </div>
-
-                    {/* Category Join-Timing Rules Section */}
-                    <div>
-                        <h4 className="font-semibold text-base mb-1 border-b border-base-300 pb-2">
-                            {t('app.categoryRules')}
-                        </h4>
-                        <p className="text-xs text-base-content/60 mb-3">{t('app.categoryRulesDesc')}</p>
-                        {categoryRulesError && (
-                            <div className="alert alert-error mb-3 py-2 text-sm" role="alert">
-                                <span>{t('app.categoryRulesSaveError')}</span>
-                            </div>
-                        )}
-                        <CategoryRulesEditor
-                            value={categoryRules}
-                            types={CATEGORY_RULE_TYPE_SUGGESTIONS}
-                            onChange={(next) => {
-                                if (categoryRulesError) setCategoryRulesError(false);
-                                setCategoryRules(next);
                             }}
                         />
                     </div>

@@ -22,8 +22,18 @@ const { computeNextDelayMs } = require('../../src/js/headless/index');
 describe('headless runOneCycle', () => {
     let onCycleComplete;
 
+    // The delay assertions below are exact (`toBe(60000)`), and they compare a
+    // close_time the test derives from Date.now() against a delay the production
+    // code computes from its OWN Date.now() a moment later. With a live clock the
+    // two can land on opposite sides of a second boundary, which turns an
+    // expected 60000 into 59000 and fails the suite roughly one run in six.
+    // Freezing the clock makes both reads agree, so these tests measure the
+    // cadence logic rather than how long the setup happened to take.
+    const FIXED_NOW_MS = 1_700_000_000_000;
+
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.spyOn(Date, 'now').mockReturnValue(FIXED_NOW_MS);
         onCycleComplete = jest.fn();
         globalThis.AndroidHeadlessBridge = { onCycleComplete };
         settings.loadSettings.mockReturnValue({ checkFrequencyMin: 2, checkFrequencyMax: 2 });
@@ -32,6 +42,7 @@ describe('headless runOneCycle', () => {
     });
 
     afterEach(() => {
+        Date.now.mockRestore();
         delete globalThis.AndroidHeadlessBridge;
     });
 
