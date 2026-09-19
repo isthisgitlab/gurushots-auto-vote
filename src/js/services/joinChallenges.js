@@ -79,6 +79,16 @@ const resolveJoinSetting = (key, challenge) => {
     if (values && Object.prototype.hasOwnProperty.call(values, key)) {
         return values[key];
     }
+    // CATEGORY tier: keyed on the challenge's own `type` / `max_photo_submits`,
+    // so it applies to a whole class of challenges rather than one title. It
+    // sits BELOW the title tiers (a rule naming this exact title is the more
+    // specific instruction) and ABOVE the global default. Optional-chained like
+    // every other per-challenge settings read here: an older persisted facade
+    // must degrade to "no category override", never throw mid-pass.
+    const category = settings.getCategoryRuleOverrides?.(challenge);
+    if (category && Object.prototype.hasOwnProperty.call(category, key)) {
+        return category[key];
+    }
     return settings.getEffectiveSetting(key, null);
 };
 
@@ -166,23 +176,32 @@ const resolveCandidateConfig = (challenge) => ({
     // Hours → seconds, to match close_time's unit. A non-finite/negative value
     // degrades to 0 = "no window", i.e. the historical join-on-sight behavior.
     joinWithinSec: Math.max(0, Number(resolveJoinSetting('autoJoinWithinHoursOfEnd', challenge)) || 0) * 3600,
+    // Elapsed-fraction anchor, resolved through the same tier chain. Percent and
+    // hours never combine: resolveJoinWindow picks ONE (percent wins), so a
+    // category row saying "90%" fully replaces an inherited hours window rather
+    // than intersecting with it.
+    joinAfterPercentElapsed: Math.max(0, Number(resolveJoinSetting('autoJoinAfterPercentElapsed', challenge)) || 0),
     hasProfileMatch: hasTitleOptIn(challenge),
 });
 
 /**
  * Report a candidate the join window could not evaluate.
  *
- * The live get_member_challenges response DOES carry close_time (and start_time)
+ * The live get_member_challenges response DOES carry close_time AND start_time
  * on every open challenge — verified 2026-09-19 — so this should never fire in
- * practice. It stays because the fail-closed gate skips such a candidate, which
+ * practice. `reason` names which of the two the gate could not read (only the
+ * percent-elapsed anchor reads start_time). It stays because the fail-closed gate skips such a candidate, which
  * would otherwise be indistinguishable from "nothing to join": if GuruShots ever
  * drops or renames the field, the window would silently stop every join. Naming
  * the fields that ARE present makes that diagnosable from one run.
  */
-const warnMissingCloseTime = (challenge) => {
+const warnMissingCloseTime = (challenge, reason = 'close-time-unknown') => {
     const fields = Object.keys(challenge || {}).join(', ') || '(none)';
+    // start_time is only read by the percent-elapsed anchor, so name the field
+    // the gate actually could not read rather than a generic "timing" message.
+    const field = reason === 'start-time-unknown' ? 'start_time' : 'close_time';
     cat().warning(
-        `join window set but ${logger.challengeTag(challenge)} has no readable close_time — ` +
+        `join window set but ${logger.challengeTag(challenge)} has no readable ${field} — ` +
             `candidate deferred. Fields present: ${fields}`,
         null,
     );
@@ -513,12 +532,19 @@ const runJoinPass = async (token, now, deps) => {
             includeTags: cfg.includeTags,
             excludeTags: cfg.excludeTags,
             joinWithinSec: cfg.joinWithinSec,
+            joinAfterPercentElapsed: cfg.joinAfterPercentElapsed,
             nowSec,
         });
         if (!decision.join) {
-            if (decision.reason === 'close-time-unknown' && !missingCloseTimeLogged) {
+            // Both timing fields get the same one-per-pass diagnostic: each
+            // means the window silently stopped joining, which is otherwise
+            // indistinguishable from "nothing to join".
+            if (
+                (decision.reason === 'close-time-unknown' || decision.reason === 'start-time-unknown') &&
+                !missingCloseTimeLogged
+            ) {
                 missingCloseTimeLogged = true;
-                warnMissingCloseTime(challenge);
+                warnMissingCloseTime(challenge, decision.reason);
             }
             results.push({ id: challenge?.id, status: `skipped:${decision.reason}` });
             continue;

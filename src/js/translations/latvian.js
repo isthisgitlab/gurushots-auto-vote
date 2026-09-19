@@ -257,6 +257,28 @@
                 'Nogaidīt, līdz izaicinājumam līdz beigām atlicis tik stundu, un tikai tad pievienoties, nevis pievienoties uzreiz, tiklīdz tas parādās. 0 = pievienoties uzreiz.',
             autoJoinWithinHoursOfEndHelp:
                 'Izaicinājums ārpus loga netiek izlaists pavisam — tas tiek pārvērtēts katrā ciklā un pievienots, tiklīdz nonāk logā. Ja izaicinājums nenorāda beigu laiku, tas netiek pievienots pāragri, kamēr logs ir iestatīts.',
+            categoryRules: 'Pievienošanās laiks pēc kategorijas',
+            categoryRulesDesc:
+                'Piešķir veselai izaicinājumu grupai savu pievienošanās laiku, nenosaucot katru nosaukumu. Atbilstība pēc izaicinājuma veida, pēc fotoattēlu skaita vai pēc abiem. Šie noteikumi ir pārāki par globālo laiku augšā un zemāki par nosaukuma noteikumu.',
+            categoryRulesSaveError:
+                'Šos kategoriju noteikumus neizdevās saglabāt. Pārbaudi, vai divas rindas neatbilst vienai kategorijai un vai visas vērtības ir pieļaujamajā diapazonā.',
+            noCategoryRules: 'Vēl nav kategoriju noteikumu. Visi izaicinājumi izmanto globālo laiku augšā.',
+            addCategoryRule: 'Pievienot kategorijas noteikumu',
+            removeCategoryRule: 'Noņemt kategorijas noteikumu',
+            categoryRuleType: 'Izaicinājuma veids',
+            categoryRuleTypePlaceholder: 'Jebkurš veids',
+            categoryRulePics: 'Fotoattēli',
+            categoryRuleAnyPics: 'Jebkurš',
+            categoryRulePercentElapsed: 'Pievienoties pēc',
+            categoryRuleJoinWindow: 'Vai stundas pirms beigām',
+            categoryRuleInheritPlaceholder: 'Mantot',
+            categoryRuleHint:
+                'Atstāj lauku tukšu, lai mantotu globālo iestatījumu. Ja aizpildīti abi, tiek izmantoti procenti. Fotoattēlu skaits labi norāda garumu: 4 fotoattēlu izaicinājumi parasti ilgst dienu, 2 fotoattēlu — divas dienas, 3 fotoattēlu — trīs.',
+            autoJoinAfterPercentElapsed: 'Pievienoties pēc % no izaicinājuma',
+            autoJoinAfterPercentElapsedDesc:
+                'Nogaidīt, līdz pagājusi šī daļa no izaicinājuma, un tikai tad pievienoties — procentos no tā paša garuma. 75 nozīmē "pievienoties, kad pagājušas trīs ceturtdaļas". 0 = izslēgts.',
+            autoJoinAfterPercentElapsedHelp:
+                'Izmanto šo fiksētu stundu vietā, kad izaicinājumi ir dažāda garuma: 75% nozīmē 6 stundas pirms beigām 24 stundu izaicinājumam un 5 dienas pirms beigām 3 nedēļu izstādei, ko ar vienu stundu iestatījumu panākt nevar. Kad šis ir virs 0, tas pilnībā aizstāj stundu logu. Izaicinājums, kas nenorāda gan sākuma, gan beigu laiku, netiek pievienots pāragri.',
             autoJoinMaxCoins: 'Maks. monētas par izaicinājumu',
             autoJoinMaxCoinsDesc:
                 'Lielākā monētu cena, ko maksāt par pievienošanos vienam izaicinājumam. 0 = tikai bezmaksas. Maksas pievienošanās prasa arī cikla budžetu virs 0.',
