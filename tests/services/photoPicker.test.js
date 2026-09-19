@@ -353,6 +353,15 @@ describe('photoPicker', () => {
             // intent explicit and keeps the caller on the full-library path.
             expect(buildSearchTerms({ title: 'C is for…' }, {})).toEqual([]);
         });
+        test('"The Letter X" returns [] instead of searching for the noun "letter"', () => {
+            // Regression: this used to tokenise to ['letter'] and narrow the
+            // library to mail/notes/signage — the correspondence sense — instead
+            // of leaving the full library for the client-side letter filter.
+            expect(buildSearchTerms({ title: "The Letter 'G'" }, {})).toEqual([]);
+            expect(buildSearchTerms({ title: 'The Letter G' }, {})).toEqual([]);
+            // A title that merely contains the word still tokenises normally.
+            expect(buildSearchTerms({ title: 'Love Letter' }, {})).toEqual(['letter', 'love']);
+        });
     });
 
     describe('detectLetterPrefix', () => {
@@ -369,6 +378,39 @@ describe('photoPicker', () => {
             expect(detectLetterPrefix('A is for Apple')).toBe('a');
             expect(detectLetterPrefix('B Is For')).toBe('b'); // case-insensitive, end-of-string boundary
         });
+        test('parses the named "The Letter X" family', () => {
+            // The form GuruShots actually ships. Before this was handled the title
+            // tokenised to the subject noun "letter" and the fill chased
+            // correspondence (mail, notes, signage) instead of G-subjects.
+            expect(detectLetterPrefix("The Letter 'G'")).toBe('g');
+            expect(detectLetterPrefix('The Letter "G"')).toBe('g');
+            expect(detectLetterPrefix('The Letter ‘G’')).toBe('g'); // curly single
+            expect(detectLetterPrefix('The Letter “G”')).toBe('g'); // curly double
+            expect(detectLetterPrefix('The Letter G')).toBe('g'); // bare, terminal
+            expect(detectLetterPrefix('Letter G')).toBe('g');
+            expect(detectLetterPrefix('the letter g')).toBe('g'); // case-insensitive
+            expect(detectLetterPrefix('Letter: G')).toBe('g');
+        });
+        test('a named letter terminal in its SEGMENT still parses', () => {
+            expect(detectLetterPrefix('Letter G: Green Things')).toBe('g');
+            expect(detectLetterPrefix('Letter G - Show your best')).toBe('g');
+            expect(detectLetterPrefix('Letter G.')).toBe('g');
+            expect(detectLetterPrefix('Letter G!')).toBe('g');
+        });
+        test('a bare mid-title letter is treated as an article, not a theme', () => {
+            // The quoted-or-terminal rule is what keeps the article "a" out. The
+            // accepted cost is that "Letter B Challenge" is also left alone: an
+            // unquoted letter with a trailing word is not distinguishable from
+            // the article case by shape alone.
+            expect(detectLetterPrefix('A Letter a Day')).toBeNull();
+            expect(detectLetterPrefix('Letter B Challenge')).toBeNull();
+        });
+        test('the word "letter" without a lone letter after it is not a letter challenge', () => {
+            expect(detectLetterPrefix('Love Letter')).toBeNull();
+            expect(detectLetterPrefix('The Letter')).toBeNull();
+            expect(detectLetterPrefix('Letters From Home')).toBeNull();
+            expect(detectLetterPrefix('Letter to Santa')).toBeNull();
+        });
         test('a word merely ending in a letter before "is for" is not a letter challenge', () => {
             expect(detectLetterPrefix('What is for dinner')).toBeNull();
             expect(detectLetterPrefix('This is for you')).toBeNull();
@@ -382,7 +424,6 @@ describe('photoPicker', () => {
             expect(detectLetterPrefix('Begins With L-A')).toBeNull();
         });
         test('out-of-scope title forms return null', () => {
-            expect(detectLetterPrefix('Letter B Challenge')).toBeNull();
             expect(detectLetterPrefix('L Words')).toBeNull();
             expect(detectLetterPrefix('Sunset')).toBeNull();
         });
@@ -397,6 +438,8 @@ describe('photoPicker', () => {
             expect(detectLetterPrefix(long)).toBeNull();
             // Same cap guards the "is for" family.
             expect(detectLetterPrefix(`${'x '.repeat(150)}C is for…`)).toBeNull();
+            // ...and the named family.
+            expect(detectLetterPrefix(`The Letter 'G' ${'x'.repeat(300)}`)).toBeNull();
         });
     });
 

@@ -547,8 +547,9 @@ const SEARCH_TERMS_CAP = 3;
 // plus the "X is for" family below ("C is for…", "A is for Apple").
 // Returns the lone target letter (lowercased) or null.
 //
-// SCOPE: only the begins/starts-with and "X is for" families are handled. Titles
-// like "Letter L" or "L Words" intentionally return null and keep today's behavior.
+// SCOPE: the begins/starts-with, "X is for" and "The Letter X" families are
+// handled. A bare "L Words" intentionally returns null and keeps today's
+// behavior.
 //
 // SECURITY: `title` is an untrusted string from the GuruShots API. We cap its
 // length before matching (ReDoS defense-in-depth, though neither pattern has
@@ -570,10 +571,31 @@ const LETTER_CHALLENGE_RE =
 // (?<![\w-]): it additionally rejects punctuation-adjacent false positives,
 // and only m[1] is read so the consumed whitespace is irrelevant.
 const LETTER_IS_FOR_RE = /(?:^|\s)([a-z])\s+is\s+for\b/i;
+// "The Letter 'G'", "The Letter G", "Letter G: Green Things" — the form
+// GuruShots actually ships, which names the letter instead of describing the
+// rule. Without this the title tokenises to the subject noun "letter" and the
+// fill chases correspondence (mail, notes, signage) instead of G-subjects.
+//
+// The letter must be QUOTED or TERMINAL within its segment (end of title, or
+// followed by a separator). That deliberate narrowness is what keeps the
+// article "a" out: "A Letter a Day" has a bare single char mid-title, which is
+// far more often an article than a theme, so it stays null. The cost is that
+// "Letter B Challenge" also stays null — an unquoted letter with a trailing
+// word is not distinguishable from that article case by shape alone.
+//
+// Quote pairs are matched by open-class/close-class rather than a backreference
+// because the curly pairs differ on each side (U+2018/U+2019, U+201C/U+201D);
+// a mismatched pair is accepted since this parses messy titles, not validates.
+const LETTER_NAMED_RE = /\bletters?\s*:?\s*(?:['"‘“]\s*([a-z])\s*['"’”]|([a-z])(?=\s*(?:[-–—:;,.!?|]|$)))/i;
 const detectLetterPrefix = (title) => {
     if (typeof title !== 'string' || title.length > 200) return null;
-    const m = title.match(LETTER_CHALLENGE_RE) || title.match(LETTER_IS_FOR_RE);
-    return m ? m[1].toLowerCase() : null;
+    const m = title.match(LETTER_CHALLENGE_RE) || title.match(LETTER_IS_FOR_RE) || title.match(LETTER_NAMED_RE);
+    if (!m) return null;
+    // Each pattern captures the letter in a different group (LETTER_NAMED_RE has
+    // one per quoted/bare branch, only one of which participates), so read the
+    // first group that actually matched rather than hard-coding an index.
+    const letter = m.slice(1).find((g) => typeof g === 'string' && g.length === 1);
+    return letter ? letter.toLowerCase() : null;
 };
 
 /**
