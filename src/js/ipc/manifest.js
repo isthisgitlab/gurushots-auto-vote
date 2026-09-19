@@ -61,6 +61,8 @@ const invokeChannels = [
     'get-effective-setting',
     'get-title-rules',
     'set-title-rules',
+    'get-category-rules',
+    'set-category-rules',
     'get-title-profile',
     'get-challenge-overrides',
     'replace-challenge-overrides',

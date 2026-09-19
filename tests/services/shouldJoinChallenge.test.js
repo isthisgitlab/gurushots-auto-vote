@@ -252,3 +252,136 @@ describe('join window (timing)', () => {
         expect(win({ challenge: paidNear, maxCoins: 150, remainingBudget: 10 }).reason).toBe('over-cycle-budget');
     });
 });
+
+/**
+ * Percent-elapsed join anchor: `joinAfterPercentElapsed` (0 = off) defers a
+ * candidate until that share of its OWN lifetime has run, so one setting suits
+ * challenges of wildly different lengths — the live payload carries 2h flash
+ * challenges and 515h exhibitions side by side.
+ */
+describe('join window (percent elapsed)', () => {
+    const HOUR = 3600;
+    const START = 1_700_000_000;
+    // A challenge of `durH` hours, observed `elapsedH` hours after it opened.
+    const at = (durH, elapsedH, over = {}) => ({
+        challenge: {
+            id: 7,
+            type: 'default',
+            join_coins: 0,
+            start_time: START,
+            close_time: START + durH * HOUR,
+            ...over,
+        },
+        nowSec: START + elapsedH * HOUR,
+    });
+    const pct = (value, ctx) => call({ joinAfterPercentElapsed: value, ...ctx });
+
+    test('0 is off — the candidate joins on sight, and start_time is never read', () => {
+        expect(pct(0, at(24, 0))).toMatchObject({ join: true, reason: 'free' });
+        expect(
+            call({ challenge: { id: 7, type: 'default', join_coins: 0 }, joinAfterPercentElapsed: 0 }),
+        ).toMatchObject({ join: true, reason: 'free' });
+    });
+
+    test('defers before the fraction has run and joins once it has', () => {
+        expect(pct(75, at(24, 17)).reason).toBe('too-early');
+        expect(pct(75, at(24, 19))).toMatchObject({ join: true, reason: 'free' });
+    });
+
+    test('the boundary is inclusive — exactly at the fraction joins', () => {
+        expect(pct(75, at(24, 18))).toMatchObject({ join: true, reason: 'free' });
+        // One minute short is still too early.
+        expect(pct(75, { ...at(24, 18), nowSec: START + 18 * HOUR - 60 }).reason).toBe('too-early');
+    });
+
+    /**
+     * The whole point of the anchor: ONE value tracks the challenge's length,
+     * where a fixed hours window cannot. These are the real durations observed
+     * on the live account (24/48/72h defaults, a 515.7h exhibition, a 2h flash).
+     */
+    test.each([
+        [24, 6],
+        [48, 12],
+        [72, 18],
+        [168, 42],
+    ])('75%% of a %ih challenge leaves %ih before close', (durH, leftH) => {
+        expect(pct(75, at(durH, durH - leftH - 0.05)).reason).toBe('too-early');
+        expect(pct(75, at(durH, durH - leftH)).join).toBe(true);
+    });
+
+    test('a 2h flash and a 515.7h exhibition are both handled by the same value', () => {
+        // Flash: 75% of 2h = 30 minutes left.
+        expect(pct(75, at(2, 1.4)).reason).toBe('too-early');
+        expect(pct(75, at(2, 1.5)).join).toBe(true);
+        // Exhibition: 75% of 515.7h leaves ~128.9h — an hours window tuned for
+        // the flash would have joined it weeks early.
+        expect(pct(75, at(515.7, 386)).reason).toBe('too-early');
+        expect(pct(75, at(515.7, 387)).join).toBe(true);
+    });
+
+    test('percent wins when an hours window is also set — one candidate, one window', () => {
+        // The hours window alone would defer (1s from close); percent alone
+        // would join. Percent is the one that decides.
+        expect(pct(75, { ...at(24, 20), joinWithinSec: 1 })).toMatchObject({ join: true, reason: 'free' });
+        // And the reverse: percent defers even though the hours window is wide open.
+        expect(pct(75, { ...at(24, 2), joinWithinSec: 48 * HOUR }).reason).toBe('too-early');
+    });
+
+    test('a title opt-in does NOT bypass it, matching the hours window', () => {
+        expect(pct(75, { ...at(24, 2), hasProfileMatch: true })).toMatchObject({
+            join: false,
+            reason: 'too-early',
+        });
+    });
+
+    test('it gates paid candidates identically, before the coin caps', () => {
+        const paid = at(24, 2, { join_coins: 100 });
+        expect(pct(75, { ...paid, maxCoins: 150 }).reason).toBe('too-early');
+        const paidLate = at(24, 20, { join_coins: 100 });
+        expect(pct(75, { ...paidLate, maxCoins: 150 })).toMatchObject({ join: true, reason: 'paid' });
+    });
+
+    describe('fail-closed', () => {
+        test('a missing start_time is not joined — a percentage needs a length', () => {
+            expect(pct(75, at(24, 20, { start_time: undefined })).reason).toBe('start-time-unknown');
+        });
+        test('an unparseable start_time is refused, not coerced', () => {
+            expect(pct(75, at(24, 20, { start_time: 'soon' })).reason).toBe('start-time-unknown');
+        });
+        test('a start_time at or after close_time has no fraction to compute', () => {
+            expect(pct(75, at(24, 20, { start_time: START + 99 * HOUR })).reason).toBe('start-time-unknown');
+            expect(pct(75, at(24, 20, { start_time: START + 24 * HOUR })).reason).toBe('start-time-unknown');
+        });
+        test('a missing close_time still reports close-time-unknown first', () => {
+            expect(pct(75, at(24, 20, { close_time: undefined })).reason).toBe('close-time-unknown');
+        });
+        test('an already-closed candidate is refused before the fraction is read', () => {
+            expect(pct(75, { ...at(24, 25) }).reason).toBe('already-closed');
+        });
+    });
+
+    test('a start_time in the future reads as 0% elapsed, never negative', () => {
+        // Clock skew: now is before start. 0% < 75%, so defer rather than join.
+        expect(pct(75, { ...at(24, 12), nowSec: START - HOUR }).reason).toBe('too-early');
+        // And a 1% anchor does not accidentally pass on a negative fraction.
+        expect(pct(1, { ...at(24, 12), nowSec: START - HOUR }).reason).toBe('too-early');
+    });
+
+    /**
+     * 100% elapsed is only true once close_time has passed, at which point the
+     * gate reports `already-closed` instead. So the anchor clamps to the latest
+     * fraction that can actually fire (99%) — a corrupted or out-of-range value
+     * must degrade to "join as late as possible", never to "never join".
+     */
+    test('an out-of-range value clamps to the latest REACHABLE fraction, not to never', () => {
+        // 98% of 24h = 23.52h elapsed: still short of the clamped 99% anchor.
+        expect(pct(1000, at(24, 23.5)).reason).toBe('too-early');
+        // 99.5% elapsed clears the clamped anchor and still has time left.
+        expect(pct(1000, at(24, 23.88)).join).toBe(true);
+    });
+
+    test('the schema ceiling (99) is reachable, so the maximum setting still joins', () => {
+        expect(pct(99, at(24, 23.5)).reason).toBe('too-early');
+        expect(pct(99, at(24, 23.9)).join).toBe(true);
+    });
+});

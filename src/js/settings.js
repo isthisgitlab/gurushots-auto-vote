@@ -1050,7 +1050,7 @@ const findTitleRule = (target) => _findRuleIn(getTitleRules(), target);
  * per-title setups still belong in a named profile, which this composes with
  * (inline wins; see resolveJoinSetting in services/joinChallenges.js).
  */
-const TITLE_RULE_INLINE_KEYS = ['autoJoin', 'autoFill', 'autoJoinWithinHoursOfEnd'];
+const TITLE_RULE_INLINE_KEYS = ['autoJoin', 'autoFill', 'autoJoinWithinHoursOfEnd', 'autoJoinAfterPercentElapsed'];
 
 /**
  * Pull the inline overrides off one rule, validated against the schema. Returns
@@ -1089,6 +1089,168 @@ const getTitleRuleOverrides = (target) => {
     // Re-validate on read: a hand-edited settings file can hold anything, and
     // automation must never act on a value the schema would reject.
     return _sanitizeTitleRuleInline(rule) || {};
+};
+
+// ---- category rules (join timing per challenge TYPE / photo count) ----
+
+/**
+ * Settings a category rule may override. Timing only, deliberately: a category
+ * ("every exhibition", "every 4-photo challenge") is a blunt instrument - broad
+ * enough that letting it flip `autoJoin` itself, or move coin caps, would make
+ * one careless row spend money across a whole class of challenges. Timing is
+ * the axis that genuinely varies by category, because a category is really a
+ * proxy for how long the challenge runs.
+ */
+const CATEGORY_RULE_INLINE_KEYS = ['autoJoinWithinHoursOfEnd', 'autoJoinAfterPercentElapsed'];
+
+// A challenge carries at most a handful of submissions; the ceiling is a
+// defense-in-depth bound on a hand-edited file, not a real API limit.
+const MAX_CATEGORY_PICS = 10;
+const MAX_CATEGORY_RULES = 20;
+
+/**
+ * Get the saved category rules. Tolerates a settings file written before this
+ * feature existed (loadSettings shallow-merges challengeSettings whole).
+ */
+const getCategoryRules = () => {
+    const settings = loadSettings();
+    const rules = settings.challengeSettings?.categoryRules;
+    return Array.isArray(rules) ? rules : [];
+};
+
+const normalizeCategoryType = (type) => (typeof type === 'string' ? type.trim().toLowerCase() : '');
+
+const normalizeCategoryPics = (pics) => {
+    const n = Number(pics);
+    return Number.isInteger(n) && n >= 1 && n <= MAX_CATEGORY_PICS ? n : null;
+};
+
+/**
+ * Does the rule's TYPE condition hold? Three-valued like the title matcher:
+ * null = the rule sets no type at all, false = it sets one that did not match.
+ */
+const categoryTypeMatches = (rule, typeKey) => {
+    const wanted = normalizeCategoryType(rule?.type);
+    if (!wanted) return null;
+    return typeKey === wanted;
+};
+
+/** Same three-valued contract for the PHOTO-COUNT condition. */
+const categoryPicsMatches = (rule, pics) => {
+    const wanted = normalizeCategoryPics(rule?.pics);
+    if (wanted === null) return null;
+    return pics === wanted;
+};
+
+/**
+ * Find the category rule that best matches a challenge.
+ *
+ * A rule may be keyed on the challenge `type`, on its `max_photo_submits`, or
+ * on both; every condition it carries must hold (AND), and a rule carrying
+ * neither matches nothing. A rule naming BOTH beats one naming either alone, so
+ * "4-photo exhibitions" can be carved out of "all exhibitions". Ties break by
+ * position, so the outcome never depends on object ordering.
+ *
+ * @param {{type?: string, max_photo_submits?: number}} challenge
+ * @returns {object|null}
+ */
+const findCategoryRule = (challenge) => {
+    const rules = getCategoryRules();
+    if (!Array.isArray(rules) || rules.length === 0) return null;
+    const typeKey = normalizeCategoryType(challenge?.type);
+    const pics = normalizeCategoryPics(challenge?.max_photo_submits);
+    if (!typeKey && pics === null) return null;
+
+    let best = null;
+    let bestScore = -1;
+    for (const rule of rules) {
+        const byType = categoryTypeMatches(rule, typeKey);
+        const byPics = categoryPicsMatches(rule, pics);
+        if (byType === null && byPics === null) continue;
+        if (byType === false || byPics === false) continue;
+        const score = (byType === true ? 1 : 0) + (byPics === true ? 1 : 0);
+        // Strict > keeps the EARLIEST rule on a tie.
+        if (score > bestScore) {
+            best = rule;
+            bestScore = score;
+        }
+    }
+    return best;
+};
+
+/**
+ * The timing overrides saved on the category rule matching this challenge, or
+ * an empty object. Read by the join pass, which resolves
+ * title-inline -> title-profile -> CATEGORY -> global.
+ *
+ * @param {{type?: string, max_photo_submits?: number}} challenge
+ * @returns {object}
+ */
+const getCategoryRuleOverrides = (challenge) => {
+    const rule = findCategoryRule(challenge);
+    if (!rule) return {};
+    const out = {};
+    for (const key of CATEGORY_RULE_INLINE_KEYS) {
+        if (!Object.prototype.hasOwnProperty.call(rule, key)) continue;
+        const value = rule[key];
+        // '' / null is how the editor spells "inherit" - absent, not 0.
+        if (value === null || value === undefined || value === '') continue;
+        // Re-validate on read: a hand-edited file can hold anything.
+        if (!validateSetting(key, value)) continue;
+        out[key] = value;
+    }
+    return out;
+};
+
+/**
+ * Persist the category rules, dropping rows with no condition and rejecting a
+ * row whose override value the schema would refuse. Returns false without
+ * writing when any row is invalid, mirroring setTitleRules.
+ *
+ * @param {Array<object>} rules
+ * @returns {boolean}
+ */
+const setCategoryRules = (rules) => {
+    if (!Array.isArray(rules)) return false;
+    if (rules.length > MAX_CATEGORY_RULES) return false;
+    const out = [];
+    const seen = new Set();
+    for (const rule of rules) {
+        const type = normalizeCategoryType(rule?.type);
+        const picsRaw = rule?.pics;
+        const picsGiven = picsRaw !== null && picsRaw !== undefined && picsRaw !== '';
+        const pics = picsGiven ? normalizeCategoryPics(picsRaw) : null;
+        // A photo count that was supplied but is out of range is a rejection,
+        // not a silent drop - dropping it would widen the rule to every count.
+        if (picsGiven && pics === null) return false;
+        // A row with no condition at all is dropped (the editor's empty new row),
+        // not treated as an error.
+        if (!type && pics === null) continue;
+
+        const key = type + '\u0000' + (pics === null ? '' : pics);
+        // Two rows with the same condition would make the winner positional and
+        // invisible in the UI; refuse instead of silently keeping one.
+        if (seen.has(key)) return false;
+        seen.add(key);
+
+        const next = {};
+        if (type) next.type = type;
+        if (pics !== null) next.pics = pics;
+        for (const settingKey of CATEGORY_RULE_INLINE_KEYS) {
+            if (!Object.prototype.hasOwnProperty.call(rule, settingKey)) continue;
+            const value = rule[settingKey];
+            if (value === null || value === undefined || value === '') continue;
+            if (!validateSetting(settingKey, value)) return false;
+            next[settingKey] = value;
+        }
+        out.push(next);
+    }
+    const settings = loadSettings();
+    if (!settings.challengeSettings || typeof settings.challengeSettings !== 'object') {
+        settings.challengeSettings = {};
+    }
+    settings.challengeSettings.categoryRules = out;
+    return saveSettings(settings);
 };
 
 const _sanitizeTitleRuleTags = (key, value) => {
@@ -2207,6 +2369,10 @@ module.exports = {
 
     // Title-keyed tag rules (survive challenge rotation)
     getTitleRules,
+    getCategoryRules,
+    setCategoryRules,
+    findCategoryRule,
+    getCategoryRuleOverrides,
     setTitleRules,
     getTitleRuleOverrides,
     TITLE_RULE_INLINE_KEYS,

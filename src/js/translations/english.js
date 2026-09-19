@@ -257,6 +257,28 @@
                 'Wait until a challenge is this many hours from ending before joining it, instead of joining the moment it appears. 0 = join as soon as it is seen.',
             autoJoinWithinHoursOfEndHelp:
                 'A challenge outside the window is not skipped for good — it is reconsidered every cycle and joined once it enters the window. If a challenge does not report an end time, it is left alone while a window is set rather than joined early.',
+            categoryRules: 'Join Timing By Category',
+            categoryRulesDesc:
+                'Give a whole class of challenges its own entry timing, without naming each title. Match on the challenge type, on how many photos it takes, or on both. These win over the global timing above and lose to a title rule.',
+            categoryRulesSaveError:
+                'Those category rules could not be saved. Check that no two rows match the same category and that every value is in range.',
+            noCategoryRules: 'No category rules yet. Every challenge uses the global timing above.',
+            addCategoryRule: 'Add Category Rule',
+            removeCategoryRule: 'Remove category rule',
+            categoryRuleType: 'Challenge Type',
+            categoryRuleTypePlaceholder: 'Any type',
+            categoryRulePics: 'Photos',
+            categoryRuleAnyPics: 'Any',
+            categoryRulePercentElapsed: 'Join After',
+            categoryRuleJoinWindow: 'Or Hours Before End',
+            categoryRuleInheritPlaceholder: 'Inherit',
+            categoryRuleHint:
+                'Leave a field empty to inherit the global setting. When both are filled the percentage is used. Photo count is a good stand-in for length: 4-photo challenges usually run a day, 2-photo ones two days, 3-photo ones three.',
+            autoJoinAfterPercentElapsed: 'Join After % Of Challenge Has Run',
+            autoJoinAfterPercentElapsedDesc:
+                'Wait until this much of a challenge has already run before joining it, as a percentage of its own length. 75 means "join once three-quarters is over". 0 = off.',
+            autoJoinAfterPercentElapsedHelp:
+                'Use this instead of a fixed number of hours when challenges vary in length: 75% lands 6 hours before the end of a 24-hour challenge and 5 days before the end of a 3-week exhibition, whereas one hours setting cannot suit both. When this is above 0 it replaces the hours window entirely. A challenge that does not report both a start and an end time is left alone rather than joined early.',
             autoJoinMaxCoins: 'Max Coins Per Challenge',
             autoJoinMaxCoinsDesc:
                 'Highest coin cost to pay to join a single challenge. 0 = free challenges only. Paid joins also require a per-cycle budget above 0.',

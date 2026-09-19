@@ -122,13 +122,40 @@ Domain terms used throughout, in reader's terms:
   wholesale when the master is off **and** no title rule turns it on (a tag-only rule never does);
   everything else (scope/coin caps/join window) is title-resolved too, except `autoJoinCycleCoinBudget`,
   which is genuinely pass-global.
-- **The join window (`autoJoinWithinHoursOfEnd`, `0` = off) gates WHEN, never WHETHER.** Above 0, a candidate
-  is only joined once it is within that many hours of its own `close_time`; outside it the candidate is
-  _deferred_ (`skipped:too-early`) and reconsidered next cycle, not rejected. It is **fail-closed**: a
-  candidate whose `close_time` cannot be read is not joined while a window is set, and the pass logs that
-  candidate's actual field names once per pass. Unlike the type filters, a title opt-in does **not** bypass
-  the window (bypassing an explicit "join late" would invert it), and the manual single-join path ignores the
-  window entirely — a click is the user overriding timing.
+- **The join window gates WHEN, never WHETHER.** Two settings express it, both on the `0` = off sentinel:
+  `autoJoinWithinHoursOfEnd` joins a candidate once it is within that many hours of its own `close_time`,
+  and `autoJoinAfterPercentElapsed` joins it once that percentage of its own lifetime
+  (`close_time` - `start_time`) has run. Outside the window the candidate is _deferred_
+  (`skipped:too-early`) and reconsidered next cycle, not rejected. It is **fail-closed**: a candidate whose
+  `close_time` cannot be read is not joined while a window is set (percent mode additionally needs
+  `start_time`, and reports `skipped:start-time-unknown`), and the pass logs that candidate's actual field
+  names once per pass. Unlike the type filters, a title opt-in does **not** bypass the window (bypassing an
+  explicit "join late" would invert it), and the manual single-join path ignores the window entirely — a
+  click is the user overriding timing.
+- **Percent and hours never combine — `resolveJoinWindow` picks exactly ONE.** Percent wins whenever it is
+  above 0, so a category rule saying "90%" fully _replaces_ an inherited hours window instead of
+  intersecting with it; the effective timing for a candidate is therefore always readable off a single
+  number. The reason percent exists at all: hours-before-close does not transfer across challenge lengths.
+  The live open list carries 2h flash challenges and 515.7h exhibitions side by side, so one absolute window
+  is either far too late for the short ones or far too early for the long ones, while `75` means the same
+  thing to both. The percent ceiling is **99, not 100**: a challenge is only 100% elapsed once `close_time`
+  has passed, at which point the gate already reports `already-closed` — allowing 100 would ship a maximum
+  that silently never joins. Out-of-range values clamp to 99 (as late as possible), never to "never".
+- **Category rules key join timing on the CHALLENGE CLASS, not the title.** A rule in
+  `challengeSettings.categoryRules` matches on the challenge's `type`, on its `max_photo_submits`, or on
+  both (AND; a rule naming both beats one naming either alone, ties break by position). They exist because
+  entry timing really tracks how long a challenge runs, and those two fields are the payload's usable
+  proxies for it — on the live account 4-photo defaults run 24h, 2-photo ones 48h and 3-photo ones 72h,
+  which is why a per-category window is the natural way to say it. Note the proxy is **imperfect and must
+  not be treated as a length**: the same account's 4-photo challenges span 24h, 72h, 168h and 515.7h, so a
+  photo-count rule alone mis-times the long ones — that is exactly what the percent anchor is for. Category
+  rules may override **timing only** (`autoJoinWithinHoursOfEnd`, `autoJoinAfterPercentElapsed`);
+  deliberately not `autoJoin` itself or the coin caps, since one careless row would otherwise spend money
+  across a whole class of challenges.
+- **Join-setting precedence, most specific first: title-rule inline → title profile → CATEGORY → global
+  default.** `resolveJoinSetting` walks exactly that chain. A title names one challenge and so outranks a
+  category naming dozens; the global default is the floor. An omitted key at any tier means _inherit_ and is
+  never written as a value, so no rule can freeze today's default into storage.
 - **Title rules match on conditions, not just an exact title.** A rule carries a title condition (with a
   `match` mode: `exact` — the default and the pre-existing behavior — `starts`, or `contains`), a
   `challengeTag` condition, or both; every condition present must hold (AND), and a rule with neither

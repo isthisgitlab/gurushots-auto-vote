@@ -92,6 +92,20 @@ const coinAmount = z.number().int().min(0).max(MAX_COIN_AMOUNT);
 // "always in window" while still bounding a corrupted settings file.
 const MAX_JOIN_WINDOW_HOURS = 720;
 const joinWindowHours = z.number().min(0).max(MAX_JOIN_WINDOW_HOURS);
+// Auto-join elapsed-fraction anchor, as a PERCENT of the candidate's own
+// lifetime (close_time - start_time). 0 = off, same sentinel family as
+// MAX_JOIN_WINDOW_HOURS above. This exists because hours-before-close does not
+// transfer across challenge lengths: the live payload carries 2h flash
+// challenges and 515h exhibitions side by side (verified 2026-09-19), so one
+// absolute window is either far too late for the short ones or far too early
+// for the long ones. A percentage is scale-free — 75 means "join once
+// three-quarters of the challenge has run", whatever its length.
+// The ceiling is 99, NOT 100: a candidate is only 100% elapsed at the instant
+// its close_time passes, and the gate refuses an already-closed challenge before
+// it ever reads the fraction. Allowing 100 would therefore ship a maximum that
+// silently never joins anything. 99 is the latest value that can actually fire.
+const MAX_JOIN_PERCENT_ELAPSED = 99;
+const joinPercentElapsed = z.number().min(0).max(MAX_JOIN_PERCENT_ELAPSED);
 // Entry-slot index: 1-4 selects a slot, 0 is the "last entry" sentinel. GuruShots challenges
 // carry at most four submissions (max_photo_submits tops out at 4, which is also why the
 // auto-fill schedule only covers images 2-4), so anything above 4 could never name a real
@@ -942,6 +956,29 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoJoinWithinHoursOfEnd',
         description: 'app.autoJoinWithinHoursOfEndDesc',
         helpKey: 'app.autoJoinWithinHoursOfEndHelp',
+    },
+    // Elapsed-fraction join anchor. 0 = off. When BOTH this and
+    // autoJoinWithinHoursOfEnd are set on the same resolved source, the percent
+    // wins (see resolveJoinWindow in services/VotingLogic.js) — one candidate
+    // gets ONE window, never the intersection of two, so the effective timing is
+    // always readable off a single number.
+    //
+    // FAIL-CLOSED exactly like the hours window, and on one more field: percent
+    // mode needs start_time AND close_time to know the challenge's length, so a
+    // candidate missing either is deferred rather than joined.
+    autoJoinAfterPercentElapsed: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        validation: joinPercentElapsed,
+        min: 0,
+        max: MAX_JOIN_PERCENT_ELAPSED,
+        unit: 'app.unitPercent',
+        validationOrder: 1,
+        group: 'autoJoin',
+        label: 'app.autoJoinAfterPercentElapsed',
+        description: 'app.autoJoinAfterPercentElapsedDesc',
+        helpKey: 'app.autoJoinAfterPercentElapsedHelp',
     },
     // Per-challenge coin cap. 0 = free only (paid joins disabled). Paid joining
     // requires BOTH this AND autoJoinCycleCoinBudget > 0.

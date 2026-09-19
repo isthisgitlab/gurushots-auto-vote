@@ -31,6 +31,7 @@ jest.mock('../../src/js/settings', () => ({
     getEffectiveTagSetting: jest.fn(() => []),
     getTitleRules: jest.fn(() => []),
     getTitleRuleOverrides: jest.fn(() => ({})),
+    getCategoryRuleOverrides: jest.fn(() => ({})),
 }));
 
 const cancellation = require('../../src/js/voting/cancellation');
@@ -82,6 +83,7 @@ beforeEach(() => {
     settings.getEffectiveTagSetting.mockReturnValue([]);
     settings.getTitleRules.mockReturnValue([]);
     settings.getTitleRuleOverrides.mockReturnValue({});
+    settings.getCategoryRuleOverrides.mockReturnValue({});
     settings.getEffectiveSetting.mockImplementation((key) => DEFAULT_SETTINGS[key]);
     inFlight.clear();
 });
@@ -825,5 +827,115 @@ describe('joinChallengeSingle — manual', () => {
         const res = await joinChallengeSingle(2, 'tok', deps, { spendCoins: true });
         expect(res.status).toBe('joined');
         expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
+    });
+});
+
+/**
+ * Category-keyed join timing inside the pass: a rule matched on the challenge's
+ * own type / photo count overrides the global window, and the percent-elapsed
+ * anchor replaces the hours window rather than intersecting with it.
+ *
+ * Precedence under test: title-inline -> title-profile -> CATEGORY -> global.
+ */
+describe('runJoinPass \u2014 category join timing', () => {
+    const HOUR = 3600;
+    const NOW_MS = 1_700_000_000_000;
+    const NOW_SEC = NOW_MS / 1000;
+    // A 24h challenge that opened 20h ago: 83% elapsed, 4h left.
+    const candidate = (over = {}) => ({
+        id: 1,
+        join_coins: 0,
+        type: 'default',
+        title: 'Seaside',
+        max_photo_submits: 4,
+        start_time: NOW_SEC - 20 * HOUR,
+        close_time: NOW_SEC + 4 * HOUR,
+        ...over,
+    });
+    const globalSetting = (map) =>
+        settings.getEffectiveSetting.mockImplementation((k) =>
+            Object.prototype.hasOwnProperty.call(map, k) ? map[k] : DEFAULT_SETTINGS[k],
+        );
+
+    test('a category rule overrides the global window for its category', async () => {
+        // Global says "only in the last hour" \u2014 this candidate has 4h left.
+        globalSetting({ autoJoinWithinHoursOfEnd: 1 });
+        // The category rule widens it to 6h, so this one joins.
+        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinWithinHoursOfEnd: 6 });
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.joined).toBe(1);
+        expect(deps.submitToChallenge).toHaveBeenCalled();
+    });
+
+    test('a category rule can also make the timing STRICTER than the global', async () => {
+        globalSetting({ autoJoinWithinHoursOfEnd: 48 });
+        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinWithinHoursOfEnd: 1 });
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.joined).toBe(0);
+        expect(res.results[0].status).toBe('skipped:too-early');
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+
+    test('a percent rule REPLACES an inherited hours window, it does not intersect it', async () => {
+        // The global hours window alone would defer (1h allowed, 4h left).
+        globalSetting({ autoJoinWithinHoursOfEnd: 1 });
+        // 83% elapsed clears a 75% anchor, so the candidate joins.
+        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinAfterPercentElapsed: 75 });
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.joined).toBe(1);
+    });
+
+    test('a percent rule defers a candidate that has not run long enough yet', async () => {
+        globalSetting({ autoJoinWithinHoursOfEnd: 0 });
+        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinAfterPercentElapsed: 90 });
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.joined).toBe(0);
+        expect(res.results[0].status).toBe('skipped:too-early');
+    });
+
+    test('a title-rule override still wins over the category rule', async () => {
+        globalSetting({ autoJoinWithinHoursOfEnd: 0 });
+        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinAfterPercentElapsed: 90 });
+        // The title says "join any time", and a title is the more specific rule.
+        settings.getTitleRuleOverrides.mockReturnValue({ autoJoinAfterPercentElapsed: 10 });
+        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.joined).toBe(1);
+    });
+
+    test('the same percent anchor defers a long challenge and joins a short one', async () => {
+        globalSetting({ autoJoinWithinHoursOfEnd: 0, autoJoinAfterPercentElapsed: 75 });
+        const deps = makeDeps({
+            getMemberChallenges: jest.fn(async () => [
+                // 24h challenge, 20h in (83%) \u2014 joins.
+                candidate({ id: 1 }),
+                // 515.7h exhibition, 20h in (4%) \u2014 deferred, though it has the
+                // same 4h-vs-hours shape a fixed window could not tell apart.
+                candidate({
+                    id: 2,
+                    type: 'exhibition',
+                    title: 'My Best Shot',
+                    close_time: NOW_SEC + 495.7 * HOUR,
+                }),
+            ]),
+        });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.joined).toBe(1);
+        expect(res.results.map((r) => r.status)).toEqual(['joined', 'skipped:too-early']);
+    });
+
+    test('a candidate with no start_time is deferred, never joined early', async () => {
+        globalSetting({ autoJoinWithinHoursOfEnd: 0, autoJoinAfterPercentElapsed: 75 });
+        const deps = makeDeps({
+            getMemberChallenges: jest.fn(async () => [candidate({ start_time: undefined })]),
+        });
+        const res = await runJoinPass('tok', NOW_MS, deps);
+        expect(res.joined).toBe(0);
+        expect(res.results[0].status).toBe('skipped:start-time-unknown');
+        expect(deps.submitToChallenge).not.toHaveBeenCalled();
     });
 });
