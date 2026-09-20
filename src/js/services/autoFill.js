@@ -39,7 +39,8 @@ const { getScheduleShift, remapScheduleRows } = require('./scheduleRemap');
 /**
  * Semantic match scores for an eligible set, computed once per fill and reused
  * across every picker call in that fill (the emergency path picks twice).
- * Always on: returns a Map<photoId, 0..1> to merge into the picker, or null
+ * Always on: returns a Map<photoId, {score, support}> to merge into the picker
+ * — best-label similarity plus how many labels are on theme — or null
  * when the lexicon is unavailable / the challenge has no usable theme text — in
  * which case ranking stays lexical, exactly as before. The scorer
  * (`deps.getSemanticScores`, defaulting to the real module) is injectable so
@@ -48,7 +49,7 @@ const { getScheduleShift, remapScheduleRows } = require('./scheduleRemap');
  * @param {object} challenge
  * @param {Array<object>} eligible
  * @param {{getSemanticScores?: function}} deps
- * @returns {Promise<Map<string, number>|null>}
+ * @returns {Promise<Map<string, {score: number, support: number}>|null>}
  */
 const resolveSemanticScores = async (challenge, eligible, deps) => {
     const scorer = (deps && deps.getSemanticScores) || getSemanticScores;
@@ -820,7 +821,7 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
  *   mustIncludeTags: string[]|null,
  *   shouldIncludeTags: string[]|null,
  *   fillWithoutTagMatch: *,
- *   probeStandDown?: (function({eligible: Array<object>, semanticScores: Map<string, number>|null}): boolean)|null,
+ *   probeStandDown?: (function({eligible: Array<object>, semanticScores: Map<string, {score: number, support: number}>|null}): boolean)|null,
  *   onEmptyPick?: (function(Array<object>): *)|null,
  *   guardPick?: (function(Array<string>): boolean)|null,
  *   onRefreshed?: (function(Array<string>): ({standDown?: boolean, picked?: Array<string>}|null))|null,

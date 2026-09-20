@@ -20,6 +20,7 @@ const {
     labelWordStems,
     wholeLabelStems,
     SEMANTIC_MATCH_FLOOR,
+    SEMANTIC_SUPPORT_CAP,
 } = require('../../src/js/services/photoPicker');
 
 const allowed = (id, labels, uploadDate = 1000, extras = {}) => ({
@@ -1142,6 +1143,100 @@ describe('photoPicker', () => {
             const pA = allowed('a', ['x'], 1000, { votes: 1 });
             const pB = allowed('b', ['x'], 1000, { votes: 5 });
             expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores: { a: 0.9 } })).toEqual(['b']);
+        });
+
+        test('a bare number value still scores — the pre-support map shape', () => {
+            // The documented opt shape before support existed. Callers and tests
+            // that build the map by hand keep working and simply contribute no
+            // support; only the scorer emits the record form.
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            const semanticScores = new Map([
+                ['a', 0.9],
+                ['b', { score: 0.1, support: 3 }],
+            ]);
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores })).toEqual(['a']);
+        });
+    });
+
+    describe("semantic support tier (the photo's other labels)", () => {
+        const challenge = { title: 'Pink In Nature', url: '', welcome_message: '' };
+
+        test('breaks a tie the max-pooled score cannot, ahead of popularity', () => {
+            // Both photos peak identically — the shape a tag-narrowed fetch
+            // produces — so without this tier votes would decide and pick 'b'.
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            const semanticScores = new Map([
+                ['a', { score: 0.9, support: 3 }],
+                ['b', { score: 0.9, support: 1 }],
+            ]);
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores })).toEqual(['a']);
+        });
+
+        test('never outranks a stronger headline match', () => {
+            // The governing constraint: support only orders photos the max already
+            // agreed are equally on theme. A better best-label always wins, however
+            // much corroboration the loser carries.
+            const pA = allowed('a', ['Random'], 1000);
+            const pB = allowed('b', ['Random'], 1000);
+            const semanticScores = new Map([
+                ['a', { score: 0.95, support: 1 }],
+                ['b', { score: 0.6, support: 3 }],
+            ]);
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores })).toEqual(['a']);
+        });
+
+        test('sits below the explicit Should Include Tags preference', () => {
+            const pA = allowed('a', ['Random'], 1000);
+            const pB = allowed('b', ['Sunset'], 1000);
+            const semanticScores = new Map([
+                ['a', { score: 0.9, support: 3 }],
+                ['b', { score: 0.9, support: 0 }],
+            ]);
+            const out = pickPhotosForChallenge(challenge, [pA, pB], 2, {
+                shouldIncludeTags: ['sunset'],
+                semanticScores,
+            });
+            expect(out[0]).toBe('b');
+        });
+
+        test('support below the match floor is discarded with its score', () => {
+            // A sub-floor score means no label cleared the floor, so a support count
+            // paired with one is incoherent and must not smuggle itself past the
+            // floor into the tier above the lexical keyword hit.
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            const semanticScores = new Map([
+                ['a', { score: 0.2, support: 3 }],
+                ['b', { score: 0.2, support: 0 }],
+            ]);
+            // Both collapse to (0,0) → votes decide, exactly as with no map at all.
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores })).toEqual(['b']);
+        });
+
+        test('support is clamped to the cap, so a huge count cannot run away', () => {
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            const semanticScores = new Map([
+                ['a', { score: 0.9, support: 999 }],
+                ['b', { score: 0.9, support: SEMANTIC_SUPPORT_CAP }],
+            ]);
+            // Clamped equal → votes decide → b. An unclamped 999 would pick 'a'.
+            expect(pickPhotosForChallenge(challenge, [pA, pB], 1, { semanticScores })).toEqual(['b']);
+        });
+
+        test('a contested tie the support tier settles costs no stat enrichment', () => {
+            // selectEnrichmentSet reads the same theme comparator, so a tie this
+            // tier resolves is no longer contested — one fewer get_image_data call.
+            const pA = allowed('a', ['Random'], 1000, { votes: 1 });
+            const pB = allowed('b', ['Random'], 1000, { votes: 5 });
+            const semanticScores = new Map([
+                ['a', { score: 0.9, support: 3 }],
+                ['b', { score: 0.9, support: 1 }],
+            ]);
+            const scored = buildScoredCandidates(challenge, [pA, pB], { semanticScores });
+            expect(selectEnrichmentSet(scored, 1)).toEqual([]);
         });
     });
 

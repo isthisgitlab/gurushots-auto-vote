@@ -21,16 +21,27 @@
  *      SEMANTIC_MATCH_FLOOR: below it the value is forced to 0, because
  *      sub-floor cosine is indistinguishable from vector noise and must not be
  *      allowed to pre-empt a genuine lexical hit on tier 3.
- *   3. Tag-match score — how many of the photo's label word-stems overlap the
+ *   3. Semantic support — how many of the photo's labels are on theme, not
+ *      just the single best one, capped at SEMANTIC_SUPPORT_CAP. Tier 2
+ *      max-pools, so it cannot separate a photo the theme is ABOUT from one
+ *      that merely carries a matching tag beside unrelated ones — and because
+ *      the candidate fetch searches ONE resolved tag server-side, most of a
+ *      fill's candidates carry that tag and tie on tier 2 by construction,
+ *      which left popularity deciding. This tier reads the REST of the label
+ *      set, and sits strictly BELOW tier 2 so it only ever orders photos
+ *      already judged on theme — it can never lift a weaker match above a
+ *      stronger one. It applies the same per-label floor as tier 2, so "on
+ *      theme" means one thing in both.
+ *   4. Tag-match score — how many of the photo's label word-stems overlap the
  *      challenge keywords (URL slug + title + welcome_message, light-stemmed,
  *      stopword-filtered).
- *   4. Stats known       \
- *   5. Votes              \  popularity — ONLY orders photos that tied at 0
- *   6. Achievements count /  across tiers 1-3, i.e. nothing matched the theme.
- *   7. Views             /
- *   8. Upload date      /
+ *   5. Stats known       \
+ *   6. Votes              \  popularity — ONLY orders photos that tied at 0
+ *   7. Achievements count /  across tiers 1-4, i.e. nothing matched the theme.
+ *   8. Views             /
+ *   9. Upload date      /
  *
- * NOTE on tier 4: get_photos_private returns votes=0 and no achievements for
+ * NOTE on tier 5: get_photos_private returns votes=0 and no achievements for
  * every library photo, so the real values are fetched per photo from
  * get_image_data by services/photoStats.js, which marks each candidate
  * `statsKnown`. That fetch is budgeted, so a candidate set can be partially
@@ -41,7 +52,7 @@
  *
  * NOTE on how often the popularity tiers decide: for an abstract title (e.g.
  * "Your Legacy") no label can match and the semantic score falls under
- * SEMANTIC_MATCH_FLOOR, so EVERY candidate ties at (0,0,0) and the tie group is
+ * SEMANTIC_MATCH_FLOOR, so EVERY candidate ties at (0,0,0,0) and the tie group is
  * effectively the whole library. The popularity path is the majority path for
  * such challenges, not an edge case.
  */
@@ -552,6 +563,76 @@ const tokeniseTagList = (tags) => {
  */
 const SEMANTIC_MATCH_FLOOR = 46;
 
+/**
+ * How many on-theme labels the semantic SUPPORT tier counts before it stops
+ * (see tier 3 in the file header).
+ *
+ * WHY A CAP AT ALL. Uncapped, this tier would reward a photo for carrying many
+ * loosely-related labels over one carrying few strongly-related ones — the same
+ * "measures how chatty the tagger was rather than how on-theme the photo is"
+ * failure that made mean-pooling wrong in services/semantic/index.js, just
+ * wearing a different hat. A photo's third corroborating label has already
+ * settled "one lucky tag" versus "this photo is about the theme"; past that the
+ * extra labels carry no information this tier can use.
+ *
+ * NOT A CALIBRATED CONSTANT, unlike SEMANTIC_MATCH_FLOOR — nothing statistical
+ * depends on its exact value, and it is safe to move. The floor is what decides
+ * whether a label counts at all, and it is NOT re-derived by this tier: the
+ * per-label similarity being thresholded here is the same quantity, pooled the
+ * same way, that scripts/validate-lexicon.js already gates the build on.
+ */
+const SEMANTIC_SUPPORT_CAP = 3;
+
+// The "no semantic signal" tuple. Shared so the several early exits in
+// semanticTiersOf cannot drift apart, and frozen because it is handed out by
+// reference rather than copied.
+const NO_SEMANTIC = Object.freeze({ semantic: 0, semanticSupport: 0 });
+
+/**
+ * Read one photo's semantic tiers (2 and 3) out of the scorer's map.
+ *
+ * The 0..1 similarity is bucketed to whole percent so tiny float differences
+ * don't churn the order or make it non-deterministic; photos within the same
+ * bucket fall through to the tiers below.
+ *
+ * Anything below SEMANTIC_MATCH_FLOOR is forced to 0 — NOT merely ranked low.
+ * Sub-floor cosine is statistically indistinguishable from the noise between
+ * two unrelated word vectors, and these tiers sit ABOVE the lexical `score`, so
+ * without the floor a photo with pure vector drift would out-rank a photo with
+ * a genuine keyword hit. The floor is what makes "nothing matched the theme" an
+ * honest, testable state instead of a fuzzy one. Its value is not hand-picked:
+ * scripts/validate-lexicon.js gates the build on p99(unrelated) < FLOOR <
+ * p25(related) against the real lexicon.
+ *
+ * Two accepted value shapes. The scorer hands over a {score, support} record; a
+ * bare number is the shape opts.semanticScores was documented with before the
+ * support tier existed, and is still what callers and tests that build the map
+ * by hand pass — it stays valid and simply contributes no support. Normalising
+ * here is what keeps every caller in between shape-agnostic: the map is passed
+ * through autoFill and joinChallenges untouched.
+ *
+ * @param {Map<string, {score: number, support: number}|number>|null} semanticScores
+ * @param {string|number} id
+ * @returns {{semantic: number, semanticSupport: number}}
+ */
+const semanticTiersOf = (semanticScores, id) => {
+    if (!semanticScores) return NO_SEMANTIC;
+    const entry = semanticScores.get(String(id));
+    const raw = typeof entry === 'number' ? entry : entry && entry.score;
+    if (!Number.isFinite(raw)) return NO_SEMANTIC;
+    const bucket = Math.round(Math.max(0, Math.min(1, raw)) * 100);
+    // Sub-floor: no label cleared the floor, so there is nothing to support
+    // either. Returning zero for BOTH keeps a hand-built map that pairs a
+    // sub-floor score with a support count from smuggling that count past the
+    // floor and pre-empting a genuine lexical hit on the tier below.
+    if (bucket < SEMANTIC_MATCH_FLOOR) return NO_SEMANTIC;
+    const rawSupport = entry && entry.support;
+    const semanticSupport = Number.isFinite(rawSupport)
+        ? Math.max(0, Math.min(SEMANTIC_SUPPORT_CAP, Math.floor(rawSupport)))
+        : 0;
+    return { semantic: bucket, semanticSupport };
+};
+
 // Issue at most a few server-side searches per fill: a title rarely has more
 // than two or three subject nouns, and tag lists are short. The cap bounds the
 // extra requests the union fetch makes.
@@ -848,7 +929,7 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  * @param {object} challenge - challenge object (url, title, welcome_message all optional)
  * @param {Array<object>} eligiblePhotos - candidates from getEligiblePhotos
  * @param {number} slotsToFill - how many photos to return at most
- * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[], fillWithoutTagMatch?: boolean, semanticScores?: Map<string, number>, onFallback?: function}} [opts]
+ * @param {{mustIncludeTags?: string[], shouldIncludeTags?: string[], fillWithoutTagMatch?: boolean, semanticScores?: Map<string, {score: number, support: number}|number>, onFallback?: function}} [opts]
  *   mustIncludeTags: hard filter — keep only photos whose labels match
  *   every distinct tag stem (ALL semantics). Tags are deduped to stems
  *   first, so "larch, larches" collapses to one requirement. A photo
@@ -864,11 +945,15 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  *   true; pass false to keep the slot empty until a fully matching photo exists.
  *   The fallback is all-or-nothing: if any photo satisfies every hard filter,
  *   only those are used and the fallback does not kick in.
- *   semanticScores: optional Map<photoId, similarity 0..1> from the semantic
- *   matcher. When present it adds one ranking tier (just below the explicit
- *   should-tag preference, above the lexical keyword score) so on-theme photos
- *   a substring match misses still rank up. Omit it (the default) and ranking
- *   is byte-for-byte the lexical-only behavior.
+ *   semanticScores: optional Map<photoId, {score, support}> from the semantic
+ *   matcher — `score` the best-label similarity in 0..1, `support` how many of
+ *   the photo's labels cleared the same floor. When present it adds two ranking
+ *   tiers (just below the explicit should-tag preference, above the lexical
+ *   keyword score) so on-theme photos a substring match misses still rank up,
+ *   and so a photo the theme is ABOUT outranks one merely carrying a matching
+ *   tag. A bare `number` value is also accepted — the shape documented here
+ *   before the support tier existed — and scores with no support. Omit the map
+ *   (the default) and ranking is byte-for-byte the lexical-only behavior.
  *   onFallback: optional callback invoked as onFallback({letterPrefix, mustStems})
  *   when a hard filter eliminated every photo and the picker relaxed to the
  *   unfiltered set (i.e. an off-theme photo is about to be picked). Injected
@@ -957,42 +1042,28 @@ const buildScoredCandidates = (challenge, eligiblePhotos, opts = {}) => {
         }
     }
 
-    // Optional semantic tier. Bucket the 0..1 similarity to whole percent so tiny
-    // float differences don't churn the order or make it non-deterministic; photos
-    // within the same bucket fall through to the lexical tiers below. No map (the
-    // default) → every bucket is 0 → this tier is inert and the sort is identical
-    // to the lexical-only behavior.
-    //
-    // Anything below SEMANTIC_MATCH_FLOOR is forced to 0 — NOT merely ranked low.
-    // Sub-floor cosine is statistically indistinguishable from the noise between
-    // two unrelated word vectors, and this tier sits ABOVE the lexical `score`, so
-    // without the floor a photo with pure vector drift would out-rank a photo with
-    // a genuine keyword hit. The floor is what makes "nothing matched the theme"
-    // an honest, testable state instead of a fuzzy one. Its value is not
-    // hand-picked: scripts/validate-lexicon.js gates the build on
-    // p99(unrelated) < FLOOR < p25(related) against the real lexicon.
+    // Optional semantic tiers — see semanticTiersOf. No map (the default) → both
+    // are 0 for every photo → they are inert and the sort is identical to the
+    // lexical-only behavior.
     const semanticScores = opts.semanticScores instanceof Map ? opts.semanticScores : null;
-    const semanticTier = (id) => {
-        if (!semanticScores) return 0;
-        const raw = semanticScores.get(String(id));
-        if (!Number.isFinite(raw)) return 0;
-        const bucket = Math.round(Math.max(0, Math.min(1, raw)) * 100);
-        return bucket >= SEMANTIC_MATCH_FLOOR ? bucket : 0;
-    };
 
     const keywords = buildChallengeKeywords(challenge, opts.ignoreWords || null);
-    return filtered.map(({ photo, wordStems }) => ({
-        id: photo.id,
-        photo,
-        shouldMatchCount: countShouldMatches(wordStems, shouldStems),
-        semantic: semanticTier(photo.id),
-        score: scorePhoto(photo, keywords, wordStems),
-        statsKnown: statsKnownOf(photo),
-        achievementCount: achievementCountOf(photo),
-        votes: votesOf(photo),
-        views: viewsOf(photo),
-        uploadDate: uploadDateOf(photo),
-    }));
+    return filtered.map(({ photo, wordStems }) => {
+        const { semantic, semanticSupport } = semanticTiersOf(semanticScores, photo.id);
+        return {
+            id: photo.id,
+            photo,
+            shouldMatchCount: countShouldMatches(wordStems, shouldStems),
+            semantic,
+            semanticSupport,
+            score: scorePhoto(photo, keywords, wordStems),
+            statsKnown: statsKnownOf(photo),
+            achievementCount: achievementCountOf(photo),
+            votes: votesOf(photo),
+            views: viewsOf(photo),
+            uploadDate: uploadDateOf(photo),
+        };
+    });
 };
 
 // The theme tiers, highest-priority first. A photo's standing on these is what
@@ -1001,6 +1072,10 @@ const buildScoredCandidates = (challenge, eligiblePhotos, opts = {}) => {
 const compareTheme = (a, b) => {
     if (b.shouldMatchCount !== a.shouldMatchCount) return b.shouldMatchCount - a.shouldMatchCount;
     if (b.semantic !== a.semantic) return b.semantic - a.semantic;
+    // Strictly below the max-pooled score above: two photos only reach this
+    // comparison when the lexicon rated their BEST label identically, so the
+    // question left is whether the rest of the label set agrees with the theme.
+    if (b.semanticSupport !== a.semanticSupport) return b.semanticSupport - a.semanticSupport;
     return b.score - a.score;
 };
 
@@ -1081,6 +1156,7 @@ module.exports = {
     labelWordStems,
     labelStemGroups,
     SEMANTIC_MATCH_FLOOR,
+    SEMANTIC_SUPPORT_CAP,
     // exported for unit tests
     tokenise,
     stem,
