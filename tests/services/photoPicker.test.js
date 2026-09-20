@@ -169,6 +169,47 @@ describe('photoPicker', () => {
             expect(buildThemeKeywords({ title: 'Mountains: !!!' })).toEqual(['mountain']);
         });
 
+        test('a SPACE-DELIMITED hyphen separates the series from the subject', () => {
+            // The live series ships this form - "Screen Stars - Tropic Paradise",
+            // plain ASCII hyphen (0x2d), not the colon the older examples used.
+            // Treating it as part of the title put "stars" in the pooled theme
+            // vector, and the semantic tier then ranked a Milky Way photo over a
+            // genuine tropical one, pre-empting the lexical tier where the
+            // tropical photo won.
+            expect(buildThemeKeywords({ title: 'Screen Stars - Tropic Paradise' })).toEqual(['tropic', 'paradise']);
+            expect(buildThemeKeywords({ title: 'Color Hunt - Green' })).toEqual(['green']);
+        });
+
+        test('the long dashes keep working alongside the spaced hyphen', () => {
+            expect(buildThemeKeywords({ title: 'Screen Stars \u2013 Tropic Paradise' })).toEqual([
+                'tropic',
+                'paradise',
+            ]);
+            expect(buildThemeKeywords({ title: 'Screen Stars \u2014 Tropic Paradise' })).toEqual([
+                'tropic',
+                'paradise',
+            ]);
+        });
+
+        test('a BARE hyphen is still not a separator - compounds survive whole', () => {
+            // The spacing is the whole distinction: a compound joins its parts
+            // with no spaces, so splitting on a bare "-" would silently discard
+            // a real subject.
+            expect(buildThemeKeywords({ title: 'Black-and-White Portraits' })).toEqual(['black', 'white', 'portrait']);
+            expect(buildThemeKeywords({ title: 'Close-Up Macro' })).toEqual(['close', 'up', 'macro']);
+        });
+
+        test('a spaced-hyphen tail with no usable word falls back to the whole title', () => {
+            expect(buildThemeKeywords({ title: 'Mountains - !!!' })).toEqual(['mountain']);
+        });
+
+        test('the search terms drop the series prefix on a spaced-hyphen title', () => {
+            // Not cosmetic: SEARCH_TERMS_CAP is 3, so the un-split title yielded
+            // [paradise, tropic, star] and spent a server round-trip actively
+            // fetching starry photos into the candidate pool.
+            expect(buildSearchTerms({ title: 'Screen Stars - Tropic Paradise' })).toEqual(['paradise', 'tropic']);
+        });
+
         test('the lexical tier keeps the whole title, series prefix included', () => {
             // It matches each keyword independently, so an extra word is weak
             // evidence rather than vector noise - and it is the safety net for a

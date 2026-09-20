@@ -364,18 +364,33 @@ const isParticiple = (word) => word.length > 5 && word.endsWith('ing');
 // "Screen Stars: Mountains", "Guru Picks: Portraits". Everything before the
 // separator is the series, so the subject is what follows it.
 //
-// Colon and the two long dashes only. A plain hyphen is NOT a separator here —
-// it shows up inside ordinary titles and compound words far too often to treat
-// as structure, and getting that wrong would silently discard a real subject.
+// Colon, the two long dashes, and a SPACE-DELIMITED hyphen. A BARE hyphen is
+// still not a separator — it shows up inside ordinary titles and compound words
+// ("Black-and-White", "Close-Up") far too often to treat as structure, and
+// getting that wrong would silently discard a real subject. The spacing is what
+// separates the two cases: a compound joins its parts with no spaces, so " - "
+// is structural punctuation while "-" is orthography.
+//
+// That distinction is load-bearing, not cosmetic. The live series actually
+// ships "Screen Stars - Tropic Paradise" with a plain hyphen — the example
+// above was written with a colon the real titles do not use. Without this
+// branch the whole title became the theme, "stars" entered the pooled theme
+// vector, and the semantic tier ranked a Milky Way photo (0.657) over a genuine
+// tropical one (0.598) — pre-empting the lexical tier, where the tropical photo
+// actually won 2-1.
 //
 // Falls back to the whole title when the tail carries no usable word, so
 // "Mountains: A Tribute" keeps "mountains" instead of collapsing to nothing.
-const SERIES_SEPARATOR_RE = /[:\u2013\u2014]/;
+const SERIES_SEPARATOR_RE = /[:\u2013\u2014]|\s-\s/;
 const titleSubject = (title, ignoreWords) => {
     if (typeof title !== 'string') return '';
     const match = SERIES_SEPARATOR_RE.exec(title);
     if (!match) return title;
-    const tail = title.slice(match.index + 1);
+    // Skip the WHOLE match, not one character: the spaced-hyphen branch is three
+    // characters wide. A fixed +1 would leave "- Tropic Paradise" as the tail —
+    // harmless for tokenise(), which strips punctuation anyway, but it would hand
+    // buildSearchTerms a leading stray and is simply wrong.
+    const tail = title.slice(match.index + match[0].length);
     return tokenise(tail, { ignoreWords }).length > 0 ? tail : title;
 };
 
