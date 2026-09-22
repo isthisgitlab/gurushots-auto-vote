@@ -46,6 +46,15 @@ const ENDPOINTS = {
     // api/tags.js for why the pair exists.
     searchAutocomplete: `${API_BASE}/rest/search_autocomplete`,
     currentMemberProfile: `${API_BASE}/rest/get_current_member_profile`,
+
+    // Prize claiming (WEB profile), captured from the web app: a finished
+    // challenge's rewards are claimed with claimResources, a completed mission's
+    // with claimMissionPrizes; the two list calls report what is claimable
+    // (claim_state === 'CLAIM'). See api/rewards.js.
+    getMyCompletedChallenges: `${API_BASE}/rest/get_my_completed_challenges`,
+    claimResources: `${API_BASE}/rest/claim_resources`,
+    getMyMissions: `${API_BASE}/rest/get_my_missions`,
+    claimMissionPrizes: `${API_BASE}/rest/claim_mission_prizes`,
 };
 
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded; charset=utf-8';

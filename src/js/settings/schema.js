@@ -1140,6 +1140,21 @@ const SETTINGS_SCHEMA = {
         description: 'app.ignoreTitleWordsDesc',
     },
 
+    // --- Rewards ---
+    // Claim finished-challenge rewards and completed-mission prizes
+    // automatically. GLOBAL and default OFF; the pass runs as a pre-step of the
+    // voting cycle but at most once an hour (services/autoClaim.js).
+    autoClaimPrizes: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'rewards',
+        label: 'app.autoClaimPrizes',
+        description: 'app.autoClaimPrizesDesc',
+    },
+
     // --- Notifications ---
     // OS desktop/mobile "action coming up" warnings. All GLOBAL (perChallenge:
     // false) and default OFF — entirely opt-in. Each toggle gates one deadline
@@ -1281,6 +1296,7 @@ const SETTINGS_GROUPS = [
     { id: 'lastMinute', label: 'app.groupLastMinute', tier: 'overrides' },
     { id: 'scheduledFill', label: 'app.groupScheduledFill', tier: 'overrides' },
     { id: 'votingPause', label: 'app.groupVotingPause', tier: 'overrides' },
+    { id: 'rewards', label: 'app.groupRewards', tier: 'app' },
     { id: 'notifications', label: 'app.groupNotifications', tier: 'app' },
     { id: 'display', label: 'app.groupDisplay', tier: 'app' },
 ];

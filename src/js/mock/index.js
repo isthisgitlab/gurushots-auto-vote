@@ -16,6 +16,7 @@ const { createMemoryEntryTracker } = require('../services/newEntryTracker');
 const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
 const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges');
+const { runClaimPass } = require('../services/autoClaim');
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
@@ -748,6 +749,87 @@ const mockApiClient = {
     ),
 
     /**
+     * Simulate /rest/get_my_completed_challenges: one finished challenge with
+     * unclaimed rewards (claim_state CLAIM) and one already claimed, shaped like
+     * the captured web payload. A single short page, so paging stops at once.
+     */
+    getMyCompletedChallenges: mockMethod(
+        {
+            name: 'getMyCompletedChallenges',
+            tokenArg: 0,
+            onNoToken: () => [],
+        },
+        async () => {
+            await simulateApiResponse({}, 200);
+            const rewards = (claimState) => ({
+                claim_state: claimState,
+                sections: [{ type: 'TOTAL', name: 'Total', resources: [{ type: 'COINS', title: 'Coins', value: 60 }] }],
+            });
+            return [
+                { id: 900101, title: 'Mock Finished Challenge', member: { rewards_by_section: rewards('CLAIM') } },
+                { id: 900102, title: 'Mock Claimed Challenge', member: { rewards_by_section: rewards('CLAIMED') } },
+            ];
+        },
+    ),
+
+    /** Simulate /rest/claim_resources — always confirms. */
+    claimChallengeResources: mockMethod(
+        {
+            name: 'claimChallengeResources',
+            tokenArg: 1,
+            onNoToken: () => false,
+        },
+        async () => {
+            await simulateApiResponse({}, 200);
+            return true;
+        },
+    ),
+
+    /**
+     * Simulate /rest/get_my_missions: one completed mission (claim_state CLAIM)
+     * and one still in progress (DISABLED).
+     */
+    getMyMissions: mockMethod(
+        {
+            name: 'getMyMissions',
+            tokenArg: 0,
+            onNoToken: () => [],
+        },
+        async () => {
+            await simulateApiResponse({}, 200);
+            return [
+                {
+                    id: 900201,
+                    name: 'Vote on 400 photos',
+                    progress: { current: 400, required: 400 },
+                    prizes: [{ type: 'COINS', amount: 20 }],
+                    claim_state: 'CLAIM',
+                },
+                {
+                    id: 900202,
+                    name: 'Play 6 Duels',
+                    progress: { current: 0, required: 6 },
+                    prizes: [{ type: 'COINS', amount: 60 }],
+                    claim_state: 'DISABLED',
+                },
+            ];
+        },
+    ),
+
+    /** Simulate /rest/claim_mission_prizes — always confirms. */
+    claimMissionPrize: mockMethod(
+        {
+            name: 'claimMissionPrize',
+            tokenArg: 1,
+            onNoToken: () => false,
+        },
+        async () => {
+            await simulateApiResponse({}, 200);
+            return true;
+        },
+    ),
+
+    /**
      * Simulate /rest/get_current_member_profile — the token-only identity read
      * that supplies member_id for searchTagAutocomplete below.
      */
@@ -878,6 +960,12 @@ const mockApiClient = {
             } catch (error) {
                 logger.withCategory('join').warning(`Mock join pass errored: ${error?.message || error}`, null);
             }
+            // Hourly prize-claim pre-step (default-off autoClaimPrizes), as in real.
+            try {
+                await runClaimPass(token, Date.now(), mockClaimDeps());
+            } catch (error) {
+                logger.withCategory('claim').warning(`Mock claim pass errored: ${error?.message || error}`, null);
+            }
         }
         return runVotingPass(token, challengeIdFilter, {
             api: {
@@ -920,6 +1008,14 @@ const mockJoinDeps = () => ({
     // single-process, so idempotency persistence and the cross-process lock are
     // unnecessary (mirrors cleanupStaleMetadata:null).
     joinStateStore: null,
+});
+
+// Prize-claim deps over the mock endpoints (see services/autoClaim.js).
+const mockClaimDeps = () => ({
+    getMyCompletedChallenges: mockApiClient.getMyCompletedChallenges,
+    claimChallengeResources: mockApiClient.claimChallengeResources,
+    getMyMissions: mockApiClient.getMyMissions,
+    claimMissionPrize: mockApiClient.claimMissionPrize,
 });
 
 module.exports = {

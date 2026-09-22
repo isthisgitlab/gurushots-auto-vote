@@ -12,12 +12,14 @@ const { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DEL
 const { getEligiblePhotos, getImageData, submitToChallenge } = require('./submissions');
 const { getCurrentMemberProfile, searchTagAutocomplete } = require('./tags');
 const { getMemberChallenges, getBankroll, coinsUnlock } = require('./join');
+const { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize } = require('./rewards');
 const { cleanupStaleMetadata } = require('../metadata');
 const { sleep, getRandomDelay } = require('../timing');
 const logger = require('../logger');
 const { runVotingPass } = require('../services/votingOrchestrator');
 const { createMetadataEntryTracker } = require('../services/newEntryTracker');
 const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges');
+const { runClaimPass } = require('../services/autoClaim');
 const { joinStateStore, acquireUnlockLock } = require('../joinStateStore');
 
 // One instance for the process: the tracker is stateless (it reads and writes
@@ -41,6 +43,14 @@ const joinDeps = {
     searchTagAutocomplete,
     joinStateStore,
     acquireUnlockLock,
+};
+
+// Endpoints for the hourly prize-claim pre-step (services/autoClaim.js).
+const claimDeps = {
+    getMyCompletedChallenges,
+    claimChallengeResources,
+    getMyMissions,
+    claimMissionPrize,
 };
 
 /**
@@ -141,6 +151,15 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
             logger
                 .withCategory('join')
                 .warning(`join pass errored (voting continues): ${error?.message || error}`, null);
+        }
+        // Prize-claim pre-step: gated by the default-off `autoClaimPrizes`
+        // setting and throttled to once an hour inside runClaimPass.
+        try {
+            await runClaimPass(token, Date.now(), claimDeps);
+        } catch (error) {
+            logger
+                .withCategory('claim')
+                .warning(`claim pass errored (voting continues): ${error?.message || error}`, null);
         }
     }
     return runVotingPass(token, challengeIdFilter, {

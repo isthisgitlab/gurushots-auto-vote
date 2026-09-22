@@ -430,6 +430,7 @@
             groupScheduledFill: 'Plānotā balsošana',
             groupVotingPause: 'Balsošanas pauze',
             groupAutoFill: 'Automātiskā aizpilde',
+            groupRewards: 'Balvas',
             groupNotifications: 'Paziņojumi',
             groupDisplay: 'Attēlojums',
             tierCore: 'Pamata',
@@ -439,6 +440,9 @@
                 'Visi pēc noklusējuma izslēgti — ieslēdz kādu tikai tad, ja gribi mainīt, kad darbojas parastais redzamības noteikums.',
             tierApp: 'Lietotne',
             // Paziņojumu iestatījumi (pēc noklusējuma izslēgti)
+            autoClaimPrizes: 'Automātiski saņemt balvas',
+            autoClaimPrizesDesc:
+                'Automātiski saņem balvas no noslēgtajiem izaicinājumiem un izpildītajām misijām (auto-balsošanai jādarbojas). Pārbauda ne biežāk kā reizi stundā. Pēc noklusējuma izslēgts.',
             notifyOnBoost: 'Paziņot pirms Boost',
             notifyOnBoostDesc: 'Brīdina pirms Boost izmantošanas, lai paspētu atstāt lietotni ieslēgtu.',
             notifyOnTurbo: 'Paziņot pirms Turbo',

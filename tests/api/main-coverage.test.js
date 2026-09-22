@@ -4,7 +4,7 @@
  *     on a wrong pick, early stop on WON, skip of resolved / malformed battles);
  *   - joinChallenge: the manual single-join wrapper (spendCoins must be `true`
  *     exactly — anything truthy-but-not-true must not spend coins);
- *   - fetchChallengesAndVote: the join pre-step gating and the deps it hands to
+ *   - fetchChallengesAndVote: the join and claim pre-step gating and the deps it hands to
  *     the shared runVotingPass (real mode keeps the real cleanupStaleMetadata).
  *
  * Every collaborator is mocked; sleep resolves immediately so no real timer runs.
@@ -43,6 +43,13 @@ jest.mock('../../src/js/services/joinChallenges', () => ({
     runJoinPass: jest.fn(),
     joinChallengeSingle: jest.fn(),
 }));
+jest.mock('../../src/js/services/autoClaim', () => ({ runClaimPass: jest.fn() }));
+jest.mock('../../src/js/api/rewards', () => ({
+    getMyCompletedChallenges: jest.fn(),
+    claimChallengeResources: jest.fn(),
+    getMyMissions: jest.fn(),
+    claimMissionPrize: jest.fn(),
+}));
 jest.mock('../../src/js/joinStateStore', () => ({
     joinStateStore: { kind: 'join-state-store' },
     acquireUnlockLock: jest.fn(),
@@ -58,6 +65,8 @@ const submissions = require('../../src/js/api/submissions');
 const { joinStateStore, acquireUnlockLock } = require('../../src/js/joinStateStore');
 const { runVotingPass } = require('../../src/js/services/votingOrchestrator');
 const { runJoinPass, joinChallengeSingle } = require('../../src/js/services/joinChallenges');
+const { runClaimPass } = require('../../src/js/services/autoClaim');
+const rewards = require('../../src/js/api/rewards');
 const main = require('../../src/js/api/main');
 
 const { runTurboMiniGame, joinChallenge, fetchChallengesAndVote } = main;
@@ -248,6 +257,46 @@ describe('fetchChallengesAndVote', () => {
     beforeEach(() => {
         runVotingPass.mockResolvedValue({ success: true, challenges: [] });
         runJoinPass.mockResolvedValue(undefined);
+        runClaimPass.mockResolvedValue(undefined);
+    });
+
+    test('runs the claim pre-step after join and before voting, with the rewards endpoints', async () => {
+        const order = [];
+        runJoinPass.mockImplementation(async () => order.push('join'));
+        runClaimPass.mockImplementation(async () => order.push('claim'));
+        runVotingPass.mockImplementation(async () => {
+            order.push('vote');
+            return { success: true };
+        });
+
+        await fetchChallengesAndVote('tok');
+
+        expect(order).toEqual(['join', 'claim', 'vote']);
+        expect(runClaimPass).toHaveBeenCalledWith('tok', expect.any(Number), {
+            getMyCompletedChallenges: rewards.getMyCompletedChallenges,
+            claimChallengeResources: rewards.claimChallengeResources,
+            getMyMissions: rewards.getMyMissions,
+            claimMissionPrize: rewards.claimMissionPrize,
+        });
+    });
+
+    test('skips the claim pre-step for a single-challenge run', async () => {
+        await fetchChallengesAndVote('tok', null, 99);
+
+        expect(runClaimPass).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['an Error', new Error('boom'), 'boom'],
+        ['a non-Error value', 'plain failure', 'plain failure'],
+    ])('a claim pass that throws %s is logged and voting still runs', async (_label, thrown, expected) => {
+        runClaimPass.mockRejectedValue(thrown);
+
+        const result = await fetchChallengesAndVote('tok');
+
+        expect(result).toEqual({ success: true, challenges: [] });
+        expect(runVotingPass).toHaveBeenCalledTimes(1);
+        expect(scopedWarnings()).toEqual([`claim pass errored (voting continues): ${expected}`]);
     });
 
     test('runs the join pre-step before voting on a full pass', async () => {

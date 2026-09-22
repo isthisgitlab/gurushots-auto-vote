@@ -428,6 +428,7 @@
             groupScheduledFill: 'Scheduled Voting',
             groupVotingPause: 'Voting Pause',
             groupAutoFill: 'Auto Fill',
+            groupRewards: 'Rewards',
             groupNotifications: 'Notifications',
             groupDisplay: 'Display',
             tierCore: 'Core',
@@ -436,6 +437,9 @@
             tierOverridesDesc: 'All off by default — turn one on only to change when the normal exposure rule applies.',
             tierApp: 'App',
             // Notification settings (all default off, opt-in)
+            autoClaimPrizes: 'Auto-Claim Prizes',
+            autoClaimPrizesDesc:
+                'Automatically claim rewards from finished challenges and prizes from completed missions (autovote must be running). Checks at most once an hour. Off by default.',
             notifyOnBoost: 'Notify before boost',
             notifyOnBoostDesc: 'Warn before a boost is applied, so you can keep the app running.',
             notifyOnTurbo: 'Notify before turbo',
