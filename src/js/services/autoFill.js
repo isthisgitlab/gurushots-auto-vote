@@ -29,6 +29,7 @@ const {
     finalizePick,
     buildSearchTerms,
     detectLetterPrefix,
+    parseNegation,
     hasThemeMatch,
 } = require('./photoPicker');
 const { getSemanticScores } = require('./semantic');
@@ -280,11 +281,25 @@ const fetchCandidatesForChallenge = async (
     // tag filter in pickPhotosForChallenge. Leave a breadcrumb so a "wrong photo"
     // report is traceable to that path.
     const letter = detectLetterPrefix(challenge?.title);
+    const negation = parseNegation(challenge?.title, ignoreWords);
     if (letter && terms.length === 0) {
         logger
             .withCategory(logLabel)
             .debug(
                 `${logLabel}: letter challenge "${letter.toUpperCase()}" for ${logger.challengeTag(challenge)}; fetching full library for client-side tag filtering`,
+                null,
+            );
+    } else if (terms.length === 0 && negation.active) {
+        // "No Humans": the title only names what to leave OUT, so there is
+        // nothing to search for — the library is fetched unfiltered and the
+        // picker drops the photos showing the negated subject. Intended, so not a
+        // warning; info still reaches a packaged build's log.
+        logger
+            .withCategory(logLabel)
+            .info(
+                `${logLabel}: ${logger.challengeTag(challenge)} only names what to leave out ` +
+                    `(${negation.stems.join(', ')}); ranking your whole ` +
+                    `library with photos showing it excluded`,
                 null,
             );
     } else if (terms.length === 0) {
@@ -740,7 +755,7 @@ const refreshChallengeState = async (challenge, token, { getActiveChallenges, lo
  * never warn.
  */
 const makeFallbackLogger = (prefix, challenge, logger) => {
-    return ({ letterPrefix, mustStems }) => {
+    return ({ letterPrefix, mustStems, excludedStems }) => {
         const reasons = [];
         if (letterPrefix) {
             const letter = letterPrefix.toUpperCase();
@@ -748,6 +763,9 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
         }
         if (Array.isArray(mustStems) && mustStems.length > 0) {
             reasons.push('no photo matched every Must Include Tag');
+        }
+        if (Array.isArray(excludedStems) && excludedStems.length > 0) {
+            reasons.push(`every eligible photo shows what the title excludes (${excludedStems.join(', ')})`);
         }
         const why = reasons.join('; ') || 'a hard filter matched no photo';
         logger

@@ -405,6 +405,128 @@ const titleSubject = (title, ignoreWords) => {
     return tokenise(tail, { ignoreWords }).length > 0 ? tail : title;
 };
 
+// Negated titles name what must NOT be in the photo: "No Humans", "Without
+// People", "People-Free". 'no'/'not' are stopwords, so before this existed
+// "No Humans" tokenised to ["human"] and every tier — theme vector, lexical
+// keywords, server search — actively ranked photos OF people first, the exact
+// inverse of the brief. A negated subject is therefore stripped from every
+// positive keyword source and turned into an exclusion filter instead (see
+// buildScoredCandidates).
+//
+// Only a segment that STARTS with the negation counts ("No Humans", "Color
+// Hunt: No Red"), plus the hyphenated "X-free" compound. A bare "free" is not
+// matched ("Wild and Free", "Born Free" are subjects, not absences).
+const NEGATION_LEAD_RE = /^\s*(?:no|without|non|zero)(?:\s+|-)(.+)$/i;
+const FREE_SUFFIX_RE = /\b([a-z]+)-free\b/gi;
+// The marker words themselves are not stopwords (only no/not are), so once a
+// negation is recognised they must also leave the keyword sources — otherwise
+// the url slug "without-people" would hand the theme the word "without".
+const NEGATION_MARKER_STEMS = new Set(['no', 'not', 'without', 'non', 'zero', 'free']);
+// Stock phrases that open with "no" but are not an absence: "No Place Like
+// Home", "No Limits", "No Fear". Such a segment is left as an ordinary subject.
+const NEGATION_IDIOM_WORDS = new Set(['like', 'matter', 'limit', 'limits', 'doubt', 'way', 'end', 'fear', 'regret']);
+const SERIES_SPLIT_RE = new RegExp(SERIES_SEPARATOR_RE.source, 'g');
+
+const NO_NEGATION = Object.freeze({ positiveTitle: '', stems: Object.freeze([]), active: false });
+
+/**
+ * Split a title into its positive text and the stems it says to leave out.
+ *
+ * @param {string} title
+ * @param {Iterable<string>|null} [ignoreWords]
+ * @returns {{positiveTitle: string, stems: string[], active: boolean}}
+ */
+const parseNegation = (title, ignoreWords = null) => {
+    if (typeof title !== 'string' || title === '') return NO_NEGATION;
+    const stems = new Set();
+    const addWords = (text) => {
+        const words = rawTokenise(text, { ignoreWords });
+        for (const word of words) stems.add(stem(word));
+        return words.length > 0;
+    };
+    const bounded = title.slice(0, MAX_TOKENISE_CHARS);
+    // Rejoined with ': ' so titleSubject still sees the series structure of
+    // whatever survives.
+    const segments = bounded.split(SERIES_SPLIT_RE).map((segment) => {
+        const match = NEGATION_LEAD_RE.exec(segment);
+        if (!match) return segment;
+        if (rawTokenise(match[1], { keepStopwords: true }).some((w) => NEGATION_IDIOM_WORDS.has(w))) return segment;
+        return addWords(match[1]) ? '' : segment;
+    });
+    const positiveTitle = segments.join(': ').replace(FREE_SUFFIX_RE, (whole, word) => (addWords(word) ? ' ' : whole));
+    if (stems.size === 0) return { positiveTitle: title, stems: [], active: false };
+    return { positiveTitle, stems: Array.from(stems), active: true };
+};
+
+// Remove negated subjects and the negation markers from a keyword list.
+const dropNegated = (keywords, negation) => {
+    if (!negation.active) return keywords;
+    const negated = new Set(negation.stems);
+    return keywords.filter((k) => !negated.has(k) && !NEGATION_MARKER_STEMS.has(k));
+};
+
+// "No People" / "No Humans" is by far the commonest negated brief, and the
+// vision labels on a photo of a person rarely say "human": they say "Man",
+// "Girl", "Portrait", "Crowd". The word-vector lexicon cannot stand in here —
+// measured against "humans" it rates "Animal" (0.54) and "Nature" (0.50) above
+// the match floor while "Man" (0.44), "Woman" (0.41) and "Crowd" (0.10) fall
+// under it — so the people concept is spelled out. Compared by EXACT stem, not
+// matches(): the prefix branch would let "man" catch "mango"/"mane".
+const PEOPLE_LABEL_STEMS = new Set(
+    [
+        'human',
+        'person',
+        'people',
+        'man',
+        'men',
+        'woman',
+        'women',
+        'child',
+        'children',
+        'kid',
+        'boy',
+        'girl',
+        'baby',
+        'toddler',
+        'teen',
+        'teenager',
+        'adult',
+        'face',
+        'portrait',
+        'selfie',
+        'crowd',
+        'bride',
+        'groom',
+        'family',
+        'couple',
+        'lady',
+        'gentleman',
+        'pedestrian',
+        'tourist',
+    ].map((w) => stem(w)),
+);
+
+/**
+ * What the challenge title says to leave out, in the shape the exclusion filter
+ * reads, or null when the title negates nothing.
+ *
+ * @param {object} challenge
+ * @param {Iterable<string>|null} [ignoreWords]
+ * @returns {{stems: string[], concept: Set<string>|null}|null}
+ */
+const excludedSubjectOf = (challenge, ignoreWords = null) => {
+    const { stems, active } = parseNegation(challenge?.title, ignoreWords);
+    if (!active) return null;
+    return { stems, concept: stems.some((s) => PEOPLE_LABEL_STEMS.has(s)) ? PEOPLE_LABEL_STEMS : null };
+};
+
+const photoShowsExcluded = (labelStems, excluded) =>
+    labelStems.some(
+        (labelStem) =>
+            (excluded.concept !== null && excluded.concept.has(labelStem)) ||
+            excluded.stems.some((s) => matches(labelStem, s)),
+    );
+
 // Keyword count is bounded for the same reason the per-photo stem count is (see
 // MAX_STEMS_PER_PHOTO): these keywords are the inner loop of every scorePhoto
 // call AND become the vecCache key in semantic/index.js, whose MAX_CACHE bounds
@@ -419,10 +541,15 @@ const buildChallengeKeywords = (challenge, ignoreWords = null) => {
     // the subject. Here each keyword is matched on its own, so a series word is
     // at worst weak evidence, and keeping it means "Mountains: A Tribute" still
     // scores a mountain photo even though the subject heuristic reads the tail.
-    const fromTitle = tokenise(challenge?.title, opts);
+    //
+    // A negated subject ("No Humans") is removed from all three sources: the url
+    // slug and the welcome_message repeat it, and a keyword here ranks photos UP.
+    const negation = parseNegation(challenge?.title, ignoreWords);
+    const title = negation.active ? negation.positiveTitle : challenge?.title;
+    const fromTitle = tokenise(title, opts);
     const fromUrl = tokenise(challenge?.url, opts);
     const fromWelcome = tokenise(challenge?.welcome_message, opts);
-    const all = [...fromTitle, ...fromUrl, ...fromWelcome];
+    const all = dropNegated([...fromTitle, ...fromUrl, ...fromWelcome], negation);
     // title + url first, so if the cap bites it is the long welcome_message prose
     // that gets dropped, never the title — which is where the subject actually is.
     return Array.from(new Set(all)).slice(0, MAX_CHALLENGE_KEYWORDS);
@@ -467,11 +594,15 @@ const buildChallengeKeywords = (challenge, ignoreWords = null) => {
  */
 const buildThemeKeywords = (challenge, ignoreWords = null) => {
     const opts = { ignoreWords };
-    const fromTitle = tokenise(titleSubject(challenge?.title, ignoreWords), opts);
+    // A negated subject must not become the theme (see parseNegation): pooling
+    // "human" for "No Humans" pulls the vector straight at photos of people.
+    const negation = parseNegation(challenge?.title, ignoreWords);
+    const title = negation.active ? negation.positiveTitle : challenge?.title;
+    const fromTitle = dropNegated(tokenise(titleSubject(title, ignoreWords), opts), negation);
     if (fromTitle.length > 0) return Array.from(new Set(fromTitle)).slice(0, MAX_CHALLENGE_KEYWORDS);
     // Title said nothing usable — the slug is the only signal left, and with no
     // title to contradict it there is nothing for a stale one to poison.
-    return Array.from(new Set(tokenise(challenge?.url, opts))).slice(0, MAX_CHALLENGE_KEYWORDS);
+    return Array.from(new Set(dropNegated(tokenise(challenge?.url, opts), negation))).slice(0, MAX_CHALLENGE_KEYWORDS);
 };
 
 // Minimum stem length for the fuzzy (prefix) branch of matches(). Below this a
@@ -739,13 +870,18 @@ const buildSearchTerms = (challenge, opts = {}) => {
         // the last one the cap would drop. That matters because the cap is small:
         // "Color Hunt: Blue & Orange" used to yield [color, hunt, blue] and lose
         // "orange" entirely.
-        const words = rawTokenise(titleSubject(challenge?.title, ignoreWords), { ignoreWords });
+        //
+        // Never search a negated subject: "No Humans" searching "human" would
+        // fetch exactly the photos the challenge forbids.
+        const negation = parseNegation(challenge?.title, ignoreWords);
+        const title = negation.active ? negation.positiveTitle : challenge?.title;
+        const words = rawTokenise(titleSubject(title, ignoreWords), { ignoreWords });
         // A participle is a modifier, never the subject: "Leading with Lines" is
         // about lines, "Cats and Dogs Running" is about cats and dogs. Sink them
         // behind the nouns, then read the nouns right-to-left.
         const participles = words.filter(isParticiple);
         const heads = words.filter((w) => !isParticiple(w)).reverse();
-        terms = [...heads, ...participles].map(stem);
+        terms = dropNegated([...heads, ...participles].map(stem), negation);
     }
     return Array.from(new Set(terms)).slice(0, SEARCH_TERMS_CAP);
 };
@@ -954,15 +1090,29 @@ const uploadDateOf = (photo) => (Number.isFinite(photo.upload_date) ? photo.uplo
  *   tag. A bare `number` value is also accepted — the shape documented here
  *   before the support tier existed — and scores with no support. Omit the map
  *   (the default) and ranking is byte-for-byte the lexical-only behavior.
- *   onFallback: optional callback invoked as onFallback({letterPrefix, mustStems})
- *   when a hard filter eliminated every photo and the picker relaxed to the
- *   unfiltered set (i.e. an off-theme photo is about to be picked). Injected
+ *   onFallback: optional callback invoked as
+ *   onFallback({letterPrefix, mustStems, excludedStems}) when a hard filter
+ *   eliminated every photo and the picker relaxed to the unfiltered set (i.e. an
+ *   off-theme photo is about to be picked). `excludedStems` is non-empty when
+ *   the relaxed filter was a negated title ("No Humans": every candidate's
+ *   labels showed the negated subject). Injected
  *   side-channel so this function stays pure — callers use it to log the
  *   fallback where a user can see it. Exceptions it throws are swallowed;
  *   omitting it changes nothing. Not called when fillWithoutTagMatch is false
  *   (the picker returns [] instead of relaxing).
  * @returns {Array<string>} ordered list of photo ids; length <= slotsToFill
  */
+// Same "never throws" contract as resolveSemanticScores: a buggy callback must
+// not turn a fill that would succeed into a crash.
+const notifyFallback = (opts, info) => {
+    if (typeof opts.onFallback !== 'function') return;
+    try {
+        opts.onFallback(info);
+    } catch {
+        // Deliberately swallowed — the callback is observability-only.
+    }
+};
+
 const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {}) => {
     if (!Number.isInteger(slotsToFill) || slotsToFill <= 0) return [];
     const scored = buildScoredCandidates(challenge, eligiblePhotos, opts);
@@ -1028,17 +1178,26 @@ const buildScoredCandidates = (challenge, eligiblePhotos, opts = {}) => {
         const hadHardFilter = mustStems.length > 0 || Boolean(letterPrefix);
         if (hadHardFilter && opts.fillWithoutTagMatch !== false) {
             filtered = withStems;
-            if (typeof opts.onFallback === 'function') {
-                // Same "never throws" contract as resolveSemanticScores: a buggy
-                // callback must not turn a fill that would succeed into a crash.
-                try {
-                    opts.onFallback({ letterPrefix, mustStems });
-                } catch {
-                    // Deliberately swallowed — the callback is observability-only.
-                }
-            }
+            notifyFallback(opts, { letterPrefix, mustStems, excludedStems: [] });
         } else {
             return [];
+        }
+    }
+
+    // A negated title ("No Humans") excludes photos whose labels show the
+    // negated subject. Same all-or-nothing fallback as the hard filters above:
+    // only when EVERY remaining photo shows it does the picker relax (or return
+    // [] under fillWithoutTagMatch:false). A photo with no labels cannot be
+    // judged and is kept.
+    const excluded = excludedSubjectOf(challenge, opts.ignoreWords || null);
+    if (excluded) {
+        const kept = filtered.filter(({ wordStems }) => !photoShowsExcluded(wordStems, excluded));
+        if (kept.length > 0) {
+            filtered = kept;
+        } else if (opts.fillWithoutTagMatch === false) {
+            return [];
+        } else {
+            notifyFallback(opts, { letterPrefix: null, mustStems: [], excludedStems: excluded.stems });
         }
     }
 
@@ -1176,6 +1335,7 @@ module.exports = {
     hasThemeMatch,
     buildSearchTerms,
     detectLetterPrefix,
+    parseNegation,
     labelWordStems,
     labelStemGroups,
     SEMANTIC_MATCH_FLOOR,

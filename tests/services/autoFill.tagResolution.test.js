@@ -136,6 +136,26 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         expect(searchTagAutocomplete).not.toHaveBeenCalled();
     });
 
+    test('a negated title never searches its subject and explains the full-library fetch', async () => {
+        // "No Humans" searching "human" would fetch exactly the forbidden photos.
+        const getEligiblePhotos = makeGetEligiblePhotos();
+        const { logger, category } = makeLogger();
+        const result = await fetchCandidatesForChallenge(
+            { id: 'c-nohumans', title: 'No Humans', url: 'no-humans' },
+            'tok',
+            {},
+            { getEligiblePhotos, logger },
+        );
+        expect(result).toEqual(LIBRARY);
+        expect(getEligiblePhotos).toHaveBeenCalledTimes(1);
+        expect(getEligiblePhotos.mock.calls[0][2]?.search).toBeUndefined();
+        expect(category.info).toHaveBeenCalledWith(
+            expect.stringContaining('only names what to leave out (human)'),
+            null,
+        );
+        expect(category.warning).not.toHaveBeenCalledWith(expect.stringContaining('no searchable theme'), null);
+    });
+
     test('a failing identity lookup degrades to the old behavior instead of throwing', async () => {
         const getEligiblePhotos = makeGetEligiblePhotos();
         const { logger } = makeLogger();

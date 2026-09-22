@@ -9,6 +9,7 @@ const {
     finalizePick,
     buildSearchTerms,
     detectLetterPrefix,
+    parseNegation,
     tokenise,
     stem,
     matches,
@@ -1652,6 +1653,70 @@ describe('photoPicker', () => {
                 }),
             ];
             expect(pickPhotosForChallenge(challenge, photos, 1)).toEqual(['portfolio']);
+        });
+    });
+
+    describe('negated titles ("No Humans")', () => {
+        test('parseNegation reads a leading negation and the "X-free" compound', () => {
+            expect(parseNegation('No Humans')).toEqual({ positiveTitle: '', stems: ['human'], active: true });
+            expect(parseNegation('Without People').stems).toEqual(['people']);
+            expect(parseNegation('Color Hunt: No Red').stems).toEqual(['red']);
+            const free = parseNegation('People-Free Streets');
+            expect(free.stems).toEqual(['people']);
+            expect(tokenise(free.positiveTitle)).toEqual(['street']);
+        });
+
+        test.each(['No Place Like Home', 'No Limits', 'Wild and Free', 'Street Photography', 'Nobody Home'])(
+            '"%s" is not a negation',
+            (title) => {
+                expect(parseNegation(title).active).toBe(false);
+            },
+        );
+
+        test('the negated subject never becomes a theme, keyword or search term', () => {
+            const challenge = { title: 'No Humans', url: 'no-humans', welcome_message: 'No humans in frame.' };
+            expect(buildThemeKeywords(challenge)).toEqual([]);
+            expect(buildChallengeKeywords(challenge)).toEqual(['frame']);
+            expect(buildSearchTerms(challenge)).toEqual([]);
+            // The url slug must not smuggle the marker word back in either.
+            expect(buildThemeKeywords({ title: 'Without People', url: 'without-people' })).toEqual([]);
+            expect(buildSearchTerms({ title: 'People-Free Streets' })).toEqual(['street']);
+        });
+
+        test('photos of people are excluded even when their labels never say "human"', () => {
+            const photos = [
+                allowed('portrait', ['Portrait', 'Woman'], 3000),
+                allowed('crowd', ['Crowd', 'Street'], 2900),
+                allowed('kid', ['Boy', 'Playground'], 2800),
+                allowed('dog', ['Dog', 'Animal'], 1000),
+                // "man" is matched by exact stem, so a mango is not a man.
+                allowed('mango', ['Mango', 'Fruit'], 900),
+            ];
+            expect(pickPhotosForChallenge({ title: 'No Humans' }, photos, 5)).toEqual(['dog', 'mango']);
+        });
+
+        test('a non-people negation excludes by the word itself', () => {
+            const photos = [allowed('car', ['Car', 'Road'], 3000), allowed('tree', ['Tree'], 1000)];
+            expect(pickPhotosForChallenge({ title: 'No Cars' }, photos, 2)).toEqual(['tree']);
+        });
+
+        test('when every photo shows the negated subject it falls back and says why', () => {
+            const photos = [allowed('portrait', ['Portrait'], 3000), allowed('crowd', ['Crowd'], 2000)];
+            const onFallback = jest.fn();
+            expect(pickPhotosForChallenge({ title: 'No Humans' }, photos, 1, { onFallback })).toEqual(['portrait']);
+            expect(onFallback).toHaveBeenCalledWith({ letterPrefix: null, mustStems: [], excludedStems: ['human'] });
+        });
+
+        test('fillWithoutTagMatch:false leaves the slot empty instead', () => {
+            const photos = [allowed('portrait', ['Portrait'], 3000)];
+            expect(pickPhotosForChallenge({ title: 'No Humans' }, photos, 1, { fillWithoutTagMatch: false })).toEqual(
+                [],
+            );
+        });
+
+        test('an unlabelled photo cannot be judged and is kept', () => {
+            const photos = [allowed('portrait', ['Person'], 3000), allowed('bare', [], 1000)];
+            expect(pickPhotosForChallenge({ title: 'No Humans' }, photos, 2)).toEqual(['bare']);
         });
     });
 });
