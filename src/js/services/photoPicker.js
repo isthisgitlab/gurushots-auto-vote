@@ -1082,6 +1082,28 @@ const compareTheme = (a, b) => {
 const sameTheme = (a, b) => compareTheme(a, b) === 0;
 
 /**
+ * Did this candidate match the challenge theme AT ALL?
+ *
+ * Reads exactly the tiers compareTheme ranks on, and lives here beside them on
+ * purpose: this module OWNS the tier list, and a caller that re-states it by
+ * hand silently rots the moment a tier is added, renamed or reordered. The one
+ * caller (logPopularityPick in services/autoFill.js) uses it to decide whether
+ * a tie means "everything matched equally" or "nothing matched" — get that
+ * backwards and the app tells a user their fill failed on the fills that
+ * worked, which is the bug this predicate was extracted to stop recurring.
+ *
+ * Every theme tier is non-negative (that is what makes the governing rule
+ * enforceable — see the file header), so "matched something" is exactly "any
+ * tier is above zero".
+ *
+ * @param {{shouldMatchCount: number, semantic: number, semanticSupport: number, score: number}} entry
+ * @returns {boolean}
+ */
+const hasThemeMatch = (entry) =>
+    Boolean(entry) &&
+    (entry.shouldMatchCount > 0 || entry.semantic > 0 || entry.semanticSupport > 0 || entry.score > 0);
+
+/**
  * The candidates whose relative order the POPULARITY tiers will actually decide
  * — i.e. the ones worth spending a stat lookup on.
  *
@@ -1151,6 +1173,7 @@ module.exports = {
     buildScoredCandidates,
     selectEnrichmentSet,
     finalizePick,
+    hasThemeMatch,
     buildSearchTerms,
     detectLetterPrefix,
     labelWordStems,

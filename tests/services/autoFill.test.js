@@ -255,6 +255,15 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         // Theme-narrowed fetch: the title "Pink In Nature" derives search
         // terms, so the eligible-photo fetch is issued with a `search` filter
         // rather than the bare 2-arg call.
+        //
+        // The themed budget must stay STRICTLY under api/submissions.js's own
+        // PAGINATE_BUDGET_MS (20000): up to SEARCH_TERMS_CAP of these walks run
+        // concurrently seconds before a close, and the themed phase may run
+        // twice (raw terms, then the tag-resolver retry). `expect.any(Number)`
+        // alone would not notice the two being accidentally equalised.
+        const themedBudget = getEligiblePhotos.mock.calls.find(([, , o]) => o && o.search)[2].budgetMs;
+        expect(themedBudget).toBeGreaterThan(0);
+        expect(themedBudget).toBeLessThanOrEqual(8000);
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', {
             search: 'pink',
             paginate: true,
@@ -534,8 +543,8 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     test('logs a coverage-gap warning when the schedule tops out below max_photo_submits', async () => {
         // Schedule tops out at 4 but the challenge allows 6: with 4 entries and
         // the schedule satisfied, the remaining 2 slots are left to emergency
-        // fill — a WARNING must say so (debug/info are compiled out of packaged
-        // builds).
+        // fill — a WARNING must say so (only `debug`/`api` are compiled out of
+        // packaged builds; the level here is about severity, not reach).
         const warning = jest.fn();
         const logger = {
             withCategory: () => ({ info: jest.fn(), warning, success: jest.fn(), error: jest.fn(), debug: jest.fn() }),
@@ -2800,8 +2809,9 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             submitToChallenge,
         });
 
-        // debug/info are compiled out of packaged builds, so this has to be a
-        // warning or a real user sees nothing at all.
+        // An off-theme submission is surprising enough to warrant a warning —
+        // the level is about severity, not reach. (Only `debug`/`api` are gated
+        // on isSourceCode() in logger.js; `info` reaches packaged builds too.)
         const warnings = logger.__level.warning.mock.calls.map(([msg]) => msg);
         const explanation = warnings.find((m) => m.includes('chosen on past performance'));
         expect(explanation).toBeDefined();
@@ -2868,6 +2878,66 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         // 'b' has the higher real vote count, so it is the one that was submitted.
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['b'], 'tok');
         expect(explanation).toContain('b (900 votes');
+    });
+
+    test('treats a SEMANTIC-only match as on theme, with the lexical tier at zero', async () => {
+        const logger = makeCapturingLogger();
+        // The commit's motivating repro, and the case the previous test cannot
+        // reach: "Stairs" stems to "stair", the label is "Staircase", and the
+        // prefix matcher rejects that pair (delta 4 > MAX_STEM_PREFIX_DELTA), so
+        // the LEXICAL tier scores 0. Only the lexicon says these are on theme.
+        // Without this case, deleting the `semantic` clause from the theme-match
+        // predicate would still pass the whole suite.
+        const stairPhoto = (id, views) => ({
+            id,
+            labels: ['Staircase'],
+            votes: 0,
+            views,
+            upload_date: 9000,
+            permission: { allowed: true, message: null },
+        });
+        const photos = [stairPhoto('s1', 900), stairPhoto('s2', 800)];
+        // Guard the premise: if the matcher ever learns "staircase" ~ "stair",
+        // this test stops testing the semantic-only path and must be revisited.
+        const { scorePhoto, buildChallengeKeywords } = require('../../src/js/services/photoPicker');
+        const challenge = makeChallenge({ title: 'Stairs', url: 'stairs', entries: [{ id: 'e1' }] });
+        expect(scorePhoto(photos[0], buildChallengeKeywords(challenge))).toBe(0);
+
+        const getSemanticScores = jest.fn().mockResolvedValue(
+            new Map([
+                ['s1', { score: 0.94, support: 1 }],
+                ['s2', { score: 0.94, support: 1 }],
+            ]),
+        );
+        const getImageData = jest.fn(async (id) => ({
+            votes: id === 's2' ? 900 : 10,
+            views: 50,
+            achievements: [],
+        }));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue(photos),
+            getImageData,
+            getSemanticScores,
+            submitToChallenge,
+        });
+
+        const allMessages = [
+            ...logger.__level.warning.mock.calls,
+            ...logger.__level.info.mock.calls,
+            ...logger.__level.success.mock.calls,
+        ].map(([msg]) => msg);
+        expect(allMessages.some((m) => m.includes('matched the challenge theme'))).toBe(false);
+        expect(allMessages.some((m) => m.includes('Per-Title Tag Rule'))).toBe(false);
+        const explanation = logger.__level.info.mock.calls
+            .map(([msg]) => msg)
+            .find((m) => m.includes('chosen on past performance'));
+        expect(explanation).toBeDefined();
+        expect(explanation).toContain('theme equally well');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['s2'], 'tok');
     });
 
     test('reports partial coverage honestly when only some photos were measured', async () => {

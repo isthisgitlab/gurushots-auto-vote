@@ -29,6 +29,7 @@ const {
     finalizePick,
     buildSearchTerms,
     detectLetterPrefix,
+    hasThemeMatch,
 } = require('./photoPicker');
 const { getSemanticScores } = require('./semantic');
 const { resolveTermsToTags } = require('./tagResolver');
@@ -217,14 +218,24 @@ const resolveTagsForTerms = async (terms, challenge, opts) => {
 // Test-only: drop the memoised identity between cases.
 const __resetMemberIdCache = () => memberIdCache.clear();
 
-// Wall-clock budget for ONE themed search's library walk (see searchUnion).
-// Deliberately well under api/submissions.js's own PAGINATE_BUDGET_MS default:
-// up to SEARCH_TERMS_CAP of these run concurrently, and the whole fill path can
+// Wall-clock budget for the THEMED PHASE of one candidate fetch — not for one
+// searchUnion call. The distinction is load-bearing: fetchCandidatesForChallenge
+// can run searchUnion TWICE in sequence (once on the raw terms, then again on
+// the tag-resolver's output when the first missed), so a per-call budget would
+// silently stack to double this before the unfiltered fallback's own
+// PAGINATE_BUDGET_MS even starts. searchUnion therefore spends what is LEFT of
+// this budget, making the whole themed phase bounded by it however many times it
+// runs.
+//
+// Deliberately well under api/submissions.js's PAGINATE_BUDGET_MS default: up to
+// SEARCH_TERMS_CAP walks run concurrently inside one call, and this path can
 // fire seconds before a challenge closes, where returning fewer candidates
-// always beats missing the close. Page 1 is fetched regardless of this budget —
+// always beats missing the close. Page 1 is fetched regardless of the budget —
 // getEligiblePhotos only tests it before fetching a SECOND page — so a term that
-// fits in one page can never be cut short by it.
+// fits in one page can never be cut short, and the floor below keeps a
+// late-running resolved search from being handed a budget of zero.
 const THEMED_SEARCH_BUDGET_MS = 8000;
+const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
 
 /**
  * Fetch the eligible-photo candidates for a challenge, narrowed to its theme.
@@ -292,6 +303,15 @@ const fetchCandidatesForChallenge = async (
                 null,
             );
     }
+    // Shared deadline for the whole themed phase, so the raw-term searches and
+    // the tag-resolver retry that may follow them split ONE budget instead of
+    // each taking a full one (see THEMED_SEARCH_BUDGET_MS). Floored rather than
+    // clamped to zero: a resolved search handed 0ms would stop after page 1 and
+    // quietly reintroduce the truncation this change removes.
+    const themedPhaseStartedAt = Date.now();
+    const remainingThemedBudgetMs = () =>
+        Math.max(THEMED_SEARCH_MIN_BUDGET_MS, THEMED_SEARCH_BUDGET_MS - (Date.now() - themedPhaseStartedAt));
+
     // One search per term, unioned by id. Extracted so the resolution retry
     // below runs the identical fetch/dedupe/fault-tolerance path rather than a
     // second copy of it.
@@ -321,7 +341,7 @@ const fetchCandidatesForChallenge = async (
                 getEligiblePhotos(challengeId, token, {
                     search: term,
                     paginate: true,
-                    budgetMs: THEMED_SEARCH_BUDGET_MS,
+                    budgetMs: remainingThemedBudgetMs(),
                     logLabel,
                 }),
             ),
@@ -802,17 +822,33 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
     // Every contested entry shares the boundary's theme tuple (that is what
     // selectEnrichmentSet selected them on), so one of them settles whether this
     // tie is "all matched equally" or "none matched at all".
+    //
+    // The guard is not reachable today — `explained.length === 0` already
+    // returned above, and explained is a subset of contestedEntries — but it is
+    // one line and it removes a nasty failure mode if either invariant is ever
+    // refactored: this function runs INSIDE the try around submitToChallenge, so
+    // a TypeError here would be reported as 'submit-threw' for a submission that
+    // had already succeeded.
     const sample = contestedEntries[0];
-    const themeMatched =
-        sample.shouldMatchCount > 0 || sample.semantic > 0 || sample.semanticSupport > 0 || sample.score > 0;
+    if (!sample) return;
+    // Predicate owned by photoPicker, which owns the tier list it reads. Stating
+    // it by hand here would silently rot the day a tier is added or reordered —
+    // and the regression would be exactly the bug this branch exists to fix.
+    const themeMatched = hasThemeMatch(sample);
     const subject = explained.length === 1 ? 'the entry was' : `${explained.length} entries were`;
     const log = logger.withCategory('autoFill');
 
     if (themeMatched) {
         log.info(
-            `${prefix}: ${contestedEntries.length} photos matched ${logger.challengeTag(challenge)}'s theme equally ` +
-                `well, so ${subject} chosen on past performance — ${explained.map(describe).join('; ')}` +
-                `${coverage}.`,
+            // Never "1 photos": selectEnrichmentSet returns [] for a group of one,
+            // so the caller's `contested.length > 0` gate implies at least two.
+            // Phrased "... for <tag>" like every other challengeTag site in this
+            // file, rather than suffixing a possessive onto the tag — challengeTag
+            // renders as "[Challenge 1: Stairs]", and "]'s theme" reads as a
+            // garbled string before it reads as English.
+            `${prefix}: ${contestedEntries.length} photos matched the theme equally well for ` +
+                `${logger.challengeTag(challenge)}, so ${subject} chosen on past performance — ` +
+                `${explained.map(describe).join('; ')}${coverage}.`,
             null,
         );
         return;
@@ -1148,8 +1184,9 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     // When the schedule was end-aligned (challenge allows fewer images
     // than the schedule's span), say which row's time governed this fill
     // — the resolved mapping, not a bare shift count. Success-level on
-    // purpose: debug/info are compiled out of packaged builds, and the
-    // remapped timing is exactly what a user checking "why did it fill
+    // purpose: `debug` is compiled out of packaged builds (it is gated on
+    // isSourceCode() in logger.js; `info`, `success` and `warning` are NOT),
+    // and the remapped timing is exactly what a user checking "why did it fill
     // now?" needs to see. Attribute the TARGET's row (`desired + shift`
     // maps back to the original image number that set the current
     // target), not the entry number: during catch-up the entry being
