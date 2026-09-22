@@ -13,7 +13,14 @@ import { ResetIcon } from '@/components/ui/ResetButton';
 /**
  * Challenges section with Vote All, Refresh buttons, and challenge cards
  */
-export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onChallengeSettingsClick }) {
+export function ChallengesSection({
+    timezone,
+    autovoteRunning,
+    isLoggedIn,
+    onChallengeSettingsClick,
+    bankroll = null,
+    onBankrollChanged,
+}) {
     const { t } = useTranslation();
     const { challenges, loading, error, refetch } = useChallenges();
     const times = useTimers(challenges);
@@ -67,6 +74,12 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
         // Refresh challenges after a vote
         refetch(true);
     }, [refetch]);
+
+    // A key / swap / fill spend changes both the challenge and the balance.
+    const handleCurrencySpent = useCallback(() => {
+        handleVoteComplete();
+        if (onBankrollChanged) onBankrollChanged();
+    }, [handleVoteComplete, onBankrollChanged]);
 
     // Transient-failure banner: a failed fetch (retries exhausted) surfaces
     // here instead of being silently shown as "no challenges". Auto-clears on
@@ -217,6 +230,8 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                         autovoteRunning={autovoteRunning}
                         onVoteComplete={handleVoteComplete}
                         onSettingsClick={onChallengeSettingsClick}
+                        bankroll={bankroll}
+                        onCurrencySpent={handleCurrencySpent}
                     />
                 ))}
             </div>

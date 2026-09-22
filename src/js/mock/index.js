@@ -170,6 +170,15 @@ const mockMethod = (
     };
 };
 
+// Shared body of the mock currency spends: fixture 900004 is the failure sentinel.
+const mockSpendResult = async (challengeId) => {
+    await simulateApiResponse({}, 300);
+    if (String(challengeId) === '900004') {
+        return { ok: false, raw: { success: false } };
+    }
+    return { ok: true, raw: { success: true } };
+};
+
 /**
  * Mock API client that can be used for testing
  */
@@ -815,6 +824,26 @@ const mockApiClient = {
             }
             return { ok: true, raw: { success: true } };
         },
+    ),
+
+    /**
+     * Simulate the three bankroll spends (/rest/key_unlock, /rest/swap,
+     * /rest/exposure_autofill). Stateless; fixture 900004 fails (success:false)
+     * so every spend-failure path can be exercised in mock mode.
+     */
+    keyUnlock: mockMethod(
+        { name: 'keyUnlock', tokenArg: 1, onNoToken: () => ({ ok: false, raw: null }) },
+        async (challengeId) => mockSpendResult(challengeId),
+    ),
+
+    swapPhoto: mockMethod(
+        { name: 'swapPhoto', tokenArg: 3, onNoToken: () => ({ ok: false, raw: null }) },
+        async (challengeId) => mockSpendResult(challengeId),
+    ),
+
+    exposureAutofill: mockMethod(
+        { name: 'exposureAutofill', tokenArg: 2, onNoToken: () => ({ ok: false, raw: null }) },
+        async (challengeId) => mockSpendResult(challengeId),
     ),
 
     /**

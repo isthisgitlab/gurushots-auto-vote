@@ -4,6 +4,7 @@ import { useMemberChallenges } from '@/api/useMemberChallenges';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { interp } from '@/utils/interp';
 
 // Map a join outcome status to a translated, colored inline message. Distinct
 // wording for the money-critical "charged but not joined" case, which also
@@ -27,9 +28,6 @@ const TEXT_CLASS = {
     error: 'text-error',
     neutral: 'text-base-content/60',
 };
-
-// t() has no interpolation; fill {name} placeholders locally.
-const interp = (str, vars) => String(str).replace(/\{(\w+)\}/g, (_, k) => (vars && vars[k] != null ? vars[k] : ''));
 
 const costOf = (c) => {
     const n = Number(c?.join_coins);

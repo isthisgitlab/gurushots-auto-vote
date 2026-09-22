@@ -265,15 +265,27 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  *   enables tag resolution on the miss path (see the retry below). Omit either
  *   and the function behaves exactly as it did before resolution existed, which
  *   is what keeps every existing caller and test valid.
+ *   usage: 'submit' (default) or 'swap' — which server-side eligibility view the
+ *   library reads (a swap replaces an entry instead of adding one).
  * @returns {Promise<Array<object>>}
  */
 const fetchCandidatesForChallenge = async (
     challenge,
     token,
     tagOpts,
-    { getEligiblePhotos, logger, logLabel = 'autoFill', searchTagAutocomplete, getCurrentMemberProfile },
+    {
+        getEligiblePhotos,
+        logger,
+        logLabel = 'autoFill',
+        searchTagAutocomplete,
+        getCurrentMemberProfile,
+        usage = 'submit',
+    },
 ) => {
     const challengeId = challenge.id;
+    // Only a swap asks the server for its own eligibility view; every existing
+    // caller keeps the exact option shape it always sent (usage defaults to submit).
+    const usageOpt = usage === 'swap' ? { usage } : {};
     const ignoreWords = (tagOpts && tagOpts.ignoreWords) || null;
     const terms = buildSearchTerms(challenge, tagOpts);
     // A letter challenge ("Begins With L") yields no search terms on purpose —
@@ -358,6 +370,7 @@ const fetchCandidatesForChallenge = async (
                     paginate: true,
                     budgetMs: remainingThemedBudgetMs(),
                     logLabel,
+                    ...usageOpt,
                 }),
             ),
         );
@@ -468,7 +481,7 @@ const fetchCandidatesForChallenge = async (
     // full PAGINATE_BUDGET_MS default rather than the tighter themed budget: by
     // the time it runs the themed searches have already found nothing, and this
     // is the last chance to put ANY photo in the slot.
-    return getEligiblePhotos(challengeId, token, { paginate: true, logLabel });
+    return getEligiblePhotos(challengeId, token, { paginate: true, logLabel, ...usageOpt });
 };
 
 const getEntries = (challenge) => {
@@ -883,6 +896,162 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
 };
 
 /**
+ * First half of the fill pipeline: fetch the candidate library for a challenge
+ * and score it semantically. Shared by runFillAttempt and
+ * rankCandidatesForChallenge so a swap ranks photos exactly the way a fill
+ * does.
+ *
+ * @returns {Promise<{status: 'fetch-error', error: *} | {status: 'loaded', eligible: Array<object>, semanticScores: *, ignoreWords: *}>}
+ */
+const loadFillCandidates = async ({ label, challenge, token, deps, mustIncludeTags, shouldIncludeTags, usage }) => {
+    const { logger, getEligiblePhotos, searchTagAutocomplete, getCurrentMemberProfile } = deps;
+    // One lookup for the whole fill — see resolveIgnoreWords for why it is not
+    // threaded in from each caller like the tag settings are.
+    const ignoreWords = resolveIgnoreWords(deps.settings, challenge);
+
+    let eligible;
+    try {
+        eligible = await fetchCandidatesForChallenge(
+            challenge,
+            token,
+            { mustIncludeTags, shouldIncludeTags, ignoreWords },
+            // Forward the tag-resolution pair. This call rebuilds a fresh deps
+            // object rather than spreading `deps`, so anything not named here is
+            // silently dropped — which is how resolution can look wired (the
+            // orchestrator supplies it) while never reaching THIS path, the one
+            // that does ordinary auto-fill, emergency fill and manual fill.
+            { getEligiblePhotos, logger, searchTagAutocomplete, getCurrentMemberProfile, usage },
+        );
+    } catch (error) {
+        logger
+            .withCategory('autoFill')
+            .warning(
+                `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
+                null,
+            );
+        return { status: 'fetch-error', error };
+    }
+
+    // Score once and reuse for every picker call in this fill (the emergency
+    // probe and its actual pick rank the same eligible set, so they must see
+    // the same map).
+    const semanticScores = await resolveSemanticScores(challenge, eligible, { ...deps, ignoreWords });
+    return { status: 'loaded', eligible, semanticScores, ignoreWords };
+};
+
+/**
+ * Second half of the fill pipeline: build the scored candidate list and enrich
+ * the contested ones with real stats. Returns the FULL scored pool —
+ * finalizePick (which truncates to wantCount) is the caller's job.
+ *
+ * @returns {Promise<{scored: Array<object>, contested: Array<object>, contestedIds: Set<string>}>}
+ */
+const scoreFillCandidates = async ({
+    label,
+    challenge,
+    token,
+    deps,
+    eligible,
+    semanticScores,
+    ignoreWords,
+    wantCount,
+    mustIncludeTags,
+    shouldIncludeTags,
+    fillWithoutTagMatch,
+}) => {
+    const { logger } = deps;
+    const scored = buildScoredCandidates(challenge, eligible, {
+        mustIncludeTags,
+        shouldIncludeTags,
+        fillWithoutTagMatch,
+        semanticScores,
+        ignoreWords,
+        onFallback: makeFallbackLogger(label, challenge, logger),
+    });
+
+    // Stat enrichment. selectEnrichmentSet returns the candidates still
+    // competing for the last slot after the theme tiers — i.e. exactly the set
+    // whose order the popularity tiers decide. It is empty whenever the theme
+    // settled things, so a clean match costs no extra requests.
+    const contested = selectEnrichmentSet(scored, wantCount);
+    const contestedIds = new Set(contested.map((photo) => String(photo.id)));
+    if (contested.length > 0) {
+        const enriched = await enrichCandidates(contested, token, deps);
+        const statsById = new Map(enriched.map((photo) => [String(photo.id), photo]));
+        for (const entry of scored) {
+            const fresh = statsById.get(String(entry.id));
+            if (!fresh) continue;
+            entry.statsKnown = fresh.statsKnown === true;
+            if (entry.statsKnown) {
+                entry.votes = Number.isFinite(fresh.votes) ? fresh.votes : entry.votes;
+                entry.views = Number.isFinite(fresh.views) ? fresh.views : entry.views;
+                entry.achievementCount = Number.isFinite(fresh.achievementCount)
+                    ? fresh.achievementCount
+                    : entry.achievementCount;
+            }
+        }
+    }
+    return { scored, contested, contestedIds };
+};
+
+/**
+ * Ranks a challenge's candidate photos with the same pipeline a fill uses, but
+ * submits nothing. Every id in `excludeIds` is removed BEFORE scoring and
+ * enrichment — finalizePick truncates after sorting, so filtering afterwards
+ * could discard every valid alternative when the top picks are excluded.
+ *
+ * @param {object} challenge
+ * @param {string} token
+ * @param {object} deps - same shape as the fill deps
+ * @param {{label?: string, usage?: 'submit'|'swap', excludeIds?: Set<string>, wantCount?: number,
+ *   mustIncludeTags?: string[]|null, shouldIncludeTags?: string[]|null, fillWithoutTagMatch?: *}} [opts]
+ * @returns {Promise<{status: 'fetch-error', error: *} | {status: 'ranked', picked: Array<object>}>}
+ *   picked: the top `wantCount` candidate photo records (with id + member_id), best first
+ */
+const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => {
+    const {
+        label = 'rank',
+        usage = 'submit',
+        excludeIds = new Set(),
+        wantCount = 1,
+        mustIncludeTags = null,
+        shouldIncludeTags = null,
+        fillWithoutTagMatch = true,
+    } = opts;
+    const loaded = await loadFillCandidates({
+        label,
+        challenge,
+        token,
+        deps,
+        mustIncludeTags,
+        shouldIncludeTags,
+        usage,
+    });
+    if (loaded.status === 'fetch-error') {
+        return loaded;
+    }
+    const eligible = loaded.eligible.filter((photo) => photo && !excludeIds.has(String(photo.id)));
+    const { scored } = await scoreFillCandidates({
+        label,
+        challenge,
+        token,
+        deps,
+        eligible,
+        semanticScores: loaded.semanticScores,
+        ignoreWords: loaded.ignoreWords,
+        wantCount,
+        mustIncludeTags,
+        shouldIncludeTags,
+        fillWithoutTagMatch,
+    });
+    const byId = new Map(eligible.map((photo) => [String(photo.id), photo]));
+    const picked = finalizePick(scored, wantCount)
+        .map((id) => byId.get(String(id)))
+        .filter(Boolean);
+    return { status: 'ranked', picked };
+};
+
+/**
  * The one fill pipeline all four public entry points share:
  *
  *   fetch candidates → semantic scores → (optional probe) → pick →
@@ -966,38 +1135,12 @@ const runFillAttempt = async ({
     guardPick = null,
     onRefreshed = null,
 }) => {
-    const { logger, getEligiblePhotos, submitToChallenge, searchTagAutocomplete, getCurrentMemberProfile } = deps;
-    // One lookup for the whole fill — see resolveIgnoreWords for why it is not
-    // threaded in from each caller like the tag settings are.
-    const ignoreWords = resolveIgnoreWords(deps.settings, challenge);
-
-    let eligible;
-    try {
-        eligible = await fetchCandidatesForChallenge(
-            challenge,
-            token,
-            { mustIncludeTags, shouldIncludeTags, ignoreWords },
-            // Forward the tag-resolution pair. This call rebuilds a fresh deps
-            // object rather than spreading `deps`, so anything not named here is
-            // silently dropped — which is how resolution can look wired (the
-            // orchestrator supplies it) while never reaching THIS path, the one
-            // that does ordinary auto-fill, emergency fill and manual fill.
-            { getEligiblePhotos, logger, searchTagAutocomplete, getCurrentMemberProfile },
-        );
-    } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(
-                `${label}: failed to fetch eligible photos for ${logger.challengeTag(challenge)}: ${error.message || error}`,
-                null,
-            );
-        return { status: 'fetch-error', error };
+    const { logger, submitToChallenge } = deps;
+    const loaded = await loadFillCandidates({ label, challenge, token, deps, mustIncludeTags, shouldIncludeTags });
+    if (loaded.status === 'fetch-error') {
+        return loaded;
     }
-
-    // Score once and reuse for every picker call in this fill (the emergency
-    // probe and its actual pick rank the same eligible set, so they must see
-    // the same map).
-    const semanticScores = await resolveSemanticScores(challenge, eligible, { ...deps, ignoreWords });
+    const { eligible, semanticScores, ignoreWords } = loaded;
 
     if (probeStandDown && probeStandDown({ eligible, semanticScores })) {
         return { status: 'probe-stand-down' };
@@ -1009,37 +1152,19 @@ const runFillAttempt = async ({
     // on every scheduler cycle inside the emergency window, usually to stand
     // down. Enriching before it would spend a burst of get_image_data requests
     // per cycle to submit nothing. Do not "fix" this asymmetry.
-    const scored = buildScoredCandidates(challenge, eligible, {
+    const { scored, contested, contestedIds } = await scoreFillCandidates({
+        label,
+        challenge,
+        token,
+        deps,
+        eligible,
+        semanticScores,
+        ignoreWords,
+        wantCount,
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
-        semanticScores,
-        ignoreWords,
-        onFallback: makeFallbackLogger(label, challenge, logger),
     });
-
-    // Stat enrichment. selectEnrichmentSet returns the candidates still
-    // competing for the last slot after the theme tiers — i.e. exactly the set
-    // whose order the popularity tiers decide. It is empty whenever the theme
-    // settled things, so a clean match costs no extra requests.
-    const contested = selectEnrichmentSet(scored, wantCount);
-    const contestedIds = new Set(contested.map((photo) => String(photo.id)));
-    if (contested.length > 0) {
-        const enriched = await enrichCandidates(contested, token, deps);
-        const statsById = new Map(enriched.map((photo) => [String(photo.id), photo]));
-        for (const entry of scored) {
-            const fresh = statsById.get(String(entry.id));
-            if (!fresh) continue;
-            entry.statsKnown = fresh.statsKnown === true;
-            if (entry.statsKnown) {
-                entry.votes = Number.isFinite(fresh.votes) ? fresh.votes : entry.votes;
-                entry.views = Number.isFinite(fresh.views) ? fresh.views : entry.views;
-                entry.achievementCount = Number.isFinite(fresh.achievementCount)
-                    ? fresh.achievementCount
-                    : entry.achievementCount;
-            }
-        }
-    }
 
     let picked = finalizePick(scored, wantCount);
     if (picked.length === 0) {
@@ -1645,6 +1770,8 @@ module.exports = {
     getEffectiveScheduleRows,
     getSlotsRemaining,
     fetchCandidatesForChallenge,
+    rankCandidatesForChallenge,
+    resolveMemberId,
     __resetMemberIdCache,
     resolveSemanticScores,
     resolveIgnoreWords,

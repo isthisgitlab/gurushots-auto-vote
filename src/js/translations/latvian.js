@@ -237,6 +237,41 @@
             bankrollSwaps: 'maiņas',
             bankrollFills: 'aizpildes',
             bankrollCoins: 'monētas',
+            // Valūtas darbības (atslēga / apmaiņa / ekspozīcijas papildināšana) izaicinājuma kartītē
+            currencyKeyUnlock: 'Atslēgt',
+            currencyKeyUnlockTitle: 'Atslēgt boost ar atslēgu?',
+            currencyKeyUnlockBody:
+                'Tas atslēdz boost izaicinājumā "{title}". Boost netiek piemērots bildei — tu joprojām izvēlies, kuru bildi boostēt.',
+            currencyFillExposure: 'Papildināt ekspozīciju',
+            currencyFillExposureTitle: 'Papildināt ekspozīciju ar papildinājumu?',
+            currencyFillExposureBody: 'Tas paaugstina izaicinājuma "{title}" ekspozīciju līdz 100%.',
+            currencySwap: 'Apmainīt',
+            currencySwapTitle: 'Apmainīt šo bildi?',
+            currencySwapBody:
+                'Pašreizējā bilde tiek aizstāta ar to, ko lietotne izvēlējās šim izaicinājumam. Aizstāto bildi nevar apmainīt atpakaļ.',
+            currencySwapCurrent: 'Pašreizējā bilde',
+            currencySwapReplacement: 'Jaunā bilde',
+            currencySwapBoostedWarning: 'Šai bildei ir boost vai turbo. Boost vai turbo var nepāriet uz jauno bildi.',
+            currencyCost: 'Maksā: 1 {unit}.',
+            currencyBalance: 'Tev ir {current} {currency}; pēc tam paliks {resulting}.',
+            currencyBalanceUnknown:
+                'Neizdevās nolasīt tavu {currency} atlikumu — lietotne to pārbaudīs vēlreiz pirms tērēšanas.',
+            currencyUnitKeys: 'atslēga',
+            currencyUnitSwaps: 'apmaiņa',
+            currencyUnitFills: 'papildinājums',
+            currencySpend: 'Tērēt: 1 {unit}',
+            // Valūtas darbību rezultāti
+            currencyOutcomeNotAvailable:
+                'Šobrīd šajā izaicinājumā nav pieejams — iespējams, jau izdarīts. Kartīte atjaunosies.',
+            currencyOutcomeNoBalance: 'Šīs valūtas vairs nav, tāpēc nekas netika iztērēts.',
+            currencyOutcomeBalanceUnknown:
+                'Neizdevās pārbaudīt atlikumu, tāpēc nekas netika iztērēts. Mēģini vēlreiz pēc brīža.',
+            currencyOutcomeNoAlternative:
+                'Nav citas bildes, ar ko apmainīt — visas derīgās bildes šeit jau izmantotas.',
+            currencyOutcomeStaleCandidate:
+                'Ieteiktās bildes derīgums beidzās. Nospied Apmainīt vēlreiz, lai saņemtu jaunu ieteikumu.',
+            currencyOutcomeBusy: 'Vēl notiek cita valūtas darbība — mēģini vēlreiz pēc brīža.',
+            currencyOutcomeFailed: 'GuruShots noraidīja pieprasījumu. Mēģini vēlāk; ja atkārtojas, pārbaudi žurnālus.',
             // Automātiskās pievienošanās iestatījumi
             groupAutoJoin: 'Automātiskā pievienošanās',
             autoJoin: 'Automātiski pievienoties izaicinājumiem',

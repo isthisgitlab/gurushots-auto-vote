@@ -237,6 +237,42 @@
             bankrollSwaps: 'swaps',
             bankrollFills: 'fills',
             bankrollCoins: 'coins',
+            // Currency actions (key unlock / swap / exposure fill) on a challenge card
+            currencyKeyUnlock: 'Unlock',
+            currencyKeyUnlockTitle: 'Unlock boost with a key?',
+            currencyKeyUnlockBody:
+                'This unlocks the boost on "{title}". It does not apply the boost to a photo — you still choose which entry to boost.',
+            currencyFillExposure: 'Fill exposure',
+            currencyFillExposureTitle: 'Fill exposure with a fill?',
+            currencyFillExposureBody: 'This tops the exposure of "{title}" up to 100%.',
+            currencySwap: 'Swap',
+            currencySwapTitle: 'Swap this photo?',
+            currencySwapBody:
+                'The current photo is replaced by the one the app picked for this challenge. The replaced photo cannot be swapped back in.',
+            currencySwapCurrent: 'Current photo',
+            currencySwapReplacement: 'Replacement photo',
+            currencySwapBoostedWarning:
+                'This photo is boosted or turbo-charged. The boost or turbo may not carry over to the replacement.',
+            currencyCost: 'Costs 1 {unit}.',
+            currencyBalance: 'You have {current} {currency}; after this you will have {resulting}.',
+            currencyBalanceUnknown:
+                'Your {currency} balance could not be read — the app will check it again before spending.',
+            currencyUnitKeys: 'key',
+            currencyUnitSwaps: 'swap',
+            currencyUnitFills: 'fill',
+            currencySpend: 'Spend 1 {unit}',
+            // Currency action outcomes (what happened → why → what next)
+            currencyOutcomeNotAvailable:
+                'Not available on this challenge right now — it may already be done. The card will refresh.',
+            currencyOutcomeNoBalance: 'You have none of that currency left, so nothing was spent.',
+            currencyOutcomeBalanceUnknown:
+                'Your balance could not be checked, so nothing was spent. Try again in a moment.',
+            currencyOutcomeNoAlternative:
+                'No different photo is available to swap in — every eligible photo is already used here.',
+            currencyOutcomeStaleCandidate: 'The suggested replacement expired. Press Swap again for a fresh pick.',
+            currencyOutcomeBusy: 'Another currency action is still running — try again in a moment.',
+            currencyOutcomeFailed:
+                'GuruShots rejected the request. Try again later; check the logs if it keeps happening.',
             // Auto-Join settings
             groupAutoJoin: 'Auto Join',
             autoJoin: 'Auto-Join Challenges',

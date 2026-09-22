@@ -36,12 +36,14 @@ const PAGINATE_BUDGET_MS = 20_000;
  *
  * @param {string|number} challengeId
  * @param {string} token
- * @param {{limit: number, start: number, search?: string}} opts
+ * @param {{limit: number, start: number, search?: string, usage?: string}} opts
+ *   usage: the library view the server filters `permission.allowed` for —
+ *   'submit' (default, adding a new entry) or 'swap' (replacing an entry).
  * @returns {Promise<Array<object>|null>} the page's items, or null when the
  *   response was missing/malformed (the caller decides whether that ends a
  *   paginated run or is simply an empty result).
  */
-const fetchPhotoPage = async (challengeId, token, { limit, start, search }) => {
+const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage = 'submit' }) => {
     const headers = createWebHeaders(token);
     const params = [
         `c_id=${encodeURIComponent(String(challengeId))}`,
@@ -49,7 +51,7 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search }) => {
         'order=date',
         'sort=desc',
         `start=${encodeURIComponent(String(start))}`,
-        'usage=submit',
+        `usage=${encodeURIComponent(String(usage))}`,
     ];
     if (typeof search === 'string' && search.trim() !== '') {
         params.push(`search=${encodeURIComponent(search.trim())}`);
@@ -69,7 +71,8 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search }) => {
  *
  * @param {string|number} challengeId
  * @param {string} token
- * @param {{limit?: number, start?: number, search?: string, paginate?: boolean, logLabel?: string}} [options]
+ * @param {{limit?: number, start?: number, search?: string, paginate?: boolean, logLabel?: string, usage?: string, budgetMs?: number}} [options]
+ *   usage: 'submit' (default) or 'swap' — forwarded to every page request.
  *   logLabel: prefix for the paginated-walk warnings (default 'autoFill'); the
  *   join flow passes 'join' so its messages aren't attributed to auto-fill.
  *   search: optional free-text term; when a non-empty string, the server
@@ -103,9 +106,10 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
     const limit = Number.isFinite(options.limit) && options.limit > 0 ? options.limit : 100;
     const start = Number.isFinite(options.start) && options.start >= 0 ? options.start : 0;
     const search = options.search;
+    const usage = options.usage === 'swap' ? 'swap' : 'submit';
 
     if (options.paginate !== true) {
-        return (await fetchPhotoPage(challengeId, token, { limit, start, search })) || [];
+        return (await fetchPhotoPage(challengeId, token, { limit, start, search, usage })) || [];
     }
 
     const budgetMs = Number.isFinite(options.budgetMs) && options.budgetMs > 0 ? options.budgetMs : PAGINATE_BUDGET_MS;
@@ -130,7 +134,7 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
         }
         let items;
         try {
-            items = await fetchPhotoPage(challengeId, token, { limit, start: start + page * limit, search });
+            items = await fetchPhotoPage(challengeId, token, { limit, start: start + page * limit, search, usage });
         } catch (error) {
             warn(
                 `reading page ${page + 1} of your photo library failed (${oneLine(error?.message || error)}); continuing with the ${byId.size} photo(s) already read`,

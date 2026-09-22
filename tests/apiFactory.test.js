@@ -26,6 +26,11 @@ jest.mock('../src/js/api/submissions', () => ({
     getImageData: jest.fn(),
     submitToChallenge: jest.fn(),
 }));
+jest.mock('../src/js/api/currency', () => ({
+    keyUnlock: jest.fn(),
+    swapPhoto: jest.fn(),
+    exposureAutofill: jest.fn(),
+}));
 jest.mock('../src/js/mock', () => ({
     mockApiClient: {
         authenticate: jest.fn(),
@@ -45,6 +50,9 @@ jest.mock('../src/js/mock', () => ({
         getCurrentMemberProfile: jest.fn(),
         searchTagAutocomplete: jest.fn(),
         joinChallenge: jest.fn(),
+        keyUnlock: jest.fn(),
+        swapPhoto: jest.fn(),
+        exposureAutofill: jest.fn(),
     },
 }));
 

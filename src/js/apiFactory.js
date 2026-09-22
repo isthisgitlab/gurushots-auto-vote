@@ -21,6 +21,7 @@ const { applyTurbo } = require('./api/turbo');
 const { getEligiblePhotos, getImageData, submitToChallenge } = require('./api/submissions');
 const { getMemberChallenges, getBankroll } = require('./api/join');
 const { getCurrentMemberProfile, searchTagAutocomplete } = require('./api/tags');
+const { keyUnlock, swapPhoto, exposureAutofill } = require('./api/currency');
 const { mockApiClient } = require('./mock');
 
 /**
@@ -49,6 +50,9 @@ const { mockApiClient } = require('./mock');
  * @property {(...args: any[]) => any} getCurrentMemberProfile
  * @property {(...args: any[]) => any} searchTagAutocomplete
  * @property {(...args: any[]) => any} joinChallenge
+ * @property {(...args: any[]) => any} keyUnlock
+ * @property {(...args: any[]) => any} swapPhoto
+ * @property {(...args: any[]) => any} exposureAutofill
  * @property {() => string} getStrategyType
  */
 
@@ -71,6 +75,9 @@ const realApi = {
     getCurrentMemberProfile,
     searchTagAutocomplete,
     joinChallenge,
+    keyUnlock,
+    swapPhoto,
+    exposureAutofill,
     getStrategyType: () => 'RealAPI',
 };
 

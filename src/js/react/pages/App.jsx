@@ -190,6 +190,8 @@ function AppContent() {
                         autovoteRunning={autovote.running}
                         isLoggedIn={isLoggedIn}
                         onChallengeSettingsClick={handleChallengeSettingsClick}
+                        bankroll={bankroll}
+                        onBankrollChanged={refetchBankroll}
                     />
 
                     {/* Discover — un-joined challenges, collapsed below the main list */}

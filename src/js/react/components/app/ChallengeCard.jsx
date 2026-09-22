@@ -16,6 +16,8 @@ import { EntryBadge } from './EntryBadge';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
 import { ChallengeCardCompact } from './ChallengeCardCompact';
+import { CurrencyCellButton } from './CurrencyActionButton';
+import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../../voting/currencyActions';
 
 const TURBO_ERROR_DISPLAY_MS = 5000;
 const FILL_ERROR_DISPLAY_MS = 5000;
@@ -66,6 +68,8 @@ export function ChallengeCard({
     autovoteRunning,
     onVoteComplete,
     onSettingsClick,
+    bankroll = null,
+    onCurrencySpent,
 }) {
     const { t } = useTranslation();
     const { hasCustomSettings, autoFillEnabled, isCompact, hasCompactOverride, toggleCompact } = useChallengeSettings(
@@ -130,6 +134,14 @@ export function ChallengeCard({
     const cardAlertClass = `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`;
 
     const showAutoFillBadge = autoFillEnabled && slotsRemaining > 0;
+
+    // Bankroll-currency actions — shown only when the balance and the
+    // challenge both allow them (shared predicates; the main process re-checks
+    // the live state before spending). Refresh balances + challenges after.
+    const showKeyUnlock = canKeyUnlock(challenge, bankroll, now);
+    const showFillExposure = canFillExposure(challenge, bankroll, now);
+    const swapAvailable = canSwapEntry(challenge, bankroll, now);
+    const handleCurrencySpent = onCurrencySpent || onVoteComplete;
 
     // Manual "vote to 100%" override. Shown even while the scheduled
     // autovote loop is running so a single challenge can be pushed to 100%
@@ -355,10 +367,28 @@ export function ChallengeCard({
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.exposure')}</div>
                         <div className={exposureClass}>{exposureFactor}%</div>
+                        {showFillExposure && (
+                            <CurrencyCellButton
+                                kind="fill"
+                                challenge={challenge}
+                                bankroll={bankroll}
+                                disabled={autovoteRunning}
+                                onSpent={handleCurrencySpent}
+                            />
+                        )}
                     </div>
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.boost')}</div>
                         <div className={boostStatus.colorClass}>{boostStatus.text}</div>
+                        {showKeyUnlock && (
+                            <CurrencyCellButton
+                                kind="key"
+                                challenge={challenge}
+                                bankroll={bankroll}
+                                disabled={autovoteRunning}
+                                onSpent={handleCurrencySpent}
+                            />
+                        )}
                     </div>
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.turbo')}</div>
@@ -436,6 +466,10 @@ export function ChallengeCard({
                                     turboAvailable={member.turbo?.state === 'WON'}
                                     onBoostApplied={onVoteComplete}
                                     onTurboApplied={onVoteComplete}
+                                    swapAvailable={swapAvailable}
+                                    bankroll={bankroll}
+                                    actionsLocked={autovoteRunning}
+                                    onSwapped={handleCurrencySpent}
                                 />
                             ))}
                         </div>

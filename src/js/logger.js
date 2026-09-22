@@ -469,6 +469,8 @@ const LOG_CATEGORIES = {
     UPDATE: 'update',
     BOOST: 'boost',
     TURBO: 'turbo',
+    // Bankroll-currency spends (key unlock / swap / exposure fill).
+    CURRENCY: 'currency',
     // Catch-all for events that don't belong to a domain category —
     // bridge plumbing failures, bootstrap errors, etc. Routes to the
     // shared app-YYYY-MM-DD.log alongside other non-settings categories;

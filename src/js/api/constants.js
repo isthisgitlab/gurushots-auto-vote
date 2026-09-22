@@ -32,6 +32,14 @@ const ENDPOINTS = {
     coinsUnlock: `${API_BASE}/rest/coins_unlock`,
     getBankroll: `${API_BASE}/rest/get_bankroll`,
 
+    // Bankroll-currency spends on an entered challenge (WEB profile), captured
+    // from the web app: keyUnlock spends a KEY to unlock a LOCKED boost (does not
+    // apply it), swap spends a SWAP to replace an entered photo, exposureAutofill
+    // spends a FILL to top exposure up to 100%. See api/currency.js.
+    keyUnlock: `${API_BASE}/rest/key_unlock`,
+    swap: `${API_BASE}/rest/swap`,
+    exposureAutofill: `${API_BASE}/rest/exposure_autofill`,
+
     // Tag resolution for auto-fill (WEB profile). searchAutocomplete maps a
     // partial word onto the tags that actually exist on the member's own
     // photos; currentMemberProfile supplies the member_id it requires. See

@@ -93,6 +93,11 @@ const invokeChannels = [
     'get-member-challenges',
     'join-challenge',
     'get-auto-join-active',
+    // Bankroll-currency spends (key / swap / exposure fill)
+    'key-unlock-boost',
+    'preview-swap-photo',
+    'swap-entry-photo',
+    'fill-exposure',
     'reload-window',
     'refresh-menu',
     // AutoUpdater

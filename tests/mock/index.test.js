@@ -725,3 +725,17 @@ describe('mock/index', () => {
         });
     });
 });
+
+describe('mock currency spends (keyUnlock / swapPhoto / exposureAutofill)', () => {
+    const { mockApiClient } = require('../../src/js/mock/index');
+
+    test.each([
+        ['keyUnlock', (id, tok) => mockApiClient.keyUnlock(id, tok)],
+        ['swapPhoto', (id, tok) => mockApiClient.swapPhoto(id, 'old', 'new', tok)],
+        ['exposureAutofill', (id, tok) => mockApiClient.exposureAutofill(id, 'member', tok)],
+    ])('%s: succeeds, fails for fixture 900004, and refuses a missing token', async (_, call) => {
+        await expect(call('1', 'tok')).resolves.toEqual({ ok: true, raw: { success: true } });
+        await expect(call('900004', 'tok')).resolves.toEqual({ ok: false, raw: { success: false } });
+        await expect(call('1', null)).resolves.toEqual({ ok: false, raw: null });
+    });
+});

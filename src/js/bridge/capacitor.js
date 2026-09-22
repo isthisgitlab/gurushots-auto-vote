@@ -29,6 +29,7 @@ const votingHandlers = require('../ipc/voting.handlers');
 const logHandlers = require('../ipc/log.handlers');
 const actionsHandlers = require('../ipc/actions.handlers');
 const computationsHandlers = require('../ipc/computations.handlers');
+const currencyHandlers = require('../ipc/currency.handlers');
 
 const settings = require('../settings');
 const logger = require('../logger');
@@ -180,6 +181,7 @@ const buildAllHandlers = () => {
         ...logHandlers.buildHandlers(),
         ...actionsHandlers.buildHandlers(),
         ...computationsHandlers.buildHandlers(),
+        ...currencyHandlers.buildHandlers(),
         ...updateStubs,
     };
 };

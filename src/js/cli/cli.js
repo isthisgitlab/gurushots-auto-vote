@@ -28,7 +28,16 @@ const {
     startContinuousVoting,
     showStatus,
 } = require('./commands/voting');
-const { boostChallenge, turboChallenge, fillChallenge } = require('./commands/actions');
+const {
+    boostChallenge,
+    turboChallenge,
+    fillChallenge,
+    unlockBoostCmd,
+    swapCmd,
+    parseSwapFlags,
+    SWAP_USAGE,
+    fillExposureCmd,
+} = require('./commands/actions');
 const { showBankroll } = require('./commands/bankroll');
 const { showDiscover, joinChallengeCmd } = require('./commands/join');
 const { checkUpdates } = require('./commands/update');
@@ -87,6 +96,12 @@ Commands:
   boost    - Apply a boost to a challenge: boost --challenge=<id> [--image=<id>]
   turbo    - Play the turbo mini-game on a challenge: turbo --challenge=<id>
   fill     - Submit photo(s) to a challenge's empty slots: fill --challenge=<id> [--all]
+  unlock-boost  - Spend a key to unlock a locked boost (does not apply it):
+             unlock-boost --challenge=<id> [--yes]
+  swap     - Spend a swap to replace an entered photo with a different one:
+             swap --challenge=<id> --image=<id> [--to=<id> --yes]
+  fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
+             Currency actions spend nothing without --yes; they print the cost first.
   start    - Start continuous voting with cron scheduling (runs until stopped with Ctrl+C)
   status   - Show current status and settings
   bankroll - Show your currency balances (keys / swaps / fills / coins). Alias: coins
@@ -118,6 +133,9 @@ Examples:
   boost --challenge=12345
   turbo --challenge=12345
   fill --challenge=12345 --all
+  unlock-boost --challenge=12345 --yes
+  swap --challenge=12345 --image=abc123
+  fill-exposure --challenge=12345 --yes
   bankroll
   discover
   join 12345
@@ -208,6 +226,27 @@ const main = async () => {
                 const { challengeId, rest } = extractChallenge(args.slice(1));
                 requireChallenge({ challengeId }, 'Usage: fill --challenge=<id> [--all]');
                 await fillChallenge(challengeId, { all: rest.includes('--all') });
+                process.exit(0);
+                break;
+            }
+            case 'unlock-boost': {
+                const { challengeId, rest } = extractChallenge(args.slice(1));
+                requireChallenge({ challengeId }, 'Usage: unlock-boost --challenge=<id> [--yes]');
+                await unlockBoostCmd(challengeId, { yes: rest.includes('--yes') });
+                process.exit(0);
+                break;
+            }
+            case 'swap': {
+                const { challengeId, rest } = extractChallenge(args.slice(1));
+                requireChallenge({ challengeId }, SWAP_USAGE);
+                const ok = await swapCmd(challengeId, parseSwapFlags(rest));
+                process.exit(ok === false ? 1 : 0);
+                break;
+            }
+            case 'fill-exposure': {
+                const { challengeId, rest } = extractChallenge(args.slice(1));
+                requireChallenge({ challengeId }, 'Usage: fill-exposure --challenge=<id> [--yes]');
+                await fillExposureCmd(challengeId, { yes: rest.includes('--yes') });
                 process.exit(0);
                 break;
             }

@@ -4,7 +4,8 @@
  * invokes: the middleware's index-resolving `applyBoost` (honors
  * `boostImageIndex` and the mock/real API swap), and the `play-auto-turbo`
  * / `fill-challenge-now` IPC handlers called with a null event — the same
- * shape the Capacitor bridge uses. All three target a single challenge
+ * shape the Capacitor bridge uses. The currency spends (unlock-boost / swap /
+ * fill-exposure) reuse their IPC handlers the same way. All target a single challenge
  * identified by `--challenge=<id>`; the dispatcher in cli.js enforces that
  * the flag is present.
  */
@@ -19,6 +20,8 @@ const { findActiveChallenge } = require('../../services/findActiveChallenge');
 // set or pull in its transitive dependencies.
 let _handlers;
 const handlers = () => (_handlers ??= require('../../ipc/actions.handlers').buildHandlers());
+let _currencyHandlers;
+const currencyHandlers = () => (_currencyHandlers ??= require('../../ipc/currency.handlers').buildHandlers());
 
 /**
  * Shared auth guard + challenge lookup. Returns the live challenge object,
@@ -127,4 +130,165 @@ const fillChallenge = async (challengeId, { all = false } = {}) => {
     }
 };
 
-module.exports = { boostChallenge, turboChallenge, fillChallenge };
+// ---- bankroll-currency spends (key unlock / swap / exposure fill) ----
+//
+// Mirror of `join <id> [--yes]`: without --yes nothing is spent — the command
+// prints what would happen and the exact re-run line. The handlers enforce the
+// same gate main-side (confirmed === true), so --yes is the only way to spend.
+
+// CLI wording for each outcome code the spend handlers return.
+const OUTCOME_TEXT = {
+    'not-available': 'That action is not available on this challenge right now (it may already be done).',
+    'no-balance': 'You have none of that currency left.',
+    'balance-unknown': 'Could not read your balance, so nothing was spent. Try again shortly.',
+    'no-alternative': 'No different photo is available to swap in.',
+    'stale-candidate':
+        'The replacement photo changed since the preview. Nothing was spent — re-run without --yes to see the new suggestion.',
+    busy: 'Another currency action is still running. Try again in a moment.',
+    'invalid-args': 'Invalid challenge or image id.',
+    'api-failed': 'GuruShots rejected the request. Nothing further was attempted — check the log for details.',
+};
+
+const describeOutcome = (result) => OUTCOME_TEXT[result?.outcome] || result?.error || 'Action failed';
+
+const CURRENCY_LABEL = { keys: 'key', swaps: 'swap', fills: 'fill' };
+
+const readBalance = async (field) => {
+    const bankroll = await handlers()['get-bankroll'](null);
+    return bankroll?.success ? Number(bankroll[field]) : null;
+};
+
+const printCost = async (field) => {
+    const balance = await readBalance(field);
+    const label = CURRENCY_LABEL[field];
+    const line =
+        balance === null
+            ? `Cost: 1 ${label} (balance could not be read).`
+            : `Cost: 1 ${label} — balance ${balance} → ${Math.max(balance - 1, 0)}.`;
+    logger.withCategory('currency').info(line);
+};
+
+const reportSpend = (result, successText) => {
+    if (result?.success) {
+        logger.withCategory('currency').success(successText);
+    } else {
+        logger.withCategory('currency').error(describeOutcome(result));
+    }
+};
+
+/**
+ * Spend a KEY to unlock the challenge's locked boost (unlock only).
+ */
+const unlockBoostCmd = async (challengeId, { yes = false } = {}) => {
+    const challenge = await resolveChallenge(challengeId);
+    if (!challenge) return;
+    try {
+        if (!yes) {
+            logger.withCategory('currency').info(`Unlock the boost on "${challenge.title}" with a key.`);
+            await printCost('keys');
+            logger
+                .withCategory('currency')
+                .info(`To spend the key, re-run: unlock-boost --challenge=${challengeId} --yes`);
+            return;
+        }
+        const result = await currencyHandlers()['key-unlock-boost'](null, challengeId, true);
+        reportSpend(result, `Boost unlocked on "${challenge.title}" (not applied yet).`);
+    } catch (err) {
+        logger.withCategory('currency').error(`Failed to unlock boost: ${err?.message || err}`);
+    }
+};
+
+const SWAP_USAGE = 'Usage: swap --challenge=<id> --image=<id> [--to=<id> --yes]';
+
+/**
+ * Reads swap's own flags from the args left after --challenge:
+ * --image=<id> (the entry to replace), --to=<id> (the confirmed replacement), --yes.
+ */
+const parseSwapFlags = (rest) => {
+    const flag = (name) => {
+        const arg = rest.find((a) => a.startsWith(`--${name}=`));
+        return arg ? arg.slice(name.length + 3) || null : null;
+    };
+    return { imageId: flag('image'), to: flag('to'), yes: rest.includes('--yes') };
+};
+
+/**
+ * Spend a SWAP to replace entered photo `imageId` with the app's best-ranked
+ * different photo. The dry run prints the suggested replacement; --yes must
+ * repeat it as --to=<id>, and is refused if the suggestion changed since.
+ * Returns false on a usage error (no --image).
+ */
+const swapCmd = async (challengeId, { imageId, to = null, yes = false } = {}) => {
+    if (!imageId) {
+        logger.withCategory('ui').error('Please specify the entered photo to replace with --image=<id>');
+        logger.withCategory('ui').info(SWAP_USAGE);
+        return false;
+    }
+    const challenge = await resolveChallenge(challengeId);
+    if (!challenge) return;
+    try {
+        const preview = await currencyHandlers()['preview-swap-photo'](null, challengeId, imageId);
+        if (!preview?.success) {
+            logger.withCategory('currency').error(describeOutcome(preview));
+            return;
+        }
+        const newId = preview.candidate.id;
+        if (!yes) {
+            logger.withCategory('currency').info(`Swap in "${challenge.title}": ${imageId} → ${newId}`);
+            await printCost('swaps');
+            logger
+                .withCategory('currency')
+                .info(
+                    `To spend the swap, re-run: swap --challenge=${challengeId} --image=${imageId} --to=${newId} --yes`,
+                );
+            return;
+        }
+        if (!to || to !== newId) {
+            logger
+                .withCategory('currency')
+                .error(
+                    to
+                        ? `The suggested replacement is now ${newId}, not ${to}. Nothing was spent — re-run with --to=${newId} --yes to confirm it.`
+                        : `Add --to=${newId} to confirm the replacement (run without --yes first to review it).`,
+                );
+            return;
+        }
+        const result = await currencyHandlers()['swap-entry-photo'](null, challengeId, imageId, newId, true);
+        reportSpend(result, `Swapped ${imageId} → ${newId} in "${challenge.title}".`);
+    } catch (err) {
+        logger.withCategory('currency').error(`Failed to swap photo: ${err?.message || err}`);
+    }
+};
+
+/**
+ * Spend a FILL to top the challenge's exposure up to 100%.
+ */
+const fillExposureCmd = async (challengeId, { yes = false } = {}) => {
+    const challenge = await resolveChallenge(challengeId);
+    if (!challenge) return;
+    try {
+        if (!yes) {
+            logger.withCategory('currency').info(`Fill the exposure of "${challenge.title}" to 100%.`);
+            await printCost('fills');
+            logger
+                .withCategory('currency')
+                .info(`To spend the fill, re-run: fill-exposure --challenge=${challengeId} --yes`);
+            return;
+        }
+        const result = await currencyHandlers()['fill-exposure'](null, challengeId, true);
+        reportSpend(result, `Exposure filled on "${challenge.title}".`);
+    } catch (err) {
+        logger.withCategory('currency').error(`Failed to fill exposure: ${err?.message || err}`);
+    }
+};
+
+module.exports = {
+    boostChallenge,
+    turboChallenge,
+    fillChallenge,
+    unlockBoostCmd,
+    swapCmd,
+    parseSwapFlags,
+    SWAP_USAGE,
+    fillExposureCmd,
+};

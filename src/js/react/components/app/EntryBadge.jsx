@@ -4,6 +4,7 @@ import { useTurbo } from '@/api/useTurbo';
 import { useAutoClear } from '@/hooks/useAutoClear';
 import { getEntryStatus } from '@/utils/formatters';
 import { EntryPhoto } from './EntryPhoto';
+import { SwapEntryButton } from './SwapEntryButton';
 
 /**
  * Entry badge component showing entry details and per-entry action buttons.
@@ -15,8 +16,23 @@ import { EntryPhoto } from './EntryPhoto';
  * @param {boolean} [props.turboAvailable] - A won Turbo is held and unapplied
  * @param {Function} [props.onBoostApplied]
  * @param {Function} [props.onTurboApplied]
+ * @param {boolean} [props.swapAvailable] - A swap can be spent on this challenge (balance + challenge flags)
+ * @param {object|null} [props.bankroll] - For the swap confirm modal's balance line
+ * @param {boolean} [props.actionsLocked] - Autovote is running; manual spends wait
+ * @param {Function} [props.onSwapped]
  */
-export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable, onBoostApplied, onTurboApplied }) {
+export function EntryBadge({
+    entry,
+    challengeId,
+    boostAvailable,
+    turboAvailable,
+    onBoostApplied,
+    onTurboApplied,
+    swapAvailable = false,
+    bankroll = null,
+    actionsLocked = false,
+    onSwapped,
+}) {
     const { t } = useTranslation();
     const { applyBoost, loading: boosting, error: boostError, clearError: clearBoostError } = useBoost();
     const { applyTurbo, loading: turboing, error: turboError, clearError: clearTurboError } = useTurbo();
@@ -77,6 +93,20 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
                 >
                     {turboing ? <span className="loading loading-spinner loading-xs" /> : `⚡ ${t('app.turbo')}`}
                 </button>
+            )}
+            {swapAvailable && (
+                // ml-2 + gap: keep Swap an 8px step away from Boost/Turbo so
+                // adjacent touch targets aren't flush on Android.
+                <span className="ml-2 inline-flex items-center gap-2">
+                    <SwapEntryButton
+                        entry={entry}
+                        challengeId={challengeId}
+                        bankroll={bankroll}
+                        warnActioned={isEntryActioned}
+                        disabled={actionsLocked}
+                        onSpent={onSwapped}
+                    />
+                </span>
             )}
             {(boostError || turboError) && <span className="text-error ml-1">{boostError || turboError}</span>}
         </div>

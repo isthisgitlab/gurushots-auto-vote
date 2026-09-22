@@ -296,3 +296,35 @@ describe('submissions', () => {
         });
     });
 });
+
+describe('getEligiblePhotos usage option', () => {
+    const token = 'tok-123';
+    const { makePostRequest } = require('../../src/js/api/api-client');
+
+    beforeEach(() => jest.clearAllMocks());
+
+    test("defaults to usage=submit and ignores anything but 'swap'", async () => {
+        makePostRequest.mockResolvedValue({ items: [] });
+        await getEligiblePhotos(1, token, { usage: 'evil&x=1' });
+        expect(makePostRequest.mock.calls[0][2]).toBe('c_id=1&limit=100&order=date&sort=desc&start=0&usage=submit');
+    });
+
+    test('usage=swap on a single page', async () => {
+        makePostRequest.mockResolvedValue({ items: [] });
+        await getEligiblePhotos(1, token, { usage: 'swap' });
+        expect(makePostRequest.mock.calls[0][2]).toBe('c_id=1&limit=100&order=date&sort=desc&start=0&usage=swap');
+    });
+
+    test('usage=swap is sent on every page of a paginated walk', async () => {
+        const page = (start) => Array.from({ length: 2 }, (_, i) => ({ id: `p${start + i}` }));
+        makePostRequest
+            .mockResolvedValueOnce({ items: page(0) })
+            .mockResolvedValueOnce({ items: page(2) })
+            .mockResolvedValueOnce({ items: [] });
+        await getEligiblePhotos(1, token, { usage: 'swap', paginate: true, limit: 2 });
+        expect(makePostRequest).toHaveBeenCalledTimes(3);
+        for (const [, , body] of makePostRequest.mock.calls) {
+            expect(body).toContain('usage=swap');
+        }
+    });
+});
