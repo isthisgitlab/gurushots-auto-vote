@@ -2,6 +2,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { openBoostWindows } from '../../../voting/boostWindow';
 import { useTick } from '@/hooks/useTick';
+import { lowExposureChallenges } from '@/utils/challengeAlerts';
 
 // A turbo is "available" for this challenge when it's ready to apply (WON) or
 // ready to earn (FREE / in progress / cooldown elapsed).
@@ -66,7 +67,8 @@ function NextActionCountdown({ nextRunAt, running }) {
 
 /**
  * At-a-glance summary bar above the challenge list: active-challenge count,
- * boosts/turbos available right now, and the next armed autovote action.
+ * boosts/turbos available right now, low-exposure challenges (only when there
+ * are any), and the next armed autovote action.
  *
  * The three counts derive from the already-fetched, reference-stable
  * `challenges` array and recompute only when it changes — NO tick here, so the
@@ -80,6 +82,7 @@ export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoi
     const activeCount = list.length;
     const boostsAvailable = openBoostWindows(list, nowSec).length;
     const turbosAvailable = list.filter((c) => isTurboAvailable(c.member?.turbo, nowSec)).length;
+    const lowExposureCount = lowExposureChallenges(list, nowSec).length;
 
     // Show the bar whenever there's a balance to display, even with no active
     // challenges and autovote idle — that's exactly when a user browses Discover
@@ -104,6 +107,7 @@ export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoi
                 <HeaderStat icon="🏆" value={activeCount} label={t('app.statusHeaderActive')} />
                 <HeaderStat icon="🚀" value={boostsAvailable} label={t('app.statusHeaderBoosts')} />
                 <HeaderStat icon="⚡" value={turbosAvailable} label={t('app.statusHeaderTurbos')} />
+                {lowExposureCount > 0 && <HeaderStat icon="👁" value={lowExposureCount} label={t('app.lowExposure')} />}
                 <div className="flex items-baseline gap-1 whitespace-nowrap">
                     <span aria-hidden="true">⏳</span>
                     <span className="text-base-content/60">{t('app.statusHeaderNext')}:</span>

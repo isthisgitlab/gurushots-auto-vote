@@ -128,6 +128,8 @@
             unavailable: 'Unavailable',
             boost: 'Boost',
             boostWindowOpen: 'Boost window open',
+            boostOpenBadge: 'Boost open',
+            lowExposure: 'Low exposure',
             jumpToChallenge: 'Jump to challenge',
             deadlineTimeline: 'Upcoming actions',
             deadlineTimelineApprox: 'approximate — may shift as entries fill',

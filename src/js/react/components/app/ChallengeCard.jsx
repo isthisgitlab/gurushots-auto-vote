@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus } from '@/utils/formatters';
+import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus, isBoostWindowOpen } from '@/utils/formatters';
+import { isLowExposure } from '@/utils/challengeAlerts';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
@@ -13,6 +14,7 @@ import { VoteButton } from './VoteButton';
 import { RunButton } from './RunButton';
 import { EntryBadge } from './EntryBadge';
 import { StatusBadge } from '../ui/StatusBadge';
+import { PulseDot } from '../ui/PulseDot';
 
 const TURBO_ERROR_DISPLAY_MS = 5000;
 const FILL_ERROR_DISPLAY_MS = 5000;
@@ -115,6 +117,14 @@ export function ChallengeCard({
     const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
     const canFill = challengeStillOpen && slotsRemaining > 0;
 
+    // At-a-glance alerts (see utils/challengeAlerts): an open boost window gets
+    // a blue ring + pulsing badge, low exposure a red border + badge and a red
+    // exposure figure, so the card stands out in a long list without reading it.
+    const boostOpen = isBoostWindowOpen(member.boost, now);
+    const lowExposure = isLowExposure(challenge, now);
+    const exposureClass = lowExposure ? 'text-error font-bold' : '';
+    const cardAlertClass = `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`;
+
     // Badge row is split into two categories: "logical/state" badges that
     // reflect live challenge/automation state, and an "override/config"
     // badge that marks user-configured overrides. They are styled
@@ -185,7 +195,10 @@ export function ChallengeCard({
         // scroll-mt is a stock Tailwind utility — keeps the card off the top
         // edge after scrollIntoView. Keep the `challenge-${id}` scheme in sync
         // with scrollToChallenge if it ever changes.
-        <div id={`challenge-${challenge.id}`} className="border rounded-lg p-3 mb-3 bg-base-100 scroll-mt-4">
+        <div
+            id={`challenge-${challenge.id}`}
+            className={`${cardAlertClass} rounded-lg p-3 mb-3 bg-base-100 scroll-mt-4`}
+        >
             <div className="space-y-2">
                 {/* Header stacks vertically: the title gets the full card
                     width (so it truncates far less), and the action buttons
@@ -204,6 +217,18 @@ export function ChallengeCard({
                         {/* Challenge badges — logical/state group (solid colors),
                             then a separated override/config marker (muted ghost). */}
                         <div className="flex flex-wrap items-center gap-1 mt-1">
+                            {boostOpen && (
+                                <span className="badge badge-info badge-sm gap-1 font-semibold">
+                                    <PulseDot variant="info" size="status-sm" />
+                                    🚀 {t('app.boostOpenBadge')}
+                                </span>
+                            )}
+                            {lowExposure && (
+                                <span className="badge badge-error badge-sm gap-1 font-semibold">
+                                    <PulseDot variant="error" pulse={exposureFactor === 0} size="status-sm" />
+                                    👁 {t('app.exposure')} {exposureFactor}%
+                                </span>
+                            )}
                             {challenge.type && (
                                 <StatusBadge variant="warning" size="xs">
                                     🏁 {challenge.type.toUpperCase()}
@@ -368,7 +393,7 @@ export function ChallengeCard({
                         <span className={timeText === 'Ended' ? 'text-error font-medium' : 'text-success font-medium'}>
                             ⏱ {timeText}
                         </span>
-                        <span>📊 {exposureFactor}%</span>
+                        <span className={exposureClass}>📊 {exposureFactor}%</span>
                         <span className={boostStatus.colorClass}>🚀 {boostStatus.text}</span>
                         <span className={turboStatus.colorClass}>⚡ {turboStatus.text}</span>
                         <span>
@@ -408,7 +433,7 @@ export function ChallengeCard({
                         </div>
                         <div className="text-center p-2 bg-base-200 rounded">
                             <div className="font-medium">{t('app.exposure')}</div>
-                            <div>{exposureFactor}%</div>
+                            <div className={exposureClass}>{exposureFactor}%</div>
                         </div>
                         <div className="text-center p-2 bg-base-200 rounded">
                             <div className="font-medium">{t('app.boost')}</div>

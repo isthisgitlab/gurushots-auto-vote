@@ -3,6 +3,7 @@ import { formatDuration } from '@/utils/formatters';
 import { openBoostWindows } from '../../../voting/boostWindow';
 import { useTick } from '@/hooks/useTick';
 import { ChipListPanel, ChallengeChip } from './ChallengeChips';
+import { PulseDot } from '../ui/PulseDot';
 
 /**
  * Compact summary placed above the challenge list naming the challenges whose
@@ -34,7 +35,8 @@ export function BoostWindowBanner({ challenges }) {
     return (
         <ChipListPanel icon="🚀" label={t('app.boostWindowOpen')} count={open.length}>
             {open.map((c) => (
-                <ChallengeChip key={c.id} challengeId={c.id}>
+                <ChallengeChip key={c.id} challengeId={c.id} className="btn-info">
+                    <PulseDot variant="info" size="status-sm" />
                     <span>{c.title}</span>
                     {c.remaining != null && <span className="opacity-70">· {formatDuration(c.remaining)} left</span>}
                 </ChallengeChip>

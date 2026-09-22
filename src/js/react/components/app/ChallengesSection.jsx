@@ -4,6 +4,7 @@ import { useChallenges } from '@/contexts/ChallengesContext';
 import { useTimers } from '@/hooks/useTimers';
 import { ChallengeCard } from './ChallengeCard';
 import { BoostWindowBanner } from './BoostWindowBanner';
+import { LowExposureBanner } from './LowExposureBanner';
 import { ChallengeNav } from './ChallengeNav';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
@@ -193,6 +194,10 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
             {/* Boost-window summary: anchors to the challenges whose boost
                 window is open right now. Self-hides when none are open. */}
             <BoostWindowBanner challenges={challenges} />
+
+            {/* Low-exposure summary: anchors to running challenges whose
+                exposure is at or near zero. Self-hides when none are low. */}
+            <LowExposureBanner challenges={challenges} />
 
             {/* Jump-to-challenge index: anchors to every card by title so the
                 user can click a name instead of scrolling. */}

@@ -129,6 +129,8 @@
             unavailable: 'Nav pieejams',
             boost: 'Boost',
             boostWindowOpen: 'Boost logs ir atvērts',
+            boostOpenBadge: 'Boost atvērts',
+            lowExposure: 'Zema redzamība',
             jumpToChallenge: 'Pāriet uz izaicinājumu',
             deadlineTimeline: 'Gaidāmās darbības',
             deadlineTimelineApprox: 'aptuveni — var mainīties, aizpildoties dalībām',
