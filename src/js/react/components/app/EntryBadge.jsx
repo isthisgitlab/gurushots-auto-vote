@@ -4,7 +4,7 @@ import { useTurbo } from '@/api/useTurbo';
 import { useAutoClear } from '@/hooks/useAutoClear';
 import { getEntryStatus } from '@/utils/formatters';
 import { EntryPhoto } from './EntryPhoto';
-import { SwapEntryButton } from './SwapEntryButton';
+import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
 
 /**
  * Entry badge component showing entry details and per-entry action buttons.
@@ -20,6 +20,7 @@ import { SwapEntryButton } from './SwapEntryButton';
  * @param {object|null} [props.bankroll] - For the swap confirm modal's balance line
  * @param {boolean} [props.actionsLocked] - Autovote is running; manual spends wait
  * @param {Function} [props.onSwapped]
+ * @param {object|null} [props.swapBack] - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
  */
 export function EntryBadge({
     entry,
@@ -32,6 +33,7 @@ export function EntryBadge({
     bankroll = null,
     actionsLocked = false,
     onSwapped,
+    swapBack = null,
 }) {
     const { t } = useTranslation();
     const { applyBoost, loading: boosting, error: boostError, clearError: clearBoostError } = useBoost();
@@ -106,6 +108,16 @@ export function EntryBadge({
                         disabled={actionsLocked}
                         onSpent={onSwapped}
                     />
+                    {swapBack && (
+                        <SwapBackButton
+                            entry={entry}
+                            swapBack={swapBack}
+                            challengeId={challengeId}
+                            bankroll={bankroll}
+                            disabled={actionsLocked}
+                            onSpent={onSwapped}
+                        />
+                    )}
                 </span>
             )}
             {(boostError || turboError) && <span className="text-error ml-1">{boostError || turboError}</span>}

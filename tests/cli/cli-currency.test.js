@@ -45,6 +45,8 @@ jest.mock('../../src/js/ipc/currency.handlers', () => {
         'key-unlock-boost': jest.fn(),
         'preview-swap-photo': jest.fn(),
         'swap-entry-photo': jest.fn(),
+        'get-swap-backs': jest.fn(),
+        'swap-back-entry-photo': jest.fn(),
         'fill-exposure': jest.fn(),
     };
     return { __handlers: handlers, buildHandlers: () => handlers, register: jest.fn() };
@@ -56,7 +58,7 @@ const handlers = {
     ...require('../../src/js/ipc/actions.handlers').__handlers,
     ...require('../../src/js/ipc/currency.handlers').__handlers,
 };
-const { unlockBoostCmd, swapCmd, fillExposureCmd } = require('../../src/js/cli/commands/actions');
+const { unlockBoostCmd, swapCmd, swapBackCmd, fillExposureCmd } = require('../../src/js/cli/commands/actions');
 
 const msgsAt = (level) => logger.__calls.filter((c) => c.level === level).map((c) => String(c.msg));
 const contains = (arr, sub) => arr.some((s) => s.includes(sub));
@@ -131,5 +133,38 @@ describe('swap', () => {
         await swapCmd('111', { imageId: 'old1', yes: true });
         expect(handlers['swap-entry-photo']).not.toHaveBeenCalled();
         expect(contains(msgsAt('error'), 'No different photo')).toBe(true);
+    });
+});
+
+describe('swap-back', () => {
+    beforeEach(() => {
+        handlers['get-swap-backs'].mockResolvedValue({
+            success: true,
+            items: [{ currentId: 'repl', previousId: 'orig', previousMemberId: 'm', kind: 'boost' }],
+        });
+    });
+
+    test('without --yes: names the original and its boost, spends nothing', async () => {
+        await swapBackCmd('111', { imageId: 'repl' });
+        expect(handlers['swap-back-entry-photo']).not.toHaveBeenCalled();
+        expect(contains(msgsAt('info'), 'repl → orig (gets its boost back)')).toBe(true);
+        expect(contains(msgsAt('info'), 'swap-back --challenge=111 --image=repl --yes')).toBe(true);
+    });
+
+    test('with --yes: swaps back with confirmed=true', async () => {
+        handlers['swap-back-entry-photo'].mockResolvedValue({ success: true, outcome: 'ok' });
+        await swapBackCmd('111', { imageId: 'repl', yes: true });
+        expect(handlers['swap-back-entry-photo']).toHaveBeenCalledWith(null, '111', 'repl', true);
+        expect(contains(msgsAt('success'), 'its boost is back')).toBe(true);
+    });
+
+    test('no recorded swap back for that photo: reported, nothing spent', async () => {
+        await swapBackCmd('111', { imageId: 'other', yes: true });
+        expect(handlers['swap-back-entry-photo']).not.toHaveBeenCalled();
+        expect(contains(msgsAt('error'), 'No swap back is recorded')).toBe(true);
+    });
+
+    test('missing --image is a usage error', async () => {
+        expect(await swapBackCmd('111', {})).toBe(false);
     });
 });

@@ -156,3 +156,47 @@ describe('swap preview binding', () => {
         expect((await handlers['swap-entry-photo'](null, 10, 'x', 'new1', true)).outcome).toBe('stale-candidate');
     });
 });
+
+describe('swap back channels', () => {
+    beforeEach(() => {
+        currencyActions.swapBack.mockResolvedValue(OK);
+        apiFactory.getApiStrategy = jest.fn().mockReturnValue({ getStrategyType: () => 'MockAPI' });
+    });
+
+    test('get-swap-backs lists the ledger records without spending', async () => {
+        expect(await handlers['get-swap-backs'](null, 10)).toEqual({ success: true, items: [] });
+    });
+
+    test('get-swap-backs validates the challenge id', async () => {
+        expect((await handlers['get-swap-backs'](null, null)).outcome).toBe('invalid-args');
+    });
+
+    test('a successful swap passes the ledger along so it can record a boosted original', async () => {
+        await handlers['preview-swap-photo'](null, 10, 'old');
+        await handlers['swap-entry-photo'](null, 10, 'old', 'new1', true);
+        expect(currencyActions.swapEntry.mock.calls[0][4].ledger).toEqual(
+            expect.objectContaining({ list: expect.any(Function), onSwapped: expect.any(Function) }),
+        );
+    });
+
+    test('swap-back-entry-photo requires confirmation', async () => {
+        expect((await handlers['swap-back-entry-photo'](null, 10, 'repl')).outcome).toBe('needs-confirm');
+        expect(currencyActions.swapBack).not.toHaveBeenCalled();
+    });
+
+    test('swap-back-entry-photo spends through the service with the ledger', async () => {
+        expect((await handlers['swap-back-entry-photo'](null, 10, 'repl', true)).success).toBe(true);
+        expect(currencyActions.swapBack).toHaveBeenCalledWith(
+            10,
+            'repl',
+            'tok',
+            expect.objectContaining({ ledger: expect.any(Object) }),
+        );
+    });
+
+    test('mock mode uses an in-memory ledger, never the real one', async () => {
+        const { swapBackLedger } = require('../../src/js/swapBackStore');
+        await handlers['swap-back-entry-photo'](null, 10, 'repl', true);
+        expect(currencyActions.swapBack.mock.calls[0][3].ledger).not.toBe(swapBackLedger);
+    });
+});

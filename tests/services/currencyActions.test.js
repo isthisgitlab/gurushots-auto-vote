@@ -174,3 +174,80 @@ describe('swapEntry', () => {
         expect((await swapEntry(555, 'gone', 'fresh', 'tok', { strategy, logger })).outcome).toBe('not-available');
     });
 });
+
+describe('swap back', () => {
+    const { createMemoryLedger } = require('../../src/js/swapBackStore');
+    const { swapBack } = require('../../src/js/services/currencyActions');
+
+    // Slot now holds 'repl'; the boosted original 'orig' sits in the swap history.
+    const swappedChallenge = () =>
+        makeChallenge({
+            member: {
+                boost: { state: 'USED', timeout: null },
+                ranking: {
+                    exposure: { exposure_factor: 50 },
+                    entries: [{ id: 'repl', member_id: 'mem1' }],
+                    swaps: [{ id: 'orig' }],
+                },
+            },
+        });
+
+    test('swapEntry records a swapped-out boosted photo in the ledger', async () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries[1].boosted = true; // 'old' is boosted
+        const strategy = stubStrategy({ challenge });
+        const ledger = createMemoryLedger();
+        await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, ledger });
+        expect(ledger.list(555)).toEqual([
+            expect.objectContaining({ currentId: 'fresh', previousId: 'old', kind: 'boost' }),
+        ]);
+    });
+
+    test('a rejected swap leaves the ledger alone', async () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries[1].boosted = true;
+        const strategy = stubStrategy({
+            challenge,
+            overrides: { swapPhoto: jest.fn().mockResolvedValue({ ok: false, raw: null }) },
+        });
+        const ledger = createMemoryLedger();
+        await swapEntry(555, 'old', 'fresh', 'tok', { strategy, logger, ledger });
+        expect(ledger.list(555)).toEqual([]);
+    });
+
+    test('swaps the recorded original back and clears the record', async () => {
+        const strategy = stubStrategy({ challenge: swappedChallenge() });
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
+        expect(await swapBack(555, 'repl', 'tok', { strategy, logger, ledger })).toEqual({ ok: true, outcome: 'ok' });
+        expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'repl', 'orig', 'tok');
+        expect(ledger.list(555)).toEqual([]);
+    });
+
+    test('no record for that slot → not-available, nothing spent', async () => {
+        const strategy = stubStrategy({ challenge: swappedChallenge() });
+        expect((await swapBack(555, 'repl', 'tok', { strategy, logger, ledger: createMemoryLedger() })).outcome).toBe(
+            'not-available',
+        );
+        expect(strategy.swapPhoto).not.toHaveBeenCalled();
+    });
+
+    test('a record the live challenge no longer matches is dropped, nothing spent', async () => {
+        const live = swappedChallenge();
+        live.member.ranking.swaps = []; // the original is not in the swap history
+        const strategy = stubStrategy({ challenge: live });
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
+        expect((await swapBack(555, 'repl', 'tok', { strategy, logger, ledger })).outcome).toBe('not-available');
+        expect(strategy.swapPhoto).not.toHaveBeenCalled();
+        expect(ledger.list(555)).toEqual([]);
+    });
+
+    test('out of swaps → no-balance, record kept', async () => {
+        const strategy = stubStrategy({ challenge: swappedChallenge(), bankroll: { ...FULL, swaps: 0 } });
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(555, { id: 'orig', member_id: 'mem1', boosted: true }, 'repl');
+        expect((await swapBack(555, 'repl', 'tok', { strategy, logger, ledger })).outcome).toBe('no-balance');
+        expect(ledger.list(555)).toHaveLength(1);
+    });
+});

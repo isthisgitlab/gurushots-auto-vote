@@ -253,6 +253,10 @@
             currencySwapReplacement: 'Replacement photo',
             currencySwapBoostedWarning:
                 'This photo is boosted or turbo-charged. The boost/turbo stays with this photo — the replacement will not have it, and it cannot be used again in this challenge unless you swap this photo back in.',
+            currencySwapBack: 'Swap back',
+            currencySwapBackTitle: 'Swap the original photo back?',
+            currencySwapBackBody: 'Your original photo returns to this slot and gets its {kind} back.',
+            currencySwapBackOriginal: 'Original photo',
             currencyCost: 'Costs 1 {unit}.',
             currencyBalance: 'You have {current} {currency}; after this you will have {resulting}.',
             currencyBalanceUnknown:

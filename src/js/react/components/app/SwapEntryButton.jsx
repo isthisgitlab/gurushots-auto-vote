@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { useSwapPhoto } from '@/api/useCurrencyActions';
+import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
+import { interp } from '@/utils/interp';
 import { useAutoClear } from '@/hooks/useAutoClear';
 import { entryPhotoUrl } from '@/utils/formatters';
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
@@ -97,6 +98,68 @@ export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, di
                 </div>
                 <p>{t('app.currencySwapBody')}</p>
                 {warnActioned && <p className="text-warning">{t('app.currencySwapBoostedWarning')}</p>}
+            </CurrencyConfirmModal>
+        </>
+    );
+}
+
+/**
+ * Per-entry "Swap back" button, shown on the photo that replaced one swapped
+ * out while boosted/turbo'd: spends a SWAP to put the original back, which
+ * restores its boost/turbo. The original comes from the main-side ledger.
+ *
+ * @param {object} props
+ * @param {object} props.entry - the entry now in the slot
+ * @param {{previousId: string, previousMemberId: string, kind: 'boost'|'turbo'}} props.swapBack
+ * @param {string|number} props.challengeId
+ * @param {object|null} props.bankroll
+ * @param {boolean} props.disabled
+ * @param {function} [props.onSpent]
+ */
+export function SwapBackButton({ entry, swapBack, challengeId, bankroll, disabled, onSpent }) {
+    const { t } = useTranslation();
+    const { run, loading, error, clearError } = useSwapBack();
+    const [confirmOpen, setConfirmOpen] = useState(false);
+
+    useAutoClear(error, clearError, ERROR_DISPLAY_MS);
+
+    const handleConfirm = async () => {
+        const result = await run(challengeId, entry.id);
+        setConfirmOpen(false);
+        if ((result?.success || result?.outcome === 'not-available') && onSpent) onSpent();
+    };
+
+    const original = { id: swapBack.previousId, member_id: swapBack.previousMemberId };
+    const kindLabel = t(swapBack.kind === 'turbo' ? 'app.turbo' : 'app.boost');
+
+    return (
+        <>
+            <button
+                className={`btn btn-xs ${error ? 'btn-error' : 'btn-info'}`}
+                onClick={() => setConfirmOpen(true)}
+                disabled={disabled || loading}
+            >
+                {loading ? <span className="loading loading-spinner loading-xs" /> : `↩️ ${t('app.currencySwapBack')}`}
+            </button>
+            {error && (
+                <span className="text-error" role="alert">
+                    {currencyOutcomeText(t, error)}
+                </span>
+            )}
+            <CurrencyConfirmModal
+                isOpen={confirmOpen}
+                onClose={() => setConfirmOpen(false)}
+                onConfirm={handleConfirm}
+                title={t('app.currencySwapBackTitle')}
+                field="swaps"
+                bankroll={bankroll}
+                spending={loading}
+            >
+                <div className="flex gap-3">
+                    <SwapPhoto photo={entry} caption={t('app.currencySwapCurrent')} />
+                    <SwapPhoto photo={original} caption={t('app.currencySwapBackOriginal')} />
+                </div>
+                <p>{interp(t('app.currencySwapBackBody'), { kind: kindLabel })}</p>
             </CurrencyConfirmModal>
         </>
     );

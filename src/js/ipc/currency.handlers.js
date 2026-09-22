@@ -1,6 +1,7 @@
 /**
  * IPC handlers for the bankroll-currency spends on an entered challenge:
- * key-unlock-boost, preview-swap-photo, swap-entry-photo and fill-exposure.
+ * key-unlock-boost, preview-swap-photo, swap-entry-photo, get-swap-backs,
+ * swap-back-entry-photo and fill-exposure.
  *
  * Every spend requires an explicit confirmed === true (the renderer's confirm
  * modal / the CLI's --yes); without it the handler returns outcome
@@ -18,6 +19,7 @@ const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
 const currencyActions = require('../services/currencyActions');
 const { CURRENCY_OUTCOME } = require('../voting/currencyActions');
+const { swapBackLedger, createMemoryLedger } = require('../swapBackStore');
 
 const sanitizeForLog = logger.sanitizeLogString;
 
@@ -52,6 +54,11 @@ const takeSwapPreview = (key) => {
     swapPreviews.delete(key);
     return entry && entry.expiresAt > Date.now() ? entry.candidateId : null;
 };
+
+// Mock mode keeps its swap-back records in memory — it must never touch the
+// real ledger file (same rule as metadata/join state).
+const mockSwapBackLedger = createMemoryLedger();
+const ledgerFor = (strategy) => (strategy?.getStrategyType?.() === 'MockAPI' ? mockSwapBackLedger : swapBackLedger);
 
 const isIdArg = (value) => (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
 
@@ -136,8 +143,51 @@ const buildHandlers = () => ({
             if (previewed === null || previewed !== String(newImageId)) {
                 return { ok: false, outcome: CURRENCY_OUTCOME.staleCandidate };
             }
-            return currencyActions.swapEntry(challengeId, imageId, newImageId, token, { strategy, logger });
+            return currencyActions.swapEntry(challengeId, imageId, newImageId, token, {
+                strategy,
+                logger,
+                ledger: ledgerFor(strategy),
+            });
         });
+    },
+
+    // Slots in this challenge that hold a replacement for a photo swapped out
+    // while boosted/turbo'd — each can be swapped back to restore it. Reads
+    // only the local ledger; spends nothing.
+    'get-swap-backs': async (event, challengeId) => {
+        if (!isIdArg(challengeId)) return currencyFailure(CURRENCY_OUTCOME.invalidArgs);
+        try {
+            const items = ledgerFor(apiFactory.getApiStrategy())
+                .list(challengeId)
+                .map(({ currentId, previousId, previousMemberId, kind }) => ({
+                    currentId,
+                    previousId,
+                    previousMemberId,
+                    kind,
+                }));
+            return { success: true, items };
+        } catch (error) {
+            logger.withCategory('currency').error('Error handling get-swap-backs request:', error);
+            return { success: false, items: [], error: CURRENCY_OUTCOME.apiFailed };
+        }
+    },
+
+    // Spend a SWAP to put the recorded boosted/turbo'd original back into the
+    // slot now holding `currentImageId`. The original comes from the ledger.
+    'swap-back-entry-photo': async (event, challengeId, currentImageId, confirmed) => {
+        logger
+            .withCategory('currency')
+            .info(
+                `↩️ Swap back request: Challenge=${sanitizeForLog(challengeId)}, Image=${sanitizeForLog(currentImageId)}, confirmed=${confirmed === true}`,
+                null,
+            );
+        return runCurrencySpend('swap back', [challengeId, currentImageId], confirmed, (token, strategy) =>
+            currencyActions.swapBack(challengeId, currentImageId, token, {
+                strategy,
+                logger,
+                ledger: ledgerFor(strategy),
+            }),
+        );
     },
 
     // Spend a FILL to top the challenge's exposure up to 100%.

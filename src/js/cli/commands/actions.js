@@ -199,6 +199,7 @@ const unlockBoostCmd = async (challengeId, { yes = false } = {}) => {
 };
 
 const SWAP_USAGE = 'Usage: swap --challenge=<id> --image=<id> [--to=<id> --yes]';
+const SWAP_BACK_USAGE = 'Usage: swap-back --challenge=<id> --image=<id> [--yes]';
 
 /**
  * Reads swap's own flags from the args left after --challenge:
@@ -261,6 +262,50 @@ const swapCmd = async (challengeId, { imageId, to = null, yes = false } = {}) =>
 };
 
 /**
+ * Spend a SWAP to put a photo swapped out while boosted/turbo'd back into the
+ * slot now holding `imageId` — it gets its boost/turbo back. Only swaps made
+ * through this app are known (the API history has no boost flag).
+ * Returns false on a usage error (no --image).
+ */
+const swapBackCmd = async (challengeId, { imageId, yes = false } = {}) => {
+    if (!imageId) {
+        logger.withCategory('ui').error('Please specify the photo now in the slot with --image=<id>');
+        logger.withCategory('ui').info(SWAP_BACK_USAGE);
+        return false;
+    }
+    const challenge = await resolveChallenge(challengeId);
+    if (!challenge) return true;
+    try {
+        const list = await currencyHandlers()['get-swap-backs'](null, challengeId);
+        const record = (list?.items || []).find((r) => r.currentId === String(imageId));
+        if (!record) {
+            logger.withCategory('currency').error(`No swap back is recorded for ${imageId} in "${challenge.title}".`);
+            return true;
+        }
+        if (!yes) {
+            logger
+                .withCategory('currency')
+                .info(
+                    `Swap back in "${challenge.title}": ${imageId} → ${record.previousId} (gets its ${record.kind} back)`,
+                );
+            await printCost('swaps');
+            logger
+                .withCategory('currency')
+                .info(`To spend the swap, re-run: swap-back --challenge=${challengeId} --image=${imageId} --yes`);
+            return true;
+        }
+        const result = await currencyHandlers()['swap-back-entry-photo'](null, challengeId, imageId, true);
+        reportSpend(
+            result,
+            `Swapped ${record.previousId} back into "${challenge.title}" — its ${record.kind} is back.`,
+        );
+    } catch (err) {
+        logger.withCategory('currency').error(`Failed to swap back: ${err?.message || err}`);
+    }
+    return true;
+};
+
+/**
  * Spend a FILL to top the challenge's exposure up to 100%.
  */
 const fillExposureCmd = async (challengeId, { yes = false } = {}) => {
@@ -290,5 +335,7 @@ module.exports = {
     swapCmd,
     parseSwapFlags,
     SWAP_USAGE,
+    swapBackCmd,
+    SWAP_BACK_USAGE,
     fillExposureCmd,
 };

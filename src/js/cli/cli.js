@@ -36,6 +36,8 @@ const {
     swapCmd,
     parseSwapFlags,
     SWAP_USAGE,
+    swapBackCmd,
+    SWAP_BACK_USAGE,
     fillExposureCmd,
 } = require('./commands/actions');
 const { showBankroll } = require('./commands/bankroll');
@@ -100,6 +102,8 @@ Commands:
              unlock-boost --challenge=<id> [--yes]
   swap     - Spend a swap to replace an entered photo with a different one:
              swap --challenge=<id> --image=<id> [--to=<id> --yes]
+  swap-back - Swap a photo that was swapped out while boosted/turbo'd back in (it gets
+             its boost/turbo back): swap-back --challenge=<id> --image=<current id> [--yes]
   fill-exposure - Spend a fill to top exposure up to 100%: fill-exposure --challenge=<id> [--yes]
              Currency actions spend nothing without --yes; they print the cost first.
   start    - Start continuous voting with cron scheduling (runs until stopped with Ctrl+C)
@@ -240,6 +244,14 @@ const main = async () => {
                 const { challengeId, rest } = extractChallenge(args.slice(1));
                 requireChallenge({ challengeId }, SWAP_USAGE);
                 const ok = await swapCmd(challengeId, parseSwapFlags(rest));
+                process.exit(ok === false ? 1 : 0);
+                break;
+            }
+            case 'swap-back': {
+                const { challengeId, rest } = extractChallenge(args.slice(1));
+                requireChallenge({ challengeId }, SWAP_BACK_USAGE);
+                const { imageId, yes } = parseSwapFlags(rest);
+                const ok = await swapBackCmd(challengeId, { imageId, yes });
                 process.exit(ok === false ? 1 : 0);
                 break;
             }

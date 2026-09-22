@@ -38,7 +38,7 @@ export function BoostWindowBanner({ challenges }) {
                 <ChallengeChip key={c.id} challengeId={c.id} className="btn-info">
                     <PulseDot variant="info" size="status-sm" />
                     <span>{c.title}</span>
-                    {c.remaining != null && <span className="opacity-70">· {formatDuration(c.remaining)} left</span>}
+                    {c.remaining != null && <span className="font-semibold">· {formatDuration(c.remaining)} left</span>}
                 </ChallengeChip>
             ))}
         </ChipListPanel>

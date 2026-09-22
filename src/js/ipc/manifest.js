@@ -97,6 +97,8 @@ const invokeChannels = [
     'key-unlock-boost',
     'preview-swap-photo',
     'swap-entry-photo',
+    'get-swap-backs',
+    'swap-back-entry-photo',
     'fill-exposure',
     'reload-window',
     'refresh-menu',

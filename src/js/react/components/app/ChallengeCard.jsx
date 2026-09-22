@@ -1,11 +1,19 @@
 import { useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import { formatEndTime, getBoostStatus, getTurboStatus, getLevelStatus, isBoostWindowOpen } from '@/utils/formatters';
+import {
+    formatEndTime,
+    formatDuration,
+    getBoostStatus,
+    getTurboStatus,
+    getLevelStatus,
+    isBoostWindowOpen,
+} from '@/utils/formatters';
 import { isLowExposure } from '@/utils/challengeAlerts';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
+import { useSwapBacks } from '@/api/useSwapBacks';
 import { DeadlineTimeline } from './DeadlineTimeline';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { useTick } from '@/hooks/useTick';
@@ -82,6 +90,7 @@ export function ChallengeCard({
     // computed main-side). Failure yields empty actions / false — the card just
     // renders without them, never an error surface.
     const { actions: deadlineActions, boostBlocked } = useDeadlineActions(challenge);
+    const swapBacks = useSwapBacks(challenge);
 
     // Tick once a second — only meaningful when this challenge is in TIMER
     // state and we want canPlayAutoTurbo to flip to true the moment the
@@ -129,6 +138,12 @@ export function ChallengeCard({
     // a blue ring + pulsing badge, low exposure a red border + badge and a red
     // exposure figure, so the card stands out in a long list without reading it.
     const boostOpen = isBoostWindowOpen(member.boost, now);
+    // Time left in a timed boost window, preformatted for the badge; null for a
+    // key-unlocked boost, which has no timer. Ticks with `now`.
+    const boostTimeLeft =
+        boostOpen && member.boost?.state === 'AVAILABLE' && member.boost.timeout > 0
+            ? formatDuration(member.boost.timeout - now)
+            : null;
     const lowExposure = isLowExposure(challenge, now);
     const exposureClass = lowExposure ? 'text-error font-bold' : '';
     const cardAlertClass = `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`;
@@ -206,6 +221,7 @@ export function ChallengeCard({
     const badgeRowProps = {
         challenge,
         boostOpen,
+        boostTimeLeft,
         lowExposure,
         exposureFactor,
         showAutoFillBadge,
@@ -470,6 +486,7 @@ export function ChallengeCard({
                                     bankroll={bankroll}
                                     actionsLocked={autovoteRunning}
                                     onSwapped={handleCurrencySpent}
+                                    swapBack={swapBacks.find((r) => r.currentId === String(entry.id)) ?? null}
                                 />
                             ))}
                         </div>

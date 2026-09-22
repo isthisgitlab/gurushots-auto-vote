@@ -34,3 +34,13 @@ export function useSwapPhoto() {
     );
     return { preview, commit };
 }
+
+/**
+ * Spend a SWAP to put the recorded boosted/turbo'd original back into the slot
+ * now holding `currentImageId`. Same shape as useKeyUnlock.
+ */
+export const useSwapBack = () =>
+    useAsyncIpcAction(
+        (challengeId, currentImageId) => window.api.swapBackEntryPhoto(challengeId, currentImageId, true),
+        SPEND_LABELS,
+    );

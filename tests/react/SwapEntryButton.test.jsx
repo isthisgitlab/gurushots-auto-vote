@@ -5,7 +5,7 @@
  */
 
 import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
-import { SwapEntryButton } from '@/components/app/SwapEntryButton';
+import { SwapEntryButton, SwapBackButton } from '@/components/app/SwapEntryButton';
 
 const ENTRY = { id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', member_id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' };
 const CANDIDATE = { id: 'cccccccccccccccccccccccccccccccc', member_id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' };
@@ -88,4 +88,48 @@ test('warns when the entry is boosted or turbo-charged', async () => {
     renderButton({ warnActioned: true });
     fireEvent.click(swapButton());
     expect(await screen.findByText('app.currencySwapBoostedWarning')).toBeTruthy();
+});
+
+describe('SwapBackButton', () => {
+    const SWAP_BACK = {
+        previousId: 'dddddddddddddddddddddddddddddddd',
+        previousMemberId: ENTRY.member_id,
+        kind: 'boost',
+    };
+
+    const renderSwapBack = () => {
+        const onSpent = jest.fn();
+        render(
+            <SwapBackButton
+                entry={ENTRY}
+                swapBack={SWAP_BACK}
+                challengeId={7}
+                bankroll={{ keys: 0, swaps: 4, fills: 0, coins: 0 }}
+                disabled={false}
+                onSpent={onSpent}
+            />,
+        );
+        return { onSpent };
+    };
+
+    beforeEach(() => {
+        window.api.swapBackEntryPhoto = jest.fn().mockResolvedValue({ success: true, outcome: 'ok' });
+    });
+
+    test('confirm modal shows the current photo and the original, then swaps back', async () => {
+        const { onSpent } = renderSwapBack();
+        fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
+        expect(screen.getByText('app.currencySwapBackTitle')).toBeTruthy();
+        expect(screen.getByAltText('app.currencySwapBackOriginal')).toBeTruthy();
+        fireEvent.click(screen.getByText('app.currencySpend'));
+        await waitFor(() => expect(onSpent).toHaveBeenCalledTimes(1));
+        expect(window.api.swapBackEntryPhoto).toHaveBeenCalledWith(7, ENTRY.id, true);
+    });
+
+    test('Cancel spends nothing', () => {
+        renderSwapBack();
+        fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
+        fireEvent.click(screen.getByText('common.cancel'));
+        expect(window.api.swapBackEntryPhoto).not.toHaveBeenCalled();
+    });
 });

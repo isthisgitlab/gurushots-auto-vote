@@ -253,6 +253,10 @@
             currencySwapReplacement: 'Jaunā bilde',
             currencySwapBoostedWarning:
                 'Šai bildei ir boost vai turbo. Tas paliek pie šīs bildes — jaunajai bildei tā nebūs, un šajā izaicinājumā to vairs nevarēs izmantot, ja vien šo bildi neapmainīsi atpakaļ.',
+            currencySwapBack: 'Apmainīt atpakaļ',
+            currencySwapBackTitle: 'Apmainīt atpakaļ sākotnējo bildi?',
+            currencySwapBackBody: 'Tava sākotnējā bilde atgriežas šajā vietā un atgūst savu {kind}.',
+            currencySwapBackOriginal: 'Sākotnējā bilde',
             currencyCost: 'Maksā: 1 {unit}.',
             currencyBalance: 'Tev ir {current} {currency}; pēc tam paliks {resulting}.',
             currencyBalanceUnknown:

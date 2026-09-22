@@ -159,10 +159,12 @@ const previewSwap = async (challengeId, imageId, token, { strategy, logger, sett
  * @param {string} imageId
  * @param {string} newImageId
  * @param {string} token
- * @param {{strategy: object, logger: object}} deps
+ * @param {{strategy: object, logger: object, ledger?: object}} deps - ledger: the swap-back
+ *   ledger (swapBackStore.js), told about every successful swap so a swapped-out
+ *   boosted/turbo'd photo can be swapped back later
  * @returns {Promise<{ok: boolean, outcome: string}>}
  */
-const swapEntry = async (challengeId, imageId, newImageId, token, { strategy, logger }) => {
+const swapEntry = async (challengeId, imageId, newImageId, token, { strategy, logger, ledger = null }) => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
     if (!entryIds(challenge).has(String(imageId))) {
@@ -171,12 +173,53 @@ const swapEntry = async (challengeId, imageId, newImageId, token, { strategy, lo
     if (String(newImageId) === String(imageId) || swapExcludedIds(challenge).has(String(newImageId))) {
         return { ok: false, outcome: CURRENCY_OUTCOME.staleCandidate };
     }
-    return spendResult(
+    const oldEntry = findEntry(challenge, imageId);
+    const result = spendResult(
         logger,
         'swap',
         challenge,
         await strategy.swapPhoto(challenge.id, String(imageId), String(newImageId), token),
     );
+    if (result.ok && ledger) ledger.onSwapped(challenge.id, oldEntry, newImageId);
+    return result;
+};
+
+/**
+ * Spends a SWAP to put a photo that was swapped out while boosted/turbo'd back
+ * into the slot now holding `currentImageId` — the photo gets its boost/turbo
+ * back. The original comes from the swap-back ledger, never from the caller,
+ * and must still be in this challenge's swap history (not entered).
+ *
+ * @param {string|number} challengeId
+ * @param {string} currentImageId - the replacement now in the slot
+ * @param {string} token
+ * @param {{strategy: object, logger: object, ledger: object}} deps
+ * @returns {Promise<{ok: boolean, outcome: string}>}
+ */
+const swapBack = async (challengeId, currentImageId, token, { strategy, logger, ledger }) => {
+    const record = ledger.list(challengeId).find((r) => r.currentId === String(currentImageId));
+    if (!record) return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
+    if (blocked) return { ok: false, outcome: blocked };
+    const history = new Set(
+        (Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps : []).map((s) =>
+            String(s?.id),
+        ),
+    );
+    const entered = entryIds(challenge);
+    if (!entered.has(record.currentId) || entered.has(record.previousId) || !history.has(record.previousId)) {
+        // The slot moved on outside this app — the record no longer describes it.
+        ledger.remove(challengeId, record.currentId);
+        return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
+    }
+    const result = spendResult(
+        logger,
+        'swapBack',
+        challenge,
+        await strategy.swapPhoto(challenge.id, record.currentId, record.previousId, token),
+    );
+    if (result.ok) ledger.remove(challengeId, record.currentId);
+    return result;
 };
 
 /**
@@ -208,4 +251,4 @@ const fillExposure = async (challengeId, token, { strategy, logger }) => {
     );
 };
 
-module.exports = { unlockBoostWithKey, previewSwap, swapEntry, fillExposure };
+module.exports = { unlockBoostWithKey, previewSwap, swapEntry, swapBack, fillExposure };

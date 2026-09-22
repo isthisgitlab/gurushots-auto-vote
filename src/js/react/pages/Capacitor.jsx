@@ -17,6 +17,7 @@ import { installBridge, subscribe } from '../../bridge/capacitor';
 import { initializeAsync as initSettings, flushPendingWrites, getSetting } from '../../settings';
 import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
+import { initializeSwapBackAsync, flushSwapBackWrites } from '../../swapBackStore';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
 import { mountApp } from './App';
@@ -82,6 +83,8 @@ const bootstrap = async () => {
         // hydrate them so a paid retry after relaunch never re-unlocks (double
         // charge) on Android.
         await initializeJoinStateAsync();
+        // Swap-back records (which slot can restore a boosted/turbo'd photo).
+        await initializeSwapBackAsync();
 
         // Settings writes are write-behind (cache now, persist async). When
         // the OS backgrounds or tears down the WebView, push the latest
@@ -92,6 +95,7 @@ const bootstrap = async () => {
                 flushPendingWrites();
                 flushMetadataWrites();
                 flushJoinStateWrites();
+                flushSwapBackWrites();
             } catch {
                 // never let a teardown handler throw
             }

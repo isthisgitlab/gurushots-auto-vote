@@ -130,6 +130,16 @@ describe('ChallengeCard attention cues', () => {
         expect(screen.getByText(/app\.boostOpenBadge/)).toBeTruthy();
     });
 
+    test('timed boost badge shows how long the window stays open', () => {
+        renderCard(fullChallenge({ boost: { state: 'AVAILABLE', timeout: nowSec() + 25 * 60 + 30 } }));
+        expect(screen.getByText(/app\.boostOpenBadge/).textContent).toMatch(/⏳ 25m/);
+    });
+
+    test('key-unlocked boost badge shows no countdown', () => {
+        renderCard(fullChallenge({ boost: { state: 'AVAILABLE_KEY' } }));
+        expect(screen.getByText(/app\.boostOpenBadge/).textContent).not.toMatch(/⏳/);
+    });
+
     test('low exposure gives a red border and an exposure badge', () => {
         const { container } = renderCard(fullChallenge({ exposure: 0 }));
         const card = container.querySelector('#challenge-7');

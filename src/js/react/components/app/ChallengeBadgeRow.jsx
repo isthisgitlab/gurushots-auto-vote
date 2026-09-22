@@ -12,12 +12,16 @@ import { PulseDot } from '../ui/PulseDot';
  * boost window, low exposure — see utils/challengeAlerts) lead the state group
  * and stay in the compact tile, where standing out without reading is the point.
  *
+ * `boostTimeLeft` (preformatted, e.g. "23m") is shown in the boost badge for a
+ * timed window — the tile's boost cell truncates, so the badge carries it.
+ *
  * `showPhotoCount` is off in the compact tile, where the entries cell already
  * reads N/max and the "N photos" badge would only repeat the max.
  */
 export function ChallengeBadgeRow({
     challenge,
     boostOpen,
+    boostTimeLeft = null,
     lowExposure,
     exposureFactor,
     showAutoFillBadge,
@@ -38,6 +42,7 @@ export function ChallengeBadgeRow({
                 <span className="badge badge-info badge-sm gap-1 font-semibold">
                     <PulseDot variant="info" size="status-sm" />
                     🚀 {t('app.boostOpenBadge')}
+                    {boostTimeLeft && <span>· ⏳ {boostTimeLeft}</span>}
                 </span>
             )}
             {lowExposure && (
