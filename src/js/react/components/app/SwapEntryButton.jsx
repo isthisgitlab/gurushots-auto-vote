@@ -43,10 +43,9 @@ function SwapPhoto({ photo, caption }) {
  * @param {boolean} props.warnActioned - the entry is boosted or turbo'd (its boost/turbo stays with the photo, so the replacement won't get it)
  * @param {string|number} props.challengeId
  * @param {object|null} props.bankroll
- * @param {boolean} props.disabled
  * @param {function} [props.onSpent] - called after a successful swap
  */
-export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, disabled, onSpent }) {
+export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, onSpent }) {
     const { t } = useTranslation();
     const { preview, commit } = useSwapPhoto();
     const [candidate, setCandidate] = useState(null);
@@ -74,7 +73,7 @@ export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, di
             <button
                 className={`btn btn-xs ${error ? 'btn-error' : 'btn-accent'}`}
                 onClick={handlePreview}
-                disabled={disabled || busy}
+                disabled={busy}
             >
                 {busy ? <span className="loading loading-spinner loading-xs" /> : `🔄 ${t('app.currencySwap')}`}
             </button>
@@ -113,10 +112,9 @@ export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, di
  * @param {{previousId: string, previousMemberId: string, kind: 'boost'|'turbo'}} props.swapBack
  * @param {string|number} props.challengeId
  * @param {object|null} props.bankroll
- * @param {boolean} props.disabled
  * @param {function} [props.onSpent]
  */
-export function SwapBackButton({ entry, swapBack, challengeId, bankroll, disabled, onSpent }) {
+export function SwapBackButton({ entry, swapBack, challengeId, bankroll, onSpent }) {
     const { t } = useTranslation();
     const { run, loading, error, clearError } = useSwapBack();
     const [confirmOpen, setConfirmOpen] = useState(false);
@@ -137,7 +135,7 @@ export function SwapBackButton({ entry, swapBack, challengeId, bankroll, disable
             <button
                 className={`btn btn-xs ${error ? 'btn-error' : 'btn-info'}`}
                 onClick={() => setConfirmOpen(true)}
-                disabled={disabled || loading}
+                disabled={loading}
             >
                 {loading ? <span className="loading loading-spinner loading-xs" /> : `↩️ ${t('app.currencySwapBack')}`}
             </button>

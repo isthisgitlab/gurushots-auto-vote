@@ -18,7 +18,6 @@ import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
  * @param {Function} [props.onTurboApplied]
  * @param {boolean} [props.swapAvailable] - A swap can be spent on this challenge (balance + challenge flags)
  * @param {object|null} [props.bankroll] - For the swap confirm modal's balance line
- * @param {boolean} [props.actionsLocked] - Autovote is running; manual spends wait
  * @param {Function} [props.onSwapped]
  * @param {object|null} [props.swapBack] - Swap-back offer for this slot (the original was swapped out while boosted/turbo'd)
  */
@@ -31,7 +30,6 @@ export function EntryBadge({
     onTurboApplied,
     swapAvailable = false,
     bankroll = null,
-    actionsLocked = false,
     onSwapped,
     swapBack = null,
 }) {
@@ -105,7 +103,6 @@ export function EntryBadge({
                         challengeId={challengeId}
                         bankroll={bankroll}
                         warnActioned={isEntryActioned}
-                        disabled={actionsLocked}
                         onSpent={onSwapped}
                     />
                     {swapBack && (
@@ -114,7 +111,6 @@ export function EntryBadge({
                             swapBack={swapBack}
                             challengeId={challengeId}
                             bankroll={bankroll}
-                            disabled={actionsLocked}
                             onSpent={onSwapped}
                         />
                     )}

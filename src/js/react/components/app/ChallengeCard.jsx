@@ -388,7 +388,6 @@ export function ChallengeCard({
                                 kind="fill"
                                 challenge={challenge}
                                 bankroll={bankroll}
-                                disabled={autovoteRunning}
                                 onSpent={handleCurrencySpent}
                             />
                         )}
@@ -401,7 +400,6 @@ export function ChallengeCard({
                                 kind="key"
                                 challenge={challenge}
                                 bankroll={bankroll}
-                                disabled={autovoteRunning}
                                 onSpent={handleCurrencySpent}
                             />
                         )}
@@ -484,7 +482,6 @@ export function ChallengeCard({
                                     onTurboApplied={onVoteComplete}
                                     swapAvailable={swapAvailable}
                                     bankroll={bankroll}
-                                    actionsLocked={autovoteRunning}
                                     onSwapped={handleCurrencySpent}
                                     swapBack={swapBacks.find((r) => r.currentId === String(entry.id)) ?? null}
                                 />

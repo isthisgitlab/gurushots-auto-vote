@@ -21,10 +21,9 @@ const ERROR_DISPLAY_MS = 5000;
  * @param {string} props.body - confirm modal explanation
  * @param {{run: function, loading: boolean, error: string|null, clearError: function}} props.action
  * @param {string|number} props.challengeId
- * @param {boolean} props.disabled
  * @param {function} [props.onSpent] - called after a successful spend (refetch balances + challenges)
  */
-function CurrencyActionButton({ label, icon, field, bankroll, title, body, action, challengeId, disabled, onSpent }) {
+function CurrencyActionButton({ label, icon, field, bankroll, title, body, action, challengeId, onSpent }) {
     const { t } = useTranslation();
     const [confirmOpen, setConfirmOpen] = useState(false);
     const { run, loading, error, clearError } = action;
@@ -43,7 +42,7 @@ function CurrencyActionButton({ label, icon, field, bankroll, title, body, actio
             <button
                 className={`btn btn-xs mt-1 ${error ? 'btn-error' : 'btn-accent'}`}
                 onClick={() => setConfirmOpen(true)}
-                disabled={disabled || loading}
+                disabled={loading}
             >
                 {loading ? (
                     <span className="loading loading-spinner loading-xs" />
@@ -99,9 +98,9 @@ const CELL_ACTIONS = {
  * `kind="fill"` tops exposure up to 100% (Exposure cell). `kind` is fixed per
  * mounted instance, so the hook it selects is stable across renders.
  *
- * @param {{kind: 'key'|'fill', challenge: object, bankroll: object|null, disabled: boolean, onSpent?: function}} props
+ * @param {{kind: 'key'|'fill', challenge: object, bankroll: object|null, onSpent?: function}} props
  */
-export function CurrencyCellButton({ kind, challenge, bankroll, disabled, onSpent }) {
+export function CurrencyCellButton({ kind, challenge, bankroll, onSpent }) {
     const { t } = useTranslation();
     const config = CELL_ACTIONS[kind];
     const action = config.useAction();
@@ -115,7 +114,6 @@ export function CurrencyCellButton({ kind, challenge, bankroll, disabled, onSpen
             body={interp(t(config.body), { title: challenge.title })}
             action={action}
             challengeId={challenge.id}
-            disabled={disabled}
             onSpent={onSpent}
         />
     );

@@ -114,9 +114,10 @@ describe('visibility', () => {
         expect(fillButton()).toBeNull();
     });
 
-    test('disabled while autovote runs', () => {
+    test('stay usable while autovote runs', () => {
         renderCard(makeChallenge(), { autovoteRunning: true });
-        expect(keyButton().closest('button').disabled).toBe(true);
+        expect(keyButton().closest('button').disabled).toBe(false);
+        expect(fillButton().closest('button').disabled).toBe(false);
     });
 });
 

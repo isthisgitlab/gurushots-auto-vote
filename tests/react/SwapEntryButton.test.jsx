@@ -18,7 +18,6 @@ const renderButton = (props = {}) => {
             challengeId={7}
             bankroll={{ keys: 0, swaps: 4, fills: 0, coins: 0 }}
             warnActioned={false}
-            disabled={false}
             onSpent={onSpent}
             {...props}
         />,
@@ -105,7 +104,6 @@ describe('SwapBackButton', () => {
                 swapBack={SWAP_BACK}
                 challengeId={7}
                 bankroll={{ keys: 0, swaps: 4, fills: 0, coins: 0 }}
-                disabled={false}
                 onSpent={onSpent}
             />,
         );
