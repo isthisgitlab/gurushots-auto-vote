@@ -255,7 +255,12 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         // Theme-narrowed fetch: the title "Pink In Nature" derives search
         // terms, so the eligible-photo fetch is issued with a `search` filter
         // rather than the bare 2-arg call.
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'pink' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', {
+            search: 'pink',
+            paginate: true,
+            budgetMs: expect.any(Number),
+            logLabel: 'autoFill',
+        });
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
     });
 
@@ -950,7 +955,12 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
             submitToChallenge,
         });
         expect(result).toBe('submitted');
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'sunset' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', {
+            search: 'sunset',
+            paginate: true,
+            budgetMs: expect.any(Number),
+            logLabel: 'autoFill',
+        });
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // unfiltered fallback
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['off'], 'tok');
     });
@@ -1702,8 +1712,18 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { getEligiblePhotos, logger: makeLogger() },
         );
         expect(out.map((p) => p.id).sort()).toEqual(['p1', 'p2', 'shared']);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'cat' });
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'dog' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', {
+            search: 'cat',
+            paginate: true,
+            budgetMs: expect.any(Number),
+            logLabel: 'autoFill',
+        });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', {
+            search: 'dog',
+            paginate: true,
+            budgetMs: expect.any(Number),
+            logLabel: 'autoFill',
+        });
         // Search produced allowed candidates → the unfiltered fallback is not used.
         expect(getEligiblePhotos).not.toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' });
     });
@@ -1719,7 +1739,12 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             { getEligiblePhotos, logger: makeLogger() },
         );
         expect(out.map((p) => p.id)).toEqual(['full']);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'pink' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', {
+            search: 'pink',
+            paginate: true,
+            budgetMs: expect.any(Number),
+            logLabel: 'autoFill',
+        });
         expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { paginate: true, logLabel: 'autoFill' }); // unfiltered fallback
     });
 
@@ -2021,7 +2046,12 @@ describe('letter challenges ("Begins With L") — tag-based fill, end to end', (
             { getEligiblePhotos, logger },
         );
         expect(out.map((p) => p.id)).toEqual(['leaf']);
-        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', { search: 'leaf' });
+        expect(getEligiblePhotos).toHaveBeenCalledWith('c1', 'tok', {
+            search: 'leaf',
+            paginate: true,
+            budgetMs: expect.any(Number),
+            logLabel: 'autoFill',
+        });
         expect(debug).not.toHaveBeenCalled();
     });
 
@@ -2783,6 +2813,61 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         // coverage has to be read off the patched scored entries.
         expect(explanation).toContain('out of 2 equally off-theme candidates');
         expect(explanation).not.toContain('looked up for 0 of');
+    });
+
+    test('does NOT claim the theme was missed when every candidate matched it equally', async () => {
+        const logger = makeCapturingLogger();
+        // Both carry the challenge's own subject word, so they tie on the THEME
+        // tiers at a non-zero score and popularity breaks the tie. This is the
+        // routine shape of a resolved-tag fill (one tag searched server-side, so
+        // every candidate carries it) — not a failure to match.
+        const onThemePhoto = (id, views) => ({
+            id,
+            labels: ['Pink'],
+            votes: 0,
+            views,
+            upload_date: 9000,
+            permission: { allowed: true, message: null },
+        });
+        const getEligiblePhotos = jest.fn().mockResolvedValue([onThemePhoto('a', 900), onThemePhoto('b', 800)]);
+        const getImageData = jest.fn(async (id) => ({
+            votes: id === 'a' ? 10 : 900,
+            views: 50,
+            achievements: [],
+        }));
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+
+        await maybeAutoFillChallenge(makeChallenge({ entries: [{ id: 'e1' }] }), 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger,
+            getEligiblePhotos,
+            getImageData,
+            submitToChallenge,
+        });
+
+        // The old code warned "nothing matched the challenge theme" here and told
+        // the user to add a Per-Title Tag Rule — advice to repair a fill that
+        // worked. That claim must not appear at any level.
+        const allMessages = [
+            ...logger.__level.warning.mock.calls,
+            ...logger.__level.info.mock.calls,
+            ...logger.__level.success.mock.calls,
+        ].map(([msg]) => msg);
+        expect(allMessages.some((m) => m.includes('matched the challenge theme'))).toBe(false);
+        expect(allMessages.some((m) => m.includes('equally off-theme'))).toBe(false);
+        expect(allMessages.some((m) => m.includes('Per-Title Tag Rule'))).toBe(false);
+
+        // It still explains WHICH photo won and why — just honestly, and at info
+        // rather than crying wolf at warning level.
+        const explanation = logger.__level.info.mock.calls
+            .map(([msg]) => msg)
+            .find((m) => m.includes('chosen on past performance'));
+        expect(explanation).toBeDefined();
+        expect(explanation).toContain('matched');
+        expect(explanation).toContain('theme equally well');
+        // 'b' has the higher real vote count, so it is the one that was submitted.
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['b'], 'tok');
+        expect(explanation).toContain('b (900 votes');
     });
 
     test('reports partial coverage honestly when only some photos were measured', async () => {
