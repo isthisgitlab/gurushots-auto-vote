@@ -839,6 +839,9 @@ const TITLE_RULE_TAG_KEYS = ['mustIncludeTags', 'shouldIncludeTags'];
 // so 200 is comfortably generous for both.
 const MAX_TITLE_RULES = 200;
 const MAX_TITLE_LENGTH = 200;
+// One rule may list several titles that share the same behaviour, so the user
+// doesn't have to duplicate a whole rule per recurring challenge.
+const MAX_TITLES_PER_RULE = 50;
 
 // Current id→title observations are process-local. Real API responses also
 // persist first-seen title pins, but this cache is what lets the same resolver
@@ -952,6 +955,23 @@ const TITLE_MATCH_MODES = ['exact', 'contains', 'starts'];
 
 const ruleMatchMode = (rule) => (TITLE_MATCH_MODES.includes(rule?.match) ? rule.match : 'exact');
 
+/**
+ * The raw title patterns a rule carries. A rule saved before multi-title
+ * support has only `title`; a newer one carries the full list in `titles`
+ * (with `title` mirroring the first entry, so an older build still matches
+ * that one). Non-strings are dropped; empties are left for callers to filter.
+ *
+ * @param {object} rule
+ * @returns {string[]}
+ */
+const titleRuleTitles = (rule) => {
+    const list = Array.isArray(rule?.titles) && rule.titles.length > 0 ? rule.titles : [rule?.title];
+    return list.filter((title) => typeof title === 'string');
+};
+
+// Normalized, non-empty patterns — what the matcher and the identity key use.
+const _rulePatterns = (rule) => titleRuleTitles(rule).map(normalizeTitle).filter(Boolean);
+
 // Challenge tags are API-owned strings ("Exhibition", "No comm", "special 4 pic").
 // Compared trimmed + lowercased, like titles.
 const normalizeTag = (tag) => (typeof tag === 'string' ? tag.trim().toLowerCase() : '');
@@ -961,15 +981,26 @@ const normalizeTagList = (tags) => (Array.isArray(tags) ? tags.map(normalizeTag)
 /**
  * Does the rule's TITLE condition hold? Returns null when the rule sets no
  * title at all (a tag-only rule) — distinct from false, which means the rule
- * has a title condition that did NOT match.
+ * has a title condition that did NOT match. On a match it returns the length of
+ * the longest listed title that matched (always > 0, so truthy), which the
+ * matcher uses as its tie-break — any one of a rule's titles is enough.
  */
 const titleConditionMatches = (rule, titleKey) => {
-    const pattern = normalizeTitle(rule?.title);
-    if (!pattern) return null;
+    const patterns = _rulePatterns(rule);
+    if (patterns.length === 0) return null;
     if (!titleKey) return false;
-    if (ruleMatchMode(rule) === 'contains') return titleKey.includes(pattern);
-    if (ruleMatchMode(rule) === 'starts') return titleKey.startsWith(pattern);
-    return titleKey === pattern;
+    const mode = ruleMatchMode(rule);
+    let best = 0;
+    for (const pattern of patterns) {
+        const hit =
+            mode === 'contains'
+                ? titleKey.includes(pattern)
+                : mode === 'starts'
+                  ? titleKey.startsWith(pattern)
+                  : titleKey === pattern;
+        if (hit && pattern.length > best) best = pattern.length;
+    }
+    return best > 0 ? best : false;
 };
 
 /** Same three-valued contract for the CHALLENGE-TAG condition. */
@@ -988,7 +1019,7 @@ const TITLE_MODE_SCORE = { exact: 3, starts: 2, contains: 1 };
 
 const ruleSpecificity = (rule) => {
     let score = 0;
-    if (normalizeTitle(rule?.title)) score += TITLE_MODE_SCORE[ruleMatchMode(rule)];
+    if (_rulePatterns(rule).length > 0) score += TITLE_MODE_SCORE[ruleMatchMode(rule)];
     if (normalizeTag(rule?.challengeTag)) score += 1;
     return score;
 };
@@ -1027,7 +1058,8 @@ const _findRuleIn = (rules, target) => {
         if (byTitle === false || byTag === false) continue;
 
         const score = ruleSpecificity(rule);
-        const length = normalizeTitle(rule?.title).length;
+        // Length of the title that actually matched, not of the rule's first.
+        const length = byTitle || 0;
         // Strict > on both keys keeps the EARLIEST rule on a total tie.
         if (score > bestScore || (score === bestScore && length > bestLength)) {
             best = rule;
@@ -1267,18 +1299,38 @@ const _canonicalTitleRuleProfile = (storedProfiles, requested) => {
     return _findProfileKey(storedProfiles, _normalizeProfileName(name));
 };
 
-// Identity of a rule's match condition. "\u0000" cannot occur in a trimmed
-// title or tag, so it is a safe separator that no user value can forge.
+// Identity of a rule's match condition. "\u0000"/"\u0001" cannot occur in a
+// trimmed title or tag, so they are safe separators no user value can forge.
+// The title list is sorted so the same set in a different order is one rule.
 const _titleRuleKey = (rule) =>
-    [normalizeTitle(rule?.title), ruleMatchMode(rule), normalizeTag(rule?.challengeTag)].join('\u0000');
+    [_rulePatterns(rule).sort().join('\u0001'), ruleMatchMode(rule), normalizeTag(rule?.challengeTag)].join('\u0000');
+
+// Trim, drop empties and case-insensitive duplicates (first spelling wins).
+const _sanitizeRuleTitleList = (rule) => {
+    const seen = new Set();
+    const titles = [];
+    for (const raw of titleRuleTitles(rule)) {
+        const title = raw.trim();
+        const key = normalizeTitle(title);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        titles.push(title);
+    }
+    return titles;
+};
 
 const _sanitizeTitleRule = (rule, storedProfiles) => {
-    const title = typeof rule?.title === 'string' ? rule.title.trim() : '';
+    const titles = _sanitizeRuleTitleList(rule);
+    const title = titles[0] || '';
     const challengeTag = typeof rule?.challengeTag === 'string' ? rule.challengeTag.trim() : '';
     // A rule needs at least one condition. Historically that was always a title;
     // now a tag-only rule is legitimate, so emptiness is judged on both.
     if (!title && !challengeTag) return { valid: true, rule: null };
-    if (title.length > MAX_TITLE_LENGTH || challengeTag.length > MAX_TITLE_LENGTH) {
+    if (
+        titles.length > MAX_TITLES_PER_RULE ||
+        titles.some((entry) => entry.length > MAX_TITLE_LENGTH) ||
+        challengeTag.length > MAX_TITLE_LENGTH
+    ) {
         return { valid: false, title: title || challengeTag };
     }
     // An unrecognised mode is a rejection, not a silent fall back to 'exact':
@@ -1306,6 +1358,9 @@ const _sanitizeTitleRule = (rule, storedProfiles) => {
     }
 
     const sanitized = { title, mustIncludeTags, shouldIncludeTags, ...inline };
+    // `title` keeps mirroring the first entry (older builds and single-title
+    // readers); the full list is only stored when there is more than one.
+    if (titles.length > 1) sanitized.titles = titles;
     // Only persist a non-default match mode, and only alongside a title — an
     // orphan `match` on a tag-only rule would read as meaningful and isn't.
     if (title && match !== 'exact') sanitized.match = match;
@@ -1318,7 +1373,7 @@ const _sanitizeTitleRule = (rule, storedProfiles) => {
  * Persist the title rules. A rule may add tags, inherit a named profile, or do
  * both. Sanitizes input: trims titles, validates tag lists against the schema,
  * resolves profile names case-insensitively, drops no-op rules, and de-dupes
- * by normalized title (last wins).
+ * by match condition — the title set, mode and challenge tag (last wins).
  */
 const setTitleRules = (rules) => {
     if (!Array.isArray(rules)) {
@@ -2369,6 +2424,7 @@ module.exports = {
 
     // Title-keyed tag rules (survive challenge rotation)
     getTitleRules,
+    titleRuleTitles,
     getCategoryRules,
     setCategoryRules,
     findCategoryRule,

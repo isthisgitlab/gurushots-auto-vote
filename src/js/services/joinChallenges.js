@@ -127,11 +127,15 @@ const anyTitleRuleEnablesAutoJoin = () => {
             if (rule.autoJoin === true) return true;
             continue;
         }
-        const title = rule?.title;
-        if (!title) continue;
-        const profile = settings.getTitleProfile(title);
-        if (profile && !profile.suppressed && profile.values && profile.values.autoJoin === true) {
-            return true;
+        // A rule may list several titles; any of them resolving to an
+        // auto-joining profile arms the pass.
+        const titles = settings.titleRuleTitles ? settings.titleRuleTitles(rule) : [rule?.title];
+        for (const title of titles) {
+            if (!title) continue;
+            const profile = settings.getTitleProfile(title);
+            if (profile && !profile.suppressed && profile.values && profile.values.autoJoin === true) {
+                return true;
+            }
         }
     }
     return false;

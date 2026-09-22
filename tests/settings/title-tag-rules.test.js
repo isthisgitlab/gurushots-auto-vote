@@ -459,6 +459,58 @@ describe('settings facade — title-keyed tag rules', () => {
             });
         });
 
+        describe('several titles on one rule', () => {
+            test("any listed title matches, with the rule's one match mode", () => {
+                save({ titles: ['Hats', 'Going Viral'], autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'hats' })).toEqual({ autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'Going Viral' })).toEqual({ autoJoin: true });
+                expect(settings.getTitleRuleOverrides({ title: 'Something Else' })).toEqual({});
+            });
+
+            test('persists the trimmed, de-duplicated list with title mirroring the first', () => {
+                save({ titles: ['  Hats ', '', 'hats', 'Going Viral'], autoJoin: true });
+                const [rule] = settings.getTitleRules();
+                expect(rule.title).toBe('Hats');
+                expect(rule.titles).toEqual(['Hats', 'Going Viral']);
+            });
+
+            test('a list of one is stored as a plain single-title rule', () => {
+                save({ titles: ['Hats', '  '], autoJoin: true });
+                const [rule] = settings.getTitleRules();
+                expect(rule.title).toBe('Hats');
+                expect(rule).not.toHaveProperty('titles');
+            });
+
+            test('the same title set in another order is one rule, last wins', () => {
+                save(
+                    { titles: ['a', 'b'], autoJoinWithinHoursOfEnd: 1 },
+                    { titles: ['B', 'A'], autoJoinWithinHoursOfEnd: 2 },
+                );
+                const rules = settings.getTitleRules();
+                expect(rules).toHaveLength(1);
+                expect(rules[0].autoJoinWithinHoursOfEnd).toBe(2);
+            });
+
+            test('the tie-break uses the title that matched, not the first one', () => {
+                save(
+                    { titles: ['x', 'photo of'], match: 'contains', autoJoinWithinHoursOfEnd: 7 },
+                    { title: 'pho', match: 'contains', autoJoinWithinHoursOfEnd: 2 },
+                );
+                expect(settings.getTitleRuleOverrides({ title: 'Photo of the Week' })).toEqual({
+                    autoJoinWithinHoursOfEnd: 7,
+                });
+            });
+
+            test('an over-length title anywhere in the list rejects the save', () => {
+                expect(settings.setTitleRules([{ titles: ['ok', 'x'.repeat(201)], autoJoin: true }])).toBe(false);
+            });
+
+            test('too many titles on one rule rejects the save', () => {
+                const titles = Array.from({ length: 51 }, (_, i) => `t${i}`);
+                expect(settings.setTitleRules([{ titles, autoJoin: true }])).toBe(false);
+            });
+        });
+
         test('a bare title string still resolves (callers that have no challenge)', () => {
             save({ title: 'abc', match: 'contains', autoJoin: true });
             expect(settings.getTitleRuleOverrides('The ABC Challenge')).toEqual({ autoJoin: true });

@@ -24,10 +24,42 @@ describe('TitleTagRulesEditor', () => {
         const onChange = jest.fn();
         const value = [{ title: '', mustIncludeTags: [], shouldIncludeTags: [] }];
         render(<TitleTagRulesEditor value={value} onChange={onChange} />);
-        fireEvent.change(screen.getByLabelText('app.titleTagRuleTitle'), { target: { value: "Let's See Hats" } });
+        fireEvent.change(screen.getByLabelText('app.titleTagRuleTitle 1'), { target: { value: "Let's See Hats" } });
         expect(onChange).toHaveBeenCalledWith([
-            { title: "Let's See Hats", mustIncludeTags: [], shouldIncludeTags: [] },
+            { title: "Let's See Hats", titles: ["Let's See Hats"], mustIncludeTags: [], shouldIncludeTags: [] },
         ]);
+    });
+
+    test('a rule can list several titles', () => {
+        const onChange = jest.fn();
+        const value = [{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }];
+        render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        fireEvent.click(screen.getByText(/app\.addTitleRuleTitle/));
+        expect(onChange).toHaveBeenLastCalledWith([
+            { title: 'A', titles: ['A', ''], mustIncludeTags: [], shouldIncludeTags: [] },
+        ]);
+    });
+
+    test('stored titles render one input each and can be removed', () => {
+        const onChange = jest.fn();
+        const value = [{ title: 'A', titles: ['A', 'B'], mustIncludeTags: [], shouldIncludeTags: [] }];
+        render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        expect(screen.getByLabelText('app.titleTagRuleTitle 1').value).toBe('A');
+        expect(screen.getByLabelText('app.titleTagRuleTitle 2').value).toBe('B');
+        fireEvent.click(screen.getByLabelText('app.removeTitleRuleTitle 1'));
+        expect(onChange).toHaveBeenLastCalledWith([
+            { title: 'B', titles: ['B'], mustIncludeTags: [], shouldIncludeTags: [] },
+        ]);
+    });
+
+    test('a single title has no remove-title button', () => {
+        render(
+            <TitleTagRulesEditor
+                value={[{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }]}
+                onChange={jest.fn()}
+            />,
+        );
+        expect(screen.queryByLabelText('app.removeTitleRuleTitle 1')).toBeNull();
     });
 
     test('removing a row emits the array without it', () => {
@@ -183,7 +215,7 @@ describe('TitleTagRulesEditor', () => {
                     onChange={jest.fn()}
                 />,
             );
-            expect(screen.getByLabelText('app.titleTagRuleTitle').value).toBe('');
+            expect(screen.getByLabelText('app.titleTagRuleTitle 1').value).toBe('');
             expect(screen.getByLabelText('app.titleRuleChallengeTag').value).toBe('Exhibition');
         });
     });

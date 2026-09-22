@@ -82,12 +82,69 @@ function renderTitleProfileSelect(index, rule, profiles, updateRule, t) {
     );
 }
 
+// Mirrors MAX_TITLES_PER_RULE in settings.js; the sanitizer is the real gate.
+const MAX_TITLES_PER_RULE = 50;
+
+// The editable title list of a rule. Stored rules carry `titles` only when they
+// list more than one (with `title` mirroring the first); an older rule has just
+// `title`. Always at least one row so a fresh rule shows an input.
+const ruleTitleRows = (rule) => {
+    if (Array.isArray(rule.titles) && rule.titles.length > 0) return rule.titles;
+    return [rule.title ?? ''];
+};
+
+// Patch for a new title list. `title` follows the first row so the saved shape
+// stays readable by single-title code; the sanitizer drops empty rows.
+const titlesPatch = (titles) => ({ titles, title: titles[0] ?? '' });
+
+function renderTitleList(index, rule, updateRule, t) {
+    const titles = ruleTitleRows(rule);
+    const setTitles = (next) => updateRule(index, titlesPatch(next));
+    return (
+        <div className="space-y-2">
+            {titles.map((title, titleIndex) => (
+                // Index key: rows are only appended or removed, and the input is controlled.
+                <div key={titleIndex} className="flex items-center gap-2">
+                    <input
+                        type="text"
+                        className="input input-bordered input-sm flex-1"
+                        placeholder={t('app.titleTagRuleTitlePlaceholder')}
+                        aria-label={`${t('app.titleTagRuleTitle')} ${titleIndex + 1}`}
+                        value={title}
+                        onChange={(e) => setTitles(titles.map((v, i) => (i === titleIndex ? e.target.value : v)))}
+                    />
+                    {titles.length > 1 && (
+                        <button
+                            type="button"
+                            className="btn btn-ghost btn-xs"
+                            title={t('app.removeTitleRuleTitle')}
+                            aria-label={`${t('app.removeTitleRuleTitle')} ${titleIndex + 1}`}
+                            onClick={() => setTitles(titles.filter((_, i) => i !== titleIndex))}
+                        >
+                            ×
+                        </button>
+                    )}
+                </div>
+            ))}
+            <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                disabled={titles.length >= MAX_TITLES_PER_RULE}
+                onClick={() => setTitles([...titles, ''])}
+            >
+                + {t('app.addTitleRuleTitle')}
+            </button>
+        </div>
+    );
+}
+
 /**
  * Editor for challenge rules. GuruShots challenges rotate with a fresh id each
  * time, so id-keyed per-challenge overrides are lost on every rotation; these
  * rules match on what survives a rotation instead.
  *
- * MATCHING: a rule matches on a title (with a `match` mode — is-exactly, which
+ * MATCHING: a rule matches on one or more titles (any one is enough; one
+ * `match` mode applies to all of them — is-exactly, which
  * is the default, starts-with, or contains) and/or on a `challengeTag` — the
  * challenge's OWN classifier from the API (Exhibition, Comm, Turbo, …), not a
  * photo tag. Both present means both must hold. When several rules match one
@@ -101,7 +158,7 @@ function renderTitleProfileSelect(index, rule, profiles, updateRule, t) {
  *
  * Controlled: `value` is the rules array and `onChange(nextRules)` is called
  * with a new array on every edit. Each rule is
- * `{ title: string, match?: 'exact'|'starts'|'contains', challengeTag?: string,
+ * `{ title: string, titles?: string[], match?: 'exact'|'starts'|'contains', challengeTag?: string,
  *    profile?: string, mustIncludeTags: string[], shouldIncludeTags: string[],
  *    autoJoin?: boolean, autoFill?: boolean, autoJoinWithinHoursOfEnd?: number }`.
  */
@@ -140,14 +197,7 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {} }) {
                             <option value="starts">{t('app.titleRuleMatchStarts')}</option>
                             <option value="contains">{t('app.titleRuleMatchContains')}</option>
                         </select>
-                        <input
-                            type="text"
-                            className="input input-bordered input-sm flex-1"
-                            placeholder={t('app.titleTagRuleTitlePlaceholder')}
-                            aria-label={t('app.titleTagRuleTitle')}
-                            value={rule.title ?? ''}
-                            onChange={(e) => updateRule(index, { title: e.target.value })}
-                        />
+                        <span className="label-text text-sm flex-1">{t('app.titleRuleTitlesLabel')}</span>
                         <button
                             className="btn btn-ghost btn-sm text-error"
                             title={t('app.removeTitleTagRule')}
@@ -157,6 +207,7 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {} }) {
                             ×
                         </button>
                     </div>
+                    {renderTitleList(index, rule, updateRule, t)}
                     <div className="form-control gap-1">
                         <span className="label-text text-sm">{t('app.titleRuleChallengeTag')}</span>
                         <input
