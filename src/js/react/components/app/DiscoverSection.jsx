@@ -246,7 +246,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                             </div>
                             <ModalActions>
                                 <button className="btn btn-ghost btn-sm" onClick={() => setConfirm(null)}>
-                                    {t('common.cancel')}
+                                    {t('app.cancel')}
                                 </button>
                                 <button className="btn btn-warning btn-sm" onClick={onConfirm} disabled={insufficient}>
                                     {interp(t('app.discoverConfirmSpend'), { coins: cCost })}

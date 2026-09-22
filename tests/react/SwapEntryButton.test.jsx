@@ -127,7 +127,7 @@ describe('SwapBackButton', () => {
     test('Cancel spends nothing', () => {
         renderSwapBack();
         fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
-        fireEvent.click(screen.getByText('common.cancel'));
+        fireEvent.click(screen.getByText('app.cancel'));
         expect(window.api.swapBackEntryPhoto).not.toHaveBeenCalled();
     });
 });

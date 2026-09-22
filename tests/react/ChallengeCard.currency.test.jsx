@@ -126,7 +126,7 @@ describe('confirm flow', () => {
         renderCard(makeChallenge());
         fireEvent.click(keyButton());
         expect(screen.getByText('app.currencyKeyUnlockTitle')).toBeTruthy();
-        fireEvent.click(screen.getByText('common.cancel'));
+        fireEvent.click(screen.getByText('app.cancel'));
         expect(window.api.keyUnlockBoost).not.toHaveBeenCalled();
     });
 
