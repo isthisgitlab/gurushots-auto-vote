@@ -252,7 +252,7 @@
             currencySwapCurrent: 'Current photo',
             currencySwapReplacement: 'Replacement photo',
             currencySwapBoostedWarning:
-                'This photo is boosted or turbo-charged. The boost or turbo may not carry over to the replacement.',
+                'This photo is boosted or turbo-charged. The boost/turbo stays with this photo — the replacement will not have it, and it cannot be used again in this challenge unless you swap this photo back in.',
             currencyCost: 'Costs 1 {unit}.',
             currencyBalance: 'You have {current} {currency}; after this you will have {resulting}.',
             currencyBalanceUnknown:

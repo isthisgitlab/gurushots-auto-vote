@@ -251,7 +251,8 @@
                 'Pašreizējā bilde tiek aizstāta ar to, ko lietotne izvēlējās šim izaicinājumam. Aizstāto bildi nevar apmainīt atpakaļ.',
             currencySwapCurrent: 'Pašreizējā bilde',
             currencySwapReplacement: 'Jaunā bilde',
-            currencySwapBoostedWarning: 'Šai bildei ir boost vai turbo. Boost vai turbo var nepāriet uz jauno bildi.',
+            currencySwapBoostedWarning:
+                'Šai bildei ir boost vai turbo. Tas paliek pie šīs bildes — jaunajai bildei tā nebūs, un šajā izaicinājumā to vairs nevarēs izmantot, ja vien šo bildi neapmainīsi atpakaļ.',
             currencyCost: 'Maksā: 1 {unit}.',
             currencyBalance: 'Tev ir {current} {currency}; pēc tam paliks {resulting}.',
             currencyBalanceUnknown:

@@ -39,7 +39,7 @@ function SwapPhoto({ photo, caption }) {
  *
  * @param {object} props
  * @param {object} props.entry - entry record (id, member_id)
- * @param {boolean} props.warnActioned - the entry is boosted or turbo'd (warn it may not carry over)
+ * @param {boolean} props.warnActioned - the entry is boosted or turbo'd (its boost/turbo stays with the photo, so the replacement won't get it)
  * @param {string|number} props.challengeId
  * @param {object|null} props.bankroll
  * @param {boolean} props.disabled
