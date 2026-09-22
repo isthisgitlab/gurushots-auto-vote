@@ -40,8 +40,21 @@ jobs:
             - name: Setup build environment
               uses: ./.github/actions/setup-build
 
-            - name: Run tests
-              run: pnpm test
+            # Coverage runs here (not only in test.yml) so Coveralls records one
+            # report per release push on master/develop — the same commits that
+            # go on to be tagged and published.
+            - name: Run tests with coverage
+              run: pnpm test:coverage
+
+            # Upload only; never gate the release on Coveralls availability.
+            # GITHUB_TOKEN identifies the repo to Coveralls — no repo token secret.
+            - name: Upload coverage to Coveralls
+              uses: coverallsapp/github-action@v2
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  file: coverage/lcov.info
+                  format: lcov
+                  fail-on-error: false
 
     version-bump:
         runs-on: ubuntu-slim
