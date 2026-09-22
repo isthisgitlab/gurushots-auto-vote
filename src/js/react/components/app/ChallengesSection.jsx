@@ -161,12 +161,14 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                 )}
                 {/* Global compact-mode toggle. Sets the default density
                     for all cards; per-card overrides on individual
-                    challenges remain. */}
-                <button
-                    className="btn btn-ghost btn-sm sm:ml-auto"
-                    onClick={handleToggleGlobalCompact}
-                    title={globalCompact ? 'Show full details' : 'Compact view'}
-                >
+                    challenges remain.
+
+                    The label names the ACTION, not the current state — this is
+                    a button, so while the cards are compact it reads "Details"
+                    ("click to get details"), matching the per-card toggle in
+                    ChallengeCard. The icon follows the same rule: it depicts
+                    the view you are about to switch TO. */}
+                <button className="btn btn-ghost btn-sm sm:ml-auto" onClick={handleToggleGlobalCompact}>
                     <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         {globalCompact ? (
                             <path
@@ -184,7 +186,7 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                             />
                         )}
                     </svg>
-                    {globalCompact ? 'Compact' : 'Detailed'}
+                    {globalCompact ? t('app.details') : t('app.compact')}
                 </button>
             </div>
 
