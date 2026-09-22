@@ -71,13 +71,13 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         );
 
         expect(result.map((p) => p.id).sort()).toEqual(['stairs_1', 'stairs_2']);
-        // The unfiltered library walk must NOT have happened — that is the path
-        // that submits an off-theme photo.
-        expect(getEligiblePhotos).not.toHaveBeenCalledWith(
-            'c-stairs',
-            'tok',
-            expect.objectContaining({ paginate: true }),
-        );
+        // The UNFILTERED library walk must NOT have happened — that is the path
+        // that submits an off-theme photo. What makes it unfiltered is the
+        // absence of a `search` term, NOT `paginate`: themed searches paginate
+        // too now (they just stop after one request when a term fits in a page),
+        // so keying this on `paginate` would assert the opposite of the intent.
+        const unfilteredCalls = getEligiblePhotos.mock.calls.filter(([, , opts]) => !opts || !opts.search);
+        expect(unfilteredCalls).toEqual([]);
         expect(category.warning).not.toHaveBeenCalled();
         expect(category.info).toHaveBeenCalledWith(expect.stringContaining('"staircase"'), null);
     });
