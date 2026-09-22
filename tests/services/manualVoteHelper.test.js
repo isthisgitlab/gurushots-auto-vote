@@ -145,3 +145,28 @@ describe('voteAllChallengesManual', () => {
         expect(strategy.submitVotes).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('voteAllChallengesManual — default stagger', () => {
+    afterEach(() => jest.useRealTimers());
+
+    test('without options it waits STAGGER_MS after each successful vote', async () => {
+        jest.useFakeTimers({ now: Date.now() });
+        const strategy = {
+            getVoteImages: jest.fn().mockResolvedValue({ images: [{ id: 'i1' }] }),
+            submitVotes: jest.fn().mockResolvedValue({ ok: true }),
+        };
+        let settled = false;
+        const run = voteAllChallengesManual([challengeWithExposure(50)], strategy, 'tok').then((r) => {
+            settled = true;
+            return r;
+        });
+
+        // Let the vote itself land, then confirm the loop is parked on the stagger.
+        await jest.advanceTimersByTimeAsync(STAGGER_MS - 1);
+        expect(strategy.submitVotes).toHaveBeenCalledTimes(1);
+        expect(settled).toBe(false);
+
+        await jest.advanceTimersByTimeAsync(1);
+        await expect(run).resolves.toEqual({ voted: 1, skipped: 0, total: 1 });
+    });
+});

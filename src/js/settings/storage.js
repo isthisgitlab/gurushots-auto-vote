@@ -183,18 +183,6 @@ const getDefaultMockSetting = () => {
     return false;
 };
 
-/**
- * Detect whether autovote is currently running. The flag is set by the
- * autovote orchestration code, possibly on different global surfaces
- * depending on whether we're in Electron main, renderer, or the CLI.
- * `globalThis` covers the renderer too — `window === globalThis` there.
- */
-const isAutovoteRunning = () => {
-    if (typeof global !== 'undefined' && global.autovoteRunning) return true;
-    if (typeof globalThis !== 'undefined' && globalThis.autovoteRunning) return true;
-    return false;
-};
-
 // Get the userData directory path (useful for debugging)
 const getUserDataPath = () => {
     return path.dirname(getSettingsPath());
@@ -298,7 +286,6 @@ module.exports = {
     initializeAsync,
     flushPendingWrites,
     getSettingsPath,
-    isAutovoteRunning,
     getDefaultMockSetting,
     getUserDataPath,
     getEnvironmentInfo,

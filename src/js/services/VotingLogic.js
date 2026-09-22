@@ -1479,6 +1479,10 @@ const describeDeadlineActions = (challenge, now) => {
                 // the shared check treats undefined/null as "no id" exactly as
                 // the runner does, and must not learn this view's normalisation.
                 return !evaluateEmergencyFill(challenge, challenge?.id, settings).standDown;
+            // Exhaustive-switch safety net: orderDeadlineActions emits only the four
+            // cases above today, but an action added there without a matching case
+            // here must stay hidden rather than be treated as visible.
+            /* istanbul ignore next */
             default:
                 return false;
         }
@@ -1550,10 +1554,10 @@ const resolveJoinWindow = (joinWithinSec, percentElapsed) => {
  * @param {{close_time?: number, start_time?: number}} challenge
  * @param {number} joinWithinSec seconds before close_time to start joining (0 = off)
  * @param {number} nowSec current time in epoch SECONDS (close_time's unit)
- * @param {number} [percentElapsed] percent of the challenge's lifetime that must have run (0 = off)
+ * @param {number} percentElapsed percent of the challenge's lifetime that must have run (0 = off)
  * @returns {string|null}
  */
-const joinWindowRefusal = (challenge, joinWithinSec, nowSec, percentElapsed = 0) => {
+const joinWindowRefusal = (challenge, joinWithinSec, nowSec, percentElapsed) => {
     const window = resolveJoinWindow(joinWithinSec, percentElapsed);
     if (window.mode === 'off') return null;
 

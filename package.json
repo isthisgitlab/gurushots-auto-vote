@@ -333,16 +333,10 @@
         ],
         "coverageThreshold": {
             "global": {
-                "branches": 78,
-                "functions": 78,
-                "lines": 80,
-                "statements": 80
-            },
-            "./src/js/ipc/": {
-                "branches": 58,
-                "functions": 44,
-                "lines": 57,
-                "statements": 58
+                "branches": 100,
+                "functions": 100,
+                "lines": 100,
+                "statements": 100
             }
         }
     }

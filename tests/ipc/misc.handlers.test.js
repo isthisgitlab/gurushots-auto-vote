@@ -54,3 +54,98 @@ describe('misc.handlers open-external-url scheme gate', () => {
         expect(res.error).toBe('boom');
     });
 });
+
+describe('misc.handlers reload-window', () => {
+    const win = (destroyed = false) => ({ isDestroyed: jest.fn(() => destroyed), reload: jest.fn() });
+
+    test('reloads the main window when it is alive', async () => {
+        const main = win();
+        const login = win();
+        const handlers = buildHandlers({ getMainWindow: () => main, getLoginWindow: () => login });
+        await expect(handlers['reload-window']()).resolves.toEqual({ success: true });
+        expect(main.reload).toHaveBeenCalledTimes(1);
+        expect(login.reload).not.toHaveBeenCalled();
+    });
+
+    test.each([
+        ['absent', null],
+        ['destroyed', true],
+    ])('falls back to the login window when the main window is %s', async (_label, mainState) => {
+        const main = mainState === null ? null : win(true);
+        const login = win();
+        const handlers = buildHandlers({ getMainWindow: () => main, getLoginWindow: () => login });
+        await expect(handlers['reload-window']()).resolves.toEqual({ success: true });
+        expect(login.reload).toHaveBeenCalledTimes(1);
+        if (main) expect(main.reload).not.toHaveBeenCalled();
+    });
+
+    test('reports failure when no live window exists', async () => {
+        const login = win(true);
+        const handlers = buildHandlers({ getMainWindow: () => null, getLoginWindow: () => login });
+        await expect(handlers['reload-window']()).resolves.toEqual({
+            success: false,
+            error: 'No active window to reload',
+        });
+        expect(login.reload).not.toHaveBeenCalled();
+    });
+
+    test('returns the error envelope when reload throws', async () => {
+        const main = win();
+        main.reload.mockImplementation(() => {
+            throw new Error('crashed');
+        });
+        const handlers = buildHandlers({ getMainWindow: () => main, getLoginWindow: () => null });
+        await expect(handlers['reload-window']()).resolves.toEqual({ success: false, error: 'crashed' });
+    });
+});
+
+describe('misc.handlers refresh-menu', () => {
+    const { updateMenuTranslations } = require('../../src/js/ui/applicationMenu');
+    let savedTranslationManager;
+
+    beforeEach(() => {
+        updateMenuTranslations.mockClear();
+        savedTranslationManager = global.translationManager;
+    });
+
+    afterEach(() => {
+        global.translationManager = savedTranslationManager;
+    });
+
+    test('reloads the language from settings before rebuilding the menu', async () => {
+        const loadLanguageFromSettings = jest.fn().mockResolvedValue(undefined);
+        global.translationManager = { loadLanguageFromSettings };
+        const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
+
+        await expect(handlers['refresh-menu']()).resolves.toEqual({ success: true });
+        expect(loadLanguageFromSettings).toHaveBeenCalledTimes(1);
+        expect(updateMenuTranslations).toHaveBeenCalledTimes(1);
+        expect(loadLanguageFromSettings.mock.invocationCallOrder[0]).toBeLessThan(
+            updateMenuTranslations.mock.invocationCallOrder[0],
+        );
+    });
+
+    test('does not rebuild the menu when the language load fails', async () => {
+        global.translationManager = { loadLanguageFromSettings: jest.fn().mockRejectedValue(new Error('io')) };
+        const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
+
+        await expect(handlers['refresh-menu']()).resolves.toEqual({ success: false, error: 'io' });
+        expect(updateMenuTranslations).not.toHaveBeenCalled();
+    });
+});
+
+describe('misc.handlers register', () => {
+    test('registers every channel with the injected window accessors', async () => {
+        const { register } = require('../../src/js/ipc/misc.handlers');
+        const channels = new Map();
+        const main = { isDestroyed: () => false, reload: jest.fn() };
+        register(
+            { handle: (channel, impl) => channels.set(channel, impl) },
+            { getMainWindow: () => main, getLoginWindow: () => null },
+        );
+
+        expect([...channels.keys()].sort()).toEqual(['open-external-url', 'refresh-menu', 'reload-window']);
+        await expect(channels.get('reload-window')(undefined)).resolves.toEqual({ success: true });
+        expect(main.reload).toHaveBeenCalled();
+    });
+});

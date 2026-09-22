@@ -36,14 +36,15 @@ const PAGINATE_BUDGET_MS = 20_000;
  *
  * @param {string|number} challengeId
  * @param {string} token
- * @param {{limit: number, start: number, search?: string, usage?: string}} opts
+ * @param {{limit: number, start: number, search?: string, usage: string}} opts
  *   usage: the library view the server filters `permission.allowed` for —
- *   'submit' (default, adding a new entry) or 'swap' (replacing an entry).
+ *   'submit' (adding a new entry) or 'swap' (replacing an entry); the caller
+ *   always normalizes it to one of the two.
  * @returns {Promise<Array<object>|null>} the page's items, or null when the
  *   response was missing/malformed (the caller decides whether that ends a
  *   paginated run or is simply an empty result).
  */
-const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage = 'submit' }) => {
+const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage }) => {
     const headers = createWebHeaders(token);
     const params = [
         `c_id=${encodeURIComponent(String(challengeId))}`,

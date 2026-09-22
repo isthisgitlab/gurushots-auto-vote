@@ -780,7 +780,10 @@ const makeFallbackLogger = (prefix, challenge, logger) => {
         if (Array.isArray(excludedStems) && excludedStems.length > 0) {
             reasons.push(`every eligible photo shows what the title excludes (${excludedStems.join(', ')})`);
         }
-        const why = reasons.join('; ') || 'a hard filter matched no photo';
+        // photoPicker only fires onFallback with at least one reason set (a
+        // must-tag / letter filter, or a negated title's stems), so `why` is
+        // never empty.
+        const why = reasons.join('; ');
         logger
             .withCategory('autoFill')
             .warning(
@@ -852,16 +855,12 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
 
     // Every contested entry shares the boundary's theme tuple (that is what
     // selectEnrichmentSet selected them on), so one of them settles whether this
-    // tie is "all matched equally" or "none matched at all".
-    //
-    // The guard is not reachable today — `explained.length === 0` already
-    // returned above, and explained is a subset of contestedEntries — but it is
-    // one line and it removes a nasty failure mode if either invariant is ever
-    // refactored: this function runs INSIDE the try around submitToChallenge, so
-    // a TypeError here would be reported as 'submit-threw' for a submission that
-    // had already succeeded.
-    const sample = contestedEntries[0];
-    if (!sample) return;
+    // tie is "all matched equally" or "none matched at all". Sampled from
+    // `explained` (non-empty past the early return above, and a subset of the
+    // contested entries) so it is always defined: this function runs INSIDE the
+    // try around submitToChallenge, where a TypeError would be misreported as
+    // 'submit-threw' for a submission that had already succeeded.
+    const sample = explained[0];
     // Predicate owned by photoPicker, which owns the tier list it reads. Stating
     // it by hand here would silently rot the day a tier is added or reordered —
     // and the regression would be exactly the bug this branch exists to fix.
@@ -983,11 +982,11 @@ const scoreFillCandidates = async ({
             if (!fresh) continue;
             entry.statsKnown = fresh.statsKnown === true;
             if (entry.statsKnown) {
-                entry.votes = Number.isFinite(fresh.votes) ? fresh.votes : entry.votes;
-                entry.views = Number.isFinite(fresh.views) ? fresh.views : entry.views;
-                entry.achievementCount = Number.isFinite(fresh.achievementCount)
-                    ? fresh.achievementCount
-                    : entry.achievementCount;
+                // enrichCandidates only marks statsKnown on entries whose three
+                // fields it has already coerced to finite non-negative integers.
+                entry.votes = fresh.votes;
+                entry.views = fresh.views;
+                entry.achievementCount = fresh.achievementCount;
             }
         }
     }
@@ -1087,8 +1086,6 @@ const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => 
  *   - onEmptyPick(eligible) → replaces the default
  *     "`label`: no eligible photos" info line; its return value comes back
  *     as `detail` (manual fill derives its user-facing error string here).
- *   - guardPick(picked) → truthy to abort after the pick but before the
- *     refresh/submit (fill-new's defensive empty-image-id check).
  *   - onRefreshed(picked) → runs after refreshChallengeState returns
  *     'refreshed'; return { standDown: true } to abort, { picked } to
  *     replace the batch (emergency fill truncates to the fresh free-slot
@@ -1106,14 +1103,12 @@ const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => 
  *   fillWithoutTagMatch: *,
  *   probeStandDown?: (function({eligible: Array<object>, semanticScores: Map<string, {score: number, support: number}>|null}): boolean)|null,
  *   onEmptyPick?: (function(Array<object>): *)|null,
- *   guardPick?: (function(Array<string>): boolean)|null,
  *   onRefreshed?: (function(Array<string>): ({standDown?: boolean, picked?: Array<string>}|null))|null,
  * }} params
  * @returns {Promise<
  *   {status: 'fetch-error', error: *}
  *   | {status: 'probe-stand-down'}
  *   | {status: 'no-pick', detail: *}
- *   | {status: 'bad-pick'}
  *   | {status: 'gone'}
  *   | {status: 'refresh-stand-down'}
  *   | {status: 'submitted', picked: Array<string>}
@@ -1132,7 +1127,6 @@ const runFillAttempt = async ({
     fillWithoutTagMatch,
     probeStandDown = null,
     onEmptyPick = null,
-    guardPick = null,
     onRefreshed = null,
 }) => {
     const { logger, submitToChallenge } = deps;
@@ -1175,10 +1169,6 @@ const runFillAttempt = async ({
             .withCategory('autoFill')
             .info(`${label}: no eligible photos for ${logger.challengeTag(challenge)}`, null);
         return { status: 'no-pick', detail: null };
-    }
-
-    if (guardPick && guardPick(picked)) {
-        return { status: 'bad-pick' };
     }
 
     // Live re-check just before consuming a slot: the pass-start snapshot can
@@ -1273,7 +1263,8 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         // allows. WARNING (not debug/info, which are compiled out of packaged
         // builds — see makeFallbackLogger) so a real user has a trace for why
         // those slots stay empty until emergency fill.
-        const max = Number.isFinite(challenge.max_photo_submits) ? challenge.max_photo_submits : 0;
+        // Finite: the slotsRemaining > 0 guard above is false for a non-finite max.
+        const max = challenge.max_photo_submits;
         // Highest target the schedule can ever demand = the target as time
         // runs out (secondsRemaining → 0 matches every row), so reuse
         // resolveScheduleTarget instead of re-deriving the clamp-and-max here.
@@ -1334,10 +1325,10 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
     // maps back to the original image number that set the current
     // target), not the entry number: during catch-up the entry being
     // submitted may sit on an off row and was never scheduled itself.
-    // Sanitize max before it reaches the log line: the challenge object
-    // is untrusted API shape, and interpolating the raw field would let
-    // a malformed value (e.g. a string with newlines) forge log lines.
-    const maxSubmits = Number.isFinite(challenge.max_photo_submits) ? challenge.max_photo_submits : 0;
+    // Safe to interpolate into the log line: the slotsRemaining > 0 guard at
+    // the top already proved max_photo_submits is a finite number (a malformed
+    // value — e.g. a string with newlines — returns 'skipped' there).
+    const maxSubmits = challenge.max_photo_submits;
     const shift = getScheduleShift(getValidScheduleRows(schedule), maxSubmits);
     const shiftNote =
         shift > 0
@@ -1708,16 +1699,6 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
-        guardPick: (picked) => {
-            if (picked[0]) return false;
-            // Defensive: pickPhotosForChallenge only returns truthy ids, but guard
-            // so an empty value never propagates to the boost/turbo image_id —
-            // applyBoostToEntry has no own null-guard (unlike applyTurbo).
-            logger
-                .withCategory('autoFill')
-                .info(`fillNew: picked an empty photo id for ${logger.challengeTag(challenge)}`, null);
-            return true;
-        },
         // Live re-check just before consuming a slot: an entry added outside
         // this run (e.g. a manual submission) may have filled the challenge
         // since the pass-start snapshot; callers fall back to acting on an
@@ -1736,7 +1717,7 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
         },
     });
     if (attempt.status === 'fetch-error') return { ok: false, imageId: null, reason: 'fetch-error' };
-    if (attempt.status === 'no-pick' || attempt.status === 'bad-pick') {
+    if (attempt.status === 'no-pick') {
         return { ok: false, imageId: null, reason: 'no-eligible' };
     }
     if (attempt.status === 'gone') return { ok: false, imageId: null, reason: 'challenge-gone' };
@@ -1747,6 +1728,10 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
     // the returned id themselves (autoFill.reflectNewEntry(challenge,
     // filled.imageId) after a successful return); reflecting here too would
     // duplicate the entry. See runFillAttempt's header.
+    //
+    // Always a truthy id: buildScoredCandidates drops every photo without one
+    // before scoring, so finalizePick can only return real ids — which matters
+    // because applyBoostToEntry has no null-guard of its own.
     const imageId = attempt.picked[0];
     logger
         .withCategory('autoFill')

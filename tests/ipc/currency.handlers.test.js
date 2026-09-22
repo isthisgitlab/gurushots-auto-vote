@@ -200,3 +200,85 @@ describe('swap back channels', () => {
         expect(currencyActions.swapBack.mock.calls[0][3].ledger).not.toBe(swapBackLedger);
     });
 });
+
+describe('preview-swap-photo edge cases', () => {
+    test('expired previews are pruned when a new preview is remembered', async () => {
+        const realNow = Date.now;
+        try {
+            await handlers['preview-swap-photo'](null, 11, 'pruned');
+            // Remembering a new preview after the TTL sweeps the expired one out.
+            Date.now = () => realNow() + 5 * 60 * 1000 + 1;
+            await handlers['preview-swap-photo'](null, 11, 'fresh');
+        } finally {
+            Date.now = realNow;
+        }
+        // Back at real time the pruned entry would still be within its TTL —
+        // stale-candidate here proves it was deleted, not merely expired.
+        expect((await handlers['swap-entry-photo'](null, 11, 'pruned', 'new1', true)).outcome).toBe('stale-candidate');
+        expect((await handlers['swap-entry-photo'](null, 11, 'fresh', 'new1', true)).success).toBe(true);
+    });
+
+    test('auth failure returns the guard response without previewing', async () => {
+        auth.requireAuthToken = jest
+            .fn()
+            .mockReturnValue({ ok: false, response: { success: false, error: 'no token' } });
+        expect(await handlers['preview-swap-photo'](null, 10, 'old')).toEqual({ success: false, error: 'no token' });
+        expect(currencyActions.previewSwap).not.toHaveBeenCalled();
+    });
+
+    test('a thrown preview error maps to api-failed and is not remembered', async () => {
+        currencyActions.previewSwap.mockRejectedValueOnce(new Error('network'));
+        expect(await handlers['preview-swap-photo'](null, 12, 'old')).toEqual({
+            success: false,
+            outcome: 'api-failed',
+            error: 'api-failed',
+        });
+        expect((await handlers['swap-entry-photo'](null, 12, 'old', 'new1', true)).outcome).toBe('stale-candidate');
+    });
+
+    test('a preview without a candidate is a failure', async () => {
+        currencyActions.previewSwap.mockResolvedValueOnce({ ok: true, outcome: 'ok' });
+        expect((await handlers['preview-swap-photo'](null, 13, 'old')).success).toBe(false);
+    });
+});
+
+describe('get-swap-backs listing', () => {
+    beforeEach(() => {
+        apiFactory.getApiStrategy = jest.fn().mockReturnValue({ getStrategyType: () => 'MockAPI' });
+    });
+
+    test('lists only the public fields of a recorded boosted original', async () => {
+        currencyActions.swapEntry.mockImplementationOnce(async (challengeId, imageId, newImageId, _token, deps) => {
+            deps.ledger.onSwapped(challengeId, { id: imageId, boosted: true, member_id: 'mem' }, newImageId);
+            return OK;
+        });
+        await handlers['preview-swap-photo'](null, 77, 'orig');
+        await handlers['swap-entry-photo'](null, 77, 'orig', 'new1', true);
+
+        expect(await handlers['get-swap-backs'](null, 77)).toEqual({
+            success: true,
+            items: [{ currentId: 'new1', previousId: 'orig', previousMemberId: 'mem', kind: 'boost' }],
+        });
+    });
+
+    test('returns an empty api-failed envelope when the strategy lookup throws', async () => {
+        apiFactory.getApiStrategy = jest.fn(() => {
+            throw new Error('settings corrupt');
+        });
+        expect(await handlers['get-swap-backs'](null, 77)).toEqual({
+            success: false,
+            items: [],
+            error: 'api-failed',
+        });
+    });
+});
+
+describe('register', () => {
+    test('registers every currency channel on ipcMain', async () => {
+        const { register } = require('../../src/js/ipc/currency.handlers');
+        const channels = new Map();
+        register({ handle: (channel, impl) => channels.set(channel, impl) });
+        expect([...channels.keys()].sort()).toEqual(Object.keys(handlers).sort());
+        expect((await channels.get('fill-exposure')(undefined, 10, false)).outcome).toBe('needs-confirm');
+    });
+});

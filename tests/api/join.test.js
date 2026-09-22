@@ -88,4 +88,12 @@ describe('getBankroll', () => {
         makePostRequest.mockResolvedValueOnce({ success: true, bankroll: {} });
         expect(await getBankroll(token)).toBeNull();
     });
+
+    test('skips null entries and zeroes a non-numeric amount', async () => {
+        makePostRequest.mockResolvedValueOnce({
+            success: true,
+            bankroll: { challenges: [null, { type: 'KEYS', amount: 'lots' }, { type: 'COINS', amount: '12' }] },
+        });
+        expect(await getBankroll(token)).toEqual({ keys: 0, swaps: 0, fills: 0, coins: 12 });
+    });
 });

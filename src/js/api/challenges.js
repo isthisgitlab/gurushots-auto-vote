@@ -49,7 +49,7 @@ const fetchActiveChallenges = async (token) => {
     logger.withCategory('api').debug('Active challenges response received', {
         challengeCount,
         hasValidStructure: !!response.challenges,
-        responseKeys: Object.keys(response || {}),
+        responseKeys: Object.keys(response),
     });
 
     logger.withCategory('api').endOperation(operationId, `retrieved ${challengeCount} challenges`);

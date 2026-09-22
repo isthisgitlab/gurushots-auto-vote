@@ -17,13 +17,14 @@ const { pickBoostEntry } = require('../services/VotingLogic');
  * helper is local to boost only — not shared with turbo.
  *
  * Uses URLSearchParams for RFC-compliant application/x-www-form-urlencoded
- * encoding (space → `+`, reserved chars percent-encoded). Callers must pass
- * already-normalized string values; non-string inputs are stringified.
+ * encoding (space → `+`, reserved chars percent-encoded). Both callers
+ * normalize their ids first (applyBoost stringifies and guards the entry id,
+ * applyBoostToEntry maps null/undefined to ''), so values arrive as-is.
  */
 const _postBoost = async (challengeId, imageId, token) => {
     const data = new URLSearchParams({
-        c_id: String(challengeId ?? ''),
-        image_id: String(imageId ?? ''),
+        c_id: String(challengeId),
+        image_id: String(imageId),
     }).toString();
     const headers = {
         ...createCommonHeaders(token),

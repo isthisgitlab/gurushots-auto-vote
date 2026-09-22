@@ -37,8 +37,6 @@ describe('time-unit migration in loadSettings', () => {
         jest.resetModules();
         jest.clearAllMocks();
         // Ensure no autovote-running flag bleeds across tests
-        if (typeof global !== 'undefined') delete global.autovoteRunning;
-        if (typeof globalThis !== 'undefined') delete globalThis.autovoteRunning;
         // Re-require fs *after* resetModules so we share the fresh mock
         // instance that settings.js will see.
         fs = require('node:fs');
@@ -209,8 +207,6 @@ describe('emergencyFill minute->second migration in loadSettings', () => {
     beforeEach(() => {
         jest.resetModules();
         jest.clearAllMocks();
-        if (typeof global !== 'undefined') delete global.autovoteRunning;
-        if (typeof globalThis !== 'undefined') delete globalThis.autovoteRunning;
         fs = require('node:fs');
         settings = require('../../src/js/settings');
     });

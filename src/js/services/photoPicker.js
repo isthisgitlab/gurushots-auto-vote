@@ -511,10 +511,10 @@ const PEOPLE_LABEL_STEMS = new Set(
  * reads, or null when the title negates nothing.
  *
  * @param {object} challenge
- * @param {Iterable<string>|null} [ignoreWords]
+ * @param {Iterable<string>|null} ignoreWords
  * @returns {{stems: string[], concept: Set<string>|null}|null}
  */
-const excludedSubjectOf = (challenge, ignoreWords = null) => {
+const excludedSubjectOf = (challenge, ignoreWords) => {
     const { stems, active } = parseNegation(challenge?.title, ignoreWords);
     if (!active) return null;
     return { stems, concept: stems.some((s) => PEOPLE_LABEL_STEMS.has(s)) ? PEOPLE_LABEL_STEMS : null };
@@ -820,9 +820,10 @@ const detectLetterPrefix = (title) => {
     if (!m) return null;
     // Each pattern captures the letter in a different group (LETTER_NAMED_RE has
     // one per quoted/bare branch, only one of which participates), so read the
-    // first group that actually matched rather than hard-coding an index.
-    const letter = m.slice(1).find((g) => typeof g === 'string' && g.length === 1);
-    return letter ? letter.toLowerCase() : null;
+    // first group that actually matched rather than hard-coding an index. Every
+    // match has exactly one participating `([a-z])` group, so this always finds it.
+    const letter = /** @type {string} */ (m.slice(1).find((g) => typeof g === 'string' && g.length === 1));
+    return letter.toLowerCase();
 };
 
 /**

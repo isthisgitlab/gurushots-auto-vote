@@ -42,8 +42,6 @@ describe('last-hour → final-window key rename migration in loadSettings', () =
     beforeEach(() => {
         jest.resetModules();
         jest.clearAllMocks();
-        if (typeof global !== 'undefined') delete global.autovoteRunning;
-        if (typeof globalThis !== 'undefined') delete globalThis.autovoteRunning;
         fs = require('node:fs');
         settings = require('../../src/js/settings');
     });

@@ -277,3 +277,150 @@ describe('should-cancel-voting and set-cancel-voting', () => {
         expect(result).toBe(true);
     });
 });
+
+describe('manual single-challenge vote — manual-only paths', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    test('rejects when no token configured', async () => {
+        setToken(null);
+        const result = await buildHandlers()['vote-on-challenge-manual']({}, '123', 'Title');
+        expect(result).toEqual({ success: false, error: 'No authentication token found' });
+    });
+
+    test('returns failure when the challenges fetch has no list', async () => {
+        setToken('tok');
+        const strategy = { getActiveChallenges: jest.fn().mockResolvedValue({}) };
+        apiFactory.getApiStrategy = jest.fn().mockReturnValue(strategy);
+        const result = await buildHandlers()['vote-on-challenge-manual']({}, '123', 'Title');
+        expect(strategy.getActiveChallenges).toHaveBeenCalledWith('tok');
+        expect(result).toEqual({ success: false, error: 'Failed to fetch challenges' });
+    });
+
+    test('succeeds when no vote images are available', async () => {
+        setToken('tok');
+        const challenge = buildChallenge({ id: 123, title: 'C' });
+        const strategy = stubStrategy([challenge]);
+        manualVote.submitVotesForChallenge.mockResolvedValue({ outcome: 'no-images' });
+        const result = await buildHandlers()['vote-on-challenge-manual']({}, 123, 'C');
+        expect(manualVote.submitVotesForChallenge).toHaveBeenCalledWith(challenge, strategy, 'tok', expect.any(Number));
+        expect(result).toEqual({ success: true, message: 'Successfully voted on challenge "C" manually' });
+    });
+});
+
+describe('error envelopes — handlers never throw to the renderer', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    const throwingMiddleware = (err) => {
+        apiFactory.getMiddleware = jest.fn().mockReturnValue({
+            runVotingCycle: jest.fn().mockRejectedValue(err),
+            guiVote: jest.fn().mockRejectedValue(err),
+        });
+    };
+
+    test.each([
+        ['its message', new Error('cycle broke'), 'cycle broke'],
+        ['the generic fallback', new Error(''), 'Failed to run voting cycle'],
+    ])('run-voting-cycle returns %s when the middleware rejects', async (_label, err, expected) => {
+        throwingMiddleware(err);
+        await expect(buildHandlers()['run-voting-cycle']()).resolves.toEqual({ success: false, error: expected });
+    });
+
+    test.each([
+        ['its message', new Error('cycle broke'), 'cycle broke'],
+        ['the generic fallback', new Error(''), 'Failed to run voting cycle'],
+    ])('run-voting-cycle-for-challenge returns %s when the middleware rejects', async (_label, err, expected) => {
+        throwingMiddleware(err);
+        await expect(buildHandlers()['run-voting-cycle-for-challenge']({}, 7)).resolves.toEqual({
+            success: false,
+            error: expected,
+        });
+    });
+
+    test('gui-vote uses the generic fallback when the error has no message', async () => {
+        setToken('tok');
+        throwingMiddleware(new Error(''));
+        await expect(buildHandlers()['gui-vote']()).resolves.toEqual({
+            success: false,
+            error: 'Failed to load challenges',
+        });
+    });
+
+    test.each([
+        ['its message', new Error('vote-all broke'), 'vote-all broke'],
+        ['the generic fallback', new Error(''), 'Failed to vote on all challenges manually'],
+    ])('vote-all-challenges-manual returns %s when the loop throws', async (_label, err, expected) => {
+        setToken('tok');
+        stubStrategy([buildChallenge({ id: 1 })]);
+        manualVote.voteAllChallengesManual.mockRejectedValue(err);
+        await expect(buildHandlers()['vote-all-challenges-manual']()).resolves.toEqual({
+            success: false,
+            error: expected,
+        });
+    });
+
+    test.each([
+        ['vote-on-challenge', new Error('fetch broke'), 'fetch broke'],
+        ['vote-on-challenge', new Error(''), 'Failed to vote on challenge'],
+        ['vote-on-challenge-manual', new Error('fetch broke'), 'fetch broke'],
+        ['vote-on-challenge-manual', new Error(''), 'Failed to vote on challenge manually'],
+    ])('%s returns the error envelope when the fetch rejects', async (channel, err, expected) => {
+        setToken('tok');
+        apiFactory.getApiStrategy = jest
+            .fn()
+            .mockReturnValue({ getActiveChallenges: jest.fn().mockRejectedValue(err) });
+        await expect(buildHandlers()[channel]({}, '123', 'C')).resolves.toEqual({ success: false, error: expected });
+    });
+});
+
+describe('vote-all-challenges-manual progress callback', () => {
+    beforeEach(() => jest.clearAllMocks());
+
+    test('the forwarded onProgress reports progress through the voting logger', async () => {
+        // logger is the global jest.fn() mock from tests/setup.js; swap its
+        // implementation and put the original back (spyOn + mockRestore would
+        // strip the setup implementation and break later tests).
+        const logger = require('../../src/js/logger');
+        const progress = jest.fn();
+        const originalImpl = logger.withCategory.getMockImplementation();
+        logger.withCategory.mockImplementation(() => ({
+            info: jest.fn(),
+            warning: jest.fn(),
+            success: jest.fn(),
+            error: jest.fn(),
+            debug: jest.fn(),
+            progress,
+        }));
+        try {
+            setToken('tok');
+            const challenge = buildChallenge({ id: 1, title: 'Alpha' });
+            stubStrategy([challenge]);
+            manualVote.voteAllChallengesManual.mockImplementation(async (list, _s, _t, { onProgress }) => {
+                onProgress(1, list.length, list[0]);
+                return { voted: 1, skipped: 0, total: 1 };
+            });
+
+            const result = await buildHandlers()['vote-all-challenges-manual']();
+
+            expect(progress).toHaveBeenCalledWith('Processing challenge 1/1: Alpha', 1, 1);
+            expect(result).toEqual({
+                success: true,
+                message: 'Manual vote all completed: 1 voted, 0 skipped out of 1 challenges',
+                stats: { total: 1, voted: 1, skipped: 0 },
+            });
+        } finally {
+            logger.withCategory.mockImplementation(originalImpl);
+        }
+    });
+});
+
+describe('register', () => {
+    test('registers every voting channel on ipcMain', () => {
+        const { register } = require('../../src/js/ipc/voting.handlers');
+        const channels = new Map();
+        register({ handle: (channel, impl) => channels.set(channel, impl) });
+        expect([...channels.keys()].sort()).toEqual(Object.keys(buildHandlers()).sort());
+
+        cancellation.isCancelled = jest.fn().mockReturnValue(false);
+        expect(channels.get('should-cancel-voting')(undefined)).toBe(false);
+    });
+});

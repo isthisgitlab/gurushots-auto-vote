@@ -111,3 +111,28 @@ describe('registerHandlers applies the check to every channel', () => {
         expect(result).toBe('ok');
     });
 });
+
+describe('registerHandlers refusal logging', () => {
+    test('refuses a non-main frame that has no url (logged as <unknown>)', async () => {
+        const logger = require('../../src/js/logger');
+        const warning = jest.fn();
+        // Swap (then restore) the setup-mock implementation rather than spyOn +
+        // mockRestore, which would strip it for every later test.
+        const originalImpl = logger.withCategory.getMockImplementation();
+        logger.withCategory.mockImplementation(() => ({ warning }));
+        try {
+            const channels = new Map();
+            const impl = jest.fn();
+            registerHandlers({ handle: (channel, fn) => channels.set(channel, fn) }, { 'do-thing': impl });
+
+            const event = { senderFrame: {}, sender: { mainFrame: { url: 'file:///app/index.html' } } };
+            const result = await channels.get('do-thing')(event);
+
+            expect(result).toEqual({ success: false, error: 'Refused: untrusted sender' });
+            expect(impl).not.toHaveBeenCalled();
+            expect(warning).toHaveBeenCalledWith("Refused IPC 'do-thing' from untrusted frame <unknown>", null);
+        } finally {
+            logger.withCategory.mockImplementation(originalImpl);
+        }
+    });
+});

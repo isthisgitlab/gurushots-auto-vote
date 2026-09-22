@@ -24,7 +24,7 @@ const { findActiveChallenge } = require('../services/findActiveChallenge');
 // to a single card otherwise. Delegates to BaseMiddleware so the
 // auth-check, cancellation-reset, and IPC-envelope shape live in one
 // place that the gui-vote handler also reaches via guiVote().
-const runStrategyOnceViaMiddleware = (challengeId = null) => apiFactory.getMiddleware().runVotingCycle(challengeId);
+const runStrategyOnceViaMiddleware = (challengeId) => apiFactory.getMiddleware().runVotingCycle(challengeId);
 
 // Single-target vote entry shared by vote-on-challenge and
 // vote-on-challenge-manual. The two channels carried slightly different

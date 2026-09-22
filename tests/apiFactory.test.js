@@ -237,6 +237,24 @@ describe('apiFactory', () => {
             // the Object.fromEntries construction.
             expect(Object.keys(mockApi).sort()).toEqual(Object.keys(realApi).sort());
         });
+
+        test('module load fails fast when mockApiClient lacks a realApi method', () => {
+            // Explicit jest.mock factories are shared with isolated registries, so
+            // temporarily drop the method from the shared mock client and re-load
+            // only apiFactory in isolation.
+            const { mockApiClient } = require('../src/js/mock');
+            const saved = mockApiClient.keyUnlock;
+            delete mockApiClient.keyUnlock;
+            try {
+                jest.isolateModules(() => {
+                    expect(() => require('../src/js/apiFactory')).toThrow(
+                        "mockApiClient is missing a 'keyUnlock' implementation for the realApi surface",
+                    );
+                });
+            } finally {
+                mockApiClient.keyUnlock = saved;
+            }
+        });
     });
 
     describe('mock surface debug wrapper', () => {

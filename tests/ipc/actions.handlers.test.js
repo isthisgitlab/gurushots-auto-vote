@@ -512,3 +512,295 @@ describe('get-auto-join-active', () => {
         expect(result).toEqual({ success: false, active: false });
     });
 });
+
+describe('authenticate — error fallback', () => {
+    test('uses the network-error fallback when the thrown error has no message', async () => {
+        apiFactory.getApiStrategy = jest
+            .fn()
+            .mockReturnValue({ authenticate: jest.fn().mockRejectedValue(new Error('')) });
+        const handlers = buildHandlers();
+        const result = await handlers.authenticate({}, 'u', 'p', false);
+        expect(result).toEqual({ success: false, error: 'Authentication failed due to network error' });
+    });
+});
+
+describe('play-auto-turbo — manual bypass and result shaping', () => {
+    const liveTurboChallenge = (overrides = {}) => ({
+        id: 123,
+        title: 'Live Title',
+        close_time: NOW() + 3600,
+        member: { turbo: { state: 'FREE' } },
+        ...overrides,
+    });
+
+    test('allows play when a TIMER cooldown has already elapsed', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'TIMER', time_to_open: NOW() - 10 } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        strategy.runTurboMiniGame.mockResolvedValue({ played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 });
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({
+            success: true,
+            result: { played: 3, correct: 3, won: true, flipped: 0, doubleFailed: 0 },
+        });
+    });
+
+    test('refuses a TIMER whose cooldown has not elapsed yet', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ member: { turbo: { state: 'TIMER', time_to_open: NOW() + 600 } } })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: false, error: 'Turbo not playable (state=TIMER)' });
+        expect(strategy.runTurboMiniGame).not.toHaveBeenCalled();
+    });
+
+    test('reports state=unknown when the challenge has no turbo state', async () => {
+        setToken('tok');
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveTurboChallenge({ member: {} })] }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: false, error: 'Turbo not playable (state=unknown)' });
+    });
+
+    test('refuses a playable turbo on a challenge that has already closed', async () => {
+        setToken('tok');
+        stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({
+                challenges: [liveTurboChallenge({ close_time: NOW() - 1 })],
+            }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(false);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: false, error: 'Turbo not playable (state=FREE)' });
+    });
+
+    test('falls back to the caller title, then a generic label, when the live challenge has none', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveTurboChallenge({ title: '' })] }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        strategy.runTurboMiniGame.mockResolvedValue({ played: 1, correct: 1 });
+        const handlers = buildHandlers();
+
+        await handlers['play-auto-turbo']({}, '123', 'Caller Title');
+        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith({ id: 123, title: 'Caller Title' }, 'tok');
+
+        await handlers['play-auto-turbo']({}, '123', undefined);
+        expect(strategy.runTurboMiniGame).toHaveBeenLastCalledWith({ id: 123, title: 'challenge 123' }, 'tok');
+    });
+
+    test('a null mini-game result is reported as not earned with a null result', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [liveTurboChallenge()] }),
+        });
+        votingLogic.shouldPlayAutoTurbo = jest.fn().mockReturnValue(true);
+        strategy.runTurboMiniGame.mockResolvedValue(null);
+        const handlers = buildHandlers();
+        const result = await handlers['play-auto-turbo']({}, '123', 'C');
+        expect(result).toEqual({ success: false, error: 'Turbo not earned — try again later', result: null });
+    });
+
+    test('a throw inside the critical section releases the in-flight slot', async () => {
+        setToken('tok');
+        const strategy = stubStrategy({
+            getActiveChallenges: jest.fn().mockRejectedValue(new Error('fetch failed')),
+        });
+        const handlers = buildHandlers();
+
+        await expect(handlers['play-auto-turbo']({}, '123', 'C')).resolves.toEqual({
+            success: false,
+            error: 'fetch failed',
+        });
+        // Second call is not rejected as "already in progress".
+        await expect(handlers['play-auto-turbo']({}, '123', 'C')).resolves.toEqual({
+            success: false,
+            error: 'fetch failed',
+        });
+        expect(strategy.getActiveChallenges).toHaveBeenCalledTimes(2);
+    });
+
+    test('uses the generic fallback when a pre-flight error has no message', async () => {
+        settings.loadSettings = jest.fn(() => {
+            throw new Error('');
+        });
+        const handlers = buildHandlers();
+        await expect(handlers['play-auto-turbo']({}, '123', 'C')).resolves.toEqual({
+            success: false,
+            error: 'Failed to run turbo mini-game',
+        });
+    });
+});
+
+describe('apply-turbo-to-entry — error fallback', () => {
+    test('uses the generic fallback when applyTurbo throws without a message', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ applyTurbo: jest.fn().mockRejectedValue(new Error('')) });
+        const handlers = buildHandlers();
+        await expect(handlers['apply-turbo-to-entry']({}, '123', 'i1')).resolves.toEqual({
+            success: false,
+            error: 'Failed to apply turbo',
+        });
+    });
+});
+
+describe('fill-challenge-now — result shapes and errors', () => {
+    const stubLive = () =>
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 123 }] }) });
+
+    test('uses the singular form for exactly one submitted entry', async () => {
+        stubAuthGuardOk();
+        stubLive();
+        autoFill.fillChallengeNow = jest.fn().mockResolvedValue({ success: true, submitted: 1, skipped: 0 });
+        const result = await buildHandlers()['fill-challenge-now']({}, '123', 'one');
+        expect(result.message).toBe('Submitted 1 entry');
+    });
+
+    test('forwards a failed fill without a success message', async () => {
+        stubAuthGuardOk();
+        stubLive();
+        autoFill.fillChallengeNow = jest
+            .fn()
+            .mockResolvedValue({ success: false, submitted: 0, skipped: 2, error: 'No eligible photos' });
+        const result = await buildHandlers()['fill-challenge-now']({}, '123', 'all');
+        expect(result).toEqual({
+            success: false,
+            submitted: 0,
+            skipped: 2,
+            error: 'No eligible photos',
+            message: undefined,
+        });
+    });
+
+    test.each([
+        ['its message', new Error('fill blew up'), 'fill blew up'],
+        ['the generic fallback', new Error(''), 'Failed to fill challenge'],
+    ])('returns %s when the fill throws', async (_label, err, expected) => {
+        stubAuthGuardOk();
+        stubLive();
+        autoFill.fillChallengeNow = jest.fn().mockRejectedValue(err);
+        await expect(buildHandlers()['fill-challenge-now']({}, '123', 'one')).resolves.toEqual({
+            success: false,
+            error: expected,
+        });
+    });
+});
+
+describe('apply-boost-to-entry — errors', () => {
+    test.each([
+        ['its message', new Error('rate limited'), 'rate limited'],
+        ['the generic fallback', new Error(''), 'Failed to apply boost'],
+    ])('returns %s when applyBoostToEntry throws', async (_label, err, expected) => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({ applyBoostToEntry: jest.fn().mockRejectedValue(err) });
+        await expect(buildHandlers()['apply-boost-to-entry']({}, '123', 'i1')).resolves.toEqual({
+            success: false,
+            error: expected,
+        });
+        expect(strategy.applyBoostToEntry).toHaveBeenCalledWith('123', 'i1', 'tok');
+    });
+});
+
+describe('get-bankroll — errors', () => {
+    test.each([
+        ['its message', new Error('timeout'), 'timeout'],
+        ['the generic fallback', new Error(''), 'Failed to read bankroll'],
+    ])('returns %s when getBankroll throws', async (_label, err, expected) => {
+        stubAuthGuardOk();
+        stubStrategy({ getBankroll: jest.fn().mockRejectedValue(err) });
+        await expect(buildHandlers()['get-bankroll']({})).resolves.toEqual({ success: false, error: expected });
+    });
+});
+
+describe('get-member-challenges — filter, shape and errors', () => {
+    test('returns the auth guard response when not authenticated', async () => {
+        stubAuthGuardFail();
+        await expect(buildHandlers()['get-member-challenges']({})).resolves.toEqual({
+            success: false,
+            error: 'No authentication token found',
+        });
+    });
+
+    test('passes an explicit filter through and coerces a non-array result to []', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({ getMemberChallenges: jest.fn().mockResolvedValue(null) });
+        const result = await buildHandlers()['get-member-challenges']({}, 'all');
+        expect(strategy.getMemberChallenges).toHaveBeenCalledWith('tok', 'all');
+        expect(result).toEqual({ success: true, items: [] });
+    });
+
+    test.each([
+        ['its message', new Error('503'), '503'],
+        ['the generic fallback', new Error(''), 'Failed to list challenges'],
+    ])('returns %s with an empty list when listing throws', async (_label, err, expected) => {
+        stubAuthGuardOk();
+        stubStrategy({ getMemberChallenges: jest.fn().mockRejectedValue(err) });
+        await expect(buildHandlers()['get-member-challenges']({})).resolves.toEqual({
+            success: false,
+            items: [],
+            error: expected,
+        });
+    });
+});
+
+describe('join-challenge — guard and errors', () => {
+    test('returns the auth guard response when not authenticated', async () => {
+        stubAuthGuardFail();
+        const strategy = stubStrategy({ joinChallenge: jest.fn() });
+        await expect(buildHandlers()['join-challenge']({}, 5, true)).resolves.toEqual({
+            success: false,
+            error: 'No authentication token found',
+        });
+        expect(strategy.joinChallenge).not.toHaveBeenCalled();
+    });
+
+    test('treats a truthy non-boolean spendCoins as false', async () => {
+        stubAuthGuardOk();
+        const strategy = stubStrategy({ joinChallenge: jest.fn().mockResolvedValue(null) });
+        const result = await buildHandlers()['join-challenge']({}, 5, 'yes');
+        expect(strategy.joinChallenge).toHaveBeenCalledWith(5, false, 'tok');
+        expect(result.success).toBe(false);
+    });
+
+    test.each([
+        ['its message', new Error('insufficient coins'), 'insufficient coins'],
+        ['the generic fallback', new Error(''), 'Failed to join challenge'],
+    ])('returns %s when joining throws', async (_label, err, expected) => {
+        stubAuthGuardOk();
+        stubStrategy({ joinChallenge: jest.fn().mockRejectedValue(err) });
+        await expect(buildHandlers()['join-challenge']({}, 5, true)).resolves.toEqual({
+            success: false,
+            error: expected,
+        });
+    });
+});
+
+describe('register', () => {
+    test('registers every action channel on ipcMain', async () => {
+        const { register } = require('../../src/js/ipc/actions.handlers');
+        const channels = new Map();
+        register({ handle: (channel, impl) => channels.set(channel, impl) });
+        expect([...channels.keys()].sort()).toEqual(Object.keys(buildHandlers()).sort());
+
+        stubAuthGuardFail();
+        await expect(channels.get('get-bankroll')(undefined)).resolves.toEqual({
+            success: false,
+            error: 'No authentication token found',
+        });
+    });
+});

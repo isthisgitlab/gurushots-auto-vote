@@ -136,6 +136,13 @@ describe('submissions', () => {
             expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('reading page 2'), null);
         });
 
+        test('a non-Error rejection is still reported by its value', async () => {
+            makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockRejectedValueOnce('ETIMEDOUT');
+            const photos = await getEligiblePhotos('c1', token, { limit: 2, paginate: true });
+            expect(photos.map((p) => p.id)).toEqual(['p1', 'p2']);
+            expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('failed (ETIMEDOUT)'), null);
+        });
+
         test('a mid-walk malformed page keeps what was fetched and warns', async () => {
             makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockResolvedValueOnce({ nope: true });
             const photos = await getEligiblePhotos('c1', token, { limit: 2, paginate: true });

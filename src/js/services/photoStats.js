@@ -103,12 +103,11 @@ let fetchedThisPass = 0;
 let passCapLogged = false;
 
 // Only ids short enough to be safe cache keys are persisted; see
-// MAX_PHOTO_ID_LENGTH. Returns null for anything unusable.
+// MAX_PHOTO_ID_LENGTH. Both callers pass an already-stringified id (a persisted
+// Object.keys key, or String(photo.id)). Returns null for anything unusable.
 const cacheKeyFor = (id) => {
-    if (id === undefined || id === null) return null;
-    const key = String(id);
-    if (key === '' || key.length > MAX_PHOTO_ID_LENGTH) return null;
-    return key;
+    if (id === '' || id.length > MAX_PHOTO_ID_LENGTH) return null;
+    return id;
 };
 
 const nonNegInt = (value) => {
@@ -210,20 +209,16 @@ const resetPassState = () => {
 const breakerOpen = () => consecutiveFailures >= FAILURE_BREAKER_THRESHOLD || fetchedThisPass >= MAX_ENRICH_PER_PASS;
 
 /**
- * Run `worker` over `items` at most ENRICH_CONCURRENCY at a time.
- * Rejections are contained per item — the returned array mirrors the input.
+ * Run `worker` over `items` at most ENRICH_CONCURRENCY at a time, for its side
+ * effects only. allSettled keeps one item's rejection from aborting the rest
+ * of its chunk.
  */
-const mapChunked = async (items, worker) => {
-    const out = [];
+const forEachChunked = async (items, worker) => {
     for (let i = 0; i < items.length; i += ENRICH_CONCURRENCY) {
         const chunk = items.slice(i, i + ENRICH_CONCURRENCY);
-        const settled = await Promise.allSettled(chunk.map(worker));
-        for (const result of settled) {
-            out.push(result.status === 'fulfilled' ? result.value : null);
-        }
+        await Promise.allSettled(chunk.map(worker));
         if (breakerOpen()) break;
     }
-    return out;
 };
 
 /**
@@ -302,7 +297,7 @@ const enrichCandidates = async (photos, token, deps) => {
     }
 
     if (fetchList.length > 0) {
-        await mapChunked(fetchList, async (photo) => {
+        await forEachChunked(fetchList, async (photo) => {
             if (breakerOpen()) return null;
             const id = String(photo.id);
             fetchedThisPass++;

@@ -65,6 +65,11 @@ describe('api/tags', () => {
             expect(makePostRequest).not.toHaveBeenCalled();
         });
 
+        test('skips the round-trip for a non-string term', async () => {
+            await expect(searchTagAutocomplete(token, 12345, 'c1d1f773')).resolves.toEqual([]);
+            expect(makePostRequest).not.toHaveBeenCalled();
+        });
+
         test('skips the round-trip without a member id', async () => {
             await expect(searchTagAutocomplete(token, 'stair', '')).resolves.toEqual([]);
             expect(makePostRequest).not.toHaveBeenCalled();

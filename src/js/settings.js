@@ -25,7 +25,6 @@ const {
     storage,
     initializeAsync,
     flushPendingWrites,
-    isAutovoteRunning,
     getDefaultMockSetting,
     getUserDataPath,
     getSettingsPath,
@@ -93,17 +92,10 @@ const readRawSettings = () => storage.readRaw();
  * Merge parsed persisted settings over the defaults so all properties
  * exist, and resolve the environment-aware mock default.
  */
-const mergeWithDefaults = (settings) => {
-    // Merge with default settings to ensure all properties exist
-    const mergedSettings = { ...getDefaultSettings(), ...settings };
-
-    // Mock setting can be user-controlled, but default to environment if not set
-    if (mergedSettings.mock === undefined) {
-        mergedSettings.mock = getDefaultMockSetting();
-    }
-
-    return mergedSettings;
-};
+const mergeWithDefaults = (settings) =>
+    // Defaults carry the environment-aware mock value, so a persisted blob
+    // without `mock` (JSON never holds `undefined`) inherits it here.
+    ({ ...getDefaultSettings(), ...settings });
 
 // Migrate buggy-GUI-encoded time values. Pre-fix (versions
 // v0.7.0 through v0.8.2), SettingInput stored boostTime /
@@ -472,16 +464,10 @@ const loadSettings = () => {
             if (!migrationInProgress) {
                 migrationInProgress = true;
                 try {
-                    if (!cleanupCompleted && !isAutovoteRunning()) {
+                    if (!cleanupCompleted) {
                         cleanupObsoleteSettings();
                         cleanupCompleted = true;
-                    } else if (isAutovoteRunning()) {
-                        logger
-                            .withCategory('settings')
-                            .debug('⏸️ Skipping obsolete settings cleanup - autovote is running');
                     }
-                } catch (migrationError) {
-                    logger.withCategory('settings').warning('Cleanup failed:', migrationError);
                 } finally {
                     migrationInProgress = false;
                 }
@@ -528,13 +514,7 @@ const saveSettings = (settings) => {
 
 // Get a specific setting
 const getSetting = (key) => {
-    const settings = loadSettings();
-    if (!settings) {
-        logger.withCategory('settings').warning(`Settings not loaded, returning default for key: ${key}`);
-        const defaultSettings = getDefaultSettings();
-        return defaultSettings[key];
-    }
-    return settings[key];
+    return loadSettings()[key];
 };
 
 // Set a specific setting
@@ -679,7 +659,7 @@ const _ensureChallengeContainer = (settings, challengeId) => {
  * 'set' (override stored), 'cleared' (override removed because it
  * matched the global default).
  */
-const _applyChallengeOverride = (settings, settingKey, challengeId, value, batchOverrides = null) => {
+const _applyChallengeOverride = (settings, settingKey, challengeId, value) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
         logger.withCategory('settings').error(`Invalid setting key: ${settingKey}`, null);
         return 'invalid';
@@ -693,21 +673,17 @@ const _applyChallengeOverride = (settings, settingKey, challengeId, value, batch
     const titleProfile = _getTitleProfileForChallengeId(settings, challengeId);
     const inheritedDefaults = { ...globalDefaults, ...(titleProfile?.values || {}) };
     const existingOverrides = settings.challengeSettings?.perChallenge?.[challengeId] || {};
-    const contextSettings = batchOverrides
-        ? { ...inheritedDefaults, ...existingOverrides, ...batchOverrides }
-        : { ...inheritedDefaults, ...existingOverrides, [settingKey]: value };
-    const candidates = batchOverrides || { [settingKey]: value };
+    const contextSettings = { ...inheritedDefaults, ...existingOverrides, [settingKey]: value };
 
-    if (!_challengeValueSetIsValid(contextSettings, candidates, challengeId)) {
+    if (!_challengeValueSetIsValid(contextSettings, { [settingKey]: value }, challengeId)) {
         logger.withCategory('settings').error(`Invalid value for setting ${settingKey}:`, value);
         return 'invalid';
     }
 
     const container = _ensureChallengeContainer(settings, challengeId);
-    const inheritedValue = Object.prototype.hasOwnProperty.call(inheritedDefaults, settingKey)
-        ? inheritedDefaults[settingKey]
-        : SETTINGS_SCHEMA[settingKey].default;
-    if (!valuesEqual(value, inheritedValue)) {
+    // inheritedDefaults always holds every schema key (_globalChallengeValues
+    // starts from the full schema defaults), and settingKey is schema-checked above.
+    if (!valuesEqual(value, inheritedDefaults[settingKey])) {
         container[settingKey] = value;
         return 'set';
     }
@@ -926,7 +902,8 @@ const _titleForChallengeId = (settings, challengeId) => {
 const unionTags = (base, extra) => {
     const out = [];
     const seen = new Set();
-    for (const list of [Array.isArray(base) ? base : [], Array.isArray(extra) ? extra : []]) {
+    // `extra` is always an array (the caller checks it); only `base` can be null.
+    for (const list of [Array.isArray(base) ? base : [], extra]) {
         for (const tag of list) {
             if (typeof tag !== 'string') continue;
             if (seen.has(tag)) continue;
@@ -1041,7 +1018,6 @@ const ruleSpecificity = (rule) => {
  * @returns {object|null}
  */
 const _findRuleIn = (rules, target) => {
-    if (!Array.isArray(rules)) return null;
     const challenge = typeof target === 'string' ? { title: target } : target;
     const titleKey = normalizeTitle(challenge?.title);
     const tagKeys = normalizeTagList(challenge?.tags);
@@ -1293,11 +1269,9 @@ const _sanitizeTitleRuleTags = (key, value) => {
     return validateSetting(key, list) ? list : null;
 };
 
-const _canonicalTitleRuleProfile = (storedProfiles, requested) => {
-    const name = typeof requested === 'string' ? requested.trim() : '';
-    if (!name) return '';
-    return _findProfileKey(storedProfiles, _normalizeProfileName(name));
-};
+// `requested` is the caller's already-trimmed string ('' = no profile).
+const _canonicalTitleRuleProfile = (storedProfiles, requested) =>
+    requested ? _findProfileKey(storedProfiles, _normalizeProfileName(requested)) : '';
 
 // Identity of a rule's match condition. "\u0000"/"\u0001" cannot occur in a
 // trimmed title or tag, so they are safe separators no user value can forge.
@@ -2065,6 +2039,10 @@ const applyChallengeProfile = (name, challengeId) => {
         return false;
     }
 
+    // Safety net: _sanitizeProfileValues already validated these values against
+    // the same {globals + profile} context, so this only fails if a schema rule
+    // starts depending on the challenge id. Kept so nothing invalid is persisted.
+    /* istanbul ignore if */
     if (!_replaceChallengeOverridesInSettings(settings, id, sanitized, true)) return false;
     return saveSettings(settings);
 };
@@ -2250,7 +2228,9 @@ const cleanupObsoleteSettings = () => {
         // Save cleaned settings if any changes were made
         if (hasChanges) {
             logger.withCategory('settings').debug('Settings cleanup completed - saving cleaned settings');
-            saveSettings(settings);
+            // Write the full cleaned blob directly: saveSettings merges over the
+            // on-disk settings, which would resurrect deleted top-level keys.
+            storage.writeRaw(JSON.stringify(settings, null, 2));
         }
     } catch (error) {
         logger.withCategory('settings').error('Error during settings cleanup:', error);
@@ -2265,20 +2245,14 @@ const cleanupObsoleteSettings = () => {
  * Reset a single setting to its default value
  */
 const resetSetting = (key) => {
-    try {
-        const defaultSettings = getDefaultSettings();
+    const defaultSettings = getDefaultSettings();
 
-        if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
-            logger.withCategory('settings').error(`Invalid setting key: ${key}`, null);
-            return false;
-        }
-
-        const defaultValue = defaultSettings[key];
-        return setSetting(key, defaultValue);
-    } catch (error) {
-        logger.withCategory('settings').error(`Error resetting setting ${key}:`, error);
+    if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
+        logger.withCategory('settings').error(`Invalid setting key: ${key}`, null);
         return false;
     }
+
+    return setSetting(key, defaultSettings[key]);
 };
 
 /**
@@ -2298,101 +2272,64 @@ const resetGlobalDefault = (settingKey) => {
  * Reset all global defaults for schema-based settings
  */
 const resetAllGlobalDefaults = () => {
-    try {
-        const settings = loadSettings();
-        if (!settings.challengeSettings) {
-            settings.challengeSettings = getDefaultSettings().challengeSettings;
-        }
-
-        // Reset all global defaults to schema defaults
-        const globalDefaults = {};
-        Object.keys(SETTINGS_SCHEMA).forEach((key) => {
-            globalDefaults[key] = SETTINGS_SCHEMA[key].default;
-        });
-
-        settings.challengeSettings.globalDefaults = globalDefaults;
-        return saveSettings(settings);
-    } catch (error) {
-        logger.withCategory('settings').error('Error resetting all global defaults:', error);
-        return false;
+    const settings = loadSettings();
+    if (!settings.challengeSettings) {
+        settings.challengeSettings = getDefaultSettings().challengeSettings;
     }
+
+    // Reset all global defaults to schema defaults
+    const globalDefaults = {};
+    Object.keys(SETTINGS_SCHEMA).forEach((key) => {
+        globalDefaults[key] = SETTINGS_SCHEMA[key].default;
+    });
+
+    settings.challengeSettings.globalDefaults = globalDefaults;
+    return saveSettings(settings);
 };
 
 /**
  * Reset all settings to their default values (preserves only essential user data)
  */
 const resetAllSettings = () => {
-    try {
-        const currentSettings = loadSettings();
-        const defaultSettings = getDefaultSettings();
+    const currentSettings = loadSettings();
 
-        // Settings to preserve (only essential user data that shouldn't be reset)
-        const preserveKeys = ['token', 'mock', 'apiHeaders'];
-
-        // Start with defaults
-        const newSettings = { ...defaultSettings };
-
-        // Preserve specified user data
-        preserveKeys.forEach((key) => {
-            if (currentSettings[key] !== undefined) {
-                newSettings[key] = currentSettings[key];
-            }
-        });
-
-        // Save the reset settings
-        const saveResult = saveSettings(newSettings);
-
-        // Run cleanup to remove any obsolete settings
-        if (saveResult) {
-            cleanupObsoleteSettings();
-        }
-
-        return saveResult;
-    } catch (error) {
-        logger.withCategory('settings').error('Error resetting all settings:', error);
-        return false;
+    // Start with defaults, preserving only essential user data. loadSettings
+    // merges over the defaults, so these keys are always present.
+    const newSettings = { ...getDefaultSettings() };
+    for (const key of ['token', 'mock', 'apiHeaders']) {
+        newSettings[key] = currentSettings[key];
     }
+
+    // Save the reset settings
+    const saveResult = saveSettings(newSettings);
+
+    // Run cleanup to remove any obsolete settings
+    if (saveResult) {
+        cleanupObsoleteSettings();
+    }
+
+    return saveResult;
 };
 
 /**
  * Check if a setting has been modified from its default value
  */
 const isSettingModified = (key) => {
-    try {
-        const currentSettings = loadSettings();
-        const defaultSettings = getDefaultSettings();
-
-        if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
-            return false;
-        }
-
-        const currentValue = currentSettings[key];
-        const defaultValue = defaultSettings[key];
-
-        return !valuesEqual(currentValue, defaultValue);
-    } catch (error) {
-        logger.withCategory('settings').error(`Error checking if setting ${key} is modified:`, error);
+    const defaultSettings = getDefaultSettings();
+    if (!Object.prototype.hasOwnProperty.call(defaultSettings, key)) {
         return false;
     }
+    return !valuesEqual(loadSettings()[key], defaultSettings[key]);
 };
 
 /**
  * Check if a global default has been modified from its schema default
  */
 const isGlobalDefaultModified = (settingKey) => {
-    try {
-        if (!SETTINGS_SCHEMA[settingKey]) {
-            return false;
-        }
-
-        const currentValue = getGlobalDefault(settingKey);
-        const schemaDefault = SETTINGS_SCHEMA[settingKey].default;
-
-        return !valuesEqual(currentValue, schemaDefault);
-    } catch (error) {
-        logger.withCategory('settings').error(`Error checking if global default ${settingKey} is modified:`, error);
+    if (!SETTINGS_SCHEMA[settingKey]) {
         return false;
     }
+    return !valuesEqual(getGlobalDefault(settingKey), SETTINGS_SCHEMA[settingKey].default);
 };
 
 module.exports = {

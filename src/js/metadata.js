@@ -564,8 +564,8 @@ const resetAllMetadata = () => {
  * @returns {Object} - {lastCheck: number|null, skipVersion: string|null}
  */
 const getUpdateCheckData = () => {
-    const metadata = loadMetadata();
-    return metadata.updateCheck || { lastCheck: null, skipVersion: null };
+    // loadMetadata() always validates/fills updateCheck, so no fallback needed.
+    return loadMetadata().updateCheck;
 };
 
 /**
@@ -579,11 +579,8 @@ const setLastUpdateCheck = (timestamp) => {
         return false;
     }
 
+    // loadMetadata() always validates/fills updateCheck.
     const metadata = loadMetadata();
-    if (!metadata.updateCheck) {
-        metadata.updateCheck = { lastCheck: null, skipVersion: null };
-    }
-
     metadata.updateCheck.lastCheck = timestamp;
     return saveMetadata(metadata);
 };

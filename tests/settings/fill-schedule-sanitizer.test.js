@@ -112,8 +112,6 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
         jest.resetModules();
         jest.clearAllMocks();
         // Ensure no autovote-running flag bleeds across tests
-        if (typeof global !== 'undefined') delete global.autovoteRunning;
-        if (typeof globalThis !== 'undefined') delete globalThis.autovoteRunning;
         // Re-require fs *after* resetModules so we share the fresh mock
         // instance that settings.js will see.
         fs = require('node:fs');

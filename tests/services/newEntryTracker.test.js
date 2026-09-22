@@ -16,6 +16,7 @@ const {
     createMetadataEntryTracker,
 } = require('../../src/js/services/newEntryTracker');
 const metadata = require('../../src/js/metadata');
+const logger = require('../../src/js/logger');
 
 jest.mock('../../src/js/metadata');
 
@@ -169,5 +170,71 @@ describe('createMetadataEntryTracker', () => {
 
         tracker.set('c1', ['a', 'b']);
         expect(metadata.setChallengeEntryIds).toHaveBeenCalledWith('c1', ['a', 'b']);
+    });
+});
+
+describe('createMetadataEntryTracker — persistence outcome logging', () => {
+    beforeEach(() => jest.clearAllMocks());
+    afterEach(() => jest.restoreAllMocks());
+
+    test('warns when metadata refuses the write, stays quiet when it succeeds', () => {
+        const warning = jest.fn();
+        jest.spyOn(logger, 'withCategory').mockReturnValue({ warning });
+        const tracker = createMetadataEntryTracker();
+
+        metadata.setChallengeEntryIds.mockReturnValueOnce(true);
+        tracker.set('c1', ['a']);
+        expect(warning).not.toHaveBeenCalled();
+
+        metadata.setChallengeEntryIds.mockReturnValueOnce(false);
+        tracker.set('c\n2', ['a']);
+        expect(warning).toHaveBeenCalledTimes(1);
+        // The API-sourced id is CR/LF-collapsed before interpolation.
+        expect(warning.mock.calls[0][0]).not.toContain('\n');
+        expect(warning.mock.calls[0][0]).toContain('Could not persist entry snapshot');
+    });
+});
+
+describe('non-array guards', () => {
+    test('hasNewEntries is false when the current ids are not an array', () => {
+        expect(hasNewEntries(['a'], null)).toBe(false);
+    });
+
+    test('shouldRecordSnapshot refuses a non-array current snapshot', () => {
+        expect(shouldRecordSnapshot(['a'], null)).toBe(false);
+        expect(shouldRecordSnapshot(null, undefined)).toBe(false);
+    });
+});
+
+describe('cap fallback when metadata exports are not finite', () => {
+    afterEach(() => jest.restoreAllMocks());
+
+    test('falls back to 64 for both caps and warns once per cap', () => {
+        const warning = jest.fn();
+        // The setup-level logger mock is already instantiated in the shared mock
+        // registry, so an isolated doMock of it would be ignored — spy instead.
+        jest.spyOn(logger, 'withCategory').mockReturnValue({ warning });
+        // Same reason for mutating (and restoring) the shared metadata mock
+        // rather than doMock-ing a replacement.
+        const saved = { tracked: metadata.MAX_TRACKED_ENTRY_IDS, length: metadata.MAX_ENTRY_ID_LENGTH };
+        metadata.MAX_TRACKED_ENTRY_IDS = undefined;
+        metadata.MAX_ENTRY_ID_LENGTH = Number.NaN;
+        try {
+            jest.isolateModules(() => {
+                const isolated = require('../../src/js/services/newEntryTracker');
+
+                const entries = Array.from({ length: 70 }, (_, i) => ({ id: `e${i}` }));
+                entries[0] = { id: 'x'.repeat(65) }; // over the fallback length cap → dropped
+                const ids = isolated.readEntryIds({ member: { ranking: { entries } } });
+                expect(ids).toHaveLength(63); // 64 kept by count, minus the over-long one
+                expect(ids[0]).toBe('e1');
+            });
+        } finally {
+            metadata.MAX_TRACKED_ENTRY_IDS = saved.tracked;
+            metadata.MAX_ENTRY_ID_LENGTH = saved.length;
+        }
+        expect(warning).toHaveBeenCalledTimes(2);
+        expect(warning.mock.calls[0][0]).toContain('MAX_TRACKED_ENTRY_IDS');
+        expect(warning.mock.calls[1][0]).toContain('MAX_ENTRY_ID_LENGTH');
     });
 });
