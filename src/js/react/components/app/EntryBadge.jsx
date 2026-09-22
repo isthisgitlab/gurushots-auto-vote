@@ -2,6 +2,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useBoost } from '@/api/useBoost';
 import { useTurbo } from '@/api/useTurbo';
 import { useAutoClear } from '@/hooks/useAutoClear';
+import { getEntryStatus } from '@/utils/formatters';
 import { EntryPhoto } from './EntryPhoto';
 
 /**
@@ -20,12 +21,13 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
     const { applyBoost, loading: boosting, error: boostError, clearError: clearBoostError } = useBoost();
     const { applyTurbo, loading: turboing, error: turboError, clearError: clearTurboError } = useTurbo();
 
-    // entry.boost is an eligibility/availability indicator, not an
-    // applied flag — the API uses a separate boolean entry.boosted
-    // for that. Reading entry.boost here would light up the rocket
-    // icon on entries that are merely *eligible* for boost.
-    const isEntryBoosted = entry.boosted === true;
-    const isEntryTurboed = !!entry.turbo;
+    // Shared with the compact card's glyph row so both read one mapping.
+    const {
+        isBoosted: isEntryBoosted,
+        isTurboed: isEntryTurboed,
+        className: entryTypeClass,
+        icon,
+    } = getEntryStatus(entry);
     // Boost and turbo are mutually exclusive on a single entry —
     // applying one locks out the other on the same photo. Hide both
     // buttons whenever the entry is already in either state.
@@ -37,21 +39,6 @@ export function EntryBadge({ entry, challengeId, boostAvailable, turboAvailable,
     // block the user from retrying without page state reset.
     useAutoClear(boostError, clearBoostError, 5000);
     useAutoClear(turboError, clearTurboError, 5000);
-
-    const getEntryStyle = () => {
-        if (isEntryBoosted) {
-            return { className: 'border-info text-info', icon: '🚀' };
-        }
-        if (isEntryTurboed) {
-            return { className: 'border-warning text-warning', icon: '⚡' };
-        }
-        if (entry.guru_pick) {
-            return { className: 'badge-secondary', icon: '⭐' };
-        }
-        return { className: 'border-success text-success', icon: '📷' };
-    };
-
-    const { className: entryTypeClass, icon } = getEntryStyle();
 
     const handleBoost = async () => {
         const result = await applyBoost(challengeId, entry.id);

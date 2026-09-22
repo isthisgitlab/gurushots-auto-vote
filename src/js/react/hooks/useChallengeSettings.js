@@ -14,11 +14,16 @@ import { useEffect, useState, useCallback, useRef } from 'react';
  *   isCompact           effective compactCards value
  *   hasCompactOverride  whether compactCards has a per-challenge override
  *   toggleCompact()     flip the per-card density (or remove the override)
+ *
+ * `initialCompact` seeds isCompact until the IPC read lands — pass the global
+ * compactCards default. Compact and detailed cards occupy different grid
+ * spans, so a card that starts at the wrong density visibly reflows the whole
+ * grid on every remount; with the seed only cards carrying an override flip.
  */
-export function useChallengeSettings(challengeId) {
+export function useChallengeSettings(challengeId, initialCompact = false) {
     const [hasCustomSettings, setHasCustomSettings] = useState(false);
     const [autoFillEnabled, setAutoFillEnabled] = useState(false);
-    const [isCompact, setIsCompact] = useState(false);
+    const [isCompact, setIsCompact] = useState(initialCompact);
     const [hasCompactOverride, setHasCompactOverride] = useState(false);
 
     // Tracks whether the card is still mounted. ChallengesSection refreshes

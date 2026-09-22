@@ -132,14 +132,14 @@
         "jest-environment-node": "^30.5.2",
         "knip": "^6.37.0",
         "lefthook": "^2.1.14",
-        "marked": "^18.0.13",
+        "marked": "^18.0.14",
         "marked-gfm-heading-id": "^4.1.4",
         "only-allow": "^1.2.2",
         "postject": "1.0.0-alpha.6",
         "prettier": "4.0.0-alpha.13",
         "tailwindcss": "^4.3.3",
         "ttsc": "0.30.4",
-        "typescript": "7.1.0-dev.20260918.1",
+        "typescript": "7.1.0-dev.20260921.1",
         "yauzl": "^3.4.0"
     },
     "electronmon": {

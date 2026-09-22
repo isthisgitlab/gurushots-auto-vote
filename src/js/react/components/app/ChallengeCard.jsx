@@ -13,22 +13,21 @@ import { useAutoClear } from '@/hooks/useAutoClear';
 import { VoteButton } from './VoteButton';
 import { RunButton } from './RunButton';
 import { EntryBadge } from './EntryBadge';
-import { StatusBadge } from '../ui/StatusBadge';
-import { PulseDot } from '../ui/PulseDot';
+import { ChallengeBadgeRow } from './ChallengeBadgeRow';
+import { CardDensityToggle } from './CardDensityToggle';
+import { ChallengeCardCompact } from './ChallengeCardCompact';
 
 const TURBO_ERROR_DISPLAY_MS = 5000;
 const FILL_ERROR_DISPLAY_MS = 5000;
 
 /**
- * "Earn turbo" mini-game button shared by the compact summary row and the
- * detailed turbo cell. `withMargin` adds the detailed cell's mt-1 spacing;
- * `disabled` stays a prop because the two branches lock on different
- * conditions (compact: playing only; detailed: playing or autovote running).
+ * "Earn turbo" mini-game button in the detailed turbo cell. Locked while a
+ * play is in flight or the autovote loop (which plays turbo itself) is running.
  */
-function EarnTurboButton({ withMargin = false, turboError, playingTurbo, disabled, onPlay, label }) {
+function EarnTurboButton({ turboError, playingTurbo, disabled, onPlay, label }) {
     return (
         <button
-            className={`btn btn-xs${withMargin ? ' mt-1' : ''} ${turboError ? 'btn-error' : 'btn-info'}`}
+            className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
             onClick={onPlay}
             disabled={disabled}
         >
@@ -38,8 +37,7 @@ function EarnTurboButton({ withMargin = false, turboError, playingTurbo, disable
 }
 
 /**
- * "+1" fill button shared by the compact summary row and the detailed
- * entries cell — identical in both branches.
+ * "+1" fill button in the detailed entries cell.
  */
 function FillOneButton({ fillError, filling, autovoteRunning, onFill }) {
     return (
@@ -54,10 +52,15 @@ function FillOneButton({ fillError, filling, autovoteRunning, onFill }) {
 }
 
 /**
- * Challenge card component displaying all challenge details
+ * Challenge card. Renders either the full detailed card (every stat and every
+ * action) or, when compactCards is on for this challenge, the read-only
+ * ChallengeCardCompact tile. The root element is the grid item in
+ * ChallengesSection's #challenges-container: a detailed card spans the full
+ * row, compact tiles share one.
  */
 export function ChallengeCard({
     challenge,
+    defaultCompact = false,
     timeRemaining,
     timezone,
     autovoteRunning,
@@ -67,6 +70,7 @@ export function ChallengeCard({
     const { t } = useTranslation();
     const { hasCustomSettings, autoFillEnabled, isCompact, hasCompactOverride, toggleCompact } = useChallengeSettings(
         challenge.id,
+        defaultCompact,
     );
     const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
     const { fillNow, loading: filling, error: fillError, clearError: clearFillError } = useFillChallenge();
@@ -125,15 +129,7 @@ export function ChallengeCard({
     const exposureClass = lowExposure ? 'text-error font-bold' : '';
     const cardAlertClass = `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`;
 
-    // Badge row is split into two categories: "logical/state" badges that
-    // reflect live challenge/automation state, and an "override/config"
-    // badge that marks user-configured overrides. They are styled
-    // differently (solid vs muted ghost) and separated so a config marker
-    // is never mistaken for a live state.
     const showAutoFillBadge = autoFillEnabled && slotsRemaining > 0;
-    const hasLogicalBadge = Boolean(
-        challenge.type || challenge.badge || challenge.max_photo_submits > 1 || showAutoFillBadge,
-    );
 
     // Manual "vote to 100%" override. Shown even while the scheduled
     // autovote loop is running so a single challenge can be pushed to 100%
@@ -188,17 +184,46 @@ export function ChallengeCard({
         }
     };
 
+    // id + scroll-mt make the card a smooth-scroll target for the anchor chips
+    // in BoostWindowBanner and ChallengeNav (both go through scrollToChallenge,
+    // which looks the card up by this exact id); scroll-mt keeps it off the top
+    // edge after scrollIntoView. Keep `challenge-${id}` in sync with
+    // scrollToChallenge. Shared by both layouts.
+    const cardId = `challenge-${challenge.id}`;
+    const cardClass = `${cardAlertClass} rounded-lg p-3 bg-base-100 scroll-mt-4`;
+    const badgeRowProps = {
+        challenge,
+        boostOpen,
+        lowExposure,
+        exposureFactor,
+        showAutoFillBadge,
+        hasCustomSettings,
+    };
+
+    if (isCompact) {
+        return (
+            <div id={cardId} className={cardClass}>
+                <ChallengeCardCompact
+                    challenge={challenge}
+                    badgeRowProps={badgeRowProps}
+                    timeText={timeText}
+                    exposureFactor={exposureFactor}
+                    exposureClass={exposureClass}
+                    boostStatus={boostStatus}
+                    turboStatus={turboStatus}
+                    entries={entries}
+                    hasCompactOverride={hasCompactOverride}
+                    onToggleCompact={toggleCompact}
+                    boostBlocked={boostBlocked}
+                    deadlineActions={deadlineActions}
+                />
+            </div>
+        );
+    }
+
     return (
-        // id + scroll-mt make the card a smooth-scroll target for the anchor
-        // chips in BoostWindowBanner and ChallengeNav (both go through the
-        // scrollToChallenge helper, which looks the card up by this exact id).
-        // scroll-mt is a stock Tailwind utility — keeps the card off the top
-        // edge after scrollIntoView. Keep the `challenge-${id}` scheme in sync
-        // with scrollToChallenge if it ever changes.
-        <div
-            id={`challenge-${challenge.id}`}
-            className={`${cardAlertClass} rounded-lg p-3 mb-3 bg-base-100 scroll-mt-4`}
-        >
+        // col-span-full: a detailed card takes a whole row of the grid.
+        <div id={cardId} className={`${cardClass} col-span-full`}>
             <div className="space-y-2">
                 {/* Header stacks vertically: the title gets the full card
                     width (so it truncates far less), and the action buttons
@@ -207,59 +232,15 @@ export function ChallengeCard({
                 <div className="flex flex-col gap-2">
                     <div className="min-w-0">
                         <h3 className="font-bold text-base truncate">{challenge.title}</h3>
-                        {/* Welcome message — hidden in compact mode to keep the card a tight widget. truncate prevents long welcome text from forcing the grid cell wider. sanitizeWelcomeMessage strips medium-editor toolbar leakage and allowlists safe tags. */}
-                        {!isCompact && sanitizedWelcome && (
+                        {/* Welcome message. truncate prevents long welcome text from forcing the card wider. sanitizeWelcomeMessage strips medium-editor toolbar leakage and allowlists safe tags. */}
+                        {sanitizedWelcome && (
                             <div
                                 className="text-xs text-base-content/60 truncate"
                                 dangerouslySetInnerHTML={{ __html: sanitizedWelcome }}
                             />
                         )}
-                        {/* Challenge badges — logical/state group (solid colors),
-                            then a separated override/config marker (muted ghost). */}
-                        <div className="flex flex-wrap items-center gap-1 mt-1">
-                            {boostOpen && (
-                                <span className="badge badge-info badge-sm gap-1 font-semibold">
-                                    <PulseDot variant="info" size="status-sm" />
-                                    🚀 {t('app.boostOpenBadge')}
-                                </span>
-                            )}
-                            {lowExposure && (
-                                <span className="badge badge-error badge-sm gap-1 font-semibold">
-                                    <PulseDot variant="error" pulse={exposureFactor === 0} size="status-sm" />
-                                    👁 {t('app.exposure')} {exposureFactor}%
-                                </span>
-                            )}
-                            {challenge.type && (
-                                <StatusBadge variant="warning" size="xs">
-                                    🏁 {challenge.type.toUpperCase()}
-                                </StatusBadge>
-                            )}
-                            {!challenge.type && challenge.badge && (
-                                <StatusBadge variant="info" size="xs">
-                                    🏁 {challenge.badge}
-                                </StatusBadge>
-                            )}
-                            {challenge.max_photo_submits > 1 && (
-                                <StatusBadge variant="warning" size="xs">
-                                    🖼 {challenge.max_photo_submits} {t('app.photos')}
-                                </StatusBadge>
-                            )}
-                            {showAutoFillBadge && (
-                                <StatusBadge variant="success" size="xs">
-                                    📥 {t('app.autoFillBadge')}
-                                </StatusBadge>
-                            )}
-                            {hasLogicalBadge && hasCustomSettings && (
-                                <span data-testid="badge-divider" className="w-px h-3 bg-base-300 mx-0.5 self-center" />
-                            )}
-                            {hasCustomSettings && (
-                                <StatusBadge variant="ghost" size="xs">
-                                    ⚙️ {t('app.customBadge')}
-                                </StatusBadge>
-                            )}
-                        </div>
-                        {/* Challenge URL — hidden in compact mode. */}
-                        {!isCompact && challenge.url && (
+                        <ChallengeBadgeRow {...badgeRowProps} />
+                        {challenge.url && (
                             <div className="text-xs text-base-content/40 mt-1">
                                 <button
                                     onClick={handleOpenUrl}
@@ -279,35 +260,11 @@ export function ChallengeCard({
                             />
                         )}
                         {showRunButton && <RunButton challengeId={challenge.id} onVoteComplete={onVoteComplete} />}
-                        {/* Per-card density toggle. The icon is filled
-                            when this card has its own override so the
-                            user can see at-a-glance which cards diverge
-                            from the global default. */}
-                        <button className="btn btn-ghost btn-xs px-1" onClick={toggleCompact}>
-                            <svg
-                                className="w-3 h-3 mr-1"
-                                fill={hasCompactOverride ? 'currentColor' : 'none'}
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                            >
-                                {isCompact ? (
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth="2"
-                                        d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                                    />
-                                ) : (
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth="2"
-                                        d="M9 9V4M9 9H4M9 9L4 4m11 5h5m-5 0V4m0 5l5-5M9 15v5m0-5H4m5 0l-5 5m11-5h5m-5 0v5m0-5l5 5"
-                                    />
-                                )}
-                            </svg>
-                            {isCompact ? t('app.details') : t('app.compact')}
-                        </button>
+                        <CardDensityToggle
+                            isCompact={false}
+                            hasOverride={hasCompactOverride}
+                            onToggle={toggleCompact}
+                        />
                         {challenge.type !== 'flash' && (
                             <button
                                 className="btn btn-ghost btn-xs px-1"
@@ -333,30 +290,28 @@ export function ChallengeCard({
                     </div>
                 </div>
 
-                {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. Hidden in compact mode. */}
-                {!isCompact && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.entries')}</div>
-                            <div>{challenge.entries.toLocaleString()}</div>
-                        </div>
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.players')}</div>
-                            <div>{challenge.players.toLocaleString()}</div>
-                        </div>
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.votes')}</div>
-                            <div>{challenge.votes.toLocaleString()}</div>
-                        </div>
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.prize')}</div>
-                            <div>{challenge.prizes_worth}</div>
-                        </div>
+                {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.entries')}</div>
+                        <div>{challenge.entries.toLocaleString()}</div>
                     </div>
-                )}
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.players')}</div>
+                        <div>{challenge.players.toLocaleString()}</div>
+                    </div>
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.votes')}</div>
+                        <div>{challenge.votes.toLocaleString()}</div>
+                    </div>
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.prize')}</div>
+                        <div>{challenge.prizes_worth}</div>
+                    </div>
+                </div>
 
-                {/* User Progress — full bar + level + next-level info; compact mode hides this. */}
-                {!isCompact && userProgress && userProgress.votes > 0 && (
+                {/* User Progress — full bar + level + next-level info. */}
+                {userProgress && userProgress.votes > 0 && (
                     <div className="bg-base-200 rounded p-2">
                         <div className="flex justify-between items-center mb-1">
                             <span className="text-xs font-medium">{t('app.yourProgress')}</span>
@@ -387,113 +342,77 @@ export function ChallengeCard({
                     </div>
                 )}
 
-                {/* Compact mode: single-line widget summary instead of the 6-cell grid. */}
-                {isCompact && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-base-content/80">
-                        <span className={timeText === 'Ended' ? 'text-error font-medium' : 'text-success font-medium'}>
-                            ⏱ {timeText}
-                        </span>
-                        <span className={exposureClass}>📊 {exposureFactor}%</span>
-                        <span className={boostStatus.colorClass}>🚀 {boostStatus.text}</span>
-                        <span className={turboStatus.colorClass}>⚡ {turboStatus.text}</span>
-                        <span>
-                            🖼 {entries.length}/{challenge.max_photo_submits}
-                        </span>
+                {/* 6-cell stats grid — stacks 2-up on phones, 3-up on small tablets, 6-up on desktop */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.time')}</div>
+                        <div className={timeText === 'Ended' ? 'text-error' : 'text-success'}>{timeText}</div>
+                    </div>
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.ends')}</div>
+                        <div className="text-xs">{endTime}</div>
+                    </div>
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.exposure')}</div>
+                        <div className={exposureClass}>{exposureFactor}%</div>
+                    </div>
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.boost')}</div>
+                        <div className={boostStatus.colorClass}>{boostStatus.text}</div>
+                    </div>
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.turbo')}</div>
+                        <div className={turboStatus.colorClass}>{turboStatus.text}</div>
                         {canPlayAutoTurbo && (
                             <EarnTurboButton
                                 turboError={turboError}
                                 playingTurbo={playingTurbo}
-                                disabled={playingTurbo}
+                                disabled={playingTurbo || autovoteRunning}
                                 onPlay={handlePlayAutoTurbo}
                                 label={t('app.earnTurbo')}
                             />
                         )}
-                        {canFill && (
-                            <FillOneButton
-                                fillError={fillError}
-                                filling={filling}
-                                autovoteRunning={autovoteRunning}
-                                onFill={() => handleFill('one')}
-                            />
-                        )}
-                        {(turboError || fillError) && <span className="text-error">⚠ {turboError || fillError}</span>}
-                    </div>
-                )}
-
-                {/* Detailed mode: 6-cell stats grid — stacks 2-up on phones, 3-up on small tablets, 6-up on desktop */}
-                {!isCompact && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.time')}</div>
-                            <div className={timeText === 'Ended' ? 'text-error' : 'text-success'}>{timeText}</div>
-                        </div>
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.ends')}</div>
-                            <div className="text-xs">{endTime}</div>
-                        </div>
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.exposure')}</div>
-                            <div className={exposureClass}>{exposureFactor}%</div>
-                        </div>
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.boost')}</div>
-                            <div className={boostStatus.colorClass}>{boostStatus.text}</div>
-                        </div>
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.turbo')}</div>
-                            <div className={turboStatus.colorClass}>{turboStatus.text}</div>
-                            {canPlayAutoTurbo && (
-                                <EarnTurboButton
-                                    withMargin
-                                    turboError={turboError}
-                                    playingTurbo={playingTurbo}
-                                    disabled={playingTurbo || autovoteRunning}
-                                    onPlay={handlePlayAutoTurbo}
-                                    label={t('app.earnTurbo')}
-                                />
-                            )}
-                            {turboError && <div className="text-error text-xs mt-1">{turboError}</div>}
-                            {!turboError && canPlayAutoTurbo && autovoteRunning && (
-                                <div className="text-base-content/60 text-xs mt-1">
-                                    {t('app.autoTurboRunsWithAutovote')}
-                                </div>
-                            )}
-                        </div>
-                        <div className="text-center p-2 bg-base-200 rounded">
-                            <div className="font-medium">{t('app.yourEntries')}</div>
-                            <div>
-                                {entries.length}/{challenge.max_photo_submits}
+                        {turboError && <div className="text-error text-xs mt-1">{turboError}</div>}
+                        {!turboError && canPlayAutoTurbo && autovoteRunning && (
+                            <div className="text-base-content/60 text-xs mt-1">
+                                {t('app.autoTurboRunsWithAutovote')}
                             </div>
-                            {canFill && (
-                                <div className="flex gap-1 mt-1 justify-center">
-                                    <FillOneButton
-                                        fillError={fillError}
-                                        filling={filling}
-                                        autovoteRunning={autovoteRunning}
-                                        onFill={() => handleFill('one')}
-                                    />
-                                    {slotsRemaining > 1 && (
-                                        <button
-                                            className="btn btn-xs btn-warning"
-                                            onClick={() => handleFill('all')}
-                                            disabled={filling || autovoteRunning}
-                                        >
-                                            {filling ? (
-                                                <span className="loading loading-spinner loading-xs" />
-                                            ) : (
-                                                `+${slotsRemaining}`
-                                            )}
-                                        </button>
-                                    )}
-                                </div>
-                            )}
-                            {fillError && <div className="text-error text-xs mt-1">{fillError}</div>}
-                        </div>
+                        )}
                     </div>
-                )}
+                    <div className="text-center p-2 bg-base-200 rounded">
+                        <div className="font-medium">{t('app.yourEntries')}</div>
+                        <div>
+                            {entries.length}/{challenge.max_photo_submits}
+                        </div>
+                        {canFill && (
+                            <div className="flex gap-1 mt-1 justify-center">
+                                <FillOneButton
+                                    fillError={fillError}
+                                    filling={filling}
+                                    autovoteRunning={autovoteRunning}
+                                    onFill={() => handleFill('one')}
+                                />
+                                {slotsRemaining > 1 && (
+                                    <button
+                                        className="btn btn-xs btn-warning"
+                                        onClick={() => handleFill('all')}
+                                        disabled={filling || autovoteRunning}
+                                    >
+                                        {filling ? (
+                                            <span className="loading loading-spinner loading-xs" />
+                                        ) : (
+                                            `+${slotsRemaining}`
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                        {fillError && <div className="text-error text-xs mt-1">{fillError}</div>}
+                    </div>
+                </div>
 
-                {/* Challenge Tags — hidden in compact mode. */}
-                {!isCompact && challenge.tags && challenge.tags.length > 0 && (
+                {/* Challenge Tags */}
+                {challenge.tags && challenge.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                         {challenge.tags.map((tag, index) => (
                             <span key={index} className="badge badge-ghost badge-xs">
@@ -503,14 +422,10 @@ export function ChallengeCard({
                     </div>
                 )}
 
-                {/* Entry Details — entry-level boost / turbo badges.
-                    Kept in compact mode because the per-entry boost
-                    actions are part of the auto-voter's surface area. */}
+                {/* Entry Details — entry-level boost / turbo badges and actions. */}
                 {entries.length > 0 && (
                     <div>
-                        {!isCompact && (
-                            <div className="text-xs text-base-content/60 mb-1">{t('app.entryDetails')}:</div>
-                        )}
+                        <div className="text-xs text-base-content/60 mb-1">{t('app.entryDetails')}:</div>
                         <div className="flex flex-wrap gap-1">
                             {entries.map((entry) => (
                                 <EntryBadge
@@ -528,8 +443,8 @@ export function ChallengeCard({
                 )}
 
                 {/* Boost/turbo conflict — a boost is available but the only entry
-                    already has Turbo, so it can't be placed. Actionable, so it
-                    shows in both compact and detailed modes. */}
+                    already has Turbo, so it can't be placed. The compact tile
+                    shows the same state as a one-line note. */}
                 {boostBlocked && (
                     <div className="alert alert-warning py-2 text-xs" role="alert">
                         <span>{t('app.boostConflictWarning')}</span>
@@ -537,8 +452,8 @@ export function ChallengeCard({
                 )}
 
                 {/* Advisory timeline of the automation's upcoming deadline
-                    actions; compact mode collapses it to a single next-action line. */}
-                <DeadlineTimeline actions={deadlineActions} compact={isCompact} />
+                    actions (the compact tile shows only the next one). */}
+                <DeadlineTimeline actions={deadlineActions} />
             </div>
         </div>
     );

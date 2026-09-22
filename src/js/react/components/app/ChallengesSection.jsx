@@ -203,12 +203,15 @@ export function ChallengesSection({ timezone, autovoteRunning, isLoggedIn, onCha
                 user can click a name instead of scrolling. */}
             <ChallengeNav challenges={challenges} />
 
-            {/* Challenge Cards */}
-            <div id="challenges-container">
+            {/* Challenge Cards — a grid where each card picks its own span:
+                a detailed card is col-span-full, compact tiles share a row,
+                as many per row as fit at >= 16rem each. */}
+            <div id="challenges-container" className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-3">
                 {challenges.map((challenge) => (
                     <ChallengeCard
                         key={`${challenge.id}-${refreshKey}`}
                         challenge={challenge}
+                        defaultCompact={globalCompact}
                         timeRemaining={times[challenge.id]}
                         timezone={timezone}
                         autovoteRunning={autovoteRunning}

@@ -149,6 +149,29 @@ export const getBoostStatus = (boost) => {
 };
 
 /**
+ * Display state of one submitted entry — the photo's own boost/turbo/guru-pick
+ * status, as opposed to getBoostStatus/getTurboStatus which describe the
+ * challenge-level resource. Boost and turbo are mutually exclusive on an entry,
+ * so the first match wins.
+ *
+ * entry.boost is an eligibility indicator, not an applied flag — the API marks
+ * an applied boost with the separate boolean entry.boosted. Reading entry.boost
+ * would light the rocket on entries that are merely eligible.
+ *
+ * @param {object} entry - Entry record from challenge.member.ranking.entries
+ * @returns {{ isBoosted: boolean, isTurboed: boolean, icon: string, className: string, textClass: string }}
+ */
+export const getEntryStatus = (entry) => {
+    const isBoosted = entry?.boosted === true;
+    const isTurboed = !!entry?.turbo;
+    const base = { isBoosted, isTurboed };
+    if (isBoosted) return { ...base, icon: '🚀', className: 'border-info text-info', textClass: 'text-info' };
+    if (isTurboed) return { ...base, icon: '⚡', className: 'border-warning text-warning', textClass: 'text-warning' };
+    if (entry?.guru_pick) return { ...base, icon: '⭐', className: 'badge-secondary', textClass: 'text-secondary' };
+    return { ...base, icon: '📷', className: 'border-success text-success', textClass: 'text-success' };
+};
+
+/**
  * Whether a boost window is currently open (boost can be applied right now).
  * Re-exported from the shared predicate (voting/boostWindow.js) that the
  * voting engine (services/VotingLogic.js) uses too, so the two hosts can
