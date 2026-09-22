@@ -84,7 +84,7 @@
                 'GuruShots Auto Vote - Electron lietojumprogramma automātiskai balsošanai GuruShots izaicinājumos ar apvienotu GUI un CLI saskarni (atbalsta gan īstos, gan testa režīmus)',
             checkForUpdates: 'Pārbaudīt atjauninājumus...',
             noUpdates: 'Nav atjauninājumu',
-            noUpdatesMessage: 'Jūs izmantojat jaunāko versiju.',
+            noUpdatesMessage: 'Tev jau ir jaunākā versija.',
             updateError: 'Atjaunināšanas kļūda',
             updateErrorMessage: 'Neizdevās pārbaudīt atjauninājumus.',
         },
@@ -97,14 +97,14 @@
             mockMode: 'Testa režīms',
             mockModeInfo: 'Testa režīms: tiek izmantoti simulēti dati. Derēs jebkādi pieteikšanās dati.',
             password: 'Parole',
-            passwordPlaceholder: 'Ievadiet savu paroli',
+            passwordPlaceholder: 'Ievadi savu paroli',
             passwordRequired: 'Parole ir obligāta',
             productionModeInfo:
-                'Produkcijas režīms: Tiek izmantots īstais GuruShots API. Nepieciešami derīgi pieejas dati.',
+                'Īstais režīms: savienojas ar tavu GuruShots kontu. Vajag derīgu lietotājvārdu un paroli.',
             stayLoggedIn: 'Saglabāt pieteikšanos',
             title: 'Pieteikšanās - GuruShots Auto Vote',
             username: 'Lietotājvārds',
-            usernamePlaceholder: 'Ievadiet savu lietotājvārdu',
+            usernamePlaceholder: 'Ievadi savu lietotājvārdu',
             usernameRequired: 'Lietotājvārds ir obligāts',
         },
         // App screen specific
@@ -112,7 +112,7 @@
             activeChallenges: 'Aktīvie izaicinājumi',
             addCustomTimezone: 'Pievienot pielāgotu laika joslu',
             addTimezone: 'Pievienot laika joslu',
-            apiTimeout: 'API noildze',
+            apiTimeout: 'Gaidīšanas laiks',
             apiTimeoutDesc:
                 'Cik ilgi gaidīt GuruShots API atbildi, pirms pieprasījums tiek uzskatīts par neizdevušos (1–120 sekundes).',
             appSetting: 'Lietotnes iestatījums',
@@ -120,7 +120,7 @@
             autoVote: 'Automātiskā balsošana',
             autovoteRunning: 'Automātiskā balsošana darbojas',
             autovoteRunningDesc:
-                'Iekšējs karogs — saglabā automātiskās balsošanas stāvokli starp lietotnes restartiem, lai balsošana varētu atsākties automātiski',
+                'Iekšējs — atceras, vai automātiskā balsošana bija ieslēgta, lai pēc lietotnes restarta tā atsāktos pati',
             skipUpdateVersion: 'Izlaistā atjauninājuma versija',
             skipUpdateVersionDesc:
                 'Iekšējs — atjauninājuma versija, ko lietotājs izvēlējās izlaist; lietotne nepiedāvās šo versiju, līdz tā tiek notīrīta',
@@ -133,7 +133,7 @@
             lowExposure: 'Zema redzamība',
             jumpToChallenge: 'Pāriet uz izaicinājumu',
             deadlineTimeline: 'Gaidāmās darbības',
-            deadlineTimelineApprox: 'aptuveni — var mainīties, aizpildoties dalībām',
+            deadlineTimelineApprox: 'aptuveni — var mainīties, pievienojot bildes',
             deadlineNext: 'Nākamā',
             deadlineDue: 'jau tagad',
             deadlineActionAutoFill: 'Auto-aizpilde',
@@ -141,7 +141,7 @@
             deadlineActionTurbo: 'Turbo',
             deadlineActionEmergencyFill: 'Ārkārtas aizpilde',
             boostConflictWarning:
-                'Boost nevar pielietot: tavai vienīgajai dalībai jau ir Turbo (tie nevar dalīt vienu dalību). Pievieno otru dalību, lai izmantotu abus.',
+                'Boost nevar izmantot: tavai vienīgajai bildei jau ir Turbo, un abi nevar būt uz vienas bildes. Pievieno otru bildi, lai izmantotu abus.',
             statusHeaderActive: 'aktīvi',
             statusHeaderBoosts: 'Boost gatavi',
             statusHeaderTurbos: 'Turbo gatavi',
@@ -166,16 +166,16 @@
             voteBeforeBoostDesc:
                 'Īsu brīdi pirms Boost automātiskās pielietošanas nobalso šo izaicinājumu līdz 100% redzamībai, lai Boost nostrādātu uz pilnībā redzama foto, nevis uz tāda, kura redzamība jau sarukusi.',
             voteBeforeBoostHelp:
-                'Boost pareizina to, kas foto ir tajā brīdī, kad tas nostrādā, un katram izaicinājumam tas ir tikai viens — tāpēc pielietot to foto ar sarukušu redzamību nozīmē to izšķērdēt. Kad šis ir ieslēgts, bots zemāk norādītajā nobīdē nobalso līdz 100%, un tad Boost tiek pielietots kā parasti. Nepieciešams ieslēgts “Auto-pielietot Boost”, un tas nedarbojas, ja attiecīgais Boost laiks ir 0 (“izslēgts”). Redzamība nesasniedz 100% vienā piegājienā, tāpēc atstāj nobīdi, kas pietiek vairākiem balsošanas cikliem.',
+                'Boost pareizina to, kas foto ir tajā brīdī, kad tas nostrādā, un katram izaicinājumam tas ir tikai viens — tāpēc pielietot to foto ar sarukušu redzamību nozīmē to izšķērdēt. Kad šis ir ieslēgts, bots zemāk norādīto laiku pirms Boost nobalso līdz 100%, un tad Boost tiek pielietots kā parasti. Nepieciešams ieslēgts “Auto-pielietot Boost”, un tas nedarbojas, ja attiecīgais Boost laiks ir 0 (“izslēgts”). Redzamība nesasniedz 100% vienā piegājienā, tāpēc atstāj pietiekami laika vairākiem balsošanas cikliem.',
             voteBeforeBoostOnlyBoostHint:
                 'Ieslēgts “Tikai "Boost" režīms”, tāpēc bots nebalso — šī uzpilde nekad nenotiks. Izslēdz to (sadaļā “Vispārīgi”), lai izmantotu šo uzpildi.',
             voteBeforeBoostNoAutoBoostHint:
-                'Izslēgts “Auto-pielietot Boost”, tāpēc neviens Boost netiek pielietots automātiski un nav, pirms kā uzpildīt.',
+                'Izslēgts “Auto-pielietot Boost”, tāpēc Boost netiek izmantots automātiski un šai uzpildei nav, kad nostrādāt.',
             voteBeforeBoostLastMinuteOnlyHint:
                 'Ieslēgts “Balsot tikai pēdējās minūtēs”, tāpēc bots pirms tam nebalso — šī uzpilde nostrādās tikai tad, ja Boost gadīsies iekrist tajā logā, kur balsošana tik un tā iet līdz 100%.',
             voteBeforeBoostNoBoostTimeHint:
-                'Gan “Boost laiks”, gan “Boost laiks (atvērts ar atslēgu)” ir 0 (izslēgts), tāpēc neviens Boost netiek pielietots automātiski un nav brīža, pirms kā uzpildīt. Iestati vismaz vienu no tiem lielāku par 0.',
-            voteBeforeBoostLeadMin: 'Nobīde pirms Boost',
+                'Gan “Boost laiks”, gan “Boost laiks (atvērts ar atslēgu)” ir 0 (izslēgts), tāpēc Boost netiek izmantots automātiski un šai uzpildei nav, kad nostrādāt. Iestati vismaz vienu no tiem lielāku par 0.',
+            voteBeforeBoostLeadMin: 'Cik laicīgi pirms Boost',
             voteBeforeBoostLeadMinDesc:
                 'Cik ilgi pirms Boost pielietošanas sākas uzpilde. Atvēli pietiekami laika vairākām balsošanas kārtām — redzamība nesasniedz 100% vienā piegājienā.',
             autoBoost: 'Auto-pielietot Boost',
@@ -200,7 +200,7 @@
                 'Ja ieslēgts, tieši pirms Boost tiek iesniegts jauns foto (izmantojot tavus automātiskās aizpildes tagu noteikumus) un Boost tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Boost foto.',
             boostFillNewOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
             boostFillNewOnConflictDesc:
-                'Ja ieslēgts, jauns foto tiek iesniegts un Boost tiek pielietots tikai tad, ja tavam vienīgajam esošajam foto jau ir Turbo (tāpēc Boost nevar tur nokļūt). Parastā gadījumā Boost joprojām nonāk uz tava esošā foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Boost šajā ciklā tiek izlaists — atkāpšanās iespējas nav, jo tavam vienīgajam foto jau ir Turbo. Tiek ignorēts, ja augstākā iespēja ir ieslēgta, jo tā vienmēr iesniedz jaunu foto.',
+                'Ja ieslēgts, jauns foto tiek iesniegts un Boost tiek pielietots tikai tad, ja tavam vienīgajam esošajam foto jau ir Turbo (tāpēc Boost nevar tur nokļūt). Parastā gadījumā Boost joprojām nonāk uz tava esošā foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Boost šajā ciklā tiek izlaists — rezerves varianta nav, jo tavam vienīgajam foto jau ir Turbo. Netiek ņemts vērā, ja ieslēgta iepriekšējā opcija, jo tā vienmēr iesniedz jaunu foto.',
             turboApplyWhenBoostActive: 'Pielietot Turbo Boost laikā',
             turboApplyWhenBoostActiveDesc: 'Ja izslēgts, nepielieto Turbo, kamēr šim izaicinājumam ir pieejams Boost',
             turboFillNew: 'Turbo jaunam iesniegtam foto',
@@ -208,7 +208,7 @@
                 'Ja ieslēgts, tieši pirms Turbo tiek iesniegts jauns foto (izmantojot tavus automātiskās aizpildes tagu noteikumus) un Turbo tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Turbo foto; ja vēl nav neviena foto, Turbo šajā ciklā tiek izlaists.',
             turboFillNewOnConflict: 'Turbo jaunam iesniegtam foto tikai konflikta gadījumā',
             turboFillNewOnConflictDesc:
-                'Ja ieslēgts, jauns foto tiek iesniegts un tam tiek pielietots Turbo tikai tad, ja tavam vienīgajam esošajam foto jau ir Boost (tāpēc Turbo nevar tur nokļūt). Parastā gadījumā Turbo joprojām nonāk uz tava esošā foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Turbo šajā ciklā tiek izlaists — atkāpšanās iespējas nav, jo tavam vienīgajam foto jau ir Boost. Tiek ignorēts, ja augstākā iespēja ir ieslēgta, jo tā vienmēr iesniedz jaunu foto.',
+                'Ja ieslēgts, jauns foto tiek iesniegts un tam tiek pielietots Turbo tikai tad, ja tavam vienīgajam esošajam foto jau ir Boost (tāpēc Turbo nevar tur nokļūt). Parastā gadījumā Turbo joprojām nonāk uz tava esošā foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Turbo šajā ciklā tiek izlaists — rezerves varianta nav, jo tavam vienīgajam foto jau ir Boost. Netiek ņemts vērā, ja ieslēgta iepriekšējā opcija, jo tā vienmēr iesniedz jaunu foto.',
             playAutoTurbo: 'Spēlēt Turbo mini-spēli, lai iegūtu Turbo',
             autoTurboRunsWithAutovote: 'Automātiskā balsošana jau spēlē Turbo mini-spēli katrā ciklā',
             earnTurbo: 'Iegūt Turbo',
@@ -235,16 +235,16 @@
             // Konts (galvenes rādītāji)
             bankrollKeys: 'atslēgas',
             bankrollSwaps: 'maiņas',
-            bankrollFills: 'aizpildes',
+            bankrollFills: 'uzpildes',
             bankrollCoins: 'monētas',
-            // Valūtas darbības (atslēga / apmaiņa / ekspozīcijas papildināšana) izaicinājuma kartītē
-            currencyKeyUnlock: 'Atslēgt',
-            currencyKeyUnlockTitle: 'Atslēgt boost ar atslēgu?',
+            // Valūtas darbības (atslēga / apmaiņa / redzamības papildināšana) izaicinājuma kartītē
+            currencyKeyUnlock: 'Atbloķēt',
+            currencyKeyUnlockTitle: 'Atbloķēt Boost ar atslēgu?',
             currencyKeyUnlockBody:
-                'Tas atslēdz boost izaicinājumā "{title}". Boost netiek piemērots bildei — tu joprojām izvēlies, kuru bildi boostēt.',
-            currencyFillExposure: 'Papildināt ekspozīciju',
-            currencyFillExposureTitle: 'Papildināt ekspozīciju ar papildinājumu?',
-            currencyFillExposureBody: 'Tas paaugstina izaicinājuma "{title}" ekspozīciju līdz 100%.',
+                'Tas atbloķē Boost izaicinājumā "{title}". Boost vēl netiek uzlikts nevienai bildei — tu pats izvēlies, kurai bildei to izmantot.',
+            currencyFillExposure: 'Uzpildīt redzamību',
+            currencyFillExposureTitle: 'Uzpildīt redzamību?',
+            currencyFillExposureBody: 'Tas uzreiz paceļ izaicinājuma "{title}" redzamību līdz 100%.',
             currencySwap: 'Apmainīt',
             currencySwapTitle: 'Apmainīt šo bildi?',
             currencySwapBody:
@@ -252,7 +252,7 @@
             currencySwapCurrent: 'Pašreizējā bilde',
             currencySwapReplacement: 'Jaunā bilde',
             currencySwapBoostedWarning:
-                'Šai bildei ir boost vai turbo. Tas paliek pie šīs bildes — jaunajai bildei tā nebūs, un šajā izaicinājumā to vairs nevarēs izmantot, ja vien šo bildi neapmainīsi atpakaļ.',
+                'Šai bildei ir Boost vai Turbo. Tas paliek pie šīs bildes — jaunajai bildei tā nebūs, un šajā izaicinājumā to vairs nevarēs izmantot, ja vien šo bildi neapmainīsi atpakaļ.',
             currencySwapBack: 'Apmainīt atpakaļ',
             currencySwapBackTitle: 'Apmainīt atpakaļ sākotnējo bildi?',
             currencySwapBackBody: 'Tava sākotnējā bilde atgriežas šajā vietā un atgūst savu {kind}.',
@@ -260,10 +260,10 @@
             currencyCost: 'Maksā: 1 {unit}.',
             currencyBalance: 'Tev ir {current} {currency}; pēc tam paliks {resulting}.',
             currencyBalanceUnknown:
-                'Neizdevās nolasīt tavu {currency} atlikumu — lietotne to pārbaudīs vēlreiz pirms tērēšanas.',
+                'Neizdevās nolasīt atlikumu ({currency}) — lietotne to pārbaudīs vēlreiz pirms tērēšanas.',
             currencyUnitKeys: 'atslēga',
-            currencyUnitSwaps: 'apmaiņa',
-            currencyUnitFills: 'papildinājums',
+            currencyUnitSwaps: 'maiņa',
+            currencyUnitFills: 'uzpilde',
             currencySpend: 'Tērēt: 1 {unit}',
             // Valūtas darbību rezultāti
             currencyOutcomeNotAvailable:
@@ -274,7 +274,7 @@
             currencyOutcomeNoAlternative:
                 'Nav citas bildes, ar ko apmainīt — visas derīgās bildes šeit jau izmantotas.',
             currencyOutcomeStaleCandidate:
-                'Ieteiktās bildes derīgums beidzās. Nospied Apmainīt vēlreiz, lai saņemtu jaunu ieteikumu.',
+                'Ieteiktā bilde vairs nav aktuāla. Nospied Apmainīt vēlreiz, lai saņemtu jaunu ieteikumu.',
             currencyOutcomeBusy: 'Vēl notiek cita valūtas darbība — mēģini vēlreiz pēc brīža.',
             currencyOutcomeFailed: 'GuruShots noraidīja pieprasījumu. Mēģini vēlāk; ja atkārtojas, pārbaudi žurnālus.',
             // Automātiskās pievienošanās iestatījumi
@@ -284,24 +284,24 @@
                 'Katrā balsošanas ciklā automātiski pievienoties atvērtajiem izaicinājumiem (auto-balsošanai jādarbojas). Pēc noklusējuma izslēgts. Kad ieslēgts, pievienojas VISIEM atvērtajiem izaicinājumiem, ja vien nesašaurini ar tipu sarakstiem zemāk; maksas izaicinājumiem nepieciešami monētu limiti zemāk (0 = tikai bezmaksas).',
             autoJoinTypes: 'Tikai šiem tipiem',
             autoJoinTypesDesc:
-                'Ar komatu atdalīti izaicinājumu tipi, kuriem pievienoties, piem., "flash,contest". Atstāj TUKŠU, lai pievienotos visiem tipiem (noklusējums). Reģistrnejutīgs.',
+                'Ar komatu atdalīti izaicinājumu tipi, kuriem pievienoties, piem., "flash,contest". Atstāj TUKŠU, lai pievienotos visiem tipiem (noklusējums). Lielajiem/mazajiem burtiem nav nozīmes.',
             autoJoinExcludeTypes: 'Nekad nepievienoties šiem tipiem',
             autoJoinExcludeTypesDesc:
                 'Ar komatu atdalīti izaicinājumu tipi, kuriem nekad automātiski nepievienoties, piem., "flash,exhibition". Tā kā noklusējums ir pievienoties visiem tipiem, šādi iegūst "pievienoties visam, izņemot šos". Izaicinājums, kas atbilst saglabātam nosaukuma profilam, joprojām tiek pievienots — profils ir apzināta izvēle konkrētam nosaukumam.',
             autoJoinChallengeTags: 'Tikai izaicinājumi ar tagiem',
             autoJoinChallengeTagsDesc:
-                'Ar komatu atdalīti IZAICINĀJUMA tagi, kuriem pievienoties, piem., "Exhibition,Turbo". Šie ir tagi, ko izaicinājumam piešķir GuruShots (Exhibition, Comm, No comm, Turbo, Magazine, "special 4 pic"), nevis tavu foto tagi. Atstāj TUKŠU, lai atļautu visus. Izaicinājums atbilst, ja tam ir JEBKURŠ tags no saraksta. Nav reģistrjutīgs.',
+                'Ar komatu atdalīti IZAICINĀJUMA tagi, kuriem pievienoties, piem., "Exhibition,Turbo". Šie ir tagi, ko izaicinājumam piešķir GuruShots (Exhibition, Comm, No comm, Turbo, Magazine, "special 4 pic"), nevis tavu foto tagi. Atstāj TUKŠU, lai atļautu visus. Izaicinājums atbilst, ja tam ir JEBKURŠ tags no saraksta. Lielajiem/mazajiem burtiem nav nozīmes.',
             autoJoinExcludeChallengeTags: 'Nekad izaicinājumi ar tagiem',
             autoJoinExcludeChallengeTagsDesc:
-                'Ar komatu atdalīti IZAICINĀJUMA tagi, kuriem nekad automātiski nepievienoties, piem., "Comm". Atņem no augšējā tvēruma — šādi iegūst "pievienoties visam, izņemot šos". Nosaukuma noteikums, kas ieslēdz pievienošanos, joprojām pievienojas — tā ir apzināta izvēle konkrētam nosaukumam.',
+                'Ar komatu atdalīti IZAICINĀJUMA tagi, kuriem nekad automātiski nepievienoties, piem., "Comm". Izslēdz tos no augstāk atlasītajiem — šādi iegūst "pievienoties visam, izņemot šos". Nosaukuma noteikums, kas ieslēdz pievienošanos, joprojām pievienojas — tā ir apzināta izvēle konkrētam nosaukumam.',
             autoJoinWithinHoursOfEnd: 'Pievienoties tikai tuvu beigām',
             autoJoinWithinHoursOfEndDesc:
                 'Nogaidīt, līdz izaicinājumam līdz beigām atlicis tik stundu, un tikai tad pievienoties, nevis pievienoties uzreiz, tiklīdz tas parādās. 0 = pievienoties uzreiz.',
             autoJoinWithinHoursOfEndHelp:
-                'Izaicinājums ārpus loga netiek izlaists pavisam — tas tiek pārvērtēts katrā ciklā un pievienots, tiklīdz nonāk logā. Ja izaicinājums nenorāda beigu laiku, tas netiek pievienots pāragri, kamēr logs ir iestatīts.',
+                'Izaicinājums ārpus loga netiek izlaists pavisam — tas tiek pārbaudīts katrā ciklā no jauna un pievienots, tiklīdz nonāk logā. Ja izaicinājums nenorāda beigu laiku, tas netiek pievienots pāragri, kamēr logs ir iestatīts.',
             categoryRules: 'Pievienošanās laiks pēc kategorijas',
             categoryRulesDesc:
-                'Piešķir veselai izaicinājumu grupai savu pievienošanās laiku, nenosaucot katru nosaukumu. Atbilstība pēc izaicinājuma veida, pēc fotoattēlu skaita vai pēc abiem. Šie noteikumi ir pārāki par globālo laiku augšā un zemāki par nosaukuma noteikumu.',
+                'Piešķir veselai izaicinājumu grupai savu pievienošanās laiku, nenosaucot katru nosaukumu. Atlasa pēc izaicinājuma veida, pēc bilžu skaita vai pēc abiem. Šie noteikumi aizstāj globālo laiku augšā, bet nosaukuma noteikums aizstāj tos.',
             categoryRulesSaveError:
                 'Šos kategoriju noteikumus neizdevās saglabāt. Pārbaudi, vai divas rindas neatbilst vienai kategorijai un vai visas vērtības ir pieļaujamajā diapazonā.',
             noCategoryRules: 'Vēl nav kategoriju noteikumu. Visi izaicinājumi izmanto globālo laiku augšā.',
@@ -309,13 +309,13 @@
             removeCategoryRule: 'Noņemt kategorijas noteikumu',
             categoryRuleType: 'Izaicinājuma veids',
             categoryRuleTypePlaceholder: 'Jebkurš veids',
-            categoryRulePics: 'Fotoattēli',
-            categoryRuleAnyPics: 'Jebkurš',
+            categoryRulePics: 'Bildes',
+            categoryRuleAnyPics: 'Jebkāds skaits',
             categoryRulePercentElapsed: 'Pievienoties pēc',
             categoryRuleJoinWindow: 'Vai stundas pirms beigām',
-            categoryRuleInheritPlaceholder: 'Mantot',
+            categoryRuleInheritPlaceholder: 'Noklusējums',
             categoryRuleHint:
-                'Atstāj lauku tukšu, lai mantotu globālo iestatījumu; ievadi 0, lai šai kategorijai izslēgtu attiecīgo aizstājumu. Ja aizpildīti abi, tiek izmantoti procenti. Fotoattēlu skaits labi norāda garumu: 4 fotoattēlu izaicinājumi parasti ilgst dienu, 2 fotoattēlu — divas dienas, 3 fotoattēlu — trīs.',
+                'Atstāj lauku tukšu, lai izmantotu globālo iestatījumu; ievadi 0, lai šai kategorijai to izslēgtu. Ja aizpildīti abi, tiek izmantoti procenti. Bilžu skaits labi norāda garumu: 4 bilžu izaicinājumi parasti ilgst dienu, 2 bilžu — divas dienas, 3 bilžu — trīs.',
             autoJoinAfterPercentElapsed: 'Pievienoties pēc % no izaicinājuma',
             autoJoinAfterPercentElapsedDesc:
                 'Nogaidīt, līdz pagājusi šī daļa no izaicinājuma, un tikai tad pievienoties — procentos no tā paša garuma. 75 nozīmē "pievienoties, kad pagājušas trīs ceturtdaļas". 0 = izslēgts.',
@@ -328,9 +328,9 @@
             autoJoinCycleCoinBudgetDesc:
                 'Kopējais monētu daudzums, ko automātiskā pievienošanās drīkst tērēt vienā ciklā. 0 = netērēt neko (maksas izslēgta). Gan šim, gan limitam par izaicinājumu jābūt virs 0, lai pievienotos maksas izaicinājumiem.',
             // Atklāšana (nepievienotie izaicinājumi)
-            discoverTitle: 'Atklāt izaicinājumus',
+            discoverTitle: 'Atrast izaicinājumus',
             discoverCountLabel: 'atvērti izaicinājumi',
-            discoverRefresh: 'Atsvaidzināt',
+            discoverRefresh: 'Atjaunot',
             discoverEmpty: 'Šobrīd nav atvērtu izaicinājumu, kuriem pievienoties.',
             discoverUnavailableList:
                 'Neizdevās ielādēt atvērtos izaicinājumus. Pārbaudi savienojumu un mēģini vēlreiz.',
@@ -366,13 +366,13 @@
             customSettingsHint: 'Ir pielāgoti iestatījumi',
             mustIncludeTags: 'Obligātie tagi',
             mustIncludeTagsDesc:
-                'Striktais filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Apsvērt tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar visiem šiem tagiem. Atstāj tukšu, lai apsvērtu visus piemērotos foto. Salīdzināšana nav reģistrjutīga un notiek pa veseliem vārdiem: galotnes un daudzskaitlis joprojām sakrīt ("cat" sakrīt ar "cats"), bet tags nesakritīs ar garāku, nesaistītu vārdu ("cat" nesakrīt ar "catamaran"). Vairāku vārdu tagi sakrīt pa vārdiem, tāpēc "sea life" prasa abus. Tagi jāraksta angliski — automātiski noteiktie foto tagi vienmēr ir angļu valodā.',
+                'Stingrs filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Ņemt vērā tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar visiem šiem tagiem. Atstāj tukšu, lai ņemtu vērā visus piemērotos foto. Lielajiem/mazajiem burtiem nav nozīmes, un salīdzina pa veseliem vārdiem: galotnes un daudzskaitlis joprojām sakrīt ("cat" sakrīt ar "cats"), bet tags nesakritīs ar garāku, nesaistītu vārdu ("cat" nesakrīt ar "catamaran"). Vairāku vārdu tagi sakrīt pa vārdiem, tāpēc "sea life" prasa abus. Tagi jāraksta angliski — automātiski noteiktie foto tagi vienmēr ir angļu valodā.',
             shouldIncludeTags: 'Vēlamie tagi',
             shouldIncludeTagsDesc:
-                'Vēlamais kritērijs gan auto-aizpildei, gan manuālajai aizpildei. Priekšroku dot foto, kuru tagi sakrīt ar šiem; sakritības tiek ranžētas augstāk par automātiski noteikto izaicinājuma atslēgvārdu vērtējumu, bet neizslēdz pārējos foto. Ja neviens nesakrīt, aizpilde turpinās ar parasto ranžēšanu. Salīdzināšanai ir tie paši veselo vārdu noteikumi, kas Obligātajiem tagiem.',
+                'Vēlamais kritērijs gan auto-aizpildei, gan manuālajai aizpildei. Priekšroku dot foto, kuru tagi sakrīt ar šiem; tie tiek likti augstāk nekā pēc automātiski noteiktajiem izaicinājuma atslēgvārdiem, bet pārējie foto netiek izslēgti. Ja neviens nesakrīt, aizpilde notiek kā parasti. Salīdzināšanai ir tie paši veselo vārdu noteikumi, kas Obligātajiem tagiem.',
             ignoreTitleWords: 'Ignorēt šos vārdus izaicinājumu nosaukumos',
             ignoreTitleWordsDesc:
-                'Vārdi, ko izņemt no izaicinājuma nosaukuma, pirms pēc tā meklē piemērotus foto. Izaicinājumu nosaukumi parasti tēmu papildina ar apzīmētāju, nevis tikai nosauc to — "Epic Lighthouses" ir par bākām, nevis par "epic" — un šie liekie vārdi gan aizmiglo tēmu, gan aizņem nedaudzās meklēšanas reizes uz vienu izaicinājumu. Saraksts jau ir aizpildīts ar biežākajiem; to var brīvi labot. Izņem vārdu, ja izaicinājums tiešām ir par to. Sēriju priedēkļi kā "Color Hunt:" tiek apstrādāti automātiski, un tiem ieraksts nav vajadzīgs.',
+                'Vārdi, ko izņemt no izaicinājuma nosaukuma, pirms pēc tā meklē piemērotus foto. Izaicinājumu nosaukumos tēmai parasti pieliek kādu papildvārdu — "Epic Lighthouses" ir par bākām, nevis par "epic" — un šie liekie vārdi gan aizmiglo tēmu, gan tērē tās nedaudzās meklēšanas reizes, kas pieejamas vienam izaicinājumam. Saraksts jau ir aizpildīts ar biežākajiem; to var brīvi labot. Izņem vārdu, ja izaicinājums tiešām ir par to. Sēriju sākumi kā "Color Hunt:" tiek atmesti automātiski, tos šeit nav jāraksta.',
             fillWithoutTagMatch: 'Aizpildīt arī bez tagu sakritības',
             fillWithoutTagMatchDesc:
                 'Attiecas tikai tad, ja ir iestatīti obligātie tagi. Tā kā foto jāsakrīt ar visiem tagiem, tas notiek biežāk, kad pieprasīti vairāki tagi. Kad ieslēgts (noklusējums), ja neviens no taviem foto nesakrīt ar visiem šiem tagiem, tik un tā tiek pievienots labākais pieejamais foto, lai vieta nepaliek tukša. Kad izslēgts, vieta paliek tukša, līdz parādās foto, kas sakrīt ar visiem tagiem.',
@@ -384,7 +384,7 @@
             tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
             titleTagRules: 'Noteikumi pēc nosaukuma',
             titleTagRulesDesc:
-                'Piešķir profilu un tagus pēc precīza nosaukuma (nav reģistrjutīgs). Tas darbojas arī pēc izaicinājuma id maiņas; manuālie iestatījumi ir prioritāri. Tagi tiek apvienoti.',
+                'Piešķir profilu un tagus pēc izaicinājuma nosaukuma (lielajiem/mazajiem burtiem nav nozīmes). Darbojas arī tad, ja tas pats izaicinājums atgriežas vēlreiz; manuāliem iestatījumiem ir priekšroka. Tagi tiek apvienoti.',
             titleTagRulesSaveError:
                 'Neizdevās saglabāt noteikumus. Pārbaudi profilus, nosaukumu/tagu garumu un pretrunas ar atvērtu izaicinājumu manuālajiem iestatījumiem. Pārējie iestatījumi saglabāti.',
             titleTagRuleTitle: 'Izaicinājuma nosaukums',
@@ -401,14 +401,14 @@
             titleRuleChallengeTagHint:
                 'Paša izaicinājuma tags, nevis foto tags. Atstāj nosaukumu tukšu, lai atbilstu tikai pēc taga.',
             titleRuleProfile: 'Automātiskais profils',
-            titleRuleInherit: 'Mantot',
+            titleRuleInherit: 'Noklusējums',
             titleRuleOn: 'Ieslēgts',
             titleRuleOff: 'Izslēgts',
             titleRuleAutoJoin: 'Automātiski pievienoties šim nosaukumam',
             titleRuleAutoFill: 'Automātiski aizpildīt šo nosaukumu',
             titleRuleJoinWindow: 'Pievienoties, kad līdz beigām atlicis (h)',
-            titleRuleJoinWindowPlaceholder: 'mantot',
-            titleRuleOverridesLabel: 'Uzvedība šim nosaukumam',
+            titleRuleJoinWindowPlaceholder: 'noklusējums',
+            titleRuleOverridesLabel: 'Iestatījumi šim nosaukumam',
             addTitleTagRule: 'Pievienot noteikumu',
             removeTitleTagRule: 'Noņemt noteikumu',
             noTitleTagRules: 'Vēl nav noteikumu. Pievieno vienu izaicinājuma nosaukumam.',
@@ -421,7 +421,7 @@
             groupGeneral: 'Vispārīgi',
             groupBoost: 'Boost',
             groupTurbo: 'Turbo',
-            groupFinalWindow: 'Beigu loga ekspozīcija',
+            groupFinalWindow: 'Beigu loga redzamība',
             groupLastMinute: 'Pēdējā minūte',
             groupScheduledFill: 'Plānotā balsošana',
             groupVotingPause: 'Balsošanas pauze',
@@ -429,26 +429,26 @@
             groupNotifications: 'Paziņojumi',
             groupDisplay: 'Attēlojums',
             tierCore: 'Pamata',
-            tierEntries: 'Ieraksti',
+            tierEntries: 'Bildes',
             tierOverrides: 'Laika noteikumi',
             tierOverridesDesc:
-                'Visi pēc noklusējuma izslēgti — ieslēdziet kādu tikai tad, ja vēlaties mainīt, kad darbojas parastais ekspozīcijas noteikums.',
+                'Visi pēc noklusējuma izslēgti — ieslēdz kādu tikai tad, ja gribi mainīt, kad darbojas parastais redzamības noteikums.',
             tierApp: 'Lietotne',
             // Paziņojumu iestatījumi (pēc noklusējuma izslēgti)
-            notifyOnBoost: 'Paziņot pirms boost',
-            notifyOnBoostDesc: 'Brīdināt pirms boost tiek pielietots, lai vari atstāt lietotni darbojamies.',
-            notifyOnTurbo: 'Paziņot pirms turbo',
-            notifyOnTurboDesc: 'Brīdināt pirms turbo tiek nospēlēts, lai vari atstāt lietotni darbojamies.',
+            notifyOnBoost: 'Paziņot pirms Boost',
+            notifyOnBoostDesc: 'Brīdina pirms Boost izmantošanas, lai paspētu atstāt lietotni ieslēgtu.',
+            notifyOnTurbo: 'Paziņot pirms Turbo',
+            notifyOnTurboDesc: 'Brīdina pirms Turbo spēles, lai paspētu atstāt lietotni ieslēgtu.',
             notifyOnAutoFill: 'Paziņot pirms automātiskās aizpildes',
             notifyOnAutoFillDesc:
-                'Brīdināt pirms ieraksts tiek automātiski aizpildīts tuvu beigām, lai vari atstāt lietotni darbojamies.',
+                'Brīdina pirms bilde tiek automātiski pievienota tuvu beigām, lai paspētu atstāt lietotni ieslēgtu.',
             notifyOnEmergencyFill: 'Paziņot pirms ārkārtas aizpildes',
             notifyOnEmergencyFillDesc:
-                'Brīdināt pirms pēdējā brīža ārkārtas aizpildes, lai vari atstāt lietotni darbojamies.',
+                'Brīdina pirms pēdējā brīža ārkārtas aizpildes, lai paspētu atstāt lietotni ieslēgtu.',
             notifyLeadTime: 'Brīdināt cik ilgi iepriekš',
             notifyLeadTimeDesc: 'Cik minūtes pirms darbības tiek parādīts brīdinājums.',
             notifyLeadTimeHelp:
-                'Pēc iespējas: lietotne var brīdināt tikai ciklā, kas patiešām izpildās, tāpēc ilgāks laiks nekā pārbaudes biežums tuvu beigām var pienākt ar mazu brīdinājumu. Visdrošāk tas darbojas pēdējās minūtes logā.',
+                'Ne vienmēr precīzi: lietotne brīdina tikai pārbaudes brīdī, tāpēc, ja šis laiks ir garāks par pārbaudes biežumu, brīdinājums var pienākt vēlāk. Visdrošāk tas darbojas pēdējās minūtes logā.',
             // Paziņojuma virsraksta/teksta veidnes. {action} izmanto darbību
             // nosaukumus; {title} ir izaicinājuma nosaukums; {minutes}/{count}
             // aizpilda paziņojumu slānis.
@@ -457,15 +457,14 @@
             notifyGroupTitle: 'Tuvojas darbības',
             notifyGroupBody: '{count} darbības nākamajās ~{minutes} min — atstāj lietotni atvērtu līdz tam.',
             challengeName: 'Izaicinājums',
-            challengeOverrides: 'Specifiskie iestatījumi izaicinājumiem',
+            challengeOverrides: 'Atsevišķu izaicinājumu iestatījumi',
             challengeSettings: 'Izaicinājuma iestatījumi',
-            challengeSettingsDesc:
-                'Konfigurējiet iestatījumus, kas ir specifiski šim izaicinājumam. Pielāgotie iestatījumi būs prioritārāki par globālajiem noklusējumiem.',
+            challengeSettingsDesc: 'Iestatījumi tikai šim izaicinājumam. Tie aizstāj globālos noklusējumus.',
             checkForUpdates: 'Pārbaudīt atjauninājumus',
             checkForUpdatesDesc: 'Pārbaudīt jaunāku versiju tagad, negaidot automātisko pārbaudi.',
-            compactCards: 'Kompaktas kartes',
+            compactCards: 'Kompaktas kartītes',
             compactCardsDesc:
-                'Rādīt izaicinājumus kā mazākas kartes, lai ekrānā ietilpst vairāk; izslēdz, lai redzētu pilna izmēra kartes ar vairāk detaļām.',
+                'Rādīt izaicinājumus kā mazākas kartītes, lai ekrānā ietilpst vairāk; izslēdz, lai redzētu pilna izmēra kartītes ar vairāk detaļām.',
             compact: 'Kompakts',
             details: 'Detaļas',
             configureBoost: 'Konfigurēt "Boost" izaicinājumam:',
@@ -509,7 +508,7 @@
             noComm: 'Bez komentāriem',
             noEntries: 'Nav bilžu',
             noGlobalSettingsToDisplay: 'Nav globālu iestatījumu, ko attēlot',
-            noOverrides: 'Nav norādīti specifiski iestatījumi izaicinājumiem',
+            noOverrides: 'Nevienam izaicinājumam nav atsevišķu iestatījumu',
             noUiSettingsToDisplay: 'Nav saskarnes iestatījumu, ko attēlot',
             noUpdatesAvailable: 'Nav pieejamu atjauninājumu',
             normal: 'NORMĀLS',
@@ -519,15 +518,15 @@
             onlyBoostDesc: 'Pilnībā izlaist parasto balsošanu šim izaicinājumam un tikai pielietot Boost.',
             voteOnNewEntry: 'Balsot par jaunu bildi',
             voteOnNewEntryDesc:
-                'Kad šajā izaicinājumā parādās jauna bilde — pievienota paša mājaslapā vai ar automātisko aizpildi, ārkārtas aizpildi vai Boost/Turbo aizpildi — nobalsot vienu reizi arī tad, ja redzamība jau ir sasniegusi vai pārsniegusi slieksni. Balso līdz tiem griestiem, ko izaicinājums izmantotu parasti: Redzamības mērķis (vai Redzamība, ja mērķis ir 0), vai Beigu loga ekspozīcijas mērķis beigu loga laikā, kad ieslēgts "Izmantot beigu loga ekspozīciju". Nepārspēj iestatījumus Tikai "Boost" režīms, Balsot tikai pēdējās minūtes laikā vai Tikai plānotā balsošana: ja kāds no tiem bloķē, balsojums nenotiek.',
+                'Kad šajā izaicinājumā parādās jauna bilde — pievienota pašā GuruShots vai ar automātisko aizpildi, ārkārtas aizpildi vai Boost/Turbo aizpildi — nobalsot vienu reizi arī tad, ja redzamība jau ir sasniegusi vai pārsniegusi slieksni. Balso līdz tiem griestiem, ko izaicinājums izmantotu parasti: Redzamības mērķis (vai Redzamība, ja mērķis ir 0), vai Beigu loga redzamības mērķis beigu loga laikā, kad ieslēgts "Izmantot beigu loga redzamību". Tas neapiet iestatījumus Tikai "Boost" režīms, Balsot tikai pēdējās minūtes laikā un Tikai plānotā balsošana: ja kāds no tiem to aizliedz, balsojums nenotiek.',
             override: 'Pielāgots',
             overrideForChallenge: 'Pielāgot iestatījumus izaicinājumam',
             photo: 'bilde',
             photos: 'bildes',
             noActiveChallenges: 'Nav aktīvu izaicinājumu',
             players: 'Spēlētāji',
-            pleaseLogin: 'Lai apskatītu izaicinājumus, lūdzu, piesakieties',
-            prerelease: 'Pirmizlaides versija',
+            pleaseLogin: 'Piesakies, lai redzētu izaicinājumus',
+            prerelease: 'Testa (beta) versija',
             prize: 'Balva',
             rank: 'Vieta',
             rememberLoginSession: 'Atcerēties pieteikšanās sesiju',
@@ -535,12 +534,12 @@
             removeCurrentTimezone: 'Noņemt pašreizējo laika joslu',
             resetToGlobal: 'Atiestatīt uz globālajiem',
             resetToDefault: 'Atiestatīt uz noklusējumu',
-            resetToDefaultNotSaved: "Atiestatīt uz noklusējumu (netiks saglabāts, kamēr nenospiedīsiet 'Saglabāt')",
+            resetToDefaultNotSaved: "Atiestatīt uz noklusējumu (netiks saglabāts, kamēr nenospiedīsi 'Saglabāt')",
             resetAll: 'Atiestatīt visu',
             resetAllConfirmTitle: 'Atiestatīt visus iestatījumus',
-            resetAllConfirmMessage: 'Vai tiešām vēlaties atiestatīt VISUS iestatījumus uz to noklusējuma vērtībām?',
+            resetAllConfirmMessage: 'Vai tiešām atiestatīt VISUS iestatījumus uz noklusējumu?',
             resetAllConfirmDetails:
-                'Šī darbība atiestatīs:\\n• Visus saskarnes iestatījumus (tēmu, valodu, laika joslu)\\n• Visus globālos noklusējuma iestatījumus izaicinājumiem\\n• Lietotnes preferences\\n• Logu pozīcijas un izmērus\\n• Pielāgotās laika joslas\\n• Lietotājvārda un pieteikšanās sesijas preferences\\n\\nTiks saglabāts tikai jūsu piekļuves marķieris (token), pēdējais atjauninājumu pārbaudes laiks, testa režīma iestatījums un API galvenes.\\n\\nŠo darbību nevar atsaukt.',
+                'Šī darbība atiestatīs:\\n• Visus saskarnes iestatījumus (tēmu, valodu, laika joslu)\\n• Visus globālos noklusējuma iestatījumus izaicinājumiem\\n• Lietotnes preferences\\n• Logu pozīcijas un izmērus\\n• Pielāgotās laika joslas\\n• Lietotājvārda un pieteikšanās sesijas preferences\\n\\nPaliks tikai tava pieteikšanās (tokens un savienojuma dati), pēdējās atjauninājumu pārbaudes laiks un testa režīma iestatījums.\\n\\nŠo darbību nevar atsaukt.',
             resetAllSuccess: 'Visi iestatījumi ir atiestatīti. Lapa tiks pārlādēta, lai piemērotu izmaiņas.',
             save: 'Saglabāt',
             scrollToTop: 'Uz augšu',
@@ -557,7 +556,7 @@
             time: 'Laiks',
             timezone: 'Laika josla',
             timezoneDesc: 'Laika josla, ko izmanto, lai rādītu izaicinājumu sākuma un beigu laikus tavā vietējā laikā.',
-            timezonePlaceholder: 'Ievadiet laika joslu',
+            timezonePlaceholder: 'Ievadi laika joslu',
             uiSetting: 'Saskarnes iestatījums',
             updateAvailable: 'Pieejams atjauninājums!',
             run: 'Palaist',
@@ -574,14 +573,14 @@
             votingAll: 'Balso...',
             checkFrequency: 'Pārbaudes biežums',
             checkFrequencyDesc:
-                'Katrs cikls izmanto nejaušu aizkavi šajā diapazonā. Vienāds min un max nozīmē fiksētu biežumu.',
+                'Katrs cikls izmanto nejaušu pauzi šajā diapazonā. Vienāds min un max nozīmē fiksētu biežumu.',
             checkFrequencyMin: 'Min',
             checkFrequencyMax: 'Max',
             reliability: 'Uzticamība',
-            apiMaxRetries: 'API atkārtojumi',
+            apiMaxRetries: 'Atkārtoti mēģinājumi',
             apiMaxRetriesDesc:
-                'Cik reižu atkārtot neizdevušos API pieprasījumu pirms padošanās (0 atspējo). Attiecas uz īslaicīgām tīkla kļūdām, noildzēm, pieprasījumu ierobežojumiem (429) un servera kļūdām (5xx). “Atkārtojuma aizkave” ir bāzes aizkave milisekundēs, kas aptuveni dubultojas katrā mēģinājumā.',
-            apiRetryBaseDelayMs: 'Atkārtojuma aizkave (ms)',
+                'Cik reizes mēģināt vēlreiz, ja pieprasījums uz GuruShots neizdodas (0 = nemēģināt). Attiecas uz īslaicīgām tīkla kļūdām, pārāk ilgu gaidīšanu, pārāk daudz pieprasījumu (429) un servera kļūdām (5xx). “Pauze starp mēģinājumiem” ir sākuma pauze milisekundēs, kas ar katru mēģinājumu aptuveni dubultojas.',
+            apiRetryBaseDelayMs: 'Pauze starp mēģinājumiem (ms)',
             voteOnlyInLastMinute: 'Balsot tikai pēdējās minūtes laikā',
             voteOnlyInLastMinuteDesc:
                 'Pilnībā izlaist izaicinājumu, līdz tas sasniedz pēdējās minūtes sliekšņa logu, tad balsot līdz 100%. Tā balsošana notiek tikai pašās beigās, nevis visa izaicinājuma laikā.',
@@ -590,87 +589,87 @@
                 'Cik bieži (minūtēs) pārbaudīt izaicinājumu, kad tas ir pēdējās minūtes sliekšņa robežās. Noklusējums 1 pārbauda katru minūti, lai nepalaistu garām beigu grūdienu.',
             useScheduledFill: 'Izmantot plānoto balsošanu',
             useScheduledFillDesc:
-                'Balsot līdz 100% ekspozīcijai izvēlētos laikos, nevis tikai tad, kad tā nokrītas zem Redzamības sliekšņa. Tas plāno tikai balsošanu — foto netiek iesniegts (to dara Automātiskā aizpilde). Pieejami divi palaidēju saraksti, kurus var apvienot: viens vai vairāki ikdienas Balsošanas laiki un viens vai vairāki vienreizēji Balsošana pirms beigām intervāli. Katrs ieraksts atver savu neatkarīgu balsošanas logu — piem., intervāli 10h un 4h pirms beigām balso divreiz noslēguma dienā. Loga laikā izaicinājums tiek balsots līdz 100% un tur noturēts; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens laiks zemāk, un nekad neattiecas uz zibens izaicinājumiem vai izaicinājumiem režīmā "Tikai Boost". Ja lietotne nedarbojas visa loga laikā, šis logs tiek izlaists — atgūšanas nav.',
+                'Balsot līdz 100% redzamībai izvēlētos laikos, nevis tikai tad, kad tā nokrītas zem Redzamības sliekšņa. Tas plāno tikai balsošanu — foto netiek iesniegts (to dara Automātiskā aizpilde). Laikus var norādīt divos veidos, un tos var apvienot: ikdienas “Balsošanas laiki” un vienreizēji intervāli “Balsošana pirms beigām”. Katrs laiks atver savu neatkarīgu balsošanas logu — piem., intervāli 10h un 4h pirms beigām balso divreiz noslēguma dienā. Loga laikā izaicinājums tiek balsots līdz 100% un tur noturēts; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens laiks zemāk, un nekad neattiecas uz Flash izaicinājumiem vai izaicinājumiem režīmā "Tikai Boost". Ja lietotne nedarbojas visa loga laikā, šis logs tiek izlaists un vēlāk netiek atkārtots.',
             scheduledFillTime: 'Balsošanas laiki',
             scheduledFillTimeDesc:
-                'Ikdienas pulksteņa laiki (24h), kuros atveras balsošanas logi, lietotnes Laika joslas iestatījumā — nevis šīs ierīces pulkstenī. Katrs laiks katru dienu atver savu logu; noņemiet visas rindas, lai izslēgtu šo palaidēju. Ap vasaras/ziemas laika maiņu faktiskais brīdis maiņas dienā var nobīdīties līdz pat stundai.',
-            scheduledFillTimeOff: 'laiki nav iestatīti — šis palaidējs ir izslēgts',
+                'Ikdienas pulksteņa laiki (24h), kuros atveras balsošanas logi, lietotnes Laika joslas iestatījumā — nevis šīs ierīces pulkstenī. Katrs laiks katru dienu atver savu logu; noņem visas rindas, lai šos laikus izslēgtu. Ap vasaras/ziemas laika maiņu faktiskais brīdis maiņas dienā var nobīdīties līdz pat stundai.',
+            scheduledFillTimeOff: 'laiki nav iestatīti — izslēgts',
             scheduledFillBeforeEnd: 'Balsošana pirms beigām',
             scheduledFillBeforeEndDesc:
-                'Atvērt vienreizējus balsošanas logus tik ilgi pirms izaicinājuma beigām — piem., 10h 0m un 4h 0m, lai balsotu divreiz noslēguma dienā. GUI ievada stundās un minūtēs; noņemiet visas rindas, lai izslēgtu šo palaidēju. Tie ir relatīvi pret katra izaicinājuma termiņu — pārbaudiet tos vēlreiz, kad izmantojat saglabātu profilu izaicinājumam ar citu laika grafiku.',
-            scheduledFillBeforeEndOff: 'intervāli nav iestatīti — šis palaidējs ir izslēgts',
+                'Atvērt vienreizējus balsošanas logus tik ilgi pirms izaicinājuma beigām — piem., 10h 0m un 4h 0m, lai balsotu divreiz noslēguma dienā. Ievada stundās un minūtēs; noņem visas rindas, lai šos intervālus izslēgtu. Tie skaitās no katra izaicinājuma beigām — pārbaudi tos vēlreiz, ja lieto saglabātu profilu izaicinājumam ar citu garumu.',
+            scheduledFillBeforeEndOff: 'intervāli nav iestatīti — izslēgts',
             scheduledFillAddTime: 'Pievienot laiku',
             scheduledFillAddBeforeEnd: 'Pievienot intervālu',
-            scheduledFillRemoveEntry: 'Noņemt ierakstu',
-            scheduledFillEntryDraft: 'iestatiet laiku — 0h 0m rindas netiek saglabātas',
-            scheduledFillDuplicateEntry: 'dublikāts — šis ieraksts tiek ignorēts',
-            scheduledFillMaxEntries: 'Sasniegts maksimums — {0} ieraksti.',
+            scheduledFillRemoveEntry: 'Noņemt rindu',
+            scheduledFillEntryDraft: 'iestati laiku — rindas ar 0h 0m netiek saglabātas',
+            scheduledFillDuplicateEntry: 'atkārtojas — šī rinda tiek ignorēta',
+            scheduledFillMaxEntries: 'Sasniegts maksimums — {0} rindas.',
             scheduledFillSourceBeforeEnd: '{0} pirms beigām',
             scheduledFillWindowMinutes: 'Balsošanas logs (minūtes)',
             scheduledFillWindowMinutesDesc:
-                'Cik ilgi katrs balsošanas logs paliek atvērts pēc sava sākuma laika. Loga laikā izaicinājums tiek uzpildīts līdz 100% un tur noturēts; pēc tā aizvēršanās atkal darbojas parastie noteikumi. Turiet to garāku par Pārbaudes biežumu, lai balsošanas cikls garantēti trāpītu logā.',
+                'Cik ilgi katrs balsošanas logs paliek atvērts pēc sava sākuma laika. Loga laikā izaicinājums tiek uzpildīts līdz 100% un tur noturēts; pēc tā aizvēršanās atkal darbojas parastie noteikumi. Iestati to garāku par Pārbaudes biežumu, lai balsošanas cikls garantēti trāpītu logā.',
             scheduledFillReplaces: 'Tikai plānotā balsošana',
             scheduledFillReplacesDesc:
-                'Kad ieslēgts, parastā un beigu loga ekspozīcijas balsošana ārpus plānotajiem balsošanas logiem tiek bloķēta — plānotie laiki kļūst par vienīgo automātisko balsošanu. Zibens izaicinājumi un Pēdējās minūtes noteikumi joprojām balso kā parasti, manuālā balsošana netiek ietekmēta, un "Balsot tikai pēdējās minūtes laikā" ir pārāks par šo iestatījumu. Brīdinājums: ja lietotne nedarbojas visa loga laikā, šis logs tiek izlaists bez atgūšanas un bez sliekšņa rezerves, tāpēc izaicinājums var noslēgties ar nepilnīgu ekspozīciju.',
+                'Kad ieslēgts, parastā un beigu loga redzamības balsošana ārpus plānotajiem balsošanas logiem tiek bloķēta — plānotie laiki kļūst par vienīgo automātisko balsošanu. Flash izaicinājumi un Pēdējās minūtes noteikumi joprojām balso kā parasti, manuālā balsošana netiek ietekmēta, un iestatījumam "Balsot tikai pēdējās minūtes laikā" ir priekšroka pār šo. Brīdinājums: ja lietotne nedarbojas visa loga laikā, šis logs tiek izlaists, vēlāk netiek atkārtots un parastais slieksnis to neaizstāj, tāpēc izaicinājums var noslēgties ar nepilnīgu redzamību.',
             scheduledFillNextHint: 'Nākamais balsošanas logs: {0}–{1} ({2}) — no {3}',
             scheduledFillNoTimesHint:
                 'Nav iestatīts balsošanas laiks — plānotā balsošana nedarbojas, kamēr nav iestatīts kāds zemāk.',
             scheduledFillWastedWindowHint:
                 'Logi intervāliem {0} sniedzas pāri izaicinājuma termiņam — izmantojama ir tikai daļa pirms beigām.',
             scheduledFillShortWindowHint:
-                'Šis logs ir īsāks par jūsu maksimālo Pārbaudes biežumu ({0} min) — vesels logs var iekrist starp balsošanas cikliem, kamēr lietotne darbojas bez uzraudzības.',
+                'Šis logs ir īsāks par tavu maksimālo Pārbaudes biežumu ({0} min) — vesels logs var iekrist starp balsošanas cikliem, kamēr lietotne darbojas bez uzraudzības.',
             scheduledFillUnreachableHint:
                 '"Tikai plānotā balsošana" ir ieslēgta, bet pirms šī izaicinājuma beigām vairs nevar notikt neviens balsošanas logs — parastā un beigu loga balsošana paliek bloķēta, tāpēc balsos tikai Pēdējās minūtes noteikumi.',
             scheduledFillProfileReplacesWarning:
-                'Šī profila piemērošana ieslēgs "Tikai plānotā balsošana" šim izaicinājumam — pirms saglabāšanas pārskatiet balsošanas laikus.',
+                'Šī profila piemērošana ieslēgs "Tikai plānotā balsošana" šim izaicinājumam — pārskati balsošanas laikus pirms saglabāšanas.',
             useVotingPause: 'Balsošanas pauze',
             useVotingPauseDesc:
-                'Apturēt automātisko balsošanu izvēlētajos logos — domāts nakts pārtraukumam starp mačiem, kad aizpildītā ekspozīcija savāc ļoti maz balsu un tās pašas balsis ir vērtīgāk iztērētas pēc nākamā mača sākuma. Pieejami divi palaidēju saraksti, kurus var apvienot: viens vai vairāki ikdienas Pauzes laiki un viens vai vairāki vienreizēji Pauze pirms beigām intervāli. Katrs ieraksts sāk savu pauzi, kas ilgst zemāk norādīto Pauzes ilgumu; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens laiks zemāk. Zibens izaicinājumi un Pēdējās minūtes noteikumi joprojām balso, tāpēc izaicinājums, kas patiešām beidzas pauzes laikā, netiek pamests, un Boost un Turbo joprojām tiek pielietoti pēc saviem taimeriem. Manuālā balsošana nekad netiek bloķēta.',
+                'Apturēt automātisko balsošanu izvēlētajos logos — domāts nakts pārtraukumam starp kārtām, kad pilna redzamība savāc ļoti maz balsu un tās pašas balsis labāk iztērēt, kad sākas nākamā kārta. Laikus var norādīt divos veidos, un tos var apvienot: ikdienas “Pauzes laiki” un vienreizēji intervāli “Pauze pirms beigām”. Katrs laiks sāk savu pauzi, kas ilgst zemāk norādīto Pauzes ilgumu; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens laiks zemāk. Flash izaicinājumi un Pēdējās minūtes noteikumi joprojām balso, tāpēc izaicinājums, kas patiešām beidzas pauzes laikā, netiek pamests, un Boost un Turbo joprojām tiek pielietoti pēc saviem taimeriem. Manuālā balsošana nekad netiek bloķēta.',
             votingPauseTime: 'Pauzes laiki',
             votingPauseTimeDesc:
-                'Ikdienas pulksteņa laiki (24h), kuros sākas pauze, lietotnes Laika joslas iestatījumā — nevis šīs ierīces pulkstenī. Katrs laiks katru dienu sāk savu pauzi; noņemiet visas rindas, lai izslēgtu šo palaidēju. Nakts pauzei no 01:30 līdz 06:00 iestatiet šeit 01:30 un Pauzes ilgumu 270 minūtes. Ap vasaras/ziemas laika maiņu faktiskais brīdis maiņas dienā var nobīdīties līdz pat stundai.',
+                'Ikdienas pulksteņa laiki (24h), kuros sākas pauze, lietotnes Laika joslas iestatījumā — nevis šīs ierīces pulkstenī. Katrs laiks katru dienu sāk savu pauzi; noņem visas rindas, lai šos laikus izslēgtu. Nakts pauzei no 01:30 līdz 06:00 iestati šeit 01:30 un Pauzes ilgumu 270 minūtes. Ap vasaras/ziemas laika maiņu faktiskais brīdis maiņas dienā var nobīdīties līdz pat stundai.',
             votingPauseBeforeEnd: 'Pauze pirms beigām',
             votingPauseBeforeEndDesc:
-                'Sākt vienreizēju pauzi tik ilgi pirms izaicinājuma beigām. GUI ievada stundās un minūtēs; noņemiet visas rindas, lai izslēgtu šo palaidēju. Tie ir relatīvi pret katra izaicinājuma termiņu — pārbaudiet tos vēlreiz, kad izmantojat saglabātu profilu izaicinājumam ar citu laika grafiku. Pauze, kas sniedzas pāri termiņam, tāpat padodas Pēdējās minūtes noteikumiem, kuri balso vienmēr.',
+                'Sākt vienreizēju pauzi tik ilgi pirms izaicinājuma beigām. Ievada stundās un minūtēs; noņem visas rindas, lai šos intervālus izslēgtu. Tie skaitās no katra izaicinājuma beigām — pārbaudi tos vēlreiz, ja lieto saglabātu profilu izaicinājumam ar citu garumu. Pauze, kas sniedzas pāri termiņam, tāpat padodas Pēdējās minūtes noteikumiem, kuri balso vienmēr.',
             votingPauseDurationMinutes: 'Pauzes ilgums (minūtes)',
             votingPauseDurationMinutesDesc:
-                'Cik ilgi katra pauze turpinās no sava sākuma laika. Kad tā beidzas, atkal darbojas parastie noteikumi un ekspozīcija tiek uzpildīta nākamajā balsošanas ciklā. Piemērs: 270 minūtes, sākot 01:30, notur pauzi līdz 06:00.',
+                'Cik ilgi katra pauze turpinās no sava sākuma laika. Kad tā beidzas, atkal darbojas parastie noteikumi un redzamība tiek uzpildīta nākamajā balsošanas ciklā. Piemērs: 270 minūtes, sākot 01:30, notur pauzi līdz 06:00.',
             votingPauseNextHint: 'Nākamā pauze: {0}–{1} ({2}) — no {3}',
             votingPauseActiveHint:
-                'Pauze ir aktīva līdz {0} ({1}) — balsos tikai Pēdējās minūtes un zibens noteikumi. Boost un Turbo joprojām tiek pielietoti pēc saviem taimeriem.',
+                'Pauze ir aktīva līdz {0} ({1}) — balsos tikai Pēdējās minūtes un Flash noteikumi. Boost un Turbo joprojām tiek pielietoti pēc saviem taimeriem.',
             votingPauseShortWindowHint:
-                'Šī pauze ir īsāka par jūsu maksimālo Pārbaudes biežumu ({0} min) — balsošanas cikls to var pilnībā pārlēkt, un balsošana turpināsies tā, it kā pauze nebūtu iestatīta.',
+                'Šī pauze ir īsāka par tavu maksimālo Pārbaudes biežumu ({0} min) — balsošanas cikls to var pilnībā pārlēkt, un balsošana turpināsies tā, it kā pauze nebūtu iestatīta.',
             votingPauseNoTimesHint:
                 'Nav iestatīts pauzes laiks — balsošanas pauze nedarbojas, kamēr nav iestatīts kāds zemāk.',
             votingPauseAllDayHint:
                 'Šīs pauzes aizņem visu diennakti — ārpus Pēdējās minūtes noteikumiem šis izaicinājums nekad automātiski nebalsotu.',
             finalWindowDuration: 'Beigu loga ilgums',
             finalWindowDurationDesc:
-                'Cik ilgs ir beigu logs pirms izaicinājuma beigām. Beigu loga ekspozīcijas noteikums darbojas šajā logā. Pēc noklusējuma 1 stunda.',
+                'Cik ilgs ir beigu logs pirms izaicinājuma beigām. Beigu loga redzamības noteikums darbojas šajā logā. Pēc noklusējuma 1 stunda.',
             finalWindowDurationHelp:
-                'Beigu loga garums, skaitot atpakaļ no izaicinājuma beigu laika. Iestati 1 stundu, lai atveidotu veco fiksēto pēdējās stundas darbību, vai saīsini/pagarini to, lai mainītu, kad pārņem Beigu loga ekspozīcijas slieksnis un mērķis.',
-            finalWindowExposure: 'Beigu loga ekspozīcija',
+                'Beigu loga garums, skaitot atpakaļ no izaicinājuma beigu laika. Iestati 1 stundu, lai viss darbotos kā agrāk (fiksēta pēdējā stunda), vai saīsini/pagarini to, lai mainītu, kad pārņem Beigu loga redzamības slieksnis un mērķis.',
+            finalWindowExposure: 'Beigu loga redzamība',
             finalWindowExposureDesc:
-                'Redzamības līmenis, kas iedarbina balsošanu beigu logā (tikai kad ieslēgts "Izmantot beigu loga ekspozīciju"). Jābūt vienādam vai mazākam par Redzamības iestatījumu.',
-            finalWindowExposureTarget: 'Beigu loga ekspozīcijas mērķis',
+                'Redzamības līmenis, kas iedarbina balsošanu beigu logā (tikai kad ieslēgts "Izmantot beigu loga redzamību"). Jābūt vienādam vai mazākam par Redzamības iestatījumu.',
+            finalWindowExposureTarget: 'Beigu loga redzamības mērķis',
             finalWindowExposureTargetDesc:
                 'Balsot līdz šim procentam, kad nostrādā beigu loga noteikums (0 = tāds pats kā beigu loga slieksnis)',
             finalWindowExposureTargetHelp:
                 '0 NENOZĪMĒ izslēgts. 0 nozīmē “balsot līdz beigu loga redzamības slieksnim” — beigu loga noteikums paliek aktīvs. Ievadi 1-100, lai balsotu tālāk par šo slieksni. Pretstatā laika iestatījumiem, kur 0 nozīmē izslēgts.',
-            useFinalWindowExposure: 'Izmantot beigu loga ekspozīciju',
+            useFinalWindowExposure: 'Izmantot beigu loga redzamību',
             useFinalWindowExposureDesc:
                 'Beigu logā pirms izaicinājuma beigām izmantot atsevišķo beigu loga redzamības slieksni un mērķi parastā redzamības iestatījuma vietā.',
             voteBeforeFinalWindow: 'Balsot pirms beigu loga',
             voteBeforeFinalWindowDesc:
-                'Ap beigu loga sākumu balsot līdz parastajam redzamības mērķim, lai izaicinājums, kura redzamība jau nokritusies zem tā, netiktu atstāts zemā līmenī beigu loga zemākā sliekšņa dēļ. Papildināšana paliek aktīva logā, kas aptver beigu loga robežu — nobīdes minūtes pirms tās un tikpat daudz minūšu pēc tās — un tad pārņem beigu loga redzamības noteikums. Darbojas tikai tad, kad ieslēgts "Izmantot beigu loga ekspozīciju".',
-            voteBeforeFinalWindowLeadMin: 'Balsošanas pirms beigu loga nobīde',
+                'Ap beigu loga sākumu balsot līdz parastajam redzamības mērķim, lai izaicinājums, kura redzamība jau nokritusies zem tā, netiktu atstāts zemā līmenī beigu loga zemākā sliekšņa dēļ. Papildināšana paliek aktīva logā, kas aptver beigu loga robežu — nobīdes minūtes pirms tās un tikpat daudz minūšu pēc tās — un tad pārņem beigu loga redzamības noteikums. Darbojas tikai tad, kad ieslēgts "Izmantot beigu loga redzamību".',
+            voteBeforeFinalWindowLeadMin: 'Cik laicīgi pirms beigu loga',
             voteBeforeFinalWindowLeadMinDesc:
                 'Cik minūtes ap beigu loga sākumu papildināšana paliek aktīva. Logs atveras tik daudz minūšu pirms beigu loga un aizveras tikpat daudz minūšu pēc tā sākuma, pēc kā pārņem beigu loga redzamības noteikums.',
             validationInvalidValue: 'Nepareiza vērtība',
             validationMustBeLessOrEqual: 'Jābūt ≤ {0} (pašlaik {1})',
             whatsNew: 'Kas jauns:',
-            yourEntries: 'Jūsu bildes',
-            yourProgress: 'Jūsu progress',
+            yourEntries: 'Tavas bildes',
+            yourProgress: 'Tavs progress',
             // Additional keys for React components
             refresh: 'Atjaunot',
             challengeOverrideInfo:
@@ -683,7 +682,8 @@
             updateReady: 'Atjauninājums gatavs',
             updateError: 'Atjaunināšanas kļūda',
             releaseNotes: 'Laidiena piezīmes',
-            updateReadyToInstall: 'Atjauninājums lejupielādēts un gatavs instalēšanai. Restartējiet, lai piemērotu.',
+            updateReadyToInstall:
+                'Atjauninājums lejupielādēts un gatavs instalēšanai. Restartē lietotni, lai to uzstādītu.',
             skipVersion: 'Izlaist versiju',
             remindLater: 'Atgādināt vēlāk',
             download: 'Lejupielādēt',
@@ -693,12 +693,12 @@
             downloadInBrowser: 'Lejupielādēt pārlūkā',
             overridden: 'Pielāgots',
             usingGlobal: 'Izmanto globālo',
-            overridesActiveSummary: '{0} manuāls(-i) pielāgojums(-i); pārējie izmanto profila/globālo pamatu.',
-            overridesNoneSummary: 'Nav manuālu pielāgojumu; izmanto profila/globālo pamatu.',
+            overridesActiveSummary: 'Manuāli pielāgoti: {0}; pārējie izmanto profila vai globālos iestatījumus.',
+            overridesNoneSummary: 'Nav manuālu pielāgojumu; izmanto profila vai globālos iestatījumus.',
             enableOverride: 'Iespējot pielāgošanu šim izaicinājumam',
             clearAll: 'Notīrīt visu',
             notApplicable: 'Nav piemērojams',
-            notApplicableHint: 'Jūsu saglabātās vērtības tiek paturētas.',
+            notApplicableHint: 'Tavas saglabātās vērtības netiek dzēstas.',
             naBoostUsed: 'Boost šim izaicinājumam jau izmantots — šie iestatījumi nedarbosies.',
             naTurboUsed: 'Turbo šim izaicinājumam jau izmantots — šie iestatījumi nedarbosies.',
             naSlotsFull: 'Visas bilžu vietas ir aizpildītas — automātiskajai aizpildei nav ko pievienot.',
@@ -716,11 +716,11 @@
             saveAsProfile: 'Saglabāt pašreizējo kā profilu',
             profileNamePlaceholder: 'Profila nosaukums (piem., "2 bilžu taktika")',
             noProfiles: 'Nav saglabātu profilu',
-            profileSaveError: 'Neizdevās saglabāt profilu — kāda vērtība neizturēja validāciju.',
-            profileNameRequired: 'Vispirms ievadiet profila nosaukumu.',
+            profileSaveError: 'Neizdevās saglabāt profilu — kāda vērtība nav derīga.',
+            profileNameRequired: 'Vispirms ievadi profila nosaukumu.',
             profileNameTooLong: 'Profila nosaukums ir par garu (maks. {0} rakstzīmes).',
-            profileLimitReached: 'Sasniegts profilu limits ({0}) — vispirms izdzēsiet kādu.',
-            profileAppliedHint: 'Pielietots — pārskatiet vērtības zemāk un tad Saglabāt.',
+            profileLimitReached: 'Sasniegts profilu limits ({0}) — vispirms izdzēs kādu.',
+            profileAppliedHint: 'Profils ielikts — pārskati vērtības zemāk un nospied Saglabāt.',
             profileApplyHint:
                 'Profila pielietošana aizstāj pašreizējās formas vērtības (arī nesaglabātās izmaiņas); iestatījumi, kas profilā nav iekļauti, atgriežas uz "Izmanto globālo".',
             profileOverwriteHint: 'Saglabājot ar esošu nosaukumu, tas tiek pārrakstīts.',
@@ -728,13 +728,13 @@
             intentModified: 'Rediģēta sagatave',
             intentJustParticipate: 'Vienkārši piedalīties',
             intentJustParticipateDesc:
-                'Uztur tavas dalības aizpildītas, bet nekad netērē Boost vai Turbo un nedzenas pēc redzamības tālāk par slieksni — maz pūļu, maz riska.',
-            intentFinishStrong: 'Nobeigt spēcīgi',
+                'Uztur visas bilžu vietas aizpildītas, bet nekad netērē Boost vai Turbo un nedzenas pēc redzamības tālāk par slieksni — maz pūļu, maz riska.',
+            intentFinishStrong: 'Spēcīgs finišs',
             intentFinishStrongDesc:
                 'Lielāko izaicinājuma daļu spēlē normāli, tad beigu logā izmanto Boost un Turbo un spēcīgi palielina redzamību.',
             intentMaxExposure: 'Maksimāla redzamība',
             intentMaxExposureDesc:
-                'Visu laiku spiež uz priekšu: balso līdz pilnai redzamībai, aizpilda dalības un izmanto Boost un Turbo.',
+                'Visu laiku uz pilnu jaudu: balso līdz pilnai redzamībai, aizpilda bilžu vietas un izmanto Boost un Turbo.',
         },
         // Logs page specific
         logs: {
