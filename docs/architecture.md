@@ -380,7 +380,7 @@ repeated six times is one that gets forgotten at one of them.
   next_, uses a translated string, and **never** dumps raw HTTP status codes or internal result shapes at
   the user — internal detail goes to `logError`, not the UI.
 - **Reuse the `react/components/ui/` primitives** rather than re-rolling: `Modal` (+`ModalActions`),
-  `AsyncActionButton`, `StatusBadge` (+`ConnectionBadge`, `MockStatusBadge`), `LoadingSpinner`,
+  `AsyncActionButton`, `StatusBadge` (+`ConnectionBadge`), `LoadingSpinner`,
   `ResetButton`. New modals **must** go through `ui/Modal.jsx` (around L29–100) — it owns the a11y bar:
   `role="dialog"` / `aria-modal`, a full Tab/Shift+Tab focus trap, focus-move-in on open and restore on
   close, Escape-to-close, and body-scroll lock.

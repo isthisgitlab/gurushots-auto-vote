@@ -30,6 +30,7 @@ jest.mock('../../src/js/settings', () => ({
     getTitleProfile: jest.fn(() => null),
     getEffectiveTagSetting: jest.fn(() => []),
     getTitleRules: jest.fn(() => []),
+    titleRuleTitles: jest.fn((rule) => [rule?.title].filter((t) => typeof t === 'string')),
     getTitleRuleOverrides: jest.fn(() => ({})),
     getCategoryRuleOverrides: jest.fn(() => ({})),
 }));
@@ -937,5 +938,385 @@ describe('runJoinPass \u2014 category join timing', () => {
         expect(res.joined).toBe(0);
         expect(res.results[0].status).toBe('skipped:start-time-unknown');
         expect(deps.submitToChallenge).not.toHaveBeenCalled();
+    });
+});
+
+describe('joinChallenges — edge paths', () => {
+    const logger = require('../../src/js/logger');
+    const autoFill = require('../../src/js/services/autoFill');
+    const warnings = () => logger.withCategory().warning.mock.calls.map(([msg]) => msg);
+    const errors = () => logger.withCategory().error.mock.calls.map(([msg]) => msg);
+
+    describe('title matching', () => {
+        test('a titleless candidate that carries challenge tags still consults the title-rule tiers', () => {
+            settings.getTitleRuleOverrides.mockReturnValue({ autoJoinMaxCoins: 7 });
+            expect(resolveJoinSetting('autoJoinMaxCoins', { tags: ['Exhibition'] })).toBe(7);
+            expect(settings.getTitleRuleOverrides).toHaveBeenCalledWith({ tags: ['Exhibition'] });
+        });
+
+        test('an empty tag list with no title is not matchable', () => {
+            settings.getTitleRuleOverrides.mockReturnValue({ autoJoinMaxCoins: 7 });
+            expect(resolveJoinSetting('autoJoinMaxCoins', { tags: [] })).toBe(150);
+            expect(settings.getTitleRuleOverrides).not.toHaveBeenCalled();
+        });
+
+        test('a tag-keyed profile is a title opt-in for a titleless candidate (bypasses excluded type)', async () => {
+            settings.getEffectiveSetting.mockImplementation((k) =>
+                k === 'autoJoinExcludeTypes' ? 'flash' : DEFAULT_SETTINGS[k],
+            );
+            settings.getTitleProfile.mockImplementation((target) =>
+                Array.isArray(target?.tags) && target.tags.includes('Exhibition') ? { name: 'p', values: {} } : null,
+            );
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [
+                    { id: 1, join_coins: 0, type: 'flash', tags: ['Exhibition'] },
+                    { id: 2, join_coins: 0, type: 'flash', tags: [] },
+                ]),
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([
+                { id: 1, status: 'joined' },
+                { id: 2, status: 'skipped:excluded-type' },
+            ]);
+        });
+    });
+
+    describe('arming (anyTitleRuleEnablesAutoJoin)', () => {
+        beforeEach(() => {
+            settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
+        });
+
+        test('a non-array rules value never arms', () => {
+            settings.getTitleRules.mockReturnValue({ not: 'a list' });
+            expect(isAutoJoinActive()).toBe(false);
+        });
+
+        test('blank titles are skipped; a later title resolving to an auto-join profile arms', () => {
+            settings.titleRuleTitles.mockReturnValueOnce(['', 'Real']);
+            settings.getTitleRules.mockReturnValue([{ titles: ['', 'Real'], profile: 'p' }]);
+            settings.getTitleProfile.mockImplementation((t) => (t === 'Real' ? { values: { autoJoin: true } } : null));
+            expect(isAutoJoinActive()).toBe(true);
+            expect(settings.getTitleProfile).toHaveBeenCalledTimes(1);
+            expect(settings.getTitleProfile).toHaveBeenCalledWith('Real');
+        });
+    });
+
+    describe('join-window diagnostics', () => {
+        test('a null candidate is deferred and the diagnostic reports no fields', async () => {
+            settings.getEffectiveSetting.mockImplementation((k) =>
+                k === 'autoJoinWithinHoursOfEnd' ? 24 : DEFAULT_SETTINGS[k],
+            );
+            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [null]) });
+            const res = await runJoinPass('tok', 1_700_000_000_000, deps);
+            expect(res.results).toEqual([{ id: undefined, status: 'skipped:close-time-unknown' }]);
+            expect(warnings().some((m) => m.includes('no readable close_time') && m.endsWith('(none)'))).toBe(true);
+        });
+    });
+
+    describe('join-state store failures', () => {
+        test('a store whose read throws is unreadable → no spend (Error and non-Error)', async () => {
+            for (const thrown of [new Error('EIO'), 'raw-failure']) {
+                jest.clearAllMocks();
+                const deps = makeDeps({
+                    joinStateStore: {
+                        readRaw: () => {
+                            throw thrown;
+                        },
+                        writeRaw: jest.fn(),
+                    },
+                });
+                const res = await performJoin({ id: 3 }, 'tok', deps, 100);
+                expect(res).toEqual({ status: 'failed-no-charge', charged: 0 });
+                expect(deps.coinsUnlock).not.toHaveBeenCalled();
+                const text = thrown instanceof Error ? thrown.message : thrown;
+                expect(warnings()).toContain(`could not read join-state: ${text}`);
+            }
+        });
+
+        test('a join-state file that is valid JSON but not an object is unreadable → no spend', async () => {
+            const deps = makeDeps({ joinStateStore: { readRaw: () => '[1,2]', writeRaw: jest.fn() } });
+            expect(await performJoin({ id: 3 }, 'tok', deps, 100)).toEqual({ status: 'failed-no-charge', charged: 0 });
+            expect(warnings()).toContain('join-state file is malformed (not an object) — treating as unreadable');
+            expect(errors()).toContain('challenge 3: join-state is unreadable — not spending coins');
+        });
+
+        test('a failure to clear the marker after a successful join is logged, the join still succeeds', async () => {
+            let raw = JSON.stringify({ 4: { unlockedAt: 1 } });
+            const deps = makeDeps({
+                joinStateStore: {
+                    readRaw: () => raw,
+                    writeRaw: jest.fn(() => {
+                        throw new Error('read-only');
+                    }),
+                },
+            });
+            const res = await performJoin({ id: 4 }, 'tok', deps, 100);
+            expect(res).toMatchObject({ status: 'joined', charged: 0 });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(warnings()).toContain('could not clear unlock marker for 4: read-only');
+            raw = null;
+        });
+
+        test('a non-Error thrown while persisting the claim refuses the spend and is reported as-is', async () => {
+            const deps = makeDeps({
+                joinStateStore: {
+                    readRaw: () => null,
+                    writeRaw: () => {
+                        throw 'disk full';
+                    },
+                },
+            });
+            expect(await performJoin({ id: 4 }, 'tok', deps, 100)).toEqual({ status: 'failed-no-charge', charged: 0 });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(warnings()).toContain('could not persist unlock marker for 4: disk full');
+        });
+
+        test('a non-Error thrown while clearing the marker is reported as-is', async () => {
+            const deps = makeDeps({
+                joinStateStore: {
+                    readRaw: () => JSON.stringify({ 4: { unlockedAt: 1 } }),
+                    writeRaw: () => {
+                        throw 'nope';
+                    },
+                },
+            });
+            await performJoin({ id: 4 }, 'tok', deps, 100);
+            expect(warnings()).toContain('could not clear unlock marker for 4: nope');
+        });
+
+        test('clearing when this challenge has no marker writes nothing', async () => {
+            const writeRaw = jest.fn();
+            const deps = makeDeps({ joinStateStore: { readRaw: () => JSON.stringify({ other: {} }), writeRaw } });
+            expect((await performJoin({ id: 5 }, 'tok', deps, 0)).status).toBe('joined');
+            expect(writeRaw).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('mock mode (no join-state store)', () => {
+        test('a paid join with joinStateStore null unlocks and submits without persisting', async () => {
+            const deps = makeDeps({ joinStateStore: null });
+            expect(await performJoin({ id: 6 }, 'tok', deps, 50)).toEqual({
+                status: 'joined',
+                charged: 50,
+                imageId: 'imgA',
+            });
+            expect(deps.coinsUnlock).toHaveBeenCalledWith(6, 'tok');
+        });
+    });
+
+    describe('performJoin — remaining outcomes', () => {
+        test('another process unlocked between the first check and the lock → submit only, no re-charge', async () => {
+            const reads = [null, JSON.stringify({ 8: { unlockedAt: 1 } }), JSON.stringify({ 8: { unlockedAt: 1 } })];
+            const deps = makeDeps({ joinStateStore: { readRaw: () => reads.shift() ?? null, writeRaw: jest.fn() } });
+            const res = await performJoin({ id: 8 }, 'tok', deps, 100);
+            expect(res).toMatchObject({ status: 'joined', charged: 0 });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+            expect(deps.submitToChallenge).toHaveBeenCalledWith(8, ['imgA'], 'tok');
+        });
+
+        test('free join cancelled before submit → failed-no-charge', async () => {
+            cancellation.isCancelled.mockReturnValue(true);
+            const deps = makeDeps();
+            expect(await performJoin({ id: 9 }, 'tok', deps, 0)).toEqual({ status: 'failed-no-charge', charged: 0 });
+            expect(deps.submitToChallenge).not.toHaveBeenCalled();
+        });
+
+        test('free join whose submit fails → failed-no-charge', async () => {
+            const deps = makeDeps({ submitToChallenge: jest.fn(async () => ({ ok: false })) });
+            expect(await performJoin({ id: 9 }, 'tok', deps, 0)).toEqual({ status: 'failed-no-charge', charged: 0 });
+        });
+
+        test('a retried submit of an already-paid join that fails again stays pending, not re-charged', async () => {
+            const deps = makeDeps({
+                joinStateStore: { readRaw: () => JSON.stringify({ 10: { unlockedAt: 1 } }), writeRaw: jest.fn() },
+                submitToChallenge: jest.fn(async () => null),
+            });
+            expect(await performJoin({ id: 10 }, 'tok', deps, 100)).toEqual({
+                status: 'charged-pending-submit',
+                charged: 0,
+            });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        });
+
+        test('the photo library throwing skips the candidate (Error and non-Error)', async () => {
+            for (const thrown of [new Error('library down'), 'raw']) {
+                jest.clearAllMocks();
+                autoFill.fetchCandidatesForChallenge.mockRejectedValueOnce(thrown);
+                const deps = makeDeps();
+                expect(await performJoin({ id: 11 }, 'tok', deps, 100)).toEqual({
+                    status: 'skipped-no-photo',
+                    charged: 0,
+                });
+                const text = thrown instanceof Error ? thrown.message : thrown;
+                expect(warnings()).toContain(`could not read eligible photos for 11: ${text}`);
+            }
+        });
+
+        test('a picker returning nothing at all is "no photo"', async () => {
+            photoPicker.pickPhotosForChallenge.mockReturnValue(null);
+            expect((await performJoin({ id: 12 }, 'tok', makeDeps(), 0)).status).toBe('skipped-no-photo');
+        });
+    });
+
+    describe('runJoinPass — remaining outcomes', () => {
+        test('no token → not run', async () => {
+            const deps = makeDeps();
+            expect(await runJoinPass('', Date.now(), deps)).toEqual({ ran: false, joined: 0, results: [] });
+            expect(deps.getMemberChallenges).not.toHaveBeenCalled();
+        });
+
+        test('listing open challenges throws → not run (Error and non-Error)', async () => {
+            for (const thrown of [new Error('503'), 'raw']) {
+                jest.clearAllMocks();
+                const deps = makeDeps({ getMemberChallenges: jest.fn().mockRejectedValue(thrown) });
+                expect(await runJoinPass('tok', Date.now(), deps)).toEqual({ ran: false, joined: 0, results: [] });
+                const text = thrown instanceof Error ? thrown.message : thrown;
+                expect(warnings()).toContain(`could not list open challenges: ${text}`);
+            }
+        });
+
+        test('no open challenges → ran, nothing joined, no balance read', async () => {
+            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => []) });
+            expect(await runJoinPass('tok', Date.now(), deps)).toEqual({ ran: true, joined: 0, results: [] });
+            expect(deps.getBankroll).not.toHaveBeenCalled();
+        });
+
+        test('a non-Error thrown by the balance read is reported and paid joins are skipped', async () => {
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 100, type: 'flash' }]),
+                getBankroll: jest.fn().mockRejectedValue('bank down'),
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.joined).toBe(0);
+            expect(warnings()).toContain('could not read balance (paid joins skipped this pass): bank down');
+        });
+
+        test('a missing/invalid clock falls back to the wall clock for the join window', async () => {
+            settings.getEffectiveSetting.mockImplementation((k) =>
+                k === 'autoJoinWithinHoursOfEnd' ? 1 : DEFAULT_SETTINGS[k],
+            );
+            const closeSoon = Math.floor(Date.now() / 1000) + 600;
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [
+                    { id: 1, join_coins: 0, type: 'flash', close_time: closeSoon },
+                ]),
+            });
+            expect((await runJoinPass('tok', undefined, deps)).joined).toBe(1);
+        });
+
+        test('cancellation stops the pass before the next candidate', async () => {
+            cancellation.isCancelled.mockReturnValue(true);
+            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }]) });
+            expect(await runJoinPass('tok', Date.now(), deps)).toEqual({ ran: true, joined: 0, results: [] });
+            expect(warnings()).toContain('join pass cancelled by user');
+        });
+
+        test('a numeric-string balance allows the paid join and is decremented for later candidates', async () => {
+            // Budget (300) covers both joins, so only the balance can stop the second.
+            const bankroll = { coins: '150' };
+            const deps = makeDeps({
+                getMemberChallenges: jest.fn(async () => [
+                    { id: 1, join_coins: 100, type: 'flash' },
+                    { id: 2, join_coins: 100, type: 'flash' },
+                ]),
+                getBankroll: jest.fn(async () => bankroll),
+            });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results[0]).toEqual({ id: 1, status: 'joined' });
+            expect(res.results[1]).toEqual({ id: 2, status: 'skipped:insufficient-coins' });
+            expect(deps.coinsUnlock).toHaveBeenCalledTimes(1);
+            expect(bankroll.coins).toBe(50);
+        });
+
+        test('a candidate with no eligible photo is reported and not counted as joined', async () => {
+            photoPicker.pickPhotosForChallenge.mockReturnValue([]);
+            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }]) });
+            expect(await runJoinPass('tok', Date.now(), deps)).toEqual({
+                ran: true,
+                joined: 0,
+                results: [{ id: 1, status: 'skipped-no-photo' }],
+            });
+        });
+
+        test('a thrown non-Error from a candidate join is logged by value', async () => {
+            photoPicker.pickPhotosForChallenge.mockImplementationOnce(() => {
+                throw 'picker boom';
+            });
+            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0 }]) });
+            const res = await runJoinPass('tok', Date.now(), deps);
+            expect(res.results).toEqual([{ id: 1, status: 'error' }]);
+            expect(warnings()).toContain('join failed for challenge 1: picker boom');
+        });
+    });
+
+    describe('joinChallengeSingle — remaining outcomes', () => {
+        const paid = () => jest.fn(async () => [{ id: 2, join_coins: 100, type: 'flash' }]);
+
+        test('no token → not-authenticated without any API call', async () => {
+            const deps = makeDeps();
+            expect(await joinChallengeSingle(2, null, deps)).toEqual({
+                status: 'not-authenticated',
+                challengeId: 2,
+                cost: 0,
+            });
+            expect(deps.getMemberChallenges).not.toHaveBeenCalled();
+        });
+
+        test('omitting opts means "do not spend" → needs-confirm', async () => {
+            const deps = makeDeps({ getMemberChallenges: paid() });
+            expect(await joinChallengeSingle(2, 'tok', deps)).toEqual({
+                status: 'needs-confirm',
+                challengeId: 2,
+                cost: 100,
+            });
+        });
+
+        test('listing throws → fetch-failed (Error and non-Error)', async () => {
+            for (const thrown of [new Error('503'), 'raw']) {
+                const deps = makeDeps({ getMemberChallenges: jest.fn().mockRejectedValue(thrown) });
+                expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toEqual({
+                    status: 'fetch-failed',
+                    challengeId: 2,
+                    cost: 0,
+                });
+            }
+        });
+
+        test('a null listing → unavailable', async () => {
+            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => null) });
+            expect((await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).status).toBe('unavailable');
+        });
+
+        test.each([[null], [{}], [{ coins: 'lots' }]])('bankroll %p → balance-unknown, no spend', async (bankroll) => {
+            const deps = makeDeps({ getMemberChallenges: paid(), getBankroll: jest.fn(async () => bankroll) });
+            expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toEqual({
+                status: 'balance-unknown',
+                challengeId: 2,
+                cost: 100,
+            });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        });
+
+        test('not enough coins → skipped-unaffordable with the balance', async () => {
+            const deps = makeDeps({ getMemberChallenges: paid(), getBankroll: jest.fn(async () => ({ coins: 40 })) });
+            expect(await joinChallengeSingle(2, 'tok', deps, { spendCoins: true })).toEqual({
+                status: 'skipped-unaffordable',
+                challengeId: 2,
+                cost: 100,
+                coins: 40,
+            });
+            expect(deps.coinsUnlock).not.toHaveBeenCalled();
+        });
+
+        test('a free challenge joins without reading the balance', async () => {
+            const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 3, join_coins: 'free' }]) });
+            expect(await joinChallengeSingle(3, 'tok', deps, { spendCoins: false })).toEqual({
+                status: 'joined',
+                challengeId: 3,
+                cost: 0,
+                imageId: 'imgA',
+            });
+            expect(deps.getBankroll).not.toHaveBeenCalled();
+        });
     });
 });

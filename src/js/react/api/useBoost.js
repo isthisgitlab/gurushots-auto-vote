@@ -5,10 +5,11 @@ import { useAsyncIpcAction } from './useAsyncIpcAction';
  * Returns { applyBoost, loading, error, clearError }.
  */
 export function useBoost() {
-    const action = useAsyncIpcAction(
-        (challengeId, imageId, boostType = 'boost') => window.api.applyBoost(challengeId, imageId, boostType),
-        { failureMessage: 'Boost failed', errorMessage: 'Boost error' },
-    );
+    // The apply-boost-to-entry handler takes (challengeId, imageId) only.
+    const action = useAsyncIpcAction((challengeId, imageId) => window.api.applyBoost(challengeId, imageId), {
+        failureMessage: 'Boost failed',
+        errorMessage: 'Boost error',
+    });
 
     return {
         applyBoost: action.run,

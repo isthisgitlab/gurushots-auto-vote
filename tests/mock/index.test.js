@@ -275,6 +275,13 @@ describe('mock/index', () => {
 
         describe('getActiveChallenges', () => {
             test('should return challenges for any token', async () => {
+                // The session cache and the generator stub are shared across
+                // tests (other suites re-point the generator); pin both so the
+                // result does not depend on test order.
+                mockIndex.clearSessionCache();
+                challenges.generateMockChallenges.mockReturnValueOnce({
+                    challenges: [{ id: '2', title: 'Generated Challenge' }],
+                });
                 const result = await mockIndex.mockApiClient.getActiveChallenges('any-token');
 
                 expect(result).toEqual({ challenges: [{ id: '2', title: 'Generated Challenge' }] });

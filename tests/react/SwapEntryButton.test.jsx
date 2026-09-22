@@ -89,6 +89,25 @@ test('warns when the entry is boosted or turbo-charged', async () => {
     expect(await screen.findByText('app.currencySwapBoostedWarning')).toBeTruthy();
 });
 
+test('a not-available commit still refreshes (the state moved under us)', async () => {
+    window.api.swapEntryPhoto = jest
+        .fn()
+        .mockResolvedValue({ success: false, outcome: 'not-available', error: 'not-available' });
+    const { onSpent } = renderButton();
+    fireEvent.click(swapButton());
+    fireEvent.click(await screen.findByText('app.currencySpend'));
+    await waitFor(() => expect(onSpent).toHaveBeenCalledTimes(1));
+});
+
+test('Cancel closes the confirm modal without swapping', async () => {
+    const { onSpent } = renderButton();
+    fireEvent.click(swapButton());
+    fireEvent.click(await screen.findByText('app.cancel'));
+    await waitFor(() => expect(screen.queryByText('app.currencySwapTitle')).toBeNull());
+    expect(window.api.swapEntryPhoto).not.toHaveBeenCalled();
+    expect(onSpent).not.toHaveBeenCalled();
+});
+
 describe('SwapBackButton', () => {
     const SWAP_BACK = {
         previousId: 'dddddddddddddddddddddddddddddddd',
@@ -96,12 +115,12 @@ describe('SwapBackButton', () => {
         kind: 'boost',
     };
 
-    const renderSwapBack = () => {
+    const renderSwapBack = (swapBack = SWAP_BACK) => {
         const onSpent = jest.fn();
         render(
             <SwapBackButton
                 entry={ENTRY}
-                swapBack={SWAP_BACK}
+                swapBack={swapBack}
                 challengeId={7}
                 bankroll={{ keys: 0, swaps: 4, fills: 0, coins: 0 }}
                 onSpent={onSpent}
@@ -129,5 +148,38 @@ describe('SwapBackButton', () => {
         fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
         fireEvent.click(screen.getByText('app.cancel'));
         expect(window.api.swapBackEntryPhoto).not.toHaveBeenCalled();
+    });
+
+    test('names the turbo kind in the body for a turbo swap back', () => {
+        window.translationManager.t.mockImplementation((key) => (key === 'app.turbo' ? 'TURBO' : key));
+        try {
+            renderSwapBack({ ...SWAP_BACK, kind: 'turbo' });
+            fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
+            expect(window.translationManager.t).toHaveBeenCalledWith('app.turbo');
+            expect(window.translationManager.t).not.toHaveBeenCalledWith('app.boost');
+        } finally {
+            window.translationManager.t.mockImplementation((key) => key);
+        }
+    });
+
+    test('a not-available outcome refreshes and flags the button', async () => {
+        window.api.swapBackEntryPhoto = jest
+            .fn()
+            .mockResolvedValue({ success: false, outcome: 'not-available', error: 'not-available' });
+        const { onSpent } = renderSwapBack();
+        fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
+        fireEvent.click(screen.getByText('app.currencySpend'));
+        await waitFor(() => expect(onSpent).toHaveBeenCalledTimes(1));
+        expect(screen.getByRole('alert')).toBeTruthy();
+        expect(screen.getByText(/app\.currencySwapBack$/).closest('button').className).toContain('btn-error');
+    });
+
+    test('a plain failure shows the reason without refreshing', async () => {
+        window.api.swapBackEntryPhoto = jest.fn().mockResolvedValue({ success: false, outcome: 'failed' });
+        const { onSpent } = renderSwapBack();
+        fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
+        fireEvent.click(screen.getByText('app.currencySpend'));
+        await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+        expect(onSpent).not.toHaveBeenCalled();
     });
 });

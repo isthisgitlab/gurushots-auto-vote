@@ -129,7 +129,7 @@ const anyTitleRuleEnablesAutoJoin = () => {
         }
         // A rule may list several titles; any of them resolving to an
         // auto-joining profile arms the pass.
-        const titles = settings.titleRuleTitles ? settings.titleRuleTitles(rule) : [rule?.title];
+        const titles = settings.titleRuleTitles(rule);
         for (const title of titles) {
             if (!title) continue;
             const profile = settings.getTitleProfile(title);
@@ -199,7 +199,7 @@ const resolveCandidateConfig = (challenge) => ({
  * drops or renames the field, the window would silently stop every join. Naming
  * the fields that ARE present makes that diagnosable from one run.
  */
-const warnMissingCloseTime = (challenge, reason = 'close-time-unknown') => {
+const warnMissingCloseTime = (challenge, reason) => {
     const fields = Object.keys(challenge || {}).join(', ') || '(none)';
     // start_time is only read by the percent-elapsed anchor, so name the field
     // the gate actually could not read rather than a generic "timing" message.
@@ -235,7 +235,8 @@ const readUnlockedState = (store) => {
         cat().warning('join-state file is malformed (not an object) — treating as unreadable', null);
         return { state: {}, ok: false };
     } catch (error) {
-        cat().warning(`join-state file is corrupt: ${error?.message || error}`, null);
+        // JSON.parse only ever throws a SyntaxError here (readRaw returns a string).
+        cat().warning(`join-state file is corrupt: ${error.message}`, null);
         return { state: {}, ok: false };
     }
 };
@@ -565,9 +566,10 @@ const runJoinPass = async (token, now, deps) => {
         }
         if (outcome.charged > 0) {
             remainingBudget -= outcome.charged;
-            if (bankroll && Number.isFinite(bankroll.coins)) {
-                bankroll.coins -= outcome.charged;
-            }
+            // A charge only follows a passed affordability check, which already
+            // proved Number(bankroll.coins) finite. Coerce the same way so a
+            // numeric-string balance is still decremented for the rest of the pass.
+            bankroll.coins = Number(bankroll.coins) - outcome.charged;
         }
         if (outcome.status === 'joined') joined += 1;
         results.push({ id: challenge?.id, status: outcome.status });

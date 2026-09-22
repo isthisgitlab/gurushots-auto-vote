@@ -9,18 +9,6 @@ const LEVEL_COLORS = {
 };
 
 /**
- * Escape HTML to prevent XSS
- * @param {string} text
- * @returns {string}
- */
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-/**
  * Single log entry. Three small badges then the message:
  *   [severity] [context] [category] message
  */
@@ -38,7 +26,8 @@ export function LogEntry({ entry }) {
             {' '}
             <span className="text-yellow-400">[{category || 'general'}]</span>
             {' '}
-            <span className="text-white">{escapeHtml(message)}</span>
+            {/* JSX text is escaped by the renderer; pre-escaping showed "&lt;" literally. */}
+            <span className="text-white">{message}</span>
         </div>
     );
 }
@@ -46,7 +35,7 @@ export function LogEntry({ entry }) {
 /**
  * Empty state when no logs are present
  */
-export function LogsEmptyState({ text = 'No logs yet.' }) {
+export function LogsEmptyState({ text }) {
     return (
         <div className="text-gray-500 text-center py-8">
             {text}

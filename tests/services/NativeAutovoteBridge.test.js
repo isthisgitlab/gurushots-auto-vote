@@ -75,4 +75,18 @@ describe('NativeAutovoteBridge', () => {
         await expect(bridge.stop()).resolves.toEqual({ running: false, available: true, error: 'stop boom' });
         await expect(bridge.getStatus()).resolves.toEqual({ running: false, available: true, error: 'status boom' });
     });
+
+    test('reports unavailable (and logs) when reading the plugin registry throws', async () => {
+        const warning = jest.fn();
+        require('../../src/js/logger').withCategory.mockReturnValueOnce({ warning });
+        globalThis.Capacitor = {
+            get Plugins() {
+                throw new Error('bridge not ready');
+            },
+        };
+        const bridge = loadBridge();
+
+        expect(bridge.isAvailable()).toBe(false);
+        expect(warning).toHaveBeenCalledWith('NativeAutovoteBridge.getPlugin failed', 'bridge not ready');
+    });
 });

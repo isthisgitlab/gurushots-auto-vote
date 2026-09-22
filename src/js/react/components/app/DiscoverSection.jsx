@@ -41,7 +41,7 @@ const costOf = (c) => {
  * changes state, refetches the list and calls onJoined so the header bankroll
  * (and active challenges) refresh.
  *
- * @param {{ isLoggedIn: boolean, bankroll: object|null, onJoined?: function }} props
+ * @param {{ isLoggedIn: boolean, bankroll: object|null, onJoined: function }} props
  */
 export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
     const { t } = useTranslation();
@@ -62,9 +62,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                 // doesn't linger. Refresh balances only when coins moved.
                 const gone = res?.success || res?.status === 'charged-pending-submit' || res?.status === 'unavailable';
                 if (gone) refetch();
-                if (res?.success || res?.status === 'charged-pending-submit') {
-                    if (onJoined) onJoined();
-                }
+                if (res?.success || res?.status === 'charged-pending-submit') onJoined();
                 return res;
             } catch (err) {
                 setResults((prev) => ({ ...prev, [id]: { status: 'failed-no-charge', error: err?.message } }));
@@ -90,12 +88,15 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
     const onConfirm = useCallback(async () => {
         const challenge = confirm;
         setConfirm(null);
-        if (challenge) await doJoin(challenge, true);
+        // Only reachable from the modal's Spend button, which renders only
+        // while a challenge is pending confirmation.
+        await doJoin(challenge, true);
     }, [confirm, doJoin]);
 
     if (!isLoggedIn) return null;
 
-    const list = Array.isArray(items) ? items : [];
+    // useMemberChallenges guarantees an array.
+    const list = items;
 
     return (
         <>
@@ -168,9 +169,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                                                 </span>
                                             </div>
                                             {meta && (
-                                                <div
-                                                    className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant] || TEXT_CLASS.neutral}`}
-                                                >
+                                                <div className={`text-xs mt-0.5 ${TEXT_CLASS[meta.variant]}`}>
                                                     {meta.key
                                                         ? interp(t(meta.key), {
                                                               coins: outcome.cost ?? cost,

@@ -200,47 +200,17 @@ class BaseMiddleware {
         return !!(token && token.trim() !== '');
     }
 
-    async logout(clearToken = true) {
-        if (clearToken) {
-            await clearAuthToken();
-            logger.withCategory('authentication').success('Logged out successfully', null, null);
-        }
+    async logout() {
+        await clearAuthToken();
+        logger.withCategory('authentication').success('Logged out successfully', null, null);
     }
 
     getActiveChallenges() {
         return this.apiStrategy.getActiveChallenges(requireToken());
     }
 
-    getVoteImages(challenge) {
-        return this.apiStrategy.getVoteImages(challenge, requireToken());
-    }
-
-    submitVotes(voteImages, exposureThreshold = settings.SETTINGS_SCHEMA.exposure.default) {
-        return this.apiStrategy.submitVotes(voteImages, requireToken(), exposureThreshold);
-    }
-
     applyBoost(challenge) {
         return this.apiStrategy.applyBoost(challenge, requireToken());
-    }
-
-    applyBoostToEntry(challengeId, imageId) {
-        return this.apiStrategy.applyBoostToEntry(challengeId, imageId, requireToken());
-    }
-
-    applyTurbo(challengeId, imageId) {
-        return this.apiStrategy.applyTurbo(challengeId, imageId, requireToken());
-    }
-
-    getBankroll() {
-        return this.apiStrategy.getBankroll(requireToken());
-    }
-
-    getMemberChallenges(filter = 'open') {
-        return this.apiStrategy.getMemberChallenges(requireToken(), filter);
-    }
-
-    joinChallenge(challengeId, spendCoins = false) {
-        return this.apiStrategy.joinChallenge(challengeId, spendCoins === true, requireToken());
     }
 }
 

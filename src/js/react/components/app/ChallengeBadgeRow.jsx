@@ -21,7 +21,7 @@ import { PulseDot } from '../ui/PulseDot';
 export function ChallengeBadgeRow({
     challenge,
     boostOpen,
-    boostTimeLeft = null,
+    boostTimeLeft,
     lowExposure,
     exposureFactor,
     showAutoFillBadge,

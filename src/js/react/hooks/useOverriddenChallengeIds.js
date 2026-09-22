@@ -16,7 +16,7 @@ const NONE = new Set();
  * Re-runs on settings-changed so the marker tracks edits made in the
  * per-challenge settings modal.
  *
- * @param {Array<{id: string|number}>} challenges
+ * @param {Array<{id: string|number}>} challenges - always an array (ChallengeNav normalizes)
  * @returns {Set<string>} ids, as strings
  */
 export function useOverriddenChallengeIds(challenges) {
@@ -28,7 +28,7 @@ export function useOverriddenChallengeIds(challenges) {
     // into one the way a plain join/split would.
     const idsKey = useMemo(() => {
         const ids = [];
-        for (const challenge of challenges || []) {
+        for (const challenge of challenges) {
             const id = challenge?.id;
             if (id === null || id === undefined) continue;
             const key = String(id);
@@ -53,5 +53,7 @@ export function useOverriddenChallengeIds(challenges) {
     // Same guard, for the same reason, as useActiveChallenges.
     const { data } = useIpcQuery(queryFn, { initialData: NONE, subscribe: true, singleFlight: true });
 
-    return data instanceof Set ? data : NONE;
+    // queryFn only ever resolves a Set and a failed read keeps the previous
+    // value, so `data` is always a Set here.
+    return data;
 }

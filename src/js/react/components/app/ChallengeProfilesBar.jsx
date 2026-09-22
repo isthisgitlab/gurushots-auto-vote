@@ -6,7 +6,8 @@ import { getIntentByName, intentValuesMatch } from '../../../settings/intentProf
 // falling back to its idle state.
 const CONFIRM_TIMEOUT_MS = 4000;
 
-const normalizeName = (name) => (typeof name === 'string' ? name.trim().toLowerCase() : '');
+// Only ever called with profile-name keys and the trimmed input — always strings.
+const normalizeName = (name) => name.trim().toLowerCase();
 
 /**
  * Named challenge-settings profiles bar for the per-challenge settings modal.
@@ -89,8 +90,9 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
         disarm();
     };
 
+    // Apply and Delete are disabled while no profile is selected, so both
+    // handlers can rely on selectedProfile being set.
     const handleApply = () => {
-        if (!selectedProfile) return;
         onApply(selectedProfile);
         setErrorText('');
         setApplied(true);
@@ -98,7 +100,6 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
     };
 
     const handleDelete = async () => {
-        if (!selectedProfile) return;
         if (confirming !== 'delete') {
             arm('delete');
             return;

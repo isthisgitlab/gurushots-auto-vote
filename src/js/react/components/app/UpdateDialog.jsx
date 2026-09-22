@@ -113,8 +113,8 @@ export function UpdateDialog() {
                     </div>
                 )}
 
-                {/* Error State */}
-                {state === UPDATE_STATES.ERROR && error && (
+                {/* Error State — SET_ERROR always carries an error payload. */}
+                {state === UPDATE_STATES.ERROR && (
                     <div className="alert alert-error">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
@@ -170,7 +170,7 @@ export function UpdateDialog() {
                             <button className="btn btn-ghost btn-sm" onClick={hideDialog}>
                                 {t('app.close')}
                             </button>
-                            {error?.canFallbackToBrowser && (
+                            {error.canFallbackToBrowser && (
                                 <button className="btn btn-latvian btn-sm" onClick={openBrowserDownload}>
                                     {t('app.downloadInBrowser')}
                                 </button>

@@ -31,6 +31,7 @@ jest.mock('../../src/js/settings.js', () => ({
     setSetting: jest.fn(() => true),
     loadSettings: jest.fn(() => ({ mock: true, token: 'tok' })),
     getEffectiveSetting: jest.fn(),
+    flushPendingWrites: jest.fn(async () => {}),
 }));
 
 jest.mock('../../src/js/apiFactory', () => {

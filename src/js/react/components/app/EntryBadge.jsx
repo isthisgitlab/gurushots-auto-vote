@@ -14,8 +14,8 @@ import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
  * @param {string|number} props.challengeId
  * @param {boolean} props.boostAvailable - Boost is currently usable on the parent challenge
  * @param {boolean} [props.turboAvailable] - A won Turbo is held and unapplied
- * @param {Function} [props.onBoostApplied]
- * @param {Function} [props.onTurboApplied]
+ * @param {Function} props.onBoostApplied - called after a successful boost
+ * @param {Function} props.onTurboApplied - called after a successful turbo
  * @param {boolean} [props.swapAvailable] - A swap can be spent on this challenge (balance + challenge flags)
  * @param {object|null} [props.bankroll] - For the swap confirm modal's balance line
  * @param {Function} [props.onSwapped]
@@ -58,12 +58,12 @@ export function EntryBadge({
 
     const handleBoost = async () => {
         const result = await applyBoost(challengeId, entry.id);
-        if (result?.success && onBoostApplied) onBoostApplied();
+        if (result?.success) onBoostApplied();
     };
 
     const handleTurbo = async () => {
         const result = await applyTurbo(challengeId, entry.id);
-        if (result?.success && onTurboApplied) onTurboApplied();
+        if (result?.success) onTurboApplied();
     };
 
     return (

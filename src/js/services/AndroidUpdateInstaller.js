@@ -14,16 +14,10 @@
 const runtime = require('../runtime');
 const logger = require('../logger');
 
-// The native plugin, when this build registered it. Accessed lazily so
-// non-Capacitor paths never touch globalThis.Capacitor.
-const getNativeInstaller = () => {
-    if (!runtime.isCapacitor()) return null;
-    try {
-        return globalThis.Capacitor?.Plugins?.ApkInstaller || null;
-    } catch {
-        return null;
-    }
-};
+// The native plugin, when this build registered it. Accessed lazily (only
+// after downloadAndInstall's isCapacitor() gate) so non-Capacitor paths never
+// touch globalThis.Capacitor.
+const getNativeInstaller = () => globalThis.Capacitor?.Plugins?.ApkInstaller || null;
 
 // Browser fallback: hand the URL to the system browser. One extra tap vs the
 // native installer but works with no native code and matches the sideload
@@ -59,7 +53,7 @@ const openInBrowser = (downloadUrl, version) => {
  *   with native download-progress events when the native plugin is used.
  * @returns {Promise<{success: boolean, version?: string, error?: string}>}
  */
-const downloadAndInstall = async ({ downloadUrl, version, onProgress } = {}) => {
+const downloadAndInstall = async ({ downloadUrl, version, onProgress }) => {
     if (!downloadUrl) return { success: false, error: 'No download URL provided' };
     if (!runtime.isCapacitor()) return { success: false, error: 'Android updater is a no-op outside Capacitor' };
 

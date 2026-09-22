@@ -312,10 +312,8 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     // inside start() prevents double-starts. Skips when there is no
     // token, otherwise the loop would error every cycle until the user
     // logs in.
-    const autoResumeRef = useRef(false);
+    // (An empty-deps effect runs once per mount, so no extra ran-once guard.)
     useEffect(() => {
-        if (autoResumeRef.current) return;
-        autoResumeRef.current = true;
         const maybeResume = async () => {
             try {
                 const wasRunning = await window.api.getSetting('autovoteRunning');

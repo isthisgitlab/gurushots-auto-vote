@@ -35,10 +35,9 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', className
     // The element focused before the modal opened, restored on close.
     const previouslyFocusedRef = useRef(null);
 
-    const getFocusable = useCallback(() => {
-        const box = modalBoxRef.current;
-        return box ? Array.from(box.querySelectorAll(FOCUSABLE_SELECTOR)) : [];
-    }, []);
+    // Only called while the dialog is mounted and open (the open effect and the
+    // keydown listener it owns), so the box ref is always attached here.
+    const getFocusable = useCallback(() => Array.from(modalBoxRef.current.querySelectorAll(FOCUSABLE_SELECTOR)), []);
 
     const handleKeyDown = useCallback(
         (e) => {

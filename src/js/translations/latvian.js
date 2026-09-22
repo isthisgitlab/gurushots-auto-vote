@@ -1,6 +1,10 @@
 // Latvian translations for GuruShots Auto Vote
 /* global window, self */
 (function (root, factory) {
+    // The else branch is the classic <script>-tag load (src/html/*.html). Jest
+    // always loads this file through its CommonJS wrapper, where `module` is
+    // defined, so that branch cannot run under test.
+    /* istanbul ignore else */
     if (typeof module === 'object' && module.exports) {
         // Node.js
         module.exports = factory();

@@ -82,4 +82,12 @@ describe('useTimers (signals-backed countdown)', () => {
             }),
         ).not.toThrow();
     });
+
+    test('an empty challenge list starts no interval', () => {
+        const spy = jest.spyOn(global, 'setInterval');
+        render(<TimerProbe challenges={[]} />);
+        expect(screen.getByTestId('ids').textContent).toBe('');
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+    });
 });

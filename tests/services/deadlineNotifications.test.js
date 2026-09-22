@@ -241,3 +241,41 @@ describe('readNotificationConfig', () => {
         expect(readNotificationConfig((k) => ({ notifyLeadTime: 'x' })[k]).leadSec).toBe(0);
     });
 });
+
+describe('defensive inputs from hosts', () => {
+    test('interpolate treats a missing template as empty text', () => {
+        expect(interpolate(null, { a: 1 })).toBe('');
+        expect(interpolate(undefined, {})).toBe('');
+    });
+
+    test('computeDueNotifications with no enabled map fires nothing', () => {
+        expect(computeDueNotifications([challenge('1', 'T', [action('boost', 60)])], NOW, { leadSec: 300 })).toEqual(
+            [],
+        );
+    });
+
+    test('dedupe.filterNew tolerates a non-array and forgets everything it had fired', () => {
+        const dedupe = createDedupe();
+        const entry = { fireKey: '1:boost:5' };
+        expect(dedupe.filterNew([entry])).toEqual([entry]);
+        expect(dedupe.filterNew(null)).toEqual([]);
+        // The null pass pruned the key, so the same window fires again.
+        expect(dedupe.filterNew([entry])).toEqual([entry]);
+    });
+
+    test('formatNotification without a translator falls back to the raw keys / action name', () => {
+        const due = computeDueNotifications([challenge('1', 'Sunset', [action('boost', 120)])], NOW, {
+            leadSec: 300,
+            enabled: ALL_ON,
+        });
+        expect(formatNotification(due, undefined)).toEqual({ title: 'app.notifyTitle', body: 'app.notifyBody' });
+    });
+
+    test('readNotificationConfig without an accessor is all-off with no lead window', () => {
+        expect(readNotificationConfig(null)).toEqual({
+            leadSec: 0,
+            enabled: { autoFill: false, boost: false, turbo: false, emergencyFill: false },
+            anyEnabled: false,
+        });
+    });
+});

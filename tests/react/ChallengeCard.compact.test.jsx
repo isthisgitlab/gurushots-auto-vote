@@ -69,11 +69,11 @@ const makeChallenge = () =>
         },
     });
 
-const renderCard = (challenge = makeChallenge()) =>
+const renderCard = (challenge = makeChallenge(), timeRemaining = '2h 30m') =>
     render(
         <ChallengeCard
             challenge={challenge}
-            timeRemaining="2h 30m"
+            timeRemaining={timeRemaining}
             timezone="local"
             autovoteRunning={false}
             onVoteComplete={jest.fn()}
@@ -92,6 +92,14 @@ describe('compact ChallengeCard tile', () => {
         expect(buttons).toHaveLength(1);
         // Action label: a compact card offers to expand to details.
         expect(buttons[0].textContent).toContain('app.details');
+    });
+
+    test('an ended countdown is shown in red, a running one in green', () => {
+        const { unmount } = renderCard(makeChallenge(), 'Ended');
+        expect(screen.getByText('Ended').className).toContain('text-error');
+        unmount();
+        renderCard();
+        expect(screen.getByText('2h 30m').className).toContain('text-success');
     });
 
     test('toggle calls toggleCompact', () => {

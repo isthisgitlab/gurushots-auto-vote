@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const MAX_ENTRIES = 1000;
 
@@ -11,17 +11,13 @@ const MAX_ENTRIES = 1000;
  * during the await — de-duped by monotonic `seq` so identical repeated
  * messages (turbo retries, mock loops) don't collide.
  *
- * @returns {{ entries: Array, connected: boolean, clear: function }}
+ * @returns {{ entries: Array, connected: boolean }}
  */
 export function useLogStream() {
     const [entries, setEntries] = useState([]);
     const [connected, setConnected] = useState(false);
     const mountedRef = useRef(true);
     const unsubscribeRef = useRef(null);
-
-    const clear = useCallback(() => {
-        setEntries([]);
-    }, []);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -36,13 +32,16 @@ export function useLogStream() {
             });
         };
 
+        // window.api is the manifest-generated surface on both shells, so the
+        // log-stream methods always exist; onLogMessage always returns its
+        // unsubscribe and get-log-backlog always resolves an array.
         async function connect() {
             try {
-                const result = await window.api?.startLogStream?.();
-                if (!result?.success || !mountedRef.current) return;
+                const result = await window.api.startLogStream();
+                if (!result.success || !mountedRef.current) return;
                 setConnected(true);
 
-                const unsubscribe = window.api?.onLogMessage?.((logData) => {
+                unsubscribeRef.current = window.api.onLogMessage((logData) => {
                     if (!mountedRef.current) return;
                     if (!seeded) {
                         liveBuffer.push(logData);
@@ -50,11 +49,8 @@ export function useLogStream() {
                         appendEntry(logData);
                     }
                 });
-                if (typeof unsubscribe === 'function') {
-                    unsubscribeRef.current = unsubscribe;
-                }
 
-                const backlog = (await window.api.getLogBacklog?.()) || [];
+                const backlog = await window.api.getLogBacklog();
                 if (!mountedRef.current) return;
 
                 // Backlog is oldest→newest. Reverse so newest renders at top.
@@ -76,20 +72,13 @@ export function useLogStream() {
 
         return () => {
             mountedRef.current = false;
-            if (typeof unsubscribeRef.current === 'function') {
+            if (unsubscribeRef.current) {
                 unsubscribeRef.current();
                 unsubscribeRef.current = null;
             }
-            if (window.api?.stopLogStream) {
-                window.api.stopLogStream();
-            }
+            window.api.stopLogStream();
         };
     }, []);
 
-    return {
-        entries,
-        connected,
-        clear,
-        entryCount: entries.length,
-    };
+    return { entries, connected };
 }

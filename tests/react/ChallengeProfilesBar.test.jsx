@@ -225,4 +225,141 @@ describe('ChallengeProfilesBar', () => {
         expect(document.body.textContent).not.toContain('app.confirmDelete');
         expect(mockApi.deleteChallengeProfile).not.toHaveBeenCalled();
     });
+
+    test('an armed confirm falls back to idle after the timeout', async () => {
+        jest.useFakeTimers();
+        try {
+            mockApi.getChallengeProfiles.mockResolvedValue({ tactic: {} });
+            renderBar();
+            await act(async () => {});
+            await act(async () => changeSelect(selectEl(), 'tactic'));
+            await act(async () => fireEvent.click(deleteButton()));
+            expect(deleteButton().textContent).toBe('app.confirmDelete');
+            await act(async () => jest.advanceTimersByTime(4000));
+            expect(deleteButton().textContent).toBe('app.deleteProfile');
+            expect(mockApi.deleteChallengeProfile).not.toHaveBeenCalled();
+        } finally {
+            jest.useRealTimers();
+        }
+    });
+
+    test('a non-object profiles reply reads as no profiles', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue(null);
+        renderBar();
+        await waitFor(() => expect(mockApi.getChallengeProfiles).toHaveBeenCalled());
+        expect(screen.getByRole('option').textContent).toBe('app.noProfiles');
+    });
+
+    test.each([
+        ['an Error', new Error('disk'), 'Error loading challenge profiles: disk'],
+        ['a bare value', 'nope', 'Error loading challenge profiles: nope'],
+    ])('a failed profiles load (%s) is logged and shows none', async (_label, rejection, logged) => {
+        mockApi.getChallengeProfiles.mockRejectedValue(rejection);
+        renderBar();
+        await waitFor(() => expect(mockApi.logError).toHaveBeenCalledWith(logged));
+        expect(screen.getByRole('option').textContent).toBe('app.noProfiles');
+    });
+
+    test.each([
+        ['an Error', new Error('io'), 'Error deleting challenge profile: io'],
+        ['a bare value', 'io', 'Error deleting challenge profile: io'],
+    ])('a thrown Delete (%s) is logged and re-enables the buttons', async (_label, rejection, logged) => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ tactic: {} });
+        mockApi.deleteChallengeProfile.mockRejectedValue(rejection);
+        renderBar();
+        await waitFor(() => expect(document.body.textContent).toContain('tactic (0)'));
+        await act(async () => changeSelect(selectEl(), 'tactic'));
+        await act(async () => fireEvent.click(deleteButton()));
+        await act(async () => fireEvent.click(deleteButton()));
+        await waitFor(() => expect(deleteButton().disabled).toBe(false));
+        expect(mockApi.logError).toHaveBeenCalledWith(logged);
+    });
+
+    test('a successful Delete clears the selection, refreshes and notifies', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValueOnce({ tactic: {} }).mockResolvedValueOnce({});
+        const onProfilesChanged = jest.fn();
+        renderBar({ onProfilesChanged });
+        await waitFor(() => expect(document.body.textContent).toContain('tactic (0)'));
+        await act(async () => changeSelect(selectEl(), 'tactic'));
+        await act(async () => fireEvent.click(deleteButton()));
+        await act(async () => fireEvent.click(deleteButton()));
+        await waitFor(() => expect(onProfilesChanged).toHaveBeenCalledWith({ name: 'tactic', deleted: true }));
+        expect(selectEl().value).toBe('');
+        expect(screen.getByRole('option').textContent).toBe('app.noProfiles');
+    });
+
+    test.each([
+        ['an Error', new Error('full'), 'Error saving challenge profile: full'],
+        ['a bare value', 'full', 'Error saving challenge profile: full'],
+    ])('a thrown Save (%s) is logged and shows the generic error', async (_label, rejection, logged) => {
+        mockApi.saveChallengeProfile.mockRejectedValue(rejection);
+        renderBar();
+        fireEvent.change(nameInput(), { target: { value: 'p' } });
+        await act(async () => fireEvent.click(saveButton()));
+        await waitFor(() => expect(document.body.textContent).toContain('app.profileSaveError'));
+        expect(mockApi.logError).toHaveBeenCalledWith(logged);
+    });
+
+    test('without limits the client-side caps are skipped', async () => {
+        const many = {};
+        for (let i = 0; i < 60; i++) many[`p${i}`] = {};
+        mockApi.getChallengeProfiles.mockResolvedValue(many);
+        render(<ChallengeProfilesBar overrides={{ a: 1 }} onApply={jest.fn()} />);
+        await waitFor(() => expect(document.body.textContent).toContain('p0 (0)'));
+        fireEvent.change(nameInput(), { target: { value: 'y'.repeat(200) } });
+        await act(async () => fireEvent.click(saveButton()));
+        expect(mockApi.saveChallengeProfile).toHaveBeenCalledWith('y'.repeat(200), { a: 1 });
+    });
+
+    test('typing a new name disarms a pending overwrite', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValue({ Tactic: {} });
+        renderBar();
+        await waitFor(() => expect(document.body.textContent).toContain('Tactic (0)'));
+        fireEvent.change(nameInput(), { target: { value: 'tactic' } });
+        await act(async () => fireEvent.click(saveButton()));
+        expect(saveButton().textContent).toBe('app.confirmOverwrite');
+        fireEvent.change(nameInput(), { target: { value: 'tactic2' } });
+        expect(saveButton().textContent).toBe('app.saveAsProfile');
+        // A plain edit while nothing is armed keeps the idle label.
+        fireEvent.change(nameInput(), { target: { value: 'tactic3' } });
+        expect(saveButton().textContent).toBe('app.saveAsProfile');
+    });
+
+    test('a saved name the refreshed list does not carry leaves Apply disabled', async () => {
+        mockApi.getChallengeProfiles.mockResolvedValueOnce({}).mockResolvedValueOnce({ Other: {} });
+        renderBar();
+        fireEvent.change(nameInput(), { target: { value: 'mine' } });
+        await act(async () => fireEvent.click(saveButton()));
+        await waitFor(() => expect(document.body.textContent).toContain('Other (0)'));
+        expect(applyButton().disabled).toBe(true);
+    });
+
+    describe('built-in intent presets', () => {
+        const JUST = {
+            exposure: 100,
+            exposureTarget: 0,
+            autoBoost: false,
+            useTurbo: false,
+            autoTurbo: false,
+            autoFill: true,
+        };
+
+        test('are starred, translated and marked built-in while unedited', async () => {
+            mockApi.getChallengeProfiles.mockResolvedValue({ 'Just Participate': JUST, mine: {} });
+            renderBar();
+            await waitFor(() => expect(document.body.textContent).toContain('★ app.intentJustParticipate (6)'));
+            await act(async () => changeSelect(selectEl(), 'Just Participate'));
+            const badge = screen.getByText('app.intentBuiltIn');
+            expect(badge.className).toContain('badge-info');
+            expect(document.body.textContent).toContain('app.intentJustParticipateDesc');
+        });
+
+        test('are marked modified once their values differ', async () => {
+            mockApi.getChallengeProfiles.mockResolvedValue({ 'Just Participate': { ...JUST, autoFill: false } });
+            renderBar();
+            await waitFor(() => expect(document.body.textContent).toContain('★'));
+            await act(async () => changeSelect(selectEl(), 'Just Participate'));
+            expect(screen.getByText('app.intentModified').className).toContain('badge-warning');
+        });
+    });
 });

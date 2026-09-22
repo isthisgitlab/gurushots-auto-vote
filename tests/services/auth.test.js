@@ -11,7 +11,9 @@ jest.mock('../../src/js/logger', () => ({
     withCategory: jest.fn(() => ({ info: jest.fn(), warning: jest.fn(), error: jest.fn() })),
 }));
 
-const { extractAuthResult } = require('../../src/js/services/auth');
+const settings = require('../../src/js/settings');
+const logger = require('../../src/js/logger');
+const { extractAuthResult, requireAuthToken } = require('../../src/js/services/auth');
 
 describe('extractAuthResult', () => {
     test('null / undefined response → no-response failure', () => {
@@ -50,5 +52,25 @@ describe('extractAuthResult', () => {
         expect(extractAuthResult({ error: 'bad creds' }).error).toBe('bad creds');
         expect(extractAuthResult({ message: 'nope' }).error).toBe('nope');
         expect(extractAuthResult({}).error).toBe('Authentication failed - invalid response from server');
+    });
+});
+
+describe('requireAuthToken', () => {
+    test('returns the token and the loaded settings when logged in', () => {
+        const userSettings = { token: 'tok', language: 'en' };
+        settings.loadSettings.mockReturnValue(userSettings);
+        expect(requireAuthToken('boost')).toEqual({ ok: true, token: 'tok', settings: userSettings });
+    });
+
+    test('returns a ready-to-send early-return response and warns when there is no token', () => {
+        const warning = jest.fn();
+        logger.withCategory.mockReturnValueOnce({ warning });
+        settings.loadSettings.mockReturnValue({ token: '' });
+        expect(requireAuthToken('turbo apply')).toEqual({
+            ok: false,
+            response: { success: false, error: 'No authentication token found' },
+        });
+        expect(logger.withCategory).toHaveBeenCalledWith('authentication');
+        expect(warning).toHaveBeenCalledWith('❌ No token found for turbo apply', null);
     });
 });

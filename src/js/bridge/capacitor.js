@@ -100,8 +100,9 @@ const buildAllHandlers = () => {
                     // Honor a user-skipped version — the settings facade is
                     // the single skip-version store on every platform
                     // (Electron's AutoUpdater reads the same key).
-                    const skipped = settings.getSetting('skipUpdateVersion');
-                    if (skipped && skipped === result.version) {
+                    // ('' means no skip, and an available update always has a
+                    // non-empty version, so a plain equality check suffices.)
+                    if (settings.getSetting('skipUpdateVersion') === result.version) {
                         lastUpdateInfo = null;
                         emit('update-not-available', { version: result.version });
                         return { success: true, updateInfo: null };
@@ -207,7 +208,6 @@ const installBridge = () => {
     for (const [method, channel] of Object.entries(aliases)) {
         api[method] = api[kebabToCamel(channel)];
     }
-    api.guiVote = api.guiVote || api.runVotingCycle;
 
     // Send-style methods (login-success / logout) are window-control
     // hints in Electron's main process. On Capacitor they just toggle

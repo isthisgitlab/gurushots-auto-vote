@@ -29,7 +29,7 @@ const formatSettingForLog = (key, value) => {
     // `lastMinuteThreshold` 10 looks like 300 > 10 when it is really 5 minutes vs 10.
     // Annotate rather than convert, so the printed value still matches what set-setting
     // expects back.
-    const config = settings.SETTINGS_SCHEMA?.[key];
+    const config = settings.SETTINGS_SCHEMA[key];
     if (config?.type === 'time' && typeof value === 'number' && Number.isFinite(value)) {
         return value === 0 ? `${raw} (off)` : `${raw} (${formatDuration(value)})`;
     }
@@ -103,7 +103,7 @@ const setSetting = (key, value, challengeId = null) => {
         // key that nothing ever reads — the command reported success and changed nothing.
         // Setting the global default is what the user meant; say so rather than doing it
         // silently, so a script author can see the redirect in the output.
-        if (settings.SETTINGS_SCHEMA?.[key]) {
+        if (settings.SETTINGS_SCHEMA[key]) {
             // Worded for both kinds of schema key: most support per-challenge overrides, but
             // a few (lastMinuteCheckFrequency) are global-only, and pointing those at
             // --challenge would just hit requirePerChallenge's rejection.

@@ -1,4 +1,5 @@
 const { Menu, dialog, app, BrowserWindow } = require('electron');
+const logger = require('../logger');
 
 /**
  * Application Menu Module
@@ -146,7 +147,7 @@ function createApplicationMenu() {
             label: t('menu.help'),
             submenu: [
                 {
-                    label: t('menu.checkForUpdates') || 'Check for Updates...',
+                    label: t('menu.checkForUpdates'),
                     click: () => checkForUpdatesFromMenu(),
                 },
                 { type: 'separator' },
@@ -170,7 +171,6 @@ function createApplicationMenu() {
 // Check for updates from menu
 async function checkForUpdatesFromMenu() {
     const AutoUpdater = require('../services/AutoUpdater');
-    const logger = require('../logger');
 
     try {
         // Get the main window to send events to
@@ -186,19 +186,19 @@ async function checkForUpdatesFromMenu() {
             // No update available - show dialog
             void dialog.showMessageBox({
                 type: 'info',
-                title: t('menu.noUpdates') || 'No Updates',
-                message: t('menu.noUpdatesMessage') || 'You are using the latest version.',
-                buttons: [t('common.ok') || 'OK'],
+                title: t('menu.noUpdates'),
+                message: t('menu.noUpdatesMessage'),
+                buttons: [t('common.ok')],
             });
         }
     } catch (error) {
         logger.withCategory('update').error('Error checking for updates from menu:', error);
         void dialog.showMessageBox({
             type: 'error',
-            title: t('menu.updateError') || 'Update Error',
-            message: t('menu.updateErrorMessage') || 'Failed to check for updates.',
+            title: t('menu.updateError'),
+            message: t('menu.updateErrorMessage'),
             detail: error.message,
-            buttons: [t('common.ok') || 'OK'],
+            buttons: [t('common.ok')],
         });
     }
 }
@@ -242,7 +242,10 @@ function openLogsWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            preload: path.join(__dirname, '../preload.js'),
+            // Same bundle as the main windows (scripts/build-react.js): the
+            // sandboxed preload cannot require() the relative channel manifest,
+            // so the raw src/js/preload.js would leave this window without window.api.
+            preload: path.join(__dirname, '..', '..', '..', 'dist', 'preload-bundle.js'),
         },
         show: false,
     });
@@ -253,11 +256,6 @@ function openLogsWindow() {
 
     logsWindow.once('ready-to-show', () => {
         logsWindow.show();
-    });
-
-    // Clean up when window is closed
-    logsWindow.on('closed', () => {
-        // Window will be garbage collected
     });
 }
 

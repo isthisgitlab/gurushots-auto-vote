@@ -123,12 +123,12 @@ export function ChallengeCard({
 
     const handlePlayAutoTurbo = async () => {
         const result = await playAutoTurbo(challenge.id, challenge.title);
-        if (result?.success && onVoteComplete) onVoteComplete();
+        if (result?.success) onVoteComplete();
     };
 
     const handleFill = async (mode) => {
         const result = await fillNow(challenge.id, mode);
-        if (result?.success && onVoteComplete) onVoteComplete();
+        if (result?.success) onVoteComplete();
     };
 
     const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
@@ -156,7 +156,6 @@ export function ChallengeCard({
     const showKeyUnlock = canKeyUnlock(challenge, bankroll, now);
     const showFillExposure = canFillExposure(challenge, bankroll, now);
     const swapAvailable = canSwapEntry(challenge, bankroll, now);
-    const handleCurrencySpent = onCurrencySpent || onVoteComplete;
 
     // Manual "vote to 100%" override. Shown even while the scheduled
     // autovote loop is running so a single challenge can be pushed to 100%
@@ -205,10 +204,9 @@ export function ChallengeCard({
         [challenge.welcome_message],
     );
 
+    // Only reachable from the URL row, which renders only when challenge.url is set.
     const handleOpenUrl = async () => {
-        if (challenge.url) {
-            await window.api.openExternalUrl(`https://gurushots.com/challenge/${challenge.url}`);
-        }
+        await window.api.openExternalUrl(`https://gurushots.com/challenge/${challenge.url}`);
     };
 
     // id + scroll-mt make the card a smooth-scroll target for the anchor chips
@@ -388,7 +386,7 @@ export function ChallengeCard({
                                 kind="fill"
                                 challenge={challenge}
                                 bankroll={bankroll}
-                                onSpent={handleCurrencySpent}
+                                onSpent={onCurrencySpent}
                             />
                         )}
                     </div>
@@ -400,7 +398,7 @@ export function ChallengeCard({
                                 kind="key"
                                 challenge={challenge}
                                 bankroll={bankroll}
-                                onSpent={handleCurrencySpent}
+                                onSpent={onCurrencySpent}
                             />
                         )}
                     </div>
@@ -482,7 +480,7 @@ export function ChallengeCard({
                                     onTurboApplied={onVoteComplete}
                                     swapAvailable={swapAvailable}
                                     bankroll={bankroll}
-                                    onSwapped={handleCurrencySpent}
+                                    onSwapped={onCurrencySpent}
                                     swapBack={swapBacks.find((r) => r.currentId === String(entry.id)) ?? null}
                                 />
                             ))}

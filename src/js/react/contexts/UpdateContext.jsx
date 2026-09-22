@@ -16,7 +16,6 @@ const ACTIONS = {
     UPDATE_PROGRESS: 'UPDATE_PROGRESS',
     SET_READY: 'SET_READY',
     SET_ERROR: 'SET_ERROR',
-    RESET: 'RESET',
     HIDE_DIALOG: 'HIDE_DIALOG',
 };
 
@@ -62,15 +61,13 @@ function updateReducer(state, action) {
                 state: UPDATE_STATES.ERROR,
                 error: action.payload,
             };
-        case ACTIONS.RESET:
-            return initialState;
         case ACTIONS.HIDE_DIALOG:
             return {
                 ...state,
                 dialogVisible: false,
             };
-        default:
-            return state;
+        // Every dispatch below uses an ACTIONS key; there is no unknown type
+        // to fall through to.
     }
 }
 

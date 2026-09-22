@@ -58,6 +58,7 @@ describe('buildPhotoUrl', () => {
             ['non-hex characters', 'z'.repeat(32), IMAGE],
             ['null', null, IMAGE],
             ['undefined', undefined, IMAGE],
+            ['a null image id', MEMBER, null],
             ['a number', 12345, IMAGE],
         ])('%s', (_label, memberId, imageId) => {
             expect(buildPhotoUrl(memberId, imageId)).toBeNull();

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import { createContext, useContext, useEffect, useMemo } from 'react';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
 
 const ChallengesContext = createContext(null);
@@ -11,30 +11,18 @@ export function ChallengesProvider({ children, autovoteRunning }) {
     // skip stale-settings cleanup while autovote runs — prop wiring, not
     // the old window.autovoteRunning side-channel.
     const { data, loading, error, refetch } = useActiveChallenges(autovoteRunning);
-    const autoRefreshRef = useRef(null);
 
-    // Start auto-refresh when autovote is not running (every 60 seconds)
+    // Auto-refresh every 60 seconds while autovote is NOT running (the
+    // voting loop refreshes on its own cadence then). The effect's cleanup
+    // clears the interval whenever the flag flips or the provider unmounts.
     useEffect(() => {
-        if (autovoteRunning) {
-            // Stop auto-refresh during autovote
-            if (autoRefreshRef.current) {
-                clearInterval(autoRefreshRef.current);
-                autoRefreshRef.current = null;
-            }
-            return;
-        }
+        if (autovoteRunning) return undefined;
 
-        // Start auto-refresh when autovote is not running
-        autoRefreshRef.current = setInterval(() => {
+        const autoRefresh = setInterval(() => {
             refetch(true); // Skip cleanup during auto-refresh
         }, 60000);
 
-        return () => {
-            if (autoRefreshRef.current) {
-                clearInterval(autoRefreshRef.current);
-                autoRefreshRef.current = null;
-            }
-        };
+        return () => clearInterval(autoRefresh);
     }, [autovoteRunning, refetch]);
 
     // Memoize so consumers don't re-render every time the provider re-renders;

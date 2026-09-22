@@ -129,4 +129,15 @@ describe('syncBackgroundActivity', () => {
         mockPowerSaveBlocker.start.mockReturnValue(13);
         expect(syncBackgroundActivity(true)).toBe(true);
     });
+
+    test('a non-Error throw is still reported in the warning text', () => {
+        const warning = jest.fn();
+        require('../../src/js/logger').withCategory.mockReturnValueOnce({ warning });
+        mockPowerSaveBlocker.start.mockImplementationOnce(() => {
+            throw 'EPERM';
+        });
+
+        expect(syncBackgroundActivity(true)).toBe(false);
+        expect(warning).toHaveBeenCalledWith('backgroundActivity: power-save blocker unavailable: EPERM', null);
+    });
 });

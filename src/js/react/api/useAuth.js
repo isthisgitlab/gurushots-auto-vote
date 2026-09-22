@@ -1,7 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useAsyncIpcAction } from './useAsyncIpcAction';
 
-const invokeAuthenticate = (username, password, isMock = false) => window.api.authenticate(username, password, isMock);
+// Always called with all three args by `authenticate` below, which owns the default.
+const invokeAuthenticate = (username, password, isMock) => window.api.authenticate(username, password, isMock);
 
 /**
  * Hook for authentication via IPC.

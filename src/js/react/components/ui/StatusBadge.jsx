@@ -1,3 +1,5 @@
+import { useTranslation } from '@/contexts/TranslationContext';
+
 /**
  * DaisyUI badge component for displaying status
  */
@@ -36,20 +38,10 @@ export function StatusBadge({ children, variant = 'neutral', size = 'md', classN
  * Connection status badge for log viewer
  */
 export function ConnectionBadge({ connected }) {
+    const { t } = useTranslation();
     return (
         <StatusBadge variant={connected ? 'success' : 'error'} size="sm">
-            {connected ? 'Connected' : 'Disconnected'}
-        </StatusBadge>
-    );
-}
-
-/**
- * Mock mode status badge
- */
-export function MockStatusBadge({ isMock }) {
-    return (
-        <StatusBadge variant={isMock ? 'warning' : 'success'} size="sm">
-            {isMock ? 'ON' : 'OFF'}
+            {connected ? t('logs.connected') : t('logs.disconnected')}
         </StatusBadge>
     );
 }

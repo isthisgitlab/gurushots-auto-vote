@@ -93,12 +93,12 @@ export function ChallengesSection({
     if (loading && challenges.length === 0) {
         return (
             <div className="flex justify-center py-8">
-                <LoadingSpinner size="lg" text={t('common.loading')} />
+                <LoadingSpinner size="lg" />
             </div>
         );
     }
 
-    if (!challenges || challenges.length === 0) {
+    if (challenges.length === 0) {
         return (
             <div>
                 {fetchErrorBanner}

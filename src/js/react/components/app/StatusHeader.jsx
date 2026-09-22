@@ -33,13 +33,13 @@ const fmtBalance = (v) => (Number.isFinite(v) ? v : '—');
  */
 function BankrollStats({ bankroll }) {
     const { t } = useTranslation();
-    const b = bankroll || null;
+    // Only rendered when a bankroll object is present (see StatusHeader).
     return (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1" role="status" aria-live="polite">
-            <HeaderStat icon="🔑" value={fmtBalance(b?.keys)} label={t('app.bankrollKeys')} />
-            <HeaderStat icon="🔄" value={fmtBalance(b?.swaps)} label={t('app.bankrollSwaps')} />
-            <HeaderStat icon="🧩" value={fmtBalance(b?.fills)} label={t('app.bankrollFills')} />
-            <HeaderStat icon="🪙" value={fmtBalance(b?.coins)} label={t('app.bankrollCoins')} />
+            <HeaderStat icon="🔑" value={fmtBalance(bankroll.keys)} label={t('app.bankrollKeys')} />
+            <HeaderStat icon="🔄" value={fmtBalance(bankroll.swaps)} label={t('app.bankrollSwaps')} />
+            <HeaderStat icon="🧩" value={fmtBalance(bankroll.fills)} label={t('app.bankrollFills')} />
+            <HeaderStat icon="🪙" value={fmtBalance(bankroll.coins)} label={t('app.bankrollCoins')} />
         </div>
     );
 }
@@ -77,7 +77,8 @@ function NextActionCountdown({ nextRunAt, running }) {
  */
 export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoinActive }) {
     const { t } = useTranslation();
-    const list = Array.isArray(challenges) ? challenges : [];
+    // ChallengesContext always hands down an array ([] while empty/loading).
+    const list = challenges;
     const nowSec = Math.floor(Date.now() / 1000);
     const activeCount = list.length;
     const boostsAvailable = openBoostWindows(list, nowSec).length;

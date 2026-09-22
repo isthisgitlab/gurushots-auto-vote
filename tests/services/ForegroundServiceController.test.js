@@ -114,4 +114,26 @@ describe('ForegroundServiceController', () => {
         mockFsPlugin.stopForegroundService.mockRejectedValue(new Error('stop failed'));
         await expect(controller.stop()).resolves.toBeUndefined();
     });
+
+    test('degrades to a no-op (and logs) when the plugin module cannot be loaded', async () => {
+        jest.resetModules();
+        jest.doMock('@capawesome-team/capacitor-android-foreground-service', () => {
+            throw new Error('native module missing');
+        });
+        const warning = jest.fn();
+        require('../../src/js/logger').withCategory.mockReturnValueOnce({ warning });
+        require('../../src/js/runtime').isCapacitor.mockReturnValue(true);
+        try {
+            const isolated = require('../../src/js/services/ForegroundServiceController');
+
+            await expect(isolated.start()).resolves.toBe(false);
+            expect(mockFsPlugin.startForegroundService).not.toHaveBeenCalled();
+            expect(warning).toHaveBeenCalledWith('ForegroundService plugin unavailable', 'native module missing');
+        } finally {
+            // Restore the file-level plugin mock for whichever test runs next.
+            jest.doMock('@capawesome-team/capacitor-android-foreground-service', () => ({
+                ForegroundService: mockFsPlugin,
+            }));
+        }
+    });
 });

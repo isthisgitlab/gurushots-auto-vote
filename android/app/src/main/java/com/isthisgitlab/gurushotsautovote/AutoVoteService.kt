@@ -18,6 +18,7 @@ import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationCompat
 import okhttp3.Call
 import okhttp3.Callback
@@ -81,6 +82,19 @@ class AutoVoteService : Service() {
         private const val PREFS_FILE = "CapacitorStorage"
         private const val SETTINGS_KEY = "gurushots-settings"
         private const val HEADLESS_URL = "file:///android_asset/public/headless.html"
+
+        // Test seam: JVM unit tests swap in a client whose interceptor reroutes
+        // the (allow-listed) api.gurushots.com requests to a local MockWebServer.
+        // Production never reassigns it.
+        @VisibleForTesting
+        internal var httpClientFactory: () -> OkHttpClient = {
+            OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .build()
+        }
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -94,14 +108,7 @@ class AutoVoteService : Service() {
     private val cycleDone = AtomicBoolean(true)
     private var cycleWakeLock: PowerManager.WakeLock? = null
 
-    private val http: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
-            .build()
-    }
+    private val http: OkHttpClient by lazy { httpClientFactory() }
 
     private val cycleWatchdog = Runnable {
         Log.w(TAG, "Cycle watchdog fired — JS did not report completion in time")
@@ -151,7 +158,7 @@ class AutoVoteService : Service() {
             // don't start a cycle (or acquire a wakelock) against a service
             // that's shutting down.
             if (!isRunning) return@post
-            if (webView == null) createWebView()
+            val wv = createWebView()
             if (!pageReady) {
                 Log.i(TAG, "Headless page not ready yet — retrying shortly")
                 scheduleNextAlarm(PAGE_RETRY_MS)
@@ -161,7 +168,7 @@ class AutoVoteService : Service() {
             cycleWakeLock = acquireWakelock()
             mainHandler.postDelayed(cycleWatchdog, CYCLE_TIMEOUT_MS)
             Log.i(TAG, "Cycle ${cycleCount + 1} starting (JS)")
-            webView?.evaluateJavascript(
+            wv.evaluateJavascript(
                 "(function(){try{" +
                     "if(window.GS&&window.GS.runOneCycle){window.GS.runOneCycle();}" +
                     "else{AndroidHeadlessBridge.onCycleComplete(JSON.stringify({ok:false,error:'not-loaded'}));}" +
@@ -220,8 +227,9 @@ class AutoVoteService : Service() {
 
     // ---------- Headless WebView ----------
 
-    private fun createWebView() {
-        if (webView != null) return
+    /** Returns the service's headless WebView, creating (and loading) it on first use. */
+    private fun createWebView(): WebView {
+        webView?.let { return it }
         Log.i(TAG, "Creating headless WebView")
         val wv = WebView(this)
         wv.settings.javaScriptEnabled = true
@@ -269,6 +277,7 @@ class AutoVoteService : Service() {
         pageReady = false
         wv.loadUrl(HEADLESS_URL)
         webView = wv
+        return wv
     }
 
     /** OkHttp-backed HTTP bridge. Async so the WebView's JS thread never blocks on network. */
@@ -282,19 +291,23 @@ class AutoVoteService : Service() {
                 return
             }
             http.newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    resolveHttp(id, JSONObject().put("error", e.message ?: "network-error"))
-                }
+                override fun onFailure(call: Call, e: IOException) = resolveNetworkError(id, e)
 
                 override fun onResponse(call: Call, response: Response) {
-                    response.use { resp ->
-                        val bodyStr = resp.body?.string() ?: ""
-                        val headersObj = JSONObject()
-                        for (name in resp.headers.names()) headersObj.put(name.lowercase(Locale.US), resp.header(name))
-                        resolveHttp(
-                            id,
-                            JSONObject().put("status", resp.code).put("body", bodyStr).put("headers", headersObj),
-                        )
+                    // A body that fails mid-read must still resolve this id;
+                    // otherwise JS only recovers via its own request timeout.
+                    try {
+                        response.use { resp ->
+                            val bodyStr = resp.body.string()
+                            val headersObj = JSONObject()
+                            for (name in resp.headers.names()) headersObj.put(name.lowercase(Locale.US), resp.header(name))
+                            resolveHttp(
+                                id,
+                                JSONObject().put("status", resp.code).put("body", bodyStr).put("headers", headersObj),
+                            )
+                        }
+                    } catch (e: IOException) {
+                        resolveNetworkError(id, e)
                     }
                 }
             })
@@ -329,6 +342,9 @@ class AutoVoteService : Service() {
         }
         return builder.build()
     }
+
+    private fun resolveNetworkError(id: Int, e: IOException) =
+        resolveHttp(id, JSONObject().put("error", e.message ?: "network-error"))
 
     private fun resolveHttp(id: Int, payload: JSONObject) {
         val js = "window.__gsResolveHeadlessHttp && window.__gsResolveHeadlessHttp($id, ${JSONObject.quote(payload.toString())});"
@@ -383,11 +399,8 @@ class AutoVoteService : Service() {
         val intent = Intent(this, AutoVoteAlarmReceiver::class.java).apply {
             action = ACTION_RUN_CYCLE
         }
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
+        // minSdk is 24, so FLAG_IMMUTABLE (API 23) is always available.
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         return PendingIntent.getBroadcast(this, 0, intent, flags)
     }
 
@@ -438,11 +451,7 @@ class AutoVoteService : Service() {
 
     private fun buildNotification(text: String): Notification {
         val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)
-        val pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        } else {
-            PendingIntent.FLAG_UPDATE_CURRENT
-        }
+        val pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val openAppPi = openAppIntent?.let {
             PendingIntent.getActivity(this, 1, it, pendingFlags)
         }

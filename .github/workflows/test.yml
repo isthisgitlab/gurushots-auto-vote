@@ -68,6 +68,20 @@ jobs:
             - name: Run tests with coverage
               run: pnpm test:coverage
 
+            # Pushes to master/develop are reported by build.yml's release chain;
+            # uploading them here too would record a second Coveralls build for
+            # the same commit. Upload only; Coveralls outages never gate a run.
+            - name: Upload JS coverage to Coveralls
+              if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/master' && github.ref != 'refs/heads/develop')
+              uses: coverallsapp/github-action@v2
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  file: coverage/lcov.info
+                  format: lcov
+                  parallel: true
+                  flag-name: js
+                  fail-on-error: false
+
             # Rebuild the asset BEFORE validating it. Validating only the committed
             # copy would let a PR edit lexicon-concepts.json (weights, dims, a new
             # cluster) without re-running the build and still pass — the gate would
@@ -82,6 +96,76 @@ jobs:
 
             - name: Bundle size budget (renderer bundles)
               run: pnpm size
+
+    android:
+        # JVM unit tests (JUnit + Robolectric + MockWebServer) for the native
+        # Kotlin/Java code under android/app/src/main, with JaCoCo coverage.
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v7
+
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
+
+            - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
+              uses: actions/setup-java@v6
+              with:
+                  distribution: 'temurin'
+                  java-version: '21'
+                  cache: 'gradle'
+                  cache-dependency-path: |
+                      android/**/*.gradle*
+                      android/gradle/wrapper/gradle-wrapper.properties
+
+            - name: Setup Android SDK
+              uses: android-actions/setup-android@v4
+
+            # cap sync generates the Capacitor gradle subprojects (node_modules
+            # paths, capacitor-cordova-android-plugins) and the bridge config
+            # assets the tests load; it refuses to run without the web build.
+            - name: Build renderer
+              run: pnpm build:prep
+
+            - name: Sync Capacitor
+              run: pnpm exec cap sync android
+
+            - name: Run Android unit tests with coverage
+              working-directory: android
+              run: ./gradlew testDebugUnitTest jacocoTestReport
+
+            - name: Upload Android coverage to Coveralls
+              if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/master' && github.ref != 'refs/heads/develop')
+              uses: coverallsapp/github-action@v2
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  file: android/app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+                  format: jacoco
+                  # JaCoCo reports package-relative paths (com/isthisgitlab/…);
+                  # anchor them to the source root so Coveralls finds the files.
+                  base-path: android/app/src/main/java
+                  parallel: true
+                  flag-name: android
+                  fail-on-error: false
+
+    coverage-finish:
+        # Closes the parallel Coveralls build once both the JS and the Android
+        # reports are in. always() so a red test job still publishes whatever
+        # coverage was uploaded.
+        needs: [test, android]
+        if: always() && (github.event_name == 'pull_request' || (github.ref != 'refs/heads/master' && github.ref != 'refs/heads/develop'))
+        runs-on: ubuntu-slim
+
+        steps:
+            - name: Finish Coveralls parallel build
+              uses: coverallsapp/github-action@v2
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  parallel-finished: true
+                  carryforward: 'js,android'
+                  fail-on-error: false
 
     knip:
         # knip runs on a separate, standard runner: its parser (oxc-parser)

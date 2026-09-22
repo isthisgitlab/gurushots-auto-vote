@@ -70,3 +70,56 @@ test('a corrupt store reads as empty instead of throwing', () => {
     const ledger = createLedger({ readRaw: () => '{not json', writeRaw: jest.fn() });
     expect(ledger.list(7)).toEqual([]);
 });
+
+describe('defensive reads and writes', () => {
+    const logger = require('../../src/js/logger');
+
+    test.each([['[]'], ['null'], ['5'], ['"str"']])('a non-object JSON root (%s) reads as empty', (raw) => {
+        const ledger = createLedger({ readRaw: () => raw, writeRaw: jest.fn() });
+        expect(ledger.list(7)).toEqual([]);
+    });
+
+    test('a store that throws a non-Error value still reads as empty and logs the value', () => {
+        const warning = jest.fn();
+        logger.withCategory.mockReturnValueOnce({ warning });
+        const ledger = createLedger({
+            readRaw: () => {
+                throw 'disk gone';
+            },
+            writeRaw: jest.fn(),
+        });
+        expect(ledger.list(7)).toEqual([]);
+        expect(warning).toHaveBeenCalledWith('swap-back ledger unreadable: disk gone', null);
+    });
+
+    test('a non-array challenge bucket is dropped on the next write', () => {
+        let raw = JSON.stringify({
+            7: 'junk',
+            8: [{ currentId: 'X', previousId: 'Y', kind: 'boost', at: Date.now() }],
+        });
+        const ledger = createLedger({
+            readRaw: () => raw,
+            writeRaw: (data) => {
+                raw = data;
+            },
+        });
+        expect(ledger.list(7)).toEqual([]);
+        ledger.onSwapped(9, plain, 'B');
+        expect(Object.keys(JSON.parse(raw))).toEqual(['8']);
+    });
+
+    test('only the record on the swapped slot moves; others are untouched', () => {
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(7, { id: 'A', boosted: true }, 'B');
+        ledger.onSwapped(7, { id: 'P', turbo: true }, 'Q');
+        ledger.onSwapped(7, { id: 'B' }, 'C');
+        const byPrev = Object.fromEntries(ledger.list(7).map((r) => [r.previousId, r.currentId]));
+        expect(byPrev).toEqual({ A: 'C', P: 'Q' });
+    });
+
+    test('an entry without member_id records an empty previousMemberId', () => {
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(7, { id: 'A', boosted: true }, 'B');
+        expect(ledger.list(7)[0].previousMemberId).toBe('');
+    });
+});

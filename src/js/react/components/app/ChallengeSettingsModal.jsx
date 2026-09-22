@@ -13,7 +13,7 @@ import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { Modal } from '@/components/ui/Modal';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
 import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
 import { useAutovote } from '@/contexts/AutovoteContext';
@@ -225,7 +225,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     // The trigger-window derivation itself lives in utils/windowHints.js, which
     // mirrors _triggerWindowState in services/VotingLogic.js so a hint can never
     // claim a window the decision path won't open.
-    const derive = (keys, defaultDurationMin, policy = {}) =>
+    const derive = (keys, defaultDurationMin, policy) =>
         deriveWindowHints({
             keys,
             defaultDurationMin,
@@ -235,14 +235,18 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             closeTime,
             ...policy,
         });
-    /** Render a window's producing trigger: a daily 'HH:MM' or an offset label. */
+    /**
+     * Render a window's producing trigger: a daily 'HH:MM' or an offset label.
+     * Only called with a derived `next.source`, which always carries its kind
+     * plus `value` (time) or `seconds` (beforeEnd) — see utils/windowHints.
+     */
     const sourceLabel = (source) =>
-        source?.kind === 'beforeEnd'
+        source.kind === 'beforeEnd'
             ? t('app.scheduledFillSourceBeforeEnd').replace(
                   '{0}',
                   formatSecondsAsHoursMinutes(source.seconds, t('app.hours'), t('app.minutes')),
               )
-            : (source?.value ?? '');
+            : source.value;
 
     const sf = derive(
         {
@@ -434,7 +438,7 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={title} size="2xl">
             {schemaLoading || loading ? (
-                <LoadingSpinner text={t('common.loading')} />
+                <InlineLoader text={t('common.loading')} />
             ) : (
                 <div className="space-y-4">
                     {saveError && (
@@ -485,8 +489,9 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                             );
                         }}
                         onApply={(values) => {
+                            // ChallengeProfilesBar only applies a selected (non-null) profile.
                             const next = {};
-                            for (const [key, value] of Object.entries(values || {})) {
+                            for (const [key, value] of Object.entries(values)) {
                                 if (schema[key]?.perChallenge) next[key] = value;
                             }
                             const replacesWasOn =

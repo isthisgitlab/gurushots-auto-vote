@@ -144,7 +144,8 @@ export const getBoostStatus = (boost) => {
     } else if (boost.state === 'LOCKED') {
         return { text: 'Locked', colorClass: 'text-red-500' };
     } else {
-        return { text: boost.state || 'Unknown', colorClass: 'text-purple-500' };
+        // state is non-empty here (guarded above), so it is shown verbatim.
+        return { text: boost.state, colorClass: 'text-purple-500' };
     }
 };
 
@@ -205,7 +206,8 @@ export const getTurboStatus = (turbo) => {
         case 'LOCKED':
             return { text: 'Locked', colorClass: 'text-latvian' };
         default:
-            return { text: turbo.state || 'Unknown', colorClass: 'text-purple-500' };
+            // state is non-empty here (guarded above), so it is shown verbatim.
+            return { text: turbo.state, colorClass: 'text-purple-500' };
     }
 };
 
@@ -234,25 +236,4 @@ export const getLevelStatus = (level, levelName) => {
         default:
             return { text: `${levelName} ${level}`, colorClass: 'badge-warning' };
     }
-};
-
-/**
- * Check if time remaining is in "warning" zone (less than 1 hour)
- * @param {number} endTime - Unix timestamp
- * @returns {boolean}
- */
-export const isTimeWarning = (endTime) => {
-    const now = Math.floor(Date.now() / 1000);
-    const remaining = endTime - now;
-    return remaining > 0 && remaining < 3600; // Less than 1 hour
-};
-
-/**
- * Check if challenge has ended
- * @param {number} endTime - Unix timestamp
- * @returns {boolean}
- */
-export const hasEnded = (endTime) => {
-    const now = Math.floor(Date.now() / 1000);
-    return endTime <= now;
 };

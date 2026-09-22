@@ -1,5 +1,6 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
+apply plugin: 'jacoco'
 
 android {
     namespace = "com.isthisgitlab.gurushotsautovote"
@@ -10,7 +11,6 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
-        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -18,10 +18,70 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // Instruments testDebugUnitTest with the JaCoCo agent; the report
+            // itself is the jacocoTestReport task below.
+            enableUnitTestCoverage = true
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+    testCoverage {
+        jacocoVersion = rootProject.ext.jacocoVersion
+    }
+    testOptions {
+        unitTests {
+            // Robolectric needs the merged manifest + resources (FileProvider
+            // paths, launcher activity, notification icons).
+            includeAndroidResources = true
+            all {
+                // Robolectric's FileDescriptor interceptor reaches into JDK
+                // internals that JDK 17+ no longer exports by default.
+                jvmArgs '--add-exports', 'java.base/jdk.internal.access=ALL-UNNAMED'
+                // Robolectric loads classes through its own sandbox class loader
+                // (no CodeSource), so JaCoCo must be told to instrument those too.
+                jacoco {
+                    includeNoLocationClasses = true
+                    excludes = ['jdk.internal.*']
+                }
+            }
+        }
+    }
+}
+
+jacoco {
+    toolVersion = rootProject.ext.jacocoVersion
+}
+
+// JVM unit-test coverage report (XML for Coveralls, HTML for humans):
+//   ./gradlew testDebugUnitTest jacocoTestReport
+//   -> app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+// Only first-party app code is measured; generated R / BuildConfig / Manifest
+// classes are excluded.
+tasks.register('jacocoTestReport', JacocoReport) {
+    dependsOn 'testDebugUnitTest'
+    group = 'verification'
+    description = 'JaCoCo coverage report for the debug JVM unit tests.'
+
+    def generated = [
+        '**/R.class', '**/R$*.class',
+        '**/BuildConfig.*', '**/Manifest*.*',
+    ]
+    def buildDir = layout.buildDirectory
+    classDirectories.setFrom(files(
+        buildDir.dir('tmp/kotlin-classes/debug').map { fileTree(it) { exclude generated } },
+        buildDir.dir('intermediates/javac/debug/compileDebugJavaWithJavac/classes').map { fileTree(it) { exclude generated } },
+    ))
+    sourceDirectories.setFrom(files('src/main/java'))
+    executionData.setFrom(fileTree(buildDir) {
+        include 'outputs/unit_test_code_coverage/debugUnitTest/*.exec'
+    })
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = false
     }
 }
 
@@ -39,17 +99,22 @@ dependencies {
     implementation project(':capacitor-android')
     // Native background voting plugin deps
     implementation "org.jetbrains.kotlin:kotlin-stdlib:2.4.20"
-    implementation "com.squareup.okhttp3:okhttp:5.5.0"
+    implementation "com.squareup.okhttp3:okhttp:$okhttpVersion"
     // NOTE: org.json is intentionally NOT declared as a Maven dependency. The
     // Android platform (android.jar / the device framework) already provides
     // org.json.*, which is all the plugin's main code uses (AutoVoteSettings.kt,
-    // AutoVoteCycle.kt) — there are no JVM unit tests that need it. A Maven
-    // `org.json:json` dep was redundant, pulled a duplicate copy of platform
-    // classes, and made every release build depend on downloading it from Maven
-    // Central (a transient 502 there killed assembleRelease). Do not re-add it.
+    // AutoVoteService.kt). A Maven `org.json:json` dep was
+    // redundant, pulled a duplicate copy of platform classes, and made every
+    // release build depend on downloading it from Maven Central (a transient
+    // 502 there killed assembleRelease). Do not re-add it
+    // — not even as testImplementation: the JVM unit tests run under
+    // Robolectric, whose android-all runtime jar ships the real platform
+    // org.json, so tests exercise exactly the implementation the device uses.
     testImplementation "junit:junit:$junitVersion"
-    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
-    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    testImplementation "org.robolectric:robolectric:$robolectricVersion"
+    testImplementation "androidx.test:core:$androidxTestCoreVersion"
+    testImplementation "io.mockk:mockk:$mockkVersion"
+    testImplementation "com.squareup.okhttp3:mockwebserver3:$okhttpVersion"
     implementation project(':capacitor-cordova-android-plugins')
 }
 

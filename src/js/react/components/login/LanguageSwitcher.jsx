@@ -4,21 +4,16 @@ import { useTranslation } from '@/contexts/TranslationContext';
 /**
  * Language switcher dropdown component
  */
-export function LanguageSwitcher({ onLanguageChange }) {
+export function LanguageSwitcher() {
     const { t, language, setLanguage } = useTranslation();
 
     const handleLanguageChange = useCallback(
         async (newLang) => {
             await setLanguage(newLang);
-            // Refresh menu with new language
-            if (window.api.refreshMenu) {
-                await window.api.refreshMenu();
-            }
-            if (onLanguageChange) {
-                onLanguageChange(newLang);
-            }
+            // Refresh menu with new language (a no-op stub on Capacitor).
+            await window.api.refreshMenu();
         },
-        [setLanguage, onLanguageChange],
+        [setLanguage],
     );
 
     const displayLanguage = language === 'en' ? 'English' : 'Latviešu';

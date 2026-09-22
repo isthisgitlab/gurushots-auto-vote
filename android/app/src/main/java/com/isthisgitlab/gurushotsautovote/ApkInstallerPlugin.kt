@@ -30,8 +30,7 @@ import java.util.concurrent.TimeUnit
  *    (res/xml/file_paths.xml) expose the cache dir
  *  - the Android 11+ package-archive ACTION_VIEW <queries> entry
  *
- * Mirrors the OkHttp + coroutine patterns already used by AutoVoteCycle /
- * AutoVoteService. JS callers reach this via window.api (download-update)
+ * Mirrors the OkHttp patterns already used by AutoVoteService. JS callers reach this via window.api (download-update)
  * through the AndroidUpdateInstaller bridge.
  */
 @CapacitorPlugin(name = "ApkInstaller")
@@ -82,7 +81,8 @@ class ApkInstallerPlugin : Plugin() {
             if (!response.isSuccessful) {
                 throw IllegalStateException("Download failed: HTTP ${response.code}")
             }
-            val body = response.body ?: throw IllegalStateException("Empty download body")
+            // OkHttp 5's Response.body is non-null (an empty body, never null).
+            val body = response.body
             val total = body.contentLength()
 
             val outFile = File(context.cacheDir, "update.apk")

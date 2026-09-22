@@ -203,11 +203,7 @@ class AutoUpdater {
             return true;
         }
 
-        // Linux: AppImage should work
-        if (process.platform === 'linux') {
-            return true;
-        }
-
+        // Linux (AppImage) and anything else: attempt it.
         return true;
     }
 

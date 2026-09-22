@@ -19,7 +19,7 @@ const REPO_OWNER = 'isthisgitlab';
 const REPO_NAME = 'gurushots-auto-vote';
 
 const releasesLatestUrl = () => `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
-const releasesListUrl = (perPage = 10) =>
+const releasesListUrl = (perPage) =>
     `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases?per_page=${perPage}`;
 
 /**

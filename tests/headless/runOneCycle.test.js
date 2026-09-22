@@ -250,4 +250,71 @@ describe('headless runOneCycle', () => {
             expect(delay).toBe(120_000); // checkFrequencyMin=max=2 → 2 min, uncapped
         });
     });
+
+    describe('defensive fallbacks', () => {
+        const logger = require('../../src/js/logger');
+        let info;
+
+        beforeEach(() => {
+            info = jest.fn();
+            logger.withCategory.mockReturnValue({ info });
+        });
+
+        afterEach(() => {
+            logger.withCategory.mockReturnValue({
+                info: jest.fn(),
+                error: jest.fn(),
+                debug: jest.fn(),
+                warning: jest.fn(),
+            });
+        });
+
+        test('treats a null fetch result as an empty list and a non-numeric last-minute setting as 1 min', async () => {
+            const getActiveChallenges = jest.fn().mockResolvedValue(null);
+            apiFactory.getApiStrategy.mockReturnValue({ getActiveChallenges });
+            settings.getEffectiveSetting.mockReturnValue('not-a-number');
+
+            await expect(computeNextDelayMs('tok')).resolves.toBe(120_000);
+            expect(getActiveChallenges).toHaveBeenCalledWith('tok');
+        });
+
+        test('falls back to the normal cadence and logs when the cadence computation throws', async () => {
+            apiFactory.getApiStrategy.mockReturnValue({
+                getActiveChallenges: jest.fn().mockRejectedValue(new Error('socket hang up')),
+            });
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(120_000);
+            expect(info).toHaveBeenCalledWith(
+                '[headless] next-delay computation failed; using normal cadence',
+                'socket hang up',
+            );
+
+            apiFactory.getApiStrategy.mockReturnValue({ getActiveChallenges: jest.fn().mockRejectedValue('offline') });
+            await expect(computeNextDelayMs('tok', null)).resolves.toBe(120_000);
+            expect(info).toHaveBeenCalledWith(
+                '[headless] next-delay computation failed; using normal cadence',
+                'offline',
+            );
+        });
+
+        test('reports cycle-failed when the thrown value carries no message', async () => {
+            apiFactory.getApiStrategy.mockReturnValue({
+                fetchChallengesAndVote: jest.fn().mockRejectedValue({}),
+                getActiveChallenges: jest.fn(),
+            });
+
+            await globalThis.GS.runOneCycle();
+
+            expect(lastPayload()).toEqual({ ok: false, error: 'cycle-failed', nextDelayMs: 120_000 });
+        });
+
+        test('a throwing native bridge callback is logged, never rethrown', async () => {
+            onCycleComplete.mockImplementation(() => {
+                throw new Error('bridge detached');
+            });
+            settings.getSetting.mockReturnValue(undefined); // no token → immediate report
+
+            await expect(globalThis.GS.runOneCycle()).resolves.toBeUndefined();
+            expect(info).toHaveBeenCalledWith('[headless] onCycleComplete failed', 'bridge detached');
+        });
+    });
 });

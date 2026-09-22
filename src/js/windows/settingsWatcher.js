@@ -249,7 +249,9 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
                 const mainWindow = getMainWindow();
                 if (shouldReload && mainWindow && !mainWindow.isDestroyed()) {
                     mainWindow.reload();
-                } else if (hasChanges && newSettings) {
+                } else if (hasChanges) {
+                    // hasChanges is only set after a successful load, so
+                    // newSettings is always populated here.
                     // Notify all renderer windows so React hooks can refetch
                     // without a full reload. Catches CLI-originated changes.
                     BrowserWindow.getAllWindows().forEach((win) => {

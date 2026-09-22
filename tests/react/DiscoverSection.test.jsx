@@ -95,3 +95,141 @@ test('charged-pending-submit shows the distinct message + retry action', async (
     await screen.findByText('app.discoverChargedPending');
     expect(screen.getByText('app.discoverRetrySubmit')).toBeTruthy();
 });
+
+describe('edge paths', () => {
+    const renderSection = (props = {}) => {
+        const onJoined = jest.fn();
+        render(<DiscoverSection isLoggedIn bankroll={{ coins: 500 }} onJoined={onJoined} {...props} />);
+        return { onJoined };
+    };
+
+    test('logged out renders nothing', () => {
+        const { container } = render(<DiscoverSection isLoggedIn={false} bankroll={null} onJoined={jest.fn()} />);
+        expect(container.firstChild).toBeNull();
+    });
+
+    test('a failed list fetch shows the error badge and message; Refresh refetches', async () => {
+        window.api.getMemberChallenges = jest.fn().mockResolvedValue({ success: false, error: 'down' });
+        renderSection();
+        expect(await screen.findByText('app.discoverUnavailableList', { selector: 'p' })).toBeTruthy();
+        expect(screen.getByTitle('app.discoverUnavailableList').textContent).toBe('!');
+        window.api.getMemberChallenges.mockResolvedValue({ success: true, items });
+        fireEvent.click(screen.getByText('app.discoverRefresh'));
+        await screen.findByText('Free One');
+        expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(2);
+    });
+
+    test('rows fall back from title to url to an untitled label', async () => {
+        window.api.getMemberChallenges = jest.fn().mockResolvedValue({
+            success: true,
+            items: [
+                { id: 1, url: 'just-url' },
+                { id: 2, join_coins: 'x' },
+            ],
+        });
+        renderSection();
+        expect(await screen.findByText('just-url')).toBeTruthy();
+        expect(screen.getByText('app.discoverUntitled')).toBeTruthy();
+        // A non-numeric cost is treated as free.
+        expect(screen.getAllByText('app.discoverCostFree')).toHaveLength(2);
+    });
+
+    test('a successful join refetches and notifies the parent', async () => {
+        const { onJoined } = renderSection();
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getByText('app.discoverJoin'));
+        await screen.findByText('app.discoverJoined');
+        expect(onJoined).toHaveBeenCalledTimes(1);
+        expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(2);
+        expect(screen.getByText('app.discoverJoined').className).toContain('text-success');
+    });
+
+    test('an unavailable challenge refetches without touching balances', async () => {
+        window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false, status: 'unavailable' });
+        const { onJoined } = renderSection();
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getByText('app.discoverJoin'));
+        await screen.findByText('app.discoverUnavailable');
+        await waitFor(() => expect(window.api.getMemberChallenges).toHaveBeenCalledTimes(2));
+        expect(onJoined).not.toHaveBeenCalled();
+    });
+
+    test('a thrown join is reported as failed-no-charge; a statusless failure without text is generic', async () => {
+        window.api.joinChallenge = jest.fn().mockRejectedValue(new Error('ipc gone'));
+        renderSection();
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getByText('app.discoverJoin'));
+        expect(await screen.findByText('app.discoverFailedNoCharge')).toBeTruthy();
+        expect(screen.getByText('app.discoverJoin').disabled).toBe(false);
+
+        window.api.joinChallenge = jest.fn().mockResolvedValue({ success: false });
+        fireEvent.click(screen.getByText('app.discoverJoin'));
+        expect(await screen.findByText('app.discoverGenericError')).toBeTruthy();
+    });
+
+    test('the join button reads Joining while in flight', async () => {
+        let resolve;
+        window.api.joinChallenge = jest.fn(() => new Promise((r) => (resolve = r)));
+        renderSection();
+        await screen.findByText('Free One');
+        fireEvent.click(screen.getByText('app.discoverJoin'));
+        const joining = await screen.findByText('app.discoverJoining');
+        expect(joining.disabled).toBe(true);
+        resolve({ success: true, status: 'joined' });
+        await screen.findByText('app.discoverJoined');
+    });
+
+    test('retry submit re-joins the charged challenge with spendCoins=true', async () => {
+        window.api.joinChallenge = jest.fn().mockResolvedValue({ status: 'charged-pending-submit', cost: 100 });
+        const { onJoined } = renderSection();
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        fireEvent.click(await screen.findByText('app.discoverConfirmSpend'));
+        await screen.findByText('app.discoverRetrySubmit');
+        window.api.joinChallenge.mockResolvedValue({ success: true, status: 'joined' });
+        fireEvent.click(screen.getByText('app.discoverRetrySubmit'));
+        await screen.findByText('app.discoverJoined');
+        expect(window.api.joinChallenge).toHaveBeenLastCalledWith(900002, true);
+        expect(onJoined).toHaveBeenCalledTimes(2);
+    });
+
+    test('Cancel and the close button dismiss the confirm modal without spending', async () => {
+        renderSection();
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        fireEvent.click(await screen.findByText('app.cancel'));
+        await waitFor(() => expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull());
+
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        await screen.findByText('app.discoverConfirmTitle');
+        fireEvent.click(document.querySelector('[role="dialog"] button[aria-label]'));
+        await waitFor(() => expect(screen.queryByText('app.discoverConfirmTitle')).toBeNull());
+        expect(window.api.joinChallenge).not.toHaveBeenCalled();
+    });
+
+    test('an unknown balance says so and still allows the spend; a url-only paid challenge is named by url', async () => {
+        window.api.getMemberChallenges = jest
+            .fn()
+            .mockResolvedValue({ success: true, items: [{ id: 5, url: 'paid-url', join_coins: 10 }] });
+        window.translationManager.t.mockImplementation((key) =>
+            key === 'app.discoverConfirmBody' ? 'join {title} for {coins}' : key,
+        );
+        try {
+            renderSection({ bankroll: null });
+            await screen.findByText('paid-url');
+            fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+            expect(await screen.findByText('app.discoverConfirmBalanceUnknown')).toBeTruthy();
+            expect(screen.getByText('join paid-url for 10')).toBeTruthy();
+            expect(screen.getByText('app.discoverConfirmSpend').disabled).toBe(false);
+        } finally {
+            window.translationManager.t.mockImplementation((key) => key);
+        }
+    });
+
+    test('an affordable paid join shows the resulting balance', async () => {
+        renderSection();
+        await screen.findByText('Paid One');
+        fireEvent.click(screen.getByText('app.discoverJoinPaid'));
+        expect(await screen.findByText('app.discoverConfirmBalance')).toBeTruthy();
+    });
+});

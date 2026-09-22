@@ -223,20 +223,13 @@ const mockApiClient = {
         async () => {
             // Use cached challenges for session stability, generate only once per session
             if (!sessionMockCache.challenges) {
-                if (challenges.generateMockChallenges) {
-                    sessionMockCache.challenges = challenges.generateMockChallenges();
-                    logger
-                        .withCategory('challenges')
-                        .info(
-                            `Generated session-stable mock challenges: ${sessionMockCache.challenges.challenges.length}`,
-                            null,
-                        );
-                } else {
-                    sessionMockCache.challenges = challenges.mockActiveChallenges;
-                    logger
-                        .withCategory('challenges')
-                        .info(`Using static mock challenges: ${sessionMockCache.challenges.challenges.length}`, null);
-                }
+                sessionMockCache.challenges = challenges.generateMockChallenges();
+                logger
+                    .withCategory('challenges')
+                    .info(
+                        `Generated session-stable mock challenges: ${sessionMockCache.challenges.challenges.length}`,
+                        null,
+                    );
             } else {
                 logger
                     .withCategory('challenges')
@@ -269,22 +262,14 @@ const mockApiClient = {
 
             // Use cached vote images for session stability
             if (!sessionMockCache.voteImages.has(cacheKey)) {
-                if (voting.generateMockVoteImages) {
-                    const voteImages = voting.generateMockVoteImages(challengeUrl, challenge);
-                    sessionMockCache.voteImages.set(cacheKey, voteImages);
-                    logger
-                        .withCategory('voting')
-                        .debug(
-                            `Generated session-stable vote images for ${challenge.title}: ${voteImages.images.length}`,
-                            null,
-                        );
-                } else {
-                    const voteImages = voting.mockVoteImagesByChallenge[challengeUrl] || voting.mockEmptyVoteImages;
-                    sessionMockCache.voteImages.set(cacheKey, voteImages);
-                    logger
-                        .withCategory('voting')
-                        .debug(`Using static vote images for ${challenge.title}: ${voteImages.images.length}`, null);
-                }
+                const voteImages = voting.generateMockVoteImages(challengeUrl, challenge);
+                sessionMockCache.voteImages.set(cacheKey, voteImages);
+                logger
+                    .withCategory('voting')
+                    .debug(
+                        `Generated session-stable vote images for ${challenge.title}: ${voteImages.images.length}`,
+                        null,
+                    );
             } else {
                 logger.withCategory('voting').debug(`Using cached vote images for ${challenge.title}`, null);
             }
@@ -579,9 +564,7 @@ const mockApiClient = {
             // none — it is a tag lookup, not a text search. This used to be a
             // substring test, which quietly made mock mode SUCCEED on terms the
             // real API rejects and hid the whole reason tagResolver exists.
-            return items.filter((item) =>
-                (Array.isArray(item.labels) ? item.labels : []).some((label) => String(label).toLowerCase() === search),
-            );
+            return items.filter((item) => item.labels.some((label) => label.toLowerCase() === search));
         },
     ),
 

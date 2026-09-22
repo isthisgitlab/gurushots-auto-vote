@@ -78,7 +78,7 @@ function isMediumEditorJunk(el) {
 }
 
 function stripAttributes(el) {
-    const attrs = Array.from(el.attributes || []);
+    const attrs = Array.from(el.attributes);
     for (const { name } of attrs) el.removeAttribute(name);
 }
 

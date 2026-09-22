@@ -48,18 +48,90 @@ jobs:
 
             # Upload only; never gate the release on Coveralls availability.
             # GITHUB_TOKEN identifies the repo to Coveralls — no repo token secret.
+            # One flag of a parallel build: test-android uploads the other and
+            # coverage-finish closes it.
             - name: Upload coverage to Coveralls
               uses: coverallsapp/github-action@v2
               with:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
                   file: coverage/lcov.info
                   format: lcov
+                  parallel: true
+                  flag-name: js
+                  fail-on-error: false
+
+    # JVM unit tests for the native Android code (JUnit + Robolectric +
+    # MockWebServer, JaCoCo coverage). A separate job because it needs a JDK +
+    # Android SDK the slim runner doesn't carry; version-bump waits on it too,
+    # so a red native suite blocks the release exactly like a red JS suite.
+    test-android:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v7
+
+            - name: Setup build environment
+              uses: ./.github/actions/setup-build
+
+            - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
+              uses: actions/setup-java@v6
+              with:
+                  distribution: 'temurin'
+                  java-version: '21'
+                  cache: 'gradle'
+                  cache-dependency-path: |
+                      android/**/*.gradle*
+                      android/gradle/wrapper/gradle-wrapper.properties
+
+            - name: Setup Android SDK
+              uses: android-actions/setup-android@v4
+
+            # cap sync generates the Capacitor gradle subprojects and bridge
+            # config assets the tests load; it refuses to run without the web build.
+            - name: Build renderer
+              run: pnpm build:prep
+
+            - name: Sync Capacitor
+              run: pnpm exec cap sync android
+
+            - name: Run Android unit tests with coverage
+              working-directory: android
+              run: ./gradlew testDebugUnitTest jacocoTestReport
+
+            - name: Upload Android coverage to Coveralls
+              uses: coverallsapp/github-action@v2
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  file: android/app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
+                  format: jacoco
+                  # JaCoCo reports package-relative paths (com/isthisgitlab/…);
+                  # anchor them to the source root so Coveralls finds the files.
+                  base-path: android/app/src/main/java
+                  parallel: true
+                  flag-name: android
+                  fail-on-error: false
+
+    # Closes the parallel Coveralls build once both reports are in. Nothing
+    # depends on it, so a Coveralls outage can never hold up a release.
+    coverage-finish:
+        runs-on: ubuntu-slim
+        timeout-minutes: 5
+        needs: [test, test-android]
+        if: always()
+        steps:
+            - name: Finish Coveralls parallel build
+              uses: coverallsapp/github-action@v2
+              with:
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+                  parallel-finished: true
+                  carryforward: 'js,android'
                   fail-on-error: false
 
     version-bump:
         runs-on: ubuntu-slim
         timeout-minutes: 15
-        needs: [test]
+        needs: [test, test-android]
         if: github.event_name == 'push'
         outputs:
             new-version: ${{ steps.bump_version.outputs.NEW_VERSION }}

@@ -145,6 +145,14 @@ describe('openBoostWindows', () => {
         ]);
     });
 
+    test('two key-unlocked windows (no countdown) keep their relative order', () => {
+        const challenges = [
+            { id: 'k1', title: 'Key 1', member: { boost: { state: 'AVAILABLE_KEY' } } },
+            { id: 'k2', title: 'Key 2', member: { boost: { state: 'AVAILABLE_KEY' } } },
+        ];
+        expect(openBoostWindows(challenges, NOW).map((w) => w.id)).toEqual(['k1', 'k2']);
+    });
+
     test('a missing/empty list is an empty result, not a throw', () => {
         expect(openBoostWindows(null, NOW)).toEqual([]);
         expect(openBoostWindows([], NOW)).toEqual([]);

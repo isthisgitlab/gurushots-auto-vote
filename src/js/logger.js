@@ -42,9 +42,7 @@ try {
 } catch (err) {
     // Browser / Capacitor context — fs is a require shim. Logger falls
     // back to console output only; in-app log streaming uses sendLogToGUI.
-    if (typeof console !== 'undefined' && console.debug) {
-        console.debug('[logger] fs not available; skipping file-based logging:', err.message);
-    }
+    console.debug('[logger] fs not available; skipping file-based logging:', err.message);
     logsDir = '';
 }
 
@@ -54,7 +52,8 @@ const isDevMode = runtime.isDevelopment();
 // Check if we're in CLI mode vs GUI mode
 // CLI mode: running directly from cli.js or when electron main process handles CLI commands
 // GUI mode: electron main process handling GUI IPC calls
-const isCliMode = !isElectronApp || (process.argv[1] && process.argv[1].includes('cli.js'));
+const startedViaCli = Boolean(process.argv[1] && process.argv[1].includes('cli.js'));
+const isCliMode = !isElectronApp || startedViaCli;
 
 // Get current date in YYYY-MM-DD format
 const getCurrentDate = () => {
@@ -97,51 +96,47 @@ const cleanupOldLogs = () => {
     // Browser / Capacitor context has no logsDir; nothing to clean up.
     if (!logsDir) return;
     try {
-        // Check if fs and path modules are available (they might not be in test environments)
-        if (typeof require !== 'undefined') {
-            const fs = require('node:fs');
-            const path = require('node:path');
+        // A non-empty logsDir means the module-load existsSync/mkdirSync on the
+        // real fs succeeded, so fs is usable here; the directory may still have
+        // been removed since.
+        if (!fs.existsSync(logsDir)) {
+            return;
+        }
 
-            // Check if logsDir exists and is accessible
-            if (typeof fs.existsSync !== 'function' || !fs.existsSync(logsDir)) {
-                return;
+        const files = fs.readdirSync(logsDir);
+        const now = new Date();
+
+        files.forEach((file) => {
+            const filePath = path.join(logsDir, file);
+            const stats = fs.statSync(filePath);
+            const fileSizeMB = stats.size / (1024 * 1024);
+
+            let shouldDelete = false;
+            let reason = '';
+
+            // Parse date from filename
+            const fileDate = parseDateFromFilename(file);
+
+            if (fileDate) {
+                const prefix = Object.keys(LOG_RETENTION).find((p) => file.startsWith(`${p}-`));
+                if (prefix) {
+                    const { days, maxMB } = LOG_RETENTION[prefix];
+                    const tooOld = isDateOlderThan(fileDate, days);
+                    shouldDelete = tooOld || fileSizeMB > maxMB;
+                    reason = tooOld ? 'age' : 'size';
+                }
+            } else if (file.startsWith('api-debug-')) {
+                // Clean up old timestamped files
+                const fileAge = now.getTime() - stats.mtime.getTime();
+                shouldDelete = fileAge > 7 * 24 * 60 * 60 * 1000; // 7 days
+                reason = 'age';
             }
 
-            const files = fs.readdirSync(logsDir);
-            const now = new Date();
-
-            files.forEach((file) => {
-                const filePath = path.join(logsDir, file);
-                const stats = fs.statSync(filePath);
-                const fileSizeMB = stats.size / (1024 * 1024);
-
-                let shouldDelete = false;
-                let reason = '';
-
-                // Parse date from filename
-                const fileDate = parseDateFromFilename(file);
-
-                if (fileDate) {
-                    const prefix = Object.keys(LOG_RETENTION).find((p) => file.startsWith(`${p}-`));
-                    if (prefix) {
-                        const { days, maxMB } = LOG_RETENTION[prefix];
-                        const tooOld = isDateOlderThan(fileDate, days);
-                        shouldDelete = tooOld || fileSizeMB > maxMB;
-                        reason = tooOld ? 'age' : 'size';
-                    }
-                } else if (file.startsWith('api-debug-')) {
-                    // Clean up old timestamped files
-                    const fileAge = now.getTime() - stats.mtime.getTime();
-                    shouldDelete = fileAge > 7 * 24 * 60 * 60 * 1000; // 7 days
-                    reason = 'age';
-                }
-
-                if (shouldDelete) {
-                    fs.unlinkSync(filePath);
-                    console.log(`Cleaned up old log file: ${file} (${reason}, ${fileSizeMB.toFixed(2)} MB)`);
-                }
-            });
-        }
+            if (shouldDelete) {
+                fs.unlinkSync(filePath);
+                console.log(`Cleaned up old log file: ${file} (${reason}, ${fileSizeMB.toFixed(2)} MB)`);
+            }
+        });
     } catch (error) {
         // Silently ignore cleanup errors in test environments
         if (!runtime.isTest()) {
@@ -182,7 +177,7 @@ const getContext = () => {
     }
 
     // If we're in Electron, check if we were started via CLI
-    if (process.argv[1] && process.argv[1].includes('cli.js')) {
+    if (startedViaCli) {
         return 'CLI';
     }
 
@@ -200,47 +195,27 @@ const LEVEL_COLORS = {
     ERROR: 'red',
 };
 
-// Resolve the GUI fan-out sink. Electron main sets global.sendLogToGUI
-// (a Node context). The Capacitor WebView bundle has no `global`, so the
-// bridge sets globalThis.sendLogToGUI instead — check both surfaces.
-const resolveGuiSink = () => {
-    if (typeof global !== 'undefined' && global.sendLogToGUI) return global.sendLogToGUI;
-    if (typeof globalThis !== 'undefined' && globalThis.sendLogToGUI) return globalThis.sendLogToGUI;
-    return null;
-};
+// Resolve the GUI fan-out sink. Electron main sets global.sendLogToGUI and
+// the Capacitor bridge sets globalThis.sendLogToGUI; in Node `global` IS
+// `globalThis`, so one lookup covers both surfaces.
+const resolveGuiSink = () => globalThis.sendLogToGUI || null;
 
 /**
- * Apply color to text (only in CLI mode and when not sending to GUI)
+ * Wrap text in an ANSI color. Only the console line is colored — the GUI
+ * sink and the log files receive the plain message.
  */
-const colorize = (text, color, forConsole = false) => {
-    // Only apply colors in CLI mode with TTY or when explicitly for console output
-    if ((!isCliMode || !process.stdout.isTTY) && !forConsole) {
-        return text;
-    }
-    // Don't apply colors if we're sending to GUI (even in CLI mode)
-    if (resolveGuiSink() && !forConsole) {
-        return text;
-    }
-    return `${colors[color]}${text}${colors.reset}`;
-};
+const colorize = (text, color) => `${colors[color]}${text}${colors.reset}`;
 
 /**
  * Format console output. Fixed-column order:
  *   [timestamp] [LEVEL] [CONTEXT] [category] message
  */
-const formatConsoleMessage = (
-    level,
-    message,
-    context = getContext(),
-    timestamp = getTimeString(),
-    forConsole = false,
-    category = 'general',
-) => {
+const formatConsoleMessage = (level, message, context, timestamp, category) => {
     const color = LEVEL_COLORS[level] || 'white';
-    const coloredTime = colorize(`[${timestamp}]`, 'gray', forConsole);
-    const coloredLevel = colorize(`[${level}]`, color, forConsole);
-    const coloredContext = colorize(`[${context}]`, 'cyan', forConsole);
-    const coloredCategory = colorize(`[${category}]`, 'yellow', forConsole);
+    const coloredTime = colorize(`[${timestamp}]`, 'gray');
+    const coloredLevel = colorize(`[${level}]`, color);
+    const coloredContext = colorize(`[${context}]`, 'cyan');
+    const coloredCategory = colorize(`[${category}]`, 'yellow');
 
     return `${coloredTime} ${coloredLevel} ${coloredContext} ${coloredCategory} ${message}`;
 };
@@ -356,7 +331,7 @@ const writeLog = (level, message, data = null, category = null) => {
         recentLogs.push(entry);
         if (recentLogs.length > MAX_RECENT) recentLogs.shift();
 
-        if (logsDir && typeof fs.appendFileSync === 'function') {
+        if (logsDir) {
             const target = routeLogFile(level, cat);
             let line = `[${timestamp}] [${level}] [${context}] [${cat}] ${message}`;
             if (sanitized) {
@@ -370,7 +345,7 @@ const writeLog = (level, message, data = null, category = null) => {
             }
         }
 
-        console.log(formatConsoleMessage(level, message, context, getTimeString(), true, cat));
+        console.log(formatConsoleMessage(level, message, context, getTimeString(), cat));
 
         const guiSink = resolveGuiSink();
         if (guiSink) {
@@ -435,20 +410,15 @@ cleanupOldLogs();
 
 // Set up periodic cleanup (every hour) only in actual application contexts
 let cleanupInterval;
-if (
-    typeof setInterval !== 'undefined' &&
-    (isElectronApp || (isCliMode && process.argv[1] && process.argv[1].includes('cli.js')))
-) {
+if (isElectronApp || startedViaCli) {
     cleanupInterval = setInterval(cleanupOldLogs, 60 * 60 * 1000); // 1 hour
 }
 
-if (typeof process !== 'undefined') {
-    process.on('exit', () => {
-        if (cleanupInterval) {
-            clearInterval(cleanupInterval);
-        }
-    });
-}
+process.on('exit', () => {
+    if (cleanupInterval) {
+        clearInterval(cleanupInterval);
+    }
+});
 
 // Get current log file paths
 const currentLogFiles = getLogFilePaths();

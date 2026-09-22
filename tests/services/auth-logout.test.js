@@ -70,12 +70,6 @@ describe('clearAuthToken', () => {
         settings.__state.cached = { token: '' };
         expect(await clearAuthToken()).toBe(false);
     });
-
-    it('tolerates hosts without flushPendingWrites (Electron/CLI sync writes)', async () => {
-        settings.flushPendingWrites = undefined;
-        await expect(clearAuthToken()).resolves.toBe(true);
-        expect(settings.__state.cached.token).toBe('');
-    });
 });
 
 /**

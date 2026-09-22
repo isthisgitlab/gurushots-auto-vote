@@ -131,6 +131,14 @@ describe('EntryBadge — entry thumbnail', () => {
         expect(images()).toContain(`https://photos.gurushots.com/unsafe/fit-in/1200x1200/${MEMBER}/3_${IMAGE}.jpg`);
     });
 
+    test('the dialog closes again from its close button', () => {
+        renderBadge(photoEntry());
+        fireEvent.click(screen.getByRole('button', { name: /photo/i }));
+        const dialog = document.querySelector('[role="dialog"]');
+        fireEvent.click(dialog.querySelector('button[aria-label]'));
+        expect(document.querySelector('[role="dialog"]')).toBeNull();
+    });
+
     // Degradation matters more than the happy path here: a malformed id must
     // not put a broken image into every row of the challenge list.
     describe('degrades to the pre-feature badge when no URL can be built', () => {

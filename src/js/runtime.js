@@ -120,6 +120,10 @@ const isSourceCode = () => {
     } catch {
         // node:sea unavailable — fall through to other detection
     }
+    // Safety net for code loaded from an asar outside the packaged-Electron
+    // path (e.g. ELECTRON_RUN_AS_NODE, where require('electron') has no app).
+    // __dirname is fixed by the module wrapper, so a test can't place it in an asar.
+    /* istanbul ignore if */
     if (__dirname.includes('.asar')) return false;
     return true;
 };

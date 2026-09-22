@@ -495,3 +495,428 @@ describe('SettingsModal \u2014 category rules placement', () => {
         expect(screen.queryByText('app.noCategoryRules')).toBeNull();
     });
 });
+
+const clickButtonByText = (text, index = 0) => {
+    const buttons = Array.from(document.querySelectorAll('button')).filter((b) => b.textContent.trim() === text);
+    fireEvent.click(buttons[index]);
+};
+
+// The application-settings ResetButtons carry no title attribute, in DOM order:
+// theme, language, timezone, check frequency, reliability.
+const appResetButtons = () =>
+    Array.from(document.querySelectorAll('button:not([title])')).filter((b) => b.className === 'btn btn-ghost btn-sm');
+
+// Set a select's value and dispatch a native change event (fireEvent.change
+// does not reach preact's select onChange under happy-dom).
+const pickOption = (select, value) => {
+    select.value = value;
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+};
+
+describe('SettingsModal — loading state', () => {
+    afterEach(() => {
+        mockSchemaState.loading = false;
+    });
+
+    test('shows the spinner instead of the form while the schema loads', () => {
+        mockSchemaState.loading = true;
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(screen.getByLabelText('Loading')).toBeTruthy();
+        expect(screen.queryByText('app.applicationSettings')).toBeNull();
+    });
+});
+
+describe('SettingsModal — application settings controls', () => {
+    test('the theme toggle emits dark when checked and light when unchecked', () => {
+        const { unmount } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.click(document.querySelector('input.toggle'));
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('theme', 'dark');
+        unmount();
+
+        mockFormState.uiValues.theme = 'dark';
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const toggle = document.querySelector('input.toggle');
+        expect(toggle.checked).toBe(true);
+        fireEvent.click(toggle);
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('theme', 'light');
+    });
+
+    test('changing the language select emits the new language', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const select = screen.getByRole('option', { name: 'app.latvian' }).parentElement;
+        pickOption(select, 'lv');
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('language', 'lv');
+    });
+
+    test('every application reset button resets its own UI keys', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const resets = appResetButtons();
+        expect(resets).toHaveLength(5);
+        resets.forEach((b) => fireEvent.click(b));
+        expect(mockFormState.handleResetUi.mock.calls.map(([key]) => key)).toEqual([
+            'theme',
+            'language',
+            'timezone',
+            'checkFrequencyMin',
+            'checkFrequencyMax',
+            'apiMaxRetries',
+            'apiRetryBaseDelayMs',
+        ]);
+    });
+
+    test('check-frequency inputs parse integers and fall back to 1 when cleared', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const [minInput, maxInput] = document.querySelectorAll('input[type="number"][max="60"]');
+        fireEvent.change(minInput, { target: { value: '7' } });
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMin', 7);
+        fireEvent.change(minInput, { target: { value: '' } });
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMin', 1);
+        fireEvent.change(maxInput, { target: { value: '12' } });
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMax', 12);
+        fireEvent.change(maxInput, { target: { value: '' } });
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('checkFrequencyMax', 1);
+    });
+
+    test('blurring a max below the min clamps it up to the min; a valid max is left alone', () => {
+        mockFormState.uiValues.checkFrequencyMax = 2; // below min 5
+        const { unmount } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.blur(document.querySelectorAll('input[type="number"][max="60"]')[1]);
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('checkFrequencyMax', 5);
+        unmount();
+
+        mockFormState.handleUiChange.mockClear();
+        mockFormState.uiValues.checkFrequencyMax = 10;
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.blur(document.querySelectorAll('input[type="number"][max="60"]')[1]);
+        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+    });
+
+    test('blurring an emptied max treats it as 1 and clamps to the min', () => {
+        mockFormState.uiValues.checkFrequencyMax = '';
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.blur(document.querySelectorAll('input[type="number"][max="60"]')[1]);
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('checkFrequencyMax', 5);
+    });
+
+    test('clearing the reliability inputs falls back to 0 retries and a 1000 ms base delay', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.change(screen.getByLabelText('app.apiMaxRetries'), { target: { value: '' } });
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('apiMaxRetries', 0);
+        fireEvent.change(screen.getByLabelText('app.apiRetryBaseDelayMs'), { target: { value: '' } });
+        expect(mockFormState.handleUiChange).toHaveBeenLastCalledWith('apiRetryBaseDelayMs', 1000);
+    });
+});
+
+describe('SettingsModal — timezone select and custom zones', () => {
+    const tzSelect = () => screen.getByRole('option', { name: 'Europe/Riga' }).parentElement;
+    const removeButton = () => document.querySelector('button[title="app.removeCurrentTimezone"]');
+
+    test('the default zone hides the remove button', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(removeButton().className).toContain('invisible');
+    });
+
+    test('custom zones are offered and the selection is emitted', () => {
+        mockFormState.uiValues.customTimezones = ['Asia/Tokyo'];
+        mockFormState.uiValues.timezone = 'Asia/Tokyo';
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        expect(Array.from(tzSelect().options).map((o) => o.value)).toEqual(['Europe/Riga', 'Asia/Tokyo']);
+        pickOption(tzSelect(), 'Europe/Riga');
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('timezone', 'Europe/Riga');
+    });
+
+    test('a selected zone missing from the custom list still gets its own option', () => {
+        mockFormState.uiValues.timezone = 'America/New_York';
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(Array.from(tzSelect().options).map((o) => o.value)).toEqual(['Europe/Riga', 'America/New_York']);
+    });
+
+    test('removing the current zone drops it from the list and falls back to the default', () => {
+        mockFormState.uiValues.customTimezones = ['Asia/Tokyo', 'Asia/Seoul'];
+        mockFormState.uiValues.timezone = 'Asia/Tokyo';
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        expect(removeButton().className).not.toContain('invisible');
+        fireEvent.click(removeButton());
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('customTimezones', ['Asia/Seoul']);
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('timezone', 'Europe/Riga');
+    });
+
+    test('adding a zone that is already listed does not duplicate it', () => {
+        mockFormState.uiValues.customTimezones = ['Asia/Tokyo'];
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.click(findTimezoneAddButton());
+        const input = document.querySelector('input[type="text"]');
+        fireEvent.change(input, { target: { value: ' Asia/Tokyo ' } });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('customTimezones', ['Asia/Tokyo']);
+        expect(mockFormState.handleUiChange).toHaveBeenCalledWith('timezone', 'Asia/Tokyo');
+    });
+
+    test('typing after an invalid submit clears the error state', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.click(findTimezoneAddButton());
+        fireEvent.keyDown(document.querySelector('input[type="text"]'), { key: 'Enter' }); // empty → invalid
+        expect(document.querySelector('input[type="text"]').className).toMatch(/input-error/);
+
+        fireEvent.change(document.querySelector('input[type="text"]'), { target: { value: 'A' } });
+        expect(document.querySelector('input[type="text"]').className).not.toMatch(/input-error/);
+    });
+
+    test('other keys in the zone input are ignored', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        fireEvent.click(findTimezoneAddButton());
+        fireEvent.keyDown(document.querySelector('input[type="text"]'), { key: 'a' });
+        expect(document.querySelector('input[type="text"]')).not.toBeNull();
+        expect(mockFormState.handleUiChange).not.toHaveBeenCalled();
+    });
+});
+
+describe('SettingsModal — rule loading', () => {
+    const withAutoJoinGroup = () => {
+        mockSchemaState.schema = {
+            autoJoin: { type: 'boolean', default: false, group: 'autoJoin', label: 'app.autoJoin' },
+        };
+        mockSchemaState.groups = [{ id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' }];
+        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
+    };
+
+    afterEach(() => {
+        mockSchemaState.schema = {};
+        mockSchemaState.defaults = {};
+        mockSchemaState.groups = undefined;
+        mockSchemaState.tiers = undefined;
+    });
+
+    test('malformed payloads fall back to empty lists while category rules load', async () => {
+        withAutoJoinGroup();
+        window.api.getTitleRules.mockResolvedValueOnce({ not: 'an array' });
+        window.api.getChallengeProfiles.mockResolvedValueOnce(null);
+        window.api.getCategoryRules.mockResolvedValueOnce([{ type: 'flash', pics: '' }]);
+
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        expect(await screen.findByDisplayValue('flash')).toBeTruthy();
+        expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
+    });
+
+    test.each([
+        [new Error('ipc down'), 'Error loading title rules: ipc down'],
+        ['plain failure', 'Error loading title rules: plain failure'],
+    ])('a failed load is logged (%p)', async (failure, message) => {
+        window.api.getTitleRules.mockRejectedValueOnce(failure);
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await waitFor(() => expect(window.api.logError).toHaveBeenCalledWith(message));
+    });
+
+    test('a load that resolves after the modal closed is discarded', async () => {
+        let resolveStale;
+        window.api.getTitleRules
+            .mockReturnValueOnce(
+                new Promise((resolve) => {
+                    resolveStale = resolve;
+                }),
+            )
+            .mockReturnValueOnce(new Promise(() => {}));
+
+        const { rerender } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        rerender(<SettingsModal isOpen={false} onClose={jest.fn()} />);
+        rerender(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        resolveStale([{ title: 'Stale', mustIncludeTags: [], shouldIncludeTags: [] }]);
+        await new Promise((r) => setTimeout(r, 0));
+
+        expect(screen.queryByDisplayValue('Stale')).toBeNull();
+        expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
+    });
+});
+
+describe('SettingsModal — save outcomes', () => {
+    afterEach(() => {
+        mockSchemaState.schema = {};
+        mockSchemaState.defaults = {};
+        mockSchemaState.groups = undefined;
+        mockSchemaState.tiers = undefined;
+    });
+
+    test('a rejected category-rule save shows its error and editing a rule clears it', async () => {
+        mockSchemaState.schema = {
+            autoJoin: { type: 'boolean', default: false, group: 'autoJoin', label: 'app.autoJoin' },
+        };
+        mockSchemaState.groups = [{ id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' }];
+        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
+        window.api.getCategoryRules.mockResolvedValueOnce([{ type: 'flash' }]);
+        window.api.setCategoryRules.mockResolvedValueOnce(false);
+        const onClose = jest.fn();
+
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        await screen.findByDisplayValue('flash');
+        clickButtonByText('app.save');
+
+        expect(await screen.findByText('app.categoryRulesSaveError')).toBeTruthy();
+        expect(window.api.setCategoryRules).toHaveBeenCalledWith([{ type: 'flash' }]);
+        expect(onClose).not.toHaveBeenCalled();
+
+        fireEvent.change(screen.getByDisplayValue('flash'), { target: { value: 'speed' } });
+        expect(screen.queryByText('app.categoryRulesSaveError')).toBeNull();
+        expect(screen.getByDisplayValue('speed')).toBeTruthy();
+    });
+
+    test('editing a title rule after a rejected save clears the title error', async () => {
+        window.api.getTitleRules.mockResolvedValueOnce([{ title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] }]);
+        window.api.setTitleRules.mockResolvedValueOnce(false);
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await screen.findByDisplayValue('Hats');
+        clickButtonByText('app.save');
+        await screen.findByText('app.titleTagRulesSaveError');
+
+        fireEvent.change(screen.getByDisplayValue('Hats'), { target: { value: 'Caps' } });
+        expect(screen.queryByText('app.titleTagRulesSaveError')).toBeNull();
+        expect(screen.getByDisplayValue('Caps')).toBeTruthy();
+    });
+
+    test('a changed language is applied through the translation manager on save', async () => {
+        mockFormState.commit = jest.fn().mockResolvedValue([]);
+        mockFormState.uiValues.language = 'lv';
+        const onClose = jest.fn();
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        clickButtonByText('app.save');
+
+        await waitFor(() => expect(onClose).toHaveBeenCalled());
+        expect(window.translationManager.setLanguage).toHaveBeenCalledWith('lv');
+    });
+
+    test.each([
+        [new Error('boom'), 'Error saving settings: boom'],
+        ['raw', 'Error saving settings: raw'],
+    ])('a throwing save is logged and keeps the modal open (%p)', async (failure, message) => {
+        mockFormState.commit = jest.fn().mockRejectedValue(failure);
+        const onClose = jest.fn();
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        clickButtonByText('app.save');
+
+        await waitFor(() => expect(window.api.logError).toHaveBeenCalledWith(message));
+        expect(onClose).not.toHaveBeenCalled();
+    });
+});
+
+describe('SettingsModal — inline setting hints', () => {
+    const bool = (label) => ({ type: 'boolean', default: false, group: 'general', label });
+    const hintSchema = {
+        useVotingPause: bool('app.useVotingPause'),
+        votingPauseTime: { type: 'timeOfDayList', default: [], group: 'general', label: 'app.vpTime' },
+        votingPauseBeforeEnd: { type: 'timeList', default: [], group: 'general', label: 'app.vpBeforeEnd' },
+        votingPauseDurationMinutes: { type: 'number', default: 240, group: 'general', label: 'app.vpDuration' },
+        voteBeforeBoost: { ...bool('app.voteBeforeBoost'), default: true },
+        onlyBoost: bool('app.onlyBoost'),
+        autoBoost: { ...bool('app.autoBoost'), default: true },
+        voteOnlyInLastMinute: bool('app.voteOnlyInLastMinute'),
+        boostTime: { type: 'time', default: 600, group: 'general', label: 'app.boostTime' },
+        keyUnlockedBoostTime: { type: 'time', default: 0, group: 'general', label: 'app.keyBoost' },
+    };
+
+    beforeEach(() => {
+        mockSchemaState.schema = hintSchema;
+        mockSchemaState.groups = [{ id: 'general', label: 'app.groupGeneral', tier: 'core' }];
+        mockSchemaState.tiers = [{ id: 'core', label: 'app.tierCore' }];
+    });
+
+    afterEach(() => {
+        mockSchemaState.schema = {};
+        mockSchemaState.defaults = {};
+        mockSchemaState.groups = undefined;
+        mockSchemaState.tiers = undefined;
+    });
+
+    const ALL_HINT_KEYS = [
+        'app.votingPauseNoTimesHint',
+        'app.votingPauseAllDayHint',
+        'app.voteBeforeBoostOnlyBoostHint',
+        'app.voteBeforeBoostNoAutoBoostHint',
+        'app.voteBeforeBoostLastMinuteOnlyHint',
+        'app.voteBeforeBoostNoBoostTimeHint',
+    ];
+    const shownHints = () => ALL_HINT_KEYS.filter((key) => screen.queryByText(key) !== null);
+
+    test('schema defaults alone raise no warnings', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(shownHints()).toEqual([]);
+    });
+
+    test.each([
+        ['with empty trigger lists', { votingPauseTime: [], votingPauseBeforeEnd: [] }],
+        ['with no trigger lists at all', {}],
+    ])('an enabled pause %s warns that no time is set', (_label, lists) => {
+        mockFormState.formValues = { useVotingPause: true, ...lists };
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(shownHints()).toEqual(['app.votingPauseNoTimesHint']);
+    });
+
+    test('a pause whose daily windows cover the whole day says so', () => {
+        mockFormState.formValues = {
+            useVotingPause: true,
+            votingPauseTime: ['00:00', '12:00'],
+            votingPauseDurationMinutes: 720,
+        };
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(shownHints()).toEqual(['app.votingPauseAllDayHint']);
+    });
+
+    test('a pre-boost fill cancelled by every conflicting setting lists each conflict', () => {
+        mockFormState.formValues = {
+            onlyBoost: true,
+            autoBoost: false,
+            voteOnlyInLastMinute: true,
+            boostTime: 0,
+            keyUnlockedBoostTime: 0,
+        };
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(shownHints()).toEqual([
+            'app.voteBeforeBoostOnlyBoostHint',
+            'app.voteBeforeBoostNoAutoBoostHint',
+            'app.voteBeforeBoostLastMinuteOnlyHint',
+            'app.voteBeforeBoostNoBoostTimeHint',
+        ]);
+    });
+
+    test('one boost clock still running keeps the no-boost-time warning away', () => {
+        mockFormState.formValues = { boostTime: 0, keyUnlockedBoostTime: 30 };
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(shownHints()).toEqual([]);
+    });
+
+    test('no pre-boost warnings when the fill itself is off', () => {
+        mockFormState.formValues = { voteBeforeBoost: false, onlyBoost: true, autoBoost: false };
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(shownHints()).toEqual([]);
+    });
+});
+
+describe('SettingsModal — editing rules without a pending error', () => {
+    afterEach(() => {
+        mockSchemaState.schema = {};
+        mockSchemaState.groups = undefined;
+        mockSchemaState.tiers = undefined;
+    });
+
+    test('edits land in both editors and no error alert appears', async () => {
+        mockSchemaState.schema = {
+            autoJoin: { type: 'boolean', default: false, group: 'autoJoin', label: 'app.autoJoin' },
+        };
+        mockSchemaState.groups = [{ id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' }];
+        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
+        window.api.getTitleRules.mockResolvedValueOnce([{ title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] }]);
+        window.api.getCategoryRules.mockResolvedValueOnce([{ type: 'flash' }]);
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await screen.findByDisplayValue('flash');
+        await screen.findByDisplayValue('Hats');
+
+        fireEvent.change(screen.getByDisplayValue('flash'), { target: { value: 'speed' } });
+        fireEvent.change(screen.getByDisplayValue('Hats'), { target: { value: 'Caps' } });
+
+        expect(screen.getByDisplayValue('speed')).toBeTruthy();
+        expect(screen.getByDisplayValue('Caps')).toBeTruthy();
+        expect(document.querySelector('[role="alert"]')).toBeNull();
+    });
+});

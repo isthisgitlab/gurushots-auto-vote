@@ -86,13 +86,12 @@ export function deriveWindowHints({
     // array) signature would bind the index to the timeZone parameter. Each
     // occurrence stays PAIRED with its source entry before the invalid ones are
     // filtered out — a filter-then-reindex against `times` would mislabel every
-    // hint source after the first unparseable entry.
-    let timeOccs;
-    try {
-        timeOccs = times.map((entry) => ({ entry, occ: occurrencesOf(entry, timezone, nowSec) })).filter((p) => p.occ);
-    } catch {
-        timeOccs = [];
-    }
+    // hint source after the first unparseable entry. No try/catch: occurrencesOf
+    // returns null for unparseable entries and degrades an unknown zone to UTC
+    // itself, so it cannot throw for the Date.now()-derived nowSec callers pass.
+    const timeOccs = times
+        .map((entry) => ({ entry, occ: occurrencesOf(entry, timezone, nowSec) }))
+        .filter((p) => p.occ);
     const timeSet = timeOccs.length > 0;
     const active = enabled && (timeSet || beforeEnds.length > 0);
 

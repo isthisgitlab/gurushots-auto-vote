@@ -41,12 +41,14 @@ import * as latvianModule from '../../translations/latvian';
 const translations = translationsModule.default || translationsModule;
 const english = englishModule.default || englishModule;
 const latvian = latvianModule.default || latvianModule;
-if (translations?.translationManager) {
+// `x.default || x` is always an object (a module namespace at worst), so the
+// language globals can be assigned unconditionally.
+if (translations.translationManager) {
     globalThis.translationManager = translations.translationManager;
     globalThis.translations = translations.translations;
 }
-if (english) globalThis.englishTranslations = english;
-if (latvian) globalThis.latvianTranslations = latvian;
+globalThis.englishTranslations = english;
+globalThis.latvianTranslations = latvian;
 
 // Mount Login or App based on whether we have a token. Electron's
 // index.js picks this via createLoginWindow vs createMainWindow and

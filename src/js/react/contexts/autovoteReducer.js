@@ -9,7 +9,6 @@ export const ACTIONS = {
     STOP: 'STOP',
     INCREMENT_CYCLE: 'INCREMENT_CYCLE',
     UPDATE_LAST_RUN: 'UPDATE_LAST_RUN',
-    SET_STATUS: 'SET_STATUS',
     SET_ERROR: 'SET_ERROR',
     SET_NEXT_RUN: 'SET_NEXT_RUN',
 };
@@ -58,12 +57,6 @@ export function autovoteReducer(state, action) {
             return {
                 ...state,
                 lastRun: action.payload,
-            };
-        case ACTIONS.SET_STATUS:
-            return {
-                ...state,
-                status: action.payload.status,
-                statusClass: action.payload.statusClass,
             };
         case ACTIONS.SET_NEXT_RUN:
             return {

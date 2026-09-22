@@ -1,6 +1,10 @@
 // Translation system for GuruShots Auto Vote
 /* global window, document, self */
 (function (root, factory) {
+    // The else branch is the classic <script>-tag load (src/html/*.html). Jest
+    // always loads this file through its CommonJS wrapper, where `module` is
+    // defined, so that branch cannot run under test.
+    /* istanbul ignore else */
     if (typeof module === 'object' && module.exports) {
         // Node.js
         module.exports = factory();
@@ -195,7 +199,9 @@
                 }
             }
 
-            return value || key;
+            // Every path through the loop above either returns the key or leaves
+            // `value` truthy, so no `|| key` fallback is needed here.
+            return value;
         }
 
         // Get current language

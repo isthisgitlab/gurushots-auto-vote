@@ -43,7 +43,7 @@ function SwapPhoto({ photo, caption }) {
  * @param {boolean} props.warnActioned - the entry is boosted or turbo'd (its boost/turbo stays with the photo, so the replacement won't get it)
  * @param {string|number} props.challengeId
  * @param {object|null} props.bankroll
- * @param {function} [props.onSpent] - called after a successful swap
+ * @param {function} props.onSpent - called after a successful swap
  */
 export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, onSpent }) {
     const { t } = useTranslation();
@@ -63,7 +63,7 @@ export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, on
     const handleConfirm = async () => {
         const result = await commit.run(challengeId, entry.id, candidate.id);
         setCandidate(null);
-        if ((result?.success || result?.outcome === 'not-available') && onSpent) onSpent();
+        if (result?.success || result?.outcome === 'not-available') onSpent();
     };
 
     const busy = preview.loading || commit.loading;
@@ -112,7 +112,7 @@ export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, on
  * @param {{previousId: string, previousMemberId: string, kind: 'boost'|'turbo'}} props.swapBack
  * @param {string|number} props.challengeId
  * @param {object|null} props.bankroll
- * @param {function} [props.onSpent]
+ * @param {function} props.onSpent
  */
 export function SwapBackButton({ entry, swapBack, challengeId, bankroll, onSpent }) {
     const { t } = useTranslation();
@@ -124,7 +124,7 @@ export function SwapBackButton({ entry, swapBack, challengeId, bankroll, onSpent
     const handleConfirm = async () => {
         const result = await run(challengeId, entry.id);
         setConfirmOpen(false);
-        if ((result?.success || result?.outcome === 'not-available') && onSpent) onSpent();
+        if (result?.success || result?.outcome === 'not-available') onSpent();
     };
 
     const original = { id: swapBack.previousId, member_id: swapBack.previousMemberId };

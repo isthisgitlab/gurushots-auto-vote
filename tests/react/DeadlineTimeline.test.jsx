@@ -26,6 +26,16 @@ describe('DeadlineTimeline', () => {
         expect(container.firstChild).toBeNull();
     });
 
+    test('renders nothing when no action carries a due time', () => {
+        const { container } = wrap(<DeadlineTimeline actions={[{ action: 'boost', thresholdSec: 60, dueAt: null }]} />);
+        expect(container.firstChild).toBeNull();
+    });
+
+    test('an action without a label mapping is shown by its raw key', () => {
+        wrap(<DeadlineTimeline actions={[{ action: 'mysteryAction', thresholdSec: 60, dueAt: BASE_SEC + 60 }]} />);
+        expect(document.body.textContent).toContain('mysteryAction');
+    });
+
     test('full mode lists each action with a ~advisory duration', () => {
         const actions = [
             { action: 'boost', thresholdSec: 120, dueAt: BASE_SEC + 120 },

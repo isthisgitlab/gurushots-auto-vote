@@ -143,4 +143,43 @@ describe('StatusHeader', () => {
         expect(text).toContain('3'); // active
         expect(text).toContain('2'); // boosts (two AVAILABLE_KEY) and turbos (WON + FREE)
     });
+
+    test('a TIMER turbo counts once its cooldown has elapsed, not before or without a time', () => {
+        const nowSec = BASE_MS / 1000;
+        const challenges = [
+            { id: 'a', member: { turbo: { state: 'TIMER', time_to_open: nowSec - 1 } } },
+            { id: 'b', member: { turbo: { state: 'TIMER', time_to_open: nowSec + 60 } } },
+            { id: 'c', member: { turbo: { state: 'TIMER' } } },
+            { id: 'd', member: {} },
+        ];
+        const { container } = wrap(<StatusHeader challenges={challenges} nextRunAt={null} running={true} />);
+        const stats = Array.from(container.querySelectorAll('.font-semibold')).map((n) => n.textContent);
+        // active, boosts, turbos
+        expect(stats.slice(0, 3)).toEqual(['4', '0', '1']);
+    });
+
+    test('an overdue next run reads as due', () => {
+        wrap(<StatusHeader challenges={oneChallenge} nextRunAt={BASE_MS - 5000} running={true} />);
+        expect(screen.getByTestId('status-header').textContent).toContain('app.deadlineDue');
+    });
+
+    test('running without an armed time shows a dash', () => {
+        wrap(<StatusHeader challenges={oneChallenge} nextRunAt={null} running={true} />);
+        expect(screen.getByTestId('status-header').textContent).toContain('—');
+    });
+
+    test('an unreadable balance renders an em-dash, never 0', () => {
+        const { container } = wrap(
+            <StatusHeader
+                challenges={[]}
+                nextRunAt={null}
+                running={false}
+                bankroll={{ keys: 2, swaps: undefined, fills: NaN, coins: 7 }}
+            />,
+        );
+        const stats = Array.from(container.querySelectorAll('[role="status"] .font-semibold')).map(
+            (n) => n.textContent,
+        );
+        expect(stats).toEqual(['2', '—', '—', '7']);
+    });
 });

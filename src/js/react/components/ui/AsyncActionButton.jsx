@@ -13,7 +13,7 @@ import { useState } from 'react';
  * @param {string} props.className        - full DaisyUI class string for the <button>
  * @param {string} [props.title]          - optional tooltip
  * @param {() => Promise<{success?: boolean, error?: string}>} props.action
- * @param {Function} [props.onSuccess]    - awaited after a successful result
+ * @param {Function} props.onSuccess      - awaited after a successful result (every caller passes one)
  * @param {string} props.failureLogPrefix - logError prefix for `{success:false}` results
  * @param {string} props.errorLogPrefix   - logError prefix for thrown errors
  * @param {import('react').ReactNode} props.loadingLabel - text next to the spinner
@@ -41,7 +41,7 @@ export function AsyncActionButton({
         try {
             const result = await action();
             if (result?.success) {
-                if (onSuccess) await onSuccess();
+                await onSuccess();
             } else {
                 await window.api.logError(`${failureLogPrefix}: ${result?.error || 'Unknown error'}`);
             }

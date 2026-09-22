@@ -15,6 +15,7 @@ import { formatTimeRemaining } from '@/utils/formatters';
  * already re-rendering for other reasons still shows the live countdown.
  *
  * @param {Array} challenges - Array of challenge objects with close_time
+ *   (always an array — ChallengesContext normalises a missing payload to [])
  * @returns {Object<string, import('@preact/signals').Signal<string>>}
  */
 export function useTimers(challenges) {
@@ -30,7 +31,7 @@ export function useTimers(challenges) {
         const store = signalsRef.current;
         const present = new Set();
         const out = {};
-        for (const challenge of challenges || []) {
+        for (const challenge of challenges) {
             present.add(challenge.id);
             let sig = store.get(challenge.id);
             if (!sig) {
@@ -49,11 +50,12 @@ export function useTimers(challenges) {
     // displayed time refreshes the moment the challenge set changes rather than
     // waiting up to a second.
     useEffect(() => {
-        if (!challenges || challenges.length === 0) return undefined;
+        if (challenges.length === 0) return undefined;
         const tick = () => {
             for (const challenge of challenges) {
-                const sig = signalsRef.current.get(challenge.id);
-                if (sig) sig.value = formatTimeRemaining(challenge.close_time);
+                // The memo above ran for this same `challenges` array, so every
+                // id already has a signal.
+                signalsRef.current.get(challenge.id).value = formatTimeRemaining(challenge.close_time);
             }
         };
         tick();

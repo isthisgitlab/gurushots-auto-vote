@@ -432,4 +432,138 @@ describe('AutoUpdater', () => {
             expect(mockSend).not.toHaveBeenCalled();
         });
     });
+
+    describe('electron-updater events', () => {
+        let handlers;
+        let send;
+        let log;
+
+        beforeEach(() => {
+            handlers = Object.fromEntries(mockAutoUpdater.on.mock.calls.map(([event, fn]) => [event, fn]));
+            send = jest.fn();
+            autoUpdater.setMainWindow({ isDestroyed: () => false, webContents: { send } });
+            log = { info: jest.fn(), debug: jest.fn(), warning: jest.fn(), error: jest.fn() };
+            require('../../src/js/logger').withCategory.mockReturnValue(log);
+        });
+
+        it('checking-for-update notifies the renderer', () => {
+            handlers['checking-for-update']();
+            expect(send).toHaveBeenCalledWith('update-checking', null);
+            expect(log.info).toHaveBeenCalledWith('Checking for updates...', null);
+        });
+
+        it('update-available stores the formatted info and forwards it', () => {
+            handlers['update-available']({
+                version: '0.8.0',
+                releaseNotes: 'n',
+                files: [{ url: 'u', size: 1, sha: 'x' }],
+            });
+
+            expect(autoUpdater.getUpdateInfo()).toMatchObject({
+                latestVersion: '0.8.0',
+                files: [{ url: 'u', size: 1 }],
+            });
+            expect(send).toHaveBeenCalledWith('update-available', autoUpdater.getUpdateInfo());
+        });
+
+        it('update-available is not forwarded for a version the user skipped', () => {
+            settingsState.skipUpdateVersion = '0.8.0';
+
+            handlers['update-available']({ version: '0.8.0' });
+
+            expect(autoUpdater.getUpdateInfo().latestVersion).toBe('0.8.0');
+            expect(send).not.toHaveBeenCalled();
+            expect(log.info).toHaveBeenCalledWith('Update skipped by user:', '0.8.0');
+        });
+
+        it('update-not-available reports the current version', () => {
+            handlers['update-not-available']({ version: '0.6.1' });
+            expect(send).toHaveBeenCalledWith('update-not-available', { version: '0.6.1' });
+        });
+
+        it('error resets the downloading flag and offers the browser fallback', () => {
+            autoUpdater.isDownloading = true;
+
+            handlers.error(new Error('signature mismatch'));
+
+            expect(autoUpdater.isDownloading).toBe(false);
+            expect(send).toHaveBeenCalledWith('update-error', {
+                message: 'signature mismatch',
+                canFallbackToBrowser: true,
+            });
+        });
+
+        it('download-progress rounds the percentage and forwards the progress', () => {
+            handlers['download-progress']({ percent: 41.6, bytesPerSecond: 10, transferred: 416, total: 1000 });
+
+            const expected = { percent: 42, bytesPerSecond: 10, transferred: 416, total: 1000 };
+            expect(autoUpdater.getDownloadProgress()).toEqual(expected);
+            expect(send).toHaveBeenCalledWith('update-download-progress', expected);
+            expect(log.debug).toHaveBeenCalledWith('Download progress: 42%', null);
+        });
+
+        it('update-downloaded marks the update ready and forwards the formatted info', () => {
+            autoUpdater.isDownloading = true;
+
+            handlers['update-downloaded']({ version: '0.8.0', releaseNotes: 'n' });
+
+            expect(autoUpdater.isDownloading).toBe(false);
+            expect(autoUpdater.isReady()).toBe(true);
+            expect(send).toHaveBeenCalledWith('update-downloaded', expect.objectContaining({ latestVersion: '0.8.0' }));
+        });
+    });
+
+    describe('platform support and failure paths', () => {
+        const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+        const setPlatform = (value) => Object.defineProperty(process, 'platform', { value, configurable: true });
+
+        afterEach(() => {
+            require('electron').app.isPackaged = false;
+            Object.defineProperty(process, 'platform', originalPlatform);
+        });
+
+        it.each(['darwin', 'win32', 'linux', 'freebsd'])('a packaged build on %s attempts auto-update', (platform) => {
+            require('electron').app.isPackaged = true;
+            setPlatform(platform);
+            expect(autoUpdater.canAutoUpdate()).toBe(true);
+        });
+
+        it('downloadUpdate refuses in an unpackaged build', async () => {
+            autoUpdater.updateInfo = { latestVersion: '0.8.0' };
+            await expect(autoUpdater.downloadUpdate()).resolves.toBe(false);
+            expect(mockAutoUpdater.downloadUpdate).not.toHaveBeenCalled();
+        });
+
+        it('downloadUpdate rethrows a failed download and clears the downloading flag', async () => {
+            require('electron').app.isPackaged = true;
+            setPlatform('linux');
+            autoUpdater.updateInfo = { latestVersion: '0.8.0' };
+            mockAutoUpdater.downloadUpdate.mockRejectedValueOnce(new Error('ENOSPC'));
+
+            await expect(autoUpdater.downloadUpdate()).rejects.toThrow('ENOSPC');
+            expect(autoUpdater.isDownloading).toBe(false);
+        });
+
+        it('checkForUpdates returns null when electron-updater reports no update info', async () => {
+            mockAutoUpdater.checkForUpdates.mockResolvedValueOnce(null);
+            await expect(autoUpdater.checkForUpdates(true)).resolves.toBeNull();
+            expect(autoUpdater.getUpdateInfo()).toBeNull();
+        });
+
+        it('parseReleaseNotes handles note objects without a note field and unknown shapes', () => {
+            expect(autoUpdater.parseReleaseNotes([{ note: 'a' }, 'plain'])).toBe('a\nplain');
+            expect(autoUpdater.parseReleaseNotes({ unexpected: true })).toBe('No release notes available');
+        });
+
+        it('a throwing legacy store never breaks construction', () => {
+            const error = jest.fn();
+            require('../../src/js/logger').withCategory.mockReturnValueOnce({ error });
+            mockMetadata.getLegacySkipVersion.mockImplementationOnce(() => {
+                throw new Error('metadata.json corrupt');
+            });
+
+            expect(() => new AutoUpdater()).not.toThrow();
+            expect(error).toHaveBeenCalledWith('skip-version migration failed:', expect.any(Error));
+        });
+    });
 });

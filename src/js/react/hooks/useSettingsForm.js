@@ -29,20 +29,7 @@ const withFallback = (value, defaultValue) => {
  * buttons. The caller stays responsible for the surrounding lifecycle
  * (close, language toggle, threshold-scheduling notify, theme DOM revert).
  */
-export function useSettingsForm({
-    isOpen,
-    schema,
-    defaults,
-    settings,
-    refetchSettings,
-    refetchSchema,
-    updateSetting,
-    // Optional: caller can override the persistence channel for global
-    // defaults (default goes through window.api.setGlobalDefault). Tests
-    // and alt-modal callers can pass a wrapper here without monkey-
-    // patching window.api.
-    setGlobalDefault = (key, value) => window.api.setGlobalDefault(key, value),
-}) {
+export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSettings, refetchSchema, updateSetting }) {
     const [formValues, setFormValues] = useState({});
     const [uiValues, setUiValues] = useState(DEFAULT_UI_VALUES);
     const [originalUiValues, setOriginalUiValues] = useState(null);
@@ -141,7 +128,7 @@ export function useSettingsForm({
                 await updateSetting(key, value);
             }
             for (const [key, value] of Object.entries(formValues)) {
-                const saved = await setGlobalDefault(key, value);
+                const saved = await window.api.setGlobalDefault(key, value);
                 if (saved === false) rejectedKeys.push(key);
             }
         } finally {
@@ -152,7 +139,7 @@ export function useSettingsForm({
         // IPC-level transaction would need broader settings layer
         // changes (out of scope for this hook).
         return rejectedKeys;
-    }, [formValues, uiValues, updateSetting, setGlobalDefault]);
+    }, [formValues, uiValues, updateSetting]);
 
     // Roll in-memory state back to whatever the modal opened with. Theme
     // DOM revert is up to the caller — it owns the close sequence and may

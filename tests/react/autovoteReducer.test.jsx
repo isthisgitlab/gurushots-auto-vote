@@ -43,3 +43,23 @@ describe('autovoteReducer — cycle recovery', () => {
         });
     });
 });
+
+describe('autovoteReducer — other transitions', () => {
+    test('UPDATE_LAST_RUN stores the timestamp string', () => {
+        expect(autovoteReducer(initialState, { type: ACTIONS.UPDATE_LAST_RUN, payload: '12:00:00' }).lastRun).toBe(
+            '12:00:00',
+        );
+    });
+
+    test('SET_ERROR flags the error status', () => {
+        expect(autovoteReducer(initialState, { type: ACTIONS.SET_ERROR, payload: 'nope' })).toMatchObject({
+            error: 'nope',
+            status: 'Error',
+            statusClass: 'badge-error',
+        });
+    });
+
+    test('an unknown action returns the same state object', () => {
+        expect(autovoteReducer(initialState, { type: 'NOPE' })).toBe(initialState);
+    });
+});

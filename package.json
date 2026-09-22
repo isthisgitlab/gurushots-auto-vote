@@ -218,7 +218,8 @@
                 "displayName": "node",
                 "testEnvironment": "node",
                 "roots": [
-                    "<rootDir>/tests"
+                    "<rootDir>/tests",
+                    "<rootDir>/src/js"
                 ],
                 "setupFilesAfterEnv": [
                     "<rootDir>/tests/setup.js"
@@ -267,7 +268,8 @@
                     ]
                 },
                 "roots": [
-                    "<rootDir>/tests/react"
+                    "<rootDir>/tests/react",
+                    "<rootDir>/src/js"
                 ],
                 "setupFilesAfterEnv": [
                     "<rootDir>/tests/setup.js",
@@ -308,22 +310,7 @@
         ],
         "collectCoverage": false,
         "collectCoverageFrom": [
-            "src/js/api/**/*.js",
-            "src/js/apiFactory.js",
-            "src/js/ipc/**/*.js",
-            "src/js/metadata.js",
-            "src/js/services/VotingLogic.js",
-            "src/js/services/manualVote.js",
-            "src/js/services/votingOrchestrator.js",
-            "src/js/services/autoFill.js",
-            "src/js/services/photoPicker.js",
-            "src/js/services/photoStats.js",
-            "src/js/services/newEntryTracker.js",
-            "src/js/services/scheduleRemap.js",
-            "src/js/services/semantic/**/*.js",
-            "src/js/scheduling/**/*.js",
-            "src/js/settings.js",
-            "src/js/settings/**/*.js"
+            "src/js/**/*.{js,jsx}"
         ],
         "coverageDirectory": "coverage",
         "coverageReporters": [

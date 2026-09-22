@@ -219,4 +219,47 @@ describe('TitleTagRulesEditor', () => {
             expect(screen.getByLabelText('app.titleRuleChallengeTag').value).toBe('Exhibition');
         });
     });
+
+    describe('edge rows', () => {
+        test('a non-array value renders the empty state instead of crashing', () => {
+            render(<TitleTagRulesEditor value={null} onChange={jest.fn()} />);
+            expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
+        });
+
+        test('editing the second of several titles leaves the first untouched', () => {
+            const onChange = jest.fn();
+            const value = [{ title: 'A', titles: ['A', 'B'], mustIncludeTags: [], shouldIncludeTags: [] }];
+            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+            fireEvent.change(screen.getByLabelText('app.titleTagRuleTitle 2'), { target: { value: 'C' } });
+            expect(onChange).toHaveBeenLastCalledWith([
+                { title: 'A', titles: ['A', 'C'], mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+        });
+
+        test('a hand-edited null first title falls back to an empty primary title', () => {
+            const onChange = jest.fn();
+            const value = [{ title: 'x', titles: [null, 'B'], mustIncludeTags: [], shouldIncludeTags: [] }];
+            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+            fireEvent.click(screen.getByLabelText('app.removeTitleRuleTitle 2'));
+            expect(onChange).toHaveBeenLastCalledWith([
+                { title: '', titles: [null], mustIncludeTags: [], shouldIncludeTags: [] },
+            ]);
+        });
+
+        test('editing the Should tags of the second rule only patches that rule', () => {
+            const onChange = jest.fn();
+            const value = [
+                { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+                { title: 'B', mustIncludeTags: [], shouldIncludeTags: [] },
+            ];
+            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+            // Two TagsFields per row: [A.must, A.should, B.must, B.should].
+            const tagInputs = screen.getAllByPlaceholderText('app.tagsPlaceholder');
+            fireEvent.change(tagInputs[3], { target: { value: 'sky' } });
+            expect(onChange).toHaveBeenCalledWith([
+                { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
+                { title: 'B', mustIncludeTags: [], shouldIncludeTags: ['sky'] },
+            ]);
+        });
+    });
 });

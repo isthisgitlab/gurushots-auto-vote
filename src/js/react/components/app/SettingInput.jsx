@@ -11,7 +11,8 @@ import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../settings/limits';
 // ['a','bc'] as identical.
 const TAGS_FINGERPRINT_SEP = ',';
 
-const tagsArrayToText = (arr) => (Array.isArray(arr) ? arr.join(', ') : '');
+// Callers pass TagsField's already-normalised array, so no guard is needed here.
+const tagsArrayToText = (arr) => arr.join(', ');
 const tagsTextToArray = (text) =>
     text
         .split(',')
@@ -79,7 +80,7 @@ const SCHEDULE_MAX_SECONDS = 30 * 24 * 3600;
  * counts 2/3/4 is dropped on the first edit (the load-time sanitizer in
  * settings.js removes such rows anyway).
  */
-export function ScheduleField({ settingKey, value, onChange, onReset, disabled = false }) {
+function ScheduleField({ settingKey, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
     const rows = Array.isArray(value) ? value : [];
     const secondsFor = (count) => {
@@ -193,7 +194,7 @@ export const SCHEDULED_FILL_MAX_ENTRIES = MAX_SCHEDULED_FILL_ENTRIES;
  * role="status" message at the entry cap (a disabled add button is skipped by
  * Tab, so its reason must be perceivable without hover).
  */
-export function TimeOfDayListField({ settingKey, label, value, onChange, onReset, disabled = false }) {
+function TimeOfDayListField({ settingKey, label, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
     // The cap slice also bounds rendering: a hand-edited oversized array must
     // not paint hundreds of rows (the write path and load-time bounds pass
@@ -289,7 +290,7 @@ export function TimeOfDayListField({ settingKey, label, value, onChange, onReset
  * emit-only-active precedent). Same dedupe/cap/a11y behavior as
  * TimeOfDayListField above.
  */
-export function TimeListField({ settingKey, label, value, onChange, onReset, disabled = false }) {
+function TimeListField({ settingKey, label, value, onChange, onReset, disabled }) {
     const { t } = useTranslation();
     // Cap slice bounds rendering against hand-edited oversized arrays (see
     // TimeOfDayListField).

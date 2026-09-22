@@ -120,6 +120,22 @@ describe('swapExcludedIds', () => {
     });
 });
 
+describe('swapExcludedIds — id hygiene', () => {
+    test('skips entries with no usable id (missing, null, empty string, null item)', () => {
+        const c = makeChallenge();
+        c.member.ranking.entries = [{ id: 'e1' }, {}, { id: null }, { id: '' }, null, { id: 0 }];
+        expect([...swapExcludedIds(c)].sort()).toEqual(['0', 'e1', 's1']);
+    });
+});
+
+describe('canFillExposure — missing exposure', () => {
+    test('an absent exposure factor is treated as 100% (nothing to fill)', () => {
+        const c = makeChallenge();
+        c.member.ranking.exposure = {};
+        expect(canFillExposure(c, FULL, NOW)).toBe(false);
+    });
+});
+
 describe('blockedOutcome', () => {
     test('null when allowed', () => {
         expect(blockedOutcome('fill', makeChallenge(), FULL, NOW)).toBeNull();

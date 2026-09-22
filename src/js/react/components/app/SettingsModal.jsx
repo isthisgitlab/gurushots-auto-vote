@@ -18,7 +18,7 @@ import { CategoryRulesEditor } from './CategoryRulesEditor';
 // has never seen can still be typed in.
 const CATEGORY_RULE_TYPE_SUGGESTIONS = ['default', 'exhibition', 'flash', 'speed'];
 import { Modal } from '@/components/ui/Modal';
-import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
 import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
@@ -149,7 +149,9 @@ export function SettingsModal({ isOpen, onClose }) {
             setTzInputError(true);
             return;
         }
-        const list = uiValues.customTimezones || [];
+        // useSettingsForm guarantees an array here (withFallback's array guard
+        // on hydrate, DEFAULT_UI_VALUES before it), so no `|| []` fallback.
+        const list = uiValues.customTimezones;
         const nextList = list.includes(value) ? list : [...list, value];
         handleUiChange('customTimezones', nextList);
         handleUiChange('timezone', value);
@@ -159,7 +161,7 @@ export function SettingsModal({ isOpen, onClose }) {
     }, [tzInputValue, uiValues.customTimezones, handleUiChange]);
 
     const handleTimezoneRemove = useCallback(() => {
-        const filtered = (uiValues.customTimezones || []).filter((tz) => tz !== uiValues.timezone);
+        const filtered = uiValues.customTimezones.filter((tz) => tz !== uiValues.timezone);
         handleUiChange('customTimezones', filtered);
         handleUiChange('timezone', DEFAULT_TIMEZONE);
     }, [uiValues.customTimezones, uiValues.timezone, handleUiChange]);
@@ -250,7 +252,8 @@ export function SettingsModal({ isOpen, onClose }) {
         },
         defaultDurationMin: 240,
         effectiveOf: (key) => formValues[key] ?? schema?.[key]?.default,
-        timezone: uiValues.timezone || DEFAULT_TIMEZONE,
+        // Never empty: useSettingsForm's string fallback treats '' as unset.
+        timezone: uiValues.timezone,
         nowSec: Math.floor(Date.now() / 1000),
         closeTime: 0,
         onCorruptDuration: 'off',
@@ -300,7 +303,7 @@ export function SettingsModal({ isOpen, onClose }) {
     return (
         <Modal isOpen={isOpen} onClose={handleCancel} title={t('app.globalSettings')} size="2xl">
             {schemaLoading ? (
-                <LoadingSpinner text={t('common.loading')} />
+                <InlineLoader text={t('common.loading')} />
             ) : (
                 <div className="space-y-6">
                     {saveError && (
@@ -377,13 +380,13 @@ export function SettingsModal({ isOpen, onClose }) {
                                         onChange={(e) => handleUiChange('timezone', e.target.value)}
                                     >
                                         <option value={DEFAULT_TIMEZONE}>{DEFAULT_TIMEZONE}</option>
-                                        {(uiValues.customTimezones || []).map((tz) => (
+                                        {uiValues.customTimezones.map((tz) => (
                                             <option key={tz} value={tz}>
                                                 {tz}
                                             </option>
                                         ))}
                                         {uiValues.timezone !== DEFAULT_TIMEZONE &&
-                                            !(uiValues.customTimezones || []).includes(uiValues.timezone) && (
+                                            !uiValues.customTimezones.includes(uiValues.timezone) && (
                                                 <option value={uiValues.timezone}>{uiValues.timezone}</option>
                                             )}
                                     </select>

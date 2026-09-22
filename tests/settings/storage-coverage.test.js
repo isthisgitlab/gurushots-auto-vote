@@ -26,10 +26,13 @@ const USER_DATA = '/home/u/.config/gurushots-auto-vote-dev';
  * Load a fresh storage module. `electronApp` (or null) becomes the module's
  * captured electron handle; `sourceCode` drives logger.isSourceCode.
  */
-const loadStorage = ({ electronApp = null, sourceCode = true } = {}) => {
+const loadStorage = ({ electronApp = null, sourceCode = true, noElectron = false } = {}) => {
     let ctx;
     jest.isolateModules(() => {
-        jest.doMock('electron', () => (electronApp ? { app: electronApp } : {}));
+        jest.doMock('electron', () => {
+            if (noElectron) throw new Error('Cannot find module electron');
+            return electronApp ? { app: electronApp } : {};
+        });
         const fs = require('node:fs');
         const path = require('node:path');
         const actualPath = jest.requireActual('node:path');
@@ -58,6 +61,14 @@ describe('settings storage — edge cases', () => {
         delete globalThis.Capacitor;
         delete globalThis.__GS_HEADLESS__;
         jest.dontMock('electron');
+    });
+
+    test('falls back to the CLI userData path when electron cannot be loaded', () => {
+        const { categoryLogger } = loadStorage({ noElectron: true });
+        expect(categoryLogger.info).toHaveBeenCalledWith(
+            'Running in CLI context - using fallback userData path:',
+            'Cannot find module electron',
+        );
     });
 
     describe('initializeAsync (settings store)', () => {

@@ -85,7 +85,7 @@ const extractAuthResult = (response) => {
 const clearAuthToken = async () => {
     const hadToken = !!settings.getSetting('token');
     settings.setSetting('token', '');
-    await settings.flushPendingWrites?.();
+    await settings.flushPendingWrites();
     return hadToken;
 };
 
