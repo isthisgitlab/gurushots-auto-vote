@@ -29,8 +29,6 @@ const mockSettings = (turboImageIndex) => {
                 return true;
             case 'turboImageIndex':
                 return turboImageIndex;
-            case 'turboApplyWhenBoostActive':
-                return true;
             case 'turboTime':
                 return 60_000;
             default:

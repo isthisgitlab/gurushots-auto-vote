@@ -1,9 +1,9 @@
 /**
  * shouldApplyTurbo decides whether to apply a previously-won Turbo to
  * one of the user's entries on a challenge. The evaluator combines
- * timing (turboTime threshold), boost-window interaction
- * (turboApplyWhenBoostActive), and entry index (per-entry boost/turbo
- * are mutually exclusive — turbo applies to a specific entry).
+ * timing (turboTime threshold) and entry index (per-entry boost/turbo
+ * are mutually exclusive — turbo applies to a specific entry). An open
+ * boost window does not hold turbo back; only the shared entry does.
  */
 
 const settings = require('../../src/js/settings');
@@ -33,7 +33,6 @@ const mockSettings = (overrides = {}) => {
     const defaults = {
         useTurbo: true,
         turboTime: 7200,
-        turboApplyWhenBoostActive: false,
         turboImageIndex: 1,
         turboFillNew: false,
         turboFillNewOnConflict: false,
@@ -84,26 +83,28 @@ describe('shouldApplyTurbo', () => {
         expect(result.reason).toContain('threshold');
     });
 
-    test('skips while boost window is open by default', () => {
-        mockSettings({ turboApplyWhenBoostActive: false });
-        const challenge = buildChallenge({
-            closeInSeconds: 600,
-            boostState: 'AVAILABLE',
-            boostTimeout: NOW() + 1800, // boost window still alive
-        });
+    test.each([
+        ['timer boost', 'AVAILABLE', NOW() + 1800],
+        ['key-unlocked boost', 'AVAILABLE_KEY', 0],
+    ])('applies while a %s window is open — boost and turbo are independent', (_label, boostState, boostTimeout) => {
+        mockSettings();
+        const challenge = buildChallenge({ closeInSeconds: 600, boostState, boostTimeout });
         const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
-        expect(result.apply).toBe(false);
-        expect(result.reason).toBe('boost window currently open');
+        expect(result.apply).toBe(true);
+        expect(result.imageId).toBe('entry-1');
     });
 
-    test('overrides boost-window block when turboApplyWhenBoostActive is true', () => {
-        mockSettings({ turboApplyWhenBoostActive: true });
+    test('with a boost window open, still steps off the boosted entry', () => {
+        mockSettings();
         const challenge = buildChallenge({
             closeInSeconds: 600,
             boostState: 'AVAILABLE',
             boostTimeout: NOW() + 1800,
+            entries: [{ id: 'entry-1', boosted: true }, { id: 'entry-2' }],
         });
-        expect(VotingLogic.shouldApplyTurbo(challenge, NOW()).apply).toBe(true);
+        const result = VotingLogic.shouldApplyTurbo(challenge, NOW());
+        expect(result.apply).toBe(true);
+        expect(result.imageId).toBe('entry-2');
     });
 
     test('turboImageIndex 0 maps to last entry (sentinel)', () => {
@@ -265,17 +266,6 @@ describe('shouldApplyTurbo', () => {
         test('bypasses the turboTime threshold in the emergency window', () => {
             mockSettings({ turboTime: 60, emergencyFill: 300 }); // 2 min remaining > 1 min threshold
             const challenge = buildChallenge({ closeInSeconds: 120 });
-            expect(VotingLogic.shouldApplyTurbo(challenge, NOW()).apply).toBe(false); // blocked without emergency
-            expect(VotingLogic.shouldApplyTurbo(challenge, NOW(), { emergency: true }).apply).toBe(true);
-        });
-
-        test('bypasses the open-boost-window guard in the emergency window', () => {
-            mockSettings({ turboApplyWhenBoostActive: false, emergencyFill: 300 });
-            const challenge = buildChallenge({
-                closeInSeconds: 120,
-                boostState: 'AVAILABLE',
-                boostTimeout: NOW() + 1800,
-            });
             expect(VotingLogic.shouldApplyTurbo(challenge, NOW()).apply).toBe(false); // blocked without emergency
             expect(VotingLogic.shouldApplyTurbo(challenge, NOW(), { emergency: true }).apply).toBe(true);
         });

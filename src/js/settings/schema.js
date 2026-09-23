@@ -557,16 +557,6 @@ const SETTINGS_SCHEMA = {
         label: 'app.turboImageIndex',
         description: 'app.turboImageIndexDesc',
     },
-    turboApplyWhenBoostActive: {
-        type: 'boolean',
-        default: false,
-        perChallenge: true,
-        validation: zBool,
-        validationOrder: 1,
-        group: 'turbo',
-        label: 'app.turboApplyWhenBoostActive',
-        description: 'app.turboApplyWhenBoostActiveDesc',
-    },
     turboFillNew: {
         type: 'boolean',
         default: false,

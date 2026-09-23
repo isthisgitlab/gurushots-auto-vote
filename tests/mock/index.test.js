@@ -709,7 +709,6 @@ describe('mock/index', () => {
                     boostFillNew: true,
                     useTurbo: true,
                     turboFillNew: true,
-                    turboApplyWhenBoostActive: true, // boost window is open this cycle
                 });
                 const submitSpy = jest.spyOn(mockIndex.mockApiClient, 'submitToChallenge');
                 const boostEntrySpy = jest.spyOn(mockIndex.mockApiClient, 'applyBoostToEntry');

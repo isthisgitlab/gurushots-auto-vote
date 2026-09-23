@@ -264,7 +264,7 @@ When `autoBoost` is on, the app applies an available boost to the entry at `boos
 Turbo is a slow-replenishing consumable you earn by playing a mini-game, then spend whenever you like. The two halves are independent settings:
 
 - **Auto-earn (`autoTurbo`, on by default)** — when no turbo is held, the app plays the mini-game each cycle to earn one. (GUI equivalent: the **Play Auto-Turbo** button.)
-- **Auto-apply (`useTurbo`, off by default)** — when a turbo is held and the challenge has `turboTime` seconds or less remaining, it's applied to the entry at `turboImageIndex`. By default this waits until any open boost window has passed; set `turboApplyWhenBoostActive` to `true` to allow both within the same challenge (on different entries).
+- **Auto-apply (`useTurbo`, off by default)** — when a turbo is held and the challenge has `turboTime` seconds or less remaining, it's applied to the entry at `turboImageIndex`. It does not wait for an open boost window — boost and turbo only never share an entry.
 
 In the GUI you can also apply a held turbo to a specific photo with its **⚡** button, overriding the auto slot. A single photo can be either boosted or turboed, never both.
 
@@ -345,14 +345,13 @@ All of these support per-challenge overrides except where noted.
 
 **Turbo**
 
-| Setting                     | Default       | Range / values | Description                                                                                                                   |
-| --------------------------- | ------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `useTurbo`                  | `false`       | bool           | Auto-apply a held turbo before the deadline.                                                                                  |
-| `autoTurbo`                 | `true`        | bool           | Auto-play the mini-game to earn turbo when none is held.                                                                      |
-| `turboTime`                 | `7200` s (2h) | ≥ 0            | Apply turbo when this much time (or less) remains. Entered as h+m in the GUI.                                                 |
-| `turboImageIndex`           | `1`           | `0`–`4`        | Entry slot to turbo (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back if that slot is already boosted. |
-| `turboApplyWhenBoostActive` | `false`       | bool           | Allow turbo to apply while a boost window is open.                                                                            |
-| `turboFillNew`              | `false`       | bool           | During auto-fill, submit a fresh photo and immediately turbo that new entry.                                                  |
+| Setting           | Default       | Range / values | Description                                                                                                                   |
+| ----------------- | ------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `useTurbo`        | `false`       | bool           | Auto-apply a held turbo before the deadline.                                                                                  |
+| `autoTurbo`       | `true`        | bool           | Auto-play the mini-game to earn turbo when none is held.                                                                      |
+| `turboTime`       | `7200` s (2h) | ≥ 0            | Apply turbo when this much time (or less) remains. Entered as h+m in the GUI.                                                 |
+| `turboImageIndex` | `1`           | `0`–`4`        | Entry slot to turbo (1 = first, `0` = last; a challenge holds at most 4 entries). Steps back if that slot is already boosted. |
+| `turboFillNew`    | `false`       | bool           | During auto-fill, submit a fresh photo and immediately turbo that new entry.                                                  |
 
 **Final window**
 

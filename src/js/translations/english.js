@@ -204,9 +204,6 @@
             boostFillNewOnConflict: 'Boost a Freshly Submitted Photo Only on Conflict',
             boostFillNewOnConflictDesc:
                 'When on, a new photo is submitted and boosted only when your single existing entry already has Turbo on it (so Boost cannot go there). In the normal case Boost still goes to your existing entry. If there is no free slot or no eligible photo to submit, Boost is skipped this cycle — there is no fallback, since your only entry already has Turbo. Ignored when the option above is on, since that always fills a new photo.',
-            turboApplyWhenBoostActive: 'Apply Turbo During Boost Window',
-            turboApplyWhenBoostActiveDesc:
-                'When off, skip Turbo apply if a Boost is currently available on the same challenge',
             turboFillNew: 'Turbo a Freshly Submitted Photo',
             turboFillNewDesc:
                 'When on, this submits a new photo (using your Auto-Fill tag rules) just before applying Turbo and applies Turbo to that new entry instead of an existing one. If there is no free slot or no eligible photo, it falls back to your configured Turbo Entry; if you have no entry yet, Turbo is skipped this cycle.',

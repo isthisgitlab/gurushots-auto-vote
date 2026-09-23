@@ -205,8 +205,6 @@
             boostFillNewOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
             boostFillNewOnConflictDesc:
                 'Ja ieslēgts, jauns foto tiek iesniegts un Boost tiek pielietots tikai tad, ja tavam vienīgajam esošajam foto jau ir Turbo (tāpēc Boost nevar tur nokļūt). Parastā gadījumā Boost joprojām nonāk uz tava esošā foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Boost šajā ciklā tiek izlaists — rezerves varianta nav, jo tavam vienīgajam foto jau ir Turbo. Netiek ņemts vērā, ja ieslēgta iepriekšējā opcija, jo tā vienmēr iesniedz jaunu foto.',
-            turboApplyWhenBoostActive: 'Pielietot Turbo Boost laikā',
-            turboApplyWhenBoostActiveDesc: 'Ja izslēgts, nepielieto Turbo, kamēr šim izaicinājumam ir pieejams Boost',
             turboFillNew: 'Turbo jaunam iesniegtam foto',
             turboFillNewDesc:
                 'Ja ieslēgts, tieši pirms Turbo tiek iesniegts jauns foto (izmantojot tavus automātiskās aizpildes tagu noteikumus) un Turbo tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Turbo foto; ja vēl nav neviena foto, Turbo šajā ciklā tiek izlaists.',

@@ -1067,8 +1067,8 @@ const shouldApplyBoost = (challenge, now, options = {}) => {
 /**
  * Returns true while the boost window is currently usable (state AVAILABLE
  * with an active timer, or AVAILABLE_KEY / AVAILABLE without timeout).
- * Used by both shouldApplyBoost (for its own decision) and shouldApplyTurbo
- * (to optionally skip turbo while a boost is queued for the same challenge).
+ * Used by shouldApplyBoost (its emergency path) and describeDeadlineActions
+ * (the boost/turbo entry-conflict flag).
  * Predicate itself is shared with the renderer (voting/boostWindow.js).
  * @param {any} challenge
  * @param {number} now - Unix timestamp in seconds
@@ -1195,7 +1195,7 @@ const shouldPlayAutoTurbo = (challenge, now) => {
  * @param {number} now - Unix timestamp in seconds
  * @param {{emergency?: boolean}} [options] - When `emergency` is true and the
  *   challenge is inside the Emergency Fill window, apply a won turbo regardless
- *   of the useTurbo toggle, the turboTime window, or an open boost window.
+ *   of the useTurbo toggle or the turboTime window.
  * @returns {{apply: boolean, imageId: string|null, fillNew: boolean, reason: string}}
  */
 const shouldApplyTurbo = (challenge, now, options = {}) => {
@@ -1208,9 +1208,12 @@ const shouldApplyTurbo = (challenge, now, options = {}) => {
 
     // Emergency override: inside the Emergency Fill window, apply a won turbo
     // even when useTurbo is off — at the buzzer an unused turbo is wasted. The
-    // turboTime threshold and the turboApplyWhenBoostActive guard below are also
-    // skipped in this case (the challenge is about to close, and any available
-    // boost is applied alongside turbo on a separate entry).
+    // turboTime threshold below is also skipped in this case (the challenge is
+    // about to close).
+    //
+    // Turbo does not wait for an open boost window: the two are independent, and
+    // the only rule between them — never on the same entry — is enforced by the
+    // entry pick below (pickEntryAvoidingConflict).
     const emergency = options.emergency === true && isWithinEmergencyWindow(challenge, now);
     if (!emergency && !settings.getEffectiveSetting('useTurbo', challengeId)) return noop('useTurbo disabled');
 
@@ -1224,11 +1227,6 @@ const shouldApplyTurbo = (challenge, now, options = {}) => {
             return noop(
                 `${Math.floor(timeUntilEnd / 60)}m remaining > ${Math.floor(effectiveTurboTime / 60)}m threshold`,
             );
-        }
-
-        const allowDuringBoost = settings.getEffectiveSetting('turboApplyWhenBoostActive', challengeId);
-        if (!allowDuringBoost && isBoostWindowOpen(challenge, now)) {
-            return noop('boost window currently open');
         }
     }
 
