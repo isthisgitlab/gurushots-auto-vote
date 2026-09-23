@@ -61,6 +61,7 @@
  */
 
 const lexicon = require('./lexicon');
+const { diagnostics, shouldCollect } = require('./diagnostics');
 const { buildThemeKeywords, labelStemGroups, SEMANTIC_MATCH_FLOOR, SEMANTIC_SUPPORT_CAP } = require('../photoPicker');
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
@@ -120,6 +121,34 @@ const embedCached = (tokens) => {
     return vec;
 };
 
+// Observe only the words the scorer actually considers. No challenge IDs,
+// titles, photo IDs, or full labels are written to the diagnostics store.
+const observeVocabulary = (challenge, keywords, photos, scores, hasThemeVector) => {
+    try {
+        if (!shouldCollect()) return;
+        const themeWords = keywords.filter((word) => !lexicon.hasVector(word));
+        const labelWords = new Set();
+        let hasLabelVector = false;
+        for (const photo of photos) {
+            for (const group of labelStemGroups(photo)) {
+                for (const word of group) {
+                    if (lexicon.hasVector(word)) hasLabelVector = true;
+                    else labelWords.add(word);
+                }
+            }
+        }
+        diagnostics.record(challenge?.id ?? challenge?.url ?? challenge?.title, {
+            themeWords,
+            labelWords: [...labelWords],
+            noThemeVector: !hasThemeVector,
+            noLabelVectors: !hasLabelVector,
+            noOnThemeScore: hasThemeVector && ![...(scores?.values() || [])].some((entry) => clearsFloor(entry.score)),
+        });
+    } catch {
+        // Observation must never disable semantic ranking.
+    }
+};
+
 /**
  * @param {object} challenge - challenge object (url/title/welcome_message used)
  * @param {Array<object>} photos - eligible candidates with `id` and `labels`
@@ -138,7 +167,10 @@ const getSemanticScores = async (challenge, photos, ignoreWords = null) => {
         const keywords = buildThemeKeywords(challenge, ignoreWords);
         if (!keywords || keywords.length === 0) return null;
         const challengeVec = embedCached(keywords);
-        if (!challengeVec) return null;
+        if (!challengeVec) {
+            observeVocabulary(challenge, keywords, photos, null, false);
+            return null;
+        }
 
         const scores = new Map();
         for (const photo of photos) {
@@ -154,6 +186,7 @@ const getSemanticScores = async (challenge, photos, ignoreWords = null) => {
             // distinct from "scored 0", which is a measured miss.
             if (pooled) scores.set(String(id), pooled);
         }
+        observeVocabulary(challenge, keywords, photos, scores, true);
         return scores.size > 0 ? scores : null;
     } catch {
         return null;

@@ -124,7 +124,7 @@ Commands:
   apply-profile "<name>" --challenge=<id> - Replace a challenge's overrides with a profile
   delete-profile "<name>" - Delete a saved profile
   help-settings - Show detailed settings help (includes profile details)
-  logs [--error|--api|--settings] [--lines=<n>] - Print the tail of a log file
+  logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report
   reset-windows  - Reset window positions to default
   help     - Show this help message
 
@@ -383,10 +383,13 @@ const main = async () => {
             }
             case 'logs': {
                 const rest = args.slice(1);
-                let category = 'app';
-                if (rest.includes('--error')) category = 'error';
-                else if (rest.includes('--api')) category = 'api';
-                else if (rest.includes('--settings')) category = 'settings';
+                const categories = {
+                    '--error': 'error',
+                    '--api': 'api',
+                    '--settings': 'settings',
+                    '--lexicon': 'lexicon',
+                };
+                const category = categories[rest.find((arg) => Object.hasOwn(categories, arg))] || 'app';
                 const linesArg = rest.find((a) => a.startsWith('--lines='));
                 const lines = linesArg ? parseInt(linesArg.slice('--lines='.length), 10) || 100 : 100;
                 showLogs({ category, lines });

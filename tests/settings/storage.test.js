@@ -14,7 +14,7 @@ jest.mock(
     { virtual: true },
 );
 
-const { storage } = require('../../src/js/settings/storage');
+const { storage, createJsonStore } = require('../../src/js/settings/storage');
 
 describe('storage — headless service branch', () => {
     let store;
@@ -57,6 +57,19 @@ describe('storage — headless service branch', () => {
         });
         // Must not throw — settings persistence is on a synchronous path.
         expect(() => storage.writeRaw('{"token":"x"}')).not.toThrow();
+    });
+
+    test('diagnostics JSON uses the keyed native preference bridge', () => {
+        const preferences = new Map();
+        store.readKey = jest.fn((key) => preferences.get(key) ?? null);
+        store.writeKey = jest.fn((key, value) => preferences.set(key, value));
+        const diagnostics = createJsonStore({
+            fileName: 'lexicon-diagnostics.json',
+            prefKey: 'gs_lexicon_diagnostics',
+        });
+        diagnostics.writeRaw('{"challenges":1}');
+        expect(store.writeKey).toHaveBeenCalledWith('gs_lexicon_diagnostics', '{"challenges":1}');
+        expect(diagnostics.readRaw()).toBe('{"challenges":1}');
     });
 });
 

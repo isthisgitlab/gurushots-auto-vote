@@ -89,6 +89,8 @@ describe('Capacitor entry', () => {
             flushSwapBackWrites: jest.fn(),
             initializeAutoSpendAsync: jest.fn().mockResolvedValue(undefined),
             flushAutoSpendWrites: jest.fn(),
+            initializeDiagnosticsAsync: jest.fn().mockResolvedValue(undefined),
+            flushDiagnosticsWrites: jest.fn(),
             isCapacitor: jest.fn(() => native),
             categoryError: jest.fn(),
             withCategory: jest.fn(() => ({ error: m.categoryError })),
@@ -117,6 +119,10 @@ describe('Capacitor entry', () => {
             jest.doMock(`${SRC}/currencyAutoStore`, () => ({
                 initializeAutoSpendAsync: m.initializeAutoSpendAsync,
                 flushAutoSpendWrites: m.flushAutoSpendWrites,
+            }));
+            jest.doMock(`${SRC}/services/semantic/diagnostics`, () => ({
+                initializeDiagnosticsAsync: m.initializeDiagnosticsAsync,
+                flushDiagnosticsWrites: m.flushDiagnosticsWrites,
             }));
             jest.doMock(`${SRC}/runtime`, () => ({ isCapacitor: m.isCapacitor }));
             jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
@@ -163,6 +169,7 @@ describe('Capacitor entry', () => {
             m.initializeJoinStateAsync,
             m.initializeSwapBackAsync,
             m.initializeAutoSpendAsync,
+            m.initializeDiagnosticsAsync,
             m.tm.loadLanguageFromSettings,
             m.mountApp,
         ].map((fn) => fn.mock.invocationCallOrder[0]);
@@ -181,6 +188,7 @@ describe('Capacitor entry', () => {
             m.flushJoinStateWrites,
             m.flushSwapBackWrites,
             m.flushAutoSpendWrites,
+            m.flushDiagnosticsWrites,
         ];
 
         const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);

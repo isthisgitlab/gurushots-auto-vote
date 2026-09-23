@@ -164,6 +164,7 @@ const embedIn = (tbl, tokens) => {
  * @returns {Float64Array|null}
  */
 const embed = (tokens) => embedIn(table, tokens);
+const hasVector = (token) => Boolean(table && vectorFor(table, token));
 
 // Cosine similarity. Both inputs come from embed() and are already unit
 // vectors, so the dot product is the cosine.
@@ -203,4 +204,4 @@ const __resetForTests = () => {
     initPromise = null;
 };
 
-module.exports = { init, isAvailable, embed, embedIn, cosine, concreteness, buildTable, __resetForTests };
+module.exports = { init, isAvailable, embed, embedIn, hasVector, cosine, concreteness, buildTable, __resetForTests };

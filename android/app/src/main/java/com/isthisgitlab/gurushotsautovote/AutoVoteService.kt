@@ -353,8 +353,26 @@ class AutoVoteService : Service() {
 
     /** Settings bridge — same store @capacitor/preferences uses, so token/settings stay in sync. */
     inner class HeadlessStore {
+        private val diagnosticKey = "gs_lexicon_diagnostics"
+
         @android.webkit.JavascriptInterface
         fun read(): String? = getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null)
+
+        @android.webkit.JavascriptInterface
+        fun readKey(key: String): String? =
+            if (key == diagnosticKey) getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(key, null) else null
+
+        @android.webkit.JavascriptInterface
+        fun writeKey(key: String, data: String) {
+            if (key != diagnosticKey) return
+            try {
+                JSONObject(data)
+            } catch (t: Throwable) {
+                Log.w(TAG, "Refusing to persist non-JSON diagnostics blob")
+                return
+            }
+            getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(key, data).apply()
+        }
 
         @android.webkit.JavascriptInterface
         fun write(data: String) {

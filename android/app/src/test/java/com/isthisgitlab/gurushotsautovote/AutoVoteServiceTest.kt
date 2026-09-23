@@ -255,6 +255,17 @@ class AutoVoteServiceTest {
     }
 
     @Test
+    fun headlessDiagnosticsUseOnlyTheAllowedPreferenceKey() {
+        val store = newService().HeadlessStore()
+        store.writeKey("gs_lexicon_diagnostics", "{\"challenges\":1}")
+        assertEquals("{\"challenges\":1}", store.readKey("gs_lexicon_diagnostics"))
+        store.writeKey("unrelated-key", "{\"challenges\":2}")
+        assertNull(store.readKey("unrelated-key"))
+        store.writeKey("gs_lexicon_diagnostics", "invalid JSON")
+        assertEquals("{\"challenges\":1}", store.readKey("gs_lexicon_diagnostics"))
+    }
+
+    @Test
     @Config(sdk = [30])
     fun preAndroid14UsesUntypedForegroundAndPreAndroid12AlwaysSchedulesExact() {
         val am = mockk<AlarmManager>(relaxed = true)

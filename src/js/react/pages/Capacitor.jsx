@@ -19,6 +19,7 @@ import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
 import { initializeSwapBackAsync, flushSwapBackWrites } from '../../swapBackStore';
 import { initializeAutoSpendAsync, flushAutoSpendWrites } from '../../currencyAutoStore';
+import { initializeDiagnosticsAsync, flushDiagnosticsWrites } from '../../services/semantic/diagnostics';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
 import { mountApp } from './App';
@@ -90,6 +91,7 @@ const bootstrap = async () => {
         await initializeSwapBackAsync();
         // Automatic exposure-fill counts (the per-challenge fill cap).
         await initializeAutoSpendAsync();
+        await initializeDiagnosticsAsync();
 
         // Settings writes are write-behind (cache now, persist async). When
         // the OS backgrounds or tears down the WebView, push the latest
@@ -102,6 +104,7 @@ const bootstrap = async () => {
                 flushJoinStateWrites();
                 flushSwapBackWrites();
                 flushAutoSpendWrites();
+                flushDiagnosticsWrites();
             } catch {
                 // never let a teardown handler throw
             }

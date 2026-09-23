@@ -19,8 +19,13 @@ jest.mock('../../../src/js/services/semantic/assets', () => ({
     ASSET_NAME: 'semantic-vectors.json',
     __resetForTests: () => {},
 }));
+jest.mock('../../../src/js/services/semantic/diagnostics', () => ({
+    diagnostics: { record: jest.fn() },
+    shouldCollect: jest.fn(() => false),
+}));
 
 const { getSemanticScores, __resetForTests } = require('../../../src/js/services/semantic');
+const { diagnostics, shouldCollect } = require('../../../src/js/services/semantic/diagnostics');
 const lexicon = require('../../../src/js/services/semantic/lexicon');
 const { SEMANTIC_MATCH_FLOOR, SEMANTIC_SUPPORT_CAP } = require('../../../src/js/services/photoPicker');
 
@@ -34,6 +39,37 @@ describe('getSemanticScores — lexicon backend, end-to-end', () => {
     beforeEach(() => {
         __resetForTests();
         lexicon.__resetForTests();
+        diagnostics.record.mockClear();
+        shouldCollect.mockReturnValue(false);
+    });
+
+    test('collects only missing word stems without changing semantic scores', async () => {
+        shouldCollect.mockReturnValue(true);
+        const scores = await getSemanticScores({ title: 'Flowers', url: 'flowers' }, [
+            { id: 'one', labels: ['Sunflower', 'Zzqqxx'] },
+        ]);
+        expect(scores.get('one').score).toBeGreaterThan(SEMANTIC_MATCH_FLOOR / 100);
+        expect(diagnostics.record).toHaveBeenCalledWith('flowers', {
+            themeWords: [],
+            labelWords: ['zzqqxx'],
+            noThemeVector: false,
+            noLabelVectors: false,
+            noOnThemeScore: false,
+        });
+    });
+
+    test('records an out-of-vocabulary theme before the scorer falls back', async () => {
+        shouldCollect.mockReturnValue(true);
+        expect(
+            await getSemanticScores({ title: 'Zzqqxx', url: 'zzqqxx' }, [{ id: 'one', labels: ['Zzqqxx'] }]),
+        ).toBeNull();
+        expect(diagnostics.record).toHaveBeenCalledWith('zzqqxx', {
+            themeWords: ['zzqqxx'],
+            labelWords: ['zzqqxx'],
+            noThemeVector: true,
+            noLabelVectors: true,
+            noOnThemeScore: false,
+        });
     });
 
     test('ranks an on-theme (cat) photo above an off-theme (car) one', async () => {

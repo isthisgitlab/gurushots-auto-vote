@@ -222,6 +222,23 @@ const getEnvironmentInfo = () => {
  *
  * @param {{fileName: string, prefKey: string}} opts
  */
+const readHeadlessKey = (prefKey, fallback) => {
+    try {
+        return globalThis.AndroidHeadlessStore?.readKey?.(prefKey) ?? fallback;
+    } catch (err) {
+        logger.withCategory('settings').error(`Headless ${prefKey} read failed:`, err);
+        return fallback;
+    }
+};
+
+const writeHeadlessKey = (prefKey, data) => {
+    try {
+        globalThis.AndroidHeadlessStore?.writeKey?.(prefKey, data);
+    } catch (err) {
+        logger.withCategory('settings').error(`Headless ${prefKey} write failed:`, err);
+    }
+};
+
 const createJsonStore = ({ fileName, prefKey }) => {
     let initialized = false;
     let cachedJson = null;
@@ -232,17 +249,21 @@ const createJsonStore = ({ fileName, prefKey }) => {
     return {
         /** Raw JSON string, or null when never written. */
         readRaw: () => {
-            if (runtime.isHeadlessService() || runtime.isCapacitor()) {
+            if (runtime.isHeadlessService()) {
+                return readHeadlessKey(prefKey, cachedJson);
+            }
+            if (runtime.isCapacitor()) {
                 return cachedJson;
             }
             const p = filePath();
             if (!fs.existsSync(p)) return null;
             return fs.readFileSync(p, 'utf8');
         },
-        /** Sync on Electron/CLI; cache + ordered write-behind on Capacitor; memory-only on headless. */
+        /** Sync on Electron/CLI; cache + ordered write-behind on Capacitor; native keyed bridge on headless. */
         writeRaw: (data) => {
             if (runtime.isHeadlessService()) {
                 cachedJson = data;
+                writeHeadlessKey(prefKey, data);
                 return;
             }
             if (runtime.isCapacitor()) {
