@@ -427,7 +427,7 @@
             groupCurrencyAuto: 'Keys, Swaps & Fills',
             autoKeyUnlock: 'Auto-Use a Key',
             autoKeyUnlockDesc:
-                "Spend a key to unlock this challenge's locked Boost once the timing below is reached. Unlock only — the Boost is then applied by Auto-Apply Boost at the Key-Unlocked Boost Time. Set per challenge or in a profile; there is no global switch.",
+                "Spend a key to unlock this challenge's locked Boost once the timing below is reached. Unlock only — the Boost is then applied by Auto-Apply Boost at the Key-Unlocked Boost Time. Set globally, in a profile, or for one challenge.",
             autoKeyAfterStart: 'Key: After Time From Start',
             autoKeyAfterStartDesc:
                 'Use the key only once the challenge has been running this long (e.g. 11h). 0 = no condition.',
@@ -437,7 +437,7 @@
             autoKeyAfterPercentDesc: 'Use the key only once this share of the challenge has run. 0 = no condition.',
             autoSwap: 'Auto-Swap a Photo',
             autoSwapDesc:
-                'Spend a swap to replace one of your entries with the best-matching photo from your library once the timing below is reached. Set per challenge or in a profile; there is no global switch.',
+                'Spend a swap to replace one of your entries with the best-matching photo from your library once the timing below is reached. Set globally, in a profile, or for one challenge.',
             autoSwapAfterStart: 'Swap: After Time From Start',
             autoSwapAfterStartDesc: 'Swap only once the challenge has been running this long. 0 = no condition.',
             autoSwapBeforeEnd: 'Swap: Within Time Before End',
@@ -458,7 +458,7 @@
             autoSwapMaxDesc: 'Stop auto-swapping once this challenge has had this many swaps (manual swaps count too).',
             autoExposureFill: 'Auto-Use a Fill',
             autoExposureFillDesc:
-                'Spend a fill to top exposure up to 100% — but only when exposure is below the threshold below AND there are not enough photos left to vote it back up. Usually needed in flash challenges. Set per challenge or in a profile; there is no global switch.',
+                'Spend a fill to top exposure up to 100% — but only when exposure is below the threshold below AND there are not enough photos left to vote it back up. Usually needed in flash challenges. Set globally, in a profile, or for one challenge.',
             autoExposureFillBelow: 'Fill When Exposure Below',
             autoExposureFillBelowDesc: 'A fill is only spent while exposure is below this and voting cannot reach it.',
             autoExposureFillAfterStart: 'Fill: After Time From Start',

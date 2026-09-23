@@ -30,8 +30,7 @@ const { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } = require('./limi
  *   has NO global value. Hidden from the global settings modal, refused by
  *   setGlobalDefault, and a stored global value is ignored — the schema default applies
  *   until a challenge override or profile sets it. Implies `perChallenge`. Used for the
- *   currency automation, where spending keys/swaps/fills must be an explicit per-challenge
- *   (or per-profile) choice rather than a blanket global switch.
+ *   settings that require an explicit per-challenge or per-profile choice.
  * @property {import('zod').ZodType} [validation]
  * @property {(value: any, allSettings: any, challengeId?: any) => boolean} [contextValidation]
  * @property {(value: any, allSettings: any, challengeId?: any) => string} [getContextError]
@@ -580,10 +579,9 @@ const SETTINGS_SCHEMA = {
 
     // --- Keys, Swaps & Fills (currency automation) ---
     // Automatic spending of the three bankroll currencies the manual card buttons
-    // spend (services/currencyActions.js). Every per-challenge key here is
-    // challengeOnly: there is deliberately NO global switch — automation is turned
-    // on per challenge or per profile, so spending currency is always an explicit
-    // choice. Each action has three optional timing conditions (after start, before
+    // spend (services/currencyActions.js). Global defaults apply to every
+    // challenge unless a profile or per-challenge setting overrides them.
+    // Each action has three optional timing conditions (after start, before
     // end, after % elapsed); every condition that is set must hold (0 = that
     // condition off, family-1 sentinel), and none set means "any time". The pure
     // rule math lives in voting/currencyAuto.js.
@@ -591,7 +589,6 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        challengeOnly: true,
         validation: zBool,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -602,7 +599,6 @@ const SETTINGS_SCHEMA = {
         type: 'time',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: currencyRuleSec,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -614,7 +610,6 @@ const SETTINGS_SCHEMA = {
         type: 'time',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: currencyRuleSec,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -626,7 +621,6 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: joinPercentElapsed,
         min: 0,
         max: MAX_JOIN_PERCENT_ELAPSED,
@@ -641,7 +635,6 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        challengeOnly: true,
         validation: zBool,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -652,7 +645,6 @@ const SETTINGS_SCHEMA = {
         type: 'time',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: currencyRuleSec,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -664,7 +656,6 @@ const SETTINGS_SCHEMA = {
         type: 'time',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: currencyRuleSec,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -676,7 +667,6 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: joinPercentElapsed,
         min: 0,
         max: MAX_JOIN_PERCENT_ELAPSED,
@@ -693,7 +683,6 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: entrySlotIndex,
         min: 0,
         max: MAX_ENTRY_SLOT,
@@ -706,7 +695,6 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        challengeOnly: true,
         validation: zBool,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -717,7 +705,6 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        challengeOnly: true,
         validation: zBool,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -728,7 +715,6 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: swapVoteCeiling,
         min: 0,
         max: MAX_SWAP_VOTE_CEILING,
@@ -742,7 +728,6 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 1,
         perChallenge: true,
-        challengeOnly: true,
         validation: autoSpendCount,
         min: 1,
         max: MAX_AUTO_SPENDS_PER_CHALLENGE,
@@ -756,7 +741,6 @@ const SETTINGS_SCHEMA = {
         type: 'boolean',
         default: false,
         perChallenge: true,
-        challengeOnly: true,
         validation: zBool,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -770,7 +754,6 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 50,
         perChallenge: true,
-        challengeOnly: true,
         validation: percentage,
         min: 1,
         max: 100,
@@ -784,7 +767,6 @@ const SETTINGS_SCHEMA = {
         type: 'time',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: currencyRuleSec,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -796,7 +778,6 @@ const SETTINGS_SCHEMA = {
         type: 'time',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: currencyRuleSec,
         validationOrder: 1,
         group: 'currencyAuto',
@@ -808,7 +789,6 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 0,
         perChallenge: true,
-        challengeOnly: true,
         validation: joinPercentElapsed,
         min: 0,
         max: MAX_JOIN_PERCENT_ELAPSED,
@@ -823,7 +803,6 @@ const SETTINGS_SCHEMA = {
         type: 'number',
         default: 1,
         perChallenge: true,
-        challengeOnly: true,
         validation: autoSpendCount,
         min: 1,
         max: MAX_AUTO_SPENDS_PER_CHALLENGE,

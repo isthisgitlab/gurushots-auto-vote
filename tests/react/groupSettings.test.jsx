@@ -3,6 +3,7 @@
  * schema entries into ordered UI sections for both settings modals.
  */
 import { groupSchemaEntries, tierSchemaEntries } from '@/utils/groupSettings';
+import { SETTINGS_SCHEMA, SETTINGS_GROUPS } from '../../src/js/settings/schema';
 
 const groups = [
     { id: 'general', label: 'app.groupGeneral', tier: 'core' },
@@ -50,6 +51,19 @@ describe('groupSchemaEntries', () => {
             'boostTime',
             'autoSwap',
         ]);
+    });
+
+    test('currency automation controls appear in global and challenge settings', () => {
+        const global = groupSchemaEntries(SETTINGS_SCHEMA, SETTINGS_GROUPS);
+        const perChallenge = groupSchemaEntries(SETTINGS_SCHEMA, SETTINGS_GROUPS, { perChallengeOnly: true });
+        const globalKeys = keysOf(global.find((group) => group.id === 'currencyAuto'));
+        const challengeKeys = keysOf(perChallenge.find((group) => group.id === 'currencyAuto'));
+
+        expect(globalKeys).toEqual(expect.arrayContaining(['autoKeyUnlock', 'autoSwap', 'autoExposureFill']));
+        expect(challengeKeys).toEqual(globalKeys.filter((key) => SETTINGS_SCHEMA[key].perChallenge));
+        expect(globalKeys).toEqual(
+            expect.arrayContaining(['currencyReserveKeys', 'currencyReserveSwaps', 'currencyReserveFills']),
+        );
     });
 
     test('perChallengeOnly drops perChallenge:false entries', () => {

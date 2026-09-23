@@ -57,8 +57,8 @@ const resolveBoostPrefill = (challengeId) => ({
 
 // Per-challenge currency-automation timing for the cadence cap (./thresholdWindow.js):
 // each ENABLED rule's three timing conditions, null for a rule that is off. The
-// enable keys are challengeOnly, so a challenge with no override or profile turning
-// them on resolves all-null and never shortens the wait.
+// enable keys resolve through global defaults, profiles and challenge overrides.
+// Disabled rules resolve to null and never shorten the wait.
 const currencyTimingOf = (enableKey, prefix, challengeId) =>
     settings.getEffectiveSetting(enableKey, challengeId) === true
         ? {

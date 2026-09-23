@@ -430,7 +430,7 @@
             groupCurrencyAuto: 'Atslēgas, maiņas un uzpildes',
             autoKeyUnlock: 'Automātiski izmantot atslēgu',
             autoKeyUnlockDesc:
-                'Iztērēt atslēgu, lai atbloķētu šī izaicinājuma bloķēto Boost, kad sasniegts zemāk norādītais laiks. Tikai atbloķē — Boost pēc tam uzliek “Auto-pielietot Boost” pie “Boost laiks (atvērts ar atslēgu)”. Iestata izaicinājumam vai profilā; globāla slēdža nav.',
+                'Iztērēt atslēgu, lai atbloķētu šī izaicinājuma bloķēto Boost, kad sasniegts zemāk norādītais laiks. Tikai atbloķē — Boost pēc tam uzliek “Auto-pielietot Boost” pie “Boost laiks (atvērts ar atslēgu)”. Iestata globāli, profilā vai atsevišķam izaicinājumam.',
             autoKeyAfterStart: 'Atslēga: pēc laika no sākuma',
             autoKeyAfterStartDesc:
                 'Izmantot atslēgu tikai tad, kad izaicinājums ilgst jau tik ilgi (piem., 11 h). 0 = bez nosacījuma.',
@@ -442,7 +442,7 @@
                 'Izmantot atslēgu tikai tad, kad pagājusi šī daļa no izaicinājuma. 0 = bez nosacījuma.',
             autoSwap: 'Automātiski apmainīt bildi',
             autoSwapDesc:
-                'Iztērēt maiņu, lai kādu no tavām bildēm aizstātu ar piemērotāko bildi no bibliotēkas, kad sasniegts zemāk norādītais laiks. Iestata izaicinājumam vai profilā; globāla slēdža nav.',
+                'Iztērēt maiņu, lai kādu no tavām bildēm aizstātu ar piemērotāko bildi no bibliotēkas, kad sasniegts zemāk norādītais laiks. Iestata globāli, profilā vai atsevišķam izaicinājumam.',
             autoSwapAfterStart: 'Maiņa: pēc laika no sākuma',
             autoSwapAfterStartDesc: 'Mainīt tikai tad, kad izaicinājums ilgst jau tik ilgi. 0 = bez nosacījuma.',
             autoSwapBeforeEnd: 'Maiņa: pēdējā laikā līdz beigām',
@@ -465,7 +465,7 @@
                 'Pārtraukt automātisko maiņu, kad šajā izaicinājumā veikts tik daudz maiņu (manuālās arī skaitās).',
             autoExposureFill: 'Automātiski izmantot uzpildi',
             autoExposureFillDesc:
-                'Iztērēt uzpildi, lai paceltu redzamību līdz 100% — bet tikai tad, ja redzamība ir zem zemāk norādītā sliekšņa UN nav pietiekami daudz bilžu, par ko nobalsot, lai to paceltu. Parasti vajag zibens izaicinājumos. Iestata izaicinājumam vai profilā; globāla slēdža nav.',
+                'Iztērēt uzpildi, lai paceltu redzamību līdz 100% — bet tikai tad, ja redzamība ir zem zemāk norādītā sliekšņa UN nav pietiekami daudz bilžu, par ko nobalsot, lai to paceltu. Parasti vajag zibens izaicinājumos. Iestata globāli, profilā vai atsevišķam izaicinājumam.',
             autoExposureFillBelow: 'Uzpildīt, ja redzamība zem',
             autoExposureFillBelowDesc: 'Uzpildi tērē tikai tad, ja redzamība ir zem šī un balsojot to sasniegt nevar.',
             autoExposureFillAfterStart: 'Uzpilde: pēc laika no sākuma',

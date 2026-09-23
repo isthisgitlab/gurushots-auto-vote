@@ -2,8 +2,8 @@
  * Automatic spending of the bankroll currencies during a voting pass — the
  * automated counterpart of the card's manual Key / Swap / Fill buttons.
  *
- * Every action is opt-in PER CHALLENGE or PER PROFILE (the enable keys are
- * challengeOnly in the schema — there is no global switch) and gated by:
+ * Every action is disabled by default. A global default, profile, or challenge
+ * setting can enable it, subject to:
  *   1. the local challenge allowing it (voting/currencyActions challengeAllows),
  *   2. its timing rule being open (voting/currencyAuto isRuleOpen),
  *   3. its own per-challenge conditions (swap target / caps, fill shortfall),
