@@ -12,12 +12,16 @@ const isTurboAvailable = (turbo, now) => {
     return state === 'TIMER' && typeof turbo?.time_to_open === 'number' && turbo.time_to_open <= now;
 };
 
-function HeaderStat({ icon, value, label }) {
+function HeaderStat({ icon, value, label, children }) {
     return (
         <div className="flex items-baseline gap-1 whitespace-nowrap">
             <span aria-hidden="true">{icon}</span>
-            <span className="font-semibold">{value}</span>
-            <span className="text-base-content/60">{label}</span>
+            {children ?? (
+                <>
+                    <span className="font-semibold">{value}</span>
+                    <span className="text-base-content/60">{label}</span>
+                </>
+            )}
         </div>
     );
 }
@@ -51,7 +55,7 @@ function BankrollStats({ bankroll }) {
  * against a 1Hz cascade). The time is advisory: computeNextCycleDelayMs
  * recomputes each cycle, so it is `~`-prefixed like the deadline timeline.
  */
-function NextActionCountdown({ nextRunAt, running }) {
+function NextActionCountdown({ nextRunAt, running, titleKey = 'app.statusHeaderNextApprox' }) {
     const { t } = useTranslation();
     const enabled = running && typeof nextRunAt === 'number';
     const now = useTick(1000, enabled);
@@ -59,9 +63,19 @@ function NextActionCountdown({ nextRunAt, running }) {
     if (typeof nextRunAt !== 'number') return <span className="opacity-70">—</span>;
     const remaining = Math.round(nextRunAt / 1000) - now;
     return (
-        <span title={t('app.statusHeaderNextApprox')}>
+        <span title={t(titleKey)}>
             {remaining > 0 ? `~${formatDuration(remaining, { includeSeconds: true })}` : t('app.deadlineDue')}
         </span>
+    );
+}
+
+function HeaderCountdown({ icon, labelKey, ...countdown }) {
+    const { t } = useTranslation();
+    return (
+        <HeaderStat icon={icon}>
+            <span className="text-base-content/60">{t(labelKey)}:</span>
+            <NextActionCountdown {...countdown} />
+        </HeaderStat>
     );
 }
 
@@ -75,7 +89,7 @@ function NextActionCountdown({ nextRunAt, running }) {
  * header body never re-renders on the countdown's clock. Responsive: the row
  * wraps on narrow viewports rather than using wide DaisyUI `stat` blocks.
  */
-export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoinActive }) {
+export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoinActive, autoClaimStatus }) {
     const { t } = useTranslation();
     // ChallengesContext always hands down an array ([] while empty/loading).
     const list = challenges;
@@ -109,11 +123,16 @@ export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoi
                 <HeaderStat icon="🚀" value={boostsAvailable} label={t('app.statusHeaderBoosts')} />
                 <HeaderStat icon="⚡" value={turbosAvailable} label={t('app.statusHeaderTurbos')} />
                 {lowExposureCount > 0 && <HeaderStat icon="👁" value={lowExposureCount} label={t('app.lowExposure')} />}
-                <div className="flex items-baseline gap-1 whitespace-nowrap">
-                    <span aria-hidden="true">⏳</span>
-                    <span className="text-base-content/60">{t('app.statusHeaderNext')}:</span>
-                    <NextActionCountdown nextRunAt={nextRunAt} running={running} />
-                </div>
+                <HeaderCountdown icon="⏳" labelKey="app.statusHeaderNext" nextRunAt={nextRunAt} running={running} />
+                {autoClaimStatus?.enabled && (
+                    <HeaderCountdown
+                        icon="🎁"
+                        labelKey="app.statusHeaderNextClaim"
+                        nextRunAt={autoClaimStatus.nextClaimAt}
+                        running={running}
+                        titleKey="app.statusHeaderNextClaimHint"
+                    />
+                )}
                 {/* Only shown while autovote is RUNNING — that's when the join
                     pre-step actually executes. Showing it while autovote is off (a
                     pure settings check) would wrongly imply challenges are being

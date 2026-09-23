@@ -14,7 +14,12 @@ jest.mock('../../src/js/settings', () => ({ getEffectiveSetting: jest.fn() }));
 const logger = require('../../src/js/logger');
 const cancellation = require('../../src/js/voting/cancellation');
 const settings = require('../../src/js/settings');
-const { CLAIM_INTERVAL_MS, runClaimPass, resetClaimThrottle } = require('../../src/js/services/autoClaim');
+const {
+    CLAIM_INTERVAL_MS,
+    getAutoClaimStatus,
+    runClaimPass,
+    resetClaimThrottle,
+} = require('../../src/js/services/autoClaim');
 
 const T0 = 1_790_000_000_000;
 
@@ -54,6 +59,21 @@ beforeEach(() => {
 });
 
 describe('gating', () => {
+    test('status follows the real throttle, including skipped passes and setting toggles', async () => {
+        expect(getAutoClaimStatus()).toEqual({ enabled: true, nextClaimAt: 0 });
+        const deps = makeDeps();
+        await runClaimPass('tok', T0, deps);
+        expect(getAutoClaimStatus()).toEqual({ enabled: true, nextClaimAt: T0 + CLAIM_INTERVAL_MS });
+        await runClaimPass('tok', T0 + 1000, deps);
+        expect(getAutoClaimStatus().nextClaimAt).toBe(T0 + CLAIM_INTERVAL_MS);
+        settings.getEffectiveSetting.mockReturnValue(false);
+        expect(getAutoClaimStatus().enabled).toBe(false);
+        settings.getEffectiveSetting.mockReturnValue(true);
+        expect(getAutoClaimStatus().nextClaimAt).toBe(T0 + CLAIM_INTERVAL_MS);
+        await runClaimPass('tok', T0 + CLAIM_INTERVAL_MS, deps);
+        expect(getAutoClaimStatus().nextClaimAt).toBe(T0 + 2 * CLAIM_INTERVAL_MS);
+    });
+
     test('setting off (the default) makes no calls', async () => {
         settings.getEffectiveSetting.mockReturnValue(false);
         const deps = makeDeps();
@@ -89,6 +109,7 @@ describe('gating', () => {
         });
         expect((await runClaimPass('tok', T0, deps)).ran).toBe(true);
         expect((await runClaimPass('tok', T0 + 1000, deps)).ran).toBe(false);
+        expect(getAutoClaimStatus().nextClaimAt).toBe(T0 + CLAIM_INTERVAL_MS);
         expect(deps.getMyCompletedChallenges).toHaveBeenCalledTimes(1);
     });
 });

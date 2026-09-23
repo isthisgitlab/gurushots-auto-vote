@@ -16,6 +16,7 @@ const auth = require('../services/auth');
 const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
 const { isAutoJoinActive } = require('../services/joinChallenges');
+const { getAutoClaimStatus } = require('../services/autoClaim');
 const { findActiveChallenge } = require('../services/findActiveChallenge');
 
 // In-process guard that prevents two simultaneous mini-game runs on
@@ -26,6 +27,15 @@ const turboMiniGameInFlight = new Set();
 const sanitizeForLog = logger.sanitizeLogString;
 
 const buildHandlers = () => ({
+    'get-auto-claim-status': async () => {
+        try {
+            return { success: true, ...getAutoClaimStatus() };
+        } catch (error) {
+            logger.withCategory('claim').error('Error reading auto-claim status:', error);
+            return { success: false, error: error?.message || 'Could not read auto-claim status' };
+        }
+    },
+
     'get-active-challenges': async (event, token) => {
         try {
             logger.withCategory('api').debug('=== IPC get-active-challenges ===', null);

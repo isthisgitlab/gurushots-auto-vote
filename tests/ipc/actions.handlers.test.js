@@ -486,6 +486,29 @@ describe('join-challenge', () => {
     });
 });
 
+describe('get-auto-claim-status', () => {
+    test('exposes the shared claim clock without running a claim', async () => {
+        settings.getEffectiveSetting = jest.fn(() => true);
+        const { resetClaimThrottle } = require('../../src/js/services/autoClaim');
+        resetClaimThrottle();
+        await expect(buildHandlers()['get-auto-claim-status']({})).resolves.toEqual({
+            success: true,
+            enabled: true,
+            nextClaimAt: 0,
+        });
+    });
+
+    test('returns an error envelope when settings cannot be read', async () => {
+        settings.getEffectiveSetting = jest.fn(() => {
+            throw new Error('unavailable');
+        });
+        await expect(buildHandlers()['get-auto-claim-status']({})).resolves.toEqual({
+            success: false,
+            error: 'unavailable',
+        });
+    });
+});
+
 describe('get-auto-join-active', () => {
     test('reports active:true when the master autoJoin setting is on', async () => {
         settings.getEffectiveSetting = jest.fn((k) => (k === 'autoJoin' ? true : undefined));

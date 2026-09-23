@@ -150,6 +150,8 @@
             statusHeaderBoosts: 'Boost gatavi',
             statusHeaderTurbos: 'Turbo gatavi',
             statusHeaderNext: 'Nākamā',
+            statusHeaderNextClaim: 'Nākamā balvu saņemšana',
+            statusHeaderNextClaimHint: 'Balvas saņem pirmajā balsošanas ciklā pēc stundas gaidīšanas perioda beigām.',
             statusHeaderNotRunning: 'auto-balsošana izslēgta',
             statusHeaderAutoJoin: 'auto-pievienošanās ieslēgta',
             statusHeaderAutoJoinTitle:

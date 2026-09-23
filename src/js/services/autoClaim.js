@@ -26,6 +26,12 @@ const MAX_COMPLETED_PAGES = 5;
 
 let lastClaimAt = 0;
 
+// Read the same clock that gates runClaimPass; zero means due on the first cycle.
+const getAutoClaimStatus = () => ({
+    enabled: settings.getEffectiveSetting('autoClaimPrizes', null) === true,
+    nextClaimAt: lastClaimAt === 0 ? 0 : lastClaimAt + CLAIM_INTERVAL_MS,
+});
+
 const cat = () => logger.withCategory('claim');
 
 const describePrizes = (prizes) =>
@@ -141,6 +147,7 @@ const resetClaimThrottle = () => {
 
 module.exports = {
     CLAIM_INTERVAL_MS,
+    getAutoClaimStatus,
     runClaimPass,
     resetClaimThrottle,
 };

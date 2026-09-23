@@ -149,6 +149,8 @@
             statusHeaderBoosts: 'Boosts ready',
             statusHeaderTurbos: 'Turbos ready',
             statusHeaderNext: 'Next',
+            statusHeaderNextClaim: 'Next claim',
+            statusHeaderNextClaimHint: 'Claims run on the first voting cycle after the hourly cooldown ends.',
             statusHeaderNotRunning: 'autovote off',
             statusHeaderAutoJoin: 'auto-join on',
             statusHeaderAutoJoinTitle:

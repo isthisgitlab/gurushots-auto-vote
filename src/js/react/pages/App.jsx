@@ -7,6 +7,7 @@ import { UpdateProvider } from '@/contexts/UpdateContext';
 import { useSettings } from '@/api/useSettings';
 import { useBankroll } from '@/api/useBankroll';
 import { useAutoJoinActive } from '@/api/useAutoJoinActive';
+import { useAutoClaimStatus } from '@/api/useAutoClaimStatus';
 import { Navbar } from '@/components/layout/Navbar';
 import { AutoVoteControls } from '@/components/app/AutoVoteControls';
 import { StatusHeader } from '@/components/app/StatusHeader';
@@ -32,6 +33,7 @@ function AppContent() {
     const { bankroll, refetch: refetchBankroll } = useBankroll();
     const { active: autoJoinActive } = useAutoJoinActive();
     const autovote = useAutovote();
+    const autoClaimStatus = useAutoClaimStatus(autovote.nextRunAt, autovote.running);
 
     // After a join changes state, refresh balances + the active-challenge list.
     const handleJoined = useCallback(() => {
@@ -182,6 +184,7 @@ function AppContent() {
                         running={autovote.running}
                         bankroll={bankroll}
                         autoJoinActive={autoJoinActive}
+                        autoClaimStatus={autoClaimStatus}
                     />
 
                     {/* Challenges Section — the primary view (joined/active) */}

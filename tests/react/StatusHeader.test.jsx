@@ -53,6 +53,70 @@ describe('StatusHeader', () => {
         expect(screen.getByTestId('status-header').textContent).toContain('~1m 54s');
     });
 
+    test('claim countdown is independent and its tick does not re-render the header', () => {
+        wrap(
+            <StatusHeader
+                challenges={oneChallenge}
+                running={true}
+                nextRunAt={BASE_MS + 120_000}
+                autoClaimStatus={{ enabled: true, nextClaimAt: BASE_MS + 3_600_000 }}
+            />,
+        );
+        expect(screen.getByText('app.statusHeaderNextClaim:')).toBeTruthy();
+        expect(screen.getByTitle('app.statusHeaderNextClaimHint').textContent).toBe('~1h 0m');
+        act(() => jest.advanceTimersByTime(1000));
+        const baseline = openBoostWindows.mock.calls.length;
+        act(() => jest.advanceTimersByTime(1000));
+        expect(screen.getByTitle('app.statusHeaderNextClaimHint').textContent).toBe('~59m 58s');
+        expect(screen.getByTestId('status-header').textContent).toContain('~1m 58s');
+        expect(openBoostWindows).toHaveBeenCalledTimes(baseline);
+    });
+
+    test('claim is due before the first pass and after the cooldown expires', () => {
+        const { rerender } = wrap(
+            <StatusHeader
+                challenges={oneChallenge}
+                running={true}
+                autoClaimStatus={{ enabled: true, nextClaimAt: 0 }}
+            />,
+        );
+        expect(screen.getByTitle('app.statusHeaderNextClaimHint').textContent).toBe('app.deadlineDue');
+        rerender(
+            <TranslationProvider>
+                <StatusHeader
+                    challenges={oneChallenge}
+                    running={true}
+                    autoClaimStatus={{ enabled: true, nextClaimAt: BASE_MS + 1000 }}
+                />
+            </TranslationProvider>,
+        );
+        act(() => jest.advanceTimersByTime(2000));
+        expect(screen.getByTitle('app.statusHeaderNextClaimHint').textContent).toBe('app.deadlineDue');
+    });
+
+    test('claim status is hidden when disabled and paused when voting stops', () => {
+        const { rerender } = wrap(
+            <StatusHeader
+                challenges={oneChallenge}
+                running={true}
+                autoClaimStatus={{ enabled: false, nextClaimAt: 0 }}
+            />,
+        );
+        expect(screen.queryByText('app.statusHeaderNextClaim:')).toBeNull();
+        rerender(
+            <TranslationProvider>
+                <StatusHeader
+                    challenges={oneChallenge}
+                    running={false}
+                    autoClaimStatus={{ enabled: true, nextClaimAt: BASE_MS + 1000 }}
+                />
+            </TranslationProvider>,
+        );
+        const claim = screen.getByText('app.statusHeaderNextClaim:').parentElement;
+        expect(claim.textContent).toContain('app.statusHeaderNotRunning');
+        expect(claim.textContent).not.toContain('~');
+    });
+
     test('the 1Hz countdown does NOT re-render the header body (challenge-list guard)', () => {
         wrap(<StatusHeader challenges={oneChallenge} nextRunAt={BASE_MS + 120_000} running={true} />);
         // Let mount-time provider transitions (TranslationProvider's ready flip)
