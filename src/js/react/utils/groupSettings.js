@@ -36,6 +36,8 @@ export const SETTING_CELL_CLASS = 'form-control rounded-box border border-base-3
  *   when perChallengeOnly is set).
  * - Entries whose `group` matches no section (e.g. the internal
  *   autovoteRunning flag) are intentionally dropped.
+ * - challengeOnly entries have no global value, so the global view (without
+ *   perChallengeOnly) drops them; the per-challenge view keeps them.
  *
  * @param {Object|null} schema - serialized schema (key -> config with `group`)
  * @param {Array|null} groups - ordered [{ id, label }]
@@ -50,7 +52,7 @@ export function groupSchemaEntries(schema, groups, { perChallengeOnly = false } 
             label,
             tier,
             entries: Object.entries(schema).filter(
-                ([, config]) => config.group === id && (!perChallengeOnly || config.perChallenge),
+                ([, config]) => config.group === id && (perChallengeOnly ? config.perChallenge : !config.challengeOnly),
             ),
         }))
         .filter((group) => group.entries.length > 0);

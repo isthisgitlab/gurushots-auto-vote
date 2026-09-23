@@ -28,6 +28,7 @@ const {
     resolveScheduledFill,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
+    resolveCurrencyAuto,
 } = require('../scheduling/nodeResolvers');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 
@@ -72,6 +73,7 @@ const computeNextDelayMs = async (token, prefetched = null) => {
             timezone: userSettings.timezone || DEFAULT_TIMEZONE,
             resolveFinalWindowTopUp,
             resolveBoostPrefill,
+            resolveCurrencyAuto,
         });
         // API still down (this tick's own fetch failed): cap the wait to a short
         // retry so recovery tracks reconnection, not the full normal cadence.

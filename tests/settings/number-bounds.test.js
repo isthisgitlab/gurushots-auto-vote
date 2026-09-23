@@ -26,7 +26,7 @@ describe('number settings advertise bounds', () => {
 
     // The entry-slot indexes are deliberately unitless — "slot 2" needs no suffix. Every
     // other number setting is a percentage or a duration and is unreadable without one.
-    const UNITLESS = new Set(['boostImageIndex', 'turboImageIndex']);
+    const UNITLESS = new Set(['boostImageIndex', 'turboImageIndex', 'autoSwapImageIndex']);
 
     test.each(numberSettings.filter(([key]) => !UNITLESS.has(key)))('%s declares a unit', (_key, config) => {
         expect(typeof config.unit).toBe('string');

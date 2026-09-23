@@ -87,6 +87,8 @@ describe('Capacitor entry', () => {
             flushJoinStateWrites: jest.fn(),
             initializeSwapBackAsync: jest.fn().mockResolvedValue(undefined),
             flushSwapBackWrites: jest.fn(),
+            initializeAutoSpendAsync: jest.fn().mockResolvedValue(undefined),
+            flushAutoSpendWrites: jest.fn(),
             isCapacitor: jest.fn(() => native),
             categoryError: jest.fn(),
             withCategory: jest.fn(() => ({ error: m.categoryError })),
@@ -111,6 +113,10 @@ describe('Capacitor entry', () => {
             jest.doMock(`${SRC}/swapBackStore`, () => ({
                 initializeSwapBackAsync: m.initializeSwapBackAsync,
                 flushSwapBackWrites: m.flushSwapBackWrites,
+            }));
+            jest.doMock(`${SRC}/currencyAutoStore`, () => ({
+                initializeAutoSpendAsync: m.initializeAutoSpendAsync,
+                flushAutoSpendWrites: m.flushAutoSpendWrites,
             }));
             jest.doMock(`${SRC}/runtime`, () => ({ isCapacitor: m.isCapacitor }));
             jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
@@ -156,6 +162,7 @@ describe('Capacitor entry', () => {
             m.initializeMetadataAsync,
             m.initializeJoinStateAsync,
             m.initializeSwapBackAsync,
+            m.initializeAutoSpendAsync,
             m.tm.loadLanguageFromSettings,
             m.mountApp,
         ].map((fn) => fn.mock.invocationCallOrder[0]);
@@ -168,7 +175,13 @@ describe('Capacitor entry', () => {
     test('flushes every store when the page is hidden or torn down, never throwing', async () => {
         const m = load();
         await flush();
-        const flushers = [m.flushPendingWrites, m.flushMetadataWrites, m.flushJoinStateWrites, m.flushSwapBackWrites];
+        const flushers = [
+            m.flushPendingWrites,
+            m.flushMetadataWrites,
+            m.flushJoinStateWrites,
+            m.flushSwapBackWrites,
+            m.flushAutoSpendWrites,
+        ];
 
         const hidden = jest.spyOn(document, 'hidden', 'get').mockReturnValue(false);
         docListeners.visibilitychange();

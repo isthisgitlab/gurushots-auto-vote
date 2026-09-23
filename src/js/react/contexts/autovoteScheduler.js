@@ -67,6 +67,29 @@ export const resolveBoostPrefill = async (challengeId) => {
     };
 };
 
+// WebView resolver for the currency-automation cadence cap — the async-IPC twin of
+// nodeResolvers.resolveCurrencyAuto: each ENABLED rule's timing, null when off.
+const currencyTimingOf = async (enableKey, prefix, challengeId) => {
+    const [enabled, afterStart, beforeEnd, afterPercent] = await Promise.all([
+        window.api.getEffectiveSetting(enableKey, challengeId),
+        window.api.getEffectiveSetting(`${prefix}AfterStart`, challengeId),
+        window.api.getEffectiveSetting(`${prefix}BeforeEnd`, challengeId),
+        window.api.getEffectiveSetting(`${prefix}AfterPercent`, challengeId),
+    ]);
+    return enabled === true
+        ? { afterStartSec: Number(afterStart), beforeEndSec: Number(beforeEnd), afterPercent: Number(afterPercent) }
+        : null;
+};
+
+export const resolveCurrencyAuto = async (challengeId) => {
+    const [key, swap, fill] = await Promise.all([
+        currencyTimingOf('autoKeyUnlock', 'autoKey', challengeId),
+        currencyTimingOf('autoSwap', 'autoSwap', challengeId),
+        currencyTimingOf('autoExposureFill', 'autoExposureFill', challengeId),
+    ]);
+    return { key, swap, fill };
+};
+
 /**
  * Delay (ms) until the next voting cycle, using the shared decision: fast fixed
  * cadence while in-window, otherwise the rolled random delay capped to the
@@ -76,7 +99,7 @@ export const resolveBoostPrefill = async (challengeId) => {
  * @param {Array} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {{normalDelayMs:number, lastMinuteCheckMinutes:number, minGapMs:number, timezone?:(string|null)}} opts
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null)}>}
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null), nextCurrencyRule:(object|null)}>}
  */
 export async function computeNextCycleDelayMs(
     challenges,
@@ -92,5 +115,6 @@ export async function computeNextCycleDelayMs(
         timezone,
         resolveFinalWindowTopUp,
         resolveBoostPrefill,
+        resolveCurrencyAuto,
     });
 }

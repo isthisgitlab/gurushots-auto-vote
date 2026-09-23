@@ -17,6 +17,8 @@ const votingLogic = require('../services/VotingLogic');
 const autoFill = require('../services/autoFill');
 const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges');
 const { runClaimPass } = require('../services/autoClaim');
+const { mockSwapBackLedger } = require('../swapBackStore');
+const { createMemoryAutoSpendLedger } = require('../currencyAutoStore');
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
 // tracker would look like "first sight" every cycle and never detect anything.
@@ -990,9 +992,30 @@ const mockApiClient = {
             entryTracker: mockEntryTracker,
             // Short fixed spacing — mock cycles should stay fast.
             interChallengeDelay: () => 500,
+            // Mock spends over the mock endpoints, with in-memory ledgers — mock
+            // mode must never touch the real swap-back / auto-spend files.
+            currency: {
+                strategy: {
+                    getActiveChallenges: mockApiClient.getActiveChallenges,
+                    getBankroll: mockApiClient.getBankroll,
+                    keyUnlock: mockApiClient.keyUnlock,
+                    swapPhoto: mockApiClient.swapPhoto,
+                    exposureAutofill: mockApiClient.exposureAutofill,
+                    getVoteImages: mockApiClient.getVoteImages,
+                    getEligiblePhotos: mockApiClient.getEligiblePhotos,
+                    getImageData: mockApiClient.getImageData,
+                    searchTagAutocomplete: mockApiClient.searchTagAutocomplete,
+                    getCurrentMemberProfile: mockApiClient.getCurrentMemberProfile,
+                },
+                swapLedger: mockSwapBackLedger,
+                spendLedger: mockAutoSpendLedger,
+            },
         });
     },
 };
+
+// In-memory automatic-fill counter for the mock pass (process lifetime).
+const mockAutoSpendLedger = createMemoryAutoSpendLedger();
 
 // Join deps over the mock endpoints. joinStateStore is null — mock mode must
 // never touch real persisted state (same rationale as cleanupStaleMetadata:null).

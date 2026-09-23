@@ -23,6 +23,13 @@ const withFallback = (value, defaultValue) => {
 };
 
 /**
+ * The global-default half of `defaults`: challengeOnly keys have no global
+ * value (setGlobalDefault refuses them), so they never enter the global form.
+ */
+const globalFormValuesOf = (defaults, schema) =>
+    Object.fromEntries(Object.entries(defaults).filter(([key]) => !schema?.[key]?.challengeOnly));
+
+/**
  * Owns the form state behind the global Settings modal: hydrate-on-open,
  * UI vs schema-default tracking, change/reset handlers, plus a
  * `commit()` / `revert()` pair the caller drives from its Save / Cancel
@@ -57,8 +64,9 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
             return;
         }
         if (!formInitForOpenRef.current && defaults) {
-            setFormValues({ ...defaults });
-            setOriginalFormValues({ ...defaults });
+            const initialFormValues = globalFormValuesOf(defaults, schema);
+            setFormValues(initialFormValues);
+            setOriginalFormValues({ ...initialFormValues });
             formInitForOpenRef.current = true;
         }
         if (!uiInitForOpenRef.current && settings) {
@@ -70,7 +78,7 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
             setOriginalUiValues(initialUiValues);
             uiInitForOpenRef.current = true;
         }
-    }, [isOpen, defaults, settings]);
+    }, [isOpen, defaults, schema, settings]);
 
     const handleFormChange = useCallback((key, value) => {
         setFormValues((prev) => ({ ...prev, [key]: value }));
@@ -105,7 +113,7 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
         if (schema) {
             const newFormValues = {};
             for (const [key, config] of Object.entries(schema)) {
-                newFormValues[key] = config.default;
+                if (!config.challengeOnly) newFormValues[key] = config.default;
             }
             setFormValues(newFormValues);
         }

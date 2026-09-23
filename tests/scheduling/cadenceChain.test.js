@@ -335,6 +335,32 @@ describe('createCadenceChain', () => {
         );
     });
 
+    test('currency-rule mode caps to the rule opening and logs the rule branch', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const deps = makeDeps({
+            resolveCurrencyAuto: jest.fn(() => ({ key: { afterStartSec: 3700 }, swap: null, fill: null })),
+        });
+        const chain = createCadenceChain(deps);
+
+        // The key rule opens 3700s after a start 3600s ago → wait is capped to ~100s.
+        await chain.scheduleNext([
+            {
+                id: 5,
+                title: 'Key Later',
+                type: 'regular',
+                start_time: now - 3600,
+                close_time: now + 7200,
+                boost_enable: true,
+                member: { boost: { state: 'LOCKED' } },
+            },
+        ]);
+
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'currency-rule',
+            expect.stringContaining('automatic key rule for "Key Later"'),
+        );
+    });
+
     test('pre-boost mode caps to the fill boundary and logs the pre-boost branch', async () => {
         const deps = makeDeps({
             resolveBoostPrefill: jest.fn(() => ({

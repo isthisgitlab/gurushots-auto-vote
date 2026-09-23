@@ -26,6 +26,12 @@ const { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } = require('./limi
  * @property {string} [type]
  * @property {*} [default]
  * @property {boolean} [perChallenge]
+ * @property {boolean} [challengeOnly] - Only settable on a challenge or a profile: the key
+ *   has NO global value. Hidden from the global settings modal, refused by
+ *   setGlobalDefault, and a stored global value is ignored — the schema default applies
+ *   until a challenge override or profile sets it. Implies `perChallenge`. Used for the
+ *   currency automation, where spending keys/swaps/fills must be an explicit per-challenge
+ *   (or per-profile) choice rather than a blanket global switch.
  * @property {import('zod').ZodType} [validation]
  * @property {(value: any, allSettings: any, challengeId?: any) => boolean} [contextValidation]
  * @property {(value: any, allSettings: any, challengeId?: any) => string} [getContextError]
@@ -112,6 +118,19 @@ const joinPercentElapsed = z.number().min(0).max(MAX_JOIN_PERCENT_ELAPSED);
 // slot — it used to be accepted and then silently clamped to the last entry at pick time.
 const MAX_ENTRY_SLOT = 4;
 const entrySlotIndex = z.number().int().min(0).max(MAX_ENTRY_SLOT);
+// Currency automation (keys / swaps / fills). Per-challenge spend caps: how many
+// automatic swaps / exposure fills one challenge may receive. 1..10 — at least one,
+// or the enable toggle would be a no-op, and 10 is far above any real balance.
+const MAX_AUTO_SPENDS_PER_CHALLENGE = 10;
+const autoSpendCount = z.number().int().min(1).max(MAX_AUTO_SPENDS_PER_CHALLENGE);
+// Global reserve: keep at least this many of a currency; automation never spends
+// below it (manual spends are unaffected). 0 = no reserve.
+const MAX_CURRENCY_RESERVE = 1000;
+const currencyReserve = z.number().int().min(0).max(MAX_CURRENCY_RESERVE);
+// Vote-count ceiling for the swap "only when the entry has fewer than N votes"
+// rule. 0 = no vote condition.
+const MAX_SWAP_VOTE_CEILING = 1_000_000;
+const swapVoteCeiling = z.number().int().min(0).max(MAX_SWAP_VOTE_CEILING);
 // Shared 1–59 range, preserving the previous predicates exactly: used by both
 // lastMinuteThreshold (minutes-before-close that count as "last minute") and
 // lastMinuteCheckFrequency (poll cadence in minutes). Neither is required to be
@@ -138,6 +157,9 @@ const MAX_SCHEDULE_ROWS = 3;
 // can't import this zod-carrying file) — change both together.
 const MAX_SCHEDULE_COUNT = 4;
 const MAX_SCHEDULE_SECONDS = 30 * 24 * 3600; // 30 days
+// Seconds-after-start / seconds-before-end condition of a currency rule. 0 = that
+// condition is off. Capped like every other duration.
+const currencyRuleSec = z.number().int().min(0).max(MAX_SCHEDULE_SECONDS);
 // Final-window duration (seconds before close during which the final-window
 // exposure rule applies). Integer, at least 60s (a shorter window is
 // meaningless against poll cadence) and capped by the same 30-day schedule
@@ -564,6 +586,307 @@ const SETTINGS_SCHEMA = {
         group: 'turbo',
         label: 'app.turboFillNewOnConflict',
         description: 'app.turboFillNewOnConflictDesc',
+    },
+
+    // --- Keys, Swaps & Fills (currency automation) ---
+    // Automatic spending of the three bankroll currencies the manual card buttons
+    // spend (services/currencyActions.js). Every per-challenge key here is
+    // challengeOnly: there is deliberately NO global switch — automation is turned
+    // on per challenge or per profile, so spending currency is always an explicit
+    // choice. Each action has three optional timing conditions (after start, before
+    // end, after % elapsed); every condition that is set must hold (0 = that
+    // condition off, family-1 sentinel), and none set means "any time". The pure
+    // rule math lives in voting/currencyAuto.js.
+    autoKeyUnlock: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoKeyUnlock',
+        description: 'app.autoKeyUnlockDesc',
+    },
+    autoKeyAfterStart: {
+        type: 'time',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: currencyRuleSec,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoKeyAfterStart',
+        description: 'app.autoKeyAfterStartDesc',
+        helpKey: 'app.currencyRuleTimingHelp',
+    },
+    autoKeyBeforeEnd: {
+        type: 'time',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: currencyRuleSec,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoKeyBeforeEnd',
+        description: 'app.autoKeyBeforeEndDesc',
+        helpKey: 'app.currencyRuleTimingHelp',
+    },
+    autoKeyAfterPercent: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: joinPercentElapsed,
+        min: 0,
+        max: MAX_JOIN_PERCENT_ELAPSED,
+        unit: 'app.unitPercent',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoKeyAfterPercent',
+        description: 'app.autoKeyAfterPercentDesc',
+        helpKey: 'app.currencyRuleTimingHelp',
+    },
+    autoSwap: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoSwap',
+        description: 'app.autoSwapDesc',
+    },
+    autoSwapAfterStart: {
+        type: 'time',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: currencyRuleSec,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoSwapAfterStart',
+        description: 'app.autoSwapAfterStartDesc',
+        helpKey: 'app.currencyRuleTimingHelp',
+    },
+    autoSwapBeforeEnd: {
+        type: 'time',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: currencyRuleSec,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoSwapBeforeEnd',
+        description: 'app.autoSwapBeforeEndDesc',
+        helpKey: 'app.currencyRuleTimingHelp',
+    },
+    autoSwapAfterPercent: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: joinPercentElapsed,
+        min: 0,
+        max: MAX_JOIN_PERCENT_ELAPSED,
+        unit: 'app.unitPercent',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoSwapAfterPercent',
+        description: 'app.autoSwapAfterPercentDesc',
+        helpKey: 'app.currencyRuleTimingHelp',
+    },
+    // Which entry a swap replaces: 1-4 = that slot, 0 = the last entry — the same
+    // convention as boostImageIndex / turboImageIndex.
+    autoSwapImageIndex: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: entrySlotIndex,
+        min: 0,
+        max: MAX_ENTRY_SLOT,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoSwapImageIndex',
+        description: 'app.autoSwapImageIndexDesc',
+    },
+    autoSwapLowestVotes: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoSwapLowestVotes',
+        description: 'app.autoSwapLowestVotesDesc',
+    },
+    autoSwapAllowBoosted: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoSwapAllowBoosted',
+        description: 'app.autoSwapAllowBoostedDesc',
+    },
+    autoSwapMaxVotes: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: swapVoteCeiling,
+        min: 0,
+        max: MAX_SWAP_VOTE_CEILING,
+        unit: 'app.unitVotes',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoSwapMaxVotes',
+        description: 'app.autoSwapMaxVotesDesc',
+    },
+    autoSwapMax: {
+        type: 'number',
+        default: 1,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: autoSpendCount,
+        min: 1,
+        max: MAX_AUTO_SPENDS_PER_CHALLENGE,
+        unit: 'app.unitSwaps',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoSwapMax',
+        description: 'app.autoSwapMaxDesc',
+    },
+    autoExposureFill: {
+        type: 'boolean',
+        default: false,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoExposureFill',
+        description: 'app.autoExposureFillDesc',
+    },
+    // A fill is worth exactly what voting is worth, so it only runs when voting
+    // cannot do the job: exposure is below this AND the vote pool cannot lift it
+    // back to this (typically a flash challenge that has run out of photos to vote).
+    autoExposureFillBelow: {
+        type: 'number',
+        default: 50,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: percentage,
+        min: 1,
+        max: 100,
+        unit: 'app.unitPercent',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoExposureFillBelow',
+        description: 'app.autoExposureFillBelowDesc',
+    },
+    autoExposureFillAfterStart: {
+        type: 'time',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: currencyRuleSec,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoExposureFillAfterStart',
+        description: 'app.autoExposureFillAfterStartDesc',
+        helpKey: 'app.currencyRuleTimingHelp',
+    },
+    autoExposureFillBeforeEnd: {
+        type: 'time',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: currencyRuleSec,
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoExposureFillBeforeEnd',
+        description: 'app.autoExposureFillBeforeEndDesc',
+        helpKey: 'app.currencyRuleTimingHelp',
+    },
+    autoExposureFillAfterPercent: {
+        type: 'number',
+        default: 0,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: joinPercentElapsed,
+        min: 0,
+        max: MAX_JOIN_PERCENT_ELAPSED,
+        unit: 'app.unitPercent',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoExposureFillAfterPercent',
+        description: 'app.autoExposureFillAfterPercentDesc',
+        helpKey: 'app.currencyRuleTimingHelp',
+    },
+    autoExposureFillMax: {
+        type: 'number',
+        default: 1,
+        perChallenge: true,
+        challengeOnly: true,
+        validation: autoSpendCount,
+        min: 1,
+        max: MAX_AUTO_SPENDS_PER_CHALLENGE,
+        unit: 'app.unitFills',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.autoExposureFillMax',
+        description: 'app.autoExposureFillMaxDesc',
+    },
+    // Global reserve (not per challenge): automation never spends the balance
+    // below this. Manual spends from the card are not limited by it.
+    currencyReserveKeys: {
+        type: 'number',
+        default: 0,
+        perChallenge: false,
+        validation: currencyReserve,
+        min: 0,
+        max: MAX_CURRENCY_RESERVE,
+        unit: 'app.unitKeys',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.currencyReserveKeys',
+        description: 'app.currencyReserveKeysDesc',
+    },
+    // Global reserve (not per challenge): automation never spends the balance
+    // below this. Manual spends from the card are not limited by it.
+    currencyReserveSwaps: {
+        type: 'number',
+        default: 0,
+        perChallenge: false,
+        validation: currencyReserve,
+        min: 0,
+        max: MAX_CURRENCY_RESERVE,
+        unit: 'app.unitSwaps',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.currencyReserveSwaps',
+        description: 'app.currencyReserveSwapsDesc',
+    },
+    // Global reserve (not per challenge): automation never spends the balance
+    // below this. Manual spends from the card are not limited by it.
+    currencyReserveFills: {
+        type: 'number',
+        default: 0,
+        perChallenge: false,
+        validation: currencyReserve,
+        min: 0,
+        max: MAX_CURRENCY_RESERVE,
+        unit: 'app.unitFills',
+        validationOrder: 1,
+        group: 'currencyAuto',
+        label: 'app.currencyReserveFills',
+        description: 'app.currencyReserveFillsDesc',
     },
 
     // --- Final Window Exposure ---
@@ -1290,6 +1613,7 @@ const SETTINGS_GROUPS = [
     { id: 'general', label: 'app.groupGeneral', tier: 'core' },
     { id: 'boost', label: 'app.groupBoost', tier: 'core' },
     { id: 'turbo', label: 'app.groupTurbo', tier: 'core' },
+    { id: 'currencyAuto', label: 'app.groupCurrencyAuto', tier: 'core' },
     { id: 'autoFill', label: 'app.groupAutoFill', tier: 'entries' },
     { id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' },
     { id: 'finalWindow', label: 'app.groupFinalWindow', tier: 'overrides' },

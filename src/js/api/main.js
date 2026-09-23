@@ -13,7 +13,10 @@ const { getEligiblePhotos, getImageData, submitToChallenge } = require('./submis
 const { getCurrentMemberProfile, searchTagAutocomplete } = require('./tags');
 const { getMemberChallenges, getBankroll, coinsUnlock } = require('./join');
 const { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize } = require('./rewards');
+const { keyUnlock, swapPhoto, exposureAutofill } = require('./currency');
 const { cleanupStaleMetadata } = require('../metadata');
+const { swapBackLedger } = require('../swapBackStore');
+const { autoSpendLedger } = require('../currencyAutoStore');
 const { sleep, getRandomDelay } = require('../timing');
 const logger = require('../logger');
 const { runVotingPass } = require('../services/votingOrchestrator');
@@ -43,6 +46,22 @@ const joinDeps = {
     searchTagAutocomplete,
     joinStateStore,
     acquireUnlockLock,
+};
+
+// Endpoints the automatic currency spends use (services/currencyAuto.js) — the
+// same surface services/currencyActions.js reads off the strategy for a manual
+// spend, plus getVoteImages for the exposure-fill shortfall check.
+const currencyStrategy = {
+    getActiveChallenges,
+    getBankroll,
+    keyUnlock,
+    swapPhoto,
+    exposureAutofill,
+    getVoteImages,
+    getEligiblePhotos,
+    getImageData,
+    searchTagAutocomplete,
+    getCurrentMemberProfile,
 };
 
 // Endpoints for the hourly prize-claim pre-step (services/autoClaim.js).
@@ -185,6 +204,13 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
         entryTracker: metadataEntryTracker,
         // Random 2-5s spacing between challenges to mimic human behavior.
         interChallengeDelay: () => getRandomDelay(2000, 5000),
+        // Automatic key / swap / fill spends; the ledgers are the persisted ones
+        // the manual currency handlers use too.
+        currency: {
+            strategy: currencyStrategy,
+            swapLedger: swapBackLedger,
+            spendLedger: autoSpendLedger,
+        },
     });
 };
 

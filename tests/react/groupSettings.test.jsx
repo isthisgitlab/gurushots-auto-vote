@@ -41,6 +41,17 @@ describe('groupSchemaEntries', () => {
         expect(keysOf(general)).toEqual(['exposure', 'onlyBoost', 'lastMinuteCheckFrequency']);
     });
 
+    test('challengeOnly entries are dropped from the global view and kept per challenge', () => {
+        const withChallengeOnly = { ...schema, autoSwap: { perChallenge: true, challengeOnly: true, group: 'boost' } };
+        const global = groupSchemaEntries(withChallengeOnly, groups);
+        expect(global.find((g) => g.id === 'boost').entries.map(([key]) => key)).toEqual(['boostTime']);
+        const perChallenge = groupSchemaEntries(withChallengeOnly, groups, { perChallengeOnly: true });
+        expect(perChallenge.find((g) => g.id === 'boost').entries.map(([key]) => key)).toEqual([
+            'boostTime',
+            'autoSwap',
+        ]);
+    });
+
     test('perChallengeOnly drops perChallenge:false entries', () => {
         const result = groupSchemaEntries(schema, groups, { perChallengeOnly: true });
         const general = result.find((s) => s.id === 'general');

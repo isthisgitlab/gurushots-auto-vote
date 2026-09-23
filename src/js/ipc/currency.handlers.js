@@ -19,14 +19,9 @@ const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
 const currencyActions = require('../services/currencyActions');
 const { CURRENCY_OUTCOME } = require('../voting/currencyActions');
-const { swapBackLedger, createMemoryLedger } = require('../swapBackStore');
+const { swapBackLedger, mockSwapBackLedger } = require('../swapBackStore');
 
 const sanitizeForLog = logger.sanitizeLogString;
-
-// ONE lock across all three spend channels: a single spend in flight at a time.
-// Stops a double click and a scripted loop across challenges alike; the others
-// get `busy`. Released in `finally` so a throw can never wedge it.
-let currencySpendInFlight = false;
 
 // Swap previews awaiting confirmation, keyed `challengeId:imageId`. The commit
 // must name the exact candidate the user was shown; an entry is single-use
@@ -56,8 +51,8 @@ const takeSwapPreview = (key) => {
 };
 
 // Mock mode keeps its swap-back records in memory — it must never touch the
-// real ledger file (same rule as metadata/join state).
-const mockSwapBackLedger = createMemoryLedger();
+// real ledger file (same rule as metadata/join state). The in-memory ledger is
+// the one the mock voting pass also records automatic swaps into.
 const ledgerFor = (strategy) => (strategy?.getStrategyType?.() === 'MockAPI' ? mockSwapBackLedger : swapBackLedger);
 
 const isIdArg = (value) => (typeof value === 'string' && value.trim() !== '') || Number.isFinite(value);
@@ -74,16 +69,17 @@ const runCurrencySpend = async (label, idArgs, confirmed, spend) => {
     const guard = auth.requireAuthToken(label);
     if (!guard.ok) return guard.response;
     if (confirmed !== true) return currencyFailure(CURRENCY_OUTCOME.needsConfirm);
-    if (currencySpendInFlight) return currencyFailure(CURRENCY_OUTCOME.busy);
-    currencySpendInFlight = true;
     try {
-        const result = await spend(guard.token, apiFactory.getApiStrategy());
+        // The process-wide spend lock, shared with the automatic runners: a
+        // double click, a scripted loop and a spend by the voting pass all get
+        // `busy` while another spend is in flight.
+        const locked = await currencyActions.withSpendLock(() => spend(guard.token, apiFactory.getApiStrategy()));
+        if (locked.busy) return currencyFailure(CURRENCY_OUTCOME.busy);
+        const result = locked.value;
         return result?.ok ? { success: true, outcome: CURRENCY_OUTCOME.ok } : currencyFailure(result?.outcome);
     } catch (error) {
         logger.withCategory('currency').error(`Error handling ${label} request:`, error);
         return currencyFailure(CURRENCY_OUTCOME.apiFailed);
-    } finally {
-        currencySpendInFlight = false;
     }
 };
 

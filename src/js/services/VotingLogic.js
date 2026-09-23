@@ -23,6 +23,8 @@ const { getNextScheduleThresholdSec, evaluateEmergencyFill, getSlotsRemaining } 
 // two imports above — wallClock.js isn't `// @ts-check`ed yet.
 const { occurrencesOf } = /** @type {any} */ (require('../scheduling/wallClock'));
 const { isBoostWindowOpen: boostWindowOpen, boostApplyThreshold } = require('../voting/boostWindow');
+// 0 = last / 1-4 = slot addressing, shared with the swap automation.
+const { resolveEntryIndex } = require('../voting/entrySlot');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 // From settings/limits (not settings/schema) — keeps zod out of any bundle
 // that reaches this module. No `any` cast needed: limits.js exports a plain
@@ -1080,28 +1082,6 @@ const isBoostWindowOpen = (challenge, now) => boostWindowOpen(challenge?.member?
  */
 const getEffectiveTurboTime = (challengeId) => {
     return settings.getEffectiveSetting('turboTime', challengeId);
-};
-
-/**
- * Resolve a 1-indexed entry-index setting (turboImageIndex / boostImageIndex)
- * to the actual entries[] array slot. Returns null ONLY for empty/non-array
- * input; on any non-empty array, always returns a valid integer slot in
- * [0, entries.length - 1].
- *   - empty / non-array entries → null
- *   - non-integer or negative requestedIndex (corrupt settings, undefined reads)
- *     → slot 0 (first entry) rather than propagating NaN
- *   - 0 → last entry slot (sentinel)
- *   - positives → clamped to [0, entries.length - 1]
- *
- * @param {*} entries
- * @param {*} requestedIndex
- * @returns {number|null}
- */
-const resolveEntryIndex = (entries, requestedIndex) => {
-    if (!Array.isArray(entries) || entries.length === 0) return null;
-    if (!Number.isInteger(requestedIndex) || requestedIndex < 0) return 0;
-    if (requestedIndex === 0) return entries.length - 1;
-    return Math.min(entries.length - 1, requestedIndex - 1);
 };
 
 /**

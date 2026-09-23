@@ -38,12 +38,18 @@
  *   cleanupStaleMetadata: (Function|null),
  *   interChallengeDelay: () => number,
  *   entryTracker?: ({get: Function, set: Function}|null),
+ *   currency?: ({strategy: Object, swapLedger: Object, spendLedger: Object}|null),
  * }} deps
  *   `entryTracker` backs the voteOnNewEntry feature. Real mode passes a
  *   metadata.json-backed tracker; mock passes an in-memory one for the same reason
  *   it passes cleanupStaleMetadata: null — the metadata store is shared and
  *   un-namespaced, and mock challenge ids would accumulate there unpruned. Omitting
  *   it entirely makes the feature inert.
+ *   `currency` backs the automatic key / swap / fill spends (services/currencyAuto.js):
+ *   `strategy` is the endpoint set the spend services take (the same shape the manual
+ *   currency handlers pass), `swapLedger` the swap-back ledger and `spendLedger` the
+ *   automatic-fill counter. Mock passes in-memory ledgers for the same reason it passes
+ *   cleanupStaleMetadata: null. Omitting it makes the automation inert.
  * @returns {Promise<{success:boolean, message?:string, error?:string, challenges?:Array}>}
  *   `challenges` is the full active list this cycle fetched (not the
  *   filtered subset) so callers can reuse it for threshold scheduling.
@@ -55,6 +61,7 @@ const votingLogic = require('./VotingLogic');
 const autoFill = require('./autoFill');
 const photoStats = require('./photoStats');
 const newEntryTracker = require('./newEntryTracker');
+const currencyAuto = require('./currencyAuto');
 const cancellation = require('../voting/cancellation');
 const { formatDuration } = require('../format/duration');
 const { sleep } = require('../timing');
@@ -324,7 +331,7 @@ const actionRunners = {
 };
 
 const runVotingPass = async (token, challengeIdFilter, deps) => {
-    const { api, cleanupStaleMetadata, interChallengeDelay, entryTracker = null } = deps;
+    const { api, cleanupStaleMetadata, interChallengeDelay, entryTracker = null, currency = null } = deps;
     // Shared dependency bundle for every auto-fill entry point this pass
     // (fill-new on boost/turbo, staggered auto-fill, emergency fill).
     const fillDeps = {
@@ -464,6 +471,14 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                     }
                 }
 
+                // Automatic key unlock and photo swap (opt-in per challenge/profile). They
+                // run ahead of the deadline actions on purpose: an unlocked boost is then
+                // available to the boost runner this same pass, and a swap happens before a
+                // boost/turbo lands, so neither spends on the photo about to be replaced.
+                const currencyCtx = { challenge, token, now, currency };
+                await currencyAuto.runAutoKey(currencyCtx);
+                await currencyAuto.runAutoSwap(currencyCtx);
+
                 // Deadline actions (boost / auto-fill / turbo apply / emergency fill) run
                 // in the order their configured timers imply — largest seconds-before-close
                 // window first — instead of a fixed code order, so e.g. auto-fill (15m) acts
@@ -523,6 +538,10 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                         .info(`${logger.challengeTag(challenge)} New entry detected — ${outcome}`, null);
                 }
                 let voteThrew = false;
+                // The vote pool this pass voted from — handed to the exposure-fill rule,
+                // which only spends when voting cannot reach its threshold. undefined =
+                // voting didn't run (the rule fetches the pool itself); null = none.
+                let votePool;
 
                 // Record the entry snapshot, which disarms the trigger. Called from the
                 // end of this block, and additionally from the post-submit cancellation
@@ -578,6 +597,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
 
                         // Get images to vote on
                         const voteImages = await api.getVoteImages(challenge, token);
+                        votePool = voteImages ?? null;
                         if (voteImages && voteImages.images) {
                             // Check for cancellation before submitting votes
                             if (cancellation.isCancelled()) {
@@ -654,6 +674,10 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
                 }
 
                 recordEntrySnapshot();
+
+                // Automatic exposure fill, AFTER the vote: a fill is only worth spending
+                // when this pass's voting could not lift exposure to the fill threshold.
+                if (!voteThrew) await currencyAuto.runAutoExposureFill(currencyCtx, votePool);
             } catch (error) {
                 logger
                     .withCategory('voting')

@@ -18,6 +18,7 @@ import { initializeAsync as initSettings, flushPendingWrites, getSetting } from 
 import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
 import { initializeSwapBackAsync, flushSwapBackWrites } from '../../swapBackStore';
+import { initializeAutoSpendAsync, flushAutoSpendWrites } from '../../currencyAutoStore';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
 import { mountApp } from './App';
@@ -87,6 +88,8 @@ const bootstrap = async () => {
         await initializeJoinStateAsync();
         // Swap-back records (which slot can restore a boosted/turbo'd photo).
         await initializeSwapBackAsync();
+        // Automatic exposure-fill counts (the per-challenge fill cap).
+        await initializeAutoSpendAsync();
 
         // Settings writes are write-behind (cache now, persist async). When
         // the OS backgrounds or tears down the WebView, push the latest
@@ -98,6 +101,7 @@ const bootstrap = async () => {
                 flushMetadataWrites();
                 flushJoinStateWrites();
                 flushSwapBackWrites();
+                flushAutoSpendWrites();
             } catch {
                 // never let a teardown handler throw
             }

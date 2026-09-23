@@ -236,6 +236,10 @@
             unitMinutes: 'min',
             unitHours: 'h',
             unitCoins: 'coins',
+            unitVotes: 'votes',
+            unitKeys: 'keys',
+            unitSwaps: 'swaps',
+            unitFills: 'fills',
             // Bankroll (header pills)
             bankrollKeys: 'keys',
             bankrollSwaps: 'swaps',
@@ -420,6 +424,65 @@
             fillAllPhotos: 'Fill all empty slots now (no spacing)',
             cancel: 'Cancel',
             challengeDefaults: 'Challenge Defaults',
+            // Keys, Swaps & Fills (currency automation) settings
+            groupCurrencyAuto: 'Keys, Swaps & Fills',
+            autoKeyUnlock: 'Auto-Use a Key',
+            autoKeyUnlockDesc:
+                "Spend a key to unlock this challenge's locked Boost once the timing below is reached. Unlock only — the Boost is then applied by Auto-Apply Boost at the Key-Unlocked Boost Time. Set per challenge or in a profile; there is no global switch.",
+            autoKeyAfterStart: 'Key: After Time From Start',
+            autoKeyAfterStartDesc:
+                'Use the key only once the challenge has been running this long (e.g. 11h). 0 = no condition.',
+            autoKeyBeforeEnd: 'Key: Within Time Before End',
+            autoKeyBeforeEndDesc: 'Use the key only when this much time or less is left (e.g. 7h). 0 = no condition.',
+            autoKeyAfterPercent: 'Key: After % Of Challenge',
+            autoKeyAfterPercentDesc: 'Use the key only once this share of the challenge has run. 0 = no condition.',
+            autoSwap: 'Auto-Swap a Photo',
+            autoSwapDesc:
+                'Spend a swap to replace one of your entries with the best-matching photo from your library once the timing below is reached. Set per challenge or in a profile; there is no global switch.',
+            autoSwapAfterStart: 'Swap: After Time From Start',
+            autoSwapAfterStartDesc: 'Swap only once the challenge has been running this long. 0 = no condition.',
+            autoSwapBeforeEnd: 'Swap: Within Time Before End',
+            autoSwapBeforeEndDesc: 'Swap only when this much time or less is left. 0 = no condition.',
+            autoSwapAfterPercent: 'Swap: After % Of Challenge',
+            autoSwapAfterPercentDesc: 'Swap only once this share of the challenge has run. 0 = no condition.',
+            autoSwapImageIndex: 'Swap Entry',
+            autoSwapImageIndexDesc:
+                "Which entry gets replaced: 1 = first, 2 = second, etc. Use 0 for the last entry. A boosted or turbo'd entry is skipped for the previous one unless allowed below.",
+            autoSwapLowestVotes: 'Swap The Entry With Fewest Votes',
+            autoSwapLowestVotesDesc: 'Ignore Swap Entry and replace whichever entry has the fewest votes.',
+            autoSwapAllowBoosted: 'Allow Swapping Boosted/Turbo Entries',
+            autoSwapAllowBoostedDesc:
+                "By default a boosted or turbo'd entry is never swapped out — its Boost/Turbo stays with the photo. Turn on to allow it; the card then offers to swap the original back.",
+            autoSwapMaxVotes: 'Swap Only Below Votes',
+            autoSwapMaxVotesDesc: 'Only swap when the chosen entry has fewer votes than this. 0 = no vote condition.',
+            autoSwapMax: 'Max Swaps In This Challenge',
+            autoSwapMaxDesc: 'Stop auto-swapping once this challenge has had this many swaps (manual swaps count too).',
+            autoExposureFill: 'Auto-Use a Fill',
+            autoExposureFillDesc:
+                'Spend a fill to top exposure up to 100% — but only when exposure is below the threshold below AND there are not enough photos left to vote it back up. Usually needed in flash challenges. Set per challenge or in a profile; there is no global switch.',
+            autoExposureFillBelow: 'Fill When Exposure Below',
+            autoExposureFillBelowDesc: 'A fill is only spent while exposure is below this and voting cannot reach it.',
+            autoExposureFillAfterStart: 'Fill: After Time From Start',
+            autoExposureFillAfterStartDesc:
+                'Fill only once the challenge has been running this long. 0 = no condition.',
+            autoExposureFillBeforeEnd: 'Fill: Within Time Before End',
+            autoExposureFillBeforeEndDesc: 'Fill only when this much time or less is left. 0 = no condition.',
+            autoExposureFillAfterPercent: 'Fill: After % Of Challenge',
+            autoExposureFillAfterPercentDesc: 'Fill only once this share of the challenge has run. 0 = no condition.',
+            autoExposureFillMax: 'Max Auto Fills In This Challenge',
+            autoExposureFillMaxDesc:
+                'Stop auto-filling once this many fills were spent automatically on this challenge.',
+            currencyReserveKeys: 'Keep At Least (Keys)',
+            currencyReserveKeysDesc:
+                'Automatic spending never takes your keys below this. Manual spending from the card is not limited. 0 = no reserve.',
+            currencyReserveSwaps: 'Keep At Least (Swaps)',
+            currencyReserveSwapsDesc:
+                'Automatic spending never takes your swaps below this. Manual spending from the card is not limited. 0 = no reserve.',
+            currencyReserveFills: 'Keep At Least (Fills)',
+            currencyReserveFillsDesc:
+                'Automatic spending never takes your fills below this. Manual spending from the card is not limited. 0 = no reserve.',
+            currencyRuleTimingHelp:
+                'Each action has three optional timing conditions: after time from start, within time before end, and after % of the challenge. Every condition you set must be true at the same time — e.g. "after 11h from start" plus "within 7h before end" waits for both. Leave all at 0 to act as soon as the action is possible. Each action spends at most once per cycle, and the global reserve is always kept.',
             groupGeneral: 'General',
             groupBoost: 'Boost',
             groupTurbo: 'Turbo',

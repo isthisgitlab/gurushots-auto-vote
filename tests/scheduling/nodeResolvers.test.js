@@ -13,6 +13,7 @@ const {
     resolveScheduledFill,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
+    resolveCurrencyAuto,
 } = require('../../src/js/scheduling/nodeResolvers');
 
 const withSettings = (values) => {
@@ -68,6 +69,27 @@ describe('resolveBoostPrefill', () => {
             leadSec: 600,
             boostTimeSec: 600,
             keyUnlockedBoostTimeSec: 900,
+        });
+    });
+});
+
+describe('resolveCurrencyAuto', () => {
+    test('an enabled rule passes its timing through; a disabled one is null', () => {
+        withSettings({
+            autoKeyUnlock: true,
+            autoKeyAfterStart: 39600,
+            autoKeyBeforeEnd: 0,
+            autoKeyAfterPercent: 0,
+            autoSwap: false,
+            autoExposureFill: true,
+            autoExposureFillAfterStart: 0,
+            autoExposureFillBeforeEnd: 25200,
+            autoExposureFillAfterPercent: 50,
+        });
+        expect(resolveCurrencyAuto('c1')).toEqual({
+            key: { afterStartSec: 39600, beforeEndSec: 0, afterPercent: 0 },
+            swap: null,
+            fill: { afterStartSec: 0, beforeEndSec: 25200, afterPercent: 50 },
         });
     });
 });

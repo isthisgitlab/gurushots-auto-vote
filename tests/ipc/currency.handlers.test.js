@@ -23,6 +23,11 @@ beforeEach(() => {
     jest.clearAllMocks();
     auth.requireAuthToken = jest.fn().mockReturnValue({ ok: true, token: 'tok', settings: {} });
     apiFactory.getApiStrategy = jest.fn().mockReturnValue({});
+    // The spend lock is real (the handlers share it with the automatic runners);
+    // only the spend services are mocked.
+    currencyActions.withSpendLock.mockImplementation(
+        jest.requireActual('../../src/js/services/currencyActions').withSpendLock,
+    );
     currencyActions.unlockBoostWithKey.mockResolvedValue(OK);
     currencyActions.fillExposure.mockResolvedValue(OK);
     currencyActions.swapEntry.mockResolvedValue(OK);

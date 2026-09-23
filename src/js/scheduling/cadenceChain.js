@@ -115,6 +115,8 @@ const formatOversleptMessage = (lateMs, waitMs) =>
  *   per-challenge pre-final-window top-up resolver for the shared math
  * @param {import('./thresholdWindow').ResolveBoostPrefill} deps.resolveBoostPrefill -
  *   per-challenge pre-boost fill resolver for the shared math
+ * @param {import('./thresholdWindow').ResolveCurrencyAuto|null} [deps.resolveCurrencyAuto] -
+ *   per-challenge currency-automation timing resolver for the shared math
  * @param {()=>Promise<*>} deps.runCycle - run one voting cycle; the resolved
  *   value is handed to the next decision as the prefetched list candidate
  *   (any non-array means "fetch fresh"). A rejection is logged via
@@ -158,6 +160,7 @@ const createCadenceChain = ({
     resolveScheduledFill,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
+    resolveCurrencyAuto = null,
     runCycle,
     log,
     onScheduled,
@@ -222,6 +225,7 @@ const createCadenceChain = ({
                 timezone: settings.timezone || DEFAULT_TIMEZONE,
                 resolveFinalWindowTopUp,
                 resolveBoostPrefill,
+                resolveCurrencyAuto,
             });
 
             if (decision.mode === 'normal') {
@@ -247,6 +251,8 @@ const createCadenceChain = ({
                     message = `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" (${decision.nextScheduled?.form}) — next cycle in ${Math.round(waitMs / 1000)}s`;
                 } else if (decision.mode === 'pre-boost') {
                     message = `⏰ Approaching pre-boost fill for "${decision.nextBoostPrefill?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextBoostPrefill?.leadMin}m pre-boost boundary)`;
+                } else if (decision.mode === 'currency-rule') {
+                    message = `⏰ Approaching automatic ${decision.nextCurrencyRule?.action} rule for "${decision.nextCurrencyRule?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s`;
                 } else if (decision.mode === 'pre-final-window') {
                     message = `⏰ Approaching pre-final-window top-up for "${decision.nextFinalWindowTopUp?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextFinalWindowTopUp?.leadMin}m pre-final-window boundary)`;
                 } else {

@@ -55,4 +55,29 @@ const resolveBoostPrefill = (challengeId) => ({
     keyUnlockedBoostTimeSec: Number(settings.getEffectiveSetting('keyUnlockedBoostTime', challengeId)),
 });
 
-module.exports = { resolveThreshold, resolveScheduledFill, resolveFinalWindowTopUp, resolveBoostPrefill };
+// Per-challenge currency-automation timing for the cadence cap (./thresholdWindow.js):
+// each ENABLED rule's three timing conditions, null for a rule that is off. The
+// enable keys are challengeOnly, so a challenge with no override or profile turning
+// them on resolves all-null and never shortens the wait.
+const currencyTimingOf = (enableKey, prefix, challengeId) =>
+    settings.getEffectiveSetting(enableKey, challengeId) === true
+        ? {
+              afterStartSec: Number(settings.getEffectiveSetting(`${prefix}AfterStart`, challengeId)),
+              beforeEndSec: Number(settings.getEffectiveSetting(`${prefix}BeforeEnd`, challengeId)),
+              afterPercent: Number(settings.getEffectiveSetting(`${prefix}AfterPercent`, challengeId)),
+          }
+        : null;
+
+const resolveCurrencyAuto = (challengeId) => ({
+    key: currencyTimingOf('autoKeyUnlock', 'autoKey', challengeId),
+    swap: currencyTimingOf('autoSwap', 'autoSwap', challengeId),
+    fill: currencyTimingOf('autoExposureFill', 'autoExposureFill', challengeId),
+});
+
+module.exports = {
+    resolveThreshold,
+    resolveScheduledFill,
+    resolveFinalWindowTopUp,
+    resolveBoostPrefill,
+    resolveCurrencyAuto,
+};

@@ -24,6 +24,7 @@
 
 const { soonestScheduledStart, eligibleChallenges } = require('./scheduledFill');
 const { boostApplyThreshold } = require('../voting/boostWindow');
+const { ruleOpensAt } = require('../voting/currencyAuto');
 
 /**
  * Per-challenge pre-final-window-top-up config for the cadence cap.
@@ -184,6 +185,68 @@ async function soonestBoostPrefillStart(eligible, now, resolveBoostPrefill) {
 }
 
 /**
+ * @typedef {{afterStartSec?: number, beforeEndSec?: number, afterPercent?: number}} CurrencyRuleTiming
+ * @typedef {(challengeId: string) => ({key: CurrencyRuleTiming|null, swap: CurrencyRuleTiming|null, fill: CurrencyRuleTiming|null}|Promise<{key: CurrencyRuleTiming|null, swap: CurrencyRuleTiming|null, fill: CurrencyRuleTiming|null}>)} ResolveCurrencyAuto
+ *   Per-challenge timing of each ENABLED currency-automation rule (null = rule off).
+ */
+
+// Whether the challenge could still take the action at all — waking for a rule
+// whose action the challenge doesn't offer (or has already used) would no-op.
+// Live state beyond this (balance, exposure, swap caps) is left to the runner.
+const CURRENCY_ACTION_OFFERED = {
+    key: (c) => c?.boost_enable === true && c?.member?.boost?.state === 'LOCKED',
+    swap: (c) => c?.swap_enable === true && c?.swap_locked !== true,
+    fill: (c) => c?.fill_enable === true && c?.fill_locked !== true,
+};
+
+/**
+ * Soonest upcoming currency-automation rule opening (automatic key / swap /
+ * fill, voting/currencyAuto.js ruleOpensAt) strictly after `now`, across every
+ * still-open challenge — flash included, since a flash challenge running out of
+ * vote photos is exactly where the exposure-fill rule matters. The scheduler
+ * caps its sleep to it so an "11h after start" or "7h before end" rule fires on
+ * time instead of up to one normal cadence late. Fail-soft: a challenge whose
+ * resolver throws is skipped.
+ *
+ * @param {Array} challenges
+ * @param {number} now - Unix timestamp (seconds)
+ * @param {ResolveCurrencyAuto} resolveCurrencyAuto
+ * @returns {Promise<{challengeId, challengeTitle, startTime:number, action:string}|null>}
+ */
+async function soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto) {
+    const open = (Array.isArray(challenges) ? challenges : []).filter((c) => Number(c?.close_time) > now);
+    const configs = await Promise.all(
+        open.map(async (challenge) => {
+            try {
+                return await resolveCurrencyAuto(challenge.id.toString());
+            } catch {
+                return null;
+            }
+        }),
+    );
+
+    let best = null;
+    for (let i = 0; i < open.length; i++) {
+        const challenge = open[i];
+        for (const action of ['key', 'swap', 'fill']) {
+            const timing = configs[i]?.[action];
+            if (!timing || !CURRENCY_ACTION_OFFERED[action](challenge)) continue;
+            const startTime = ruleOpensAt(challenge, timing);
+            if (startTime === null || startTime <= now || startTime >= Number(challenge.close_time)) continue;
+            if (best === null || startTime < best.startTime) {
+                best = {
+                    challengeId: challenge.id,
+                    challengeTitle: challenge.title || `challenge ${challenge.id}`,
+                    startTime,
+                    action,
+                };
+            }
+        }
+    }
+    return best;
+}
+
+/**
  * Resolve each eligible challenge's per-challenge threshold ONCE. Every
  * threshold question (in-window? next entry? next delay?) is then answered from
  * this single resolved snapshot — important because on the WebView each
@@ -297,7 +360,8 @@ async function isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold
  * @param {string|null} [opts.timezone] - IANA zone for the time-of-day form
  * @param {ResolveFinalWindowTopUp|null} [opts.resolveFinalWindowTopUp] - per-challenge pre-final-window top-up config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming top-up window start
  * @param {ResolveBoostPrefill|null} [opts.resolveBoostPrefill] - per-challenge pre-boost fill config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming pre-boost window start
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null)}>}
+ * @param {ResolveCurrencyAuto|null} [opts.resolveCurrencyAuto] - per-challenge currency-automation timing resolver (sync or async); when passed, the delay is also capped to the soonest upcoming key / swap / fill rule opening
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null), nextCurrencyRule:(object|null)}>}
  */
 async function computeNextCycleDelayMs(
     challenges,
@@ -311,6 +375,7 @@ async function computeNextCycleDelayMs(
         timezone = null,
         resolveFinalWindowTopUp = null,
         resolveBoostPrefill = null,
+        resolveCurrencyAuto = null,
     },
 ) {
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
@@ -323,6 +388,7 @@ async function computeNextCycleDelayMs(
             nextScheduled: null,
             nextFinalWindowTopUp: null,
             nextBoostPrefill: null,
+            nextCurrencyRule: null,
         };
     }
 
@@ -377,7 +443,21 @@ async function computeNextCycleDelayMs(
         }
     }
 
-    return { delayMs, mode, nextEntry, nextScheduled, nextFinalWindowTopUp, nextBoostPrefill };
+    // Currency-automation rule opening — same "cap to the soonest upcoming
+    // boundary" shape; whichever boundary is sooner wins.
+    let nextCurrencyRule = null;
+    if (resolveCurrencyAuto) {
+        nextCurrencyRule = await soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto);
+        if (nextCurrencyRule) {
+            const msUntilStart = (nextCurrencyRule.startTime - now) * 1000;
+            if (msUntilStart < delayMs) {
+                delayMs = Math.max(minGapMs, msUntilStart);
+                mode = 'currency-rule';
+            }
+        }
+    }
+
+    return { delayMs, mode, nextEntry, nextScheduled, nextFinalWindowTopUp, nextBoostPrefill, nextCurrencyRule };
 }
 
 module.exports = {
@@ -386,4 +466,5 @@ module.exports = {
     computeNextCycleDelayMs,
     soonestFinalWindowTopUpStart,
     soonestBoostPrefillStart,
+    soonestCurrencyRuleStart,
 };

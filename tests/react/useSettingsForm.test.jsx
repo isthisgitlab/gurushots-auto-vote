@@ -174,6 +174,17 @@ describe('useSettingsForm — change and reset handlers', () => {
         expect(document.documentElement.getAttribute('data-theme')).toBe(DEFAULT_UI_VALUES.theme);
     });
 
+    test('challengeOnly keys never enter the global form — on open or on reset-all', () => {
+        const withChallengeOnly = { ...schema, autoSwap: { type: 'boolean', default: false, challengeOnly: true } };
+        const { result } = renderForm(
+            baseProps({ schema: withChallengeOnly, defaults: { exposure: 70, autoBoost: true, autoSwap: false } }),
+        );
+        expect(result.current.formValues).toEqual({ exposure: 70, autoBoost: true });
+
+        act(() => result.current.handleResetAll());
+        expect(result.current.formValues).toEqual({ exposure: 100, autoBoost: false });
+    });
+
     test('reset-all without a schema still resets the UI half', () => {
         const { result } = renderForm(baseProps({ schema: null }));
 

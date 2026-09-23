@@ -9,6 +9,7 @@ import {
     resolveScheduledFill,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
+    resolveCurrencyAuto,
     computeNextCycleDelayMs,
 } from '@/contexts/autovoteScheduler';
 import { mockApi } from './helpers/setup';
@@ -82,6 +83,22 @@ describe('autovoteScheduler resolvers', () => {
             });
         },
     );
+
+    it('resolveCurrencyAuto: an enabled rule passes its timing through; a disabled one is null', async () => {
+        withSettings({
+            autoKeyUnlock: true,
+            autoKeyAfterStart: 39600,
+            autoKeyBeforeEnd: 0,
+            autoKeyAfterPercent: 0,
+            autoSwap: false,
+            autoExposureFill: 'true',
+        });
+        await expect(resolveCurrencyAuto('c1')).resolves.toEqual({
+            key: { afterStartSec: 39600, beforeEndSec: 0, afterPercent: 0 },
+            swap: null,
+            fill: null,
+        });
+    });
 
     it('computeNextCycleDelayMs defaults the timezone and falls back to the normal delay', async () => {
         withSettings({});

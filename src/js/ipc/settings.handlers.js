@@ -192,6 +192,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                         type: schema[key].type,
                         default: schema[key].default,
                         perChallenge: schema[key].perChallenge,
+                        challengeOnly: schema[key].challengeOnly === true,
                         group: schema[key].group,
                         label: schema[key].label,
                         description: schema[key].description,

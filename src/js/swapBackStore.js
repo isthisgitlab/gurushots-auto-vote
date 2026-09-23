@@ -117,8 +117,14 @@ const createMemoryLedger = () => {
 
 const swapBackLedger = createLedger(swapBackStore);
 
+// Process-wide in-memory ledger for mock mode, shared by the manual swap
+// handlers and the mock voting pass so a mock automatic swap is offered for
+// swap-back exactly like a real one.
+const mockSwapBackLedger = createMemoryLedger();
+
 module.exports = {
     swapBackLedger,
+    mockSwapBackLedger,
     createLedger,
     createMemoryLedger,
     initializeSwapBackAsync: swapBackStore.initializeAsync,

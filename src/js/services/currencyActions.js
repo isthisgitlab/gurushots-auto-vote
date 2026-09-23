@@ -10,9 +10,10 @@
  * so a repeated request finds the state already changed and spends nothing —
  * unlike coinsUnlock's charge-then-join, which needs a persisted marker.
  *
- * Confirmation, the double-spend lock and argument validation live in the IPC
- * layer (ipc/actions.handlers.js); these functions assume the caller already
- * decided to spend.
+ * Confirmation and argument validation live in the IPC layer
+ * (ipc/currency.handlers.js); these functions assume the caller already decided
+ * to spend. The double-spend lock (withSpendLock) lives here so the manual
+ * handlers and the automatic runners (services/currencyAuto.js) share it.
  */
 
 const { findActiveChallenge } = require('./findActiveChallenge');
@@ -21,6 +22,30 @@ const { resetPassState: resetPhotoStatsPassState } = require('./photoStats');
 const { CURRENCY_OUTCOME, blockedOutcome, swapExcludedIds } = require('../voting/currencyActions');
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+
+// ONE lock across every spend — manual (all channels) and automatic alike: a
+// single spend in flight at a time, so a click during a voting pass can't race
+// the automation into spending twice. Released in `finally` so a throw can never
+// wedge it.
+let spendInFlight = false;
+
+/**
+ * Runs `spend` under the process-wide spend lock. Resolves {busy: true} without
+ * calling it when another spend is in flight.
+ *
+ * @template T
+ * @param {() => Promise<T>} spend
+ * @returns {Promise<{busy: true} | {busy: false, value: T}>}
+ */
+const withSpendLock = async (spend) => {
+    if (spendInFlight) return { busy: true };
+    spendInFlight = true;
+    try {
+        return { busy: false, value: await spend() };
+    } finally {
+        spendInFlight = false;
+    }
+};
 
 const cat = (logger) => logger.withCategory('currency');
 
@@ -251,4 +276,4 @@ const fillExposure = async (challengeId, token, { strategy, logger }) => {
     );
 };
 
-module.exports = { unlockBoostWithKey, previewSwap, swapEntry, swapBack, fillExposure };
+module.exports = { withSpendLock, unlockBoostWithKey, previewSwap, swapEntry, swapBack, fillExposure };

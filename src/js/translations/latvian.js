@@ -236,6 +236,10 @@
             unitMinutes: 'min',
             unitHours: 'h',
             unitCoins: 'monētas',
+            unitVotes: 'balsis',
+            unitKeys: 'atslēgas',
+            unitSwaps: 'maiņas',
+            unitFills: 'uzpildes',
             // Konts (galvenes rādītāji)
             bankrollKeys: 'atslēgas',
             bankrollSwaps: 'maiņas',
@@ -422,6 +426,71 @@
             fillAllPhotos: 'Aizpildīt visas tukšās vietas tagad (bez intervāla)',
             cancel: 'Atcelt',
             challengeDefaults: 'Noklusējuma iestatījumi izaicinājumiem',
+            // Keys, Swaps & Fills (currency automation) settings
+            groupCurrencyAuto: 'Atslēgas, maiņas un uzpildes',
+            autoKeyUnlock: 'Automātiski izmantot atslēgu',
+            autoKeyUnlockDesc:
+                'Iztērēt atslēgu, lai atbloķētu šī izaicinājuma bloķēto Boost, kad sasniegts zemāk norādītais laiks. Tikai atbloķē — Boost pēc tam uzliek “Auto-pielietot Boost” pie “Boost laiks (atvērts ar atslēgu)”. Iestata izaicinājumam vai profilā; globāla slēdža nav.',
+            autoKeyAfterStart: 'Atslēga: pēc laika no sākuma',
+            autoKeyAfterStartDesc:
+                'Izmantot atslēgu tikai tad, kad izaicinājums ilgst jau tik ilgi (piem., 11 h). 0 = bez nosacījuma.',
+            autoKeyBeforeEnd: 'Atslēga: pēdējā laikā līdz beigām',
+            autoKeyBeforeEndDesc:
+                'Izmantot atslēgu tikai tad, kad līdz beigām atlicis tik vai mazāk (piem., 7 h). 0 = bez nosacījuma.',
+            autoKeyAfterPercent: 'Atslēga: pēc % no izaicinājuma',
+            autoKeyAfterPercentDesc:
+                'Izmantot atslēgu tikai tad, kad pagājusi šī daļa no izaicinājuma. 0 = bez nosacījuma.',
+            autoSwap: 'Automātiski apmainīt bildi',
+            autoSwapDesc:
+                'Iztērēt maiņu, lai kādu no tavām bildēm aizstātu ar piemērotāko bildi no bibliotēkas, kad sasniegts zemāk norādītais laiks. Iestata izaicinājumam vai profilā; globāla slēdža nav.',
+            autoSwapAfterStart: 'Maiņa: pēc laika no sākuma',
+            autoSwapAfterStartDesc: 'Mainīt tikai tad, kad izaicinājums ilgst jau tik ilgi. 0 = bez nosacījuma.',
+            autoSwapBeforeEnd: 'Maiņa: pēdējā laikā līdz beigām',
+            autoSwapBeforeEndDesc: 'Mainīt tikai tad, kad līdz beigām atlicis tik vai mazāk. 0 = bez nosacījuma.',
+            autoSwapAfterPercent: 'Maiņa: pēc % no izaicinājuma',
+            autoSwapAfterPercentDesc: 'Mainīt tikai tad, kad pagājusi šī daļa no izaicinājuma. 0 = bez nosacījuma.',
+            autoSwapImageIndex: 'Maināmā bilde',
+            autoSwapImageIndexDesc:
+                'Kuru bildi aizstāt: 1 = pirmo, 2 = otro utt. 0 = pēdējo. Bildi ar Boost vai Turbo izlaiž un ņem iepriekšējo, ja vien zemāk tas nav atļauts.',
+            autoSwapLowestVotes: 'Mainīt bildi ar vismazāk balsīm',
+            autoSwapLowestVotesDesc: 'Neņemt vērā “Maināmā bilde” un aizstāt to bildi, kurai ir vismazāk balsu.',
+            autoSwapAllowBoosted: 'Atļaut mainīt bildes ar Boost/Turbo',
+            autoSwapAllowBoostedDesc:
+                'Pēc noklusējuma bildi ar Boost vai Turbo nekad neapmaina — Boost/Turbo paliek pie bildes. Ieslēdz, lai atļautu; kartīte tad piedāvās apmainīt sākotnējo atpakaļ.',
+            autoSwapMaxVotes: 'Mainīt tikai zem balsu skaita',
+            autoSwapMaxVotesDesc:
+                'Mainīt tikai tad, ja izvēlētajai bildei ir mazāk balsu par šo. 0 = bez balsu nosacījuma.',
+            autoSwapMax: 'Maks. maiņas šajā izaicinājumā',
+            autoSwapMaxDesc:
+                'Pārtraukt automātisko maiņu, kad šajā izaicinājumā veikts tik daudz maiņu (manuālās arī skaitās).',
+            autoExposureFill: 'Automātiski izmantot uzpildi',
+            autoExposureFillDesc:
+                'Iztērēt uzpildi, lai paceltu redzamību līdz 100% — bet tikai tad, ja redzamība ir zem zemāk norādītā sliekšņa UN nav pietiekami daudz bilžu, par ko nobalsot, lai to paceltu. Parasti vajag zibens izaicinājumos. Iestata izaicinājumam vai profilā; globāla slēdža nav.',
+            autoExposureFillBelow: 'Uzpildīt, ja redzamība zem',
+            autoExposureFillBelowDesc: 'Uzpildi tērē tikai tad, ja redzamība ir zem šī un balsojot to sasniegt nevar.',
+            autoExposureFillAfterStart: 'Uzpilde: pēc laika no sākuma',
+            autoExposureFillAfterStartDesc:
+                'Uzpildīt tikai tad, kad izaicinājums ilgst jau tik ilgi. 0 = bez nosacījuma.',
+            autoExposureFillBeforeEnd: 'Uzpilde: pēdējā laikā līdz beigām',
+            autoExposureFillBeforeEndDesc:
+                'Uzpildīt tikai tad, kad līdz beigām atlicis tik vai mazāk. 0 = bez nosacījuma.',
+            autoExposureFillAfterPercent: 'Uzpilde: pēc % no izaicinājuma',
+            autoExposureFillAfterPercentDesc:
+                'Uzpildīt tikai tad, kad pagājusi šī daļa no izaicinājuma. 0 = bez nosacījuma.',
+            autoExposureFillMax: 'Maks. automātiskās uzpildes šajā izaicinājumā',
+            autoExposureFillMaxDesc:
+                'Pārtraukt automātisko uzpildi, kad šim izaicinājumam automātiski iztērēts tik daudz uzpilžu.',
+            currencyReserveKeys: 'Paturēt vismaz (atslēgas)',
+            currencyReserveKeysDesc:
+                'Automātiskā tērēšana nekad nesamazina atslēgas zem šī skaita. Manuālo tērēšanu no kartītes tas neierobežo. 0 = bez rezerves.',
+            currencyReserveSwaps: 'Paturēt vismaz (maiņas)',
+            currencyReserveSwapsDesc:
+                'Automātiskā tērēšana nekad nesamazina maiņas zem šī skaita. Manuālo tērēšanu no kartītes tas neierobežo. 0 = bez rezerves.',
+            currencyReserveFills: 'Paturēt vismaz (uzpildes)',
+            currencyReserveFillsDesc:
+                'Automātiskā tērēšana nekad nesamazina uzpildes zem šī skaita. Manuālo tērēšanu no kartītes tas neierobežo. 0 = bez rezerves.',
+            currencyRuleTimingHelp:
+                'Katrai darbībai ir trīs neobligāti laika nosacījumi: pēc laika no sākuma, pēdējā laikā līdz beigām un pēc % no izaicinājuma. Visiem iestatītajiem nosacījumiem jāizpildās vienlaikus — piem., “pēc 11 h no sākuma” un “pēdējās 7 h līdz beigām” gaida abus. Atstāj visus uz 0, lai rīkotos, tiklīdz darbība iespējama. Katra darbība vienā ciklā tērē ne vairāk kā vienu reizi, un globālā rezerve vienmēr tiek paturēta.',
             groupGeneral: 'Vispārīgi',
             groupBoost: 'Boost',
             groupTurbo: 'Turbo',

@@ -8,6 +8,7 @@ import {
     resolveScheduledFill,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
+    resolveCurrencyAuto,
 } from './autovoteScheduler';
 import { createDeadlineNotifier, resolveRendererDelivery } from '../notifications/deadlineNotifier';
 
@@ -152,6 +153,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                 resolveScheduledFill,
                 resolveFinalWindowTopUp,
                 resolveBoostPrefill,
+                resolveCurrencyAuto,
                 runCycle: () => runVotingCycle(),
                 log: {
                     // Best-effort parity log (optional-chained so a host without

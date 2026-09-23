@@ -25,6 +25,7 @@ const {
     resolveScheduledFill,
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
+    resolveCurrencyAuto,
 } = require('./nodeResolvers');
 const { createNodeDeadlineNotifier } = require('../services/notify/nodeNotify');
 
@@ -59,6 +60,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
         resolveScheduledFill,
         resolveFinalWindowTopUp,
         resolveBoostPrefill,
+        resolveCurrencyAuto,
         // The chain hands the resolved value straight back to the next
         // decision as the prefetched-list candidate, so unwrap `challenges`
         // here; a cycle failure/legacy boolean yields a non-array → fresh fetch.

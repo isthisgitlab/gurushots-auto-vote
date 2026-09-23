@@ -138,6 +138,7 @@ module.exports = {
     CURRENCY_OUTCOME,
     CURRENCY_FIELD,
     isRunning,
+    challengeAllows,
     canKeyUnlock,
     canSwapEntry,
     canFillExposure,

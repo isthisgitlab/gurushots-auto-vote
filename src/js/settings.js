@@ -571,6 +571,8 @@ const valuesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
  * Get global default value for a setting
  */
 const getGlobalDefault = (settingKey) => {
+    // A challengeOnly key has no global value: the schema default is all there is.
+    if (SETTINGS_SCHEMA[settingKey]?.challengeOnly) return SETTINGS_SCHEMA[settingKey].default;
     const settings = loadSettings();
     const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
 
@@ -591,6 +593,13 @@ const getGlobalDefault = (settingKey) => {
 const setGlobalDefault = (settingKey, value) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
         logger.withCategory('settings').error(`Invalid setting key: ${settingKey}`, null);
+        return false;
+    }
+
+    if (SETTINGS_SCHEMA[settingKey].challengeOnly) {
+        logger
+            .withCategory('settings')
+            .error(`Setting ${settingKey} can only be set on a challenge or a profile, not globally`, null);
         return false;
     }
 
@@ -796,6 +805,10 @@ const getEffectiveSetting = (settingKey, challengeId = null) => {
             return titleProfile.values[settingKey];
         }
     }
+
+    // A challengeOnly key ignores any stored global value (hand-edited or left by
+    // an older build): only a challenge override or a profile can turn it on.
+    if (SETTINGS_SCHEMA[settingKey].challengeOnly) return SETTINGS_SCHEMA[settingKey].default;
 
     return Object.prototype.hasOwnProperty.call(challengeSettings.globalDefaults || {}, settingKey)
         ? challengeSettings.globalDefaults[settingKey]
@@ -1695,10 +1708,18 @@ const _findProfileKey = (stored, normalizedName) => {
     return null;
 };
 
-const _globalChallengeValues = (settings) => ({
-    ...getDefaultSettings().challengeSettings.globalDefaults,
-    ...(settings.challengeSettings?.globalDefaults || {}),
-});
+const _globalChallengeValues = (settings) => {
+    const values = {
+        ...getDefaultSettings().challengeSettings.globalDefaults,
+        ...(settings.challengeSettings?.globalDefaults || {}),
+    };
+    // Same rule as getEffectiveSetting: challengeOnly keys inherit the schema
+    // default, never a stored global value.
+    for (const key of Object.keys(SETTINGS_SCHEMA)) {
+        if (SETTINGS_SCHEMA[key].challengeOnly) values[key] = SETTINGS_SCHEMA[key].default;
+    }
+    return values;
+};
 
 const _isTitleProfileSuppressed = (settings, challengeId) => {
     const id = challengeId === null || challengeId === undefined ? '' : String(challengeId);

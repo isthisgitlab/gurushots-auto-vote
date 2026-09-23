@@ -236,6 +236,7 @@ describe('get-settings-schema', () => {
                     type: 'number',
                     default: 3600,
                     perChallenge: true,
+                    challengeOnly: false,
                     group: 'boost',
                     label: 'Boost',
                     description: 'd',
