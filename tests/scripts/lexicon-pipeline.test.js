@@ -11,7 +11,7 @@
  */
 
 const crypto = require('node:crypto');
-const { buildAsset } = require('../../scripts/build-lexicon');
+const { buildAsset, buildConcreteAxis } = require('../../scripts/build-lexicon');
 const { percentile, validateConfigRefs } = require('../../scripts/validate-lexicon');
 const {
     collectAuthoredWords,
@@ -79,6 +79,79 @@ describe('build-lexicon buildAsset', () => {
     test('the same word twice in ONE cluster is not a collision', () => {
         const concepts = { concepts: [{ id: 'cat', parent: 'pet', words: ['cat', 'cats'] }] };
         expect(buildAsset(intermediate, concepts).collisions).toEqual([]);
+    });
+});
+
+describe('build-lexicon concreteness axis', () => {
+    // Real 4-d int8 vectors (base64 of the two's-complement bytes), unlike the
+    // 'AAAA' placeholders above, which decode to the wrong length and are skipped.
+    const pack = (...bytes) => Buffer.from(Int8Array.from(bytes).buffer).toString('base64');
+    const asset = {
+        dims: 4,
+        scale: 0.01,
+        packed: {
+            cat: pack(100, 0, 0, 0),
+            dog: pack(0, 100, 0, 0),
+            idea: pack(0, 0, 100, 0),
+            same: pack(100, 0, 0, 0),
+        },
+    };
+    const concepts = (concreteness, extra = []) => ({
+        concepts: [
+            { id: 'cat', parent: 'pet', words: ['cat'] },
+            { id: 'dog', parent: 'emotion', words: ['dog'] },
+            { id: 'empty', parent: 'pet' },
+            ...extra,
+        ],
+        concreteness,
+    });
+    const authored = (c) => collectAuthoredWords(c).bySurface;
+    const axisOf = (c) => buildConcreteAxis(asset, c, authored(c));
+
+    test('no concreteness block ships no axis and reports nothing', () => {
+        expect(axisOf(concepts(undefined))).toEqual({ axis: undefined, missing: [], collisions: [] });
+        expect(buildAsset({ ...asset }, concepts(undefined)).output).not.toHaveProperty('concreteAxis');
+    });
+
+    test('points from the anchor mean to the concrete mean, skipping excluded parents', () => {
+        const c = concepts({ excludeParents: ['emotion'], abstractAnchors: ['Idea'] });
+        const { axis, missing, collisions } = axisOf(c);
+        expect(missing).toEqual([]);
+        expect(collisions).toEqual([]);
+        // cat (1,0,0,0) minus idea (0,0,1,0), normalised; dog's parent is excluded.
+        expect(axis).toEqual([0.707107, 0, -0.707107, 0]);
+        expect(buildAsset(asset, c).output.concreteAxis).toEqual(axis);
+    });
+
+    test('without excludeParents every concept word joins the concrete pole', () => {
+        const { axis } = axisOf(concepts({ abstractAnchors: ['idea'] }));
+        expect(axis[1]).toBeGreaterThan(0);
+    });
+
+    test('reports an anchor with no vector as missing, and ships no axis without anchors', () => {
+        const c = concepts({ abstractAnchors: ['ghost'] });
+        const { axis, missing } = axisOf(c);
+        expect(axis).toBeUndefined();
+        expect(missing).toEqual(['ghost (stem "ghost", abstractAnchors)']);
+        expect(buildAsset(asset, c).missing).toContain('ghost (stem "ghost", abstractAnchors)');
+        expect(axisOf(concepts({})).axis).toBeUndefined();
+    });
+
+    test('reports an anchor that is also an authored concept word as a collision', () => {
+        const c = concepts({ abstractAnchors: ['cat'] });
+        expect(axisOf(c).collisions).toEqual(['cat (abstract anchor is also a cat word)']);
+        expect(buildAsset(asset, c).collisions).toEqual(['cat (abstract anchor is also a cat word)']);
+    });
+
+    test('identical poles collapse to a zero axis instead of dividing by zero', () => {
+        const { axis } = axisOf(concepts({ excludeParents: ['emotion'], abstractAnchors: ['same'] }));
+        expect(axis).toEqual([0, 0, 0, 0]);
+    });
+
+    test('tolerates a concepts file with no concept list', () => {
+        expect(
+            buildConcreteAxis(asset, { concreteness: { abstractAnchors: ['idea'] } }, new Map()).axis,
+        ).toBeUndefined();
     });
 });
 

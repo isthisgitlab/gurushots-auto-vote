@@ -66,6 +66,8 @@ const STOPWORDS = new Set([
     'an',
     'and',
     'or',
+    'vs',
+    'versus',
     'with',
     'on',
     'for',
@@ -371,6 +373,58 @@ const tokenise = (text, opts) => rawTokenise(text, opts).map(stem);
 // those letters ("king", "ring", "wing" — all plausible subjects) are not caught.
 const isParticiple = (word) => word.length > 5 && word.endsWith('ing');
 
+// Bounds for abstractTitleWords, on the lexicon's concreteness cosine. Pinned by
+// the `concreteness.cases` gate in scripts/validate-lexicon.js (real titles, run
+// on every build), so move them only with that gate green. SUBJECT_MIN is the
+// high one on purpose: GloVe reads some photographable words as abstract
+// ("people" -0.38, "nature" -0.30) and some verbs as mildly concrete ("built"
+// 0.11), so the pass only acts when one word is unmistakably a thing
+// ("balloon" 0.37) — "Built Among Nature" stays exactly as it was.
+const CONCRETE_SUBJECT_MIN = 0.15;
+const ABSTRACT_WORD_MAX = -0.1;
+
+// Lazy on purpose: semantic/lexicon.js requires this module for stem(), so a
+// top-level require would hand it a half-built exports object.
+const lexiconConcreteness = (word) => require('./semantic/lexicon').concreteness(word);
+
+/**
+ * Which title words are clearly NOT the subject, judged by meaning rather than
+ * by a word list: "Balloon Fun" is about balloons, "Glass Findings" about glass,
+ * "Forever Flowers" about flowers. Positional rules cannot see this — the
+ * head-noun heuristic in buildSearchTerms reads "Balloon Fun" right-to-left and
+ * searched "fun" first — and a stoplist can never keep up with titles that
+ * change every week. The lexicon's concreteness axis scores any in-vocabulary
+ * word, including ones nobody has seen in a title before.
+ *
+ * Returns the words to demote: those reading as abstract, but ONLY when another
+ * word in the same title is clearly a thing. A title with no concrete anchor
+ * ("Creative Focus", "People and Architecture") returns nothing, so every
+ * caller keeps its existing behavior there — as it does whenever the lexicon is
+ * not loaded or a word is out of vocabulary (null concreteness = no opinion).
+ *
+ * @param {string[]} words - title words (surface or stemmed, as the caller has them)
+ * @param {(word: string) => (number|null)} [concretenessOf]
+ * @returns {Set<string>} a subset of `words`; never all of them
+ */
+const abstractTitleWords = (words, concretenessOf = lexiconConcreteness) => {
+    const abstract = new Set();
+    if (!Array.isArray(words) || words.length < 2) return abstract;
+    const scores = words.map((word) => concretenessOf(word));
+    const known = scores.filter((score) => Number.isFinite(score));
+    if (!(Math.max(...known) >= CONCRETE_SUBJECT_MIN)) return abstract;
+    words.forEach((word, i) => {
+        if (Number.isFinite(scores[i]) && scores[i] <= ABSTRACT_WORD_MAX) abstract.add(word);
+    });
+    return abstract;
+};
+
+// A title's subject stems with abstractTitleWords' demotions removed. Safe to
+// apply blindly: the result is never empty for a non-empty input.
+const withoutAbstract = (stems) => {
+    const abstract = abstractTitleWords(stems);
+    return abstract.size > 0 ? stems.filter((s) => !abstract.has(s)) : stems;
+};
+
 // Series titles name the run, then the actual subject: "Color Hunt: Green",
 // "Screen Stars: Mountains", "Guru Picks: Portraits". Everything before the
 // separator is the series, so the subject is what follows it.
@@ -549,7 +603,11 @@ const buildChallengeKeywords = (challenge, ignoreWords = null) => {
     const fromTitle = tokenise(title, opts);
     const fromUrl = tokenise(challenge?.url, opts);
     const fromWelcome = tokenise(challenge?.welcome_message, opts);
-    const all = dropNegated([...fromTitle, ...fromUrl, ...fromWelcome], negation);
+    // A title word judged not-the-subject ("fun" in "Balloon Fun") is dropped
+    // from every source: the slug and the prose repeat it, and here it would
+    // score every photo vision-labelled "Fun" as on theme.
+    const abstract = abstractTitleWords(fromTitle);
+    const all = dropNegated([...fromTitle, ...fromUrl, ...fromWelcome], negation).filter((s) => !abstract.has(s));
     // title + url first, so if the cap bites it is the long welcome_message prose
     // that gets dropped, never the title — which is where the subject actually is.
     return Array.from(new Set(all)).slice(0, MAX_CHALLENGE_KEYWORDS);
@@ -598,11 +656,15 @@ const buildThemeKeywords = (challenge, ignoreWords = null) => {
     // "human" for "No Humans" pulls the vector straight at photos of people.
     const negation = parseNegation(challenge?.title, ignoreWords);
     const title = negation.active ? negation.positiveTitle : challenge?.title;
-    const fromTitle = dropNegated(tokenise(titleSubject(title, ignoreWords), opts), negation);
+    // Pooling is where an abstract word hurts most — "fun" averaged into
+    // "balloon" drags the theme toward parties and laughter — so only the
+    // subject words are pooled (see abstractTitleWords).
+    const fromTitle = withoutAbstract(dropNegated(tokenise(titleSubject(title, ignoreWords), opts), negation));
     if (fromTitle.length > 0) return Array.from(new Set(fromTitle)).slice(0, MAX_CHALLENGE_KEYWORDS);
     // Title said nothing usable — the slug is the only signal left, and with no
     // title to contradict it there is nothing for a stale one to poison.
-    return Array.from(new Set(dropNegated(tokenise(challenge?.url, opts), negation))).slice(0, MAX_CHALLENGE_KEYWORDS);
+    const fromUrl = withoutAbstract(dropNegated(tokenise(challenge?.url, opts), negation));
+    return Array.from(new Set(fromUrl)).slice(0, MAX_CHALLENGE_KEYWORDS);
 };
 
 // Minimum stem length for the fuzzy (prefix) branch of matches(). Below this a
@@ -880,9 +942,16 @@ const buildSearchTerms = (challenge, opts = {}) => {
         // A participle is a modifier, never the subject: "Leading with Lines" is
         // about lines, "Cats and Dogs Running" is about cats and dogs. Sink them
         // behind the nouns, then read the nouns right-to-left.
-        const participles = words.filter(isParticiple);
-        const heads = words.filter((w) => !isParticiple(w)).reverse();
-        terms = dropNegated([...heads, ...participles].map(stem), negation);
+        //
+        // Last of all go the words that mean an idea rather than a thing:
+        // head-noun-first reads "Balloon Fun" as a kind of fun and would
+        // search "fun" first. Demoted, not dropped — a library tagged only
+        // "fun" still has something to find once the subject misses.
+        const abstract = abstractTitleWords(words);
+        const participles = words.filter((w) => isParticiple(w) && !abstract.has(w));
+        const heads = words.filter((w) => !isParticiple(w) && !abstract.has(w)).reverse();
+        const ideas = words.filter((w) => abstract.has(w)).reverse();
+        terms = dropNegated([...heads, ...participles, ...ideas].map(stem), negation);
     }
     return Array.from(new Set(terms)).slice(0, SEARCH_TERMS_CAP);
 };
@@ -1347,6 +1416,7 @@ module.exports = {
     matches,
     buildChallengeKeywords,
     buildThemeKeywords,
+    abstractTitleWords,
     scorePhoto,
     tokeniseTagList,
     wholeLabelStems,

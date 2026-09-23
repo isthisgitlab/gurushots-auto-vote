@@ -313,7 +313,10 @@ const download = async ({ cacheDir, zipPath, url, maxBytes }) => {
                 yield chunk;
             }
         };
-        await pipeline(res.body, capped, fs.createWriteStream(tmpPath));
+        // Open the file HERE, synchronously, not inside createWriteStream: its
+        // async open can land after a failed pipeline has already run the
+        // cleanup below, re-creating the .partial file it just removed.
+        await pipeline(res.body, capped, fs.createWriteStream(tmpPath, { fd: fs.openSync(tmpPath, 'w') }));
         fs.renameSync(tmpPath, zipPath);
     } catch (err) {
         fs.rmSync(tmpPath, { force: true });

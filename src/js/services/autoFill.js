@@ -33,6 +33,7 @@ const {
     hasThemeMatch,
 } = require('./photoPicker');
 const { getSemanticScores } = require('./semantic');
+const lexicon = require('./semantic/lexicon');
 const { resolveTermsToTags } = require('./tagResolver');
 const { enrichCandidates, resetPassState: resetPhotoStatsPassState } = require('./photoStats');
 const { oneLine } = require('../format/logSafe');
@@ -287,6 +288,13 @@ const fetchCandidatesForChallenge = async (
     // caller keeps the exact option shape it always sent (usage defaults to submit).
     const usageOpt = usage === 'swap' ? { usage } : {};
     const ignoreWords = (tagOpts && tagOpts.ignoreWords) || null;
+    // buildSearchTerms reads the lexicon synchronously to tell a title's subject
+    // from its mood word (see abstractTitleWords) and falls back to word order
+    // when it is not loaded yet — so load it first, or the very first fill after
+    // launch would search "fun" before "balloon". Every fill and join enters
+    // here, so this one await covers the scoring that follows too. Never
+    // rejects: an unavailable asset resolves false and ordering stays positional.
+    await lexicon.isAvailable();
     const terms = buildSearchTerms(challenge, tagOpts);
     // A letter challenge ("Begins With L") yields no search terms on purpose —
     // the library is fetched unfiltered and narrowed client-side by the letter

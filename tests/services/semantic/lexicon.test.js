@@ -57,6 +57,19 @@ describe('semantic lexicon backend', () => {
         expect(sim(['sunflower'], ['flower'])).toBeGreaterThan(FLOOR);
     });
 
+    test('the shipped concreteness axis tells a thing from an idea', async () => {
+        await lexicon.init();
+        // The words the title-subject pass hinges on. None of the ideas is an
+        // abstract anchor, so that side is the axis generalising, not recalling
+        // a list.
+        for (const thing of ['balloon', 'flower', 'lighthouse', 'kite', 'candy']) {
+            expect(lexicon.concreteness(thing)).toBeGreaterThan(0.15);
+        }
+        for (const idea of ['fun', 'love', 'forever', 'culture', 'moment']) {
+            expect(lexicon.concreteness(idea)).toBeLessThan(-0.1);
+        }
+    });
+
     test('unrelated concepts score below the floor', async () => {
         await lexicon.init();
         expect(sim(['cat'], ['skyscraper'])).toBeLessThan(FLOOR);

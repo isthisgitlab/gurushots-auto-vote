@@ -34,6 +34,9 @@ const { stem } = require('../src/js/services/photoPicker');
 // hand-rolled copies of "stem -> owner, fail on cross-cluster collision"
 // would drift apart silently.
 const { collectAuthoredWords, sha256OfString } = require('./fetch-embeddings');
+// The runtime's own decode + pooling, so the shipped axis is measured in exactly
+// the space concreteness() later projects onto.
+const { buildTable, embedIn } = require('../src/js/services/semantic/lexicon');
 const { runIfMain } = require('./lib/run-if-main');
 
 const ROOT = path.join(__dirname, '..');
@@ -43,6 +46,54 @@ const CONCEPTS_PATH = path.join(__dirname, 'lexicon-concepts.json');
 const OUT_ASSET = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const DIST_DIR = path.join(ROOT, 'dist');
 const OUT_DIST_NAME = 'semantic-vectors.json';
+
+// Six decimals is far below int8 vector precision and keeps the asset
+// byte-identical across runs (no float-formatting drift in the last digits).
+const AXIS_DECIMALS = 6;
+
+/**
+ * Derive the concreteness axis (see concreteness() in
+ * src/js/services/semantic/lexicon.js) from the `concreteness` block of the
+ * concepts file: unit(mean(concrete words) - mean(abstract anchors)).
+ *
+ * No block -> no axis, and the runtime reads that as "no opinion" everywhere.
+ * An anchor with no vector is reported as missing (fatal, like an authored
+ * word); an anchor that is ALSO an authored concept word is a collision (fatal)
+ * — it would sit on both poles at once.
+ *
+ * @param {{packed: object, dims: number, scale: number}} asset - the asset
+ *   being assembled (its vectors are what the axis must be measured against)
+ * @param {object} concepts
+ * @param {Map<string,string>} authored - surface word -> owning concept
+ * @returns {{axis: Array<number>|undefined, missing: Array<string>, collisions: Array<string>}}
+ */
+const buildConcreteAxis = ({ packed, dims, scale }, concepts, authored) => {
+    const config = concepts && concepts.concreteness;
+    const missing = [];
+    const collisions = [];
+    if (!config) return { axis: undefined, missing, collisions };
+
+    const anchors = (config.abstractAnchors || []).map((w) => String(w).toLowerCase());
+    for (const anchor of anchors) {
+        if (authored.has(anchor)) collisions.push(`${anchor} (abstract anchor is also a ${authored.get(anchor)} word)`);
+        const key = stem(anchor);
+        if (!Object.prototype.hasOwnProperty.call(packed, key)) {
+            missing.push(`${anchor} (stem "${key}", abstractAnchors)`);
+        }
+    }
+
+    const excluded = new Set(config.excludeParents || []);
+    const concrete = (concepts.concepts || []).filter((c) => !excluded.has(c.parent)).flatMap((c) => c.words || []);
+    const table = buildTable({ version: 2, dims, scale, packed });
+    const pos = embedIn(table, concrete);
+    const neg = embedIn(table, anchors);
+    if (!pos || !neg) return { axis: undefined, missing, collisions };
+
+    const diff = pos.map((v, i) => v - neg[i]);
+    const norm = Math.sqrt(diff.reduce((acc, v) => acc + v * v, 0)) || 1;
+    const axis = Array.from(diff, (v) => Number((v / norm).toFixed(AXIS_DECIMALS)));
+    return { axis, missing, collisions };
+};
 
 /**
  * Validate the authored vocabulary against the intermediate and assemble the
@@ -75,7 +126,10 @@ const buildAsset = (intermediate, concepts) => {
         retrofitBeta: intermediate && Number.isFinite(intermediate.retrofitBeta) ? intermediate.retrofitBeta : 0,
         packed,
     };
-    return { output, missing, collisions };
+    const axis = buildConcreteAxis(output, concepts, bySurface);
+    if (axis.axis) output.concreteAxis = axis.axis;
+    missing.push(...axis.missing);
+    return { output, missing, collisions: [...collisions, ...axis.collisions] };
 };
 
 /**
@@ -149,6 +203,6 @@ const main = ({
     );
 };
 
-module.exports = { buildAsset, main };
+module.exports = { buildAsset, buildConcreteAxis, main };
 
 runIfMain(require.main, module, main);

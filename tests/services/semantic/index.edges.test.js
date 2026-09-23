@@ -8,6 +8,8 @@ jest.mock('../../../src/js/services/semantic/lexicon', () => ({
     isAvailable: jest.fn(async () => true),
     embed: jest.fn(() => [1, 0]),
     cosine: jest.fn(() => 0.9),
+    // No opinion: title-subject ordering stays positional under this stub.
+    concreteness: jest.fn(() => null),
 }));
 
 const lexicon = require('../../../src/js/services/semantic/lexicon');

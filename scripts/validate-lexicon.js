@@ -57,7 +57,7 @@
 
 const path = require('node:path');
 const lexicon = require('../src/js/services/semantic/lexicon');
-const { SEMANTIC_MATCH_FLOOR } = require('../src/js/services/photoPicker');
+const { SEMANTIC_MATCH_FLOOR, abstractTitleWords, tokenise } = require('../src/js/services/photoPicker');
 const { runIfMain } = require('./lib/run-if-main');
 
 const CONFIG = require(path.join(__dirname, 'lexicon-concepts.json'));
@@ -99,6 +99,50 @@ const validateConfigRefs = (config) => {
         }
     }
     return errors;
+};
+
+/**
+ * The title-subject gate: every `concreteness.cases` title must demote EXACTLY
+ * the words it lists — no more (a real subject pushed aside), no fewer (the
+ * mood word still leading the search). Runs the runtime's own
+ * abstractTitleWords over the runtime's own tokeniser, against `lex`, so it
+ * judges the asset that ships.
+ *
+ * @param {Array<{title: string, abstract: string[]}>} cases
+ * @param {{concreteness: function(string): (number|null)}} lex
+ * @returns {string[]} one line per failing case
+ */
+const checkSubjectCases = (cases, lex) => {
+    const failures = [];
+    for (const { title, abstract } of cases) {
+        const got = [...abstractTitleWords(tokenise(title), (word) => lex.concreteness(word))].sort();
+        const want = [...abstract].sort();
+        if (JSON.stringify(got) !== JSON.stringify(want)) {
+            failures.push(`"${title}" demotes [${got.join(', ')}], expected [${want.join(', ')}]`);
+        }
+    }
+    return failures;
+};
+
+/**
+ * Report the title-subject cases and fail the build on any misread one.
+ *
+ * @param {object} config - the concepts file
+ * @param {{concreteness: function(string): (number|null)}} lex
+ */
+const runSubjectGate = (config, lex) => {
+    const cases = (config.concreteness && config.concreteness.cases) || [];
+    const failures = checkSubjectCases(cases, lex);
+    console.log(`  title-subject cases: ${cases.length - failures.length}/${cases.length} read correctly`);
+    if (failures.length === 0) return;
+    console.error('\n❌ Title-subject cases misread (`concreteness.cases` in scripts/lexicon-concepts.json):');
+    for (const f of failures) console.error(`   - ${f}`);
+    console.error(
+        '\n   Fix the axis first — `abstractAnchors` / `excludeParents` — then rebuild. Move\n' +
+            '   CONCRETE_SUBJECT_MIN / ABSTRACT_WORD_MAX (src/js/services/photoPicker.js) only for a case\n' +
+            '   that genuinely sits on the boundary, and never edit a case to match the output.',
+    );
+    process.exit(1);
 };
 
 /**
@@ -281,9 +325,11 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
         process.exit(1);
     }
 
+    runSubjectGate(config, lex);
+
     console.log(`\n✅ Floor sits in the gap: ${fmt(unrelP99)} < ${fmt(floor)} < ${fmt(relP25)}`);
 };
 
-module.exports = { percentile, validateConfigRefs, main };
+module.exports = { percentile, validateConfigRefs, checkSubjectCases, main };
 
 runIfMain(require.main, module, main);

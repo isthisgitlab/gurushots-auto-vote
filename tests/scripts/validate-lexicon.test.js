@@ -7,7 +7,7 @@
  */
 
 const lexicon = require('../../src/js/services/semantic/lexicon');
-const { main } = require('../../scripts/validate-lexicon');
+const { main, checkSubjectCases } = require('../../scripts/validate-lexicon');
 
 // Fake lexicon: embed() mean-pools the known words (null when none are known),
 // cosine() is a plain dot product. 'nan' embeds to a non-finite vector so the
@@ -32,6 +32,8 @@ const fakeLex = {
         return out;
     },
     cosine: (a, b) => a[0] * b[0] + a[1] * b[1],
+    // Title-subject axis: "balloon" is a thing, "fun" an idea, "zzz" unknown.
+    concreteness: (word) => ({ balloon: 0.4, fun: -0.3 })[word] ?? null,
 };
 
 const CONCEPTS = [
@@ -147,5 +149,36 @@ describe('validate-lexicon main', () => {
         await expect(run(BASE_CONFIG, 100)).rejects.toThrow('exit 1');
         expect(errors()).toContain('genuinely on-theme photos would be discarded');
         expect(errors()).not.toContain('noise would be scored');
+    });
+
+    test('reports the title-subject cases it checked when they all read correctly', async () => {
+        await run({ ...BASE_CONFIG, concreteness: { cases: [{ title: 'Balloon Fun', abstract: ['fun'] }] } });
+        expect(logs()).toContain('title-subject cases: 1/1 read correctly');
+        expect(logs()).toContain('✅ Floor sits in the gap');
+    });
+
+    test('fails on a misread title-subject case even when the floor is sound', async () => {
+        const config = { ...BASE_CONFIG, concreteness: { cases: [{ title: 'Balloon Fun', abstract: [] }] } };
+        await expect(run(config)).rejects.toThrow('exit 1');
+        expect(errors()).toContain('Title-subject cases misread');
+        expect(errors()).toContain('"Balloon Fun" demotes [fun], expected []');
+        expect(logs()).not.toContain('✅');
+    });
+});
+
+describe('validate-lexicon checkSubjectCases', () => {
+    test('passes a case whose demotions match exactly, in any order', () => {
+        expect(checkSubjectCases([{ title: 'Balloon Fun', abstract: ['fun'] }], fakeLex)).toEqual([]);
+    });
+
+    test('flags both a missed demotion and an unexpected one', () => {
+        const failures = checkSubjectCases(
+            [
+                { title: 'Balloon Fun', abstract: [] },
+                { title: 'Fun Zzz', abstract: ['fun'] }, // no concrete anchor -> nothing demoted
+            ],
+            fakeLex,
+        );
+        expect(failures).toEqual(['"Balloon Fun" demotes [fun], expected []', '"Fun Zzz" demotes [], expected [fun]']);
     });
 });

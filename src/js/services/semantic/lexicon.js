@@ -50,6 +50,15 @@ const decodeBase64Int8 = (str) => {
     }
 };
 
+// The concreteness direction build-lexicon.js derives from the table itself
+// (see concreteness below). Optional: an asset without one — or with one that
+// does not fit this table — just leaves concreteness() returning null, which
+// every caller already reads as "no opinion".
+const readAxis = (axis, dims) => {
+    if (!Array.isArray(axis) || axis.length !== dims || !axis.every(Number.isFinite)) return null;
+    return Float64Array.from(axis);
+};
+
 const buildTable = (raw) => {
     if (!raw || typeof raw !== 'object' || raw.version !== 2 || !raw.packed || typeof raw.packed !== 'object') {
         return null;
@@ -68,7 +77,7 @@ const buildTable = (raw) => {
         for (let i = 0; i < dims; i++) vec[i] = bytes[i] * scale;
         words.set(key, vec);
     }
-    return words.size > 0 ? { dims, words } : null;
+    return words.size > 0 ? { dims, words, axis: readAxis(raw.concreteAxis, dims) } : null;
 };
 
 /**
@@ -111,11 +120,11 @@ const stemToken = (t) => stem(String(t).toLowerCase());
  * @param {string} tok
  * @returns {Float32Array|undefined}
  */
-const vectorFor = (tok) => {
+const vectorFor = (tbl, tok) => {
     const key = stemToken(tok);
-    const hit = table.words.get(key);
+    const hit = tbl.words.get(key);
     if (hit) return hit;
-    return key.length > 3 && key.endsWith('e') ? table.words.get(key.slice(0, -1)) : undefined;
+    return key.length > 3 && key.endsWith('e') ? tbl.words.get(key.slice(0, -1)) : undefined;
 };
 
 /**
@@ -123,16 +132,21 @@ const vectorFor = (tok) => {
  * normalize to a unit vector. Returns null when none of the tokens are in the
  * lexicon (no signal to contribute).
  *
+ * Takes the table explicitly so scripts/build-lexicon.js pools the concreteness
+ * poles with exactly the arithmetic the runtime scores against; embed() below
+ * is this over the loaded table.
+ *
+ * @param {{dims:number, words:Map<string,Float32Array>}|null|undefined} tbl
  * @param {Array<string>} tokens
  * @returns {Float64Array|null}
  */
-const embed = (tokens) => {
-    if (!table || !Array.isArray(tokens) || tokens.length === 0) return null;
-    const dims = table.dims;
+const embedIn = (tbl, tokens) => {
+    if (!tbl || !Array.isArray(tokens) || tokens.length === 0) return null;
+    const dims = tbl.dims;
     const acc = new Float64Array(dims);
     let hits = 0;
     for (const tok of tokens) {
-        const vec = vectorFor(tok);
+        const vec = vectorFor(tbl, tok);
         if (!vec) continue;
         for (let i = 0; i < dims; i++) acc[i] += vec[i];
         hits++;
@@ -145,6 +159,12 @@ const embed = (tokens) => {
     return acc;
 };
 
+/**
+ * @param {Array<string>} tokens
+ * @returns {Float64Array|null}
+ */
+const embed = (tokens) => embedIn(table, tokens);
+
 // Cosine similarity. Both inputs come from embed() and are already unit
 // vectors, so the dot product is the cosine.
 const cosine = (a, b) => {
@@ -154,10 +174,33 @@ const cosine = (a, b) => {
     return dot;
 };
 
+/**
+ * How much `token` names a photographable THING rather than an idea, as a
+ * cosine in -1..1 (positive = concrete). Null when the lexicon is not loaded,
+ * the asset carries no axis, or the word is out of vocabulary.
+ *
+ * The axis is the direction from an abstract pole (a handful of anchor words
+ * like "idea", "feeling", "success") to the centroid of every curated visual
+ * subject in scripts/lexicon-concepts.json — the "semantic axis" construction
+ * (An, Kwak & Ahn 2018). It is a PROPERTY OF THE VECTOR SPACE, not a list: a
+ * title word nobody has ever authored still lands somewhere on it, which is the
+ * point — challenge names change every week, and "Balloon Fun" must read as
+ * balloons without anyone having written down that "fun" is not a subject.
+ * scripts/validate-lexicon.js gates the build on real titles reading correctly.
+ *
+ * @param {string} token
+ * @returns {number|null}
+ */
+const concreteness = (token) => {
+    if (!table || !table.axis) return null;
+    const vec = embed([token]);
+    return vec ? cosine(vec, table.axis) : null;
+};
+
 // Test-only: drop the loaded table so a test can re-init from a fresh asset.
 const __resetForTests = () => {
     table = undefined;
     initPromise = null;
 };
 
-module.exports = { init, isAvailable, embed, cosine, buildTable, __resetForTests };
+module.exports = { init, isAvailable, embed, embedIn, cosine, concreteness, buildTable, __resetForTests };
