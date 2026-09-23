@@ -20,6 +20,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.VisibleForTesting
 import androidx.core.app.NotificationCompat
+import androidx.webkit.WebViewAssetLoader
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -81,7 +82,7 @@ class AutoVoteService : Service() {
         // @capacitor/preferences store the JS settings module reads/writes.
         private const val PREFS_FILE = "CapacitorStorage"
         private const val SETTINGS_KEY = "gurushots-settings"
-        private const val HEADLESS_URL = "file:///android_asset/public/headless.html"
+        private const val HEADLESS_URL = "https://appassets.androidplatform.net/assets/public/headless.html"
 
         // Test seam: JVM unit tests swap in a client whose interceptor reroutes
         // the (allow-listed) api.gurushots.com requests to a local MockWebServer.
@@ -234,12 +235,12 @@ class AutoVoteService : Service() {
         val wv = WebView(this)
         wv.settings.javaScriptEnabled = true
         wv.settings.domStorageEnabled = true
-        wv.settings.allowFileAccess = true
-        // Defense in depth: cross-origin file-URL access stays at the secure
-        // defaults (allowFileAccessFromFileURLs / allowUniversalAccessFromFileURLs
-        // are false by default on all supported API levels and are deprecated —
-        // setting them explicitly only adds a deprecation warning), so a file://
-        // page can't read other file:// origins.
+        wv.settings.allowFileAccess = false
+        // Local HTTPS origin lets the headless JS fetch packaged model and
+        // lexicon assets without granting file:// cross-origin access.
+        val assetLoader = WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
         wv.addJavascriptInterface(HeadlessHttp(), "AndroidHeadlessHttp")
         wv.addJavascriptInterface(HeadlessStore(), "AndroidHeadlessStore")
         wv.addJavascriptInterface(HeadlessBridge(), "AndroidHeadlessBridge")
@@ -253,6 +254,11 @@ class AutoVoteService : Service() {
             }
         }
         wv.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(
+                view: WebView?,
+                request: android.webkit.WebResourceRequest?,
+            ): android.webkit.WebResourceResponse? = request?.url?.let(assetLoader::shouldInterceptRequest)
+
             override fun onPageFinished(view: WebView?, url: String?) {
                 // Only the headless document marks readiness — guards against a
                 // subframe load firing this on older WebView versions.

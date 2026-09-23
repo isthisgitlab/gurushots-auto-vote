@@ -11,6 +11,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.ServiceInfo
+import android.net.Uri
 import android.os.Looper
 import android.webkit.ConsoleMessage
 import android.webkit.WebResourceError
@@ -57,7 +58,7 @@ import java.util.concurrent.TimeUnit
 class AutoVoteServiceTest {
 
     private companion object {
-        const val HEADLESS_URL = "file:///android_asset/public/headless.html"
+        const val HEADLESS_URL = "https://appassets.androidplatform.net/assets/public/headless.html"
         const val MINUTE = 60_000L
     }
 
@@ -141,6 +142,7 @@ class AutoVoteServiceTest {
         assertEquals(Service.START_STICKY, svc.command(AutoVoteService.ACTION_START))
         idle()
         val wv = svc.webView()!!
+        assertFalse(wv.settings.allowFileAccess)
         shadowOf(wv).webViewClient.onPageFinished(wv, HEADLESS_URL)
         clearAlarms()
         return svc
@@ -240,7 +242,7 @@ class AutoVoteServiceTest {
         assertEquals(HEADLESS_URL, shadowWv.lastLoadedUrl)
         assertTrue(wv.settings.javaScriptEnabled)
         assertTrue(wv.settings.domStorageEnabled)
-        assertTrue(wv.settings.allowFileAccess)
+        assertFalse(wv.settings.allowFileAccess)
         assertTrue(shadowWv.getJavascriptInterface("AndroidHeadlessHttp") is AutoVoteService.HeadlessHttp)
         assertTrue(shadowWv.getJavascriptInterface("AndroidHeadlessStore") is AutoVoteService.HeadlessStore)
         assertTrue(shadowWv.getJavascriptInterface("AndroidHeadlessBridge") is AutoVoteService.HeadlessBridge)
@@ -252,6 +254,23 @@ class AutoVoteServiceTest {
         val svc = newService()
         svc.command(AutoVoteService.ACTION_START)
         assertNull(shadowOf(svc).lastForegroundNotification.contentIntent)
+    }
+
+    @Test
+    fun headlessAssetLoaderServesPackagedPageOnlyOnItsHttpsOrigin() {
+        val svc = newService()
+        svc.command(AutoVoteService.ACTION_START)
+        idle()
+        val wv = svc.webView()!!
+        val client = shadowOf(wv).webViewClient
+        val request = mockk<WebResourceRequest>()
+
+        assertNull(client.shouldInterceptRequest(wv, null as WebResourceRequest?))
+        every { request.url } returns Uri.parse(HEADLESS_URL)
+        assertNotNull(client.shouldInterceptRequest(wv, request))
+
+        every { request.url } returns Uri.parse("https://example.com/assets/public/headless.html")
+        assertNull(client.shouldInterceptRequest(wv, request))
     }
 
     @Test
