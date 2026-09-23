@@ -48,14 +48,6 @@ jobs:
             - name: Run linter
               run: pnpm lint
 
-            # ttsc runs the type-check (JSDoc + checkJs opt-in) AND the
-            # @ttsc/lint pass (lint.config.ts) in one compile — a red run here
-            # can be either a type error or an error-severity lint rule. The
-            # band hint lives in the step name because Actions never shows
-            # YAML comments in the log.
-            - name: Type-check + lint via ttsc (TS9000-TS17999 = lint rule, see lint.config.ts)
-              run: pnpm typecheck
-
             # Informational only (continue-on-error) — pnpm audit --prod above
             # is the blocking gate for shipped deps; this surfaces CVEs in the
             # devDependency tree (ttsc toolchain, build tooling) that the
@@ -166,6 +158,49 @@ jobs:
                   parallel-finished: true
                   carryforward: 'js,android'
                   fail-on-error: false
+
+    typecheck:
+        # Separate standard runner: on a cold cache ttsc compiles the
+        # @ttsc/lint Go plugin from source (~6 CPU-minutes, ~25 min wall on a
+        # single core, 1.6 GiB of GOCACHE), which blows the ubuntu-slim job
+        # cap and surfaces as "The operation was canceled".
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v7
+
+            - name: Install pnpm
+              uses: pnpm/action-setup@v6
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v7
+              with:
+                  node-version: '26'
+                  cache: 'pnpm'
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            # Only the built plugin binary (~35 MB) is needed for a warm start;
+            # the multi-GiB go-build cache next to it is deliberately not saved.
+            # ttsc keys plugins by its own content hash, so a toolchain bump
+            # just misses, rebuilds once, and saves under the new lockfile key.
+            - name: Cache compiled ttsc plugins
+              uses: actions/cache@v6
+              with:
+                  path: node_modules/.cache/ttsc/plugins
+                  key: ttsc-plugins-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+                  restore-keys: ttsc-plugins-${{ runner.os }}-${{ runner.arch }}-
+
+            # ttsc runs the type-check (JSDoc + checkJs opt-in) AND the
+            # @ttsc/lint pass (lint.config.ts) in one compile — a red run here
+            # can be either a type error or an error-severity lint rule. The
+            # band hint lives in the step name because Actions never shows
+            # YAML comments in the log.
+            - name: Type-check + lint via ttsc (TS9000-TS17999 = lint rule, see lint.config.ts)
+              run: pnpm typecheck
 
     knip:
         # knip runs on a separate, standard runner: its parser (oxc-parser)
