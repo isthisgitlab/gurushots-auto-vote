@@ -30,6 +30,7 @@
 
 - **Test Organization**: All test files must be placed in the `tests/` directory following proper Jest conventions and structure.
 - **Mock Configuration**: Never use `mock: false` in any Jest or testing commands - use proper mocking strategies instead.
+- **100% coverage gate**: CI fails on anything below 100% — Jest via `coverageThreshold` (all four metrics, `pnpm test:coverage`), Android via `./gradlew jacocoTestCoverageVerification` (zero missed on every JaCoCo counter). New code ships with tests; `istanbul ignore` is only for branches genuinely unreachable under Jest, with a comment saying why.
 
 ## UI/UX Standards
 

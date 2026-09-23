@@ -55,33 +55,56 @@ jacoco {
     toolVersion = rootProject.ext.jacocoVersion
 }
 
-// JVM unit-test coverage report (XML for Coveralls, HTML for humans):
-//   ./gradlew testDebugUnitTest jacocoTestReport
+// JVM unit-test coverage report (XML for Coveralls, HTML for humans) and the
+// 100% gate that fails the build on any uncovered code:
+//   ./gradlew testDebugUnitTest jacocoTestReport jacocoTestCoverageVerification
 //   -> app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
 // Only first-party app code is measured; generated R / BuildConfig / Manifest
 // classes are excluded.
-tasks.register('jacocoTestReport', JacocoReport) {
-    dependsOn 'testDebugUnitTest'
-    group = 'verification'
-    description = 'JaCoCo coverage report for the debug JVM unit tests.'
+def configureJacocoInputs = { task ->
+    task.dependsOn 'testDebugUnitTest'
+    task.group = 'verification'
 
     def generated = [
         '**/R.class', '**/R$*.class',
         '**/BuildConfig.*', '**/Manifest*.*',
     ]
     def buildDir = layout.buildDirectory
-    classDirectories.setFrom(files(
+    task.classDirectories.setFrom(files(
         buildDir.dir('tmp/kotlin-classes/debug').map { fileTree(it) { exclude generated } },
         buildDir.dir('intermediates/javac/debug/compileDebugJavaWithJavac/classes').map { fileTree(it) { exclude generated } },
     ))
-    sourceDirectories.setFrom(files('src/main/java'))
-    executionData.setFrom(fileTree(buildDir) {
+    task.sourceDirectories.setFrom(files('src/main/java'))
+    task.executionData.setFrom(fileTree(buildDir) {
         include 'outputs/unit_test_code_coverage/debugUnitTest/*.exec'
     })
+}
+
+tasks.register('jacocoTestReport', JacocoReport) {
+    configureJacocoInputs(it)
+    description = 'JaCoCo coverage report for the debug JVM unit tests.'
     reports {
         xml.required = true
         html.required = true
         csv.required = false
+    }
+}
+
+tasks.register('jacocoTestCoverageVerification', JacocoCoverageVerification) {
+    configureJacocoInputs(it)
+    description = 'Fails unless the debug JVM unit tests cover 100% of first-party code.'
+    violationRules {
+        rule {
+            // MISSEDCOUNT == 0 rather than COVEREDRATIO >= 1.0: an exact integer
+            // check, and the failure message names how many items are uncovered.
+            ['INSTRUCTION', 'BRANCH', 'LINE', 'COMPLEXITY', 'METHOD', 'CLASS'].each { counter ->
+                limit {
+                    it.counter = counter
+                    value = 'MISSEDCOUNT'
+                    maximum = 0
+                }
+            }
+        }
     }
 }
 

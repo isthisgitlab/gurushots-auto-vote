@@ -142,6 +142,12 @@ jobs:
                   flag-name: android
                   fail-on-error: false
 
+            # After the upload so a red gate still publishes the report that
+            # shows which lines are missing.
+            - name: Enforce 100% Android coverage
+              working-directory: android
+              run: ./gradlew jacocoTestCoverageVerification
+
     coverage-finish:
         # Closes the parallel Coveralls build once both the JS and the Android
         # reports are in. always() so a red test job still publishes whatever
