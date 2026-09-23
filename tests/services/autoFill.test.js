@@ -2769,6 +2769,47 @@ describe('photo-stats enrichment in the fill pipeline', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['portfolio'], 'tok');
     });
 
+    test('Most Memorable uses expired 100k+ votes ahead of a freshly measured mud photo', async () => {
+        statsStoreData = JSON.stringify({
+            version: 1,
+            photos: {
+                portfolio: {
+                    votes: 373147,
+                    views: 12000,
+                    achievementCount: 10,
+                    fetchedAt: Date.now() - photoStats.STATS_TTL_MS - 1000,
+                },
+                mud: { votes: 29000, views: 12587, achievementCount: 7, fetchedAt: Date.now() },
+            },
+        });
+        const candidates = [
+            { ...libraryPhoto('mud', 12587, 9000), labels: ['mud', 'human'] },
+            libraryPhoto('portfolio', 12000, 1000),
+            ...Array.from({ length: photoStats.MAX_ENRICH_PER_FILL }, (_, i) => libraryPhoto(`new${i}`, 1, 1)),
+        ];
+        const getImageData = jest.fn().mockResolvedValue({ votes: 1000, views: 1, achievements: [] });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true });
+
+        const result = await maybeAutoFillChallenge(
+            abstractChallenge({ title: 'Most Memorable', url: 'most-memorable' }),
+            'tok',
+            NOW,
+            {
+                settings: makeSettings({ autoFill: true }),
+                logger: makeLogger(),
+                getEligiblePhotos: jest.fn().mockResolvedValue(candidates),
+                getSemanticScores: jest.fn().mockResolvedValue(null),
+                getImageData,
+                submitToChallenge,
+            },
+        );
+
+        expect(result).toBe('submitted');
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['portfolio'], 'tok');
+        expect(getImageData).not.toHaveBeenCalledWith('portfolio', 'tok');
+        expect(getImageData).toHaveBeenCalledTimes(photoStats.MAX_ENRICH_PER_FILL);
+    });
+
     test('a clean theme match costs no enrichment requests', async () => {
         const getEligiblePhotos = jest
             .fn()

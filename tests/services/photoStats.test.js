@@ -164,6 +164,45 @@ describe('photoStats.enrichCandidates', () => {
         expect(out[0].statsKnown).toBe(true);
     });
 
+    test('expired counts survive when never-measured photos consume the lookup budget', async () => {
+        const fetchedAt = Date.now() - STATS_TTL_MS - 1000;
+        storeData = JSON.stringify({
+            version: 1,
+            photos: { portfolio: { votes: 373147, views: 12000, achievementCount: 10, fetchedAt } },
+        });
+        const unknown = Array.from({ length: MAX_ENRICH_PER_FILL }, (_, i) => photo(`new${i}`));
+        const getImageData = jest.fn().mockResolvedValue(payload(29000, 100));
+
+        const out = await enrichCandidates([photo('portfolio'), ...unknown], 'tok', { getImageData });
+
+        expect(getImageData).toHaveBeenCalledTimes(MAX_ENRICH_PER_FILL);
+        expect(getImageData).not.toHaveBeenCalledWith('portfolio', 'tok');
+        expect(out[0]).toEqual(
+            expect.objectContaining({ votes: 373147, views: 12000, achievementCount: 10, statsKnown: true }),
+        );
+        expect(JSON.parse(storeData).photos.portfolio.fetchedAt).toBe(fetchedAt);
+    });
+
+    test('a failed refresh preserves expired counts, including after the breaker opens', async () => {
+        const fetchedAt = Date.now() - STATS_TTL_MS - 1000;
+        storeData = JSON.stringify({
+            version: 1,
+            photos: { portfolio: { votes: 100000, views: 10000, achievementCount: 5, fetchedAt } },
+        });
+        const getImageData = jest.fn().mockResolvedValue(null);
+        const input = [photo('portfolio'), photo('unknown1'), photo('unknown2')];
+
+        const first = await enrichCandidates(input, 'tok', { getImageData });
+        expect(first[0]).toEqual(expect.objectContaining({ votes: 100000, statsKnown: true }));
+        expect(first.slice(1).every((entry) => !entry.statsKnown)).toBe(true);
+
+        getImageData.mockClear();
+        const second = await enrichCandidates(input, 'tok', { getImageData });
+        expect(getImageData).not.toHaveBeenCalled();
+        expect(second[0]).toEqual(expect.objectContaining({ votes: 100000, statsKnown: true }));
+        expect(JSON.parse(storeData).photos.portfolio.fetchedAt).toBe(fetchedAt);
+    });
+
     test('one photo failing leaves only that photo unknown', async () => {
         const getImageData = jest
             .fn()

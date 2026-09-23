@@ -22,11 +22,11 @@
  *     converges to full coverage over successive fills rather than being
  *     permanently pinned to one slice of it.
  *
- * Anything going wrong (request failure, malformed payload, rate limiting)
- * leaves the affected photo unenriched and marked stats-unknown; the picker
- * ranks it below photos with known stats rather than treating the missing
- * value as a zero. Enrichment must never turn a fill that would succeed into a
- * failure — same contract as resolveSemanticScores in autoFill.js.
+ * A failed or deferred refresh keeps the last measured counts available for
+ * ranking. Only a photo never measured is stats-unknown; the picker ranks it
+ * below photos with known stats rather than treating missing data as zero.
+ * Enrichment must never turn a fill that would succeed into a failure — same
+ * contract as resolveSemanticScores in autoFill.js.
  *
  * Cache scope: process-global and NOT token-scoped, so switching accounts
  * without restarting reuses entries. Accepted: photo ids are platform-unique
@@ -58,10 +58,9 @@ const ENRICH_CONCURRENCY = 5;
 // active challenge.
 const FAILURE_BREAKER_THRESHOLD = 3;
 
-// Vote counts move while a challenge is live, so unlike the semantic vecCache
-// (whose embeddings are eternally valid and therefore never expire) these
-// entries must age out. A day is long enough for coverage to accumulate across
-// fills and short enough that relative ranking between photos stays honest.
+// Vote counts move while a challenge is live, so refresh after a day. Expiry
+// schedules a new lookup; it must not erase the last measured vote count from
+// ranking when the lookup budget or an API failure postpones that refresh.
 const STATS_TTL_MS = 24 * 60 * 60 * 1000;
 
 // Bounds the persisted cache. Entries are tiny (three numbers), so this is
@@ -277,9 +276,10 @@ const enrichCandidates = async (photos, token, deps) => {
         if (seen.has(id)) continue;
         seen.add(id);
         const entry = store.get(id);
-        if (isFresh(entry, now)) {
+        if (entry) {
             resolved.set(id, entry);
-        } else {
+        }
+        if (!isFresh(entry, now)) {
             needFetch.push({ photo, everMeasured: entry !== undefined });
         }
     }
