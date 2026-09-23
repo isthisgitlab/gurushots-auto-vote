@@ -20,8 +20,8 @@ const { buildChallenge } = require('../helpers/challengeFixtures');
 
 const NOW = Math.floor(Date.now() / 1000);
 
-/** Exposure sits ABOVE the trigger, so only a new entry can produce a vote. */
-const challengeWith = (entryIds) =>
+/** Exposure sits at/above the trigger, so only a new entry can produce a vote. */
+const challengeWith = (entryIds, exposureFactor = 100) =>
     buildChallenge({
         id: 4242,
         title: 'Integration Challenge',
@@ -32,7 +32,7 @@ const challengeWith = (entryIds) =>
         member: {
             boost: { state: 'LOCKED', timeout: 0 },
             turbo: { state: 'NONE' },
-            ranking: { entries: entryIds.map((id) => ({ id })), exposure: { exposure_factor: 100 } },
+            ranking: { entries: entryIds.map((id) => ({ id })), exposure: { exposure_factor: exposureFactor } },
         },
     });
 
@@ -93,29 +93,29 @@ beforeEach(() => {
 
 describe('voteOnNewEntry end-to-end through the real rule engine', () => {
     test('first pass baselines silently, second pass votes once on the new entry', async () => {
+        mockSettings({ exposureTarget: 100 });
         const tracker = createMemoryEntryTracker();
 
-        // Pass 1: exposure 100% is above the 90% trigger, and there is no baseline,
+        // Pass 1: exposure 95% is above the 90% trigger, and there is no baseline,
         // so nothing should vote.
-        const first = makeApi(challengeWith(['a']));
+        const first = makeApi(challengeWith(['a'], 95));
         await runVotingPass('tok', null, deps(first, tracker));
         expect(first.submitVotes).not.toHaveBeenCalled();
 
-        // Pass 2: a second entry appeared. Exposure still reads 100%, so ONLY the
-        // new-entry rule can produce this vote.
-        const second = makeApi(challengeWith(['a', 'b']));
+        // Pass 2: a second entry appeared. Exposure is between the trigger and
+        // target, so ONLY the new-entry rule can produce this top-up.
+        const second = makeApi(challengeWith(['a', 'b'], 95));
         await runVotingPass('tok', null, deps(second, tracker));
         expect(second.submitVotes).toHaveBeenCalledTimes(1);
-        // Sentinel exposureTarget 0 resolves to the exposure trigger.
-        expect(second.submitVotes).toHaveBeenCalledWith(expect.anything(), 'tok', 90);
+        expect(second.submitVotes).toHaveBeenCalledWith(expect.anything(), 'tok', 100);
 
         // Pass 3: nothing new — quiet again.
-        const third = makeApi(challengeWith(['a', 'b']));
+        const third = makeApi(challengeWith(['a', 'b'], 95));
         await runVotingPass('tok', null, deps(third, tracker));
         expect(third.submitVotes).not.toHaveBeenCalled();
     });
 
-    test('an explicit exposureTarget becomes the forced ceiling', async () => {
+    test('a new entry at the target does not fetch or submit another vote pool', async () => {
         mockSettings({ exposureTarget: 100 });
         const tracker = createMemoryEntryTracker();
 
@@ -123,25 +123,27 @@ describe('voteOnNewEntry end-to-end through the real rule engine', () => {
         const api = makeApi(challengeWith(['a', 'b']));
         await runVotingPass('tok', null, deps(api, tracker));
 
-        expect(api.submitVotes).toHaveBeenCalledWith(expect.anything(), 'tok', 100);
+        expect(api.getVoteImages).not.toHaveBeenCalled();
+        expect(api.submitVotes).not.toHaveBeenCalled();
     });
 
     test('a failed forced vote is retried on the following pass', async () => {
+        mockSettings({ exposureTarget: 100 });
         const tracker = createMemoryEntryTracker();
-        await runVotingPass('tok', null, deps(makeApi(challengeWith(['a'])), tracker));
+        await runVotingPass('tok', null, deps(makeApi(challengeWith(['a'], 95)), tracker));
 
-        const failing = makeApi(challengeWith(['a', 'b']));
+        const failing = makeApi(challengeWith(['a', 'b'], 95));
         failing.submitVotes.mockRejectedValue(new Error('offline'));
         await runVotingPass('tok', null, deps(failing, tracker));
         expect(failing.submitVotes).toHaveBeenCalledTimes(1);
 
         // Same entries, no new photo — but the trigger is still armed.
-        const retry = makeApi(challengeWith(['a', 'b']));
+        const retry = makeApi(challengeWith(['a', 'b'], 95));
         await runVotingPass('tok', null, deps(retry, tracker));
         expect(retry.submitVotes).toHaveBeenCalledTimes(1);
 
         // ...and now it is disarmed.
-        const quiet = makeApi(challengeWith(['a', 'b']));
+        const quiet = makeApi(challengeWith(['a', 'b'], 95));
         await runVotingPass('tok', null, deps(quiet, tracker));
         expect(quiet.submitVotes).not.toHaveBeenCalled();
     });

@@ -1,15 +1,14 @@
 /**
  * Tests for the `voteOnNewEntry` forced-vote path in VotingLogic.
  *
- * Adding a photo to a challenge dilutes its exposure immediately, but the
- * exposure_factor the API reports does not always reflect that on the same poll —
- * so the normal rule sees "already at target" and skips a brand-new entry. With the
- * setting on, a detected new entry defeats that at-target check.
+ * Adding a photo to a challenge can leave it between a rule's trigger and target.
+ * With the setting on, a detected new entry bridges that gap, but it must not
+ * trigger another vote-pool fetch once the target is already met.
  *
  * Two contracts are load-bearing here:
- *   1. It defeats the AT-TARGET check only. onlyBoost, vote-only-in-last-minute,
- *      scheduled-fill-only and not-yet-started all still block — the user chose
- *      "no precedence overrides".
+ *   1. It may defeat the trigger check only while exposure remains below the
+ *      target. onlyBoost, vote-only-in-last-minute, scheduled-fill-only and
+ *      not-yet-started all still block — the user chose "no precedence overrides".
  *   2. The emitted reason must never contain a false comparison. Forcing flips
  *      `atTarget`, and the organic per-label templates pick their `<` / `>=`
  *      wording off that flag, so reusing them would print "exposure 100% < 90%".
@@ -78,17 +77,16 @@ describe('voteOnNewEntry — forcing past the at-target check', () => {
         expect(result.voteReason).toContain('95% >= 90%');
     });
 
-    test('a new entry votes despite exposure sitting above the trigger', () => {
+    test('a new entry does not vote when the target follows an already-met trigger', () => {
         mockSettings({ exposure: 90, exposureTarget: 0 });
         const result = VotingLogic.evaluateVotingDecision(buildChallenge({ exposureFactor: 95 }), NOW, {
             hasNewEntry: true,
         });
 
-        expect(result.shouldVote).toBe(true);
-        expect(result.forcedByNewEntry).toBe(true);
+        expect(result.shouldVote).toBe(false);
+        expect(result.forcedByNewEntry).toBe(false);
         // Sentinel 0 target means "follow the trigger".
         expect(result.targetExposure).toBe(90);
-        expect(result.voteReason).toContain('new entry detected');
         expect(result.voteReason).toContain('95% >= 90%');
         expectNoFalseComparison(result.voteReason);
     });
@@ -102,6 +100,18 @@ describe('voteOnNewEntry — forcing past the at-target check', () => {
         expect(result.shouldVote).toBe(true);
         expect(result.targetExposure).toBe(100);
         expect(result.voteReason).toContain('voting up to 100%');
+    });
+
+    test('a new entry does not request another vote when exposure already meets the target', () => {
+        mockSettings({ exposure: 70, exposureTarget: 100 });
+        const result = VotingLogic.evaluateVotingDecision(buildChallenge({ exposureFactor: 100 }), NOW, {
+            hasNewEntry: true,
+        });
+
+        expect(result.shouldVote).toBe(false);
+        expect(result.forcedByNewEntry).toBe(false);
+        expect(result.targetExposure).toBe(100);
+        expect(result.voteReason).toContain('exposure 100% >= 70%');
     });
 
     test('exposure already below the trigger votes organically, not forced', () => {
@@ -138,7 +148,7 @@ describe('voteOnNewEntry — forcing past the at-target check', () => {
     });
 });
 
-describe('voteOnNewEntry — reason strings stay truthful for every rule label', () => {
+describe('voteOnNewEntry — target ceilings stay authoritative for every rule label', () => {
     beforeEach(() => jest.clearAllMocks());
 
     const cases = [
@@ -168,20 +178,19 @@ describe('voteOnNewEntry — reason strings stay truthful for every rule label',
         },
     ];
 
-    test.each(cases)('$label: forced reason is truthful and votes', ({ setup, challenge, expectText }) => {
+    test.each(cases)('$label: a new entry does not vote past the target', ({ setup, challenge, expectText }) => {
         setup();
         const result = VotingLogic.evaluateVotingDecision(challenge(), NOW, { hasNewEntry: true });
 
-        expect(result.shouldVote).toBe(true);
-        expect(result.forcedByNewEntry).toBe(true);
+        expect(result.shouldVote).toBe(false);
+        expect(result.forcedByNewEntry).toBe(false);
         expect(result.voteReason).toContain(expectText);
-        expect(result.voteReason).toContain('new entry detected');
-        // The regression guard: never "100% < 100%" or "100% < 90%".
+        expect(result.voteReason).not.toContain('new entry detected');
         expect(result.voteReason).not.toMatch(/100% < /);
         expectNoFalseComparison(result.voteReason);
     });
 
-    test('scheduled fill window: forced reason is truthful and votes', () => {
+    test('scheduled fill window: a new entry does not vote past 100%', () => {
         mockSettings({
             useScheduledFill: true,
             scheduledFillBeforeEnd: [3600],
@@ -193,10 +202,10 @@ describe('voteOnNewEntry — reason strings stay truthful for every rule label',
             { hasNewEntry: true },
         );
 
-        expect(result.shouldVote).toBe(true);
-        expect(result.forcedByNewEntry).toBe(true);
-        expect(result.voteReason).toContain('scheduled fill window');
-        expect(result.voteReason).toContain('new entry detected');
+        expect(result.shouldVote).toBe(false);
+        expect(result.forcedByNewEntry).toBe(false);
+        expect(result.voteReason).toContain('scheduled fill');
+        expect(result.voteReason).not.toContain('new entry detected');
         expect(result.voteReason).not.toMatch(/100% < /);
     });
 });

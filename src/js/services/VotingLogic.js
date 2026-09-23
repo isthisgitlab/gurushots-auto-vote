@@ -280,9 +280,9 @@ const getVotingPauseState = (challenge, challengeId, now) => {
  * @property {string|null} ruleLabel
  * @property {*} thresholdInfo
  * @property {boolean} forcedByNewEntry - True only when a detected new entry
- *   actually CHANGED the outcome: exposure was at/above the trigger and the vote
- *   happens anyway. False on every blocked path, and false when the challenge was
- *   already eligible on its own.
+ *   actually CHANGED the outcome: exposure was at/above the trigger but still
+ *   below the target, so the vote happens anyway. False on every blocked path,
+ *   once the target is met, and when the challenge was already eligible on its own.
  * @property {boolean} [preservesNewEntryTrigger] - Set on a blocked path that
  *   DEFERS rather than cancels: the orchestrator must keep any new-entry trigger
  *   armed instead of disarming it. Only the voting pause sets it.
@@ -627,13 +627,13 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
      */
     const decided = (ruleLabel, trigger, target, thresholdInfo) => {
         const wouldBeAtTarget = currentExposure >= trigger;
-        // A detected new entry defeats the at-target check only — it never unblocks
-        // a blocked rule. Gated on wouldBeAtTarget so `forcedByNewEntry` marks the
-        // cases where the flag actually changed the outcome: when exposure is
-        // already below the trigger the vote is organic and recurs on its own next
-        // cycle, so there is no trigger worth preserving across a failure.
-        const forcedByNewEntry = hasNewEntry && wouldBeAtTarget;
-        const atTarget = wouldBeAtTarget && !hasNewEntry;
+        // A detected new entry may bridge the trigger-to-target gap, but must not
+        // defeat the target itself. Otherwise a challenge already full (or past a
+        // lower final-window target) fetches 100 images only to discard them.
+        // Gating on wouldBeAtTarget keeps `forcedByNewEntry` limited to cases where
+        // the flag changed the outcome; below the trigger it stays organic and recurs.
+        const forcedByNewEntry = hasNewEntry && wouldBeAtTarget && currentExposure < target;
+        const atTarget = wouldBeAtTarget && !forcedByNewEntry;
         return {
             eligible: !atTarget,
             atTarget,

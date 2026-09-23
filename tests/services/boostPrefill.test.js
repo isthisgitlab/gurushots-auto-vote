@@ -386,14 +386,14 @@ describe('deliberate non-gating on the boost/turbo conflict', () => {
     });
 });
 
-describe('new-entry forcing keeps the pre-boost label', () => {
-    test('forced vote phrases itself as a pre-boost fill', () => {
+describe('new-entry detection respects a completed pre-boost fill', () => {
+    test('full exposure does not start another pre-boost vote', () => {
         mockSettings();
         const result = VotingLogic.evaluateVotingDecision(buildChallenge({ exposureFactor: 100 }), NOW, {
             hasNewEntry: true,
         });
-        expect(result.shouldVote).toBe(true);
-        expect(result.forcedByNewEntry).toBe(true);
-        expect(result.voteReason).toContain('pre-boost fill: new entry detected');
+        expect(result.shouldVote).toBe(false);
+        expect(result.forcedByNewEntry).toBe(false);
+        expect(result.voteReason).toContain('pre-boost fill: exposure already at 100%');
     });
 });
