@@ -102,6 +102,18 @@ describe('voteOnNewEntry — forcing past the at-target check', () => {
         expect(result.voteReason).toContain('voting up to 100%');
     });
 
+    test('exposure exactly at a trigger below the target is reported without a tautology', () => {
+        mockSettings({ exposure: 90, exposureTarget: 100 });
+        const result = VotingLogic.evaluateVotingDecision(buildChallenge({ exposureFactor: 90 }), NOW, {
+            hasNewEntry: true,
+        });
+
+        expect(result.shouldVote).toBe(true);
+        expect(result.forcedByNewEntry).toBe(true);
+        expect(result.voteReason).toContain('new entry detected (exposure already at 90%)');
+        expect(result.voteReason).not.toContain('90% >= 90%');
+    });
+
     test('a new entry does not request another vote when exposure already meets the target', () => {
         mockSettings({ exposure: 70, exposureTarget: 100 });
         const result = VotingLogic.evaluateVotingDecision(buildChallenge({ exposureFactor: 100 }), NOW, {

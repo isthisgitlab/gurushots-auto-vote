@@ -815,8 +815,8 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
             normal: 'normal threshold',
         };
         const labelText = forcedLabels[/** @type {string} */ (r.ruleLabel)];
-        // For the always-100 rules the trigger equals the exposure by construction,
-        // so "exposure 100% >= 100%" would be a tautology rather than information.
+        // Exposure sitting exactly on a trigger below its target would read as the
+        // tautology "exposure 90% >= 90%", so state it as a level instead.
         const state =
             currentExposure === trigger
                 ? `exposure already at ${trigger}%`

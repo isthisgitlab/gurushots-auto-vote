@@ -67,7 +67,8 @@ describe('Login page', () => {
         window.api.getEnvironmentInfo.mockResolvedValue({ defaultMock: true });
         await renderReady();
         await waitFor(() => expect(document.getElementById('username').value).toBe('bob'));
-        expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+        // The theme lands via a passive effect, which can trail the username commit.
+        await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
         const [theme, stay, mock] = checkboxes();
         expect([theme.checked, stay.checked, mock.checked]).toEqual([true, true, true]);
         expect(screen.getByText('login.mockModeInfo')).toBeTruthy();

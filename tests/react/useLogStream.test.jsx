@@ -104,9 +104,10 @@ describe('useLogStream', () => {
     test('marks disconnected when connecting throws', async () => {
         window.api.getLogBacklog.mockRejectedValue(new Error('ipc down'));
         const { result } = renderHook(() => useLogStream());
+        // startLogStream already flipped connected to true before getLogBacklog ran,
+        // so waiting for false observes the catch path rather than the initial state.
         await waitFor(() => expect(window.api.getLogBacklog).toHaveBeenCalled());
-        await act(async () => {});
-        expect(result.current.connected).toBe(false);
+        await waitFor(() => expect(result.current.connected).toBe(false));
     });
 
     test('a throw after unmount does not touch state', async () => {

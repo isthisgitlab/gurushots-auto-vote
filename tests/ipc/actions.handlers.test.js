@@ -507,6 +507,16 @@ describe('get-auto-claim-status', () => {
             error: 'unavailable',
         });
     });
+
+    test('falls back to a generic message when the error has none', async () => {
+        settings.getEffectiveSetting = jest.fn(() => {
+            throw new Error('');
+        });
+        await expect(buildHandlers()['get-auto-claim-status']({})).resolves.toEqual({
+            success: false,
+            error: 'Could not read auto-claim status',
+        });
+    });
 });
 
 describe('get-auto-join-active', () => {
