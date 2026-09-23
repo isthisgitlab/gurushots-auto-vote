@@ -70,6 +70,7 @@ describe('App page', () => {
         for (const k of Object.keys(mockProps)) delete mockProps[k];
         mockChallenges.challenges = [];
         mockAutovote.running = false;
+        mockAutovote.cycles = 0;
         originals = Object.fromEntries(API_METHODS.map((m) => [m, window.api[m]]));
         window.api.getSettings = jest.fn().mockResolvedValue({ onboardingCompleted: true });
         window.api.setSetting = jest.fn().mockResolvedValue(undefined);
@@ -250,6 +251,20 @@ describe('App page', () => {
         act(() => mockProps.DiscoverSection.onJoined());
         expect(mockBankroll.refetch).toHaveBeenCalledTimes(1);
         expect(mockChallenges.refetch).toHaveBeenCalledTimes(1);
+    });
+
+    test('each completed autovote cycle refreshes the header bankroll', async () => {
+        const { rerender } = await renderReady();
+        // cycles === 0 on mount: the hook's own mount fetch covers it.
+        expect(mockBankroll.refetch).not.toHaveBeenCalled();
+
+        mockAutovote.cycles = 1;
+        rerender(<App />);
+        await waitFor(() => expect(mockBankroll.refetch).toHaveBeenCalledTimes(1));
+
+        mockAutovote.cycles = 2;
+        rerender(<App />);
+        await waitFor(() => expect(mockBankroll.refetch).toHaveBeenCalledTimes(2));
     });
 
     test('autovote running-changed events feed the challenges provider', async () => {

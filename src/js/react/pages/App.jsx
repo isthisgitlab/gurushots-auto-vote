@@ -41,6 +41,14 @@ function AppContent() {
         refetchChallenges();
     }, [refetchBankroll, refetchChallenges]);
 
+    // An autovote cycle can spend or earn currency (auto-join, turbos, key
+    // unlocks, fills, reward claims), but only the challenge list is refreshed
+    // by the provider — re-read the balances after every completed cycle too,
+    // or the header bankroll stays frozen at its mount-time value.
+    useEffect(() => {
+        if (autovote.cycles > 0) refetchBankroll();
+    }, [autovote.cycles, refetchBankroll]);
+
     // Local state
     const [settingsModalOpen, setSettingsModalOpen] = useState(false);
     const [challengeSettingsOpen, setChallengeSettingsOpen] = useState(false);
