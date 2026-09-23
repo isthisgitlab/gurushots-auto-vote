@@ -252,7 +252,7 @@ async function buildReact() {
 
                 const ctx = await context({
                     ...commonOptions,
-                    ...(perEntryOptions[name] || {}),
+                    ...perEntryOptions[name],
                     entryPoints: [entry],
                     outfile: path.join(distDir, `${name}-bundle.js`),
                 });
@@ -294,7 +294,7 @@ async function buildReact() {
 
                 await build({
                     ...commonOptions,
-                    ...(perEntryOptions[name] || {}),
+                    ...perEntryOptions[name],
                     entryPoints: [entry],
                     outfile: path.join(distDir, `${name}-bundle.js`),
                 });

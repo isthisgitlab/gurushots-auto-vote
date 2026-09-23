@@ -34,6 +34,7 @@ const { stem } = require('../src/js/services/photoPicker');
 // hand-rolled copies of "stem -> owner, fail on cross-cluster collision"
 // would drift apart silently.
 const { collectAuthoredWords, sha256OfString } = require('./fetch-embeddings');
+const { runIfMain } = require('./lib/run-if-main');
 
 const ROOT = path.join(__dirname, '..');
 const EMBEDDINGS_PATH = path.join(__dirname, 'lexicon-embeddings.json');
@@ -41,7 +42,7 @@ const EMBEDDINGS_SHA_PATH = path.join(__dirname, 'lexicon-embeddings.sha256');
 const CONCEPTS_PATH = path.join(__dirname, 'lexicon-concepts.json');
 const OUT_ASSET = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
 const DIST_DIR = path.join(ROOT, 'dist');
-const OUT_DIST = path.join(DIST_DIR, 'semantic-vectors.json');
+const OUT_DIST_NAME = 'semantic-vectors.json';
 
 /**
  * Validate the authored vocabulary against the intermediate and assemble the
@@ -77,21 +78,33 @@ const buildAsset = (intermediate, concepts) => {
     return { output, missing, collisions };
 };
 
-const main = () => {
-    if (!fs.existsSync(EMBEDDINGS_PATH)) {
+/**
+ * CLI entry. Paths default to the committed files; tests point them at
+ * os.tmpdir() fixtures so the committed assets are never touched.
+ *
+ * @param {object} [paths]
+ */
+const main = ({
+    embeddingsPath = EMBEDDINGS_PATH,
+    embeddingsShaPath = EMBEDDINGS_SHA_PATH,
+    conceptsPath = CONCEPTS_PATH,
+    outAsset = OUT_ASSET,
+    distDir = DIST_DIR,
+} = {}) => {
+    if (!fs.existsSync(embeddingsPath)) {
         console.error(
             '❌ scripts/lexicon-embeddings.json is missing — run `pnpm fetch:embeddings` first (network, one-time).',
         );
         process.exit(1);
     }
-    const intermediate = JSON.parse(fs.readFileSync(EMBEDDINGS_PATH, 'utf8'));
-    const concepts = JSON.parse(fs.readFileSync(CONCEPTS_PATH, 'utf8'));
+    const intermediate = JSON.parse(fs.readFileSync(embeddingsPath, 'utf8'));
+    const concepts = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
 
     // Tamper check: the intermediate is a multi-MB base64 blob nobody can
     // review line-by-line, so its payload hash lives in a one-line sidecar
     // file that IS reviewable. A payload edit that doesn't update the sidecar
     // (or vice versa) fails here instead of shipping.
-    const expectedSha = fs.readFileSync(EMBEDDINGS_SHA_PATH, 'utf8').trim();
+    const expectedSha = fs.readFileSync(embeddingsShaPath, 'utf8').trim();
     const actualSha = sha256OfString(JSON.stringify(intermediate.packed));
     if (actualSha !== expectedSha) {
         console.error('❌ scripts/lexicon-embeddings.json does not match scripts/lexicon-embeddings.sha256:');
@@ -123,19 +136,19 @@ const main = () => {
     }
 
     const json = JSON.stringify(output);
-    fs.writeFileSync(OUT_ASSET, json);
+    fs.writeFileSync(outAsset, json);
     let copied = '';
-    if (fs.existsSync(DIST_DIR)) {
-        fs.writeFileSync(OUT_DIST, json);
+    if (fs.existsSync(distDir)) {
+        fs.writeFileSync(path.join(distDir, OUT_DIST_NAME), json);
         copied = ` (+ dist copy)`;
     }
-    const bytes = fs.statSync(OUT_ASSET).size;
+    const bytes = fs.statSync(outAsset).size;
     console.log(
         `✅ Lexicon: ${Object.keys(output.packed).length} word-stems, ${output.dims}d, ` +
             `${(bytes / 1024 / 1024).toFixed(2)} MB → src/assets/semantic-vectors.json${copied}`,
     );
 };
 
-module.exports = { buildAsset };
+module.exports = { buildAsset, main };
 
-if (require.main === module) main();
+runIfMain(require.main, module, main);

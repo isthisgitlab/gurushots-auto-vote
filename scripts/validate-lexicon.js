@@ -58,6 +58,7 @@
 const path = require('node:path');
 const lexicon = require('../src/js/services/semantic/lexicon');
 const { SEMANTIC_MATCH_FLOOR } = require('../src/js/services/photoPicker');
+const { runIfMain } = require('./lib/run-if-main');
 
 const CONFIG = require(path.join(__dirname, 'lexicon-concepts.json'));
 
@@ -100,34 +101,43 @@ const validateConfigRefs = (config) => {
     return errors;
 };
 
-const main = async () => {
-    if (!(await lexicon.init())) {
+/**
+ * Run the gate. The collaborators default to the real ones; tests inject a
+ * small fake lexicon + eval config so every branch is reachable offline.
+ *
+ * @param {object} [deps]
+ * @param {object} [deps.lex] - lexicon module ({init, embed, cosine})
+ * @param {object} [deps.config] - parsed lexicon-concepts.json
+ * @param {number} [deps.matchFloor] - SEMANTIC_MATCH_FLOOR (0-100 bucket)
+ */
+const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATCH_FLOOR } = {}) => {
+    if (!(await lex.init())) {
         console.error('❌ lexicon asset unavailable — run `pnpm build:lexicon` first');
         process.exit(1);
     }
 
-    const refErrors = validateConfigRefs(CONFIG);
+    const refErrors = validateConfigRefs(config);
     if (refErrors.length) {
         console.error(`❌ scripts/lexicon-concepts.json eval config is inconsistent:`);
         for (const e of refErrors) console.error(`   - ${e}`);
         process.exit(1);
     }
 
-    const concepts = (CONFIG.concepts || []).filter((c) => Array.isArray(c.words) && c.words.length > 0 && c.parent);
+    const concepts = (config.concepts || []).filter((c) => Array.isArray(c.words) && c.words.length > 0 && c.parent);
     const byId = new Map(concepts.map((c) => [c.id, c]));
     // Parents whose grouping is organizational, not semantic (e.g. `object`:
     // umbrella vs book share nothing thematically). Their sibling pairs are
     // neither related nor noise, so they contribute only same-concept pairs.
-    const organizational = new Set(CONFIG.organizationalParents || []);
+    const organizational = new Set(config.organizationalParents || []);
     const unrelatedParentPairs = new Set();
-    for (const [a, b] of CONFIG.unrelatedParents || []) {
+    for (const [a, b] of config.unrelatedParents || []) {
         unrelatedParentPairs.add(`${a}|${b}`);
         unrelatedParentPairs.add(`${b}|${a}`);
     }
 
     // Keywords come from the *front* of the cluster (the canonical name), which
     // is what a challenge title would actually say ("farm", not "homestead").
-    const challengeVecOf = (c) => lexicon.embed(c.words.slice(0, MAX_CHALLENGE_KEYWORDS));
+    const challengeVecOf = (c) => lex.embed(c.words.slice(0, MAX_CHALLENGE_KEYWORDS));
 
     // A photo is its labels, each scored on its own and the best kept — the
     // runtime shape (see services/semantic/index.js). Returns null when no
@@ -135,9 +145,9 @@ const main = async () => {
     const bestLabelSim = (challengeVec, words) => {
         let best = null;
         for (const word of words) {
-            const vec = lexicon.embed([word]);
+            const vec = lex.embed([word]);
             if (!vec) continue;
-            const sim = lexicon.cosine(challengeVec, vec);
+            const sim = lex.cosine(challengeVec, vec);
             if (Number.isFinite(sim) && (best === null || sim > best)) best = sim;
         }
         return best;
@@ -194,7 +204,7 @@ const main = async () => {
     // Math.round(raw * 100) and matches on `bucket >= SEMANTIC_MATCH_FLOOR`, so
     // a raw cosine of FLOOR/100 - 0.005 already rounds up and counts as a
     // match. Gating on the nominal value would leave that band unguarded.
-    const floor = (SEMANTIC_MATCH_FLOOR - 0.5) / 100;
+    const floor = (matchFloor - 0.5) / 100;
     const unrelP99 = percentile(unrelated, 99);
     const unrelMax = unrelated[unrelated.length - 1];
     const relP25 = percentile(related, 25);
@@ -211,13 +221,13 @@ const main = async () => {
         `  related    p05 = ${fmt(relP05)}   p25 = ${fmt(relP25)}   median = ${fmt(relMedian)}   ` +
             `p95 = ${fmt(percentile(related, 95))}`,
     );
-    console.log(`  SEMANTIC_MATCH_FLOOR = ${fmt(SEMANTIC_MATCH_FLOOR / 100)} (effective ${fmt(floor)} after rounding)`);
+    console.log(`  SEMANTIC_MATCH_FLOOR = ${fmt(matchFloor / 100)} (effective ${fmt(floor)} after rounding)`);
 
     // Near-misses: wrong theme, plausibly correlated. Not gated — but each one
     // the floor lets through is a photo the semantic tier would call on-theme
     // when it isn't, so surface them loudly.
     const nearMisses = [];
-    for (const [aId, bId] of CONFIG.nearMissPairs || []) {
+    for (const [aId, bId] of config.nearMissPairs || []) {
         const a = byId.get(aId);
         const b = byId.get(bId);
         if (!a || !b) {
@@ -274,6 +284,6 @@ const main = async () => {
     console.log(`\n✅ Floor sits in the gap: ${fmt(unrelP99)} < ${fmt(floor)} < ${fmt(relP25)}`);
 };
 
-module.exports = { percentile, validateConfigRefs };
+module.exports = { percentile, validateConfigRefs, main };
 
-if (require.main === module) main();
+runIfMain(require.main, module, main);

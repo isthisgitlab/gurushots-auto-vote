@@ -1,12 +1,57 @@
-// Unit tests for the GitHub Pages renderer's pure helpers. These guard the
+// Unit tests for the GitHub Pages renderer. The pure helpers guard the
 // "README is the single source of truth" invariant: as the README/docs evolve,
 // their cross-links must keep resolving on the static site. Importing the module
-// is side-effect-free — main() runs only under `require.main === module`.
+// is side-effect-free — main() runs only when the file is the entry point.
+// main() itself is exercised against a temp repo tree under os.tmpdir(); the
+// real dist-site/ is never written.
 
-// The shared tests/setup.js mocks `path` globally (no `.posix`); this suite
-// tests real path resolution, so restore the actual module for this file only.
+// The shared tests/setup.js mocks `path` and `fs` globally (no `.posix`); this
+// suite tests real path resolution and real temp-dir rendering, so restore the
+// actual modules for this file only.
 jest.unmock('node:path');
 jest.unmock('path');
+jest.unmock('node:fs');
+jest.unmock('fs');
+
+// `marked` ships ESM-only, which this Jest setup cannot load. A minimal
+// line-based stand-in: each line is a link, an image, or a paragraph, and every
+// token is passed through the registered walkTokens hooks before rendering —
+// enough to pin build-site's link/image rewriting wiring.
+jest.mock('marked', () => ({
+    Marked: class {
+        constructor() {
+            this.walkers = [];
+        }
+        use(ext) {
+            if (ext.walkTokens) this.walkers.push(ext.walkTokens);
+        }
+        parse(md) {
+            return md
+                .split('\n')
+                .filter(Boolean)
+                .map((line) => {
+                    const m = line.match(/^(!?)\[([^\]]*)\]\(([^)]*)\)$/);
+                    const token = m
+                        ? { type: m[1] ? 'image' : 'link', text: m[2], href: m[3] }
+                        : { type: 'paragraph', text: line };
+                    this.walkers.forEach((walk) => walk(token));
+                    if (token.type === 'image') return `<img src="${token.href}" alt="${token.text}">`;
+                    if (token.type === 'link') return `<a href="${token.href}">${token.text}</a>`;
+                    return `<p>${token.text}</p>`;
+                })
+                .join('\n');
+        }
+    },
+}));
+jest.mock('marked-gfm-heading-id', () => ({
+    gfmHeadingId: jest.fn(() => ({})),
+    resetHeadings: jest.fn(),
+}));
+
+const fs = require('node:fs');
+const os = require('node:os');
+const nodePath = require('node:path');
+const { resetHeadings } = require('marked-gfm-heading-id');
 
 const {
     hasScheme,
@@ -17,6 +62,8 @@ const {
     render,
     buildNav,
     PAGES,
+    main,
+    runCli,
 } = require('../../scripts/build-site.js');
 
 const pageBySrc = (src) => PAGES.find((p) => p.src === src);
@@ -79,12 +126,19 @@ describe('rewriteLink', () => {
         expect(rewriteLink('docs/scheduling.md#cron', '')).toBe('./scheduling.html#cron');
         expect(rewriteLink('LICENSE?raw=1', '')).toBe(`${BLOB}/LICENSE?raw=1`);
     });
+
+    it('leaves empty and query-only hrefs untouched', () => {
+        expect(rewriteLink('', '')).toBe('');
+        expect(rewriteLink('?tab=readme', 'docs')).toBe('?tab=readme');
+    });
 });
 
 describe('rewriteImage', () => {
     it('rewrites relative images to the raw host and leaves absolute ones', () => {
         expect(rewriteImage('src/assets/logo.png', '')).toBe(`${RAW}/src/assets/logo.png`);
         expect(rewriteImage('https://img.shields.io/badge.svg', '')).toBe('https://img.shields.io/badge.svg');
+        expect(rewriteImage('', '')).toBe('');
+        expect(rewriteImage('#frag', '')).toBe('#frag');
     });
 });
 
@@ -118,5 +172,113 @@ describe('render', () => {
         expect(render('{{a}}{{a}}', { a: 'q' })).toBe('qq');
         // a value containing String.replace specials must not be interpreted
         expect(render('{{v}}', { v: '$&$1$$' })).toBe('$&$1$$');
+    });
+});
+
+describe('main (full render into a temp tree)', () => {
+    let tmp;
+    let out;
+    let logSpy;
+    let errorSpy;
+    let exitSpy;
+
+    const write = (rel, body) => {
+        const full = nodePath.join(tmp, rel);
+        fs.mkdirSync(nodePath.dirname(full), { recursive: true });
+        fs.writeFileSync(full, body);
+    };
+
+    const seedRepo = ({ logo = true, instalacija = true } = {}) => {
+        write('package.json', JSON.stringify({ version: '9.9.9' }));
+        write('layout.html', '<title>{{title}}</title><nav>{{nav}}</nav><main>{{content}}</main>v{{version}}');
+        write('README.md', '# Title\n[Scheduling](docs/scheduling.md)\n![Logo](src/assets/logo.png)\n[Lic](LICENSE)');
+        write('docs/scheduling.md', '[Home](../README.md)');
+        if (instalacija) write('docs/INSTALACIJA.md', 'Sveiki');
+        if (logo) write('src/assets/logo.png', 'PNG');
+    };
+
+    const opts = () => ({ rootDir: tmp, out, layoutFile: nodePath.join(tmp, 'layout.html') });
+
+    beforeEach(() => {
+        tmp = fs.mkdtempSync(nodePath.join(os.tmpdir(), 'build-site-'));
+        out = nodePath.join(tmp, 'dist-site');
+        logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+        errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+        // process.exit must actually halt main() the way it does in production.
+        exitSpy = jest.spyOn(process, 'exit').mockImplementation((code) => {
+            throw new Error(`exit ${code}`);
+        });
+        resetHeadings.mockClear();
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
+        fs.rmSync(tmp, { recursive: true, force: true });
+    });
+
+    it('renders every page with rewritten links, clears stale output, and copies the logo', async () => {
+        seedRepo();
+        write('dist-site/stale.html', 'old');
+
+        await main(opts());
+
+        expect(fs.readdirSync(out).sort()).toEqual(['index.html', 'installacija.html', 'logo.png', 'scheduling.html']);
+        const index = fs.readFileSync(nodePath.join(out, 'index.html'), 'utf8');
+        expect(index).toContain('<title>GuruShots Auto Vote</title>');
+        expect(index).toContain('<a href="./scheduling.html">Scheduling</a>');
+        expect(index).toContain(`<img src="${RAW}/src/assets/logo.png" alt="Logo">`);
+        expect(index).toContain(`<a href="${BLOB}/LICENSE">Lic</a>`);
+        expect(index).toContain('<p># Title</p>');
+        expect(index).toContain('v9.9.9');
+        expect(index).toContain('btn-active');
+        // links in docs/ resolve relative to docs/
+        expect(fs.readFileSync(nodePath.join(out, 'scheduling.html'), 'utf8')).toContain(
+            '<a href="./index.html">Home</a>',
+        );
+        expect(fs.readFileSync(nodePath.join(out, 'logo.png'), 'utf8')).toBe('PNG');
+        expect(resetHeadings).toHaveBeenCalledTimes(PAGES.length);
+        expect(logSpy).toHaveBeenCalledWith(
+            `✓ copied logo.png\n✓ rendered ${PAGES.length} page(s) to dist-site/ for v9.9.9`,
+        );
+    });
+
+    it('exits 1 before touching the output dir when the logo is missing', async () => {
+        seedRepo({ logo: false });
+        write('dist-site/stale.html', 'old');
+
+        await expect(main(opts())).rejects.toThrow('exit 1');
+
+        expect(errorSpy).toHaveBeenCalledWith(`✗ logo not found: ${nodePath.join('src', 'assets', 'logo.png')}`);
+        expect(fs.readdirSync(out)).toEqual(['stale.html']);
+    });
+
+    it('exits 1 when a page source is missing', async () => {
+        seedRepo({ instalacija: false });
+
+        await expect(main(opts())).rejects.toThrow('exit 1');
+
+        expect(errorSpy).toHaveBeenCalledWith('✗ source not found: docs/INSTALACIJA.md');
+    });
+
+    it('runCli uses the real repo paths and turns a failure into exit 1', async () => {
+        // Hermetic: the first existsSync (the logo check) reports missing, so
+        // main() stops before any output; write paths are booby-trapped in
+        // case that ever changes, so the real dist-site/ can never be touched.
+        jest.spyOn(fs, 'existsSync').mockReturnValueOnce(false);
+        for (const fn of ['rmSync', 'mkdirSync', 'writeFileSync', 'copyFileSync']) {
+            jest.spyOn(fs, fn).mockImplementation(() => {
+                throw new Error(`unexpected fs.${fn}`);
+            });
+        }
+        exitSpy.mockReset();
+        exitSpy.mockImplementationOnce((code) => {
+            throw new Error(`exit ${code}`);
+        });
+
+        await runCli();
+
+        expect(errorSpy).toHaveBeenCalledWith(`✗ logo not found: ${nodePath.join('src', 'assets', 'logo.png')}`);
+        expect(errorSpy).toHaveBeenCalledWith(new Error('exit 1'));
+        expect(exitSpy.mock.calls).toEqual([[1], [1]]);
     });
 });

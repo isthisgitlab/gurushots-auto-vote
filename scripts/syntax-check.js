@@ -13,6 +13,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { runIfMain } = require('./lib/run-if-main');
 
 // Colors for console output (failure output only)
 const colors = {
@@ -83,11 +84,11 @@ function checkFileSyntax(filePath) {
 }
 
 /**
- * Main execution
+ * Main execution. `dirs` defaults to the project roots; tests pass temp dirs.
  */
-function main() {
+function main(dirs = includeDirs) {
     const filesToCheck = [];
-    for (const dir of includeDirs) {
+    for (const dir of dirs) {
         filesToCheck.push(...getJsFiles(dir).filter((file) => !shouldExclude(file)));
     }
 
@@ -114,9 +115,6 @@ function main() {
     process.exit(0);
 }
 
-// Run if called directly
-if (require.main === module) {
-    main();
-}
+runIfMain(require.main, module, main);
 
-module.exports = { main, checkFileSyntax, getJsFiles };
+module.exports = { main, checkFileSyntax, getJsFiles, shouldExclude };

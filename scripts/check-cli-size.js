@@ -22,6 +22,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { runIfMain } = require('./lib/run-if-main');
 
 const ROOT = path.join(__dirname, '..');
 const BUNDLE_PATH = path.join(ROOT, 'dist', 'cli-bundled.js');
@@ -35,43 +36,50 @@ const MAX_BINARY_MB = 150; // each SEA binary (Node runtime + our blob)
 const MB = 1024 * 1024;
 const fmt = (bytes) => `${(bytes / MB).toFixed(1)} MB`;
 
-let checked = 0;
-let failed = 0;
-
-function check(label, filePath, maxMb) {
+function check(label, filePath, maxMb, tally) {
     if (!fs.existsSync(filePath)) {
         return false;
     }
-    checked += 1;
+    tally.checked += 1;
     const bytes = fs.statSync(filePath).size;
     const overBudget = bytes > maxMb * MB;
     const status = overBudget ? '❌ OVER' : '✅ ok';
     console.log(`${status}  ${label}: ${fmt(bytes)} (budget ${maxMb} MB)`);
     if (overBudget) {
-        failed += 1;
+        tally.failed += 1;
     }
     return true;
 }
 
-console.log('📏 CLI size guard');
+function main({ bundlePath = BUNDLE_PATH, cliBuildDir = CLI_BUILD_DIR } = {}) {
+    const tally = { checked: 0, failed: 0 };
 
-check('dist/cli-bundled.js', BUNDLE_PATH, MAX_BUNDLE_MB);
+    console.log('📏 CLI size guard');
 
-if (fs.existsSync(CLI_BUILD_DIR)) {
-    const binaries = fs.readdirSync(CLI_BUILD_DIR).filter((name) => name.startsWith('gurucli-'));
-    for (const name of binaries) {
-        check(`build/cli/${name}`, path.join(CLI_BUILD_DIR, name), MAX_BINARY_MB);
+    check('dist/cli-bundled.js', bundlePath, MAX_BUNDLE_MB, tally);
+
+    if (fs.existsSync(cliBuildDir)) {
+        const binaries = fs.readdirSync(cliBuildDir).filter((name) => name.startsWith('gurucli-'));
+        for (const name of binaries) {
+            check(`build/cli/${name}`, path.join(cliBuildDir, name), MAX_BINARY_MB, tally);
+        }
     }
+
+    if (tally.checked === 0) {
+        console.log('ℹ️  No CLI artifacts found — run a CLI build first (e.g. pnpm build:cli:mac). Nothing to check.');
+        process.exit(0);
+        return;
+    }
+
+    if (tally.failed > 0) {
+        console.error(`\n❌ ${tally.failed} CLI artifact(s) over budget.`);
+        process.exit(1);
+        return;
+    }
+
+    console.log(`\n🎉 All ${tally.checked} CLI artifact(s) within budget.`);
 }
 
-if (checked === 0) {
-    console.log('ℹ️  No CLI artifacts found — run a CLI build first (e.g. pnpm build:cli:mac). Nothing to check.');
-    process.exit(0);
-}
+runIfMain(require.main, module, main);
 
-if (failed > 0) {
-    console.error(`\n❌ ${failed} CLI artifact(s) over budget.`);
-    process.exit(1);
-}
-
-console.log(`\n🎉 All ${checked} CLI artifact(s) within budget.`);
+module.exports = { check, main, MAX_BUNDLE_MB, MAX_BINARY_MB };

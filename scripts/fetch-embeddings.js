@@ -44,6 +44,7 @@ const readline = require('node:readline');
 const { pipeline } = require('node:stream/promises');
 const yauzl = require('yauzl');
 const { stem } = require('../src/js/services/photoPicker');
+const { runIfMain } = require('./lib/run-if-main');
 
 const GLOVE_URL = 'https://nlp.stanford.edu/data/glove.6B.zip';
 // SHA-256 of the whole archive as served by the pinned URL. The entry hash
@@ -276,29 +277,29 @@ const quantizePack = (stems, dims) => {
     return { scale, packed };
 };
 
-const download = async () => {
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
-    if (fs.existsSync(ZIP_PATH)) {
-        console.log(`📦 Using cached archive: ${path.relative(ROOT, ZIP_PATH)}`);
+const download = async ({ cacheDir, zipPath, url, maxBytes }) => {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    if (fs.existsSync(zipPath)) {
+        console.log(`📦 Using cached archive: ${path.relative(ROOT, zipPath)}`);
         return;
     }
-    if (!GLOVE_URL.startsWith('https://')) fail(`refusing non-https source: ${GLOVE_URL}`);
-    console.log(`⬇️  Downloading ${GLOVE_URL} (~822 MB, one-time — cached afterwards)…`);
+    if (!url.startsWith('https://')) fail(`refusing non-https source: ${url}`);
+    console.log(`⬇️  Downloading ${url} (~822 MB, one-time — cached afterwards)…`);
     let res;
     try {
-        res = await fetch(GLOVE_URL);
+        res = await fetch(url);
     } catch (err) {
         fail([
             `download failed: ${err.message || err}`,
-            `URL: ${GLOVE_URL}`,
+            `URL: ${url}`,
             'Check network/proxy access and re-run `pnpm fetch:embeddings` — a completed download is',
             'cached and reused on every later run.',
         ]);
     }
     if (!res.ok || !res.body) {
-        fail([`download failed: HTTP ${res.status} ${res.statusText}`, `URL: ${GLOVE_URL}`]);
+        fail([`download failed: HTTP ${res.status} ${res.statusText}`, `URL: ${url}`]);
     }
-    const tmpPath = `${ZIP_PATH}.partial`;
+    const tmpPath = `${zipPath}.partial`;
     try {
         // Cap the bytes written before any hash check can run — a wrong or
         // malicious source must not be able to fill the disk first.
@@ -306,14 +307,14 @@ const download = async () => {
         const capped = async function* (source) {
             for await (const chunk of source) {
                 written += chunk.length;
-                if (written > MAX_DOWNLOAD_BYTES) {
-                    throw new Error(`download exceeded ${MAX_DOWNLOAD_BYTES} bytes — not the pinned archive`);
+                if (written > maxBytes) {
+                    throw new Error(`download exceeded ${maxBytes} bytes — not the pinned archive`);
                 }
                 yield chunk;
             }
         };
         await pipeline(res.body, capped, fs.createWriteStream(tmpPath));
-        fs.renameSync(tmpPath, ZIP_PATH);
+        fs.renameSync(tmpPath, zipPath);
     } catch (err) {
         fs.rmSync(tmpPath, { force: true });
         fail([`download interrupted: ${err.message || err}`, 'Re-run `pnpm fetch:embeddings` to retry.']);
@@ -328,9 +329,10 @@ const download = async () => {
  * @param {string|Buffer} zipSource - path to the archive, or its bytes (the
  *   Buffer form exists so tests can exercise this path without any fs)
  * @param {(line: string) => void} onLine
+ * @param {{maxEntryBytes?: number}} [limits] - inflated-size cap (tests lower it)
  * @returns {Promise<string>} SHA-256 hex of the entry's inflated bytes
  */
-const streamEntryLines = (zipSource, onLine) =>
+const streamEntryLines = (zipSource, onLine, { maxEntryBytes = MAX_ENTRY_BYTES } = {}) =>
     new Promise((resolve, reject) => {
         const opener = Buffer.isBuffer(zipSource)
             ? (opts, cb) => yauzl.fromBuffer(zipSource, opts, cb)
@@ -341,11 +343,11 @@ const streamEntryLines = (zipSource, onLine) =>
             zipfile.on('entry', (entry) => {
                 if (entry.fileName !== ENTRY_NAME) return zipfile.readEntry();
                 found = true;
-                if (entry.uncompressedSize > MAX_ENTRY_BYTES) {
+                if (entry.uncompressedSize > maxEntryBytes) {
                     zipfile.close();
                     return reject(
                         new Error(
-                            `entry ${ENTRY_NAME} declares ${entry.uncompressedSize} bytes (> ${MAX_ENTRY_BYTES}); not the pinned file`,
+                            `entry ${ENTRY_NAME} declares ${entry.uncompressedSize} bytes (> ${maxEntryBytes}); not the pinned file`,
                         ),
                     );
                 }
@@ -355,14 +357,18 @@ const streamEntryLines = (zipSource, onLine) =>
                     let inflated = 0;
                     stream.on('data', (chunk) => {
                         inflated += chunk.length;
-                        if (inflated > MAX_ENTRY_BYTES) {
-                            stream.destroy(new Error(`entry inflated past ${MAX_ENTRY_BYTES} bytes — aborting`));
+                        if (inflated > maxEntryBytes) {
+                            stream.destroy(new Error(`entry inflated past ${maxEntryBytes} bytes — aborting`));
                             return;
                         }
                         hash.update(chunk);
                     });
                     const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
                     rl.on('line', onLine);
+                    // readline re-emits input errors (e.g. the inflated-size
+                    // abort above); unhandled, that throws past `reject` and
+                    // leaves the promise pending behind an uncaught exception.
+                    rl.on('error', reject);
                     rl.on('close', () => {
                         zipfile.close();
                         resolve(hash.digest('hex'));
@@ -378,8 +384,26 @@ const streamEntryLines = (zipSource, onLine) =>
         });
     });
 
-const main = async () => {
-    const concepts = JSON.parse(fs.readFileSync(CONCEPTS_PATH, 'utf8'));
+/**
+ * CLI entry. Every option defaults to the pinned production value; tests
+ * override paths (os.tmpdir() fixtures), pins (hashes of a tiny fixture zip)
+ * and the scale knobs so the whole pipeline runs offline in milliseconds.
+ *
+ * @param {object} [opts]
+ */
+const main = async ({
+    conceptsPath = CONCEPTS_PATH,
+    cacheDir = CACHE_DIR,
+    zipPath = ZIP_PATH,
+    outPath = OUT_PATH,
+    url = GLOVE_URL,
+    expectedZipSha256 = ZIP_SHA256,
+    expectedEntrySha256 = ENTRY_SHA256,
+    maxDownloadBytes = MAX_DOWNLOAD_BYTES,
+    topN = TOP_N,
+    meanCenter = MEAN_CENTER,
+} = {}) => {
+    const concepts = JSON.parse(fs.readFileSync(conceptsPath, 'utf8'));
     const { bySurface: authored, collisions } = collectAuthoredWords(concepts);
     if (collisions.length) {
         fail([
@@ -388,12 +412,12 @@ const main = async () => {
             'Each stem must belong to exactly one concept. Fix scripts/lexicon-concepts.json.',
         ]);
     }
-    await download();
-    const zipSha256 = await sha256OfFile(ZIP_PATH);
-    if (zipSha256 !== ZIP_SHA256) {
+    await download({ cacheDir, zipPath, url, maxBytes: maxDownloadBytes });
+    const zipSha256 = await sha256OfFile(zipPath);
+    if (zipSha256 !== expectedZipSha256) {
         fail([
             `SHA-256 mismatch for the archive:`,
-            `expected ${ZIP_SHA256}`,
+            `expected ${expectedZipSha256}`,
             `got      ${zipSha256}`,
             'Delete scripts/.cache/glove.6B.zip and re-run; if the mismatch persists, do not commit —',
             'the pinned URL is serving different bytes than it did when this pin was recorded.',
@@ -412,7 +436,7 @@ const main = async () => {
         if (firstSpace <= 0) return;
         const token = line.slice(0, firstSpace);
         const isAuthored = authored.has(token);
-        if (!isAuthored && (genericKept >= TOP_N || !GENERIC_TOKEN_RE.test(token))) return;
+        if (!isAuthored && (genericKept >= topN || !GENERIC_TOKEN_RE.test(token))) return;
         const row = parseGloveLine(line, DIMS);
         if (!row) return;
         rows.push({ ...row, isAuthored });
@@ -420,20 +444,20 @@ const main = async () => {
         else genericKept++;
     };
 
-    console.log(`🔍 Scanning ${ENTRY_NAME} for top ${TOP_N} tokens + ${authored.size} authored words…`);
+    console.log(`🔍 Scanning ${ENTRY_NAME} for top ${topN} tokens + ${authored.size} authored words…`);
     let entrySha256;
     try {
-        entrySha256 = await streamEntryLines(ZIP_PATH, onLine);
+        entrySha256 = await streamEntryLines(zipPath, onLine);
     } catch (err) {
         fail([
             `extraction failed: ${err.message || err}`,
             'The cached archive may be corrupt — delete scripts/.cache/glove.6B.zip and re-run.',
         ]);
     }
-    if (entrySha256 !== ENTRY_SHA256) {
+    if (entrySha256 !== expectedEntrySha256) {
         fail([
             `SHA-256 mismatch for ${ENTRY_NAME}:`,
-            `expected ${ENTRY_SHA256}`,
+            `expected ${expectedEntrySha256}`,
             `got      ${entrySha256}`,
             'The downloaded archive is NOT the pinned upstream file. Delete scripts/.cache/glove.6B.zip,',
             're-run, and if the mismatch persists do not commit — investigate the source before trusting it.',
@@ -450,7 +474,7 @@ const main = async () => {
         ]);
     }
 
-    if (MEAN_CENTER) {
+    if (meanCenter) {
         const mean = new Float64Array(DIMS);
         for (const { vec } of rows) for (let i = 0; i < DIMS; i++) mean[i] += vec[i];
         for (let i = 0; i < DIMS; i++) mean[i] /= rows.length || 1;
@@ -482,7 +506,7 @@ const main = async () => {
         version: 1,
         generator: 'fetch-embeddings.js',
         source: {
-            url: GLOVE_URL,
+            url,
             zipSha256,
             entry: ENTRY_NAME,
             entrySha256,
@@ -492,24 +516,26 @@ const main = async () => {
         },
         dims: DIMS,
         scale,
-        meanCentered: MEAN_CENTER,
+        meanCentered: meanCenter,
         retrofitBeta: RETROFIT_BETA,
         packed,
     };
-    fs.writeFileSync(OUT_PATH, JSON.stringify(output));
+    fs.writeFileSync(outPath, JSON.stringify(output));
     // Sidecar payload hash: the intermediate itself is an unreviewable
     // multi-MB blob, so a hand-edit to its vectors would be invisible in a
     // diff. This one-line file makes any payload change show up as a
     // human-readable hunk, and build-lexicon.js refuses to build if the
     // committed payload no longer matches it.
-    fs.writeFileSync(`${OUT_PATH.replace(/\.json$/, '')}.sha256`, `${sha256OfString(JSON.stringify(packed))}\n`);
-    const bytes = fs.statSync(OUT_PATH).size;
+    fs.writeFileSync(`${outPath.replace(/\.json$/, '')}.sha256`, `${sha256OfString(JSON.stringify(packed))}\n`);
+    const bytes = fs.statSync(outPath).size;
     console.log(
         `✅ Intermediate: ${stems.size} word-stems, ${DIMS}d, ${(bytes / 1024 / 1024).toFixed(2)} MB ` +
-            `→ ${path.relative(ROOT, OUT_PATH)}`,
+            `→ ${path.relative(ROOT, outPath)}`,
     );
     console.log('   Next: pnpm build:lexicon && pnpm verify:lexicon');
 };
+
+const run = (opts) => main(opts).catch((err) => fail(err.stack || String(err)));
 
 module.exports = {
     collectAuthoredWords,
@@ -520,10 +546,12 @@ module.exports = {
     quantizePack,
     streamEntryLines,
     sha256OfString,
+    sha256OfFile,
+    download,
+    main,
+    run,
     GENERIC_TOKEN_RE,
     ENTRY_NAME,
 };
 
-if (require.main === module) {
-    main().catch((err) => fail(err.stack || String(err)));
-}
+runIfMain(require.main, module, run);

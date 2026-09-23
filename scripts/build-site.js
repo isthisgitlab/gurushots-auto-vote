@@ -8,10 +8,13 @@
 //
 // The pure helpers (hasScheme/toRepoPath/rewriteLink/rewriteImage/render/
 // srcDirOf) are exported for unit tests; main() runs only when the file is
-// executed directly (require.main === module), so requiring it has no effect.
+// executed directly (via runIfMain), so requiring it has no effect.
+// main() takes the repo root / output dir / layout as overridable paths so the
+// full render can be tested against a temp tree without touching dist-site/.
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { runIfMain } = require('./lib/run-if-main');
 
 const root = path.join(__dirname, '..');
 const outDir = path.join(root, 'dist-site');
@@ -114,7 +117,7 @@ const render = (template, tokens) => {
     return html;
 };
 
-const main = async () => {
+const main = async ({ rootDir = root, out = outDir, layoutFile = layoutPath } = {}) => {
     const { Marked } = await import('marked');
     const { gfmHeadingId, resetHeadings } = await import('marked-gfm-heading-id');
 
@@ -131,20 +134,20 @@ const main = async () => {
         },
     });
 
-    const logoSrc = path.join(root, 'src', 'assets', 'logo.png');
+    const logoSrc = path.join(rootDir, 'src', 'assets', 'logo.png');
     if (!fs.existsSync(logoSrc)) {
-        console.error(`✗ logo not found: ${path.relative(root, logoSrc)}`);
+        console.error(`✗ logo not found: ${path.relative(rootDir, logoSrc)}`);
         process.exit(1);
     }
 
-    const layout = fs.readFileSync(layoutPath, 'utf8');
-    const { version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    const layout = fs.readFileSync(layoutFile, 'utf8');
+    const { version } = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 
-    fs.rmSync(outDir, { recursive: true, force: true });
-    fs.mkdirSync(outDir, { recursive: true });
+    fs.rmSync(out, { recursive: true, force: true });
+    fs.mkdirSync(out, { recursive: true });
 
     for (const page of PAGES) {
-        const srcPath = path.join(root, page.src);
+        const srcPath = path.join(rootDir, page.src);
         if (!fs.existsSync(srcPath)) {
             console.error(`✗ source not found: ${page.src}`);
             process.exit(1);
@@ -161,19 +164,31 @@ const main = async () => {
             content,
             version,
         });
-        fs.writeFileSync(path.join(outDir, page.out), html, 'utf8');
+        fs.writeFileSync(path.join(out, page.out), html, 'utf8');
         console.log(`✓ ${page.src} → dist-site/${page.out}`);
     }
 
-    fs.copyFileSync(logoSrc, path.join(outDir, 'logo.png'));
+    fs.copyFileSync(logoSrc, path.join(out, 'logo.png'));
     console.log(`✓ copied logo.png\n✓ rendered ${PAGES.length} page(s) to dist-site/ for v${version}`);
 };
 
-if (require.main === module) {
+const runCli = () =>
     main().catch((err) => {
         console.error(err);
         process.exit(1);
     });
-}
 
-module.exports = { hasScheme, srcDirOf, toRepoPath, rewriteLink, rewriteImage, render, buildNav, PAGES };
+runIfMain(require.main, module, runCli);
+
+module.exports = {
+    hasScheme,
+    srcDirOf,
+    toRepoPath,
+    rewriteLink,
+    rewriteImage,
+    render,
+    buildNav,
+    PAGES,
+    main,
+    runCli,
+};

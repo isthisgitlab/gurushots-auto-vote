@@ -310,7 +310,8 @@
         ],
         "collectCoverage": false,
         "collectCoverageFrom": [
-            "src/js/**/*.{js,jsx}"
+            "src/js/**/*.{js,jsx}",
+            "scripts/**/*.js"
         ],
         "coverageDirectory": "coverage",
         "coverageReporters": [

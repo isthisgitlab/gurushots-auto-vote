@@ -24,61 +24,9 @@ const {
     GENERIC_TOKEN_RE,
     ENTRY_NAME,
 } = require('../../scripts/fetch-embeddings');
+const { makeStoredZip } = require('./helpers/stored-zip');
 
 const vec = (...xs) => Float64Array.from(xs);
-
-// Minimal STORED (uncompressed) zip builder — just enough structure for yauzl
-// to read entries, so the extraction guards can be exercised with no fs and no
-// network. `usizeOverride` lets a test lie about the declared inflated size in
-// the central directory (what a decompression bomb would do).
-const crc32 = (buf) => {
-    let crc = 0xffffffff;
-    for (let i = 0; i < buf.length; i++) {
-        crc ^= buf[i];
-        for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-    }
-    return (crc ^ 0xffffffff) >>> 0;
-};
-const makeStoredZip = (entries, { usizeOverride } = {}) => {
-    const locals = [];
-    const centrals = [];
-    let offset = 0;
-    for (const [name, content] of entries) {
-        const nameBuf = Buffer.from(name, 'utf8');
-        const data = Buffer.from(content, 'utf8');
-        const crc = crc32(data);
-        const local = Buffer.alloc(30);
-        local.writeUInt32LE(0x04034b50, 0);
-        local.writeUInt16LE(20, 4); // version needed
-        local.writeUInt32LE(crc, 14);
-        local.writeUInt32LE(data.length, 18); // compressed size (stored)
-        local.writeUInt32LE(data.length, 22); // uncompressed size
-        local.writeUInt16LE(nameBuf.length, 26);
-        const central = Buffer.alloc(46);
-        central.writeUInt32LE(0x02014b50, 0);
-        central.writeUInt16LE(20, 4); // version made by
-        central.writeUInt16LE(20, 6); // version needed
-        central.writeUInt32LE(crc, 16);
-        // A stored entry must declare equal compressed/uncompressed sizes, so
-        // a bomb lies about both — mirror that or yauzl's own consistency
-        // check fires before the guard under test.
-        central.writeUInt32LE(usizeOverride ?? data.length, 20);
-        central.writeUInt32LE(usizeOverride ?? data.length, 24);
-        central.writeUInt16LE(nameBuf.length, 28);
-        central.writeUInt32LE(offset, 42); // local header offset
-        locals.push(local, nameBuf, data);
-        centrals.push(Buffer.concat([central, nameBuf]));
-        offset += local.length + nameBuf.length + data.length;
-    }
-    const centralDir = Buffer.concat(centrals);
-    const eocd = Buffer.alloc(22);
-    eocd.writeUInt32LE(0x06054b50, 0);
-    eocd.writeUInt16LE(entries.length, 8);
-    eocd.writeUInt16LE(entries.length, 10);
-    eocd.writeUInt32LE(centralDir.length, 12);
-    eocd.writeUInt32LE(offset, 16);
-    return Buffer.concat([...locals, centralDir, eocd]);
-};
 
 describe('build-lexicon buildAsset', () => {
     const intermediate = {
@@ -318,5 +266,71 @@ describe('validate-lexicon pure helpers', () => {
         expect(percentile([1, 2, 3, 4], 99)).toBe(4);
         expect(percentile([7], 5)).toBe(7);
         expect(percentile([], 50)).toBeUndefined();
+    });
+});
+
+describe('pure pipeline edge cases', () => {
+    test('buildAsset tolerates a missing intermediate and skips stems too short to key', () => {
+        const { output, missing } = buildAsset(null, { concepts: [{ id: 'x', parent: 'p', words: ['', 'a'] }] });
+        expect(missing).toEqual([]);
+        expect(output).toMatchObject({ packed: {}, meanCentered: false, retrofitBeta: 0 });
+        expect(output.source).toBeUndefined();
+        expect(output.dims).toBeUndefined();
+        expect(output.scale).toBeUndefined();
+    });
+
+    test('buildAsset defaults packed and carries a finite retrofitBeta through', () => {
+        const { output, missing } = buildAsset({ dims: 2, retrofitBeta: 0.5 }, { concepts: [] });
+        expect(missing).toEqual([]);
+        expect(output.packed).toEqual({});
+        expect(output.retrofitBeta).toBe(0.5);
+    });
+
+    test('collectAuthoredWords tolerates a null config and word-less concepts', () => {
+        expect(collectAuthoredWords(null).bySurface.size).toBe(0);
+        const { bySurface, collisions } = collectAuthoredWords({
+            concepts: [{ id: 'x' }, { id: 'y', words: ['', 'a', 'a'] }],
+        });
+        expect([...bySurface.keys()]).toEqual(['', 'a']);
+        expect(collisions).toEqual([]);
+    });
+
+    test('normalize leaves a zero vector at zero instead of dividing by zero', () => {
+        const v = vec(0, 0);
+        normalize(v);
+        expect(Array.from(v)).toEqual([0, 0]);
+    });
+
+    test('retrofit ignores an authored row with no known owner', () => {
+        const rows = [{ token: 'ghost', vec: vec(1, 0), isAuthored: true }];
+        expect(retrofit(rows, new Map(), 0.5)).toBe(0);
+    });
+
+    test('assignStems skips unkeyable tokens, lets the first authored row win, and caps bad samples at 20', () => {
+        const rows = [
+            { token: '', vec: vec(1, 0), isAuthored: false },
+            { token: 'a', vec: vec(1, 0), isAuthored: false },
+            { token: 'cat', vec: vec(1, 0), isAuthored: true },
+            { token: 'cats', vec: vec(0, 1), isAuthored: true },
+            { token: 'day', vec: vec(1, 0), isAuthored: false },
+        ];
+        for (let i = 0; i < 22; i++) rows.push({ token: 'days', vec: vec(-1, 0), isAuthored: false });
+        const { stems, merges, badMerges, badSamples } = assignStems(rows, 0.4);
+        expect([...stems.keys()]).toEqual(['cat', 'day']);
+        expect(stems.get('cat').token).toBe('cat');
+        expect(merges).toBe(22);
+        expect(badMerges).toBe(22);
+        expect(badSamples).toHaveLength(20);
+    });
+
+    test('quantizePack falls back to a unit scale for an empty or all-zero table', () => {
+        expect(quantizePack(new Map(), 2)).toEqual({ scale: 1 / 127, packed: {} });
+    });
+
+    test('validateConfigRefs tolerates an empty config and null concept entries', () => {
+        expect(validateConfigRefs({})).toEqual([]);
+        expect(validateConfigRefs({ concepts: [null, { id: 'x' }], organizationalParents: ['p'] })).toEqual([
+            'organizationalParents references unknown parent "p"',
+        ]);
     });
 });

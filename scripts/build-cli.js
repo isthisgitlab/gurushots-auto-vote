@@ -5,6 +5,7 @@ const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
 const packageJson = require('../package.json');
+const { runIfMain } = require('./lib/run-if-main');
 
 const { version } = packageJson;
 
@@ -182,4 +183,6 @@ async function main() {
     }
 }
 
-main();
+runIfMain(require.main, module, main);
+
+module.exports = { platforms, ensureDir, bundleCli, generateSeaBlob, getOfficialNodeBinary, buildPlatform, main };
