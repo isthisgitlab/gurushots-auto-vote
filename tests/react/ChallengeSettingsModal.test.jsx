@@ -654,6 +654,19 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
         expect(document.body.textContent).not.toContain('app.scheduledFillUnreachableHint');
     });
 
+    test('(e) a future daily fill before close keeps replace mode reachable', async () => {
+        const nextTime = new Date((NOW_SEC + 30 * 60) * 1000).toISOString().slice(11, 16);
+        mockApi.getChallengeOverrides.mockResolvedValue({
+            useScheduledFill: true,
+            scheduledFillTime: [nextTime],
+            scheduledFillWindowMinutes: 5,
+            scheduledFillReplaces: true,
+        });
+        renderWithChallenge({ type: 'default', close_time: NOW_SEC + 7200, member: {} });
+        await awaitRendered();
+        expect(document.body.textContent).not.toContain('app.scheduledFillUnreachableHint');
+    });
+
     // preact/compat rewrites onChange→onInput for input/textarea only, so a
     // <select>'s onChange needs the real native change event (same workaround
     // as ChallengeProfilesBar.test.jsx).

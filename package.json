@@ -118,7 +118,7 @@
         "@types/node": "^26.6.2",
         "concurrently": "^10.0.5",
         "cross-env": "^10.1.0",
-        "daisyui": "^5.7.43",
+        "daisyui": "^5.7.44",
         "electron": "^44.4.5",
         "electron-builder": "^26.16.1",
         "electronmon": "^2.0.4",

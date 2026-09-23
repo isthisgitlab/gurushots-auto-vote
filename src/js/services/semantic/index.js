@@ -142,7 +142,7 @@ const observeVocabulary = (challenge, keywords, photos, scores, hasThemeVector) 
             labelWords: [...labelWords],
             noThemeVector: !hasThemeVector,
             noLabelVectors: !hasLabelVector,
-            noOnThemeScore: hasThemeVector && ![...(scores?.values() || [])].some((entry) => clearsFloor(entry.score)),
+            noOnThemeScore: hasThemeVector && ![...scores.values()].some((entry) => clearsFloor(entry.score)),
         });
     } catch {
         // Observation must never disable semantic ranking.

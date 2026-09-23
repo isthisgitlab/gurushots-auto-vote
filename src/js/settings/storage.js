@@ -214,11 +214,8 @@ const getEnvironmentInfo = () => {
  *     users have no business reading).
  *   - Capacitor app WebView: hydrate-once cache (initializeAsync) +
  *     ordered async write-behind to @capacitor/preferences under prefKey.
- *   - Android headless service: in-memory only. The native
- *     AndroidHeadlessStore bridge is a keyless single blob owned by the
- *     settings store, so other stores keep per-cycle state in memory —
- *     same effective behavior the raw-fs implementation had there
- *     (every fs call threw and fell back to defaults), minus the noise.
+ *   - Android headless service: the native keyed preference bridge persists
+ *     supported stores; unsupported keys retain their per-cycle memory cache.
  *
  * @param {{fileName: string, prefKey: string}} opts
  */

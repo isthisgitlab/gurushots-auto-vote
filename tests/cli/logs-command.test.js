@@ -5,6 +5,7 @@
  */
 
 jest.mock('fs');
+jest.mock('../../src/js/services/semantic/diagnostics', () => ({ diagnostics: { read: jest.fn() } }));
 
 jest.mock('../../src/js/logger.js', () => {
     const infoMock = jest.fn();
@@ -22,6 +23,7 @@ jest.mock('../../src/js/logger.js', () => {
 
 const fs = require('fs');
 const logger = require('../../src/js/logger.js');
+const { diagnostics } = require('../../src/js/services/semantic/diagnostics');
 const { showLogs } = require('../../src/js/cli/commands/logs');
 
 describe('CLI logs command', () => {
@@ -55,5 +57,47 @@ describe('CLI logs command', () => {
 
         expect(() => showLogs({})).not.toThrow();
         expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    test('prints a ranked local lexicon report without reading a log file', () => {
+        diagnostics.read.mockReturnValue({
+            since: '2026-09-24',
+            updatedAt: '2026-09-25',
+            challenges: 2,
+            noThemeVector: 1,
+            noLabelVectors: 0,
+            noOnThemeScore: 1,
+            themeWords: { zebra: 1, apple: 2, blue: 1 },
+            labelWords: { moss: 1 },
+        });
+
+        showLogs({ category: 'lexicon' });
+
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+        const printed = logger.__infoMock.mock.calls.map(([line]) => line);
+        expect(printed).toContain('Challenge observations: 2');
+        expect(printed).toContain('No theme vector: 1');
+        expect(printed).toContain('Missing challenge words: apple: 2, blue: 1, zebra: 1');
+        expect(printed).toContain('Missing photo-label words: moss: 1');
+    });
+
+    test('reports empty counters and an unobserved timestamp', () => {
+        diagnostics.read.mockReturnValue({
+            since: '2026-09-24',
+            updatedAt: null,
+            challenges: 0,
+            noThemeVector: 0,
+            noLabelVectors: 0,
+            noOnThemeScore: 0,
+            themeWords: {},
+            labelWords: {},
+        });
+
+        showLogs({ category: 'lexicon' });
+
+        const printed = logger.__infoMock.mock.calls.map(([line]) => line);
+        expect(printed[0]).toContain('last updated never');
+        expect(printed).toContain('Missing challenge words: (none)');
+        expect(printed).toContain('Missing photo-label words: (none)');
     });
 });

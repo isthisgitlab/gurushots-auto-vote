@@ -72,6 +72,28 @@ describe('getSemanticScores — lexicon backend, end-to-end', () => {
         });
     });
 
+    test('uses a title when no challenge ID or URL exists and records a sub-floor result', async () => {
+        shouldCollect.mockReturnValue(true);
+        const scores = await getSemanticScores({ title: 'Flowers' }, [{ id: 'car', labels: ['sedan'] }]);
+        expect(scores.get('car').score).toBeLessThan(SEMANTIC_MATCH_FLOOR / 100);
+        expect(diagnostics.record).toHaveBeenCalledWith('Flowers', {
+            themeWords: [],
+            labelWords: [],
+            noThemeVector: false,
+            noLabelVectors: false,
+            noOnThemeScore: true,
+        });
+    });
+
+    test('a diagnostics write failure does not change the selected semantic score', async () => {
+        shouldCollect.mockReturnValue(true);
+        diagnostics.record.mockImplementationOnce(() => {
+            throw new Error('diagnostics unavailable');
+        });
+        const scores = await getSemanticScores({ title: 'Flowers' }, [{ id: 'flower', labels: ['sunflower'] }]);
+        expect(scores.get('flower').score).toBeGreaterThan(SEMANTIC_MATCH_FLOOR / 100);
+    });
+
     test('ranks an on-theme (cat) photo above an off-theme (car) one', async () => {
         const photos = [
             { id: 'cat', labels: ['cat', 'kitten', 'whiskers'] },

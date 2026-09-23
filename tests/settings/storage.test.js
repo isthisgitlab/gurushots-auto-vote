@@ -71,6 +71,22 @@ describe('storage — headless service branch', () => {
         expect(store.writeKey).toHaveBeenCalledWith('gs_lexicon_diagnostics', '{"challenges":1}');
         expect(diagnostics.readRaw()).toBe('{"challenges":1}');
     });
+
+    test('keyed native failures fall back to the in-memory diagnostics value', () => {
+        store.readKey = jest.fn(() => {
+            throw new Error('read unavailable');
+        });
+        store.writeKey = jest.fn(() => {
+            throw new Error('write unavailable');
+        });
+        const diagnostics = createJsonStore({
+            fileName: 'lexicon-diagnostics.json',
+            prefKey: 'gs_lexicon_diagnostics',
+        });
+
+        expect(() => diagnostics.writeRaw('{"challenges":2}')).not.toThrow();
+        expect(diagnostics.readRaw()).toBe('{"challenges":2}');
+    });
 });
 
 describe('storage — capacitor write-behind', () => {
