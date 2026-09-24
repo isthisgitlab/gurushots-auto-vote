@@ -171,30 +171,31 @@ describe('build-cli', () => {
             expect(execFileSync).not.toHaveBeenCalled();
         });
 
-        test('extracts an already-downloaded darwin tarball with gzip', async () => {
-            const tarPath = path.join(NODE_CACHE_DIR, `node-v${NODE_VER}-darwin-arm64.tar.gz`);
-            existing.add(tarPath);
+        test('downloads and extracts a darwin gzip tarball from memory', async () => {
+            const tarName = `node-v${NODE_VER}-darwin-arm64.tar.gz`;
+            global.fetch.mockResolvedValue({ ok: true, arrayBuffer: async () => new Uint8Array([4, 5]).buffer });
             execFileSync.mockImplementation(() => existing.add(nodeBinary('darwin', 'arm64')));
             await expect(buildCli.getOfficialNodeBinary('darwin', 'arm64')).resolves.toBe(
                 nodeBinary('darwin', 'arm64'),
             );
-            expect(global.fetch).not.toHaveBeenCalled();
+            expect(global.fetch).toHaveBeenCalledWith(`https://nodejs.org/dist/v${NODE_VER}/${tarName}`);
             expect(fs.mkdirSync).toHaveBeenCalledWith(NODE_CACHE_DIR, { recursive: true });
-            expect(execFileSync).toHaveBeenCalledWith('tar', ['-xzf', tarPath, '-C', NODE_CACHE_DIR], {
-                stdio: 'inherit',
+            expect(fs.writeFileSync).not.toHaveBeenCalled();
+            expect(execFileSync).toHaveBeenCalledWith('tar', ['-xzf', '-', '-C', NODE_CACHE_DIR], {
+                input: Buffer.from([4, 5]),
+                stdio: ['pipe', 'inherit', 'inherit'],
             });
         });
 
-        test('downloads and extracts a linux xz tarball', async () => {
+        test('downloads and extracts a linux xz tarball from memory', async () => {
             const tarName = `node-v${NODE_VER}-linux-x64.tar.xz`;
-            const tarPath = path.join(NODE_CACHE_DIR, tarName);
             global.fetch.mockResolvedValue({ ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer });
             execFileSync.mockImplementation(() => existing.add(nodeBinary('linux', 'x64')));
             await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).resolves.toBe(nodeBinary('linux', 'x64'));
             expect(global.fetch).toHaveBeenCalledWith(`https://nodejs.org/dist/v${NODE_VER}/${tarName}`);
-            expect(fs.writeFileSync).toHaveBeenCalledWith(tarPath, Buffer.from([1, 2, 3]));
-            expect(execFileSync).toHaveBeenCalledWith('tar', ['-xJf', tarPath, '-C', NODE_CACHE_DIR], {
-                stdio: 'inherit',
+            expect(execFileSync).toHaveBeenCalledWith('tar', ['-xJf', '-', '-C', NODE_CACHE_DIR], {
+                input: Buffer.from([1, 2, 3]),
+                stdio: ['pipe', 'inherit', 'inherit'],
             });
         });
 
@@ -205,7 +206,7 @@ describe('build-cli', () => {
         });
 
         test('throws when extraction does not produce the binary', async () => {
-            existing.add(path.join(NODE_CACHE_DIR, `node-v${NODE_VER}-linux-x64.tar.xz`));
+            global.fetch.mockResolvedValue({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) });
             await expect(buildCli.getOfficialNodeBinary('linux', 'x64')).rejects.toThrow(
                 `Extracted Node binary not found at ${nodeBinary('linux', 'x64')}`,
             );

@@ -78,6 +78,8 @@ describe('sanitizeWelcomeMessage edges', () => {
         try {
             expect(sanitizeWelcomeMessage('<b>Hi</b> & "you" <x>')).toBe('Hi &amp; &quot;you&quot; ');
             expect(sanitizeWelcomeMessage('a > b')).toBe('a &gt; b');
+            // Nested fragments never reassemble into a live tag.
+            expect(sanitizeWelcomeMessage('<scr<b>ipt>alert(1)</script>')).toBe('ipt&gt;alert(1)');
         } finally {
             global.DOMParser = original;
         }

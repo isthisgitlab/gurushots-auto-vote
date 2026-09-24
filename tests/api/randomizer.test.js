@@ -91,7 +91,7 @@ describe('initializeHeaders — fresh generation', () => {
         expect(first['x-model']).toBe(IPHONE_MODELS[0]);
         expect(first['accept-language']).toBe(LANGUAGE_PREFERENCES[0]);
         expect(first['user-agent']).toContain(`iOS ${IOS_VERSIONS[0]}`);
-        expect(first['user-agent']).toMatch(new RegExp(`Alamofire/${ALAMOFIRE_VERSIONS[0].replace(/\./g, '\\.')}$`));
+        expect(first['user-agent'].endsWith(`Alamofire/${ALAMOFIRE_VERSIONS[0]}`)).toBe(true);
 
         store = {};
         Math.random.mockReturnValue(0.9999);

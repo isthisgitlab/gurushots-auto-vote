@@ -198,6 +198,14 @@ export function sanitizeWelcomeMessage(input) {
         linkifyTextNodes(wrap, doc);
         return wrap.innerHTML;
     } catch {
-        return escapeText(str.replace(/<[^>]+>/g, ''));
+        // Strip to a fixpoint so no pass can leave a reassembled tag behind;
+        // escapeText then neutralises any stray `<` / `>` that remain.
+        let text = str;
+        let prev;
+        do {
+            prev = text;
+            text = text.replace(/<[^>]+>/g, '');
+        } while (text !== prev);
+        return escapeText(text);
     }
 }

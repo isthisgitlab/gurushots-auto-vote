@@ -74,9 +74,16 @@ let anyFailure = false;
 let totalChanges = 0;
 
 for (const file of files) {
-    if (!fs.existsSync(file)) continue;
     const name = path.relative(root, file);
-    const original = fs.readFileSync(file, 'utf8');
+    // Read without a prior existsSync so the later write can't act on a file
+    // that changed between check and use; a missing README is simply skipped.
+    let original;
+    try {
+        original = fs.readFileSync(file, 'utf8');
+    } catch (err) {
+        if (err.code === 'ENOENT') continue;
+        throw err;
+    }
     let content = original;
     let changes = 0;
     let fileFailed = false;

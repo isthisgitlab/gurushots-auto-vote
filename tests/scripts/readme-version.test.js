@@ -15,9 +15,8 @@ jest.mock('path', () => jest.requireActual('path'));
 // Shared instance so the copy required inside jest.isolateModules is this one.
 const mockFiles = new Map();
 const mockFs = {
-    existsSync: jest.fn((p) => mockFiles.has(p)),
     readFileSync: jest.fn((p) => {
-        if (!mockFiles.has(p)) throw new Error(`ENOENT: ${p}`);
+        if (!mockFiles.has(p)) throw Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' });
         return mockFiles.get(p);
     }),
     writeFileSync: jest.fn((p, data) => {
@@ -124,6 +123,16 @@ describe('scripts/readme-version.js', () => {
 
         expect(run()).toBe(1);
         expect(err()).toContain('No version in package.json');
+    });
+
+    test('rethrows a README read failure other than a missing file', () => {
+        mockFiles.set(README, readme('2.0.0'));
+        mockFs.readFileSync.mockImplementationOnce((p) => mockFiles.get(p)); // package.json
+        mockFs.readFileSync.mockImplementationOnce(() => {
+            throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+        });
+
+        expect(() => run(['--check'])).toThrow('EACCES');
     });
 
     describe('update mode', () => {

@@ -85,7 +85,7 @@ beforeEach(() => {
 describe('header', () => {
     test('opens the challenge URL and the settings modal', async () => {
         const { onSettingsClick } = renderCard(makeChallenge());
-        fireEvent.click(screen.getByText(/gurushots\.com\/challenge\/sunset/));
+        fireEvent.click(screen.getByText('gurushots.com/challenge/sunset'));
         await waitFor(() =>
             expect(window.api.openExternalUrl).toHaveBeenCalledWith('https://gurushots.com/challenge/sunset'),
         );
@@ -96,7 +96,7 @@ describe('header', () => {
     test('flash challenges have no settings button, no URL row without a url', () => {
         renderCard(makeChallenge({ type: 'flash', url: '' }));
         expect(screen.queryByText('app.settings')).toBeNull();
-        expect(screen.queryByText(/gurushots\.com\/challenge/)).toBeNull();
+        expect(screen.queryByText(/^gurushots\.com\/challenge\//)).toBeNull();
     });
 
     test('Vote and Run buttons invoke their IPC and report completion', async () => {

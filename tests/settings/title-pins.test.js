@@ -131,10 +131,11 @@ describe('settings facade — first-seen title pins', () => {
     });
 
     test('a prototype-named id never surfaces a non-string prototype member', () => {
-        settings.mergeTitlePins({ __proto__: 'Proto Title', constructor: 'Ctor Title', 1: 'Real' }, []);
+        // JSON.parse (like an API payload) makes `__proto__` a real own key; a
+        // plain `__proto__:` literal would only set the prototype.
+        settings.mergeTitlePins(JSON.parse('{"__proto__":"Proto Title","constructor":"Ctor Title","1":"Real"}'), []);
         const pins = settings.getTitlePins();
-        // Object-literal `__proto__` keys don't become own properties, so the
-        // facade must only ever return validated own string entries.
+        // The facade must only ever return validated own string entries.
         for (const [, title] of Object.entries(pins)) {
             expect(typeof title).toBe('string');
         }

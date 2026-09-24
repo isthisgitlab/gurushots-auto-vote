@@ -138,22 +138,20 @@ async function getOfficialNodeBinary(plat, arch) {
     }
 
     ensureDir(NODE_CACHE_DIR);
-    const tarPath = path.join(NODE_CACHE_DIR, tarName);
 
-    if (!fs.existsSync(tarPath)) {
-        const url = `https://nodejs.org/dist/v${ver}/${tarName}`;
-        console.log(`⬇️  Downloading ${tarName}...`);
-        const res = await fetch(url);
-        if (!res.ok) {
-            throw new Error(`Failed to download ${url}: HTTP ${res.status}`);
-        }
-        const buf = Buffer.from(await res.arrayBuffer());
-        fs.writeFileSync(tarPath, buf);
+    const url = `https://nodejs.org/dist/v${ver}/${tarName}`;
+    console.log(`⬇️  Downloading ${tarName}...`);
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new Error(`Failed to download ${url}: HTTP ${res.status}`);
     }
+    const buf = Buffer.from(await res.arrayBuffer());
 
+    // Extract straight from memory: the extracted directory is the cache, so the
+    // tarball never needs to touch disk.
     console.log(`📂 Extracting ${tarName}...`);
     const flag = ext === 'tar.gz' ? '-xzf' : '-xJf';
-    execFileSync('tar', [flag, tarPath, '-C', NODE_CACHE_DIR], { stdio: 'inherit' });
+    execFileSync('tar', [flag, '-', '-C', NODE_CACHE_DIR], { input: buf, stdio: ['pipe', 'inherit', 'inherit'] });
 
     if (!fs.existsSync(binaryPath)) {
         throw new Error(`Extracted Node binary not found at ${binaryPath}`);
