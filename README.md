@@ -310,7 +310,7 @@ Everything above operates on challenges you've already joined. **Auto-join** (of
 
 ### Challenge rules
 
-GuruShots recycles each challenge under a fresh ID every rotation, so a per-challenge override is lost when the challenge comes back. **Challenge rules** match on what survives a rotation instead. They are managed in the GUI Settings modal under **Challenge Rules** (managed in the GUI and Android app's Settings; the CLI applies them but has no editor).
+GuruShots recycles each challenge under a fresh ID every rotation, so a per-challenge override is lost when the challenge comes back. **Challenge rules** match on what survives a rotation instead. They are managed under **Challenge Rules** in the Settings modal of the GUI and Android app; the CLI applies them but has no editor.
 
 - **Conditions.** A rule can match on any mix of: one or more **titles** (is exactly / starts with / contains, case-insensitive — any listed title is enough), the challenge's own **tag** (Exhibition, Comm, …, not a photo tag), its **type** (default, flash, exhibition, …), its **photo count**, and its **length** — "runs at least" / "runs at most" in hours, measured start to end (24 h = 1 day, 168 h = 7 days). Every filled field must match; an empty field is ignored. A challenge whose start or end time is unknown never matches a length condition.
 - **What a rule does.** Assign a settings **profile** (any per-challenge setting — voting, boost, turbo, …), switch **auto-join** / **auto-submit** on or off, set the **join timing** (percent of the challenge elapsed, or hours before end), and add must/should-include **photo tags**. An empty field means "inherit".
