@@ -33,19 +33,18 @@ function EarnTurboButton({ turboError, playingTurbo, disabled, onPlay, label }) 
  * where the entries cell isn't there to say what they add.
  */
 export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon = '' }) {
-    const disabled = filling;
     const spinner = <span className="loading loading-spinner loading-xs" />;
     return (
         <>
             <button
                 className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
                 onClick={() => onFill('one')}
-                disabled={disabled}
+                disabled={filling}
             >
                 {filling ? spinner : `${icon}+1`}
             </button>
             {slotsRemaining > 1 && (
-                <button className="btn btn-xs btn-warning" onClick={() => onFill('all')} disabled={disabled}>
+                <button className="btn btn-xs btn-warning" onClick={() => onFill('all')} disabled={filling}>
                     {filling ? spinner : `${icon}+${slotsRemaining}`}
                 </button>
             )}
