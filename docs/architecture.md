@@ -491,7 +491,7 @@ repeated six times is one that gets forgotten at one of them.
   recursively redacts an **allowlist** of sensitive object keys; `redactMessage` scrubs
   `token=…` / `password=…`-style fragments folded into message strings. Both run on every entry, and
   untrusted API strings additionally pass through `logger.sanitizeLogString()` before interpolation. The
-  allowlist now covers the literal `x-token` header key (added for the join/bankroll WEB endpoints, which
-  send `x-token`), but it is still an **allowlist** — prefer never logging a raw headers object rather than
+  allowlist covers the literal `x-token` header key the join/bankroll WEB endpoints send, but it is still
+  an **allowlist** — prefer never logging a raw headers object rather than
   relying on it — and neither layer is **PII-aware** (e.g. a username logged into a message is not
   redacted).
