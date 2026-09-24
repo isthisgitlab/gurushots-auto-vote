@@ -1,7 +1,7 @@
 /**
  * Unit tests for the canonical duration formatter (src/js/format/duration.js)
  * shared by the CLI status, the renderer boost-window banner + challenge
- * countdown, and the real strategy's boost logging. The default mode locks the
+ * countdown, and the voting pass's log lines. The default mode locks the
  * CLI/GUI parity the old per-shell copies promised; the includeSeconds mode
  * reproduces the former formatTimeRemaining body.
  */

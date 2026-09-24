@@ -239,8 +239,8 @@ const tagsList = z
 // Scheduled fill: LISTS of triggers (issue #26 follow-up — "fill twice in a
 // day, like 4 hours to the end and 10 hours to the end"). Each entry opens
 // its own fill window; the empty array is the off sentinel and the schema
-// default (the old scalar '' / 0 sentinels are migrated in settings/migrations.js —
-// _scheduledFillListsMigratedV1). Entries are deduped by the validators and
+// default (scalar '' / 0 values in a stored blob are migrated to lists in
+// settings/migrations.js — _scheduledFillListsMigratedV1). Entries are deduped by the validators and
 // canonical-sorted by the sanitizers; order carries no meaning. The window
 // floor keeps a window from being shorter than one last-minute check cycle;
 // the 12h ceiling keeps "hold at 100%" from silently becoming an all-day
@@ -1327,9 +1327,9 @@ const SETTINGS_SCHEMA = {
         label: 'app.autoFill',
         description: 'app.autoFillDesc',
     },
-    // Replaces the old autoFillIntervalMinutes single-interval knob (migrated
-    // in settings/migrations.js `_autoFillScheduleMigratedV1`). Default mirrors the old
-    // 10-minute default: 2 @ 30m, 3 @ 20m, 4 @ 10m before close.
+    // A stored single autoFillIntervalMinutes value is migrated into this list
+    // in settings/migrations.js (`_autoFillScheduleMigratedV1`). Default: 2 @ 30m,
+    // 3 @ 20m, 4 @ 10m before close.
     autoFillSchedule: {
         type: 'schedule',
         default: [

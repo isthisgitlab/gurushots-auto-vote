@@ -1,7 +1,8 @@
 /**
  * Canonical "seconds → human duration" formatter, shared by every platform
  * shell (CLI status, the renderer boost-window banner + challenge countdown,
- * and the real strategy's boost logging) so they all read identically.
+ * and the voting pass's log lines in services/votingOrchestrator.js) so they
+ * all read identically.
  *
  * Authored as CommonJS with no React/Node-service dependency: the CLI (CJS)
  * `require`s it and the renderer (ESM, bundled by esbuild + @swc/jest) imports

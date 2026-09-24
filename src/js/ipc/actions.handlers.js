@@ -28,7 +28,7 @@ const turboMiniGameInFlight = new Set();
 const sanitizeForLog = logger.sanitizeLogString;
 
 /** Shared catch-path result: `{ success: false, error }` with a fallback message. */
-const errorResult = (error, fallback) => ({ success: false, error: error.message || fallback });
+const errorResult = (error, fallback) => ({ success: false, error: error?.message || fallback });
 
 /** Re-fetch the active list and resolve one challenge from it (null when it is gone). */
 const fetchLiveChallenge = async (strategy, token, challengeId) => {
@@ -351,7 +351,7 @@ const handleGetMemberChallenges = async (event, filter) => {
         return { success: true, items: Array.isArray(items) ? items : [] };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);
-        return { success: false, items: [], error: error.message || 'Failed to list challenges' };
+        return { success: false, items: [], error: error?.message || 'Failed to list challenges' };
     }
 };
 

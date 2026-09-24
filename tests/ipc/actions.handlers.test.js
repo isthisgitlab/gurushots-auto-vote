@@ -771,6 +771,7 @@ describe('get-bankroll — errors', () => {
     test.each([
         ['its message', new Error('timeout'), 'timeout'],
         ['the generic fallback', new Error(''), 'Failed to read bankroll'],
+        ['the generic fallback for a thrown null', null, 'Failed to read bankroll'],
     ])('returns %s when getBankroll throws', async (_label, err, expected) => {
         stubAuthGuardOk();
         stubStrategy({ getBankroll: jest.fn().mockRejectedValue(err) });
@@ -798,6 +799,7 @@ describe('get-member-challenges — filter, shape and errors', () => {
     test.each([
         ['its message', new Error('503'), '503'],
         ['the generic fallback', new Error(''), 'Failed to list challenges'],
+        ['the generic fallback for a thrown null', null, 'Failed to list challenges'],
     ])('returns %s with an empty list when listing throws', async (_label, err, expected) => {
         stubAuthGuardOk();
         stubStrategy({ getMemberChallenges: jest.fn().mockRejectedValue(err) });

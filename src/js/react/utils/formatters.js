@@ -7,8 +7,8 @@ import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
 import { formatDuration } from '../../format/duration';
 import { entryPhotoUrl } from '../../format/photoUrl';
 
-// Re-exported from the shared core so the renderer, the CLI, and strategies/real all
-// format durations identically — see src/js/format/duration.js.
+// Re-exported from the shared core so the renderer, the CLI, and the voting pass
+// (services/votingOrchestrator.js) all format durations identically — see src/js/format/duration.js.
 export { formatDuration };
 
 // Entry thumbnails. Re-exported here rather than imported straight into the

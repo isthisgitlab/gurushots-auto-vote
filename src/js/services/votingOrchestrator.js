@@ -340,8 +340,8 @@ const buildFillDeps = (api) => ({
     getImageData: api.getImageData,
     submitToChallenge: api.submitToChallenge,
     getActiveChallenges: api.getActiveChallenges,
-    // Enables tag resolution on the themed-search miss path; omitting the
-    // pair simply falls back to the pre-resolution behavior.
+    // Enables tag resolution on the themed-search miss path; without the
+    // pair the themed search skips tag resolution.
     searchTagAutocomplete: api.searchTagAutocomplete,
     getCurrentMemberProfile: api.getCurrentMemberProfile,
 });
@@ -696,6 +696,9 @@ const processChallenge = async (challenge, now, position, total, pass) => {
             .info(`${logger.challengeTag(challenge)} New entry detected — ${describeNewEntryOutcome(decision)}`, null);
     }
 
+    // onVoteLanded fires only when a cancel follows a submit that already
+    // landed, so it records the snapshot with voteThrew=false; calling it from
+    // a failure path would disarm a forced-vote retry.
     const vote = await voteOnChallenge(challenge, decision, pass, () =>
         recordEntrySnapshot(pass.entryTracker, entry, decision, false),
     );

@@ -28,14 +28,14 @@ export const ICON_PATHS = {
  * Stroked outline SVG icon (`currentColor`, round caps/joins, width 2) — the
  * shape every inline button glyph shares. `d` is one path string or an array
  * of them for a multi-path glyph; `className` carries the Tailwind size and
- * spacing.
+ * spacing. Decorative: the button around it carries the accessible name.
  *
  * @param {{ d: string | string[], className: string }} props
  */
 export function StrokeIcon({ d, className }) {
     const paths = Array.isArray(d) ? d : [d];
     return (
-        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             {paths.map((path) => (
                 <path key={path} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={path} />
             ))}

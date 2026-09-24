@@ -506,9 +506,9 @@ const getSlotsRemaining = (challenge) => {
 /**
  * Rows of an autoFillSchedule value that are actually usable. The value comes
  * straight off the persisted settings blob via getEffectiveSetting — no zod
- * re-validation happens on read — and these helpers sit on the per-challenge
- * dispatch path in strategies/real/index.js that has no per-challenge try/catch, so a throw
- * here would abort the whole voting cycle for every challenge. Anything that
+ * re-validation happens on read — and these helpers run for every challenge on
+ * every voting pass, so a throw here would skip that challenge's remaining
+ * actions on every pass for as long as the blob stays corrupted. Anything that
  * isn't an array of { count, seconds } objects with finite numbers is silently
  * dropped (mirrors getSlotsRemaining's Number.isFinite convention). Length is
  * capped as defense-in-depth: the write path (zod) allows at most

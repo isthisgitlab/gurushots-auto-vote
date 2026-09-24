@@ -88,8 +88,8 @@ Domain terms used throughout, in reader's terms:
       L973: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
       emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill.js` — around
       L1494: `emergencySeconds <= 0` → `'disabled'`).
-- Magic constants: final-window width defaults to 3600 s — now the `finalWindowDuration` setting's default
-  (configurable 60 s … 30 d), no longer hardcoded; key-unlock boost default window = 900 s when the setting is
+- Magic constants: final-window width defaults to 3600 s — the `finalWindowDuration` setting's default
+  (configurable 60 s … 30 d); key-unlock boost default window = 900 s when the setting is
   unusable (explicit `0` still = never).
 - Vote submission votes over a **Fisher-Yates-shuffled, de-duplicated** pool (structural termination — the
   older rejection-sampling could loop forever on duplicate ids) and never posts an empty ballot
@@ -153,7 +153,7 @@ Domain terms used throughout, in reader's terms:
   tactics really track how long a challenge runs, and photo count is only an **imperfect proxy** for it: on
   the live account 4-photo defaults run 24h, 2-photo ones 48h and 3-photo ones 72h, yet 4-photo challenges
   also span 72h, 168h and 515.7h — so "4 photos" and "4 photos + at least 168h" are different rules.
-- **Resolution cascades per key (`_ruleValuesFor`).** The matching rules are walked in list order and, for
+- **Resolution cascades per key (`ruleValuesFor` in `settings/ruleResolution.js`).** The matching rules are walked in list order and, for
   each setting, the FIRST rule that sets it wins — its own inline value first, then (for the first rule
   naming a profile only) that profile's value; a key it leaves unset falls through to the next matching
   rule, then to the global default. Only **one profile** ever applies to a challenge, because profiles are
@@ -201,8 +201,8 @@ Domain terms used throughout, in reader's terms:
 
 ## 3. GuruShots API transport
 
-- **Layering**: `api/` is transport only — `api-client.js` plus one thin wrapper per endpoint, importing
-  nothing from `services/`. The real-mode strategy composes those wrappers with the services in
+- **Layering**: `api/` is the transport layer — `api-client.js` plus one thin wrapper per endpoint, importing
+  nothing from `services/` (`api/voting.js` still records vote timestamps in `metadata.js`). The real-mode strategy composes those wrappers with the services in
   `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its join/claim pre-steps, manual join, the
   Turbo mini-game), `applyBoost.js` (picks the entry via `pickBoostEntry`, posts it through
   `api/boost.js#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent

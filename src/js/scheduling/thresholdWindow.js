@@ -1,10 +1,10 @@
 /**
  * Shared last-minute threshold math for both voting schedulers.
  *
- * `runScheduler.js` (CLI/Android) and `autovoteScheduler.js` (React GUI) each
- * used to carry their own copy of "which challenge crosses its
- * lastMinuteThreshold next?" and "is any challenge in its window now?". The
- * only real difference was how a per-challenge threshold gets resolved:
+ * `runScheduler.js` (CLI/Android) and `autovoteScheduler.js` (React GUI) both
+ * answer "which challenge crosses its lastMinuteThreshold next?" and "is any
+ * challenge in its window now?" through this module. The only difference is
+ * how a per-challenge threshold gets resolved:
  *   - Node:    settings.getEffectiveSetting('lastMinuteThreshold', id)  (sync)
  *   - WebView: window.api.getEffectiveSetting('lastMinuteThreshold', id) (async)
  *
@@ -81,7 +81,7 @@ const leadWindowStart = (challenge, startTime, leadSec) => ({
 const finalWindowTopUpWindow = (challenge, config) => {
     if (!config || config.enabled !== true) return null;
     const leadSec = clampLeadSec(config.leadSec);
-    // Mirrors VotingLogic's finalWindowSec clamp (>= 60s, else legacy hour).
+    // Mirrors VotingLogic's finalWindowSec clamp (>= 60s, else the default hour).
     const durationSec = Number.isFinite(config.durationSec) && config.durationSec >= 60 ? config.durationSec : 3600;
     return { startTime: Number(challenge.close_time) - (durationSec + leadSec), leadSec };
 };
@@ -98,7 +98,7 @@ const finalWindowTopUpWindow = (challenge, config) => {
  * over 59 min, or NaN) falls back to the schema default (15 min) so a bad override
  * can't disable the cap. The valid range mirrors VotingLogic's rule-engine guard
  * (1..59 min) so the two same-purpose guards can't drift on corrupt input. A
- * corrupt durationSec (sub-minute or NaN) falls back to the legacy fixed hour
+ * corrupt durationSec (sub-minute or NaN) falls back to the default fixed hour
  * (3600), mirroring VotingLogic's finalWindowSec clamp for the same input.
  *
  * @param {Array} eligible - already-filtered still-open non-flash challenges
@@ -366,7 +366,7 @@ const capCadenceToBoundary = (cadence, boundarySec, now, minGapMs, mode) => {
  * When the host opts in (both `resolveScheduledFill` and `timezone` passed),
  * the delay is additionally capped to the soonest upcoming scheduled-fill
  * window start (scheduling/scheduledFill.js) — whichever boundary is sooner
- * wins. Hosts that don't pass the new opts get byte-identical behavior.
+ * wins. Hosts that don't pass these opts get no scheduled-fill cap.
  * The in-window last-minute branch above takes priority over this cap on
  * purpose: while any challenge is in its final stretch the fixed fast
  * cadence (default 1 min) already re-checks far more often than the

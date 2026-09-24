@@ -148,6 +148,27 @@ export default [
             'jsx-a11y/label-has-for': ['error', { required: { some: ['nesting', 'id'] } }],
         },
     },
+    // Settings facade boundary. settings.js is the only public entry point; the
+    // modules behind it under settings/ share mutable state (the load-once
+    // guards, the active-challenge caches) that a direct require would bypass.
+    // settings/schema, storage, limits, uiDefaults and challengeRules are
+    // standalone and stay importable.
+    {
+        files: ['src/js/**/*.js', 'src/js/**/*.jsx', 'scripts/**/*.js'],
+        ignores: ['src/js/settings.js', 'src/js/settings/**'],
+        rules: {
+            'no-restricted-syntax': [
+                'error',
+                ...[
+                    "CallExpression[callee.name='require'] > Literal.arguments",
+                    'ImportDeclaration > Literal.source',
+                ].map((selector) => ({
+                    selector: `${selector}[value=/settings\\/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|titlePins|titleRuleSanitize|titleRules)(\\.js)?$/]`,
+                    message: 'Settings internals are private to the facade — require settings.js instead.',
+                })),
+            ],
+        },
+    },
     // Jest test files. `pnpm lint` only scans src/ + scripts/, but the lefthook
     // pre-commit hook lints any staged *.{js,jsx} — tests included — so the Jest
     // globals (describe/it/test/expect/jest/beforeEach/…) must be declared here
