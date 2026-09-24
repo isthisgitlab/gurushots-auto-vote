@@ -12,7 +12,7 @@ export function LanguageSwitcher() {
     return (
         <div className="flex justify-end mb-4">
             <div className="dropdown dropdown-end">
-                <div className="btn btn-ghost btn-sm" role="button" tabIndex={0}>
+                <div className="btn btn-outline btn-sm" role="button" tabIndex={0}>
                     {/* Language icon */}
                     <StrokeIcon className="w-4 h-4 mr-1" d={ICON_PATHS.translate} />
                     <span>{displayLanguage}</span>

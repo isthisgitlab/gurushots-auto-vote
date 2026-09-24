@@ -119,7 +119,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', className
                         )}
                         {showCloseButton && (
                             <button
-                                className="btn btn-sm btn-circle btn-ghost"
+                                className="btn btn-sm btn-circle btn-outline"
                                 onClick={onClose}
                                 aria-label={closeLabel()}
                             >

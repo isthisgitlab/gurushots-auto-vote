@@ -202,7 +202,7 @@ function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInpu
                     )}
                 </select>
                 <button
-                    className="btn btn-ghost btn-sm"
+                    className="btn btn-outline btn-sm"
                     title={t('app.addCustomTimezone')}
                     aria-label={t('app.addCustomTimezone')}
                     onClick={timezoneInput.toggle}
@@ -210,7 +210,7 @@ function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInpu
                     +
                 </button>
                 <button
-                    className={`btn btn-ghost btn-sm text-error ${timezone !== DEFAULT_TIMEZONE ? '' : 'invisible'}`}
+                    className={`btn btn-outline btn-error btn-sm ${timezone !== DEFAULT_TIMEZONE ? '' : 'invisible'}`}
                     title={t('app.removeCurrentTimezone')}
                     aria-label={t('app.removeCurrentTimezone')}
                     onClick={timezoneInput.remove}

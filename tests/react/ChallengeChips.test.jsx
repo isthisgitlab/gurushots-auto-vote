@@ -30,7 +30,7 @@ describe('ChallengeChip', () => {
         render(<ChallengeChip challengeId={42}>JumpTo</ChallengeChip>);
 
         const chip = screen.getByRole('button', { name: /JumpTo/ });
-        expect(chip.className).toBe('btn btn-xs h-auto whitespace-normal text-left');
+        expect(chip.className).toBe('btn btn-sm h-auto whitespace-normal text-left');
         expect(chip.getAttribute('type')).toBe('button');
 
         const fakeCard = { scrollIntoView: jest.fn() };

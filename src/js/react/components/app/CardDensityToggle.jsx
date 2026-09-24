@@ -13,7 +13,7 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 export function CardDensityToggle({ isCompact, hasOverride, onToggle }) {
     const { t } = useTranslation();
     return (
-        <button className="btn btn-ghost btn-xs px-1 shrink-0" onClick={onToggle}>
+        <button className="btn btn-outline btn-sm shrink-0" onClick={onToggle}>
             <StrokeIcon
                 d={isCompact ? ICON_PATHS.expand : ICON_PATHS.collapse}
                 className="w-3 h-3 mr-1"

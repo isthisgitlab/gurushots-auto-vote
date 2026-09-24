@@ -17,7 +17,7 @@ const FILL_ERROR_DISPLAY_MS = 5000;
 function EarnTurboButton({ turboError, playingTurbo, onPlay, label }) {
     return (
         <button
-            className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
+            className={`btn btn-sm mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
             onClick={onPlay}
             disabled={playingTurbo}
         >
@@ -36,14 +36,14 @@ export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon =
     return (
         <>
             <button
-                className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
+                className={`btn btn-sm ${fillError ? 'btn-error' : 'btn-info'}`}
                 onClick={() => onFill('one')}
                 disabled={filling}
             >
                 {filling ? spinner : `${icon}+1`}
             </button>
             {slotsRemaining > 1 && (
-                <button className="btn btn-xs btn-warning" onClick={() => onFill('all')} disabled={filling}>
+                <button className="btn btn-sm btn-warning" onClick={() => onFill('all')} disabled={filling}>
                     {filling ? spinner : `${icon}+${slotsRemaining}`}
                 </button>
             )}
@@ -56,7 +56,7 @@ export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon =
  */
 function SettingsButton({ onClick, label }) {
     return (
-        <button className="btn btn-ghost btn-xs px-1" onClick={onClick}>
+        <button className="btn btn-outline btn-sm" onClick={onClick}>
             <StrokeIcon d={ICON_PATHS.cog} className="w-3 h-3 mr-1" />
             {label}
         </button>

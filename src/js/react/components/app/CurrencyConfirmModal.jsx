@@ -63,7 +63,7 @@ export function CurrencyConfirmModal({ isOpen, onClose, onConfirm, title, field,
                 </p>
             </div>
             <ModalActions>
-                <button className="btn btn-ghost btn-sm" onClick={onClose} disabled={spending}>
+                <button className="btn btn-outline btn-sm" onClick={onClose} disabled={spending}>
                     {t('app.cancel')}
                 </button>
                 <button className="btn btn-warning btn-sm" onClick={onConfirm} disabled={spending}>

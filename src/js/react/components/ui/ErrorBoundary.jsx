@@ -74,7 +74,7 @@ export class ErrorBoundary extends Component {
                     <p className="text-sm break-words">{message}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
-                    <button type="button" className="btn btn-sm" onClick={this.handleDismiss}>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={this.handleDismiss}>
                         {tr('errors.dismiss')}
                     </button>
                     <button type="button" className="btn btn-sm btn-primary" onClick={this.handleReload}>

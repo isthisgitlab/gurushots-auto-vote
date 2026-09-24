@@ -31,12 +31,12 @@ export function ModalActionRow({
 
     return (
         <div className={bordered ? 'flex justify-end gap-2 pt-4 border-t border-base-300' : 'flex justify-end gap-2'}>
-            <button className="btn btn-latvian" onClick={onSave} disabled={saving}>
+            <button className="btn btn-latvian btn-sm" onClick={onSave} disabled={saving}>
                 {saving && <span className="loading loading-spinner loading-xs" />}
                 <StrokeIcon d={ICON_PATHS.save} className={ROW_ICON_CLASS} />
                 {t('app.save')}
             </button>
-            <button className="btn btn-warning" onClick={onSecondary}>
+            <button className="btn btn-warning btn-sm" onClick={onSecondary}>
                 {secondaryIcon === 'trash' ? (
                     <StrokeIcon d={ICON_PATHS.trash} className={ROW_ICON_CLASS} />
                 ) : (
@@ -44,7 +44,7 @@ export function ModalActionRow({
                 )}
                 {secondaryLabel}
             </button>
-            <button className="btn" onClick={onCancel}>
+            <button className="btn btn-outline btn-sm" onClick={onCancel}>
                 {t('app.cancel')}
             </button>
         </div>

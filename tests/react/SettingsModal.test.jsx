@@ -446,7 +446,9 @@ const clickButtonByText = (text, index = 0) => {
 // The application-settings ResetButtons carry no title attribute, in DOM order:
 // theme, language, timezone, check frequency, reliability.
 const appResetButtons = () =>
-    Array.from(document.querySelectorAll('button:not([title])')).filter((b) => b.className === 'btn btn-ghost btn-sm');
+    Array.from(document.querySelectorAll('button:not([title])')).filter(
+        (b) => b.className === 'btn btn-outline btn-sm' && b.querySelector('svg'),
+    );
 
 // Set a select's value and dispatch a native change event (fireEvent.change
 // does not reach preact's select onChange under happy-dom).

@@ -131,7 +131,7 @@ export function ChallengesSection({
                 </div>
                 {error && isLoggedIn && (
                     <div className="text-center">
-                        <button type="button" className="btn btn-sm" onClick={handleRefresh}>
+                        <button type="button" className="btn btn-outline btn-sm" onClick={handleRefresh}>
                             {t('common.refresh')}
                         </button>
                     </div>
@@ -171,7 +171,7 @@ export function ChallengesSection({
                             iconClassName={TOOLBAR_ICON_CLASS}
                             label={t('app.run')}
                         />
-                        <button className="btn btn-ghost btn-sm" onClick={handleRefresh} disabled={loading}>
+                        <button className="btn btn-outline btn-sm" onClick={handleRefresh} disabled={loading}>
                             {loading ? <span className="loading loading-spinner loading-xs" /> : <ResetIcon />}
                             {t('app.refresh')}
                         </button>
@@ -186,7 +186,7 @@ export function ChallengesSection({
                     ("click to get details"), matching the per-card toggle in
                     ChallengeCard. The icon follows the same rule: it depicts
                     the view you are about to switch TO. */}
-                <button className="btn btn-ghost btn-sm sm:ml-auto" onClick={toggleGlobalCompact}>
+                <button className="btn btn-outline btn-sm sm:ml-auto" onClick={toggleGlobalCompact}>
                     <StrokeIcon
                         d={globalCompact ? ICON_PATHS.listCompact : ICON_PATHS.listDetailed}
                         className={TOOLBAR_ICON_CLASS}

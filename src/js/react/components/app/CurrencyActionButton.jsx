@@ -40,7 +40,7 @@ function CurrencyActionButton({ label, icon, field, bankroll, title, body, actio
     return (
         <>
             <button
-                className={`btn btn-xs mt-1 ${error ? 'btn-error' : 'btn-accent'}`}
+                className={`btn btn-sm mt-1 ${error ? 'btn-error' : 'btn-accent'}`}
                 onClick={() => setConfirmOpen(true)}
                 disabled={loading}
             >

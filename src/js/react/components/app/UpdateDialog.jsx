@@ -114,10 +114,10 @@ export function UpdateDialog() {
                 {/* Available Buttons */}
                 {state === UPDATE_STATES.AVAILABLE && (
                     <>
-                        <button className="btn btn-ghost btn-sm" onClick={skipVersion}>
+                        <button className="btn btn-outline btn-sm" onClick={skipVersion}>
                             {t('app.skipVersion')}
                         </button>
-                        <button className="btn btn-ghost btn-sm" onClick={hideDialog}>
+                        <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                             {t('app.remindLater')}
                         </button>
                         <button className="btn btn-latvian btn-sm" onClick={startDownload}>
@@ -128,7 +128,7 @@ export function UpdateDialog() {
 
                 {/* Downloading Buttons */}
                 {state === UPDATE_STATES.DOWNLOADING && (
-                    <button className="btn btn-ghost btn-sm" onClick={hideDialog}>
+                    <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                         {t('app.cancel')}
                     </button>
                 )}
@@ -136,7 +136,7 @@ export function UpdateDialog() {
                 {/* Ready Buttons */}
                 {state === UPDATE_STATES.READY && (
                     <>
-                        <button className="btn btn-ghost btn-sm" onClick={hideDialog}>
+                        <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                             {t('app.restartLater')}
                         </button>
                         <button className="btn btn-latvian btn-sm" onClick={installUpdate}>
@@ -148,7 +148,7 @@ export function UpdateDialog() {
                 {/* Error Buttons */}
                 {state === UPDATE_STATES.ERROR && (
                     <>
-                        <button className="btn btn-ghost btn-sm" onClick={hideDialog}>
+                        <button className="btn btn-outline btn-sm" onClick={hideDialog}>
                             {t('app.close')}
                         </button>
                         {error.canFallbackToBrowser && (

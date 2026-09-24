@@ -12,7 +12,7 @@ export function AutoVoteControls({ running, status, statusClass, lastRun, cycles
             <div className="card-body p-4">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     {/* Toggle Button */}
-                    <button className={`btn ${running ? 'btn-error' : 'btn-latvian'}`} onClick={onToggle}>
+                    <button className={`btn btn-sm ${running ? 'btn-error' : 'btn-latvian'}`} onClick={onToggle}>
                         {running ? (
                             <>
                                 <StrokeIcon className="w-4 h-4 mr-2" d={ICON_PATHS.close} />

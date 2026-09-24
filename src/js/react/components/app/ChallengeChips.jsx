@@ -29,7 +29,7 @@ export function ChallengeChip({ challengeId, className = '', title, children }) 
         <button
             type="button"
             title={title}
-            className={`btn btn-xs h-auto whitespace-normal text-left${className ? ` ${className}` : ''}`}
+            className={`btn btn-sm h-auto whitespace-normal text-left${className ? ` ${className}` : ''}`}
             onClick={() => scrollToChallenge(challengeId)}
         >
             {children}

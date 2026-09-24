@@ -41,7 +41,7 @@ function SwapTrigger({ idleClassName, label, busy, error, onClick }) {
     const { t } = useTranslation();
     return (
         <>
-            <button className={`btn btn-xs ${error ? 'btn-error' : idleClassName}`} onClick={onClick} disabled={busy}>
+            <button className={`btn btn-sm ${error ? 'btn-error' : idleClassName}`} onClick={onClick} disabled={busy}>
                 {busy ? <span className="loading loading-spinner loading-xs" /> : label}
             </button>
             {error && (

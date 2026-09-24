@@ -1,20 +1,19 @@
 /**
  * Tests for the shared ResetButton / ResetIcon (components/ui/ResetButton).
  * The button must render the exact DaisyUI markup the inline copies
- * produced (btn btn-ghost btn-sm + w-4 h-4 svg) so extraction stayed
- * visually identical.
+ * uses (btn btn-outline btn-sm + w-4 h-4 svg).
  */
 
 import { render, fireEvent } from './helpers/test-utils';
 import { ResetButton, ResetIcon } from '@/components/ui/ResetButton';
 
 describe('ResetButton', () => {
-    test('renders the ghost button with title and reset icon', () => {
+    test('renders the outlined button with title and reset icon', () => {
         const onClick = jest.fn();
         const { container } = render(<ResetButton title="app.resetToDefaultNotSaved" onClick={onClick} />);
 
         const button = container.querySelector('button');
-        expect(button.className).toBe('btn btn-ghost btn-sm');
+        expect(button.className).toBe('btn btn-outline btn-sm');
         expect(button.getAttribute('title')).toBe('app.resetToDefaultNotSaved');
         const svg = button.querySelector('svg');
         expect(svg).not.toBeNull();

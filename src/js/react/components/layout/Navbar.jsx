@@ -22,7 +22,7 @@ export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
             <div className="navbar-end gap-2">
                 {showLogs && (
                     <button
-                        className="btn btn-ghost btn-sm"
+                        className="btn btn-outline btn-sm"
                         onClick={onLogsClick}
                         title={t('logs.title')}
                         aria-label={t('logs.title')}
@@ -31,7 +31,7 @@ export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
                     </button>
                 )}
                 <button
-                    className="btn btn-ghost btn-sm"
+                    className="btn btn-outline btn-sm"
                     onClick={onSettingsClick}
                     title={t('app.settings')}
                     aria-label={t('app.settings')}
@@ -39,7 +39,7 @@ export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
                     <StrokeIcon className="w-5 h-5" d={ICON_PATHS.cog} />
                 </button>
                 <button
-                    className="btn btn-ghost btn-sm text-error"
+                    className="btn btn-outline btn-error btn-sm"
                     onClick={onLogout}
                     title={t('app.logout')}
                     aria-label={t('app.logout')}

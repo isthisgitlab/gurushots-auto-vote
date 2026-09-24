@@ -190,7 +190,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
                         </option>
                     ))}
                 </select>
-                <button className="btn btn-sm" onClick={handleApply} disabled={!selectedProfile || busy}>
+                <button className="btn btn-outline btn-sm" onClick={handleApply} disabled={!selectedProfile || busy}>
                     {t('app.applyProfile')}
                 </button>
                 <button

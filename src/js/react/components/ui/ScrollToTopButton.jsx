@@ -30,7 +30,7 @@ export function ScrollToTopButton() {
 
     return (
         <button
-            className="btn btn-circle btn-primary shadow-lg fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40"
+            className="btn btn-sm btn-circle btn-primary shadow-lg fixed right-4 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-40"
             onClick={handleClick}
             title={t('app.scrollToTop')}
             aria-label={t('app.scrollToTop')}

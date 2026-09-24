@@ -256,7 +256,7 @@ function RowListField({ kind, settingKey, config, value, onChange, onReset, disa
                     <div key={index} className="flex items-center gap-2 flex-wrap">
                         {controls}
                         <button
-                            className="btn btn-ghost btn-sm"
+                            className="btn btn-outline btn-sm"
                             aria-label={`${t('app.scheduledFillRemoveEntry')} ${index + 1}`}
                             onClick={() => update(rows.filter((_, j) => j !== index))}
                             disabled={disabled}

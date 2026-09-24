@@ -180,7 +180,7 @@ function RuleTitleList({ rule, onPatch }) {
                     {titles.length > 1 && (
                         <button
                             type="button"
-                            className="btn btn-ghost btn-xs"
+                            className="btn btn-outline btn-sm"
                             title={t('app.removeTitleRuleTitle')}
                             aria-label={`${t('app.removeTitleRuleTitle')} ${titleIndex + 1}`}
                             onClick={() => setTitles(titles.filter((_, i) => i !== titleIndex))}
@@ -192,7 +192,7 @@ function RuleTitleList({ rule, onPatch }) {
             ))}
             <button
                 type="button"
-                className="btn btn-ghost btn-xs"
+                className="btn btn-outline btn-sm"
                 disabled={titles.length >= MAX_TITLES_PER_RULE}
                 onClick={() => setTitles([...titles, ''])}
             >
@@ -302,7 +302,7 @@ function RuleHeader({ index, count, onMove, onRemove }) {
             <span className="text-sm font-medium flex-1">{t('app.titleRuleConditionsLabel')}</span>
             <button
                 type="button"
-                className="btn btn-ghost btn-xs"
+                className="btn btn-outline btn-sm"
                 title={t('app.titleRuleMoveUp')}
                 aria-label={`${t('app.titleRuleMoveUp')} ${index + 1}`}
                 disabled={index === 0}
@@ -312,7 +312,7 @@ function RuleHeader({ index, count, onMove, onRemove }) {
             </button>
             <button
                 type="button"
-                className="btn btn-ghost btn-xs"
+                className="btn btn-outline btn-sm"
                 title={t('app.titleRuleMoveDown')}
                 aria-label={`${t('app.titleRuleMoveDown')} ${index + 1}`}
                 disabled={index === count - 1}
@@ -321,7 +321,7 @@ function RuleHeader({ index, count, onMove, onRemove }) {
                 ↓
             </button>
             <button
-                className="btn btn-ghost btn-sm text-error"
+                className="btn btn-outline btn-error btn-sm"
                 title={t('app.removeTitleTagRule')}
                 aria-label={t('app.removeTitleTagRule')}
                 onClick={onRemove}
@@ -431,7 +431,7 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {}, types = []
                     <p className="text-xs opacity-60 flex-1">{t('app.titleRuleOrderHint')}</p>
                     <button
                         type="button"
-                        className="btn btn-ghost btn-xs"
+                        className="btn btn-outline btn-sm"
                         onClick={() => onChange(sortRulesByDefaultOrder(rules))}
                     >
                         {t('app.titleRuleSortDefault')}

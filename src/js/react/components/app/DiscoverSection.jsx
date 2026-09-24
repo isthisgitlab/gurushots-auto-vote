@@ -125,7 +125,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                 </summary>
                 <div className="collapse-content px-3 pb-3">
                     <div className="flex justify-end mb-2">
-                        <button className="btn btn-ghost btn-xs" onClick={() => refetch()} disabled={loading}>
+                        <button className="btn btn-outline btn-sm" onClick={() => refetch()} disabled={loading}>
                             {t('app.discoverRefresh')}
                         </button>
                     </div>
@@ -179,7 +179,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                                                         : outcome.error || t('app.discoverGenericError')}
                                                     {outcome.status === 'charged-pending-submit' && (
                                                         <button
-                                                            className="btn btn-ghost btn-xs ml-2"
+                                                            className="btn btn-outline btn-sm ml-2"
                                                             onClick={() => doJoin(c, true)}
                                                             disabled={isBusy}
                                                         >
@@ -245,7 +245,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                                 </p>
                             </div>
                             <ModalActions>
-                                <button className="btn btn-ghost btn-sm" onClick={() => setConfirm(null)}>
+                                <button className="btn btn-outline btn-sm" onClick={() => setConfirm(null)}>
                                     {t('app.cancel')}
                                 </button>
                                 <button className="btn btn-warning btn-sm" onClick={onConfirm} disabled={insufficient}>

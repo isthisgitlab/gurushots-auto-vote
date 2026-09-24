@@ -78,7 +78,7 @@ export function EntryBadge({
             </span>
             {showBoostButton && (
                 <button
-                    className={`btn btn-xs ml-1 ${boostError ? 'btn-error' : 'btn-success'}`}
+                    className={`btn btn-sm ml-1 ${boostError ? 'btn-error' : 'btn-success'}`}
                     onClick={handleBoost}
                     disabled={boosting}
                 >
@@ -87,7 +87,7 @@ export function EntryBadge({
             )}
             {showTurboButton && (
                 <button
-                    className={`btn btn-xs ml-1 ${turboError ? 'btn-error' : 'btn-warning'}`}
+                    className={`btn btn-sm ml-1 ${turboError ? 'btn-error' : 'btn-warning'}`}
                     onClick={handleTurbo}
                     disabled={turboing}
                 >
