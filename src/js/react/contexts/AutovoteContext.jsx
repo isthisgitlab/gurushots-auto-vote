@@ -11,6 +11,7 @@ import {
     resolveCurrencyAuto,
 } from './autovoteScheduler';
 import { createDeadlineNotifier, resolveRendererDelivery } from '../notifications/deadlineNotifier';
+import { useLatestRef } from '../hooks/useLatestRef';
 
 const AutovoteContext = createContext(null);
 
@@ -314,7 +315,11 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     // inside start() prevents double-starts. Skips when there is no
     // token, otherwise the loop would error every cycle until the user
     // logs in.
-    // (An empty-deps effect runs once per mount, so no extra ran-once guard.)
+    // (The only dependency is a stable ref, so this runs once per mount — no
+    // extra ran-once guard.) `start` is read through that ref: its identity
+    // changes with its own deps (runVotingCycle / threshold scheduling), and
+    // this must stay a single mount-time check, not re-trigger on each change.
+    const startRef = useLatestRef(start);
     useEffect(() => {
         const maybeResume = async () => {
             try {
@@ -322,16 +327,13 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
                 if (!wasRunning) return;
                 const settings = await window.api.getSettings();
                 if (!settings?.token) return;
-                await start();
+                await startRef.current();
             } catch {
                 /* ignore — leave UI in stopped state on failure */
             }
         };
         maybeResume();
-        // start is intentionally not in deps — we want a single
-        // mount-time check, not a re-trigger when start identity
-        // changes due to its own dep (runVotingCycle / threshold scheduling).
-    }, []);
+    }, [startRef]);
 
     /**
      * Toggle autovote

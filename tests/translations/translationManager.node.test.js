@@ -150,6 +150,15 @@ describe('t()', () => {
         expect(translationManager.t('common')).toEqual(english.common);
     });
 
+    test('translates in an explicitly requested language without switching', async () => {
+        const { translationManager } = load(settingsMock('en'));
+        await flush();
+        await translationManager.loadTranslations('lv');
+        expect(translationManager.t('common.light', 'lv')).toBe(latvian.common.light);
+        expect(translationManager.getCurrentLanguage()).toBe('en');
+        expect(translationManager.t('common.light')).toBe(english.common.light);
+    });
+
     test('a key missing in the current language falls back to English', async () => {
         const { translationManager, translations } = load(settingsMock('lv'));
         await flush();

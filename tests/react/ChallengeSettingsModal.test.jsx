@@ -179,6 +179,17 @@ describe('ChallengeSettingsModal group applicability', () => {
         expect(screen.getByRole('heading', { level: 5, name: 'app.groupBoost' })).toBeTruthy();
     });
 
+    test('each setting is named by its label, under a challenge-scoped id', async () => {
+        renderWithChallenge({ member: {} });
+        await waitFor(() => {
+            expect(numberInputs().length).toBeGreaterThan(0);
+        });
+        // The name also carries the override-status badge text.
+        const input = screen.getByLabelText(/^app\.boostTime/);
+        expect(input.id).toBe('challenge-setting-boostTime');
+        expect(input.type).toBe('number');
+    });
+
     test('disables a group whose action is already used (boost USED)', async () => {
         renderWithChallenge({ member: { boost: { state: 'USED' } } });
 

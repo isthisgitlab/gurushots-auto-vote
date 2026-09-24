@@ -155,8 +155,8 @@ describe('SwapBackButton', () => {
         try {
             renderSwapBack({ ...SWAP_BACK, kind: 'turbo' });
             fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
-            expect(window.translationManager.t).toHaveBeenCalledWith('app.turbo');
-            expect(window.translationManager.t).not.toHaveBeenCalledWith('app.boost');
+            expect(window.translationManager.t).toHaveBeenCalledWith('app.turbo', expect.anything());
+            expect(window.translationManager.t).not.toHaveBeenCalledWith('app.boost', expect.anything());
         } finally {
             window.translationManager.t.mockImplementation((key) => key);
         }

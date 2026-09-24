@@ -113,16 +113,21 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.queryByText('app.currentVersion:')).toBeNull();
     });
 
-    it('"Remind later" hides the dialog; backdrop click hides it too, inner clicks do not', async () => {
+    it('"Remind later" hides the dialog; backdrop click and Escape hide it too, inner clicks do not', async () => {
         const { container } = renderDialog();
         await emit('onUpdateAvailable', INFO);
         fireEvent.click(screen.getByText('app.remindLater'));
         expect(container.textContent).toBe('');
 
         await emit('onUpdateAvailable', INFO);
+        expect(screen.getByRole('dialog', { name: 'app.updateAvailable' })).toBeTruthy();
         fireEvent.click(container.querySelector('.modal-box'));
         expect(screen.getByText('app.updateAvailable')).toBeTruthy();
-        fireEvent.click(container.firstChild);
+        fireEvent.click(container.querySelector('.modal-backdrop'));
+        expect(container.textContent).toBe('');
+
+        await emit('onUpdateAvailable', INFO);
+        fireEvent.keyDown(document, { key: 'Escape' });
         expect(container.textContent).toBe('');
     });
 
@@ -170,14 +175,15 @@ describe('UpdateProvider + UpdateDialog', () => {
         expect(screen.getByText(/1\.5 MB \/ 2 MB/)).toBeTruthy();
         expect(screen.getByText(/2 KB/)).toBeTruthy();
 
-        // Backdrop click is ignored while downloading.
-        fireEvent.click(document.querySelector('.fixed'));
+        // Backdrop click and Escape are ignored while downloading.
+        fireEvent.click(document.querySelector('.modal-backdrop'));
+        fireEvent.keyDown(document, { key: 'Escape' });
         expect(screen.getByText('app.downloadingUpdate')).toBeTruthy();
 
         await emit('onUpdateDownloaded');
         expect(screen.getByText('app.updateReady')).toBeTruthy();
         expect(screen.getByText('app.updateReadyToInstall')).toBeTruthy();
-        fireEvent.click(document.querySelector('.fixed'));
+        fireEvent.click(document.querySelector('.modal-backdrop'));
         expect(screen.getByText('app.updateReady')).toBeTruthy();
 
         await clickAndSettle(screen.getByText('app.restartNow'));
@@ -280,7 +286,7 @@ describe('UpdateProvider + UpdateDialog', () => {
         const { container } = renderDialog();
         await emit('onUpdateAvailable', INFO);
         await emit('onUpdateError', { message: 'x' });
-        fireEvent.click(container.firstChild);
+        fireEvent.click(container.querySelector('.modal-backdrop'));
         expect(container.textContent).toBe('');
     });
 

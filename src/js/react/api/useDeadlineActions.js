@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLatestRef } from '../hooks/useLatestRef';
 
 /**
  * Fetches the read-only deadline-action preview + boost/turbo conflict flag for
@@ -40,12 +41,18 @@ export function useDeadlineActions(challenge) {
         challenge?.max_photo_submits,
     ].join('|');
 
+    // Read through a ref: the effect is keyed on the fingerprint, which fully
+    // captures the challenge fields the result depends on, while `challenge`
+    // itself is a fresh reference each render (depending on it would refetch
+    // every render).
+    const challengeRef = useLatestRef(challenge);
+
     useEffect(() => {
         let cancelled = false;
         setState((s) => ({ ...s, loading: true }));
         void (async () => {
             try {
-                const res = await window.api.getDeadlineActions(challenge);
+                const res = await window.api.getDeadlineActions(challengeRef.current);
                 if (cancelled) return;
                 if (res && res.success) {
                     setState({
@@ -64,10 +71,7 @@ export function useDeadlineActions(challenge) {
         return () => {
             cancelled = true;
         };
-        // fingerprint fully captures the challenge fields the result depends on;
-        // depending on `challenge` (a fresh ref each render) would refetch every
-        // render. Same fingerprint pattern as SettingInput's draft-sync effect.
-    }, [fingerprint]);
+    }, [fingerprint, challengeRef]);
 
     return state;
 }

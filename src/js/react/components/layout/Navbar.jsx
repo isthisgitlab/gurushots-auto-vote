@@ -20,7 +20,12 @@ export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
             </div>
             <div className="navbar-end gap-2">
                 {showLogs && (
-                    <button className="btn btn-ghost btn-sm" onClick={onLogsClick} title={t('logs.title')}>
+                    <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={onLogsClick}
+                        title={t('logs.title')}
+                        aria-label={t('logs.title')}
+                    >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path
                                 strokeLinecap="round"
@@ -31,7 +36,12 @@ export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
                         </svg>
                     </button>
                 )}
-                <button className="btn btn-ghost btn-sm" onClick={onSettingsClick} title={t('app.settings')}>
+                <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={onSettingsClick}
+                    title={t('app.settings')}
+                    aria-label={t('app.settings')}
+                >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
                             strokeLinecap="round"
@@ -47,7 +57,12 @@ export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
                         />
                     </svg>
                 </button>
-                <button className="btn btn-ghost btn-sm text-error" onClick={onLogout} title={t('app.logout')}>
+                <button
+                    className="btn btn-ghost btn-sm text-error"
+                    onClick={onLogout}
+                    title={t('app.logout')}
+                    aria-label={t('app.logout')}
+                >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path
                             strokeLinecap="round"

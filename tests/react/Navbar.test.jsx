@@ -27,4 +27,12 @@ describe('Navbar', () => {
         fireEvent.click(logsBtn);
         expect(onLogsClick).toHaveBeenCalledTimes(1);
     });
+
+    test('the icon-only buttons carry accessible names', () => {
+        globalThis.Capacitor = { isNativePlatform: () => true };
+        render(<Navbar isMock={false} onLogsClick={() => {}} onSettingsClick={() => {}} onLogout={() => {}} />);
+        for (const name of ['logs.title', 'app.settings', 'app.logout']) {
+            expect(screen.getByRole('button', { name })).toBeTruthy();
+        }
+    });
 });

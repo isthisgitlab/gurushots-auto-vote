@@ -40,15 +40,18 @@ export function SettingsToggles({
 
     return (
         <>
-            <div className="divider">Settings</div>
+            <div className="divider">{t('app.settings')}</div>
 
             <div className="grid grid-cols-3 gap-2">
                 {/* Theme Toggle */}
                 <div className="flex flex-col items-center">
-                    <span className="label-text mb-2">{t('common.theme')}</span>
+                    <label className="label-text mb-2" htmlFor="login-theme">
+                        {t('common.theme')}
+                    </label>
                     <div className="flex items-center justify-center">
                         <span className="label-text mr-2">{t('common.light')}</span>
                         <input
+                            id="login-theme"
                             type="checkbox"
                             className="toggle toggle-sm"
                             checked={theme === 'dark'}
@@ -60,10 +63,13 @@ export function SettingsToggles({
 
                 {/* Stay Logged In Toggle */}
                 <div className="flex flex-col items-center">
-                    <span className="label-text mb-2">{t('login.stayLoggedIn')}</span>
+                    <label className="label-text mb-2" htmlFor="login-stay-logged-in">
+                        {t('login.stayLoggedIn')}
+                    </label>
                     <div className="flex items-center justify-center">
                         <span className="invisible label-text mr-2">Off</span>
                         <input
+                            id="login-stay-logged-in"
                             type="checkbox"
                             className="toggle toggle-sm"
                             checked={stayLoggedIn}
@@ -75,10 +81,13 @@ export function SettingsToggles({
 
                 {/* Mock Mode Toggle */}
                 <div className="flex flex-col items-center">
-                    <span className="label-text mb-2">{t('login.mockMode')}</span>
+                    <label className="label-text mb-2" htmlFor="login-mock-mode">
+                        {t('login.mockMode')}
+                    </label>
                     <div className="flex items-center justify-center">
                         <span className="invisible label-text mr-2">Off</span>
                         <input
+                            id="login-mock-mode"
                             type="checkbox"
                             className="toggle toggle-sm"
                             checked={mockMode}

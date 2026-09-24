@@ -67,6 +67,13 @@ describe('LanguageSwitcher', () => {
         expect(screen.getByText('English')).toBeTruthy();
         expect(screen.getByText('common.languageEnglish').className).toBe('active');
         expect(screen.getByText('common.languageLatvian').className).toBe('');
+        // Real buttons, with the current language exposed as pressed.
+        expect(screen.getByRole('button', { name: 'common.languageEnglish' }).getAttribute('aria-pressed')).toBe(
+            'true',
+        );
+        expect(screen.getByRole('button', { name: 'common.languageLatvian' }).getAttribute('aria-pressed')).toBe(
+            'false',
+        );
 
         fireEvent.click(screen.getByText('common.languageLatvian'));
         await waitFor(() => expect(screen.getByText('Latviešu')).toBeTruthy());
@@ -105,6 +112,14 @@ describe('SettingsToggles', () => {
         expect(handlers.onStayLoggedInChange).toHaveBeenLastCalledWith(true);
         fireEvent.click(mock);
         expect(handlers.onMockModeChange).toHaveBeenLastCalledWith(true);
+    });
+
+    test('each toggle is named by its caption, under a translated heading', () => {
+        const { theme, stay, mock } = renderToggles();
+        expect(screen.getByLabelText('common.theme')).toBe(theme);
+        expect(screen.getByLabelText('login.stayLoggedIn')).toBe(stay);
+        expect(screen.getByLabelText('login.mockMode')).toBe(mock);
+        expect(screen.getByText('app.settings')).toBeTruthy();
     });
 
     test('unchecking the theme toggle selects light', () => {

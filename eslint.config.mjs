@@ -125,19 +125,28 @@ export default [
     },
     // Accessibility lint for the renderer — surfaces the WCAG issues the app
     // already commits to caring about (Modal focus-trap, translated labels).
-    // Introduced at WARN, not error: the recommended set flags ~39 pre-existing
-    // warnings, mostly control-has-associated-label (~18) and label-has-for
-    // (~11) on DaisyUI form controls, plus a handful of real interaction issues
-    // (anchors-as-buttons in LanguageSwitcher, a click-only div in UpdateDialog,
-    // an autoFocus in SettingsModal). Their fixes are real component/UX changes,
-    // not lint noise, so they can't all land in one pass. Ratcheting in at warn
-    // matches how this repo onboarded @ts-check and the ttsc lint rules (see
-    // lint.config.ts): full CI visibility now, promote rules to error as fixed.
-    // Track the backlog down rather than letting it normalise dozens of warnings.
+    // The recommended set as shipped (its levels AND options), plus two rules it
+    // leaves off:
+    // - control-has-associated-label, with the recommended options (inputs are
+    //   ignored there; label-has-for covers them), so an icon-only button needs
+    //   an aria-label.
+    // - label-has-for as "nesting OR id". It is deprecated in favour of
+    //   label-has-associated-control, but that rule cannot tell that a label
+    //   whose text is `{t('…')}` has any text and skips it — i.e. every label in
+    //   this translated UI — so an orphan <label> (tied to no control) would
+    //   otherwise pass. Its default ("nesting AND id") is not what it checks
+    //   here.
     {
         plugins: jsxA11y.flatConfigs.recommended.plugins,
         files: ['src/js/react/**/*.jsx', 'src/js/react/**/*.js'],
-        rules: Object.fromEntries(Object.keys(jsxA11y.flatConfigs.recommended.rules).map((rule) => [rule, 'warn'])),
+        rules: {
+            ...jsxA11y.flatConfigs.recommended.rules,
+            'jsx-a11y/control-has-associated-label': [
+                'error',
+                jsxA11y.flatConfigs.recommended.rules['jsx-a11y/control-has-associated-label'][1],
+            ],
+            'jsx-a11y/label-has-for': ['error', { required: { some: ['nesting', 'id'] } }],
+        },
     },
     // Jest test files. `pnpm lint` only scans src/ + scripts/, but the lefthook
     // pre-commit hook lints any staged *.{js,jsx} — tests included — so the Jest

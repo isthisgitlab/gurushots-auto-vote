@@ -7,7 +7,7 @@ import { formatSettingDefault } from '@/utils/formatters';
 import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
 import { getScheduleShift } from '../../../services/scheduleRemap';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
-import { SettingInput } from './SettingInput';
+import { SettingInput, SettingLabel } from './SettingInput';
 import { deriveWindowHints } from '@/utils/windowHints';
 import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
 import { SettingHelp } from '@/components/ui/SettingHelp';
@@ -588,7 +588,10 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
 
                                                 return (
                                                     <div key={key} className={SETTING_CELL_CLASS}>
-                                                        <label className="label">
+                                                        <SettingLabel
+                                                            inputId={`challenge-setting-${key}`}
+                                                            type={config.type}
+                                                        >
                                                             <span className="label-text font-medium">
                                                                 {t(config.label)}
                                                             </span>
@@ -607,12 +610,13 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                        </label>
+                                                        </SettingLabel>
                                                         <p className="text-xs text-base-content/60 mb-2">
                                                             {t(config.description)}
                                                         </p>
                                                         <SettingHelp helpKey={config.helpKey} />
                                                         <SettingInput
+                                                            id={`challenge-setting-${key}`}
                                                             settingKey={key}
                                                             config={config}
                                                             value={currentValue}

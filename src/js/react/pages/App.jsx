@@ -78,13 +78,15 @@ function AppContent() {
     // that would reopen the modal mid-session. Persisted via the settings
     // facade so it stays dismissed across launches/platforms.
     const welcomeHandledRef = useRef(false);
+    const settingsReady = !settingsLoading && Boolean(settings);
+    const onboardingCompleted = settings?.onboardingCompleted;
     useEffect(() => {
         if (welcomeHandledRef.current) return;
-        if (!settingsLoading && settings && !settings.onboardingCompleted) {
+        if (settingsReady && !onboardingCompleted) {
             welcomeHandledRef.current = true;
             setWelcomeOpen(true);
         }
-    }, [settingsLoading, settings?.onboardingCompleted]);
+    }, [settingsReady, onboardingCompleted]);
 
     const handleWelcomeClose = useCallback(async () => {
         setWelcomeOpen(false);

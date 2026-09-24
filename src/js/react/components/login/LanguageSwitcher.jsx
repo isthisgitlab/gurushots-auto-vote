@@ -33,16 +33,26 @@ export function LanguageSwitcher() {
                     </svg>
                     <span>{displayLanguage}</span>
                 </div>
-                <ul className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32" tabIndex={0}>
+                <ul className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32">
                     <li>
-                        <a onClick={() => handleLanguageChange('en')} className={language === 'en' ? 'active' : ''}>
+                        <button
+                            type="button"
+                            onClick={() => handleLanguageChange('en')}
+                            className={language === 'en' ? 'active' : ''}
+                            aria-pressed={language === 'en'}
+                        >
                             {t('common.languageEnglish')}
-                        </a>
+                        </button>
                     </li>
                     <li>
-                        <a onClick={() => handleLanguageChange('lv')} className={language === 'lv' ? 'active' : ''}>
+                        <button
+                            type="button"
+                            onClick={() => handleLanguageChange('lv')}
+                            className={language === 'lv' ? 'active' : ''}
+                            aria-pressed={language === 'lv'}
+                        >
                             {t('common.languageLatvian')}
-                        </a>
+                        </button>
                     </li>
                 </ul>
             </div>

@@ -24,16 +24,18 @@ export function TranslationProvider({ children }) {
         return () => clearInterval(checkInit);
     }, []);
 
-    // Translate function - delegates to window.translationManager
+    // Translate function - delegates to window.translationManager in this
+    // context's language, so a new `t` per language re-renders memoized
+    // consumers and the text always matches `language`.
     const t = useCallback(
         (key) => {
             if (window.translationManager) {
-                return window.translationManager.t(key);
+                return window.translationManager.t(key, language);
             }
             return key;
         },
         [language],
-    ); // Re-bind when language changes to trigger re-renders
+    );
 
     // Change language function
     const setLanguage = useCallback(async (lang) => {

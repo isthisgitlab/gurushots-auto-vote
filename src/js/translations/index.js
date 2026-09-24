@@ -162,10 +162,10 @@
             }
         }
 
-        // Get translation for a key
-        t(key) {
+        // Get translation for a key, in `language` (default: the current one)
+        t(key, language = this.currentLanguage) {
             const keys = key.split('.');
-            let value = translationCache[this.currentLanguage];
+            let value = translationCache[language];
 
             for (const k of keys) {
                 if (value && value[k]) {
@@ -173,7 +173,7 @@
                 } else {
                     // Fallback to English if translation not found
                     value = translationCache.en;
-                    if (!value && this.currentLanguage !== 'en') {
+                    if (!value && language !== 'en') {
                         // Try to load English as fallback. Same three-way
                         // routing as loadTranslations: bridge → logger (Node
                         // only — the <script>-tag context has no require) →

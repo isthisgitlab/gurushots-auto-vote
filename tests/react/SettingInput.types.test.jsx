@@ -6,7 +6,7 @@
  */
 
 import { fireEvent, render, screen } from './helpers/test-utils';
-import { SettingInput, TagsField } from '@/components/app/SettingInput';
+import { SettingInput, SettingLabel, TagsField } from '@/components/app/SettingInput';
 
 const renderInput = (config, value, over = {}) => {
     const props = { settingKey: 'k', config, value, onChange: jest.fn(), onReset: jest.fn(), ...over };
@@ -216,5 +216,49 @@ describe('SettingInput — list editors tolerate corrupted stored values', () =>
             '10:00',
             '11:00',
         ]);
+    });
+});
+
+describe('SettingLabel + SettingInput — accessible names', () => {
+    const renderLabelled = (config, value, id) =>
+        render(
+            <>
+                <SettingLabel inputId={id ?? 'setting-k'} type={config.type}>
+                    <span>Caption</span>
+                </SettingLabel>
+                <SettingInput settingKey="k" config={config} value={value} onChange={jest.fn()} id={id} />
+            </>,
+        );
+
+    test.each([
+        ['number', 3, 'spinbutton'],
+        ['boolean', true, 'checkbox'],
+        ['text', 'x', 'textbox'],
+        ['tags', ['a'], 'textbox'],
+    ])('a %s setting is the control its <label> names', (type, value, role) => {
+        renderLabelled({ type }, value);
+        expect(screen.getByRole(role, { name: 'Caption' })).toBe(screen.getByLabelText('Caption'));
+    });
+
+    test('a caller-supplied id is used instead of the default', () => {
+        renderLabelled({ type: 'number' }, 3, 'challenge-setting-k');
+        expect(screen.getByLabelText('Caption').id).toBe('challenge-setting-k');
+    });
+
+    test.each([
+        ['time', 3600],
+        ['schedule', []],
+        ['timeOfDayList', []],
+        ['timeList', []],
+    ])('a multi-control %s setting is a group named by the caption', (type, value) => {
+        renderLabelled({ type, label: 'lbl' }, value);
+        expect(screen.getByRole('group', { name: 'Caption' })).toBeTruthy();
+        expect(document.querySelector('label')).toBeNull();
+    });
+
+    test('the time setting names its hours and minutes inputs', () => {
+        renderLabelled({ type: 'time', label: 'lbl' }, 3660);
+        expect(screen.getByRole('spinbutton', { name: 'lbl app.hours' }).value).toBe('1');
+        expect(screen.getByRole('spinbutton', { name: 'lbl app.minutes' }).value).toBe('1');
     });
 });

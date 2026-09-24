@@ -5,7 +5,7 @@ import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { useAutovote } from '@/contexts/AutovoteContext';
 import { tierSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
-import { SettingInput } from './SettingInput';
+import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { deriveWindowHints } from '@/utils/windowHints';
 import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
@@ -106,6 +106,12 @@ export function SettingsModal({ isOpen, onClose }) {
     const [tzInputVisible, setTzInputVisible] = useState(false);
     const [tzInputValue, setTzInputValue] = useState('');
     const [tzInputError, setTzInputError] = useState(false);
+    // Revealing the custom-timezone input (the "+" button) moves focus into it,
+    // so the user can type straight away.
+    const tzInputRef = useRef(null);
+    useEffect(() => {
+        if (tzInputVisible) tzInputRef.current?.focus();
+    }, [tzInputVisible]);
 
     const {
         titleRules,
@@ -328,14 +334,15 @@ export function SettingsModal({ isOpen, onClose }) {
                         <div className={SETTINGS_GRID_CLASS}>
                             {/* Theme */}
                             <div className={SETTING_CELL_CLASS}>
-                                <label className="label">
+                                <SettingLabel inputId="ui-theme">
                                     <span className="label-text font-medium">{t('app.theme')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
-                                </label>
+                                </SettingLabel>
                                 <p className="text-xs text-base-content/60 mb-2">{t('app.themeDesc')}</p>
                                 <div className="flex items-center gap-2">
                                     <span className="text-sm">{t('common.light')}</span>
                                     <input
+                                        id="ui-theme"
                                         type="checkbox"
                                         className="toggle toggle-sm"
                                         checked={uiValues.theme === 'dark'}
@@ -348,13 +355,14 @@ export function SettingsModal({ isOpen, onClose }) {
 
                             {/* Language */}
                             <div className={SETTING_CELL_CLASS}>
-                                <label className="label">
+                                <SettingLabel inputId="ui-language">
                                     <span className="label-text font-medium">{t('app.language')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
-                                </label>
+                                </SettingLabel>
                                 <p className="text-xs text-base-content/60 mb-2">{t('app.languageDesc')}</p>
                                 <div className="flex items-center gap-2">
                                     <select
+                                        id="ui-language"
                                         className="select select-bordered select-sm"
                                         value={uiValues.language}
                                         onChange={(e) => handleUiChange('language', e.target.value)}
@@ -368,13 +376,14 @@ export function SettingsModal({ isOpen, onClose }) {
 
                             {/* Timezone */}
                             <div className={SETTING_CELL_CLASS}>
-                                <label className="label">
+                                <SettingLabel inputId="ui-timezone">
                                     <span className="label-text font-medium">{t('app.timezone')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
-                                </label>
+                                </SettingLabel>
                                 <p className="text-xs text-base-content/60 mb-2">{t('app.timezoneDesc')}</p>
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <select
+                                        id="ui-timezone"
                                         className="select select-bordered select-sm w-48"
                                         value={uiValues.timezone}
                                         onChange={(e) => handleUiChange('timezone', e.target.value)}
@@ -393,6 +402,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                     <button
                                         className="btn btn-ghost btn-sm"
                                         title={t('app.addCustomTimezone')}
+                                        aria-label={t('app.addCustomTimezone')}
                                         onClick={() => {
                                             setTzInputVisible((v) => !v);
                                             setTzInputError(false);
@@ -403,6 +413,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                     <button
                                         className={`btn btn-ghost btn-sm text-error ${uiValues.timezone !== DEFAULT_TIMEZONE ? '' : 'invisible'}`}
                                         title={t('app.removeCurrentTimezone')}
+                                        aria-label={t('app.removeCurrentTimezone')}
                                         onClick={handleTimezoneRemove}
                                     >
                                         ×
@@ -411,7 +422,9 @@ export function SettingsModal({ isOpen, onClose }) {
                                 </div>
                                 {tzInputVisible && (
                                     <input
+                                        ref={tzInputRef}
                                         type="text"
+                                        aria-label={t('app.addCustomTimezone')}
                                         placeholder={t('app.timezonePlaceholder')}
                                         className={`input input-bordered input-sm mt-2 w-60 ${tzInputError ? 'input-error' : ''}`}
                                         value={tzInputValue}
@@ -430,25 +443,29 @@ export function SettingsModal({ isOpen, onClose }) {
                                             }
                                         }}
                                         onBlur={handleTimezoneAdd}
-                                        autoFocus
                                     />
                                 )}
                             </div>
 
                             {/* Check Frequency */}
                             <div className={SETTING_CELL_CLASS}>
-                                <label className="label">
+                                <SettingLabel inputId="ui-checkFrequency" group>
                                     <span className="label-text font-medium">{t('app.checkFrequency')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
-                                </label>
+                                </SettingLabel>
                                 <p className="text-xs text-base-content/60 mb-2">{t('app.checkFrequencyDesc')}</p>
-                                <div className="flex items-center gap-2 flex-wrap">
+                                <div
+                                    className="flex items-center gap-2 flex-wrap"
+                                    role="group"
+                                    aria-labelledby="ui-checkFrequency-label"
+                                >
                                     <span className="text-sm">{t('app.checkFrequencyMin')}</span>
                                     <input
                                         type="number"
                                         className="input input-bordered input-sm w-20"
                                         min="1"
                                         max="60"
+                                        aria-label={t('app.checkFrequencyMin')}
                                         value={uiValues.checkFrequencyMin}
                                         onChange={(e) =>
                                             handleUiChange('checkFrequencyMin', parseInt(e.target.value, 10) || 1)
@@ -460,6 +477,7 @@ export function SettingsModal({ isOpen, onClose }) {
                                         className="input input-bordered input-sm w-20"
                                         min="1"
                                         max="60"
+                                        aria-label={t('app.checkFrequencyMax')}
                                         value={uiValues.checkFrequencyMax}
                                         onChange={(e) =>
                                             handleUiChange('checkFrequencyMax', parseInt(e.target.value, 10) || 1)
@@ -483,12 +501,16 @@ export function SettingsModal({ isOpen, onClose }) {
 
                             {/* Reliability — API retry / backoff */}
                             <div className={SETTING_CELL_CLASS}>
-                                <label className="label">
+                                <SettingLabel inputId="ui-reliability" group>
                                     <span className="label-text font-medium">{t('app.reliability')}</span>
                                     <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
-                                </label>
+                                </SettingLabel>
                                 <p className="text-xs text-base-content/60 mb-2">{t('app.apiMaxRetriesDesc')}</p>
-                                <div className="flex items-center gap-2 flex-wrap">
+                                <div
+                                    className="flex items-center gap-2 flex-wrap"
+                                    role="group"
+                                    aria-labelledby="ui-reliability-label"
+                                >
                                     <span className="text-sm">{t('app.apiMaxRetries')}</span>
                                     <input
                                         type="number"
@@ -539,14 +561,14 @@ export function SettingsModal({ isOpen, onClose }) {
                                         <div className={SETTINGS_GRID_CLASS}>
                                             {entries.map(([key, config]) => (
                                                 <div key={key} className={SETTING_CELL_CLASS}>
-                                                    <label className="label">
+                                                    <SettingLabel inputId={`setting-${key}`} type={config.type}>
                                                         <span className="label-text font-medium">
                                                             {t(config.label)}
                                                         </span>
                                                         <span className="badge badge-ghost badge-xs ml-2">
                                                             {t('app.globalDefault')}
                                                         </span>
-                                                    </label>
+                                                    </SettingLabel>
                                                     <p className="text-xs text-base-content/60 mb-2">
                                                         {t(config.description)}
                                                     </p>

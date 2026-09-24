@@ -1,15 +1,65 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { useLatestRef } from '@/hooks/useLatestRef';
 import { secondsToHoursMinutes, hoursMinutesToSeconds } from '@/utils/timeFieldUnits';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { MAX_SCHEDULED_FILL_ENTRIES } from '../../../settings/limits';
 
-// Used only to fingerprint a tag array for the draft-sync effect. A comma is
-// fine here: tagsTextToArray splits user input on commas before storage, so a
-// stored tag can never itself contain one, making this a collision-free
-// separator. Compare with '' (empty string) which would treat ['ab','c'] and
-// ['a','bc'] as identical.
-const TAGS_FINGERPRINT_SEP = ',';
+// Used only to fingerprint a list value for the draft-sync hook below. A comma
+// is fine here: tagsTextToArray splits user input on commas before storage, so
+// a stored tag can never itself contain one, and the time lists hold "HH:MM"
+// strings or integer seconds — a collision-free separator for all three.
+// Compare with '' (empty string) which would treat ['ab','c'] and ['a','bc']
+// as identical.
+const LIST_FINGERPRINT_SEP = ',';
+
+/**
+ * Local draft for a list-valued setting. The draft re-syncs from `value` only
+ * when the stored list's fingerprint changes AND the draft doesn't already
+ * emit it, so an edit never gets overwritten by its own round-trip through
+ * onChange, while an external replace (reset button, reload) does land.
+ *
+ * `toDraft(value)` builds the draft and `draftKeyOf(draft)` fingerprints what
+ * the draft would emit; both must be module-level (stable) functions. The
+ * value is read through a ref because it is a fresh array every render — the
+ * fingerprint, not its identity, is what should re-trigger the sync.
+ */
+function useListDraft(value, toDraft, draftKeyOf) {
+    const [draft, setDraft] = useState(() => toDraft(value));
+    const valueRef = useLatestRef(value);
+    const valueKey = value.join(LIST_FINGERPRINT_SEP);
+    useEffect(() => {
+        setDraft((current) => (draftKeyOf(current) === valueKey ? current : toDraft(valueRef.current)));
+    }, [valueKey, valueRef, toDraft, draftKeyOf]);
+    return [draft, setDraft];
+}
+
+// Setting types rendered as several controls (each with its own aria-label)
+// rather than one: their caption names a role="group" wrapper instead of
+// pointing a <label> at a single control.
+const GROUP_TYPES = new Set(['time', 'schedule', 'timeOfDayList', 'timeList']);
+
+/**
+ * Caption for a setting control, shared by the global and per-challenge
+ * settings modals. A single-control setting gets a real <label> tied to the
+ * control by `inputId`; a multi-control one (`group`, derived from the schema
+ * `type` for SettingInput) gets a caption whose id `${inputId}-label` names the
+ * control group.
+ */
+export function SettingLabel({ inputId, type, group = GROUP_TYPES.has(type), children }) {
+    if (group) {
+        return (
+            <div className="label" id={`${inputId}-label`}>
+                {children}
+            </div>
+        );
+    }
+    return (
+        <label className="label" htmlFor={inputId}>
+            {children}
+        </label>
+    );
+}
 
 // Callers pass TagsField's already-normalised array, so no guard is needed here.
 const tagsArrayToText = (arr) => arr.join(', ');
@@ -18,6 +68,7 @@ const tagsTextToArray = (text) =>
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
+const tagsDraftKey = (text) => tagsTextToArray(text).join(LIST_FINGERPRINT_SEP);
 
 /**
  * Tag list editor. Tracks the raw text locally so the user can type
@@ -25,23 +76,10 @@ const tagsTextToArray = (text) =>
  * mid-keystroke. Re-syncs when the array prop is replaced from outside
  * (reset button, reload).
  */
-export function TagsField({ settingKey, value, onChange, onReset, placeholder, disabled = false }) {
+export function TagsField({ id, settingKey, value, onChange, onReset, placeholder, disabled = false }) {
     const { t } = useTranslation();
     const arr = Array.isArray(value) ? value : [];
-    const [draft, setDraft] = useState(() => tagsArrayToText(arr));
-
-    // propKey is a stable primitive fingerprint of the array prop. It is the
-    // only dependency: `arr` is a fresh reference each render (would fire the
-    // effect every render) and is fully captured by propKey; `draft` is read
-    // inside but we only want to re-sync when the *external* prop changes, not
-    // on every keystroke. When the effect fires, the `arr` closed over matches
-    // the propKey that triggered it, so reading it here is correct.
-    const propKey = arr.join(TAGS_FINGERPRINT_SEP);
-    useEffect(() => {
-        if (tagsTextToArray(draft).join(TAGS_FINGERPRINT_SEP) !== propKey) {
-            setDraft(tagsArrayToText(arr));
-        }
-    }, [propKey]);
+    const [draft, setDraft] = useListDraft(arr, tagsArrayToText, tagsDraftKey);
 
     const handleChange = (e) => {
         setDraft(e.target.value);
@@ -51,6 +89,7 @@ export function TagsField({ settingKey, value, onChange, onReset, placeholder, d
     return (
         <div className="flex items-center gap-2">
             <input
+                id={id}
                 type="text"
                 className="input input-bordered input-sm flex-1"
                 placeholder={placeholder}
@@ -181,6 +220,23 @@ function ScheduleField({ settingKey, value, onChange, onReset, disabled }) {
 // requires zod). Re-exported under the local name its consumers already use.
 export const SCHEDULED_FILL_MAX_ENTRIES = MAX_SCHEDULED_FILL_ENTRIES;
 
+// What a time-list draft emits: rows in order, dropping drafts (`isDraft`) and
+// duplicates (first wins).
+const emittedRowsOf = (rowList, isDraft) => {
+    const seen = new Set();
+    return rowList.filter((row) => {
+        if (isDraft(row) || seen.has(row)) return false;
+        seen.add(row);
+        return true;
+    });
+};
+// A blank time input is a draft; a 0-second (or non-positive) offset is too.
+const emittedTimesOf = (rowList) => emittedRowsOf(rowList, (row) => row === '');
+const emittedSecondsOf = (rowList) => emittedRowsOf(rowList, (row) => !(row > 0));
+const timeOfDayDraftKey = (rows) => emittedTimesOf(rows).join(LIST_FINGERPRINT_SEP);
+const timeListDraftKey = (rows) => emittedSecondsOf(rows).join(LIST_FINGERPRINT_SEP);
+const copyRows = (arr) => arr.slice();
+
 /**
  * Variable add/remove row-list editor for the scheduled-fill daily times
  * (`type: 'timeOfDayList'`): one native <input type="time"> per row. Row-list
@@ -201,23 +257,8 @@ function TimeOfDayListField({ settingKey, label, value, onChange, onReset, disab
     // both enforce the cap already — this is the same defensive posture as
     // the decision/cadence consumers).
     const arr = (Array.isArray(value) ? value : []).slice(0, SCHEDULED_FILL_MAX_ENTRIES);
-    const [rows, setRows] = useState(() => arr.slice());
-
-    const emittedOf = (rowList) => {
-        const seen = new Set();
-        return rowList.filter((row) => {
-            if (row === '' || seen.has(row)) return false;
-            seen.add(row);
-            return true;
-        });
-    };
-
-    const propKey = arr.join(',');
-    useEffect(() => {
-        if (emittedOf(rows).join(',') !== propKey) {
-            setRows(arr.slice());
-        }
-    }, [propKey]);
+    const [rows, setRows] = useListDraft(arr, copyRows, timeOfDayDraftKey);
+    const emittedOf = emittedTimesOf;
 
     const update = (nextRows) => {
         setRows(nextRows);
@@ -295,23 +336,8 @@ function TimeListField({ settingKey, label, value, onChange, onReset, disabled }
     // Cap slice bounds rendering against hand-edited oversized arrays (see
     // TimeOfDayListField).
     const arr = (Array.isArray(value) ? value : []).slice(0, SCHEDULED_FILL_MAX_ENTRIES);
-    const [rows, setRows] = useState(() => arr.slice());
-
-    const emittedOf = (rowList) => {
-        const seen = new Set();
-        return rowList.filter((row) => {
-            if (!(row > 0) || seen.has(row)) return false;
-            seen.add(row);
-            return true;
-        });
-    };
-
-    const propKey = arr.join(',');
-    useEffect(() => {
-        if (emittedOf(rows).join(',') !== propKey) {
-            setRows(arr.slice());
-        }
-    }, [propKey]);
+    const [rows, setRows] = useListDraft(arr, copyRows, timeListDraftKey);
+    const emittedOf = emittedSecondsOf;
 
     const update = (nextRows) => {
         setRows(nextRows);
@@ -424,9 +450,19 @@ function getDefaultForType(type) {
 }
 
 /**
- * Schema-driven input renderer for settings
+ * Schema-driven input renderer for settings. `id` goes on the control a
+ * SettingLabel with the same `inputId` points at; multi-control types instead
+ * render a role="group" named by that caption (see SettingLabel).
  */
-export function SettingInput({ settingKey, config, value, onChange, onReset, disabled = false }) {
+export function SettingInput({
+    settingKey,
+    config,
+    value,
+    onChange,
+    onReset,
+    disabled = false,
+    id = `setting-${settingKey}`,
+}) {
     const { t } = useTranslation();
 
     // Guard against missing config
@@ -436,10 +472,12 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
 
     // Normalize value to prevent uncontrolled-to-controlled transitions
     const normalizedValue = value ?? config.default ?? getDefaultForType(config.type);
+    const groupProps = { role: 'group', 'aria-labelledby': `${id}-label` };
 
     if (config.type === 'tags') {
         return (
             <TagsField
+                id={id}
                 settingKey={settingKey}
                 value={normalizedValue}
                 onChange={onChange}
@@ -452,13 +490,15 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
 
     if (config.type === 'schedule') {
         return (
-            <ScheduleField
-                settingKey={settingKey}
-                value={normalizedValue}
-                onChange={onChange}
-                onReset={onReset}
-                disabled={disabled}
-            />
+            <div {...groupProps}>
+                <ScheduleField
+                    settingKey={settingKey}
+                    value={normalizedValue}
+                    onChange={onChange}
+                    onReset={onReset}
+                    disabled={disabled}
+                />
+            </div>
         );
     }
 
@@ -467,28 +507,32 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
     // setting — the surrounding modal renders a hint naming the zone.
     if (config.type === 'timeOfDayList') {
         return (
-            <TimeOfDayListField
-                settingKey={settingKey}
-                label={t(config.label)}
-                value={normalizedValue}
-                onChange={onChange}
-                onReset={onReset}
-                disabled={disabled}
-            />
+            <div {...groupProps}>
+                <TimeOfDayListField
+                    settingKey={settingKey}
+                    label={t(config.label)}
+                    value={normalizedValue}
+                    onChange={onChange}
+                    onReset={onReset}
+                    disabled={disabled}
+                />
+            </div>
         );
     }
 
     // Scheduled-fill before-end offsets: variable list of hours+minutes rows.
     if (config.type === 'timeList') {
         return (
-            <TimeListField
-                settingKey={settingKey}
-                label={t(config.label)}
-                value={normalizedValue}
-                onChange={onChange}
-                onReset={onReset}
-                disabled={disabled}
-            />
+            <div {...groupProps}>
+                <TimeListField
+                    settingKey={settingKey}
+                    label={t(config.label)}
+                    value={normalizedValue}
+                    onChange={onChange}
+                    onReset={onReset}
+                    disabled={disabled}
+                />
+            </div>
         );
     }
 
@@ -504,12 +548,14 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
             onChange(settingKey, hoursMinutesToSeconds(hours, parseInt(e.target.value, 10)));
         };
 
+        const label = t(config.label);
         return (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2" {...groupProps}>
                 <input
                     type="number"
                     className="input input-bordered input-sm w-20"
                     min="0"
+                    aria-label={`${label} ${t('app.hours')}`}
                     value={hours}
                     onChange={handleHoursChange}
                     disabled={disabled}
@@ -520,6 +566,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
                     className="input input-bordered input-sm w-20"
                     min="0"
                     max="59"
+                    aria-label={`${label} ${t('app.minutes')}`}
                     value={minutes}
                     onChange={handleMinutesChange}
                     disabled={disabled}
@@ -535,6 +582,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
         return (
             <div className="flex items-center gap-2">
                 <input
+                    id={id}
                     type="checkbox"
                     className="checkbox checkbox-sm"
                     checked={!!normalizedValue}
@@ -574,6 +622,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
             <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2">
                     <input
+                        id={id}
                         type="number"
                         className={`input input-bordered input-sm w-24 ${invalid ? 'input-error' : ''}`}
                         min={config.min}
@@ -608,6 +657,7 @@ export function SettingInput({ settingKey, config, value, onChange, onReset, dis
     return (
         <div className="flex items-center gap-2">
             <input
+                id={id}
                 type="text"
                 className="input input-bordered input-sm"
                 value={normalizedValue}

@@ -230,10 +230,11 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {} }) {
                         </div>
                     </div>
                     <div className="form-control">
-                        <label className="label py-1">
+                        <label className="label py-1" htmlFor={`title-rule-${index}-mustIncludeTags`}>
                             <span className="label-text text-sm">{t('app.mustIncludeTags')}</span>
                         </label>
                         <TagsField
+                            id={`title-rule-${index}-mustIncludeTags`}
                             settingKey="mustIncludeTags"
                             value={rule.mustIncludeTags}
                             onChange={(_key, tags) => updateRule(index, { mustIncludeTags: tags })}
@@ -242,10 +243,11 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {} }) {
                     </div>
 
                     <div className="form-control">
-                        <label className="label py-1">
+                        <label className="label py-1" htmlFor={`title-rule-${index}-shouldIncludeTags`}>
                             <span className="label-text text-sm">{t('app.shouldIncludeTags')}</span>
                         </label>
                         <TagsField
+                            id={`title-rule-${index}-shouldIncludeTags`}
                             settingKey="shouldIncludeTags"
                             value={rule.shouldIncludeTags}
                             onChange={(_key, tags) => updateRule(index, { shouldIncludeTags: tags })}

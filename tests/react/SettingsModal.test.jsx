@@ -118,6 +118,19 @@ describe('SettingsModal — timezone "+" inline-add', () => {
         expect(input).not.toBeNull();
         // No error class until the user submits something invalid.
         expect(input.className).not.toMatch(/input-error/);
+        // Revealing it moves focus in, and it is named for assistive tech.
+        expect(document.activeElement).toBe(input);
+        expect(input.getAttribute('aria-label')).toBe('app.addCustomTimezone');
+    });
+
+    test('each static UI setting is reachable by its label', () => {
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        // The accessible name also carries the "UI setting" badge text.
+        expect(screen.getByLabelText(/^app\.theme/).type).toBe('checkbox');
+        expect(screen.getByLabelText(/^app\.language/).tagName).toBe('SELECT');
+        expect(screen.getByLabelText(/^app\.timezone/).tagName).toBe('SELECT');
+        expect(screen.getByRole('group', { name: /^app\.checkFrequency/ })).toBeTruthy();
+        expect(screen.getByRole('group', { name: /^app\.reliability/ })).toBeTruthy();
     });
 
     test('blurring with an invalid timezone toggles the error class', () => {
