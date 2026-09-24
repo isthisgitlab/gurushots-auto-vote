@@ -46,7 +46,7 @@ export function ChallengeChip({ challengeId, className = '', children }) {
  */
 export function ChipTitle({ hint, children }) {
     return (
-        <span className="truncate" title={hint ? `${children} — ${hint}` : children}>
+        <span className="truncate" title={[children, hint].filter(Boolean).join(' — ') || undefined}>
             {children}
         </span>
     );

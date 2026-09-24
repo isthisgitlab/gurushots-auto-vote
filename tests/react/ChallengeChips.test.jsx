@@ -57,4 +57,17 @@ describe('ChipTitle', () => {
 
         expect(container.firstChild.getAttribute('title')).toBe('Title — Custom settings');
     });
+
+    test('omits missing parts from the tooltip', () => {
+        const { container } = render(
+            <>
+                <ChipTitle hint="Custom settings" />
+                <ChipTitle />
+            </>,
+        );
+
+        const [hintOnly, empty] = container.querySelectorAll('.truncate');
+        expect(hintOnly.getAttribute('title')).toBe('Custom settings');
+        expect(empty.hasAttribute('title')).toBe(false);
+    });
 });
