@@ -47,12 +47,13 @@ export function useOverriddenChallengeIds(challenges) {
         return new Set(ids.filter((_, i) => maps[i] && Object.keys(maps[i]).length > 0));
     }, [idsKey]);
 
-    // singleFlight: two refetches racing each other can resolve out of order
-    // and leave the older payload on screen — the settings-changed subscription
-    // makes that reachable by the feature's own main use case (saving an
-    // override fires a refetch while the previous one may still be in flight).
-    // Same guard, for the same reason, as useActiveChallenges.
-    const { data } = useIpcQuery(queryFn, { initialData: NONE, subscribe: true, singleFlight: true });
+    // latestOnly: two reads racing each other can resolve out of order, and the
+    // settings-changed subscription makes that the feature's main use case
+    // (saving an override starts a read while the previous one may still be in
+    // flight). Only the newest read applies its result, and no read is dropped,
+    // so a save or a new challenge list arriving mid-read still gets its own
+    // read instead of leaving the older set on screen.
+    const { data } = useIpcQuery(queryFn, { initialData: NONE, subscribe: true, latestOnly: true });
 
     // queryFn only ever resolves a Set and a failed read keeps the previous
     // value, so `data` is always a Set here.

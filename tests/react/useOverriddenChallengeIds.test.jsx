@@ -3,7 +3,8 @@
  * least one per-challenge override, read one getChallengeOverrides call per id.
  */
 
-import { render, screen, waitFor } from './helpers/test-utils';
+import { act, render, screen, waitFor } from './helpers/test-utils';
+import { fireSettingsChanged } from './helpers/setup';
 import { useOverriddenChallengeIds } from '@/hooks/useOverriddenChallengeIds';
 
 function Probe({ challenges }) {
@@ -37,4 +38,46 @@ test('an empty list issues no IPC and yields an empty set', async () => {
     // Let the mount fetch settle.
     await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe(''));
     expect(window.api.getChallengeOverrides).not.toHaveBeenCalled();
+});
+
+const deferred = () => {
+    let resolve;
+    const promise = new Promise((r) => (resolve = r));
+    return { promise, resolve };
+};
+
+test('a settings change during a read gets its own read, and the older read cannot overwrite it', async () => {
+    const first = deferred();
+    window.api.getChallengeOverrides = jest
+        .fn()
+        .mockReturnValueOnce(first.promise)
+        .mockResolvedValue({ boostTime: 30 });
+    render(<Probe challenges={[{ id: 1 }]} />);
+    await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledTimes(1));
+
+    // The override is saved while the first read is still in flight.
+    await act(async () => {
+        fireSettingsChanged();
+    });
+    await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe('1'));
+    expect(window.api.getChallengeOverrides).toHaveBeenCalledTimes(2);
+
+    // The stale first read (from before the save) settles last and is dropped.
+    await act(async () => first.resolve({}));
+    expect(screen.getByTestId('ids').textContent).toBe('1');
+});
+
+test('a new challenge list during a read is read too', async () => {
+    const first = deferred();
+    window.api.getChallengeOverrides = jest.fn((id) =>
+        id === '1' ? first.promise : Promise.resolve({ boostTime: 5 }),
+    );
+    const { rerender } = render(<Probe challenges={[{ id: 1 }]} />);
+    await waitFor(() => expect(window.api.getChallengeOverrides).toHaveBeenCalledWith('1'));
+
+    rerender(<Probe challenges={[{ id: 2 }]} />);
+    await waitFor(() => expect(screen.getByTestId('ids').textContent).toBe('2'));
+
+    await act(async () => first.resolve({ boostTime: 1 }));
+    expect(screen.getByTestId('ids').textContent).toBe('2');
 });
