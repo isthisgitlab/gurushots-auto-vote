@@ -1,81 +1,9 @@
-import { Fragment, useState, useEffect, useRef, useCallback } from 'react';
+import { Fragment } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { ResetButton } from '@/components/ui/ResetButton';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { SettingLabel } from './SettingInput';
-
-const isValidTimezone = (tz) => {
-    try {
-        new Intl.DateTimeFormat(undefined, { timeZone: tz });
-        return true;
-    } catch {
-        return false;
-    }
-};
-
-/**
- * The custom-timezone "+" input: local UI state, never persisted, so it stays
- * out of the settings form hook. Reset on every open so a stale "+" panel from
- * a previous session doesn't carry over. Adding a valid zone stores it in
- * `customTimezones` and selects it; removing drops the selected custom zone
- * and falls back to the default.
- */
-export function useCustomTimezoneInput({ isOpen, uiValues, handleUiChange }) {
-    const [visible, setVisible] = useState(false);
-    const [value, setValue] = useState('');
-    const [error, setError] = useState(false);
-    // Revealing the input (the "+" button) moves focus into it, so the user
-    // can type straight away.
-    const inputRef = useRef(null);
-    useEffect(() => {
-        if (visible) inputRef.current?.focus();
-    }, [visible]);
-
-    const close = useCallback(() => {
-        setVisible(false);
-        setValue('');
-        setError(false);
-    }, []);
-
-    useEffect(() => {
-        if (isOpen) close();
-    }, [isOpen, close]);
-
-    const add = useCallback(() => {
-        const zone = value.trim();
-        if (!zone || !isValidTimezone(zone)) {
-            setError(true);
-            return;
-        }
-        // useSettingsForm guarantees an array here (withFallback's array guard
-        // on hydrate, DEFAULT_UI_VALUES before it), so no `|| []` fallback.
-        const list = uiValues.customTimezones;
-        handleUiChange('customTimezones', list.includes(zone) ? list : [...list, zone]);
-        handleUiChange('timezone', zone);
-        close();
-    }, [value, uiValues.customTimezones, handleUiChange, close]);
-
-    const remove = useCallback(() => {
-        handleUiChange(
-            'customTimezones',
-            uiValues.customTimezones.filter((tz) => tz !== uiValues.timezone),
-        );
-        handleUiChange('timezone', DEFAULT_TIMEZONE);
-    }, [uiValues.customTimezones, uiValues.timezone, handleUiChange]);
-
-    const toggle = () => {
-        setVisible((v) => !v);
-        setError(false);
-    };
-
-    const change = (next) => {
-        setValue(next);
-        if (error) setError(false);
-    };
-
-    return { visible, value, error, inputRef, add, remove, toggle, change, close };
-}
 
 /** One application (UI) setting: caption with the "UI setting" badge, description, then its controls. */
 function UiSettingCell({ inputId, group, labelKey, descKey, children }) {
@@ -195,6 +123,62 @@ function CustomTimezoneInput({ timezoneInput }) {
     );
 }
 
+/** A UI setting whose controls share one row, ending in the setting's reset. */
+function ResettableUiCell({ inputId, labelKey, descKey, onReset, children }) {
+    return (
+        <UiSettingCell inputId={inputId} labelKey={labelKey} descKey={descKey}>
+            <div className="flex items-center gap-2">
+                {children}
+                <ResetButton onClick={onReset} />
+            </div>
+        </UiSettingCell>
+    );
+}
+
+function ThemeSetting({ uiValues, handleUiChange, handleResetUi }) {
+    const { t } = useTranslation();
+    return (
+        <ResettableUiCell
+            inputId="ui-theme"
+            labelKey="app.theme"
+            descKey="app.themeDesc"
+            onReset={() => handleResetUi('theme')}
+        >
+            <span className="text-sm">{t('common.light')}</span>
+            <input
+                id="ui-theme"
+                type="checkbox"
+                className="toggle toggle-sm"
+                checked={uiValues.theme === 'dark'}
+                onChange={(e) => handleUiChange('theme', e.target.checked ? 'dark' : 'light')}
+            />
+            <span className="text-sm">{t('common.dark')}</span>
+        </ResettableUiCell>
+    );
+}
+
+function LanguageSetting({ uiValues, handleUiChange, handleResetUi }) {
+    const { t } = useTranslation();
+    return (
+        <ResettableUiCell
+            inputId="ui-language"
+            labelKey="app.language"
+            descKey="app.languageDesc"
+            onReset={() => handleResetUi('language')}
+        >
+            <select
+                id="ui-language"
+                className="select select-bordered select-sm"
+                value={uiValues.language}
+                onChange={(e) => handleUiChange('language', e.target.value)}
+            >
+                <option value="en">{t('app.english')}</option>
+                <option value="lv">{t('app.latvian')}</option>
+            </select>
+        </ResettableUiCell>
+    );
+}
+
 function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInput }) {
     const { t } = useTranslation();
     const { timezone, customTimezones } = uiValues;
@@ -256,36 +240,8 @@ export function ApplicationSettingsSection({ uiValues, handleUiChange, handleRes
                 {t('app.applicationSettings')}
             </h4>
             <div className={SETTINGS_GRID_CLASS}>
-                <UiSettingCell inputId="ui-theme" labelKey="app.theme" descKey="app.themeDesc">
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm">{t('common.light')}</span>
-                        <input
-                            id="ui-theme"
-                            type="checkbox"
-                            className="toggle toggle-sm"
-                            checked={uiValues.theme === 'dark'}
-                            onChange={(e) => handleUiChange('theme', e.target.checked ? 'dark' : 'light')}
-                        />
-                        <span className="text-sm">{t('common.dark')}</span>
-                        <ResetButton onClick={() => handleResetUi('theme')} />
-                    </div>
-                </UiSettingCell>
-
-                <UiSettingCell inputId="ui-language" labelKey="app.language" descKey="app.languageDesc">
-                    <div className="flex items-center gap-2">
-                        <select
-                            id="ui-language"
-                            className="select select-bordered select-sm"
-                            value={uiValues.language}
-                            onChange={(e) => handleUiChange('language', e.target.value)}
-                        >
-                            <option value="en">{t('app.english')}</option>
-                            <option value="lv">{t('app.latvian')}</option>
-                        </select>
-                        <ResetButton onClick={() => handleResetUi('language')} />
-                    </div>
-                </UiSettingCell>
-
+                <ThemeSetting {...ui} />
+                <LanguageSetting {...ui} />
                 <TimezoneSetting {...ui} timezoneInput={timezoneInput} />
 
                 <UiNumberGroupCell

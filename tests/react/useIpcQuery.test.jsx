@@ -3,7 +3,7 @@
  * useSettings / useSettingsSchema / useActiveChallenges are built on:
  * mount fetch, loading/error handling, the settings-changed
  * subscription, and the layering options (showLoading, apply,
- * clearErrorOnStart, singleFlight).
+ * clearErrorOnStart, singleFlight, enabled, latestOnly).
  */
 
 import { renderHook, waitFor, act } from '@testing-library/preact';
@@ -98,6 +98,16 @@ describe('useIpcQuery', () => {
         expect(result.current.error?.message).toBe('derived');
     });
 
+    test('an apply that throws surfaces as the error', async () => {
+        const apply = () => {
+            throw new Error('apply failed');
+        };
+        const queryFn = jest.fn().mockResolvedValue('x');
+        const { result } = renderHook(() => useIpcQuery(queryFn, { apply }));
+        await waitFor(() => expect(result.current.error?.message).toBe('apply failed'));
+        expect(result.current.loading).toBe(false);
+    });
+
     test('singleFlight drops a refetch that overlaps an in-flight one', async () => {
         let resolve;
         const queryFn = jest.fn(() => new Promise((r) => (resolve = r)));
@@ -113,5 +123,104 @@ describe('useIpcQuery', () => {
             resolve('done');
         });
         await waitFor(() => expect(result.current.data).toBe('done'));
+    });
+    test('enabled:false skips the automatic fetch and the subscription; re-enabling fetches again', async () => {
+        const onSettingsChanged = jest.fn(() => () => {});
+        window.api = { onSettingsChanged };
+        const queryFn = jest.fn().mockResolvedValue('x');
+        const { result, rerender } = renderHook(({ enabled }) => useIpcQuery(queryFn, { enabled, subscribe: true }), {
+            initialProps: { enabled: false },
+        });
+        await act(async () => {});
+        expect(queryFn).not.toHaveBeenCalled();
+        expect(onSettingsChanged).not.toHaveBeenCalled();
+        expect(result.current.loading).toBe(true);
+
+        rerender({ enabled: true });
+        await waitFor(() => expect(result.current.data).toBe('x'));
+        expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+
+        rerender({ enabled: false });
+        rerender({ enabled: true });
+        await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(2));
+    });
+
+    describe('latestOnly', () => {
+        const deferredQuery = () => {
+            const calls = [];
+            const queryFn = jest.fn(
+                () =>
+                    new Promise((resolve, reject) => {
+                        calls.push({ resolve, reject });
+                    }),
+            );
+            return { queryFn, calls };
+        };
+
+        test('a call superseded by a newer refetch drops its data, error and loading reset', async () => {
+            const { queryFn, calls } = deferredQuery();
+            const { result } = renderHook(() => useIpcQuery(queryFn, { latestOnly: true, initialData: 'seed' }));
+            act(() => {
+                void result.current.refetch();
+            });
+            expect(calls).toHaveLength(2);
+
+            await act(async () => calls[0].resolve('stale'));
+            expect(result.current.data).toBe('seed');
+            expect(result.current.loading).toBe(true);
+            await act(async () => calls[0].reject(new Error('ignored')));
+            expect(result.current.error).toBeNull();
+
+            await act(async () => calls[1].resolve('fresh'));
+            expect(result.current.data).toBe('fresh');
+            expect(result.current.loading).toBe(false);
+        });
+
+        test('disabling or unmounting supersedes the in-flight call', async () => {
+            const { queryFn, calls } = deferredQuery();
+            const { result, rerender, unmount } = renderHook(
+                ({ enabled }) => useIpcQuery(queryFn, { latestOnly: true, enabled }),
+                { initialProps: { enabled: true } },
+            );
+            rerender({ enabled: false });
+            await act(async () => calls[0].reject(new Error('late')));
+            expect(result.current.error).toBeNull();
+            expect(result.current.loading).toBe(true);
+
+            rerender({ enabled: true });
+            unmount();
+            await act(async () => calls[1].resolve('late'));
+            expect(result.current.data).toBeNull();
+        });
+
+        test('a call that settled current keeps its outcome when superseded during apply', async () => {
+            let finishApply;
+            const apply = jest.fn(
+                (value, { setData }) =>
+                    new Promise((resolve) => {
+                        finishApply = () => {
+                            setData(value);
+                            resolve();
+                        };
+                    }),
+            );
+            const queryFn = jest.fn().mockResolvedValue('kept');
+            const { result, rerender } = renderHook(
+                ({ enabled }) => useIpcQuery(queryFn, { latestOnly: true, enabled, apply }),
+                { initialProps: { enabled: true } },
+            );
+            await waitFor(() => expect(apply).toHaveBeenCalled());
+            rerender({ enabled: false });
+            await act(async () => finishApply());
+            expect(result.current.data).toBe('kept');
+            expect(result.current.loading).toBe(false);
+        });
+
+        test('the current call still applies its failure', async () => {
+            const queryFn = jest.fn().mockRejectedValue(new Error('boom'));
+            const { result } = renderHook(() => useIpcQuery(queryFn, { latestOnly: true }));
+            await waitFor(() => expect(result.current.error?.message).toBe('boom'));
+            expect(result.current.loading).toBe(false);
+        });
     });
 });

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
+import { useIpcQuery } from '@/api/useIpcQuery';
 import { useAutovote } from '@/contexts/AutovoteContext';
 import { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
 import { tierSchemaEntries } from '@/utils/groupSettings';
 import { Modal } from '@/components/ui/Modal';
+import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
 import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
@@ -12,24 +13,19 @@ import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { ChallengeSettingsGroup } from './ChallengeSettingsGroup';
 import { challengeSettingHints } from './SettingHints';
 
+// The window hints only read the app settings; an unreadable read falls back
+// to the defaults rather than blocking the modal.
+const fetchAppSettings = async () => {
+    try {
+        return (await window.api.getSettings()) || {};
+    } catch {
+        return {};
+    }
+};
+
+/** App settings re-read on every open; a read still in flight at close is dropped. */
 function useAppSettings(isOpen) {
-    const [appSettings, setAppSettings] = useState(null);
-    useEffect(() => {
-        if (!isOpen) return undefined;
-        let cancelled = false;
-        window.api
-            .getSettings()
-            .then((loaded) => {
-                if (!cancelled) setAppSettings(loaded || {});
-            })
-            .catch(() => {
-                if (!cancelled) setAppSettings({});
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [isOpen]);
-    return appSettings;
+    return useIpcQuery(fetchAppSettings, { enabled: isOpen, latestOnly: true }).data;
 }
 
 /**
@@ -44,14 +40,7 @@ function OverridesSummary({ overrideCount, titleProfile }) {
     return (
         <>
             <div className="alert alert-info text-sm">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                </svg>
+                <StrokeIcon d={ICON_PATHS.info} className="w-5 h-5" />
                 <span>{t('app.challengeOverrideInfo')}</span>
             </div>
             <p className="text-xs" role="status">

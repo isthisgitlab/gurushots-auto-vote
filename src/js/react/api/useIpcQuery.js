@@ -1,5 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 
+/** singleFlight's gate: take the in-flight slot, or report that a call already holds it. */
+function claimFlight(inFlightRef) {
+    if (inFlightRef.current) return false;
+    inFlightRef.current = true;
+    return true;
+}
+
 /**
  * Shared envelope for the renderer's "fetch over IPC" hooks: data +
  * loading + error state, a stable `refetch`, an automatic fetch on
@@ -19,10 +26,17 @@ import { useState, useCallback, useEffect, useRef } from 'react';
  *   clearErrorOnStart?: boolean,
  *   showLoading?: (...args: any[]) => boolean,
  *   apply?: (result: any, tools: { setData: Function, setError: Function }, ...args: any[]) => any,
+ *   enabled?: boolean,
+ *   latestOnly?: boolean,
  * }} [options]
  *   - initialData: initial `data` state (default null)
  *   - subscribe: refetch on window.api.onSettingsChanged (default false)
  *   - singleFlight: drop refetch calls that overlap an in-flight one
+ *   - enabled: run the automatic fetch (and the subscription) only while
+ *     true (default true); flipping it back on fetches again
+ *   - latestOnly: a call superseded before it settles — by a newer call, or
+ *     by the automatic fetch being re-keyed, disabled or unmounted — drops
+ *     its outcome (data, error and the loading reset), like a cancelled effect
  *   - clearErrorOnStart: clear `error` when a refetch starts (default true)
  *   - showLoading: per-call predicate (gets the refetch args) deciding
  *     whether this call toggles `loading`; defaults to always
@@ -38,51 +52,78 @@ export function useIpcQuery(queryFn, options = {}) {
         clearErrorOnStart = true,
         showLoading,
         apply,
+        enabled = true,
+        latestOnly = false,
     } = options;
 
     const [data, setData] = useState(initialData);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const inFlightRef = useRef(false);
+    const callIdRef = useRef(0);
 
     const refetch = useCallback(
         async (...args) => {
-            if (singleFlight) {
-                if (inFlightRef.current) return;
-                inFlightRef.current = true;
-            }
+            if (singleFlight && !claimFlight(inFlightRef)) return;
+            const callId = ++callIdRef.current;
             const toggleLoading = showLoading ? showLoading(...args) : true;
             if (toggleLoading) setLoading(true);
             if (clearErrorOnStart) setError(null);
+            let outcome;
             try {
-                const result = await queryFn(...args);
-                if (apply) {
-                    await apply(result, { setData, setError }, ...args);
+                outcome = { ok: true, result: await queryFn(...args) };
+            } catch (err) {
+                outcome = { ok: false, err };
+            }
+            // Judged once, when the query settles: a call that settled current
+            // owns its whole outcome, even if a newer one starts during apply.
+            const superseded = latestOnly && callId !== callIdRef.current;
+            try {
+                if (superseded) return;
+                if (!outcome.ok) {
+                    setError(outcome.err);
+                } else if (apply) {
+                    await apply(outcome.result, { setData, setError }, ...args);
                 } else {
-                    setData(result);
+                    setData(outcome.result);
                 }
             } catch (err) {
                 setError(err);
             } finally {
-                if (toggleLoading) setLoading(false);
+                if (toggleLoading && !superseded) setLoading(false);
                 if (singleFlight) inFlightRef.current = false;
             }
         },
-        [queryFn, singleFlight, clearErrorOnStart, showLoading, apply],
+        [queryFn, singleFlight, clearErrorOnStart, showLoading, apply, latestOnly],
     );
 
+    useAutoFetch(refetch, { enabled, subscribe, latestOnly, callIdRef });
+
+    return { data, setData, loading, error, setError, refetch };
+}
+
+/**
+ * useIpcQuery's automatic fetches: on mount / whenever `refetch` is re-keyed
+ * while `enabled`, and on settings-changed when `subscribe` is set. With
+ * `latestOnly`, the effect cleanup (re-key, disable, unmount) supersedes the
+ * call it started by advancing the shared call id.
+ */
+function useAutoFetch(refetch, { enabled, subscribe, latestOnly, callIdRef }) {
     useEffect(() => {
+        if (!enabled) return undefined;
         refetch();
-    }, [refetch]);
+        if (!latestOnly) return undefined;
+        return () => {
+            callIdRef.current += 1;
+        };
+    }, [enabled, latestOnly, refetch, callIdRef]);
 
     useEffect(() => {
-        if (!subscribe || !window.api?.onSettingsChanged) return undefined;
+        if (!enabled || !subscribe || !window.api?.onSettingsChanged) return undefined;
         return window.api.onSettingsChanged(() => {
             refetch();
         });
-    }, [subscribe, refetch]);
-
-    return { data, setData, loading, error, setError, refetch };
+    }, [enabled, subscribe, refetch]);
 }
 
 /**

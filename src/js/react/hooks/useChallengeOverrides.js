@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useSessionLoad } from './useSessionLoad';
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
@@ -11,137 +12,69 @@ const perChallengeOnly = (schema, values) => {
     return kept;
 };
 
+// Single batch IPC call for the overrides (the facade's own-property-safe
+// sparse map) instead of one round-trip per schema key, alongside the
+// challenge's title-rule profile.
+const fetchChallengeSession = (challengeId, challengeTitle) =>
+    Promise.all([
+        window.api.getChallengeOverrides(challengeId.toString()),
+        window.api.getTitleProfile(challengeTitle, challengeId.toString()),
+    ]);
+
 /**
  * Load a challenge's stored overrides and title-rule profile once per
  * (open, challenge) session into the caller's state setters (stable useState
- * setters, so they never re-trigger the load). Returns whether a load is in
- * flight and whether the last load failed — a failed load leaves the form on
- * empty overrides, which must never be saved over the stored ones.
+ * setters). Returns whether a load is in flight and whether the last load
+ * failed — a failed load leaves the form on empty overrides, which must never
+ * be saved over the stored ones.
+ *
+ * Two intertwined concerns:
+ *   1. Don't clobber in-progress user edits when useSettingsSchema refetches
+ *      and hands us a new schema reference mid-session: once a (challenge,
+ *      title) has loaded, the load is disabled until the modal closes.
+ *   2. Drop in-flight loads when the user closes the modal or the target
+ *      changes before the IPC sequence resolves, so a stale setOverrides can
+ *      never land (rapid open/close cycles would otherwise blank the page) —
+ *      useSessionLoad supersedes them.
  */
-function useLoadOnOpen({ isOpen, challengeId, challengeTitle, schema, setOverrides, setTitleProfile }) {
-    const [loading, setLoading] = useState(true);
-    const [loadFailed, setLoadFailed] = useState(false);
-    // Load existing overrides once per (open, challengeId) session.
-    //
-    // Two intertwined concerns:
-    //   1. Don't clobber in-progress user edits when useSettingsSchema
-    //      refetches and hands us a new schema reference mid-session.
-    //      Tracked by loadedForChallengeRef — once we've loaded for a
-    //      given challengeId, the effect early-returns even if schema
-    //      ref changes.
-    //   2. Drop in-flight loads when the user closes the modal or the
-    //      target challengeId changes before the IPC sequence resolves,
-    //      so a stale setOverrides can never land (rapid open/close cycles
-    //      would otherwise blank the page). Tracked by the per-run
-    //      `cancelled` flag set from the effect cleanup.
-    const loadedForChallengeRef = useRef(null);
+function useOverridesLoad({ isOpen, challengeId, challengeTitle, schema, setOverrides, setTitleProfile }) {
+    const [loadedKey, setLoadedKey] = useState(null);
     useEffect(() => {
-        if (!isOpen) {
-            loadedForChallengeRef.current = null;
-            return undefined;
-        }
-        if (!challengeId || !schema) return undefined;
-        const loadKey = `${challengeId}\0${challengeTitle}`;
-        if (loadedForChallengeRef.current === loadKey) return undefined;
+        if (!isOpen) setLoadedKey(null);
+    }, [isOpen]);
 
-        let cancelled = false;
-        const load = async () => {
-            setLoading(true);
-            setLoadFailed(false);
-            try {
-                // Single batch IPC call (the facade's own-property-safe sparse
-                // map) instead of one round-trip per schema key.
-                const [stored, profile] = await Promise.all([
-                    window.api.getChallengeOverrides(challengeId.toString()),
-                    window.api.getTitleProfile(challengeTitle, challengeId.toString()),
-                ]);
-                if (cancelled) return;
-                setOverrides(perChallengeOnly(schema, stored));
-                setTitleProfile(profile);
-                loadedForChallengeRef.current = loadKey;
-            } catch (err) {
-                if (cancelled) return;
-                setLoadFailed(true);
-                await window.api.logError(`Error loading challenge overrides: ${err.message || err}`);
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
+    const loadKey = `${challengeId}\0${challengeTitle}`;
+    const load = useCallback(async () => {
+        const [stored, profile] = await fetchChallengeSession(challengeId, challengeTitle);
+        return { values: perChallengeOnly(schema, stored), profile, key: loadKey };
+    }, [challengeId, challengeTitle, schema, loadKey]);
+    const onLoad = useCallback(
+        ({ values, profile, key }) => {
+            setOverrides(values);
+            setTitleProfile(profile);
+            setLoadedKey(key);
+        },
+        [setOverrides, setTitleProfile],
+    );
 
-        void load();
-        return () => {
-            cancelled = true;
-        };
-    }, [isOpen, challengeId, challengeTitle, schema, setOverrides, setTitleProfile]);
-    return { loading, loadFailed };
+    return useSessionLoad(load, {
+        enabled: isOpen && !!challengeId && !!schema && loadedKey !== loadKey,
+        onLoad,
+        failureLog: 'Error loading challenge overrides',
+    });
 }
 
 /**
- * Owns the form state behind the per-challenge settings modal: the sparse
- * override map, the challenge's title-rule profile (and whether this
- * challenge suppresses it), load-on-open, and save. The caller renders; it
- * drives Save / Clear all through `save()` / `clearAll()`.
- *
- * Value resolution for a key: override → profile value (unless suppressed) →
- * global default → schema default. `effectiveOf` / `inheritedOf` expose that
- * chain with and without the override layer.
+ * Save for the per-challenge settings modal. `saveError` is true when the
+ * write was rejected by validation — shown as an alert and the modal stays
+ * open so the edit isn't lost. Reset on every open.
  */
-export function useChallengeOverrides({
-    isOpen,
-    challengeId,
-    challengeTitle,
-    schema,
-    defaults,
-    refetchSchema,
-    rearmSchedule,
-    onClose,
-}) {
-    const [overrides, setOverrides] = useState({});
+function useOverridesSave({ isOpen, challengeId, schema, overrides, suppressed, loadFailed, rearmSchedule, onClose }) {
     const [saving, setSaving] = useState(false);
-    // True when a setChallengeOverride write was rejected by validation —
-    // shown as an alert and the modal stays open so the edit isn't lost.
     const [saveError, setSaveError] = useState(false);
-    const [titleProfile, setTitleProfile] = useState(null);
-    // Set when a profile Apply flips scheduledFillReplaces on for a challenge
-    // that didn't have it — that one field can silently cost a challenge its
-    // fills, so it gets a highlighted warning the generic apply-hint lacks.
-    const [profileReplacesWarning, setProfileReplacesWarning] = useState(false);
-
-    // Refresh global defaults each time the modal opens so the
-    // "Global default: …" hint reflects current persisted state.
     useEffect(() => {
-        if (isOpen) {
-            refetchSchema();
-            setSaveError(false);
-            setProfileReplacesWarning(false);
-        }
-    }, [isOpen, refetchSchema]);
-
-    const { loading, loadFailed } = useLoadOnOpen({
-        isOpen,
-        challengeId,
-        challengeTitle,
-        schema,
-        setOverrides,
-        setTitleProfile,
-    });
-
-    const changeOverride = useCallback((key, value) => {
-        setOverrides((prev) => ({ ...prev, [key]: value }));
-    }, []);
-
-    const clearOverride = useCallback((key) => {
-        setOverrides((prev) => {
-            const next = { ...prev };
-            delete next[key];
-            return next;
-        });
-    }, []);
-
-    const clearAll = useCallback(() => {
-        setOverrides({});
-        setTitleProfile((profile) => (profile ? { ...profile, suppressed: false } : null));
-    }, []);
+        if (isOpen) setSaveError(false);
+    }, [isOpen]);
 
     const save = useCallback(async () => {
         // Schema can be null if its fetch failed but schemaLoading flipped
@@ -154,11 +87,7 @@ export function useChallengeOverrides({
 
         setSaving(true);
         try {
-            const saved = await window.api.replaceChallengeOverrides(
-                challengeId.toString(),
-                overrides,
-                titleProfile?.suppressed === true,
-            );
+            const saved = await window.api.replaceChallengeOverrides(challengeId.toString(), overrides, suppressed);
             if (saved === false) {
                 setSaveError(true);
                 return;
@@ -177,7 +106,26 @@ export function useChallengeOverrides({
         } finally {
             setSaving(false);
         }
-    }, [challengeId, overrides, schema, loadFailed, titleProfile, rearmSchedule, onClose]);
+    }, [challengeId, overrides, schema, loadFailed, suppressed, rearmSchedule, onClose]);
+
+    return { saving, saveError, save };
+}
+
+/**
+ * The challenge's title-rule profile and the value resolution built on it:
+ * override → profile value (unless suppressed) → global default → schema
+ * default. `effectiveOf` / `inheritedOf` expose that chain with and without
+ * the override layer.
+ */
+function useTitleProfile({ isOpen, schema, defaults, overrides, setOverrides }) {
+    const [titleProfile, setTitleProfile] = useState(null);
+    // Set when a profile Apply flips scheduledFillReplaces on for a challenge
+    // that didn't have it — that one field can silently cost a challenge its
+    // fills, so it gets a highlighted warning the generic apply-hint lacks.
+    const [profileReplacesWarning, setProfileReplacesWarning] = useState(false);
+    useEffect(() => {
+        if (isOpen) setProfileReplacesWarning(false);
+    }, [isOpen]);
 
     const profileValues = titleProfile?.suppressed ? {} : (titleProfile?.values ?? {});
     const inheritedOf = (key) =>
@@ -207,21 +155,95 @@ export function useChallengeOverrides({
     };
 
     return {
-        overrides,
         titleProfile,
+        setTitleProfile,
         profileValues,
         inheritedOf,
         effectiveOf,
+        profileReplacesWarning,
+        applyProfile,
+        onProfilesChanged,
+    };
+}
+
+/** The sparse override map and its per-key edits. */
+function useOverrideEdits() {
+    const [overrides, setOverrides] = useState({});
+
+    const changeOverride = useCallback((key, value) => {
+        setOverrides((prev) => ({ ...prev, [key]: value }));
+    }, []);
+
+    const clearOverride = useCallback((key) => {
+        setOverrides((prev) => {
+            const next = { ...prev };
+            delete next[key];
+            return next;
+        });
+    }, []);
+
+    return { overrides, setOverrides, changeOverride, clearOverride };
+}
+
+/**
+ * Owns the form state behind the per-challenge settings modal: the sparse
+ * override map, the challenge's title-rule profile (and whether this
+ * challenge suppresses it), load-on-open, and save. The caller renders; it
+ * drives Save / Clear all through `save()` / `clearAll()`.
+ */
+export function useChallengeOverrides({
+    isOpen,
+    challengeId,
+    challengeTitle,
+    schema,
+    defaults,
+    refetchSchema,
+    rearmSchedule,
+    onClose,
+}) {
+    const { overrides, setOverrides, changeOverride, clearOverride } = useOverrideEdits();
+
+    // Refresh global defaults each time the modal opens so the
+    // "Global default: …" hint reflects current persisted state.
+    useEffect(() => {
+        if (isOpen) refetchSchema();
+    }, [isOpen, refetchSchema]);
+
+    const { setTitleProfile, ...profile } = useTitleProfile({ isOpen, schema, defaults, overrides, setOverrides });
+    const { loading, loadFailed } = useOverridesLoad({
+        isOpen,
+        challengeId,
+        challengeTitle,
+        schema,
+        setOverrides,
+        setTitleProfile,
+    });
+    const { saving, saveError, save } = useOverridesSave({
+        isOpen,
+        challengeId,
+        schema,
+        overrides,
+        suppressed: profile.titleProfile?.suppressed === true,
+        loadFailed,
+        rearmSchedule,
+        onClose,
+    });
+
+    const clearAll = useCallback(() => {
+        setOverrides({});
+        setTitleProfile((current) => (current ? { ...current, suppressed: false } : null));
+    }, [setOverrides, setTitleProfile]);
+
+    return {
+        overrides,
+        ...profile,
         loading,
         loadFailed,
         saving,
         saveError,
-        profileReplacesWarning,
         changeOverride,
         clearOverride,
         clearAll,
         save,
-        applyProfile,
-        onProfilesChanged,
     };
 }

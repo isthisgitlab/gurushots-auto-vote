@@ -4,6 +4,7 @@ import { useSettings } from '@/api/useSettings';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
 import { useSettingsForm } from '@/hooks/useSettingsForm';
 import { useTitleRules } from '@/hooks/useTitleRules';
+import { useCustomTimezoneInput } from '@/hooks/useCustomTimezoneInput';
 import { useAutovote } from '@/contexts/AutovoteContext';
 import { tierSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
 import { Modal } from '@/components/ui/Modal';
@@ -13,7 +14,7 @@ import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
 import { SettingHelp } from '@/components/ui/SettingHelp';
 import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList, globalSettingHints } from './SettingHints';
-import { ApplicationSettingsSection, useCustomTimezoneInput } from './ApplicationSettingsSection';
+import { ApplicationSettingsSection } from './ApplicationSettingsSection';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
 
 // Challenge types seen on the live API (verified 2026-09-19). Suggestions for

@@ -1,4 +1,5 @@
 import { useTranslation } from '@/contexts/TranslationContext';
+import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { TagsField } from './SettingInput';
 import { hasRuleCondition, rulePatterns, sortRulesByDefaultOrder } from '../../../settings/challengeRules';
 
@@ -466,9 +467,7 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {}, types = []
             </datalist>
 
             <button className="btn btn-sm btn-outline" onClick={addRule}>
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                </svg>
+                <StrokeIcon d={ICON_PATHS.plus} className="w-4 h-4 mr-1" />
                 {t('app.addTitleTagRule')}
             </button>
         </div>

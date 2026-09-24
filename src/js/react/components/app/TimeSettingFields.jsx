@@ -187,6 +187,33 @@ const emittedSecondsOf = (rowList) => emittedRowsOf(rowList, (row) => !(row > 0)
 const copyRows = (arr) => arr.slice();
 
 /**
+ * A row list's footer: the add button (disabled at the entry cap), the empty
+ * and at-cap status messages, and the setting's reset.
+ */
+function RowListFooter({ kind, settingKey, rowCount, onAdd, onReset, disabled }) {
+    const { t } = useTranslation();
+    const atCap = rowCount >= SCHEDULED_FILL_MAX_ENTRIES;
+    return (
+        <div className="flex items-center gap-2 flex-wrap">
+            <button className="btn btn-outline btn-sm" onClick={onAdd} disabled={disabled || atCap}>
+                {t(kind.addLabelKey)}
+            </button>
+            {rowCount === 0 && (
+                <span role="status" className="text-sm opacity-70">
+                    {t(kind.emptyLabelKey)}
+                </span>
+            )}
+            {atCap && (
+                <span role="status" className="text-xs text-warning">
+                    {t('app.scheduledFillMaxEntries').replace('{0}', String(SCHEDULED_FILL_MAX_ENTRIES))}
+                </span>
+            )}
+            <SettingResetButton settingKey={settingKey} onReset={onReset} />
+        </div>
+    );
+}
+
+/**
  * Shared shell of the variable add/remove row-list editors: draft sync
  * (useListDraft's fingerprint pattern, keyed on what the draft EMITS),
  * first-wins dedupe on emission, the entry cap, per-row hint regions and the
@@ -219,8 +246,6 @@ function RowListField({ kind, settingKey, config, value, onChange, onReset, disa
         onChange(settingKey, kind.emittedOf(nextRows));
     };
 
-    const atCap = rows.length >= SCHEDULED_FILL_MAX_ENTRIES;
-
     return (
         <div className="space-y-2">
             {rows.map((row, index) => {
@@ -244,26 +269,14 @@ function RowListField({ kind, settingKey, config, value, onChange, onReset, disa
                     </div>
                 );
             })}
-            <div className="flex items-center gap-2 flex-wrap">
-                <button
-                    className="btn btn-outline btn-sm"
-                    onClick={() => update([...rows, kind.blankRow])}
-                    disabled={disabled || atCap}
-                >
-                    {t(kind.addLabelKey)}
-                </button>
-                {rows.length === 0 && (
-                    <span role="status" className="text-sm opacity-70">
-                        {t(kind.emptyLabelKey)}
-                    </span>
-                )}
-                {atCap && (
-                    <span role="status" className="text-xs text-warning">
-                        {t('app.scheduledFillMaxEntries').replace('{0}', String(SCHEDULED_FILL_MAX_ENTRIES))}
-                    </span>
-                )}
-                <SettingResetButton settingKey={settingKey} onReset={onReset} />
-            </div>
+            <RowListFooter
+                kind={kind}
+                settingKey={settingKey}
+                rowCount={rows.length}
+                onAdd={() => update([...rows, kind.blankRow])}
+                onReset={onReset}
+                disabled={disabled}
+            />
         </div>
     );
 }

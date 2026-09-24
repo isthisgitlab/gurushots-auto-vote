@@ -117,11 +117,6 @@ function boostPrefillHints({ effectiveOf, t }) {
 
 const allDayPauseHint = (t) => ({ tone: 'text-warning font-medium', text: t('app.votingPauseAllDayHint') });
 
-const shortWindowHint = (templateKey, checkFrequencyMax, t) => ({
-    tone: 'text-warning',
-    text: t(templateKey).replace('{0}', String(checkFrequencyMax)),
-});
-
 // ---- Global defaults ------------------------------------------------------
 
 const GLOBAL_HINTS = new Map([
@@ -180,95 +175,95 @@ function isScheduledFillUnreachable(fill, { nowSec, closeTime }) {
     return !beforeEndReachable && !timeOfDayReachable;
 }
 
+/**
+ * A window shorter than the longest gap between voting cycles can be stepped
+ * straight over. Gated on the window being active, and on a known cadence.
+ */
+const shortWindowHints = (win, templateKey, { checkFrequencyMax, t }) =>
+    win.active && checkFrequencyMax > 0 && win.durationMin < checkFrequencyMax
+        ? [{ tone: 'text-warning', text: t(templateKey).replace('{0}', String(checkFrequencyMax)) }]
+        : [];
+
+// ---- Per-challenge: scheduled fill -----------------------------------------
+
+/**
+ * On the master-toggle row (feature-level status): a before-end-only config
+ * would never see the next-window hint on the daily-times row. It gates on
+ * `enabled` like every value-derived hint: a time typed in while the toggle is
+ * off must not render an "active schedule" status.
+ */
+function scheduledFillStatusHints(ctx) {
+    const { fill, t } = ctx;
+    const hints = [];
+    if (fill.enabled && !fill.timeSet && fill.beforeEnds.length === 0) {
+        hints.push({ tone: 'text-warning', text: t('app.scheduledFillNoTimesHint') });
+    }
+    if (fill.enabled && fill.next) {
+        hints.push({ tone: 'text-info', text: nextWindowText(t('app.scheduledFillNextHint'), fill, ctx) });
+    }
+    return hints;
+}
+
+/** Before-end offsets shorter than the fill window waste part of it. */
+function wastedFillWindowHints({ fill, t }) {
+    if (!fill.enabled) return [];
+    const wasted = fill.beforeEnds.filter((sec) => sec < fill.durationSec);
+    if (wasted.length === 0) return [];
+    const offsets = wasted.map((sec) => formatOffset(sec, t)).join(', ');
+    return [{ tone: 'text-warning', text: t('app.scheduledFillWastedWindowHint').replace('{0}', offsets) }];
+}
+
+function fillReplacesHints({ profileReplacesWarning, fillUnreachable, t }) {
+    const hints = [];
+    if (profileReplacesWarning) {
+        hints.push({ tone: 'text-warning font-medium', text: t('app.scheduledFillProfileReplacesWarning') });
+    }
+    if (fillUnreachable) hints.push({ tone: 'text-warning', text: t('app.scheduledFillUnreachableHint') });
+    return hints;
+}
+
+// ---- Per-challenge: voting pause -------------------------------------------
+
+/**
+ * All pause status sits on the master-toggle row for the same reason
+ * scheduled fill's does: a before-end-only config would never see a hint
+ * rendered on the daily-times row.
+ */
+function votingPauseStatusHints(ctx) {
+    const { pause, timezone, t } = ctx;
+    const hints = [];
+    if (pause.enabled && !pause.timeSet && pause.beforeEnds.length === 0) {
+        hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
+    }
+    // A pause open RIGHT NOW is reported as an END time — "voting
+    // resumes at …" is what the user actually wants to know.
+    if (pause.openNow) {
+        const until = formatClockInTz(pause.next.start + pause.durationSec, timezone);
+        hints.push({
+            tone: 'text-warning',
+            text: t('app.votingPauseActiveHint').replace('{0}', until).replace('{1}', timezone),
+        });
+    } else if (pause.active && pause.next) {
+        hints.push({ tone: 'text-info', text: nextWindowText(t('app.votingPauseNextHint'), pause, ctx) });
+    }
+    // Daily pauses that leave no uncovered moment — outside the
+    // last-minute rules such a challenge would never vote automatically.
+    if (pause.coversWholeDay) hints.push(allDayPauseHint(t));
+    return hints;
+}
+
 const CHALLENGE_HINTS = new Map([
-    [
-        'useScheduledFill',
-        (ctx) => {
-            const { fill, t } = ctx;
-            const hints = [];
-            if (fill.enabled && !fill.timeSet && fill.beforeEnds.length === 0) {
-                hints.push({ tone: 'text-warning', text: t('app.scheduledFillNoTimesHint') });
-            }
-            // The next-window hint lives on the master-toggle row (feature-level
-            // status): a before-end-only config would never see it on the
-            // daily-times row. It gates on `enabled` like every value-derived
-            // hint: a time typed in while the toggle is off must not render an
-            // "active schedule" status.
-            if (fill.enabled && fill.next) {
-                hints.push({ tone: 'text-info', text: nextWindowText(t('app.scheduledFillNextHint'), fill, ctx) });
-            }
-            return hints;
-        },
-    ],
-    [
-        'scheduledFillBeforeEnd',
-        ({ fill, t }) => {
-            if (!fill.enabled) return [];
-            const wasted = fill.beforeEnds.filter((sec) => sec < fill.durationSec);
-            if (wasted.length === 0) return [];
-            const offsets = wasted.map((sec) => formatOffset(sec, t)).join(', ');
-            return [{ tone: 'text-warning', text: t('app.scheduledFillWastedWindowHint').replace('{0}', offsets) }];
-        },
-    ],
-    [
-        'scheduledFillWindowMinutes',
-        ({ fill, checkFrequencyMax, t }) =>
-            fill.active && checkFrequencyMax > 0 && fill.durationMin < checkFrequencyMax
-                ? [shortWindowHint('app.scheduledFillShortWindowHint', checkFrequencyMax, t)]
-                : [],
-    ],
-    [
-        'scheduledFillReplaces',
-        ({ profileReplacesWarning, fillUnreachable, t }) => {
-            const hints = [];
-            if (profileReplacesWarning) {
-                hints.push({ tone: 'text-warning font-medium', text: t('app.scheduledFillProfileReplacesWarning') });
-            }
-            if (fillUnreachable) hints.push({ tone: 'text-warning', text: t('app.scheduledFillUnreachableHint') });
-            return hints;
-        },
-    ],
-    [
-        // All pause status sits on the master-toggle row for the same reason
-        // scheduled fill's does: a before-end-only config would never see a
-        // hint rendered on the daily-times row.
-        'useVotingPause',
-        (ctx) => {
-            const { pause, timezone, t } = ctx;
-            const hints = [];
-            if (pause.enabled && !pause.timeSet && pause.beforeEnds.length === 0) {
-                hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
-            }
-            // A pause open RIGHT NOW is reported as an END time — "voting
-            // resumes at …" is what the user actually wants to know.
-            if (pause.openNow) {
-                const until = formatClockInTz(pause.next.start + pause.durationSec, timezone);
-                hints.push({
-                    tone: 'text-warning',
-                    text: t('app.votingPauseActiveHint').replace('{0}', until).replace('{1}', timezone),
-                });
-            } else if (pause.active && pause.next) {
-                hints.push({ tone: 'text-info', text: nextWindowText(t('app.votingPauseNextHint'), pause, ctx) });
-            }
-            // Daily pauses that leave no uncovered moment — outside the
-            // last-minute rules such a challenge would never vote automatically.
-            if (pause.coversWholeDay) hints.push(allDayPauseHint(t));
-            return hints;
-        },
-    ],
-    [
-        // The pause's counterpart to scheduledFillShortWindowHint, and it
-        // matters MORE here: the pause is deliberately not a cadence input
-        // (see docs/scheduling.md), so the scheduler never wakes for a pause
-        // boundary. A pause shorter than the longest gap between cycles can
-        // therefore be stepped straight over, and voting proceeds as if it
-        // were never set.
-        'votingPauseDurationMinutes',
-        ({ pause, checkFrequencyMax, t }) =>
-            pause.active && checkFrequencyMax > 0 && pause.durationMin < checkFrequencyMax
-                ? [shortWindowHint('app.votingPauseShortWindowHint', checkFrequencyMax, t)]
-                : [],
-    ],
+    ['useScheduledFill', scheduledFillStatusHints],
+    ['scheduledFillBeforeEnd', wastedFillWindowHints],
+    ['scheduledFillWindowMinutes', (ctx) => shortWindowHints(ctx.fill, 'app.scheduledFillShortWindowHint', ctx)],
+    ['scheduledFillReplaces', fillReplacesHints],
+    ['useVotingPause', votingPauseStatusHints],
+    // The pause's counterpart to the fill's short-window hint, and it matters
+    // MORE here: the pause is deliberately not a cadence input (see
+    // docs/scheduling.md), so the scheduler never wakes for a pause boundary.
+    // A pause shorter than the longest gap between cycles can therefore be
+    // stepped straight over, and voting proceeds as if it were never set.
+    ['votingPauseDurationMinutes', (ctx) => shortWindowHints(ctx.pause, 'app.votingPauseShortWindowHint', ctx)],
     ['voteBeforeBoost', boostPrefillHints],
 ]);
 
