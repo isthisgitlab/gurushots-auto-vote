@@ -92,6 +92,14 @@
             updateError: 'Atjaunināšanas kļūda',
             updateErrorMessage: 'Neizdevās pārbaudīt atjauninājumus.',
         },
+        quitGuard: {
+            title: 'Aizvērt, kamēr gaidāms boost?',
+            detail: 'Automātiskā balsošana darbojas un drīz pielietos boost šiem izaicinājumiem. Ja lietotne tiks aizvērta, šie boost netiks pielietoti.',
+            dueIn: 'boost pēc {time}',
+            dueNow: 'boost tūlīt',
+            keepRunning: 'Turpināt darbu',
+            quitAnyway: 'Tomēr aizvērt',
+        },
         // Login screen specific
         login: {
             heading: 'Pieteikšanās',

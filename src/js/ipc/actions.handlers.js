@@ -18,6 +18,7 @@ const autoFill = require('../services/autoFill');
 const { isAutoJoinActive } = require('../services/joinChallenges');
 const { getAutoClaimStatus } = require('../services/autoClaim');
 const { findActiveChallenge } = require('../services/findActiveChallenge');
+const { rememberChallenges } = require('../windows/quitGuard');
 
 // In-process guard that prevents two simultaneous mini-game runs on
 // the same challenge — defends against double-click and against an
@@ -41,7 +42,11 @@ const buildHandlers = () => ({
             logger.withCategory('api').debug('=== IPC get-active-challenges ===', null);
             logger.withCategory('api').debug(`Token received: ${!!token}`, null);
             const strategy = apiFactory.getApiStrategy();
-            return await strategy.getActiveChallenges(token);
+            const result = await strategy.getActiveChallenges(token);
+            // Feeds the quit confirmation. A failed fetch keeps the previous
+            // list — an empty one would wave through a quit mid-boost-window.
+            if (!result?.fetchFailed) rememberChallenges(result?.challenges);
+            return result;
         } catch (error) {
             // Never throw to the renderer (architecture invariant). Return the
             // same `{ challenges, fetchFailed }` shape the happy path uses so

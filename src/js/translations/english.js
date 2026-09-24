@@ -92,6 +92,14 @@
             updateError: 'Update Error',
             updateErrorMessage: 'Failed to check for updates.',
         },
+        quitGuard: {
+            title: 'Quit while a boost is due?',
+            detail: 'Auto-vote is running and is about to boost these challenges. If the app is closed, those boosts will not be applied.',
+            dueIn: 'boost due in {time}',
+            dueNow: 'boost due now',
+            keepRunning: 'Keep running',
+            quitAnyway: 'Quit anyway',
+        },
         // Login screen specific
         login: {
             heading: 'Login',

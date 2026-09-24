@@ -4,6 +4,7 @@ const logger = require('../logger');
 const metadata = require('../metadata');
 const settings = require('../settings');
 const { getReleasesUrl: releasesPageUrl } = require('./UpdateChecker');
+const { bypassQuitGuard } = require('../windows/quitGuard');
 
 /**
  * One-shot skip-version migration: the canonical store is the settings blob
@@ -290,6 +291,8 @@ class AutoUpdater {
         }
 
         logger.withCategory('update').info('Quitting and installing update...', null);
+        // Choosing to install is the confirmation; don't ask again mid-install.
+        bypassQuitGuard();
         autoUpdater.quitAndInstall(false, true);
     }
 

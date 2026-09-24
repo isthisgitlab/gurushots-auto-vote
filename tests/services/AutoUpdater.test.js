@@ -54,6 +54,9 @@ const mockSettings = {
 
 jest.mock('../../src/js/settings', () => mockSettings);
 
+const mockQuitGuard = { bypassQuitGuard: jest.fn() };
+jest.mock('../../src/js/windows/quitGuard', () => mockQuitGuard);
+
 describe('AutoUpdater', () => {
     let AutoUpdater;
     let autoUpdater;
@@ -205,6 +208,7 @@ describe('AutoUpdater', () => {
             autoUpdater.quitAndInstall();
 
             expect(mockAutoUpdater.quitAndInstall).not.toHaveBeenCalled();
+            expect(mockQuitGuard.bypassQuitGuard).not.toHaveBeenCalled();
         });
 
         it('should install if update is downloaded', () => {
@@ -213,6 +217,10 @@ describe('AutoUpdater', () => {
             autoUpdater.quitAndInstall();
 
             expect(mockAutoUpdater.quitAndInstall).toHaveBeenCalledWith(false, true);
+            // Choosing to install is the confirmation — the boost prompt must not block it.
+            expect(mockQuitGuard.bypassQuitGuard.mock.invocationCallOrder[0]).toBeLessThan(
+                mockAutoUpdater.quitAndInstall.mock.invocationCallOrder[0],
+            );
         });
     });
 

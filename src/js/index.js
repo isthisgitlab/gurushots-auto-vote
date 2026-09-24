@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, powerMonitor } = require('electron');
 const path = require('node:path');
 const settings = require('./settings');
 const { initializeHeaders } = require('./api/randomizer');
@@ -17,6 +17,7 @@ const { isTrustedSender } = require('./ipc/registerHandlers');
 const { ensureExit, focusExistingWindow, clearTokenOnQuit } = require('./windows/lifecycle');
 const { watchSettingsFile } = require('./windows/settingsWatcher');
 const { syncBackgroundActivity } = require('./windows/backgroundActivity');
+const { holdQuitForOpenBoosts, bypassQuitGuard, resetQuitGuard } = require('./windows/quitGuard');
 const { createApplicationMenu } = require('./ui/applicationMenu');
 const { translationManager } = require('./translations/index');
 
@@ -75,6 +76,18 @@ votingIpc.register(ipcMain);
 actionsIpc.register(ipcMain);
 computationsIpc.register(ipcMain);
 currencyIpc.register(ipcMain);
+
+// Hold a quit or main-window close that would forfeit an open boost window
+// and ask first; `proceed` re-issues it once confirmed. See windows/quitGuard.js.
+function holdForOpenBoosts(event, proceed) {
+    return holdQuitForOpenBoosts(event, {
+        autovoteRunning: settings.getSetting('autovoteRunning') === true,
+        dialog,
+        parent: mainWindow,
+        t: (key) => translationManager.t(key),
+        proceed,
+    });
+}
 
 function createLoginWindow() {
     // Get saved window bounds
@@ -192,9 +205,21 @@ function createMainWindow() {
         settings.saveWindowBounds('main', newBounds);
     });
 
+    // Closing the main window stops the cadence chain on every platform (on
+    // macOS without quitting), so it forfeits a pending boost just like a quit.
+    const win = mainWindow;
+    win.on('close', (event) => {
+        holdForOpenBoosts(event, () => {
+            if (!win.isDestroyed()) win.close();
+        });
+    });
+    // Windows log-off / shutdown: the OS is ending the session, not the user.
+    win.on('query-session-end', bypassQuitGuard);
+
     // Handle window close
     mainWindow.on('closed', () => {
         mainWindow = null;
+        resetQuitGuard();
         // Stop watching settings file when window closes
         if (settingsWatcher) {
             settingsWatcher.close();
@@ -302,6 +327,9 @@ if (gotSingleInstanceLock) {
             // Create application menu
             createApplicationMenu();
 
+            // Linux/macOS shutdown or reboot: never veto the OS with a dialog.
+            powerMonitor.on('shutdown', bypassQuitGuard);
+
             // Check if we should auto-login and run update check before creating main window
             const userSettings = settings.loadSettings();
             const shouldAutoLogin = userSettings.token && userSettings.stayLoggedIn;
@@ -351,6 +379,7 @@ if (gotSingleInstanceLock) {
             // Handle SIGINT and SIGTERM signals to ensure clean exit
             process.on('SIGINT', () => {
                 logger.withCategory('ui').info('Received SIGINT signal. Exiting...', null);
+                bypassQuitGuard();
                 app.quit();
                 // Use the global force exit handler to ensure the process terminates
                 ensureExit('SIGINT');
@@ -358,6 +387,7 @@ if (gotSingleInstanceLock) {
 
             process.on('SIGTERM', () => {
                 logger.withCategory('ui').info('Received SIGTERM signal. Exiting...', null);
+                bypassQuitGuard();
                 app.quit();
                 // Use the global force exit handler to ensure the process terminates
                 ensureExit('SIGTERM');
@@ -378,7 +408,10 @@ if (gotSingleInstanceLock) {
 // Clear token when app is about to quit if stay logged in is not enabled.
 // Gated on the lock inside the helper — a losing second instance must not
 // touch the shared settings.json and wipe the primary's session.
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+    // Lock first: a losing second instance must not read settings.json either.
+    if (gotSingleInstanceLock && holdForOpenBoosts(event, () => app.quit())) return;
+
     // A throw here must never skip ensureExit — the force-exit net below is
     // the guarantee that quit always terminates the process.
     try {
@@ -469,7 +502,8 @@ ipcMain.on('logout', (event) => {
                 }
             });
 
-            // Close main window
+            // Close main window — logging out is its own confirmation.
+            bypassQuitGuard();
             mainWindow.close();
         });
 });

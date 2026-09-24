@@ -16,12 +16,14 @@ jest.mock('../../src/js/apiFactory');
 jest.mock('../../src/js/services/auth');
 jest.mock('../../src/js/services/VotingLogic');
 jest.mock('../../src/js/services/autoFill');
+jest.mock('../../src/js/windows/quitGuard', () => ({ rememberChallenges: jest.fn() }));
 
 const settings = require('../../src/js/settings');
 const apiFactory = require('../../src/js/apiFactory');
 const auth = require('../../src/js/services/auth');
 const votingLogic = require('../../src/js/services/VotingLogic');
 const autoFill = require('../../src/js/services/autoFill');
+const { rememberChallenges } = require('../../src/js/windows/quitGuard');
 
 // The handler routes auth through the factory surfaces + the shared
 // extractAuthResult normalizer; exercise the real normalizer rather than a stub
@@ -78,6 +80,22 @@ describe('get-active-challenges', () => {
         const result = await handlers['get-active-challenges']({}, 'tok');
         expect(strategy.getActiveChallenges).toHaveBeenCalledWith('tok');
         expect(result).toEqual({ challenges: [{ id: 1 }] });
+        // Feeds the quit-while-boost-window-open confirmation.
+        expect(rememberChallenges).toHaveBeenCalledWith([{ id: 1 }]);
+    });
+
+    test('a failed fetch keeps the quit guard on its previous list', async () => {
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [], fetchFailed: true }) });
+        const handlers = buildHandlers();
+        await handlers['get-active-challenges']({}, 'tok');
+        expect(rememberChallenges).not.toHaveBeenCalled();
+    });
+
+    test('tolerates a strategy that resolves nothing', async () => {
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue(undefined) });
+        const handlers = buildHandlers();
+        await expect(handlers['get-active-challenges']({}, 'tok')).resolves.toBeUndefined();
+        expect(rememberChallenges).toHaveBeenCalledWith(undefined);
     });
 
     test('never throws to the renderer — returns the fetchFailed list shape on error', async () => {

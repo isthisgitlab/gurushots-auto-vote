@@ -1,7 +1,8 @@
 /**
  * Electron main entry (src/js/index.js): single-instance lock, IPC module
  * wiring, window creation/bounds persistence, startup update-check ordering,
- * app lifecycle events and the login-success / logout window swaps.
+ * app lifecycle events, the quit-guard wiring and the login-success / logout
+ * window swaps.
  *
  * Every collaborator is mocked; each test re-requires the entry point on a
  * fresh module registry (module-level window state lives in index.js).
@@ -10,6 +11,7 @@
 jest.mock('electron', () => {
     const appHandlers = {};
     const ipcHandlers = {};
+    const powerHandlers = {};
     const windows = [];
     class BrowserWindow {
         constructor(opts) {
@@ -57,6 +59,13 @@ jest.mock('electron', () => {
             whenReady: jest.fn(() => Promise.resolve()),
         },
         BrowserWindow,
+        dialog: { showMessageBox: jest.fn() },
+        powerMonitor: {
+            handlers: powerHandlers,
+            on: jest.fn((ev, cb) => {
+                powerHandlers[ev] = cb;
+            }),
+        },
         ipcMain: {
             handlers: ipcHandlers,
             on: jest.fn((ch, cb) => {
@@ -103,6 +112,11 @@ jest.mock('../../src/js/windows/settingsWatcher', () => ({
     watchSettingsFile: jest.fn(() => ({ close: jest.fn() })),
 }));
 jest.mock('../../src/js/windows/backgroundActivity', () => ({ syncBackgroundActivity: jest.fn() }));
+jest.mock('../../src/js/windows/quitGuard', () => ({
+    holdQuitForOpenBoosts: jest.fn(() => false),
+    bypassQuitGuard: jest.fn(),
+    resetQuitGuard: jest.fn(),
+}));
 jest.mock('../../src/js/ui/applicationMenu', () => ({ createApplicationMenu: jest.fn() }));
 jest.mock('../../src/js/translations/index', () => ({ translationManager: { t: (k) => k } }));
 
@@ -137,6 +151,7 @@ function load({ lock = true, whenReady } = {}) {
         lifecycle: require('../../src/js/windows/lifecycle'),
         watcher: require('../../src/js/windows/settingsWatcher'),
         bg: require('../../src/js/windows/backgroundActivity'),
+        quitGuard: require('../../src/js/windows/quitGuard'),
         menu: require('../../src/js/ui/applicationMenu'),
     };
     m.cat = m.logger.cat;
@@ -214,8 +229,10 @@ describe('module bootstrap', () => {
         expect(m.app.handlers['second-instance']).toBeUndefined();
 
         // before-quit is still registered, but told there is no lock.
-        m.app.handlers['before-quit']();
+        m.app.handlers['before-quit']({ preventDefault: jest.fn() });
         expect(m.lifecycle.clearTokenOnQuit).toHaveBeenCalledWith(false, m.settings);
+        // Nor does it ask about boosts — that would read the primary's settings.json.
+        expect(m.quitGuard.holdQuitForOpenBoosts).not.toHaveBeenCalled();
     });
 });
 
@@ -332,9 +349,66 @@ describe('startup (whenReady)', () => {
         expect(m.cat.info).toHaveBeenCalledWith('Received SIGTERM signal. Exiting...', null);
         expect(m.lifecycle.ensureExit).toHaveBeenCalledWith('SIGTERM');
         expect(m.app.quit).toHaveBeenCalledTimes(2);
+        // A signal is not the user's quit to confirm.
+        expect(m.quitGuard.bypassQuitGuard).toHaveBeenCalledTimes(2);
+        expect(m.quitGuard.bypassQuitGuard.mock.invocationCallOrder[0]).toBeLessThan(
+            m.app.quit.mock.invocationCallOrder[0],
+        );
 
         processHandlers.exit(3);
         expect(m.cat.info).toHaveBeenCalledWith('Process exiting with code: 3', null);
+    });
+});
+
+describe('quit guard wiring', () => {
+    beforeEach(async () => {
+        load();
+        await flush();
+    });
+
+    it('an OS shutdown bypasses the guard', () => {
+        expect(m.electron.powerMonitor.handlers.shutdown).toBe(m.quitGuard.bypassQuitGuard);
+    });
+
+    it('before-quit asks first; a held quit neither clears the token nor force-exits', () => {
+        m.ipcMain.handlers['login-success']({});
+        m.settings.getSetting.mockImplementation((key) => key === 'autovoteRunning');
+        m.quitGuard.holdQuitForOpenBoosts.mockReturnValueOnce(true);
+        const event = { preventDefault: jest.fn() };
+
+        m.app.handlers['before-quit'](event);
+
+        const [heldEvent, deps] = m.quitGuard.holdQuitForOpenBoosts.mock.calls[0];
+        expect(heldEvent).toBe(event);
+        expect(deps).toMatchObject({ autovoteRunning: true, dialog: m.electron.dialog, parent: mainWin() });
+        expect(deps.t('quitGuard.title')).toBe('quitGuard.title');
+        expect(m.lifecycle.clearTokenOnQuit).not.toHaveBeenCalled();
+        expect(m.lifecycle.ensureExit).not.toHaveBeenCalled();
+
+        deps.proceed();
+        expect(m.app.quit).toHaveBeenCalled();
+    });
+
+    it('closing the main window asks first, re-closes on confirm, and resets the guard once closed', () => {
+        m.ipcMain.handlers['login-success']({});
+        const win = mainWin();
+        const event = { preventDefault: jest.fn() };
+
+        win.handlers.close(event);
+        const [heldEvent, deps] = m.quitGuard.holdQuitForOpenBoosts.mock.calls[0];
+        expect(heldEvent).toBe(event);
+        expect(deps.autovoteRunning).toBe(false);
+
+        deps.proceed();
+        expect(win.close).toHaveBeenCalledTimes(1);
+        win.destroyed = true;
+        deps.proceed();
+        expect(win.close).toHaveBeenCalledTimes(1);
+
+        expect(win.handlers['query-session-end']).toBe(m.quitGuard.bypassQuitGuard);
+
+        win.handlers.closed();
+        expect(m.quitGuard.resetQuitGuard).toHaveBeenCalled();
     });
 });
 
@@ -601,6 +675,8 @@ describe('logout IPC', () => {
 
         expect(m.auth.clearAuthToken).toHaveBeenCalled();
         expect(m.settings.setSetting).toHaveBeenCalledWith('mock', true);
+        // Logging out is its own confirmation — no boost prompt on the way out.
+        expect(m.quitGuard.bypassQuitGuard).toHaveBeenCalled();
         expect(main.close).toHaveBeenCalled();
         expect(login.focus).not.toHaveBeenCalled();
 
