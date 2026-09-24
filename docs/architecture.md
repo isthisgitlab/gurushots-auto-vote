@@ -335,8 +335,9 @@ repeated six times is one that gets forgotten at one of them.
   `dist/` and leaves transformers out of the bundles. `hasBundledModel()` (a fetch of
   `vision-model/config.json` on Android, the `vision-runtime.sha256` SEA asset on the CLI, the model folder
   otherwise; cached) makes `rankVisually()` keep the tag order without a warning. It also keeps updates on lite:
-  the Android update check asks for `-lite.apk` (`pickAsset()` never gives a plain suffix a `-lite` asset), and
-  the lite desktop app reads `lite*.yml` via the `channel` in its `app-update.yml`. electron-updater's GitHub
+  the Android update check asks for `-lite.apk` (`pickAsset()` never gives a plain suffix a `-lite` asset), the
+  CLI's `check-updates` links its own `gurucli-…-<target>[-lite]` binary, and the lite desktop app reads
+  `lite*.yml` via the `channel` in its `app-update.yml`. electron-updater's GitHub
   provider replaces that channel with the prerelease one on beta tags and falls back to `latest*.yml` (the full
   build), so `AutoUpdater` turns `allowPrerelease` off for lite.
 

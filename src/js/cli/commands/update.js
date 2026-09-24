@@ -8,7 +8,19 @@
 
 const logger = require('../../logger');
 const updateChecker = require('../../services/UpdateChecker');
+const { hasBundledModel } = require('../../services/visionVerifier');
 const pkg = require('../../../../package.json');
+
+// The release asset this binary ships as (gurucli-v<version>-<target>[-lite],
+// see scripts/build-cli.js), so the download link matches this build's own
+// platform and variant. null (the releases page) where no CLI build exists.
+const cliAssetSuffix = async () => {
+    let target = null;
+    if (process.platform === 'darwin') target = '-mac';
+    else if (process.platform === 'linux') target = process.arch === 'arm64' ? '-linux-arm' : '-linux';
+    if (!target) return null;
+    return (await hasBundledModel()) ? target : `${target}-lite`;
+};
 
 // Release metadata (tag, asset URL, error message) is third-party data from
 // the GitHub API. Strip C0/C1 control + escape characters before printing so
@@ -32,7 +44,7 @@ const checkUpdates = async () => {
             // A prerelease build (version contains a hyphen, e.g. 1.0.0-beta.1)
             // tracks the beta channel; stable builds track the production latest.
             isBetaChannel: pkg.version.includes('-'),
-            assetSuffix: null,
+            assetSuffix: await cliAssetSuffix(),
         });
     } catch (err) {
         ui.error(`Update check failed: ${plain(err?.message || String(err))}`);

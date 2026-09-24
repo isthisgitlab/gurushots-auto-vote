@@ -56,6 +56,9 @@ jest.mock('../../src/js/services/UpdateChecker', () => ({
     getReleasesUrl: jest.fn(() => 'https://releases'),
 }));
 
+const mockHasBundledModel = jest.fn(async () => true);
+jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
+
 const fs = require('fs');
 const logger = require('../../src/js/logger.js');
 const settings = require('../../src/js/settings');
@@ -320,15 +323,45 @@ describe('join', () => {
 });
 
 describe('check-updates', () => {
+    const realPlatform = process.platform;
+    const realArch = process.arch;
+    const setHost = (platform, arch) => {
+        Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+        Object.defineProperty(process, 'arch', { value: arch, configurable: true });
+    };
+    afterEach(() => {
+        setHost(realPlatform, realArch);
+        mockHasBundledModel.mockImplementation(async () => true);
+    });
+
     test('reports up to date', async () => {
+        setHost('darwin', 'arm64');
         updateChecker.checkForUpdates.mockResolvedValue({ updateAvailable: false });
         await checkUpdates();
         expect(updateChecker.checkForUpdates).toHaveBeenCalledWith({
             currentVersion: pkg.version,
             isBetaChannel: pkg.version.includes('-'),
-            assetSuffix: null,
+            assetSuffix: '-mac',
         });
         expect(msgs('success')).toEqual([`You're up to date (${pkg.version}).`]);
+    });
+
+    test.each([
+        ['darwin', 'arm64', true, '-mac'],
+        ['linux', 'x64', true, '-linux'],
+        ['linux', 'arm64', true, '-linux-arm'],
+        ['darwin', 'arm64', false, '-mac-lite'],
+        ['linux', 'x64', false, '-linux-lite'],
+        ['linux', 'arm64', false, '-linux-arm-lite'],
+        ['win32', 'x64', true, null],
+    ])('%s/%s (model bundled: %p) links its own binary %p', async (platform, arch, bundled, suffix) => {
+        setHost(platform, arch);
+        mockHasBundledModel.mockImplementation(async () => bundled);
+        updateChecker.checkForUpdates.mockResolvedValue({ updateAvailable: false });
+        await checkUpdates();
+        expect(updateChecker.checkForUpdates).toHaveBeenLastCalledWith(
+            expect.objectContaining({ assetSuffix: suffix }),
+        );
     });
 
     test('a thrown check prints the sanitised message and the releases URL', async () => {
