@@ -28,6 +28,12 @@ allowBuilds:
 autoInstallPeers: true
 # Fail fast on conflicting peer ranges rather than silently picking a winner.
 strictPeerDependencies: true
+# Scoped exception to strictPeerDependencies: eslint-plugin-jsx-a11y (latest
+# 6.10.2) still declares eslint ^3–^9 but works under the repo's ESLint 10.
+# Drop this once the plugin's peer range includes eslint 10.
+peerDependencyRules:
+    allowedVersions:
+        'eslint-plugin-jsx-a11y>eslint': '10'
 # Honor the `engines` field in package.json (Node 26+ — that's its only key;
 # the pnpm version is pinned via `packageManager` + corepack, and pnpm 12's
 # managePackageManagerVersions default additionally records that resolved binary
