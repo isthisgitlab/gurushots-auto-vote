@@ -60,6 +60,9 @@ const ENTRY_SHA256 = '95dde4dfd627ab26608d33e76d1195ec059734bd29089ea52cadb08d07
 // Refuse to write more than this to the cache — a swapped/looping source
 // should fail fast, not fill the disk. The real archive is ~822 MB.
 const MAX_DOWNLOAD_BYTES = 1024 * 1024 * 1024;
+// The pinned URL 301s to downloads.cs.stanford.edu; a longer chain than this
+// is not the host we pinned.
+const MAX_REDIRECTS = 5;
 const DIMS = 100;
 // Top-N frequency-ranked generic tokens (counted AFTER the filter below, so the
 // stored generic vocab really is ~TOP_N stems, not "top lines minus rejects").
@@ -277,6 +280,24 @@ const quantizePack = (stems, dims) => {
     return { scale, packed };
 };
 
+/**
+ * fetch() that follows redirects itself so every hop is held to https — the
+ * built-in redirect handling would follow an https→http downgrade silently.
+ */
+const fetchHttpsOnly = async (url, maxRedirects = MAX_REDIRECTS) => {
+    let current = url;
+    for (let hop = 0; ; hop++) {
+        const res = await fetch(current, { redirect: 'manual' });
+        const location = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+        if (!location) return res;
+        // Release the redirect's socket instead of leaving it to GC.
+        await res.body?.cancel();
+        if (hop === maxRedirects) throw new Error(`more than ${maxRedirects} redirects`);
+        current = new URL(location, current).href;
+        if (!current.startsWith('https://')) throw new Error(`redirected to non-https source: ${current}`);
+    }
+};
+
 const download = async ({ cacheDir, zipPath, url, maxBytes }) => {
     fs.mkdirSync(cacheDir, { recursive: true });
     if (fs.existsSync(zipPath)) {
@@ -287,7 +308,7 @@ const download = async ({ cacheDir, zipPath, url, maxBytes }) => {
     console.log(`⬇️  Downloading ${url} (~822 MB, one-time — cached afterwards)…`);
     let res;
     try {
-        res = await fetch(url);
+        res = await fetchHttpsOnly(url);
     } catch (err) {
         fail([
             `download failed: ${err.message || err}`,
@@ -550,6 +571,7 @@ module.exports = {
     streamEntryLines,
     sha256OfString,
     sha256OfFile,
+    fetchHttpsOnly,
     download,
     main,
     run,

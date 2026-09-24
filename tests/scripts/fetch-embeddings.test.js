@@ -22,7 +22,15 @@ const { EventEmitter } = require('node:events');
 const { Readable } = require('node:stream');
 const yauzl = require('yauzl');
 
-const { download, main, run, sha256OfFile, streamEntryLines, ENTRY_NAME } = require('../../scripts/fetch-embeddings');
+const {
+    download,
+    fetchHttpsOnly,
+    main,
+    run,
+    sha256OfFile,
+    streamEntryLines,
+    ENTRY_NAME,
+} = require('../../scripts/fetch-embeddings');
 const { makeStoredZip } = require('./helpers/stored-zip');
 
 const DIMS = 100;
@@ -91,9 +99,34 @@ describe('fetch-embeddings', () => {
         });
 
         test('refuses a non-https source', async () => {
-            await expect(download({ ...opts, url: 'http://example.test/glove.zip' })).rejects.toThrow('exit 1');
+            await expect(download({ ...opts, url: 'file:///tmp/glove.zip' })).rejects.toThrow('exit 1');
             expect(errors()).toContain('refusing non-https source');
             expect(fetchSpy).not.toHaveBeenCalled();
+        });
+
+        test('follows an https redirect hop by hop', async () => {
+            const cancel = jest.fn();
+            fetchSpy
+                .mockResolvedValueOnce({
+                    status: 301,
+                    headers: new Headers({ location: '/moved/glove.zip' }),
+                    body: { cancel },
+                })
+                .mockResolvedValueOnce({ ok: true, status: 200, body: Readable.from([Buffer.from('zip')]) });
+            await download(opts);
+            expect(fetchSpy.mock.calls).toEqual([
+                ['https://example.test/glove.zip', { redirect: 'manual' }],
+                ['https://example.test/moved/glove.zip', { redirect: 'manual' }],
+            ]);
+            expect(fs.readFileSync(opts.zipPath, 'utf8')).toBe('zip');
+            expect(cancel).toHaveBeenCalledTimes(1);
+        });
+
+        test('refuses a redirect that downgrades to http', async () => {
+            fetchSpy.mockResolvedValue({ status: 302, headers: new Headers({ location: 'http://example.test/x' }) });
+            await expect(download(opts)).rejects.toThrow('exit 1');
+            expect(errors()).toContain('redirected to non-https source: http://example.test/x');
+            expect(fetchSpy).toHaveBeenCalledTimes(1);
         });
 
         test.each([
@@ -140,6 +173,22 @@ describe('fetch-embeddings', () => {
             fetchSpy.mockResolvedValue({ ok: true, body });
             await expect(download(opts)).rejects.toThrow('exit 1');
             expect(errors()).toContain('download interrupted: socket hang up');
+        });
+    });
+
+    describe('fetchHttpsOnly', () => {
+        test('gives up past the redirect limit', async () => {
+            const fetchSpy = jest
+                .spyOn(globalThis, 'fetch')
+                .mockResolvedValue({ status: 307, headers: new Headers({ location: 'https://example.test/loop' }) });
+            await expect(fetchHttpsOnly('https://example.test/a', 2)).rejects.toThrow('more than 2 redirects');
+            expect(fetchSpy).toHaveBeenCalledTimes(3);
+        });
+
+        test('returns a 3xx without a Location as-is', async () => {
+            const res = { ok: false, status: 304, headers: new Headers() };
+            jest.spyOn(globalThis, 'fetch').mockResolvedValue(res);
+            await expect(fetchHttpsOnly('https://example.test/a')).resolves.toBe(res);
         });
     });
 
