@@ -24,7 +24,7 @@
  *   4. Budget decrements only after a confirmed unlock.
  *   5. Cancellation is honored between candidates and before each spend.
  *
- * deps (injected by strategies/real/index.js real / mock/index.js mock):
+ * deps (injected by strategies/real/index.js real / mock/strategy.js mock):
  *   { getMemberChallenges, getBankroll, coinsUnlock, submitToChallenge,
  *     getEligiblePhotos, joinStateStore, acquireUnlockLock } — joinStateStore is
  *   null and acquireUnlockLock absent in mock (no real state touched, mirroring
@@ -78,6 +78,32 @@ const parseTypeList = (value) =>
               .filter((t) => t !== '')
         : [];
 
+/** The saved title rules, or null when they cannot be read. */
+const readTitleRules = () => {
+    try {
+        return settings.getTitleRules();
+    } catch {
+        return null;
+    }
+};
+
+/**
+ * Whether one rule turns auto-join ON by itself. Reads the rule's OWN values
+ * directly. Going back through the matcher here would be wrong: a `contains`
+ * or class-keyed rule has no single challenge to match against at arming time,
+ * and a higher rule could win and hide this one's `autoJoin: true`. Arming only
+ * asks "could any rule ever turn joining on?", which the rule answers itself.
+ *
+ * @param {*} rule
+ * @param {() => Object} readProfiles - lazily loads the profiles map once per scan
+ */
+const ruleEnablesAutoJoin = (rule, readProfiles) => {
+    if (rule && Object.prototype.hasOwnProperty.call(rule, 'autoJoin')) return rule.autoJoin === true;
+    const profileName = typeof rule?.profile === 'string' ? rule.profile : '';
+    if (!profileName) return false;
+    return readProfiles()[profileName]?.autoJoin === true;
+};
+
 /**
  * True when at least one saved rule turns auto-join ON — either inline on the
  * rule or through the named profile it inherits — i.e. some challenge would
@@ -88,28 +114,15 @@ const parseTypeList = (value) =>
  * returns false, so it must never keep the pass alive every cycle.
  */
 const anyTitleRuleEnablesAutoJoin = () => {
-    let rules;
-    try {
-        rules = settings.getTitleRules();
-    } catch {
-        return false;
-    }
+    const rules = readTitleRules();
     if (!Array.isArray(rules)) return false;
     let profiles = null;
-    for (const rule of rules) {
-        // Read the rule's OWN values directly. Going back through the matcher
-        // here would be wrong: a `contains` or class-keyed rule has no single
-        // challenge to match against at arming time, and a higher rule could
-        // win and hide this one's `autoJoin: true`. Arming only asks "could any
-        // rule ever turn joining on?", which the rule answers itself.
-        if (rule && Object.prototype.hasOwnProperty.call(rule, 'autoJoin')) {
-            if (rule.autoJoin === true) return true;
-            continue;
-        }
-        const profileName = typeof rule?.profile === 'string' ? rule.profile : '';
-        if (!profileName) continue;
+    const readProfiles = () => {
         profiles = profiles || settings.getChallengeProfiles() || {};
-        if (profiles[profileName]?.autoJoin === true) return true;
+        return profiles;
+    };
+    for (const rule of rules) {
+        if (ruleEnablesAutoJoin(rule, readProfiles)) return true;
     }
     return false;
 };
@@ -308,6 +321,102 @@ const pickJoinPhoto = async (challenge, token, deps) => {
 
 // ---- the join itself (shared by pass + manual) ----
 
+const failedNoCharge = () => ({ status: 'failed-no-charge', charged: 0 });
+
+/**
+ * The check→claim→unlock section, run under the cross-process lock. Re-reads
+ * the unlock claim authoritatively — another process may have unlocked between
+ * the caller's first check and acquiring the lock.
+ *
+ * @returns {Promise<{outcome: {status:string, charged:number}}|{charged:number, alreadyUnlocked:boolean}>}
+ *   `outcome` ends the join with that result; otherwise the unlock state the
+ *   submit continues from.
+ */
+const claimAndUnlock = async (challenge, token, deps, needsCoins) => {
+    const id = challenge?.id;
+    const { state, ok: stateOk } = readUnlockedState(deps.joinStateStore);
+    if (!stateOk) {
+        // Cannot verify prior unlocks → refuse to spend (a re-charge
+        // is worse than skipping this candidate this cycle).
+        cat().error(`${logger.challengeTag(challenge)}: join-state is unreadable — not spending coins`, null);
+        return { outcome: failedNoCharge() };
+    }
+    if (Object.prototype.hasOwnProperty.call(state, String(id))) {
+        return { charged: 0, alreadyUnlocked: true }; // another process already paid → retry submit only
+    }
+    if (cancellation.isCancelled()) return { outcome: failedNoCharge() };
+    // Persist the claim BEFORE spending, so a crash the instant
+    // after the charge can never let a later pass re-unlock. If
+    // the claim cannot be recorded, do not spend at all.
+    if (!markUnlocked(deps.joinStateStore, id)) {
+        cat().error(`${logger.challengeTag(challenge)}: could not record the unlock claim — not spending coins`, null);
+        return { outcome: failedNoCharge() };
+    }
+    const unlock = await deps.coinsUnlock(id, token);
+    if (!unlock?.ok) {
+        clearUnlocked(deps.joinStateStore, id);
+        cat().warning(`coins_unlock failed for ${logger.challengeTag(challenge)} — no coins charged`, null);
+        return { outcome: failedNoCharge() };
+    }
+    return { charged: needsCoins, alreadyUnlocked: false };
+};
+
+/**
+ * Paid unlock, wrapped in the cross-process lock around the check→claim→unlock
+ * section so a concurrent process (GUI auto-join vs CLI join) cannot both unlock.
+ *
+ * @returns {ReturnType<typeof claimAndUnlock>}
+ */
+const unlockUnderLock = async (challenge, token, deps, needsCoins) => {
+    const id = challenge?.id;
+    const xlock = deps.acquireUnlockLock ? deps.acquireUnlockLock(id) : { ok: true, release: () => {} };
+    if (!xlock.ok) {
+        return { outcome: { status: 'busy', charged: 0 } };
+    }
+    try {
+        return await claimAndUnlock(challenge, token, deps, needsCoins);
+    } finally {
+        xlock.release();
+    }
+};
+
+/**
+ * Submit the photo (the actual join).
+ *
+ * @param {{charged:number, alreadyUnlocked:boolean}} unlock - coins spent this
+ *   call, and whether a prior pass/process already unlocked
+ */
+const submitJoin = async (challenge, token, deps, needsCoins, imageId, { charged, alreadyUnlocked }) => {
+    const id = challenge?.id;
+    const coinsSpent = charged > 0 || alreadyUnlocked;
+    // If cancelled now and coins are already spent (this call or a prior
+    // cycle), report pending-submit — not "no charge", which would misinform
+    // the user about money spent.
+    if (cancellation.isCancelled()) {
+        return coinsSpent ? { status: 'charged-pending-submit', charged } : failedNoCharge();
+    }
+    const submit = await deps.submitToChallenge(id, [imageId], token);
+    if (submit?.ok) {
+        clearUnlocked(deps.joinStateStore, id);
+        cat().success(
+            `joined ${logger.challengeTag(challenge)}${needsCoins > 0 ? ` (spent ${needsCoins} coins)` : ''}`,
+            null,
+        );
+        return { status: 'joined', charged, imageId };
+    }
+
+    // Submit failed. If we (or a prior pass) unlocked, coins are gone — keep
+    // the marker so the next attempt retries submit only, never re-charges.
+    if (needsCoins > 0 && coinsSpent) {
+        cat().error(
+            `${logger.challengeTag(challenge)}: coins were charged but the join did not complete — will retry the submit, not re-unlock`,
+            null,
+        );
+        return { status: 'charged-pending-submit', charged };
+    }
+    return failedNoCharge();
+};
+
 /**
  * Perform one join under the safety model. Assumes the decision to join (and,
  * for paid, the consent/affordability) has already been made by the caller.
@@ -334,90 +443,17 @@ const performJoin = async (challenge, token, deps, needsCoins) => {
             return { status: 'skipped-no-photo', charged: 0 };
         }
 
-        let charged = 0;
-        let alreadyUnlocked = isUnlocked(deps.joinStateStore, id);
+        let unlock = { charged: 0, alreadyUnlocked: isUnlocked(deps.joinStateStore, id) };
 
         // 2. Paid unlock (skipped when a prior pass already unlocked → retry submit only).
-        if (needsCoins > 0 && !alreadyUnlocked) {
-            // Cross-process lock around the check→claim→unlock section so a
-            // concurrent process (GUI auto-join vs CLI join) cannot both unlock.
-            const xlock = deps.acquireUnlockLock ? deps.acquireUnlockLock(id) : { ok: true, release: () => {} };
-            if (!xlock.ok) {
-                return { status: 'busy', charged: 0 };
-            }
-            try {
-                // Re-read authoritatively under the lock — another process may
-                // have unlocked between our first check and acquiring the lock.
-                const { state, ok: stateOk } = readUnlockedState(deps.joinStateStore);
-                if (!stateOk) {
-                    // Cannot verify prior unlocks → refuse to spend (a re-charge
-                    // is worse than skipping this candidate this cycle).
-                    cat().error(
-                        `${logger.challengeTag(challenge)}: join-state is unreadable — not spending coins`,
-                        null,
-                    );
-                    return { status: 'failed-no-charge', charged: 0 };
-                }
-                if (Object.prototype.hasOwnProperty.call(state, key)) {
-                    alreadyUnlocked = true; // another process already paid → retry submit only
-                } else if (cancellation.isCancelled()) {
-                    return { status: 'failed-no-charge', charged: 0 };
-                } else {
-                    // Persist the claim BEFORE spending, so a crash the instant
-                    // after the charge can never let a later pass re-unlock. If
-                    // the claim cannot be recorded, do not spend at all.
-                    if (!markUnlocked(deps.joinStateStore, id)) {
-                        cat().error(
-                            `${logger.challengeTag(challenge)}: could not record the unlock claim — not spending coins`,
-                            null,
-                        );
-                        return { status: 'failed-no-charge', charged: 0 };
-                    }
-                    const unlock = await deps.coinsUnlock(id, token);
-                    if (!unlock?.ok) {
-                        clearUnlocked(deps.joinStateStore, id);
-                        cat().warning(
-                            `coins_unlock failed for ${logger.challengeTag(challenge)} — no coins charged`,
-                            null,
-                        );
-                        return { status: 'failed-no-charge', charged: 0 };
-                    }
-                    charged = needsCoins;
-                }
-            } finally {
-                xlock.release();
-            }
+        if (needsCoins > 0 && !unlock.alreadyUnlocked) {
+            const claimed = await unlockUnderLock(challenge, token, deps, needsCoins);
+            if ('outcome' in claimed) return claimed.outcome;
+            unlock = claimed;
         }
 
-        // 3. Submit the photo (the actual join). If cancelled now and coins are
-        // already spent (this call or a prior cycle), report pending-submit — not
-        // "no charge", which would misinform the user about money spent.
-        if (cancellation.isCancelled()) {
-            if (charged > 0 || alreadyUnlocked) {
-                return { status: 'charged-pending-submit', charged };
-            }
-            return { status: 'failed-no-charge', charged: 0 };
-        }
-        const submit = await deps.submitToChallenge(id, [imageId], token);
-        if (submit?.ok) {
-            clearUnlocked(deps.joinStateStore, id);
-            cat().success(
-                `joined ${logger.challengeTag(challenge)}${needsCoins > 0 ? ` (spent ${needsCoins} coins)` : ''}`,
-                null,
-            );
-            return { status: 'joined', charged, imageId };
-        }
-
-        // Submit failed. If we (or a prior pass) unlocked, coins are gone — keep
-        // the marker so the next attempt retries submit only, never re-charges.
-        if (needsCoins > 0 && (charged > 0 || alreadyUnlocked)) {
-            cat().error(
-                `${logger.challengeTag(challenge)}: coins were charged but the join did not complete — will retry the submit, not re-unlock`,
-                null,
-            );
-            return { status: 'charged-pending-submit', charged };
-        }
-        return { status: 'failed-no-charge', charged: 0 };
+        // 3. Submit the photo (the actual join).
+        return await submitJoin(challenge, token, deps, needsCoins, imageId, unlock);
     } finally {
         inFlight.delete(key);
     }
@@ -614,6 +650,24 @@ const runJoinPass = async (token, now, deps) => {
 // ---- manual single join (explicit paid consent) ----
 
 /**
+ * Live balance check for a confirmed paid manual join.
+ *
+ * @returns {Promise<{status:string, challengeId:(string|number), cost:number, coins?:number}|null>}
+ *   the refusal result, or null when the balance covers the cost
+ */
+const checkAffordable = async (challengeId, cost, token, deps) => {
+    const bankroll = await deps.getBankroll(token);
+    const coins = Number(bankroll?.coins);
+    if (bankroll == null || !Number.isFinite(coins)) {
+        return { status: 'balance-unknown', challengeId, cost };
+    }
+    if (coins < cost) {
+        return { status: 'skipped-unaffordable', challengeId, cost, coins };
+    }
+    return null;
+};
+
+/**
  * Join ONE challenge by id, on user request. The `autoJoinWithinHoursOfEnd`
  * window deliberately does NOT apply here — it defers the AUTOMATIC pass, and an
  * explicit click is the user overriding that timing on purpose.
@@ -654,14 +708,8 @@ const joinChallengeSingle = async (challengeId, token, deps, { spendCoins = fals
     }
 
     if (cost > 0) {
-        const bankroll = await deps.getBankroll(token);
-        const coins = Number(bankroll?.coins);
-        if (bankroll == null || !Number.isFinite(coins)) {
-            return { status: 'balance-unknown', challengeId, cost };
-        }
-        if (coins < cost) {
-            return { status: 'skipped-unaffordable', challengeId, cost, coins };
-        }
+        const refusal = await checkAffordable(challengeId, cost, token, deps);
+        if (refusal) return refusal;
     }
 
     const outcome = await performJoin(challenge, token, deps, cost);

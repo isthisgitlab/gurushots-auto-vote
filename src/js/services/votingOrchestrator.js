@@ -1,6 +1,6 @@
 /**
  * The voting-pass orchestration shared by BOTH API strategies
- * (strategies/real and mock/index.js): the mock runs the identical strategy
+ * (strategies/real and mock/strategy.js): the mock runs the identical strategy
  * path over its fake endpoints, so auto-fill, emergency fill, turbo-earn and
  * the timer-ordered deadline actions behave the same in both modes.
  *
@@ -81,16 +81,171 @@ const { sleep } = require('../timing');
  * }} ActionContext
  */
 
-/** @param {ActionContext} ctx */
-const runBoost = async (ctx) => {
-    const { challenge, token, now, api, fillDeps } = ctx;
-    // Check if boost is available for this challenge. Optional-chained to match
-    // shouldApplyBoost/shouldApplyTurbo, which already guard the same tree: a payload
-    // without `member` used to throw straight out of the per-action loop.
+/**
+ * Which kind of boost the challenge currently offers. Optional-chained to match
+ * shouldApplyBoost/shouldApplyTurbo, which already guard the same tree: a payload
+ * without `member` used to throw straight out of the per-action loop.
+ *
+ * @param {Object} challenge
+ * @returns {{boost: Object, isTimerBasedAvailable: boolean, isKeyUnlockedAvailable: boolean}}
+ */
+const readBoostAvailability = (challenge) => {
     const boost = challenge?.member?.boost || {};
     const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
-    const isTimerBasedAvailable = boost.state === 'AVAILABLE' && hasTimeout;
-    const isKeyUnlockedAvailable = boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout);
+    return {
+        boost,
+        isTimerBasedAvailable: boost.state === 'AVAILABLE' && hasTimeout,
+        isKeyUnlockedAvailable: boost.state === 'AVAILABLE_KEY' || (boost.state === 'AVAILABLE' && !hasTimeout),
+    };
+};
+
+/** Close the outer boost-<id> operation as a failure/skip with `reason`. */
+const endBoostOperation = (challenge, reason) => {
+    logger.withCategory('boost').endOperation(`boost-${challenge.id}`, null, reason);
+};
+
+/**
+ * Boost the entry fill-new just submitted. applyBoost raises the `boosted` flag
+ * itself (it owns the entry pick); the explicit-entry call cannot, so reflect it
+ * here.
+ *
+ * @returns {Promise<*>} the boost result; falsy once the operation is closed
+ */
+const boostFreshEntry = async ({ challenge, token, api }, cid, imageId) => {
+    autoFill.reflectNewEntry(challenge, imageId);
+    const boostResult = await api.applyBoostToEntry(cid, imageId, token);
+    if (boostResult) {
+        autoFill.reflectEntryFlag(challenge, imageId, 'boosted');
+    } else {
+        // applyBoostToEntry logs its own apply-boost-entry-* operation,
+        // but the outer boost-<id> operation opened by applyAvailableBoost would
+        // dangle open on failure (the applyBoost fallback path closes its own).
+        endBoostOperation(challenge, 'boost apply to fresh entry failed');
+    }
+    return boostResult;
+};
+
+/**
+ * Fill-new could not submit a fresh photo: skip, or fall back to boosting an
+ * existing entry.
+ *
+ * @returns {Promise<*>} the boost result; null when the boost was skipped
+ */
+const boostAfterFillMiss = async ({ challenge, token, api }, fillMode, reason) => {
+    if (reason === 'challenge-gone') {
+        // The live re-check confirmed the challenge left the
+        // active list — boosting an existing entry on it would
+        // just be a second failing call and a confusing log.
+        endBoostOperation(challenge, 'challenge left the active list — boost skipped');
+        return null;
+    }
+    if (fillMode === 'conflict') {
+        // On-conflict mode only fires when the single existing entry is
+        // already turboed, so there is no valid fallback target — an
+        // applyBoost here would just fail with "only entry already has
+        // Turbo". Skip instead of making the pointless call.
+        endBoostOperation(
+            challenge,
+            `boost fill-new unavailable (${reason}); only entry already has Turbo — boost skipped`,
+        );
+        return null;
+    }
+    // 'always' mode falls back to the configured Boost Entry when
+    // no fresh photo can be submitted (full / none / failed).
+    logger
+        .withCategory('boost')
+        .info(
+            `${logger.challengeTag(challenge)} boost fill-new unavailable (${reason}); boosting existing entry`,
+            null,
+        );
+    return api.applyBoost(challenge, token);
+};
+
+/**
+ * Apply the boost to the entry the fill-new mode selects.
+ *
+ * @param {ActionContext} ctx
+ * @returns {Promise<*>} the boost result; falsy when the boost failed or was
+ *   skipped (either way the operation is already closed)
+ */
+const boostSelectedEntry = async (ctx) => {
+    const { challenge, token, api, fillDeps } = ctx;
+    const cid = challenge.id.toString();
+    // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when
+    // the only existing entry is turboed; 'no' = boost an existing entry.
+    const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid);
+    if (fillMode === 'no') return api.applyBoost(challenge, token);
+    // Fill-new: submit a fresh photo and boost that entry instead
+    // of an existing one.
+    const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
+    if (filled.ok) return boostFreshEntry(ctx, cid, filled.imageId);
+    return boostAfterFillMiss(ctx, fillMode, filled.reason);
+};
+
+/**
+ * @param {ActionContext} ctx
+ * @param {boolean} isTimerBasedAvailable
+ * @param {number} timeUntilDisplayBase - seconds to the boost timeout (timer-based) or challenge end
+ */
+const applyAvailableBoost = async (ctx, isTimerBasedAvailable, timeUntilDisplayBase) => {
+    const { challenge } = ctx;
+    // Surface the override so an applied boost on a challenge with
+    // Auto-Apply Boost off is explained rather than looking like a bug.
+    if (!settings.getEffectiveSetting('autoBoost', challenge.id.toString())) {
+        logger
+            .withCategory('boost')
+            .info(
+                `${logger.challengeTag(challenge)} Emergency Fill window — applying available boost despite Auto-Apply Boost being off`,
+                null,
+            );
+    }
+    const timeDisplay = formatDuration(timeUntilDisplayBase);
+
+    const applyingMsg = isTimerBasedAvailable
+        ? `Applying boost to challenge ${challenge.title}`
+        : `Applying boost to challenge ${challenge.title} (key-unlocked)`;
+    logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
+
+    try {
+        const boostResult = await boostSelectedEntry(ctx);
+        if (boostResult) {
+            const successSuffix = isTimerBasedAvailable
+                ? `${timeDisplay} remaining`
+                : `${timeDisplay} until challenge ends`;
+            logger
+                .withCategory('boost')
+                .endOperation(`boost-${challenge.id}`, `Boost applied successfully (${successSuffix})`);
+        }
+        // On null/falsy result the operation is already closed with the failure
+        // reason (by applyBoost itself, or by the fill-new skip paths) — no
+        // caller-side fallback log needed (mirrors the turbo handling shape).
+    } catch (error) {
+        endBoostOperation(challenge, failureText(error));
+    }
+};
+
+/**
+ * @param {Object} challenge
+ * @param {boolean} isTimerBasedAvailable
+ * @param {number} timeUntilDisplayBase
+ * @param {number} effectiveBoostTime - the timer-based threshold in seconds
+ */
+const logBoostNotReady = (challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime) => {
+    const timeDisplay = formatDuration(timeUntilDisplayBase);
+    // Both branches render the threshold they actually use. The key-unlocked message
+    // used to hardcode "10m" while the code applied at 15, which misled anyone
+    // debugging it; it is now a setting, so read it rather than restating a constant.
+    const keyUnlockedWindow = votingLogic.getEffectiveKeyUnlockedBoostTime(challenge.id.toString());
+    const reason = isTimerBasedAvailable
+        ? `${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`
+        : `${timeDisplay} until challenge ends (needs ≤ ${Math.round(keyUnlockedWindow / 60)}m to auto-apply)`;
+    logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost not ready - ${reason}`, null);
+};
+
+/** @param {ActionContext} ctx */
+const runBoost = async (ctx) => {
+    const { challenge, now } = ctx;
+    const { boost, isTimerBasedAvailable, isKeyUnlockedAvailable } = readBoostAvailability(challenge);
     if (!isTimerBasedAvailable && !isKeyUnlockedAvailable) return;
 
     logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost available`, null);
@@ -104,113 +259,95 @@ const runBoost = async (ctx) => {
     const timeUntilDisplayBase = isTimerBasedAvailable ? boost.timeout - now : challenge.close_time - now;
 
     if (shouldApplyBoost) {
-        // Surface the override so an applied boost on a challenge with
-        // Auto-Apply Boost off is explained rather than looking like a bug.
-        if (!settings.getEffectiveSetting('autoBoost', challenge.id.toString())) {
-            logger
-                .withCategory('boost')
-                .info(
-                    `${logger.challengeTag(challenge)} Emergency Fill window — applying available boost despite Auto-Apply Boost being off`,
-                    null,
-                );
-        }
-        const timeDisplay = formatDuration(timeUntilDisplayBase);
-
-        const applyingMsg = isTimerBasedAvailable
-            ? `Applying boost to challenge ${challenge.title}`
-            : `Applying boost to challenge ${challenge.title} (key-unlocked)`;
-        logger.withCategory('boost').startOperation(`boost-${challenge.id}`, applyingMsg);
-
-        try {
-            const cid = challenge.id.toString();
-            // 'always' = boostFillNew; 'conflict' = boostFillNewOnConflict when
-            // the only existing entry is turboed; 'no' = boost an existing entry.
-            const fillMode = votingLogic.resolveBoostFillNewMode(challenge, cid);
-            let boostResult;
-            if (fillMode !== 'no') {
-                // Fill-new: submit a fresh photo and boost that entry instead
-                // of an existing one.
-                const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
-                if (filled.ok) {
-                    autoFill.reflectNewEntry(challenge, filled.imageId);
-                    boostResult = await api.applyBoostToEntry(cid, filled.imageId, token);
-                    if (boostResult) {
-                        // applyBoost raises this flag itself (it owns the entry pick);
-                        // the explicit-entry call cannot, so reflect it here.
-                        autoFill.reflectEntryFlag(challenge, filled.imageId, 'boosted');
-                    } else {
-                        // applyBoostToEntry logs its own apply-boost-entry-* operation,
-                        // but the outer boost-<id> operation opened above would dangle
-                        // open on failure (the applyBoost fallback path closes its own).
-                        logger
-                            .withCategory('boost')
-                            .endOperation(`boost-${challenge.id}`, null, 'boost apply to fresh entry failed');
-                        return;
-                    }
-                } else if (filled.reason === 'challenge-gone') {
-                    // The live re-check confirmed the challenge left the
-                    // active list — boosting an existing entry on it would
-                    // just be a second failing call and a confusing log.
-                    logger
-                        .withCategory('boost')
-                        .endOperation(`boost-${challenge.id}`, null, 'challenge left the active list — boost skipped');
-                    return;
-                } else if (fillMode === 'conflict') {
-                    // On-conflict mode only fires when the single existing entry is
-                    // already turboed, so there is no valid fallback target — an
-                    // applyBoost here would just fail with "only entry already has
-                    // Turbo". Skip instead of making the pointless call.
-                    logger
-                        .withCategory('boost')
-                        .endOperation(
-                            `boost-${challenge.id}`,
-                            null,
-                            `boost fill-new unavailable (${filled.reason}); only entry already has Turbo — boost skipped`,
-                        );
-                    return;
-                } else {
-                    // 'always' mode falls back to the configured Boost Entry when
-                    // no fresh photo can be submitted (full / none / failed).
-                    logger
-                        .withCategory('boost')
-                        .info(
-                            `${logger.challengeTag(challenge)} boost fill-new unavailable (${filled.reason}); boosting existing entry`,
-                            null,
-                        );
-                    boostResult = await api.applyBoost(challenge, token);
-                }
-            } else {
-                boostResult = await api.applyBoost(challenge, token);
-            }
-            if (boostResult) {
-                const successSuffix = isTimerBasedAvailable
-                    ? `${timeDisplay} remaining`
-                    : `${timeDisplay} until challenge ends`;
-                logger
-                    .withCategory('boost')
-                    .endOperation(`boost-${challenge.id}`, `Boost applied successfully (${successSuffix})`);
-            }
-            // On null/falsy result, applyBoost already logged endOperation with the failure
-            // reason — no caller-side fallback log needed (mirrors the turbo handling shape).
-        } catch (error) {
-            logger.withCategory('boost').endOperation(`boost-${challenge.id}`, null, failureText(error));
-        }
+        await applyAvailableBoost(ctx, isTimerBasedAvailable, timeUntilDisplayBase);
     } else {
-        const timeDisplay = formatDuration(timeUntilDisplayBase);
-        // Both branches render the threshold they actually use. The key-unlocked message
-        // used to hardcode "10m" while the code applied at 15, which misled anyone
-        // debugging it; it is now a setting, so read it rather than restating a constant.
-        const keyUnlockedWindow = votingLogic.getEffectiveKeyUnlockedBoostTime(challenge.id.toString());
-        const reason = isTimerBasedAvailable
-            ? `${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`
-            : `${timeDisplay} until challenge ends (needs ≤ ${Math.round(keyUnlockedWindow / 60)}m to auto-apply)`;
-        logger.withCategory('voting').info(`${logger.challengeTag(challenge)} Boost not ready - ${reason}`, null);
+        logBoostNotReady(challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime);
+    }
+};
+
+/**
+ * Resolve the entry a fill-new turbo lands on: the freshly submitted photo, or
+ * — when none could be submitted (full / none / failed) — the configured Turbo
+ * Entry, if any.
+ *
+ * @param {ActionContext} ctx
+ * @param {(string|null|undefined)} configuredImageId
+ * @returns {Promise<{skipped: true}|{skipped: false, imageId: (string|null|undefined)}>}
+ *   `skipped` when the challenge left the active list (already logged)
+ */
+const resolveFillNewTurboTarget = async ({ challenge, token, fillDeps }, configuredImageId) => {
+    const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
+    if (filled.ok) {
+        autoFill.reflectNewEntry(challenge, filled.imageId);
+        return { skipped: false, imageId: filled.imageId };
+    }
+    if (filled.reason === 'challenge-gone') {
+        // The live re-check confirmed the challenge left the active
+        // list — applying turbo to an existing entry on it would just
+        // be a second failing call and a confusing log.
+        logger
+            .withCategory('turbo')
+            .info(
+                `${logger.challengeTag(challenge)} turbo fill-new: challenge left the active list — turbo skipped`,
+                null,
+            );
+        return { skipped: true };
+    }
+    if (configuredImageId) {
+        logger
+            .withCategory('turbo')
+            .info(
+                `${logger.challengeTag(challenge)} turbo fill-new unavailable (${filled.reason}); applying to existing entry`,
+                null,
+            );
+    }
+    return { skipped: false, imageId: configuredImageId };
+};
+
+/**
+ * fill-new was requested but no fresh photo could be submitted, so the target
+ * never resolved. The two ways to land here need different logs: in the
+ * on-conflict (or always-blocked) path an entry DOES exist — it just already
+ * has Boost, so turbo cannot go on it and there is no valid fallback; only in
+ * always mode on an empty challenge is there genuinely no entry at all.
+ */
+const logTurboWithoutTarget = (challenge) => {
+    const hasExistingEntry = (challenge?.member?.ranking?.entries?.length ?? 0) > 0;
+    const skipReason = hasExistingEntry
+        ? 'only entry already has Boost — turbo skipped'
+        : 'could not submit a fresh photo and there is no existing entry — turbo skipped';
+    logger.withCategory('turbo').info(`${logger.challengeTag(challenge)} turbo fill-new ${skipReason}`, null);
+};
+
+/**
+ * @param {ActionContext} ctx
+ * @param {string} imageId
+ */
+const applyTurboToEntry = async ({ challenge, token, api }, imageId) => {
+    logger
+        .withCategory('turbo')
+        .startOperation(`turbo-apply-${challenge.id}`, `Applying turbo to entry ${imageId} on ${challenge.title}`);
+    try {
+        const result = await api.applyTurbo(challenge.id, imageId, token);
+        if (result.ok) {
+            // Mark the entry so a boost running later in this same pass avoids it.
+            autoFill.reflectEntryFlag(challenge, imageId, 'turbo');
+            logger
+                .withCategory('turbo')
+                .endOperation(`turbo-apply-${challenge.id}`, `Turbo applied to entry ${imageId}`);
+        } else {
+            logger
+                .withCategory('turbo')
+                .endOperation(`turbo-apply-${challenge.id}`, null, 'Apply request returned ok=false');
+        }
+    } catch (error) {
+        logger.withCategory('turbo').endOperation(`turbo-apply-${challenge.id}`, null, failureText(error));
     }
 };
 
 /** @param {ActionContext} ctx */
 const runTurboApply = async (ctx) => {
-    const { challenge, token, now, api, fillDeps } = ctx;
+    const { challenge, now } = ctx;
     // Auto-apply a won turbo when eligible. emergency:true lets
     // shouldApplyTurbo apply a won turbo near the deadline even if
     // Auto-Apply Turbo (useTurbo) is off for this challenge.
@@ -228,68 +365,17 @@ const runTurboApply = async (ctx) => {
             );
     }
 
-    let imageId = turboApply.imageId;
-    if (turboApply.fillNew) {
-        // Fill-new: submit a fresh photo and turbo that entry instead of an
-        // existing one. Falls back to the configured Turbo Entry (if any)
-        // when no fresh photo can be submitted (full / none / failed).
-        const filled = await autoFill.submitNewEntryForAction(challenge, token, fillDeps);
-        if (filled.ok) {
-            autoFill.reflectNewEntry(challenge, filled.imageId);
-            imageId = filled.imageId;
-        } else if (filled.reason === 'challenge-gone') {
-            // The live re-check confirmed the challenge left the active
-            // list — applying turbo to an existing entry on it would just
-            // be a second failing call and a confusing log.
-            logger
-                .withCategory('turbo')
-                .info(
-                    `${logger.challengeTag(challenge)} turbo fill-new: challenge left the active list — turbo skipped`,
-                    null,
-                );
-            return;
-        } else if (imageId) {
-            logger
-                .withCategory('turbo')
-                .info(
-                    `${logger.challengeTag(challenge)} turbo fill-new unavailable (${filled.reason}); applying to existing entry`,
-                    null,
-                );
-        }
+    // Fill-new: submit a fresh photo and turbo that entry instead of an
+    // existing one.
+    const target = turboApply.fillNew
+        ? await resolveFillNewTurboTarget(ctx, turboApply.imageId)
+        : { skipped: false, imageId: turboApply.imageId };
+    if (target.skipped) return;
+    if (!target.imageId) {
+        logTurboWithoutTarget(challenge);
+        return;
     }
-    if (!imageId) {
-        // fill-new was requested but no fresh photo could be submitted, so
-        // imageId never resolved. The two ways to land here need different
-        // logs: in the on-conflict (or always-blocked) path an entry DOES
-        // exist — it just already has Boost, so turbo cannot go on it and
-        // there is no valid fallback; only in always mode on an empty
-        // challenge is there genuinely no entry at all.
-        const hasExistingEntry = (challenge?.member?.ranking?.entries?.length ?? 0) > 0;
-        const skipReason = hasExistingEntry
-            ? 'only entry already has Boost — turbo skipped'
-            : 'could not submit a fresh photo and there is no existing entry — turbo skipped';
-        logger.withCategory('turbo').info(`${logger.challengeTag(challenge)} turbo fill-new ${skipReason}`, null);
-    } else {
-        logger
-            .withCategory('turbo')
-            .startOperation(`turbo-apply-${challenge.id}`, `Applying turbo to entry ${imageId} on ${challenge.title}`);
-        try {
-            const result = await api.applyTurbo(challenge.id, imageId, token);
-            if (result.ok) {
-                // Mark the entry so a boost running later in this same pass avoids it.
-                autoFill.reflectEntryFlag(challenge, imageId, 'turbo');
-                logger
-                    .withCategory('turbo')
-                    .endOperation(`turbo-apply-${challenge.id}`, `Turbo applied to entry ${imageId}`);
-            } else {
-                logger
-                    .withCategory('turbo')
-                    .endOperation(`turbo-apply-${challenge.id}`, null, 'Apply request returned ok=false');
-            }
-        } catch (error) {
-            logger.withCategory('turbo').endOperation(`turbo-apply-${challenge.id}`, null, failureText(error));
-        }
-    }
+    await applyTurboToEntry(ctx, target.imageId);
 };
 
 /** @param {ActionContext} ctx */

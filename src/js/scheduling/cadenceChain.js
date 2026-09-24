@@ -89,6 +89,151 @@ const formatOversleptMessage = (lateMs, waitMs) =>
     `or run the CLI (\`cli:start\`), which is not affected.`;
 
 /**
+ * Run a best-effort observability hook without letting it touch scheduling: a
+ * synchronous throw and an async rejection are both swallowed, and the hook is
+ * never awaited.
+ *
+ * @param {() => *} hook
+ */
+const fireAndForget = (hook) => {
+    try {
+        void Promise.resolve(hook()).catch(() => {});
+    } catch {
+        /* observability only — must never affect scheduling */
+    }
+};
+
+/**
+ * Normal-mode wait: anchored to the previous cycle's start, and — when this
+ * re-arm's own fetch failed (API still down) — capped to a short retry so
+ * recovery tracks reconnection, not the full (possibly very long) normal
+ * cadence. Only reachable in normal mode: a failed fetch yields an empty list,
+ * and an empty list never has a threshold/scheduled window to approach.
+ *
+ * @param {number} delayMs - the decided delay between cycle starts
+ * @param {(number|null)} previousCycleStartMs
+ * @param {boolean} fetchFailed
+ * @returns {number}
+ */
+const normalWaitMs = (delayMs, previousCycleStartMs, fetchFailed) => {
+    const waitMs = anchoredWaitMs(delayMs, previousCycleStartMs);
+    return fetchFailed ? Math.min(waitMs, OFFLINE_RETRY_MS) : waitMs;
+};
+
+/**
+ * The cadence log line for a boundary-driven (non-normal) decision.
+ *
+ * @param {Object} decision - computeNextCycleDelayMs result
+ * @param {number} waitMs
+ * @returns {string}
+ */
+const describeBoundaryCadence = (decision, waitMs) => {
+    const inSeconds = `next cycle in ${Math.round(waitMs / 1000)}s`;
+    switch (decision.mode) {
+        case 'last-minute':
+            return `⏰ Last-minute cadence — next cycle in ${(waitMs / 60_000).toFixed(2)} min`;
+        case 'scheduled':
+            return `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" (${decision.nextScheduled?.form}) — ${inSeconds}`;
+        case 'pre-boost':
+            return `⏰ Approaching pre-boost fill for "${decision.nextBoostPrefill?.challengeTitle}" — ${inSeconds} (capped to the ${decision.nextBoostPrefill?.leadMin}m pre-boost boundary)`;
+        case 'currency-rule':
+            return `⏰ Approaching automatic ${decision.nextCurrencyRule?.action} rule for "${decision.nextCurrencyRule?.challengeTitle}" — ${inSeconds}`;
+        case 'pre-final-window':
+            return `⏰ Approaching pre-final-window top-up for "${decision.nextFinalWindowTopUp?.challengeTitle}" — ${inSeconds} (capped to the ${decision.nextFinalWindowTopUp?.leadMin}m pre-final-window boundary)`;
+        default:
+            return `⏰ Approaching last-minute window for "${decision.nextEntry?.challengeTitle}" — ${inSeconds} (capped to the ${decision.nextEntry?.lastMinuteThreshold}m boundary)`;
+    }
+};
+
+/**
+ * The one decision point: read fresh settings, resolve the active list, ask
+ * computeNextCycleDelayMs how long to wait, and log the cadence line. Throws on
+ * any failure — the caller owns the random-cadence fallback.
+ *
+ * `prefetched` lets a just-completed cycle hand over the active list it
+ * already fetched, so we skip a redundant fetch. A non-array
+ * (null/undefined, a legacy boolean, or a cycle that failed before
+ * fetching) falls back to a fresh fetch. In normal mode the wait is
+ * anchored to the *start* of the previous cycle so the gap between cycle
+ * starts ≈ the rolled delay regardless of how long the cycle took; in
+ * approaching/last-minute/scheduled mode the wait runs from cycle
+ * completion so the boundary is never undershot.
+ *
+ * @param {Object} deps - the chain's host transport (see createCadenceChain)
+ * @param {*} prefetched
+ * @param {(number|null)} previousCycleStartMs
+ * @returns {Promise<{waitMs: number, cycleChallenges: Array, cycleNow: number}>}
+ *   the wait plus the list/clock snapshot for the onCycleChallenges hook
+ */
+const decideNextWait = async (deps, prefetched, previousCycleStartMs) => {
+    const settings = await deps.loadSettings();
+    const normalDelayMs = getRandomCheckFrequencyMs(settings);
+    // When no list was handed over we fetch fresh — and keep the
+    // fetchFailed flag, not just the list. An outage resolves to
+    // `{ challenges: [], fetchFailed: true }`, and that empty list would
+    // otherwise decide a full normal-cadence wait indistinguishable from
+    // "nothing to vote on". The flag lets the normal branch shorten
+    // the wait so the loop re-probes soon after connectivity returns.
+    const fetched = Array.isArray(prefetched) ? { challenges: prefetched } : await deps.fetchChallenges(settings);
+    const challenges = fetched?.challenges || [];
+    const fetchFailedNow = fetched?.fetchFailed === true;
+    const now = Math.floor(Date.now() / 1000);
+    const lastMinuteCheckMinutes = Number(await deps.resolveLastMinuteCheckMinutes()) || 1;
+
+    const decision = await computeNextCycleDelayMs(challenges, now, {
+        resolveThreshold: deps.resolveThreshold,
+        normalDelayMs,
+        lastMinuteCheckMinutes,
+        minGapMs: MIN_CYCLE_GAP_MS,
+        resolveScheduledFill: deps.resolveScheduledFill,
+        timezone: settings.timezone || DEFAULT_TIMEZONE,
+        resolveFinalWindowTopUp: deps.resolveFinalWindowTopUp,
+        resolveBoostPrefill: deps.resolveBoostPrefill,
+        resolveCurrencyAuto: deps.resolveCurrencyAuto,
+    });
+
+    if (decision.mode === 'normal') {
+        const waitMs = normalWaitMs(decision.delayMs, previousCycleStartMs, fetchFailedNow);
+        await deps.log.cadence(
+            'normal',
+            `Next cycle in ${(waitMs / 60_000).toFixed(2)} min (target ${(decision.delayMs / 60_000).toFixed(2)} min between starts, range ${settings.checkFrequencyMin}-${settings.checkFrequencyMax})`,
+        );
+        return { waitMs, cycleChallenges: challenges, cycleNow: now };
+    }
+    const waitMs = decision.delayMs;
+    await deps.log.cadence(decision.mode, describeBoundaryCadence(decision, waitMs));
+    return { waitMs, cycleChallenges: challenges, cycleNow: now };
+};
+
+/**
+ * decideNextWait, degraded on failure: an error deciding the delay must never
+ * kill the loop — fall back to a plain random cadence; the next cycle re-reads
+ * on success. The fallback carries no challenge snapshot, so the
+ * onCycleChallenges hook is skipped on EVERY decision failure — an early
+ * fetch/settings throw and a late one (resolveLastMinuteCheckMinutes,
+ * computeNextCycleDelayMs, the cadence log) alike.
+ *
+ * @param {Object} deps
+ * @param {*} prefetched
+ * @param {(number|null)} previousCycleStartMs
+ * @returns {Promise<{waitMs: number, cycleChallenges: (Array|null), cycleNow: (number|null)}>}
+ */
+const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) => {
+    try {
+        return await decideNextWait(deps, prefetched, previousCycleStartMs);
+    } catch (error) {
+        await deps.log.decisionError(error);
+        let waitMs;
+        try {
+            waitMs = getRandomCheckFrequencyMs(await deps.loadSettings());
+        } catch {
+            waitMs = getRandomCheckFrequencyMs({});
+        }
+        return { waitMs, cycleChallenges: null, cycleNow: null };
+    }
+};
+
+/**
  * Create the shared cadence chain.
  *
  * @param {Object} deps - host transport
@@ -166,122 +311,72 @@ const createCadenceChain = ({
     onScheduled,
     onCycleChallenges,
 }) => {
+    const decisionDeps = {
+        loadSettings,
+        fetchChallenges,
+        resolveLastMinuteCheckMinutes,
+        resolveThreshold,
+        resolveScheduledFill,
+        resolveFinalWindowTopUp,
+        resolveBoostPrefill,
+        resolveCurrencyAuto,
+        log,
+    };
+
+    const stopArming = () => {
+        setTimer(null);
+        onScheduled?.(null);
+    };
+
+    // The armed timer's callback. A newer chain may have taken over (host
+    // re-armed / stopped); only the timer that is still current — identity
+    // against the host's slot — may run + reschedule.
+    const runArmedCycle = async (timeoutId, waitMs, armedAtMs) => {
+        if (!isRunning() || getTimer() !== timeoutId) {
+            return;
+        }
+        const cycleStartMs = Date.now();
+        // Say so when the timer was held far past its due time (OS
+        // suspend / App Nap / hidden-page freezing). Any boundary that
+        // fell inside the stall was missed, and this line is the only
+        // trace of it.
+        //
+        // Deliberately NOT awaited: on the GUI this hook is an IPC
+        // round-trip with no timeout, and this branch runs exactly when
+        // the host has just proved itself unresponsive — awaiting it
+        // would delay an already-late cycle for a log line. Fire it,
+        // swallow a sync throw and an async rejection alike, move on.
+        const lateMs = oversleptBy(waitMs, cycleStartMs - armedAtMs);
+        if (lateMs > 0) {
+            fireAndForget(() => log.overslept?.(lateMs, waitMs));
+        }
+        let cycleResult;
+        try {
+            cycleResult = await runCycle();
+        } catch (error) {
+            await log.cycleError(error);
+        } finally {
+            if (getTimer() === timeoutId) {
+                await scheduleNext(cycleResult, cycleStartMs);
+            }
+        }
+    };
+
     // Decide how long to wait before the next cycle and arm the single timer.
-    //
-    // `prefetched` lets a just-completed cycle hand over the active list it
-    // already fetched, so we skip a redundant fetch. A non-array
-    // (null/undefined, a legacy boolean, or a cycle that failed before
-    // fetching) falls back to a fresh fetch. In normal mode the wait is
-    // anchored to the *start* of the previous cycle so the gap between cycle
-    // starts ≈ the rolled delay regardless of how long the cycle took; in
-    // approaching/last-minute/scheduled mode the wait runs from cycle
-    // completion so the boundary is never undershot.
     const scheduleNext = async (prefetched = null, previousCycleStartMs = null) => {
         if (!isRunning()) {
-            setTimer(null);
-            onScheduled?.(null);
+            stopArming();
             return;
         }
 
-        let waitMs;
-        // Captured for the best-effort onCycleChallenges hook, fired AFTER the
-        // decision try/catch so a throw in the notify path can never reach the
-        // decision `catch` (which would degrade the whole cadence to random).
-        // Assigned inside the try once the list resolves, and force-nulled in the
-        // catch so a decision failure (early OR late) always skips the hook — so
-        // both are guaranteed assigned before the guard below reads them.
-        let cycleChallenges;
-        let cycleNow;
-        try {
-            const settings = await loadSettings();
-            const normalDelayMs = getRandomCheckFrequencyMs(settings);
-            // When no list was handed over we fetch fresh — and keep the
-            // fetchFailed flag, not just the list. An outage resolves to
-            // `{ challenges: [], fetchFailed: true }`, and that empty list would
-            // otherwise decide a full normal-cadence wait indistinguishable from
-            // "nothing to vote on". The flag lets the normal branch below shorten
-            // the wait so the loop re-probes soon after connectivity returns.
-            let fetchFailedNow = false;
-            let challenges;
-            if (Array.isArray(prefetched)) {
-                challenges = prefetched;
-            } else {
-                const fetched = await fetchChallenges(settings);
-                challenges = fetched?.challenges || [];
-                fetchFailedNow = fetched?.fetchFailed === true;
-            }
-            const now = Math.floor(Date.now() / 1000);
-            // Snapshot for the post-decision notification hook (see below).
-            cycleChallenges = challenges;
-            cycleNow = now;
-            const lastMinuteCheckMinutes = Number(await resolveLastMinuteCheckMinutes()) || 1;
-
-            const decision = await computeNextCycleDelayMs(challenges, now, {
-                resolveThreshold,
-                normalDelayMs,
-                lastMinuteCheckMinutes,
-                minGapMs: MIN_CYCLE_GAP_MS,
-                resolveScheduledFill,
-                timezone: settings.timezone || DEFAULT_TIMEZONE,
-                resolveFinalWindowTopUp,
-                resolveBoostPrefill,
-                resolveCurrencyAuto,
-            });
-
-            if (decision.mode === 'normal') {
-                waitMs = anchoredWaitMs(decision.delayMs, previousCycleStartMs);
-                // API still down (this re-arm's own fetch failed): cap the wait
-                // to a short retry so recovery tracks reconnection, not the full
-                // (possibly very long) normal cadence. Only reachable in normal
-                // mode — a failed fetch yields an empty list, and an empty list
-                // never has a threshold/scheduled window to approach.
-                if (fetchFailedNow) {
-                    waitMs = Math.min(waitMs, OFFLINE_RETRY_MS);
-                }
-                await log.cadence(
-                    'normal',
-                    `Next cycle in ${(waitMs / 60_000).toFixed(2)} min (target ${(decision.delayMs / 60_000).toFixed(2)} min between starts, range ${settings.checkFrequencyMin}-${settings.checkFrequencyMax})`,
-                );
-            } else {
-                waitMs = decision.delayMs;
-                let message;
-                if (decision.mode === 'last-minute') {
-                    message = `⏰ Last-minute cadence — next cycle in ${(waitMs / 60_000).toFixed(2)} min`;
-                } else if (decision.mode === 'scheduled') {
-                    message = `⏰ Approaching scheduled fill for "${decision.nextScheduled?.challengeTitle}" (${decision.nextScheduled?.form}) — next cycle in ${Math.round(waitMs / 1000)}s`;
-                } else if (decision.mode === 'pre-boost') {
-                    message = `⏰ Approaching pre-boost fill for "${decision.nextBoostPrefill?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextBoostPrefill?.leadMin}m pre-boost boundary)`;
-                } else if (decision.mode === 'currency-rule') {
-                    message = `⏰ Approaching automatic ${decision.nextCurrencyRule?.action} rule for "${decision.nextCurrencyRule?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s`;
-                } else if (decision.mode === 'pre-final-window') {
-                    message = `⏰ Approaching pre-final-window top-up for "${decision.nextFinalWindowTopUp?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextFinalWindowTopUp?.leadMin}m pre-final-window boundary)`;
-                } else {
-                    message = `⏰ Approaching last-minute window for "${decision.nextEntry?.challengeTitle}" — next cycle in ${Math.round(waitMs / 1000)}s (capped to the ${decision.nextEntry?.lastMinuteThreshold}m boundary)`;
-                }
-                await log.cadence(decision.mode, message);
-            }
-        } catch (error) {
-            // An error deciding the delay must never kill the loop — fall back
-            // to a plain random cadence; the next cycle re-reads on success.
-            // Also drop any captured challenge snapshot: a throw AFTER the list
-            // was resolved (e.g. in resolveLastMinuteCheckMinutes or
-            // computeNextCycleDelayMs) still lands here, and the notification
-            // hook must be skipped on EVERY decision failure — not just an early
-            // fetch/settings throw — so the "skipped on the catch path" invariant
-            // below holds generally.
-            cycleChallenges = null;
-            cycleNow = null;
-            await log.decisionError(error);
-            try {
-                waitMs = getRandomCheckFrequencyMs(await loadSettings());
-            } catch {
-                waitMs = getRandomCheckFrequencyMs({});
-            }
-        }
+        const { waitMs, cycleChallenges, cycleNow } = await decideNextWaitOrFallBack(
+            decisionDeps,
+            prefetched,
+            previousCycleStartMs,
+        );
 
         if (!isRunning()) {
-            setTimer(null);
-            onScheduled?.(null);
+            stopArming();
             return;
         }
 
@@ -291,56 +386,17 @@ const createCadenceChain = ({
 
         // Best-effort per-cycle notification hook. Deliberately OUTSIDE the
         // decision try/catch and never awaited: this is the exact posture of
-        // log.overslept below — a synchronous throw or an async rejection here
+        // log.overslept — a synchronous throw or an async rejection here
         // is swallowed so it can neither kill the loop nor trip the decision
         // fallback that would discard the boundary-aware cadence. Skipped when
-        // the decision failed (cycleChallenges left null on the catch path).
+        // the decision failed (the fallback carries no challenge snapshot).
         if (cycleChallenges && onCycleChallenges) {
-            try {
-                void Promise.resolve(onCycleChallenges(cycleChallenges, cycleNow)).catch(() => {});
-            } catch {
-                /* observability only — must never affect scheduling */
-            }
+            fireAndForget(() => onCycleChallenges(cycleChallenges, cycleNow));
         }
 
         const armedAtMs = Date.now();
         const timeoutId = setTimeout(() => {
-            void (async () => {
-                // A newer chain may have taken over (host re-armed / stopped);
-                // only the timer that is still current may run + reschedule.
-                if (!isRunning() || getTimer() !== timeoutId) {
-                    return;
-                }
-                const cycleStartMs = Date.now();
-                // Say so when the timer was held far past its due time (OS
-                // suspend / App Nap / hidden-page freezing). Any boundary that
-                // fell inside the stall was missed, and this line is the only
-                // trace of it.
-                //
-                // Deliberately NOT awaited: on the GUI this hook is an IPC
-                // round-trip with no timeout, and this branch runs exactly when
-                // the host has just proved itself unresponsive — awaiting it
-                // would delay an already-late cycle for a log line. Fire it,
-                // swallow a sync throw and an async rejection alike, move on.
-                const lateMs = oversleptBy(waitMs, cycleStartMs - armedAtMs);
-                if (lateMs > 0) {
-                    try {
-                        void Promise.resolve(log.overslept?.(lateMs, waitMs)).catch(() => {});
-                    } catch {
-                        /* observability only */
-                    }
-                }
-                let cycleResult;
-                try {
-                    cycleResult = await runCycle();
-                } catch (error) {
-                    await log.cycleError(error);
-                } finally {
-                    if (getTimer() === timeoutId) {
-                        await scheduleNext(cycleResult, cycleStartMs);
-                    }
-                }
-            })();
+            void runArmedCycle(timeoutId, waitMs, armedAtMs);
         }, waitMs);
         setTimer(timeoutId);
     };
