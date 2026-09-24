@@ -39,7 +39,7 @@ export function ChallengeCard({
     // Advisory deadline-action preview + boost/turbo conflict flag (read-only,
     // computed main-side). Failure yields empty actions / false — the card just
     // renders without them, never an error surface.
-    const { actions: deadlineActions, boostBlocked } = useDeadlineActions(challenge);
+    const { actions: deadlineActions, boostBlocked } = useDeadlineActions(challenge, settingsVersion);
     const swapBacks = useSwapBacks(challenge);
 
     // Tick once a second — only meaningful when this challenge is in TIMER

@@ -9,14 +9,16 @@ import { useLatestRef } from '../hooks/useLatestRef';
  *
  * Keyed on a content fingerprint, NOT on `challenge` (a fresh reference each
  * render) and NOT on a 1s tick, so it refetches only when a field that changes
- * the result changes. Per-challenge / global setting edits arrive via the card
- * remount ChallengesSection triggers on settings-changed, so one settings change
- * coalesces into a single refetch per card rather than a fan-out.
+ * the result changes. Per-challenge / global setting edits (boostTime,
+ * keyUnlockedBoostTime, boostImageIndex, currency rules, …) arrive as a new
+ * `settingsVersion`, which ChallengesSection bumps once per settings-changed
+ * broadcast — one refetch per card per settings change, without a remount.
  *
  * @param {any} challenge
+ * @param {number} [settingsVersion] - bumped when settings change
  * @returns {{actions: Array<{action:string, thresholdSec:number, dueAt:number|null}>, boostBlocked: boolean, loading: boolean, error: boolean}}
  */
-export function useDeadlineActions(challenge) {
+export function useDeadlineActions(challenge, settingsVersion = 0) {
     const [state, setState] = useState({ actions: [], boostBlocked: false, loading: true, error: false });
 
     const boost = challenge?.member?.boost;
@@ -71,7 +73,7 @@ export function useDeadlineActions(challenge) {
         return () => {
             cancelled = true;
         };
-    }, [fingerprint, challengeRef]);
+    }, [fingerprint, settingsVersion, challengeRef]);
 
     return state;
 }

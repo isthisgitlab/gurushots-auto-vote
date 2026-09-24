@@ -17,8 +17,9 @@ const TOOLBAR_ICON_CLASS = 'w-4 h-4 mr-1';
 /**
  * Global card density: the compactCards default and the compactCardActions
  * switch, kept in sync with settings-changed events, plus `refreshKey` — bumped
- * whenever a setting changes so each ChallengeCard remounts and re-reads its
- * effective setting (any per-challenge override + the new global default).
+ * whenever a setting changes and handed to each ChallengeCard as
+ * `settingsVersion`, so the card re-reads its effective settings and its
+ * deadline-action preview in place (no remount).
  */
 function useGlobalCardDensity() {
     const [globalCompact, setGlobalCompact] = useState(false);

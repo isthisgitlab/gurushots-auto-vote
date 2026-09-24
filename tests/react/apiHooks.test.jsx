@@ -185,6 +185,24 @@ describe('useDeadlineActions', () => {
         expect(result.current.boostBlocked).toBe(false);
     });
 
+    test('a new settingsVersion refetches with the same challenge content', async () => {
+        mockApi.getDeadlineActions.mockResolvedValueOnce({ success: true, actions: [], boostBlocked: false });
+        const { result, rerender } = renderHook(({ v }) => useDeadlineActions(challenge, v), {
+            initialProps: { v: 0 },
+        });
+        await waitFor(() => expect(result.current.loading).toBe(false));
+        expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(1);
+
+        mockApi.getDeadlineActions.mockResolvedValueOnce({ success: true, actions: [], boostBlocked: true });
+        rerender({ v: 1 });
+        await waitFor(() => expect(result.current.boostBlocked).toBe(true));
+        expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+
+        // A re-render with the same version and content does not refetch.
+        rerender({ v: 1 });
+        expect(mockApi.getDeadlineActions).toHaveBeenCalledTimes(2);
+    });
+
     test('a rejection sets error; a late rejection after unmount is ignored', async () => {
         mockApi.getDeadlineActions.mockRejectedValueOnce(new Error('boom'));
         const { result } = renderHook(() => useDeadlineActions(challenge));

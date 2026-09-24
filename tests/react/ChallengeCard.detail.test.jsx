@@ -344,6 +344,32 @@ describe('entries, tags and alerts', () => {
         expect(JSON.parse(screen.getByTestId('entry-1').textContent).swapBack).toBeNull();
     });
 
+    test('a settings change refreshes the deadline preview in place, without remounting the card', async () => {
+        const challenge = makeChallenge();
+        const { container, rerender } = renderCard(challenge, { settingsVersion: 0 });
+        await waitFor(() => expect(window.api.getDeadlineActions).toHaveBeenCalledTimes(1));
+        expect(screen.queryByRole('alert')).toBeNull();
+        const root = container.firstChild;
+
+        window.api.getDeadlineActions.mockResolvedValue({ success: true, actions: [], boostBlocked: true });
+        rerender(
+            <ChallengeCard
+                challenge={challenge}
+                settingsVersion={1}
+                timeRemaining="2h"
+                timezone="local"
+                autovoteRunning={false}
+                onVoteComplete={jest.fn()}
+                onSettingsClick={jest.fn()}
+                onCurrencySpent={jest.fn()}
+            />,
+        );
+
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.boostConflictWarning'));
+        expect(window.api.getDeadlineActions).toHaveBeenCalledTimes(2);
+        expect(container.firstChild).toBe(root);
+    });
+
     test('shows the boost/turbo conflict warning from the deadline preview', async () => {
         window.api.getDeadlineActions = jest.fn().mockResolvedValue({ success: true, actions: [], boostBlocked: true });
         renderCard(makeChallenge());
