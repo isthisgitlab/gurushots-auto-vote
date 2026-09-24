@@ -22,6 +22,17 @@ allowBuilds:
     onnxruntime-node: true
     # protobufjs postinstall only prints a donation message; runtime needs no build.
     protobufjs: false
+# `autoInstallPeers` lets pnpm resolve unlisted peer deps automatically. Combined with
+# a committed `pnpm-lock.yaml` and `--frozen-lockfile` in CI, the install is reproducible;
+# the convenience is contained to first-time / dependency-update flows.
+autoInstallPeers: true
+# Fail fast on conflicting peer ranges rather than silently picking a winner.
+strictPeerDependencies: true
+# Honor the `engines` field in package.json (Node 26+ — that's its only key;
+# the pnpm version is pinned via `packageManager` + corepack, and pnpm 12's
+# managePackageManagerVersions default additionally records that resolved binary
+# — with per-platform sha512 integrity — as @pnpm/exe.* in pnpm-lock.yaml).
+engineStrict: true
 # 6h gate — deliberately below the pnpm 12 default of 1440 (24h), so this is
 # looser than Dependabot's cooldown (.github/dependabot.yml) rather than aligned
 # with it. Note this only gates what pnpm resolves; `pnpm bump` (npm-check-updates)

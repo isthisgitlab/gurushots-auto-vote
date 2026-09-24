@@ -11,7 +11,7 @@ Thank you for your interest in contributing to GuruShots Auto Vote! We welcome c
     ```bash
     corepack enable
     ```
-    Corepack ships with the official Node.js installer (nodejs.org). On some Linux distros (Debian/Ubuntu via apt, Fedora/RHEL, Arch) it may be packaged separately or absent — if `corepack: command not found`, install it with `npm i -g corepack` and re-run `corepack enable`. The repo also enables `engine-strict` in `.npmrc`, so any package whose `engines.node` doesn't satisfy Node 26+ will fail to install — that's intentional.
+    Corepack ships with the official Node.js installer (nodejs.org). On some Linux distros (Debian/Ubuntu via apt, Fedora/RHEL, Arch) it may be packaged separately or absent — if `corepack: command not found`, install it with `npm i -g corepack` and re-run `corepack enable`. The repo also enables `engineStrict` in `pnpm-workspace.yaml`, so any package whose `engines.node` doesn't satisfy Node 26+ will fail to install — that's intentional.
 
 ### Setup
 
