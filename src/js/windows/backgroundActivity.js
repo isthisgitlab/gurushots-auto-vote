@@ -58,7 +58,7 @@ const syncBackgroundActivity = (running) => {
             logger
                 .withCategory('voting')
                 .info(
-                    'Auto-vote is keeping this device awake so scheduled fills and votes are not missed; it stops when you stop auto-vote (the display can still sleep)',
+                    'Auto-vote is keeping this device awake so scheduled photo submissions and votes are not missed; it stops when you stop auto-vote (the display can still sleep)',
                     null,
                 );
             return true;

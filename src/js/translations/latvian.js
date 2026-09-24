@@ -140,10 +140,10 @@
             deadlineTimelineApprox: 'aptuveni — var mainīties, pievienojot bildes',
             deadlineNext: 'Nākamā',
             deadlineDue: 'jau tagad',
-            deadlineActionAutoFill: 'Auto-aizpilde',
+            deadlineActionAutoFill: 'Auto-iesniegšana',
             deadlineActionBoost: 'Boost',
             deadlineActionTurbo: 'Turbo',
-            deadlineActionEmergencyFill: 'Ārkārtas aizpilde',
+            deadlineActionEmergencyFill: 'Ārkārtas iesniegšana',
             boostConflictWarning:
                 'Boost nevar izmantot: tavai vienīgajai bildei jau ir Turbo, un abi nevar būt uz vienas bildes. Pievieno otru bildi, lai izmantotu abus.',
             statusHeaderActive: 'aktīvi',
@@ -203,13 +203,13 @@
                 'Kuram foto pielietot Boost: 1 = pirmais, 2 = otrais utt. Izmanto 0 priekš pēdējā foto. Ja Turbo jau ir uz šī foto, Boost pāriet uz iepriekšējo bildi (no 1 pāriet uz pēdējo). Piezīme: gan Turbo, gan Boost noklusētā vērtība ir 1, tāpēc, ja abi auto-režīmi ir ieslēgti, viens no tiem pāries uz pēdējo foto.',
             boostFillNew: 'Boost jaunam iesniegtam foto',
             boostFillNewDesc:
-                'Ja ieslēgts, tieši pirms Boost tiek iesniegts jauns foto (izmantojot tavus automātiskās aizpildes tagu noteikumus) un Boost tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Boost foto.',
+                'Ja ieslēgts, tieši pirms Boost tiek iesniegts jauns foto (izmantojot tavus auto-iesniegšanas tagu noteikumus) un Boost tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Boost foto.',
             boostFillNewOnConflict: 'Boost jaunam iesniegtam foto tikai konflikta gadījumā',
             boostFillNewOnConflictDesc:
                 'Ja ieslēgts, jauns foto tiek iesniegts un Boost tiek pielietots tikai tad, ja tavam vienīgajam esošajam foto jau ir Turbo (tāpēc Boost nevar tur nokļūt). Parastā gadījumā Boost joprojām nonāk uz tava esošā foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Boost šajā ciklā tiek izlaists — rezerves varianta nav, jo tavam vienīgajam foto jau ir Turbo. Netiek ņemts vērā, ja ieslēgta iepriekšējā opcija, jo tā vienmēr iesniedz jaunu foto.',
             turboFillNew: 'Turbo jaunam iesniegtam foto',
             turboFillNewDesc:
-                'Ja ieslēgts, tieši pirms Turbo tiek iesniegts jauns foto (izmantojot tavus automātiskās aizpildes tagu noteikumus) un Turbo tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Turbo foto; ja vēl nav neviena foto, Turbo šajā ciklā tiek izlaists.',
+                'Ja ieslēgts, tieši pirms Turbo tiek iesniegts jauns foto (izmantojot tavus auto-iesniegšanas tagu noteikumus) un Turbo tiek pielietots šim jaunajam foto, nevis esošajam. Ja nav brīvas vietas vai nav piemērota foto, tas atgriežas pie tava norādītā Turbo foto; ja vēl nav neviena foto, Turbo šajā ciklā tiek izlaists.',
             turboFillNewOnConflict: 'Turbo jaunam iesniegtam foto tikai konflikta gadījumā',
             turboFillNewOnConflictDesc:
                 'Ja ieslēgts, jauns foto tiek iesniegts un tam tiek pielietots Turbo tikai tad, ja tavam vienīgajam esošajam foto jau ir Boost (tāpēc Turbo nevar tur nokļūt). Parastā gadījumā Turbo joprojām nonāk uz tava esošā foto. Ja nav brīvas vietas vai piemērota foto, ko iesniegt, Turbo šajā ciklā tiek izlaists — rezerves varianta nav, jo tavam vienīgajam foto jau ir Boost. Netiek ņemts vērā, ja ieslēgta iepriekšējā opcija, jo tā vienmēr iesniedz jaunu foto.',
@@ -218,17 +218,17 @@
             earnTurbo: 'Iegūt Turbo',
             applyTurboToThisEntry: 'Pielietot tavu Turbo šim foto',
             applyBoostToThisEntry: 'Pielietot tavu Boost šim foto',
-            autoFill: 'Aizpildīt trūkstošos foto',
+            autoFill: 'Auto-iesniegt trūkstošos foto',
             autoFillDesc:
-                'Iesniegt papildu foto, kad izaicinājuma termiņš tuvojas, sekojot zemāk norādītajam grafikam. Aizpilda vienu vietu katrā pārbaudes ciklā.',
-            autoFillSchedule: 'Auto-aizpildes grafiks',
+                'Iesniegt papildu foto, kad izaicinājuma termiņš tuvojas, sekojot zemāk norādītajam grafikam. Iesniedz vienu foto katrā pārbaudes ciklā.',
+            autoFillSchedule: 'Auto-iesniegšanas grafiks',
             autoFillScheduleDesc:
                 'Iestati laiku uz 0h 0m, lai izslēgtu attiecīgo foto. Katra rinda nozīmē: kad līdz beigām atlicis šis laiks, jābūt vismaz šitik foto — "Foto 2 ≤ 48h" iesniedz tavu 2. foto, kad atlikušas 48 stundas. Ja esi atpalicis no grafika (lietotne palaista vēlu vai laiks ir garāks par visu izaicinājumu), tā panāk grafiku, iesniedzot vienu foto katrā ciklā jau no sākuma. Ja izaicinājums atļauj mazāk foto, nekā grafiks aptver, viss grafiks nobīdās uz beigām, lai pēdējā foto laiks attiektos uz izaicinājuma pēdējo foto — piemēram, 2 foto izaicinājumā 2. foto izmanto Foto 4 laiku, bet 3 foto izaicinājumā 2. foto izmanto Foto 3 laiku un 3. foto — Foto 4 laiku.',
             autoFillScheduleShiftHint:
                 'Šis izaicinājums atļauj {0} foto — mazāk, nekā grafiks aptver, tāpēc laiki nobīdās uz beigām: pēdējais foto izmanto Foto {1} laiku.',
             autoFillScheduleImage: 'Foto',
             autoFillScheduleOff: 'laiks nav iestatīts — var tikt iesniegts, panākot vēlāku foto',
-            autoFillScheduleEmpty: 'Visi foto ir izslēgti — auto-aizpilde neko neiesniegs.',
+            autoFillScheduleEmpty: 'Visi foto ir izslēgti — auto-iesniegšana neko neiesniegs.',
             autoFillScheduleDominated: 'nekad nedarbosies (vēlākam foto jau ir tāds pats vai garāks laiks)',
             autoFillScheduleOutOfRange: 'laiks nedrīkst pārsniegt 30 dienas',
             settingsSaveError: 'Dažus iestatījumus neizdevās saglabāt — pārbaudi izceltās vērtības un mēģini vēlreiz.',
@@ -369,24 +369,24 @@
             discoverBusy: 'Pievienošanās jau notiek.',
             validationOutOfRange: 'Ievadi vērtību no {min} līdz {max}.',
             validationAtLeast: 'Ievadi vērtību {min} vai lielāku.',
-            autoFillBadge: 'auto-aizpilde',
+            autoFillBadge: 'auto-iesniegšana',
             customBadge: 'pielāgots',
             customSettingsHint: 'Ir pielāgoti iestatījumi',
             mustIncludeTags: 'Obligātie tagi',
             mustIncludeTagsDesc:
-                'Stingrs filtrs gan auto-aizpildei, gan manuālajām aizpildes pogām. Ņemt vērā tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar visiem šiem tagiem. Atstāj tukšu, lai ņemtu vērā visus piemērotos foto. Lielajiem/mazajiem burtiem nav nozīmes, un salīdzina pa veseliem vārdiem: galotnes un daudzskaitlis joprojām sakrīt ("cat" sakrīt ar "cats"), bet tags nesakritīs ar garāku, nesaistītu vārdu ("cat" nesakrīt ar "catamaran"). Vairāku vārdu tagi sakrīt pa vārdiem, tāpēc "sea life" prasa abus. Tagi jāraksta angliski — automātiski noteiktie foto tagi vienmēr ir angļu valodā.',
+                'Stingrs filtrs gan auto-iesniegšanai, gan manuālajām foto pogām. Ņemt vērā tikai tos foto, kuru automātiski noteiktie tagi sakrīt ar visiem šiem tagiem. Atstāj tukšu, lai ņemtu vērā visus piemērotos foto. Lielajiem/mazajiem burtiem nav nozīmes, un salīdzina pa veseliem vārdiem: galotnes un daudzskaitlis joprojām sakrīt ("cat" sakrīt ar "cats"), bet tags nesakritīs ar garāku, nesaistītu vārdu ("cat" nesakrīt ar "catamaran"). Vairāku vārdu tagi sakrīt pa vārdiem, tāpēc "sea life" prasa abus. Tagi jāraksta angliski — automātiski noteiktie foto tagi vienmēr ir angļu valodā.',
             shouldIncludeTags: 'Vēlamie tagi',
             shouldIncludeTagsDesc:
-                'Vēlamais kritērijs gan auto-aizpildei, gan manuālajai aizpildei. Priekšroku dot foto, kuru tagi sakrīt ar šiem; tie tiek likti augstāk nekā pēc automātiski noteiktajiem izaicinājuma atslēgvārdiem, bet pārējie foto netiek izslēgti. Ja neviens nesakrīt, aizpilde notiek kā parasti. Salīdzināšanai ir tie paši veselo vārdu noteikumi, kas Obligātajiem tagiem.',
+                'Vēlamais kritērijs gan auto-iesniegšanai, gan manuālajām foto pogām. Priekšroku dot foto, kuru tagi sakrīt ar šiem; tie tiek likti augstāk nekā pēc automātiski noteiktajiem izaicinājuma atslēgvārdiem, bet pārējie foto netiek izslēgti. Ja neviens nesakrīt, foto tiek izvēlēti kā parasti. Salīdzināšanai ir tie paši veselo vārdu noteikumi, kas Obligātajiem tagiem.',
             ignoreTitleWords: 'Ignorēt šos vārdus izaicinājumu nosaukumos',
             ignoreTitleWordsDesc:
                 'Vārdi, ko izņemt no izaicinājuma nosaukuma, pirms pēc tā meklē piemērotus foto. Izaicinājumu nosaukumos tēmai parasti pieliek kādu papildvārdu — "Epic Lighthouses" ir par bākām, nevis par "epic" — un šie liekie vārdi gan aizmiglo tēmu, gan tērē tās nedaudzās meklēšanas reizes, kas pieejamas vienam izaicinājumam. Saraksts jau ir aizpildīts ar biežākajiem; to var brīvi labot. Izņem vārdu, ja izaicinājums tiešām ir par to. Sēriju sākumi kā "Color Hunt:" tiek atmesti automātiski, tos šeit nav jāraksta.',
-            fillWithoutTagMatch: 'Aizpildīt arī bez tagu sakritības',
+            fillWithoutTagMatch: 'Iesniegt arī bez tagu sakritības',
             fillWithoutTagMatchDesc:
                 'Attiecas tikai tad, ja ir iestatīti obligātie tagi. Tā kā foto jāsakrīt ar visiem tagiem, tas notiek biežāk, kad pieprasīti vairāki tagi. Kad ieslēgts (noklusējums), ja neviens no taviem foto nesakrīt ar visiem šiem tagiem, tik un tā tiek pievienots labākais pieejamais foto, lai vieta nepaliek tukša. Kad izslēgts, vieta paliek tukša, līdz parādās foto, kas sakrīt ar visiem tagiem.',
-            emergencyFill: 'Ārkārtas aizpilde',
+            emergencyFill: 'Ārkārtas iesniegšana',
             emergencyFillDesc:
-                'Drošības tīkls, kas darbojas izaicinājuma pēdējās minūtēs, kad auto-aizpilde citādi atstātu foto vietas tukšas — vai nu tāpēc, ka auto-aizpilde ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un "Aizpildīt arī bez tagu sakritības" ir izslēgts. Kad izaicinājumam līdz beigām atlicis tik daudz laika, atlikušās vietas tiek aizpildītas ar labākajiem pieejamajiem foto, pat ja tie nesakrīt ar taviem tagiem. Tas apzināti ignorē šos iestatījumus, lai izaicinājums nebeigtos ar neizmantotām vietām. Šajā pašā logā tā arī izmanto jebkuru pieejamo Boost un jebkuru iegūto Turbo — pat ja "Auto-pielietot Boost" vai "Auto-pielietot Turbo" izaicinājumam ir izslēgts — lai tie netiktu izniekoti, kad izaicinājums beidzas. Grafiskajā lietotnē ievada kā stundas un minūtes. Noklusējums 5 minūtes; iestati 0, lai izslēgtu (kas izslēdz arī šo pēdējās minūtes Boost/Turbo ignorēšanu). Padoms: turi šo logu ne garāku par pēdējās minūtes slieksni (noklusējums 10 minūtes), lai lietotne bieži pārbauda visu tā laiku.',
+                'Drošības tīkls, kas darbojas izaicinājuma pēdējās minūtēs, kad auto-iesniegšana citādi atstātu foto vietas tukšas — vai nu tāpēc, ka auto-iesniegšana ir izslēgta, vai tāpēc, ka obligātie tagi nesakrīt ne ar vienu foto un "Iesniegt arī bez tagu sakritības" ir izslēgts. Kad izaicinājumam līdz beigām atlicis tik daudz laika, atlikušajās vietās tiek iesniegti labākie pieejamie foto, pat ja tie nesakrīt ar taviem tagiem. Tas apzināti ignorē šos iestatījumus, lai izaicinājums nebeigtos ar neizmantotām vietām. Šajā pašā logā tā arī izmanto jebkuru pieejamo Boost un jebkuru iegūto Turbo — pat ja "Auto-pielietot Boost" vai "Auto-pielietot Turbo" izaicinājumam ir izslēgts — lai tie netiktu izniekoti, kad izaicinājums beidzas. Grafiskajā lietotnē ievada kā stundas un minūtes. Noklusējums 5 minūtes; iestati 0, lai izslēgtu (kas izslēdz arī šo pēdējās minūtes Boost/Turbo ignorēšanu). Padoms: turi šo logu ne garāku par pēdējās minūtes slieksni (noklusējums 10 minūtes), lai lietotne bieži pārbauda visu tā laiku.',
             emergencyFillHelp:
                 'Pēdējo minūšu drošības tīkls, mērīts kā laiks līdz beigām. Iestati 0, lai to pilnībā izslēgtu (kas izslēdz arī tā pēdējās minūtes Boost/Turbo glābšanu). Šeit 0 nozīmē “izslēgts” — atšķirībā no redzamības mērķa iestatījumiem, kur 0 nozīmē “sekot slieksnim”.',
             tagsPlaceholder: 'piem., saulriets, pludmale, okeāns',
@@ -413,7 +413,7 @@
             titleRuleOn: 'Ieslēgts',
             titleRuleOff: 'Izslēgts',
             titleRuleAutoJoin: 'Automātiski pievienoties šim nosaukumam',
-            titleRuleAutoFill: 'Automātiski aizpildīt šo nosaukumu',
+            titleRuleAutoFill: 'Auto-iesniegšana šim nosaukumam',
             titleRuleJoinWindow: 'Pievienoties, kad līdz beigām atlicis (h)',
             titleRuleJoinWindowPlaceholder: 'noklusējums',
             titleRuleOverridesLabel: 'Iestatījumi šim nosaukumam',
@@ -422,8 +422,8 @@
             noTitleTagRules: 'Vēl nav noteikumu. Pievieno vienu izaicinājuma nosaukumam.',
             usingProfile: 'Izmanto profilu',
             none: '(nav)',
-            addOnePhoto: 'Pievienot vienu foto, lai aizpildītu tukšu vietu',
-            fillAllPhotos: 'Aizpildīt visas tukšās vietas tagad (bez intervāla)',
+            addOnePhoto: 'Iesniegt vienu foto tukšā vietā',
+            fillAllPhotos: 'Iesniegt foto visās tukšajās vietās tagad (bez intervāla)',
             cancel: 'Atcelt',
             challengeDefaults: 'Noklusējuma iestatījumi izaicinājumiem',
             // Keys, Swaps & Fills (currency automation) settings
@@ -498,7 +498,7 @@
             groupLastMinute: 'Pēdējā minūte',
             groupScheduledFill: 'Plānotā balsošana',
             groupVotingPause: 'Balsošanas pauze',
-            groupAutoFill: 'Automātiskā aizpilde',
+            groupAutoFill: 'Auto-iesniegšana',
             groupRewards: 'Balvas',
             groupNotifications: 'Paziņojumi',
             groupDisplay: 'Attēlojums',
@@ -516,12 +516,12 @@
             notifyOnBoostDesc: 'Brīdina pirms Boost izmantošanas, lai paspētu atstāt lietotni ieslēgtu.',
             notifyOnTurbo: 'Paziņot pirms Turbo',
             notifyOnTurboDesc: 'Brīdina pirms Turbo spēles, lai paspētu atstāt lietotni ieslēgtu.',
-            notifyOnAutoFill: 'Paziņot pirms automātiskās aizpildes',
+            notifyOnAutoFill: 'Paziņot pirms auto-iesniegšanas',
             notifyOnAutoFillDesc:
-                'Brīdina pirms bilde tiek automātiski pievienota tuvu beigām, lai paspētu atstāt lietotni ieslēgtu.',
-            notifyOnEmergencyFill: 'Paziņot pirms ārkārtas aizpildes',
+                'Brīdina pirms bilde tiek automātiski iesniegta tuvu beigām, lai paspētu atstāt lietotni ieslēgtu.',
+            notifyOnEmergencyFill: 'Paziņot pirms ārkārtas iesniegšanas',
             notifyOnEmergencyFillDesc:
-                'Brīdina pirms pēdējā brīža ārkārtas aizpildes, lai paspētu atstāt lietotni ieslēgtu.',
+                'Brīdina pirms pēdējā brīža ārkārtas iesniegšanas, lai paspētu atstāt lietotni ieslēgtu.',
             notifyLeadTime: 'Brīdināt cik ilgi iepriekš',
             notifyLeadTimeDesc: 'Cik minūtes pirms darbības tiek parādīts brīdinājums.',
             notifyLeadTimeHelp:
@@ -595,7 +595,7 @@
             onlyBoostDesc: 'Pilnībā izlaist parasto balsošanu šim izaicinājumam un tikai pielietot Boost.',
             voteOnNewEntry: 'Balsot par jaunu bildi',
             voteOnNewEntryDesc:
-                'Kad šajā izaicinājumā parādās jauna bilde — pievienota pašā GuruShots vai ar automātisko aizpildi, ārkārtas aizpildi vai Boost/Turbo aizpildi — nobalsot vienu reizi arī tad, ja redzamība jau ir sasniegusi vai pārsniegusi slieksni. Balso līdz tiem griestiem, ko izaicinājums izmantotu parasti: Redzamības mērķis (vai Redzamība, ja mērķis ir 0), vai Beigu loga redzamības mērķis beigu loga laikā, kad ieslēgts "Izmantot beigu loga redzamību". Tas neapiet iestatījumus Tikai "Boost" režīms, Balsot tikai pēdējās minūtes laikā un Tikai plānotā balsošana: ja kāds no tiem to aizliedz, balsojums nenotiek.',
+                'Kad šajā izaicinājumā parādās jauna bilde — pievienota pašā GuruShots vai ar auto-iesniegšanu, ārkārtas iesniegšanu vai kā jauns Boost/Turbo foto — nobalsot vienu reizi arī tad, ja redzamība jau ir sasniegusi vai pārsniegusi slieksni. Balso līdz tiem griestiem, ko izaicinājums izmantotu parasti: Redzamības mērķis (vai Redzamība, ja mērķis ir 0), vai Beigu loga redzamības mērķis beigu loga laikā, kad ieslēgts "Izmantot beigu loga redzamību". Tas neapiet iestatījumus Tikai "Boost" režīms, Balsot tikai pēdējās minūtes laikā un Tikai plānotā balsošana: ja kāds no tiem to aizliedz, balsojums nenotiek.',
             override: 'Pielāgots',
             overrideForChallenge: 'Pielāgot iestatījumus izaicinājumam',
             photo: 'bilde',
@@ -666,7 +666,7 @@
                 'Cik bieži (minūtēs) pārbaudīt izaicinājumu, kad tas ir pēdējās minūtes sliekšņa robežās. Noklusējums 1 pārbauda katru minūti, lai nepalaistu garām beigu grūdienu.',
             useScheduledFill: 'Izmantot plānoto balsošanu',
             useScheduledFillDesc:
-                'Balsot līdz 100% redzamībai izvēlētos laikos, nevis tikai tad, kad tā nokrītas zem Redzamības sliekšņa. Tas plāno tikai balsošanu — foto netiek iesniegts (to dara Automātiskā aizpilde). Laikus var norādīt divos veidos, un tos var apvienot: ikdienas “Balsošanas laiki” un vienreizēji intervāli “Balsošana pirms beigām”. Katrs laiks atver savu neatkarīgu balsošanas logu — piem., intervāli 10h un 4h pirms beigām balso divreiz noslēguma dienā. Loga laikā izaicinājums tiek balsots līdz 100% un tur noturēts; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens laiks zemāk, un nekad neattiecas uz Flash izaicinājumiem vai izaicinājumiem režīmā "Tikai Boost". Ja lietotne nedarbojas visa loga laikā, šis logs tiek izlaists un vēlāk netiek atkārtots.',
+                'Balsot līdz 100% redzamībai izvēlētos laikos, nevis tikai tad, kad tā nokrītas zem Redzamības sliekšņa. Tas plāno tikai balsošanu — foto netiek iesniegts (to dara Auto-iesniegšana). Laikus var norādīt divos veidos, un tos var apvienot: ikdienas “Balsošanas laiki” un vienreizēji intervāli “Balsošana pirms beigām”. Katrs laiks atver savu neatkarīgu balsošanas logu — piem., intervāli 10h un 4h pirms beigām balso divreiz noslēguma dienā. Loga laikā izaicinājums tiek balsots līdz 100% un tur noturēts; laiki tiek interpretēti lietotnes Laika joslas iestatījumā (nevis šīs ierīces pulkstenī). Nedarbojas, kamēr nav iestatīts vismaz viens laiks zemāk, un nekad neattiecas uz Flash izaicinājumiem vai izaicinājumiem režīmā "Tikai Boost". Ja lietotne nedarbojas visa loga laikā, šis logs tiek izlaists un vēlāk netiek atkārtots.',
             scheduledFillTime: 'Balsošanas laiki',
             scheduledFillTimeDesc:
                 'Ikdienas pulksteņa laiki (24h), kuros atveras balsošanas logi, lietotnes Laika joslas iestatījumā — nevis šīs ierīces pulkstenī. Katrs laiks katru dienu atver savu logu; noņem visas rindas, lai šos laikus izslēgtu. Ap vasaras/ziemas laika maiņu faktiskais brīdis maiņas dienā var nobīdīties līdz pat stundai.',
@@ -778,7 +778,7 @@
             notApplicableHint: 'Tavas saglabātās vērtības netiek dzēstas.',
             naBoostUsed: 'Boost šim izaicinājumam jau izmantots — šie iestatījumi nedarbosies.',
             naTurboUsed: 'Turbo šim izaicinājumam jau izmantots — šie iestatījumi nedarbosies.',
-            naSlotsFull: 'Visas bilžu vietas ir aizpildītas — automātiskajai aizpildei nav ko pievienot.',
+            naSlotsFull: 'Visas bilžu vietas ir aizņemtas — auto-iesniegšanai nav ko pievienot.',
             naFlashNoBoost: 'Flash izaicinājumi neatbalsta Boost.',
             naFlashNoScheduledFill: 'Flash izaicinājumi vienmēr balso līdz 100% — plānotā balsošana nekad nedarbojas.',
             naFlashNoVotingPause: 'Flash izaicinājumi vienmēr balso līdz 100% — balsošanas pauze nekad nedarbojas.',
@@ -805,13 +805,13 @@
             intentModified: 'Rediģēta sagatave',
             intentJustParticipate: 'Vienkārši piedalīties',
             intentJustParticipateDesc:
-                'Uztur visas bilžu vietas aizpildītas, bet nekad netērē Boost vai Turbo un nedzenas pēc redzamības tālāk par slieksni — maz pūļu, maz riska.',
+                'Iesniedz foto visās bilžu vietās, bet nekad netērē Boost vai Turbo un nedzenas pēc redzamības tālāk par slieksni — maz pūļu, maz riska.',
             intentFinishStrong: 'Spēcīgs finišs',
             intentFinishStrongDesc:
                 'Lielāko izaicinājuma daļu spēlē normāli, tad beigu logā izmanto Boost un Turbo un spēcīgi palielina redzamību.',
             intentMaxExposure: 'Maksimāla redzamība',
             intentMaxExposureDesc:
-                'Visu laiku uz pilnu jaudu: balso līdz pilnai redzamībai, aizpilda bilžu vietas un izmanto Boost un Turbo.',
+                'Visu laiku uz pilnu jaudu: balso līdz pilnai redzamībai, iesniedz foto visās bilžu vietās un izmanto Boost un Turbo.',
         },
         // Logs page specific
         logs: {

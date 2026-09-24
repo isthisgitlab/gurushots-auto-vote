@@ -93,11 +93,12 @@ Commands:
   logout   - Clear the saved authentication token
   vote     - Run one manual voting cycle (votes to 100% regardless of settings).
              Add --challenge=<id> to manually vote a single challenge.
-  run      - Run one full auto-strategy cycle (boost / turbo / auto-fill / threshold-aware vote).
+  run      - Run one full auto-strategy cycle (boost / turbo / auto-submit / threshold-aware vote).
              Add --challenge=<id> to scope to a single challenge.
   boost    - Apply a boost to a challenge: boost --challenge=<id> [--image=<id>]
   turbo    - Play the turbo mini-game on a challenge: turbo --challenge=<id>
-  fill     - Submit photo(s) to a challenge's empty slots: fill --challenge=<id> [--all]
+  submit   - Submit photo(s) to a challenge's empty slots: submit --challenge=<id> [--all]
+             (formerly 'fill', still accepted; not the same as fill-exposure)
   unlock-boost  - Spend a key to unlock a locked boost (does not apply it):
              unlock-boost --challenge=<id> [--yes]
   swap     - Spend a swap to replace an entered photo with a different one:
@@ -136,7 +137,7 @@ Examples:
   run --challenge=12345
   boost --challenge=12345
   turbo --challenge=12345
-  fill --challenge=12345 --all
+  submit --challenge=12345 --all
   unlock-boost --challenge=12345 --yes
   swap --challenge=12345 --image=abc123
   fill-exposure --challenge=12345 --yes
@@ -152,7 +153,7 @@ Examples:
   logout
   reset-windows
 
-Note: You must login first before you can vote, boost, turbo, or fill.
+Note: You must login first before you can vote, boost, turbo, or submit.
       The 'start' command will run continuously until stopped with Ctrl+C.
       Voting interval adjusts dynamically based on challenge states.
       Use 'get-setting checkFrequencyMin'/'checkFrequencyMax' to view, 'set-setting checkFrequencyMin 2' / 'set-setting checkFrequencyMax 5' to set the random range.
@@ -226,9 +227,11 @@ const main = async () => {
                 process.exit(0);
                 break;
             }
+            // `fill` is the pre-rename name, kept so existing scripts still work.
+            case 'submit':
             case 'fill': {
                 const { challengeId, rest } = extractChallenge(args.slice(1));
-                requireChallenge({ challengeId }, 'Usage: fill --challenge=<id> [--all]');
+                requireChallenge({ challengeId }, 'Usage: submit --challenge=<id> [--all]');
                 await fillChallenge(challengeId, { all: rest.includes('--all') });
                 process.exit(0);
                 break;

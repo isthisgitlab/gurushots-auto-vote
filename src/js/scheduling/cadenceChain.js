@@ -84,7 +84,7 @@ const oversleptBy = (waitMs, actualMs) => {
 const formatOversleptMessage = (lateMs, waitMs) =>
     `Voting cycle ran ${(lateMs / 60_000).toFixed(1)} min later than scheduled ` +
     `(waited ${(waitMs / 60_000).toFixed(1)} min) — the app was suspended or its timers were throttled, ` +
-    `so any auto-fill, boost, turbo or emergency-fill due in that gap did not happen. ` +
+    `so any auto-submit, boost, turbo or emergency submit due in that gap did not happen. ` +
     `Keep the app window open and the device awake while challenges are near their deadline, ` +
     `or run the CLI (\`cli:start\`), which is not affected.`;
 

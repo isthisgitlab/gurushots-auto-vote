@@ -154,7 +154,7 @@ describe('useBoost / useTurbo / useFillChallenge', () => {
             await result.current.fillNow('c9', 'fill');
         });
         expect(mockApi.fillChallengeNow).toHaveBeenCalledWith('c9', 'fill');
-        expect(result.current.error).toBe('Fill error');
+        expect(result.current.error).toBe('Photo submit error');
         act(() => result.current.clearError());
         expect(result.current.error).toBeNull();
     });

@@ -234,7 +234,7 @@ const buildHandlers = () => ({
             };
         } catch (error) {
             logger.withCategory('autoFill').error('Error handling fill-challenge-now request:', error);
-            return { success: false, error: error.message || 'Failed to fill challenge' };
+            return { success: false, error: error.message || 'Failed to submit photos' };
         }
     },
 

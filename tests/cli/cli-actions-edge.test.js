@@ -134,19 +134,19 @@ describe('boost / turbo / fill fallbacks', () => {
     test('fill success without message/counts falls back to defaults', async () => {
         h['fill-challenge-now'].mockResolvedValue({ success: true });
         await actions.fillChallenge('111', { all: true });
-        expect(msgs('success')).toEqual(['Filled "Sunset" (submitted 0, skipped 0)']);
+        expect(msgs('success')).toEqual(['Submitted photos to "Sunset" (submitted 0, skipped 0)']);
     });
 
     test('fill failure with no error text uses the default message', async () => {
         h['fill-challenge-now'].mockResolvedValue(null);
         await actions.fillChallenge('111');
-        expect(msgs('error')).toEqual(['Failed to fill challenge']);
+        expect(msgs('error')).toEqual(['Failed to submit photos']);
     });
 
     test('fill: a thrown non-Error is stringified', async () => {
         h['fill-challenge-now'].mockRejectedValue('disk');
         await actions.fillChallenge('111');
-        expect(msgs('error')).toEqual(['Failed to fill challenge: disk']);
+        expect(msgs('error')).toEqual(['Failed to submit photos: disk']);
     });
 });
 

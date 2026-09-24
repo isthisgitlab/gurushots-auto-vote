@@ -173,7 +173,7 @@ describe('formatNotification — single & coalesced', () => {
             ...Object.fromEntries(
                 Object.values(ACTION_LABEL_KEY).map((k, i) => [
                     k,
-                    ['Auto-fill', 'Boost', 'Turbo', 'Emergency fill'][i],
+                    ['Auto-submit', 'Boost', 'Turbo', 'Emergency submit'][i],
                 ]),
             ),
         };
@@ -192,10 +192,10 @@ describe('formatNotification — single & coalesced', () => {
     });
 
     test.each([
-        ['autoFill', 'Auto-fill'],
+        ['autoFill', 'Auto-submit'],
         ['boost', 'Boost'],
         ['turbo', 'Turbo'],
-        ['emergencyFill', 'Emergency fill'],
+        ['emergencyFill', 'Emergency submit'],
     ])('single-entry English fallback labels %s → %s', (name, label) => {
         const out = formatNotification([{ title: 'T', action: name, secondsUntil: 60 }], translate);
         expect(out.title).toContain(label);

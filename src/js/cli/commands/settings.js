@@ -447,12 +447,14 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
                          has no timer of its own, so boostTime cannot describe it
                          (default: 900 = 15 min; 0 = off)
   turboTime            - Seconds before close to apply turbo (default: 7200 = 2h)
-  emergencyFill        - Seconds before close to fill empty slots as a last resort
+  emergencyFill        - Emergency Submit: seconds before close to submit photos to
+                         empty slots as a last resort
                          (default: 300 = 5 min; 0 = off). NOTE: this used to be minutes.
 
-Scheduled fill (fill exposure at chosen times — per-challenge, set with
-set-global-default or set-setting --challenge=<id>; every entry opens its own
-fill window, all OR'd; older single values migrate to arrays automatically):
+Scheduled voting (vote exposure up to 100% at chosen times — per-challenge, set
+with set-global-default or set-setting --challenge=<id>; every entry opens its
+own voting window, all OR'd; older single values migrate to arrays
+automatically. Keys keep their historical "Fill" names):
   useScheduledFill           - Master switch (default: false). Inert until a
                                time below is set; never applies to flash or
                                boost-only challenges.
@@ -462,13 +464,13 @@ fill window, all OR'd; older single values migrate to arrays automatically):
                                no duplicates)
   scheduledFillBeforeEnd     - JSON array of SECONDS-before-close offsets,
                                each opening a one-shot window. e.g.
-                               '[14400,36000]' fills at 4h and 10h before the
+                               '[14400,36000]' votes at 4h and 10h before the
                                end ([] = off, max 6, no duplicates, each
                                1s..30 days)
-  scheduledFillWindowMinutes - How long each fill window stays open
+  scheduledFillWindowMinutes - How long each voting window stays open
                                (default: 60, range 5-720)
   scheduledFillReplaces      - true = scheduled windows become the ONLY
-                               automatic fills (normal + final-window voting are
+                               automatic votes (normal + final-window voting are
                                blocked outside them; flash/last-minute rules
                                and manual voting still apply). A window missed
                                while the app is not running is skipped with no
@@ -477,7 +479,7 @@ fill window, all OR'd; older single values migrate to arrays automatically):
     set-global-default scheduledFillTime '["09:00","21:30"]'
     set-setting scheduledFillBeforeEnd '[14400,36000]' --challenge=12345
 
-Voting pause (the inverse of scheduled fill: refuse to vote inside the window
+Voting pause (the inverse of scheduled voting: refuse to vote inside the window
 — for the overnight gap between match rounds, where filled exposure earns very
 few votes. Same per-challenge scoping and JSON value format):
   useVotingPause             - Master switch (default: false). Inert until a
@@ -493,7 +495,7 @@ few votes. Same per-challenge scoping and JSON value format):
                                5-720). For a 01:30-06:00 night pause use
                                votingPauseTime '["01:30"]' with 270 here.
   Flash challenges, the Last Minute rules, Boost and Turbo are NOT paused — a
-  challenge that closes mid-pause still gets its final fill.
+  challenge that closes mid-pause still gets its final votes.
   Which commands respect a pause: "run"/"start" (the automatic schedule) and
   "vote --challenge=<id>" do. Plain "vote" does NOT — it is the manual
   vote-to-100% path, the same one the GUI's manual button uses, and manual
@@ -502,13 +504,14 @@ few votes. Same per-challenge scoping and JSON value format):
     set-global-default votingPauseTime '["01:30"]'
     set-global-default votingPauseDurationMinutes 270
 
-Auto-fill schedule (JSON array of {count, seconds} rows; replaces the old
-autoFillIntervalMinutes — existing values are migrated automatically):
+Auto-Submit schedule (photo submission; JSON array of {count, seconds} rows;
+replaces the old autoFillIntervalMinutes — existing values are migrated
+automatically. Keys keep their historical "autoFill" names):
   autoFillSchedule     - Each row: have at least <count> entries once <seconds>
                          remain before close. Counts 2-4 (max 3 rows, unique) —
                          challenges allow at most 4 images and image 1 always
                          exists. Omit a count to never schedule that image; an
-                         empty array [] means auto-fill never submits.
+                         empty array [] means auto-submit never submits.
                          Default: [{"count":2,"seconds":1800},{"count":3,"seconds":1200},{"count":4,"seconds":600}]
   Set it with set-global-default (set-setting without --challenge now redirects
   here rather than writing a key the scheduler never reads):

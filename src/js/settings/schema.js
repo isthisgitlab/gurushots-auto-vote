@@ -1576,7 +1576,10 @@ const SETTINGS_TIERS = [
  * read "Scheduled Voting": it is an exposure-voting rule (it returns a
  * `decided('scheduled', ...)` from `_runVotingRules`), not an entry fill like
  * autoFill/emergencyFill, and sharing the word "fill" with them read as if the
- * three were siblings.
+ * three were siblings. Likewise `autoFill` (and the `emergencyFill` key) keep
+ * their ids while their labels read "Auto-Submit" / "Emergency Submit": in
+ * GuruShots "fill" means the currency that tops exposure up to 100%
+ * (`autoExposureFill`, `fills`), so user-facing text reserves the word for that.
  */
 const SETTINGS_GROUPS = [
     { id: 'general', label: 'app.groupGeneral', tier: 'core' },

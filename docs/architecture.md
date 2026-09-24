@@ -24,7 +24,10 @@ Domain terms used throughout, in reader's terms:
 - **exposure factor** — how much the GuruShots API has shown your photo in a challenge, 0–100%.
 - **trigger** — vote _if_ current exposure is below this value.
 - **target** — vote _up to_ this value (the vote loop's ceiling). Distinct from the trigger.
-- **auto-fill** — automatically submit new photo entries into a challenge's open slots.
+- **auto-fill** — automatically submit new photo entries into a challenge's open slots. User-facing text
+  calls this **Auto-Submit** (and `emergencyFill` **Emergency Submit**): to GuruShots players a **fill** is the
+  currency that tops exposure up to 100% (`autoExposureFill`, the `fills` balance), so the UI, CLI and README
+  reserve "fill" for that. Code ids, setting keys and log categories keep the `autoFill`/`emergencyFill` names.
 - **boost** — a one-shot exposure multiplier applied to a single entry.
 - **turbo** — a timed exposure surge on an entry.
 - **flash** — a challenge _type_ that is always auto-targeted to 100%.

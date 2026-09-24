@@ -53,7 +53,7 @@ describe('CLI smoke', () => {
             'run',
             'boost',
             'turbo',
-            'fill',
+            'submit',
             'start',
             'status',
             'check-updates',

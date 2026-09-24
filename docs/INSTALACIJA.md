@@ -37,11 +37,11 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 - **Beigu loga ekspozīcija** — atsevišķs, parasti zemāks ekspozīcijas slieksnis konfigurējamam beigu logam (noklusējums pēdējā stunda).
 - **Boost** — automātiski pielieto boost tuvu beigām, izvēlētajai foto vietai.
 - **Turbo (iegūt + pielietot)** — automātiski spēlē mini-spēli, lai _iegūtu_ turbo, pēc tam automātiski _pielieto_ to izvēlētajai foto vietai pirms beigām.
-- **Auto-aizpilde** — iesniedz fotogrāfijas tukšajās foto vietās tuvu beigām, ar laika atstarpi, lai izvairītos no balsu atšķaidīšanas, ar tagu filtriem, tematiski atbilstošu foto izvēli, ko papildus pārbauda ierīcē strādājošs attēlu modelis, un avārijas drošības tīklu.
+- **Auto-iesniegšana** — iesniedz fotogrāfijas tukšajās foto vietās tuvu beigām, ar laika atstarpi, lai izvairītos no balsu atšķaidīšanas, ar tagu filtriem, tematiski atbilstošu foto izvēli, ko papildus pārbauda ierīcē strādājošs attēlu modelis, un avārijas drošības tīklu.
 - **Auto-pievienošanās** — atrod atvērtos (nepievienotos) izaicinājumus un pievienojas tiem automātiski (pēc noklusējuma izslēgts); kad ieslēgts, pēc noklusējuma pievienojas visiem, sašaurinot ar tipu iekļaušanas/izslēgšanas sarakstu vai saglabātu nosaukuma profilu. Maksas izaicinājumus ierobežo monētu limiti (par izaicinājumu un ciklā), un monētas nekad netiek tērētas bez pabeigtas pievienošanās. Pieejama arī manuāla pievienošanās — sakļaujams "Atklāt" saraksts grafiskajā lietotnē un `discover`/`join` CLI komandas.
-- **Konta atlikums** — parāda jūsu atslēgas / maiņas / aizpildes / monētas blakus taimerim grafiskajā lietotnē un ar `bankroll` (alias `coins`) CLI komandu.
+- **Konta atlikums** — parāda jūsu atslēgas / maiņas / uzpildes / monētas blakus taimerim grafiskajā lietotnē un ar `bankroll` (alias `coins`) CLI komandu.
 - **Iestatījumi katram izaicinājumam** — katram balsošanas iestatījumam ir globālais noklusējums, ko jebkurš izaicinājums var pārrakstīt.
-- **Tagu noteikumi pēc nosaukuma** — auto-aizpildes tagu noteikumi, kas piesaistīti izaicinājuma nosaukumam, tāpēc tie saglabājas, kad GuruShots katrā rotācijā maina izaicinājuma ID.
+- **Tagu noteikumi pēc nosaukuma** — auto-iesniegšanas tagu noteikumi, kas piesaistīti izaicinājuma nosaukumam, tāpēc tie saglabājas, kad GuruShots katrā rotācijā maina izaicinājuma ID.
 - **Trīs platformas** — Electron grafiskā lietotne, `gurucli` komandrinda un Android lietotne, kas balso ar bloķētu telefonu.
 - **Noturīgs API slānis** — konfigurējama noildze plus automātiska atkārtošana/aizture pārejošu kļūmju gadījumā.
 - **Ērtības** — gaišā/tumšā tēma, angļu/latviešu saskarne, laika joslas attēlošana, mock režīms drošai testēšanai un iebūvēti atjauninājumu paziņojumi.
@@ -64,7 +64,7 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 
 > **macOS:** tikai Apple Silicon (arm64) — Intel (x86_64) būvējuma nav. **DMG** ir vienkāršākā instalācija; **APP** zip ir alternatīva, ja vēlaties ievietot komplektu pats.
 
-> **Kāpēc lejupielādes ir lielas:** katrā būvējumā (grafiskajā lietotnē, Android un CLI) ir iekļauts ~200 MB attēlu atpazīšanas modelis (Google SigLIP, 8 bitu kvantizēts) un tā izpildvide. Auto-aizpilde to izmanto, lai pārbaudītu, vai fotogrāfijā tiešām redzams izaicinājuma temats — skatiet [Vizuālā pārbaude](#trūkstošo-ierakstu-auto-aizpilde). Tas darbojas tikai jūsu ierīcē: pirmajā lietošanas reizē nekas netiek lejupielādēts, nav vajadzīga API atslēga vai konts, un neviena fotogrāfija netiek nekur augšupielādēta.
+> **Kāpēc lejupielādes ir lielas:** katrā būvējumā (grafiskajā lietotnē, Android un CLI) ir iekļauts ~200 MB attēlu atpazīšanas modelis (Google SigLIP, 8 bitu kvantizēts) un tā izpildvide. Auto-iesniegšana to izmanto, lai pārbaudītu, vai fotogrāfijā tiešām redzams izaicinājuma temats — skatiet [Vizuālā pārbaude](#trūkstošo-ierakstu-auto-iesniegšana). Tas darbojas tikai jūsu ierīcē: pirmajā lietošanas reizē nekas netiek lejupielādēts, nav vajadzīga API atslēga vai konts, un neviena fotogrāfija netiek nekur augšupielādēta.
 
 #### 📱 Mobilā lietotne (Android, sānielāde — bez Play Store)
 
@@ -113,7 +113,7 @@ Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.c
 4. Notīriet karantīnas karogu (tikai pārlūka lejupielādēm): `xattr -d com.apple.quarantine ./gurucli-v1.8.5-mac`
 5. Palaidiet: `./gurucli-v1.8.5-mac help`
 
-Pirmajā reizē, kad CLI aizpilda vietu, tā izpako iekļauto attēlu modeli un izpildvidi (~560 MB) mapē `~/Library/Application Support/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jauna versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
+Pirmajā reizē, kad CLI iesniedz foto, tā izpako iekļauto attēlu modeli un izpildvidi (~560 MB) mapē `~/Library/Application Support/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jauna versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
 
 #### 🐧 Linux
 
@@ -130,7 +130,7 @@ Pirmajā reizē, kad CLI aizpilda vietu, tā izpako iekļauto attēlu modeli un 
 3. `chmod +x gurucli-v1.8.5-linux`
 4. `./gurucli-v1.8.5-linux help`
 
-Pirmajā reizē, kad CLI aizpilda vietu, tā izpako iekļauto attēlu modeli un izpildvidi (~550 MB) mapē `~/.config/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jauna versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
+Pirmajā reizē, kad CLI iesniedz foto, tā izpako iekļauto attēlu modeli un izpildvidi (~550 MB) mapē `~/.config/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jauna versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
 
 #### 📱 Android (sānielāde)
 
@@ -161,7 +161,7 @@ Android versija **nav pieejama Google Play** — instalācija notiek caur tiešu
 
 ```bash
 ./gurucli-v1.8.5-[platforma] login    # autentificējieties vienreiz (saglabā tokenu)
-./gurucli-v1.8.5-[platforma] run      # viens pilns auto-stratēģijas cikls (boost/turbo/aizpilde/slieksnis-balsošana)
+./gurucli-v1.8.5-[platforma] run      # viens pilns auto-stratēģijas cikls (boost/turbo/auto-iesniegšana/slieksnis-balsošana)
 ./gurucli-v1.8.5-[platforma] start    # nepārtraukta balsošana (Ctrl+C, lai apturētu)
 ```
 
@@ -186,31 +186,31 @@ Android versija **nav pieejama Google Play** — instalācija notiek caur tiešu
 
 > **⚠️** Vienlaikus darbiniet tikai VIENU instanci (grafisko lietotni vai CLI).
 
-| Komanda                                           | Ko tā dara                                                                                                                                                     |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `login`                                           | Autentificējieties ar GuruShots un saglabājiet tokenu (interaktīvs; nepieciešams īsts terminālis).                                                             |
-| `logout`                                          | Notīra saglabāto autentifikācijas tokenu.                                                                                                                      |
-| `vote`                                            | Palaiž **vienu manuālu ciklu** — balso līdz **100%** visos aktīvajos izaicinājumos, ignorējot visus sliekšņus. Vienreizēja papildināšana.                      |
-| `run [--challenge=<id>]`                          | Palaiž **vienu pilnu auto-stratēģijas ciklu** (boost / turbo / auto-aizpilde / slieksni ievērojoša balsošana). `--challenge` ierobežo uz vienu.                |
-| `boost --challenge=<id> [--image=<id>]`           | Pielieto boost vienam izaicinājumam. Bez `--image` izmanto `boostImageIndex` vietu.                                                                            |
-| `turbo --challenge=<id>`                          | Spēlē turbo mini-spēli, lai iegūtu turbo vienam izaicinājumam (tikai iegūšana; rokā esošu turbo pielieto `useTurbo` vai grafiskā lietotne).                    |
-| `fill --challenge=<id> [--all]`                   | Iesniedz labāk ranžēto fotogrāfiju vienā tukšā vietā, vai ar `--all` aizpilda visas tukšās vietas uzreiz.                                                      |
-| `bankroll` (alias `coins`)                        | Parāda jūsu valūtu atlikumus — atslēgas / maiņas / aizpildes / monētas.                                                                                        |
-| `discover`                                        | Uzskaita atvērtos (nepievienotos) izaicinājumus, kuriem varat pievienoties, ar katra tipu un monētu izmaksu.                                                   |
-| `join <id> [--yes]`                               | Pievienojas atvērtam izaicinājumam. Bezmaksas pievienojas uzreiz; **maksas** izaicinājums izdrukā monētu izmaksu un prasa `--yes`, pirms tiek tērētas monētas. |
-| `check-updates`                                   | Pārbauda GitHub, vai nav pieejams jaunāks izlaidums.                                                                                                           |
-| `start`                                           | Sāk **nepārtrauktu** balsošanu ar dinamisku plānošanu. Darbojas, līdz nospiežat **Ctrl+C**.                                                                    |
-| `status`                                          | Parāda režīmu (MOCK/REAL), autentifikācijas statusu un galvenos iestatījumus.                                                                                  |
-| `get-setting <key> [--challenge=<id>]`            | Izdrukā iestatījuma efektīvo vērtību (katram izaicinājumam ar `--challenge`).                                                                                  |
-| `set-setting <key> <value> [--challenge=<id>]`    | Uzstāda iestatījumu; ar `--challenge` ieraksta pārrakstījumu konkrētam izaicinājumam.                                                                          |
-| `set-global-default <key> <value>`                | Uzstāda globālo noklusējumu **ar shēmas validāciju**.                                                                                                          |
-| `list-settings [--challenge=<id>]`                | Parāda visus iestatījumus un modifikācijas statusu (skats katram izaicinājumam ar `--challenge`).                                                              |
-| `reset-setting <key> [--challenge=<id>]`          | Atiestata iestatījumu uz noklusējumu (vai notīra izaicinājuma pārrakstījumu ar `--challenge`).                                                                 |
-| `reset-all-settings`                              | Atiestata visu uz noklusējumiem (saglabā tokenu, mock karogu un API galvenes).                                                                                 |
-| `logs [--error\|--api\|--settings] [--lines=<n>]` | Izdrukā žurnālfaila beigas (noklusējums 100 rindas; noklusējuma kategorija ir lietotnes žurnāls).                                                              |
-| `reset-windows`                                   | Atiestata grafiskās lietotnes logu pozīcijas uz noklusējumiem.                                                                                                 |
-| `help-settings`                                   | Detalizēta palīdzība par iestatījumiem — atslēgu nosaukumi, vērtību formāti, diapazoni.                                                                        |
-| `help`                                            | Parāda komandu palīdzību.                                                                                                                                      |
+| Komanda                                           | Ko tā dara                                                                                                                                                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `login`                                           | Autentificējieties ar GuruShots un saglabājiet tokenu (interaktīvs; nepieciešams īsts terminālis).                                                                                                |
+| `logout`                                          | Notīra saglabāto autentifikācijas tokenu.                                                                                                                                                         |
+| `vote`                                            | Palaiž **vienu manuālu ciklu** — balso līdz **100%** visos aktīvajos izaicinājumos, ignorējot visus sliekšņus. Vienreizēja papildināšana.                                                         |
+| `run [--challenge=<id>]`                          | Palaiž **vienu pilnu auto-stratēģijas ciklu** (boost / turbo / auto-iesniegšana / slieksni ievērojoša balsošana). `--challenge` ierobežo uz vienu.                                                |
+| `boost --challenge=<id> [--image=<id>]`           | Pielieto boost vienam izaicinājumam. Bez `--image` izmanto `boostImageIndex` vietu.                                                                                                               |
+| `turbo --challenge=<id>`                          | Spēlē turbo mini-spēli, lai iegūtu turbo vienam izaicinājumam (tikai iegūšana; rokā esošu turbo pielieto `useTurbo` vai grafiskā lietotne).                                                       |
+| `submit --challenge=<id> [--all]`                 | Iesniedz labāk ranžēto fotogrāfiju vienā tukšā vietā, vai ar `--all` iesniedz foto visās tukšajās vietās uzreiz. Agrāk `fill` (joprojām darbojas) — nejaukt ar `fill-exposure`, kas tērē uzpildi. |
+| `bankroll` (alias `coins`)                        | Parāda jūsu valūtu atlikumus — atslēgas / maiņas / uzpildes / monētas.                                                                                                                            |
+| `discover`                                        | Uzskaita atvērtos (nepievienotos) izaicinājumus, kuriem varat pievienoties, ar katra tipu un monētu izmaksu.                                                                                      |
+| `join <id> [--yes]`                               | Pievienojas atvērtam izaicinājumam. Bezmaksas pievienojas uzreiz; **maksas** izaicinājums izdrukā monētu izmaksu un prasa `--yes`, pirms tiek tērētas monētas.                                    |
+| `check-updates`                                   | Pārbauda GitHub, vai nav pieejams jaunāks izlaidums.                                                                                                                                              |
+| `start`                                           | Sāk **nepārtrauktu** balsošanu ar dinamisku plānošanu. Darbojas, līdz nospiežat **Ctrl+C**.                                                                                                       |
+| `status`                                          | Parāda režīmu (MOCK/REAL), autentifikācijas statusu un galvenos iestatījumus.                                                                                                                     |
+| `get-setting <key> [--challenge=<id>]`            | Izdrukā iestatījuma efektīvo vērtību (katram izaicinājumam ar `--challenge`).                                                                                                                     |
+| `set-setting <key> <value> [--challenge=<id>]`    | Uzstāda iestatījumu; ar `--challenge` ieraksta pārrakstījumu konkrētam izaicinājumam.                                                                                                             |
+| `set-global-default <key> <value>`                | Uzstāda globālo noklusējumu **ar shēmas validāciju**.                                                                                                                                             |
+| `list-settings [--challenge=<id>]`                | Parāda visus iestatījumus un modifikācijas statusu (skats katram izaicinājumam ar `--challenge`).                                                                                                 |
+| `reset-setting <key> [--challenge=<id>]`          | Atiestata iestatījumu uz noklusējumu (vai notīra izaicinājuma pārrakstījumu ar `--challenge`).                                                                                                    |
+| `reset-all-settings`                              | Atiestata visu uz noklusējumiem (saglabā tokenu, mock karogu un API galvenes).                                                                                                                    |
+| `logs [--error\|--api\|--settings] [--lines=<n>]` | Izdrukā žurnālfaila beigas (noklusējums 100 rindas; noklusējuma kategorija ir lietotnes žurnāls).                                                                                                 |
+| `reset-windows`                                   | Atiestata grafiskās lietotnes logu pozīcijas uz noklusējumiem.                                                                                                                                    |
+| `help-settings`                                   | Detalizēta palīdzība par iestatījumiem — atslēgu nosaukumi, vērtību formāti, diapazoni.                                                                                                           |
+| `help`                                            | Parāda komandu palīdzību.                                                                                                                                                                         |
 
 Iestatījumi ir kopīgi ar grafisko lietotni: CLI veikts `set-setting` tiek pamanīts grafiskajā lietotnē un otrādi.
 
@@ -227,7 +227,7 @@ Iestatījumi ir kopīgi ar grafisko lietotni: CLI veikts `set-setting` tiek pama
 
 ### Viens balsošanas cikls
 
-Cikls ir viena caurlaide pa visiem jūsu aktīvajiem izaicinājumiem. Katram, šādā secībā, lietotne: pielieto **boost**, ja pienācis laiks, spēlē/pielieto **turbo**, ja atbilstošs, **auto-aizpilda** tukšu foto vietu, ja ir laiks, un pēc tam **balso** līdz mērķim, ko nosaka zemāk aprakstītie noteikumi.
+Cikls ir viena caurlaide pa visiem jūsu aktīvajiem izaicinājumiem. Katram, šādā secībā, lietotne: pielieto **boost**, ja pienācis laiks, spēlē/pielieto **turbo**, ja atbilstošs, **auto-iesniedz** foto tukšā vietā, ja ir laiks, un pēc tam **balso** līdz mērķim, ko nosaka zemāk aprakstītie noteikumi.
 
 ### Ekspozīcijas noteikumi (kurš mērķis tiek piemērots)
 
@@ -263,19 +263,21 @@ Turbo ir lēni atjaunojams patēriņa resurss, ko iegūstat, spēlējot mini-sp�
 
 Grafiskajā lietotnē rokā esošu turbo varat pielietot arī konkrētai fotogrāfijai ar tās **⚡** pogu, pārrakstot auto vietu. Viena fotogrāfija var būt vai nu ar boost, vai ar turbo, nekad abiem.
 
-### Trūkstošo ierakstu auto-aizpilde
+### Trūkstošo ierakstu auto-iesniegšana
+
+GuruShots **uzpilde** (angliski _fill_) ir valūta, kas paceļ redzamību līdz 100% (viens no atlikumiem, ko rāda [Konta atlikums](#konta-atlikums)). Foto iesniegšana tukšajās vietās ir kas cits, un lietotne to sauc par **auto-iesniegšanu**. Iestatījumi saglabā vecos `autoFill*` / `emergencyFill` / `fillWithoutTagMatch` nosaukumus, lai esošās konfigurācijas turpinātu darboties.
 
 Kad izaicinājums ļauj iesniegt vairākas fotogrāfijas un esat atstājuši tukšas vietas, šīs vietas beigās tiek izniekotas. Ar ieslēgtu `autoFill` plānotājs iesniedz **vienu fotogrāfiju katrā ciklā**, sekojot jūsu `autoFillSchedule` — soļu sarakstam, kur katrs solis nozīmē "kad līdz beigām atlicis `seconds`, jābūt vismaz `count` foto" (piem., 2. foto pie 48h, 3. pie 3h, 4. pie 15min). Ja esat atpalicis no grafika (lietotne palaista vēlu vai solis pārsniedz visu izaicinājuma ilgumu), tā panāk grafiku pa vienam foto ciklā. Atstarpe ir svarīga, jo GuruShots atšķaida balsis starp vienlaikus iesniegtiem ierakstiem, tāpēc atstatums dod katram jaunajam ierakstam neatkarīgu ekspozīciju. Esošie `autoFillIntervalMinutes` iestatījumi tiek migrēti automātiski (intervāls `M` kļūst par 2 @ 3×M, 3 @ 2×M, 4 @ 1×M minūtēm pirms beigām).
 
-- **`emergencyFill`** — drošības tīkls: pēdējā posmā pirms beigām tas aizpilda visas atlikušās vietas pat tad, kad normālie noteikumi gaidītu, un pārraksta must-include tagu filtru. Šajā pašā logā tas pielieto arī jebkuru pieejamu Boost un jebkuru iegūtu Turbo pat tad, kad `autoBoost` / `useTurbo` šim izaicinājumam ir izslēgti, lai tie netiktu izniekoti beigās. Grafiskajā lietotnē ievada kā h+m (glabā sekundēs). `0` to atspējo (kas atspējo arī boost/turbo pārrakstīšanu); turiet to `≤ lastMinuteThreshold`, lai ātrā pēdējās minūtes kadence būtu aktīva visā logā.
-- **Tagu filtri** — `mustIncludeTags` ir cietais filtrs (atbilstošas tikai fotogrāfijas ar visiem tagiem); `shouldIncludeTags` ir mīkstā preference. `fillWithoutTagMatch` izlemj, kas notiek, kad must-include tagi ir iestatīti, bet nekas neatbilst visiem tagiem: tomēr aizpildīt (noklusējums) vai atstāt vietu tukšu.
-- **Tagu noteikumi pēc nosaukuma** — tā kā GuruShots katrā rotācijā atkārto izaicinājumu ar jaunu ID, ID piesaistītie pārrakstījumi tiek zaudēti. Tagu noteikumi, kas piesaistīti (stabilajam) izaicinājuma nosaukumam, tiek salīdzināti reģistrnejutīgi un aizpildes brīdī apvienoti efektīvajos must/should-include tagu sarakstos. Pārvaldāmi grafiskās lietotnes Iestatījumu logā sadaļā **Tagu noteikumi pēc nosaukuma** (tikai grafiskajā lietotnē).
+- **`emergencyFill`** (Ārkārtas iesniegšana) — drošības tīkls: pēdējā posmā pirms beigām tas iesniedz foto visās atlikušajās vietās pat tad, kad normālie noteikumi gaidītu, un pārraksta must-include tagu filtru. Šajā pašā logā tas pielieto arī jebkuru pieejamu Boost un jebkuru iegūtu Turbo pat tad, kad `autoBoost` / `useTurbo` šim izaicinājumam ir izslēgti, lai tie netiktu izniekoti beigās. Grafiskajā lietotnē ievada kā h+m (glabā sekundēs). `0` to atspējo (kas atspējo arī boost/turbo pārrakstīšanu); turiet to `≤ lastMinuteThreshold`, lai ātrā pēdējās minūtes kadence būtu aktīva visā logā.
+- **Tagu filtri** — `mustIncludeTags` ir cietais filtrs (atbilstošas tikai fotogrāfijas ar visiem tagiem); `shouldIncludeTags` ir mīkstā preference. `fillWithoutTagMatch` izlemj, kas notiek, kad must-include tagi ir iestatīti, bet nekas neatbilst visiem tagiem: tomēr iesniegt (noklusējums) vai atstāt vietu tukšu.
+- **Tagu noteikumi pēc nosaukuma** — tā kā GuruShots katrā rotācijā atkārto izaicinājumu ar jaunu ID, ID piesaistītie pārrakstījumi tiek zaudēti. Tagu noteikumi, kas piesaistīti (stabilajam) izaicinājuma nosaukumam, tiek salīdzināti reģistrnejutīgi un iesniegšanas brīdī apvienoti efektīvajos must/should-include tagu sarakstos. Pārvaldāmi grafiskās lietotnes Iestatījumu logā sadaļā **Tagu noteikumi pēc nosaukuma** (tikai grafiskajā lietotnē).
 - **Fotogrāfiju izvēle** — kandidātus savāc ar vienmēr ieslēgtu servera puses tematisko meklēšanu paša GuruShots tagu indeksā — izmantojot jūsu must/should-include tagus, ja tie ir iestatīti, citādi atslēgvārdus no izaicinājuma nosaukuma — un atkāpjoties uz jūsu pilno atbilstošo bibliotēku, ja tā neko neuzrāda. Pēc tam katru kandidātu ranžē vienmēr ieslēgts semantiskais tēmas rezultāts (cik labi tas atbilst izaicinājumam, `0`–`1`) — ar atslēgvārdu/saknes salīdzināšanu pret fotogrāfijas vīzijas iezīmēm kā rezerves variantu, kad semantiskie dati nav pieejami — un neizšķirtus gadījumus risina pēc sasniegumu skaita, kopējā balsu skaita, skatījumu skaita, tad augšupielādes datuma.
-- **Vizuālā pārbaude** — pirms fotogrāfijas iesniegšanas ierīcē strādājošs attēlu modelis apskata 12 augstāk ranžētos kandidātus un salīdzina katru ar izaicinājumu — tā nosaukuma tematu (bez sērijas priedēkļa, noliegtajiem vārdiem kā "No Humans" un jūsu `ignoreTitleWords`) un apraksta sākumu (bez HTML un standarta balvu teksta). Fotogrāfijas, kurās temats acīmredzami nav redzams, tiek pārvietotas aiz tām, kurās tas ir; starp pārbaudi izturējušajām saglabājas augstāk aprakstītā ranžēšana, tāpēc popularitāte joprojām izšķir. Darbojas katrā izaicinājumā bez iestatīšanas. Tā nekad neatstāj vietu tukšu: ja nosaukumā nav vizuāla temata ("Photo of the Day", "Guru of The Week"), ja neviena fotogrāfija skaidri neatbilst (abstraktas tēmas kā "It's all About Balance") vai ja modeli neizdodas palaist, tiek izmantota augstāk aprakstītā ranžēšana bez izmaiņām. Tā pati pārbaude darbojas auto-aizpildei, ārkārtas aizpildei, `+1`/`+N` pogām, jaunās foto boost/turbo, foto maiņai un auto-pievienošanās. Galddatora procesoram tā aizņem ~1–1,5 s katram izaicinājumam, telefonā ilgāk; modelis tiek ielādēts vienreiz, pirmajā aizpildē pēc palaišanas.
-- **Jaunās foto boost/turbo** — ar ieslēgtu `boostFillNew` / `turboFillNew` auto-aizpilde iesniedz jaunu fotogrāfiju un uzreiz pielieto boost / turbo šim jaunajam ierakstam, lai pieejamais boost vai turbo nepaliktu neizmantots tukšā vietā.
-- **Manuālās pogas** — katrai kartītei ar tukšām vietām ir **`+1`** (iesniegt labāk ranžēto fotogrāfiju vienā vietā) un **`+N`** (aizpildīt visas atlikušās vietas uzreiz, ignorējot atstarpi). Manuālie klikšķi ignorē `autoFill` slēdzi un ir atspējoti, kamēr auto-balsošana darbojas.
+- **Vizuālā pārbaude** — pirms fotogrāfijas iesniegšanas ierīcē strādājošs attēlu modelis apskata 12 augstāk ranžētos kandidātus un salīdzina katru ar izaicinājumu — tā nosaukuma tematu (bez sērijas priedēkļa, noliegtajiem vārdiem kā "No Humans" un jūsu `ignoreTitleWords`) un apraksta sākumu (bez HTML un standarta balvu teksta). Fotogrāfijas, kurās temats acīmredzami nav redzams, tiek pārvietotas aiz tām, kurās tas ir; starp pārbaudi izturējušajām saglabājas augstāk aprakstītā ranžēšana, tāpēc popularitāte joprojām izšķir. Darbojas katrā izaicinājumā bez iestatīšanas. Tā nekad neatstāj vietu tukšu: ja nosaukumā nav vizuāla temata ("Photo of the Day", "Guru of The Week"), ja neviena fotogrāfija skaidri neatbilst (abstraktas tēmas kā "It's all About Balance") vai ja modeli neizdodas palaist, tiek izmantota augstāk aprakstītā ranžēšana bez izmaiņām. Tā pati pārbaude darbojas auto-iesniegšanai, ārkārtas iesniegšanai, `+1`/`+N` pogām, jaunās foto boost/turbo, foto maiņai un auto-pievienošanās. Galddatora procesoram tā aizņem ~1–1,5 s katram izaicinājumam, telefonā ilgāk; modelis tiek ielādēts vienreiz, pirmajā foto iesniegšanā pēc palaišanas.
+- **Jaunās foto boost/turbo** — ar ieslēgtu `boostFillNew` / `turboFillNew` lietotne iesniedz jaunu fotogrāfiju un uzreiz pielieto boost / turbo šim jaunajam ierakstam, lai pieejamais boost vai turbo nepaliktu neizmantots tukšā vietā.
+- **Manuālās pogas** — katrai kartītei ar tukšām vietām ir **`+1`** (iesniegt labāk ranžēto fotogrāfiju vienā vietā) un **`+N`** (iesniegt foto visās atlikušajās vietās uzreiz, ignorējot atstarpi). Manuālie klikšķi ignorē `autoFill` slēdzi un ir atspējoti, kamēr auto-balsošana darbojas.
 
-Jaunaizpildītos ierakstus boost un turbo noteikumi pamana automātiski _nākamajā_ ciklā.
+Jaunos iesniegtos ierakstus boost un turbo noteikumi pamana automātiski _nākamajā_ ciklā.
 
 ### Tikai-boost režīms
 
@@ -283,7 +285,7 @@ Jaunaizpildītos ierakstus boost un turbo noteikumi pamana automātiski _nākama
 
 ### Auto-pievienošanās izaicinājumiem
 
-Viss iepriekšējais darbojas ar izaicinājumiem, kuriem jau esat pievienojies. **Auto-pievienošanās** (pēc noklusējuma izslēgta) katrā ciklā atrod **atvērtos, nepievienotos** izaicinājumus un pievienojas tiem, kurus vēlaties. Tā darbojas kā solis pirms balsošanas visās platformās (grafiskā lietotne, CLI `start`, Android), un pievienošanās nozīmē foto iesniegšanu — auto-pievienošanās izmanto to pašu foto izvēli kā auto-aizpilde (tagi, tematiskā meklēšana, semantiskā ranžēšana, vizuālā pārbaude).
+Viss iepriekšējais darbojas ar izaicinājumiem, kuriem jau esat pievienojies. **Auto-pievienošanās** (pēc noklusējuma izslēgta) katrā ciklā atrod **atvērtos, nepievienotos** izaicinājumus un pievienojas tiem, kurus vēlaties. Tā darbojas kā solis pirms balsošanas visās platformās (grafiskā lietotne, CLI `start`, Android), un pievienošanās nozīmē foto iesniegšanu — auto-pievienošanās izmanto to pašu foto izvēli kā auto-iesniegšana (tagi, tematiskā meklēšana, semantiskā ranžēšana, vizuālā pārbaude).
 
 - **Tvērums — kurus izaicinājumus pievienot.** Ieslēdz `autoJoin`, un tas pēc noklusējuma pievienojas **visiem** atvērtajiem izaicinājumiem; sašaurini ar tipu sarakstiem (pēc izvēles):
     - `autoJoinTypes` — **iekļaušanas** saraksts ar izaicinājumu tipiem, atdalīti ar komatu (piem., `flash,contest`). Atstāj **tukšu, lai pievienotos visiem tipiem** (noklusējums).
@@ -296,7 +298,7 @@ Viss iepriekšējais darbojas ar izaicinājumiem, kuriem jau esat pievienojies. 
 
 ### Konta atlikums
 
-Jūsu valūtu atlikumi — **atslēgas / maiņas / aizpildes / monētas** — parādās blakus taimerim grafiskās lietotnes galvenē (tie rāda `—`, nevis `0`, ja atlikumu nevar nolasīt, tāpēc neizdevusies nolasīšana netiek sajaukta ar "tukšu"). No CLI `bankroll` (alias `coins`) tos izdrukā.
+Jūsu valūtu atlikumi — **atslēgas / maiņas / uzpildes / monētas** — parādās blakus taimerim grafiskās lietotnes galvenē (tie rāda `—`, nevis `0`, ja atlikumu nevar nolasīt, tāpēc neizdevusies nolasīšana netiek sajaukta ar "tukšu"). No CLI `bankroll` (alias `coins`) tos izdrukā.
 
 ## 🎛️ Iestatījumu atsauce
 
@@ -336,7 +338,7 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 | `autoBoost`              | `true`        | bool                 | Automātiski pielietot boost tuvu beigām.                                                                                                                                                                                                                       |
 | `boostTime`              | `3600` s (1h) | ≥ 0                  | Pielietot taimera boost, kad atlicis tik daudz laika (vai mazāk). Grafiskajā lietotnē ievada kā h+m.                                                                                                                                                           |
 | `boostImageIndex`        | `1`           | vesels ≥ 0           | Foto vieta boost (1 = pirmā, `0` = pēdējā). Paiet atpakaļ, ja vietai jau ir turbo.                                                                                                                                                                             |
-| `boostFillNew`           | `false`       | bool                 | Auto-aizpildes laikā iesniegt jaunu fotogrāfiju un uzreiz pielietot boost šim jaunajam ierakstam.                                                                                                                                                              |
+| `boostFillNew`           | `false`       | bool                 | Iesniegt jaunu fotogrāfiju un uzreiz pielietot boost šim jaunajam ierakstam.                                                                                                                                                                                   |
 | `boostFillNewOnConflict` | `false`       | bool                 | Iesniegt jaunu foto un pielietot tam boost tikai tad, ja vienīgajam esošajam ierakstam jau ir turbo (boost tur nevar nokļūt). Ja nav brīvas vietas vai piemērota foto, boost tiek izlaists (atkāpšanās iespējas nav). Ignorēts, ja `boostFillNew` ir ieslēgts. |
 
 **Turbo**
@@ -347,7 +349,7 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 | `autoTurbo`              | `true`        | bool                 | Automātiski spēlēt mini-spēli, lai iegūtu turbo, kad tāda nav rokā.                                                                                                                                                                                            |
 | `turboTime`              | `7200` s (2h) | ≥ 0                  | Pielietot turbo, kad atlicis tik daudz laika (vai mazāk). Grafiskajā lietotnē ievada kā h+m.                                                                                                                                                                   |
 | `turboImageIndex`        | `1`           | vesels ≥ 0           | Foto vieta turbo (1 = pirmā, `0` = pēdējā). Paiet atpakaļ, ja vietai jau ir boost.                                                                                                                                                                             |
-| `turboFillNew`           | `false`       | bool                 | Auto-aizpildes laikā iesniegt jaunu fotogrāfiju un uzreiz pielietot turbo šim jaunajam ierakstam.                                                                                                                                                              |
+| `turboFillNew`           | `false`       | bool                 | Iesniegt jaunu fotogrāfiju un uzreiz pielietot turbo šim jaunajam ierakstam.                                                                                                                                                                                   |
 | `turboFillNewOnConflict` | `false`       | bool                 | Iesniegt jaunu foto un pielietot tam turbo tikai tad, ja vienīgajam esošajam ierakstam jau ir boost (turbo tur nevar nokļūt). Ja nav brīvas vietas vai piemērota foto, turbo tiek izlaists (atkāpšanās iespējas nav). Ignorēts, ja `turboFillNew` ir ieslēgts. |
 
 **Beigu logs**
@@ -369,16 +371,16 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 | `lastMinuteThreshold`      | `10`        | 1–59 min             | Logs pirms beigām, kurā lietotne balso līdz 100 % neatkarīgi no ekspozīcijas griestiem.                               |
 | `lastMinuteCheckFrequency` | `1`         | 1–59 min             | **Tikai globāls (bez pārrakstīšanas katram izaicinājumam).** Plānotāja kadence, kamēr kāds izaicinājums ir savā logā. |
 
-**Auto-aizpilde**
+**Auto-iesniegšana**
 
-| Iestatījums           | Noklusējums         | Diapazons / vērtības | Apraksts                                                                                                                                                                                                                                                                                                                                       |
-| --------------------- | ------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `autoFill`            | `false`             | bool                 | Iesniegt fotogrāfijas tukšajās foto vietās tuvu beigām (ar atstarpi, vienu katrā ciklā).                                                                                                                                                                                                                                                       |
-| `autoFillSchedule`    | 2@30m, 3@20m, 4@10m | foto 2–4             | `{count, seconds}` rindas: kad atlicis ≤ `seconds`, jābūt ≥ `count` foto. Tikai foto 2–4; izlaid foto (vai GUI iestati 0h 0m), lai to nekad neplānotu. Aizstāj `autoFillIntervalMinutes` (migrē automātiski).                                                                                                                                  |
-| `fillWithoutTagMatch` | `true`              | bool                 | Ja must-include tagi iestatīti, bet neviena fotogrāfija neatbilst visiem tagiem: tomēr aizpildīt (`true`) vai atstāt vietu tukšu (`false`).                                                                                                                                                                                                    |
-| `emergencyFill`       | `300` s (5m)        | ≥ 0                  | Pēdējo minūšu drošības tīkls: aizpildīt atlikušās vietas pat ja noteikumi gaidītu, pārrakstot must-include tagus; pielieto arī jebkuru pieejamu Boost/iegūtu Turbo pat tad, kad `autoBoost`/`useTurbo` ir izslēgti. `0` = izslēgts (atspējo arī Boost/Turbo pārrakstīšanu). Turiet ≤ `lastMinuteThreshold`. Grafiskajā lietotnē ievada kā h+m. |
-| `mustIncludeTags`     | `[]`                | līdz 50 tagiem       | Cietais filtrs: aizpildīt tikai ar fotogrāfijām, kas atbilst visiem šiem tagiem.                                                                                                                                                                                                                                                               |
-| `shouldIncludeTags`   | `[]`                | līdz 50 tagiem       | Mīkstā preference: dot priekšroku fotogrāfijām ar šiem tagiem, bet neizslēgt citas.                                                                                                                                                                                                                                                            |
+| Iestatījums           | Noklusējums         | Diapazons / vērtības | Apraksts                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------------- | ------------------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `autoFill`            | `false`             | bool                 | Iesniegt fotogrāfijas tukšajās foto vietās tuvu beigām (ar atstarpi, vienu katrā ciklā).                                                                                                                                                                                                                                                                                    |
+| `autoFillSchedule`    | 2@30m, 3@20m, 4@10m | foto 2–4             | `{count, seconds}` rindas: kad atlicis ≤ `seconds`, jābūt ≥ `count` foto. Tikai foto 2–4; izlaid foto (vai GUI iestati 0h 0m), lai to nekad neplānotu. Aizstāj `autoFillIntervalMinutes` (migrē automātiski).                                                                                                                                                               |
+| `fillWithoutTagMatch` | `true`              | bool                 | Ja must-include tagi iestatīti, bet neviena fotogrāfija neatbilst visiem tagiem: tomēr iesniegt (`true`) vai atstāt vietu tukšu (`false`).                                                                                                                                                                                                                                  |
+| `emergencyFill`       | `300` s (5m)        | ≥ 0                  | Ārkārtas iesniegšana — pēdējo minūšu drošības tīkls: iesniegt foto atlikušajās vietās pat ja noteikumi gaidītu, pārrakstot must-include tagus; pielieto arī jebkuru pieejamu Boost/iegūtu Turbo pat tad, kad `autoBoost`/`useTurbo` ir izslēgti. `0` = izslēgts (atspējo arī Boost/Turbo pārrakstīšanu). Turiet ≤ `lastMinuteThreshold`. Grafiskajā lietotnē ievada kā h+m. |
+| `mustIncludeTags`     | `[]`                | līdz 50 tagiem       | Cietais filtrs: iesniegt tikai fotogrāfijas, kas atbilst visiem šiem tagiem.                                                                                                                                                                                                                                                                                                |
+| `shouldIncludeTags`   | `[]`                | līdz 50 tagiem       | Mīkstā preference: dot priekšroku fotogrāfijām ar šiem tagiem, bet neizslēgt citas.                                                                                                                                                                                                                                                                                         |
 
 **Auto-pievienošanās**
 
@@ -434,7 +436,7 @@ Vizuālā pārbaude raksta žurnālā kategorijā `autoFill`: `Visual check reor
 
 **Auto-balsošana darbojas, bet nekas nenotiek** — pārbaudiet, vai jums ir aktīvi izaicinājumi, vai ekspozīcija jau nav pie sliekšņa (noklusējums 100%), un vai `voteOnlyInLastMinute` nav ieslēgts, kamēr izaicinājumi vēl ir ārpus pēdējās minūtes loga. Pārbaudiet žurnālfailus, lai redzētu izlaišanas iemeslu katram izaicinājumam.
 
-**Auto-aizpilde izvēlējās tematam neatbilstošu fotogrāfiju** — vizuālā pārbaude izvēlas tikai starp 12 augstākajiem kandidātiem, ko atrada tagu meklēšana, tāpēc, ja nevienā no tiem temats nav redzams, tā nevar palīdzēt: pievienojiet šim izaicinājumam `mustIncludeTags`/`shouldIncludeTags` (vai tagu noteikumu pēc nosaukuma), lai sarakstā nonāktu labāki kandidāti. Žurnāla ieraksts `Visual check unavailable` nozīmē, ka attēlu modeli neizdevās ielādēt vai palaist; CLI modeli izpako pirmajā lietošanas reizē (skatiet [Instalācija katrai platformai](#instalācija-katrai-platformai)), tāpēc pārbaudiet brīvo vietu diskā.
+**Auto-iesniegšana izvēlējās tematam neatbilstošu fotogrāfiju** — vizuālā pārbaude izvēlas tikai starp 12 augstākajiem kandidātiem, ko atrada tagu meklēšana, tāpēc, ja nevienā no tiem temats nav redzams, tā nevar palīdzēt: pievienojiet šim izaicinājumam `mustIncludeTags`/`shouldIncludeTags` (vai tagu noteikumu pēc nosaukuma), lai sarakstā nonāktu labāki kandidāti. Žurnāla ieraksts `Visual check unavailable` nozīmē, ka attēlu modeli neizdevās ielādēt vai palaist; CLI modeli izpako pirmajā lietošanas reizē (skatiet [Instalācija katrai platformai](#instalācija-katrai-platformai)), tāpēc pārbaudiet brīvo vietu diskā.
 
 **Logs atveras ārpus ekrāna** — restartējiet lietotni; no CLI palaidiet `reset-windows`.
 
@@ -448,7 +450,7 @@ Ja joprojām esat iestrēdzis, pārbaudiet žurnālfailus un [atveriet problēmu
 - Akreditācijas dati tiek aizklāti no žurnāliem — jutīgās atslēgas tiek maskētas pirms jebkura ieraksta žurnālā.
 - Jūsu tokens tiek glabāts lokāli lietotnes iestatījumu failā un tiek nosūtīts tikai GuruShots; iestatījumi un konfigurācija nekad nepamet jūsu ierīci.
 - Kļūdu ziņojumi neatklāj jutīgu informāciju.
-- Auto-aizpildes attēlu pārbaude darbojas lokāli ar iekļautu modeli; tā tikai lejupielādē jūsu pašu fotogrāfiju sīktēlus no GuruShots un neko nesūta citiem pakalpojumiem.
+- Auto-iesniegšanas attēlu pārbaude darbojas lokāli ar iekļautu modeli; tā tikai lejupielādē jūsu pašu fotogrāfiju sīktēlus no GuruShots un neko nesūta citiem pakalpojumiem.
 
 ## 📄 Licence un atbalsts
 

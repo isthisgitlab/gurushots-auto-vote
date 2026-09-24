@@ -106,8 +106,8 @@ const turboChallenge = async (challengeId) => {
 };
 
 /**
- * Submit photo(s) to a challenge's empty slots. `--all` fills every empty
- * slot; otherwise a single best-ranked eligible photo is submitted.
+ * Submit photo(s) to a challenge's empty slots. `--all` submits to every
+ * empty slot; otherwise a single best-ranked eligible photo is submitted.
  */
 const fillChallenge = async (challengeId, { all = false } = {}) => {
     const challenge = await resolveChallenge(challengeId);
@@ -120,13 +120,13 @@ const fillChallenge = async (challengeId, { all = false } = {}) => {
             logger
                 .withCategory('autoFill')
                 .success(
-                    `${result.message || `Filled "${challenge.title}"`} (submitted ${result.submitted ?? 0}, skipped ${result.skipped ?? 0})`,
+                    `${result.message || `Submitted photos to "${challenge.title}"`} (submitted ${result.submitted ?? 0}, skipped ${result.skipped ?? 0})`,
                 );
         } else {
-            logger.withCategory('autoFill').error(result?.error || 'Failed to fill challenge');
+            logger.withCategory('autoFill').error(result?.error || 'Failed to submit photos');
         }
     } catch (err) {
-        logger.withCategory('autoFill').error(`Failed to fill challenge: ${err?.message || err}`);
+        logger.withCategory('autoFill').error(`Failed to submit photos: ${err?.message || err}`);
     }
 };
 

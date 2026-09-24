@@ -722,7 +722,7 @@ describe('fill-challenge-now — result shapes and errors', () => {
 
     test.each([
         ['its message', new Error('fill blew up'), 'fill blew up'],
-        ['the generic fallback', new Error(''), 'Failed to fill challenge'],
+        ['the generic fallback', new Error(''), 'Failed to submit photos'],
     ])('returns %s when the fill throws', async (_label, err, expected) => {
         stubAuthGuardOk();
         stubLive();
