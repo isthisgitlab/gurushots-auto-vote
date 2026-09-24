@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 
 // Main page is window-scrolled; show the button once past this many pixels.
 const SCROLL_THRESHOLD = 300;
@@ -34,9 +35,7 @@ export function ScrollToTopButton() {
             title={t('app.scrollToTop')}
             aria-label={t('app.scrollToTop')}
         >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
-            </svg>
+            <StrokeIcon className="w-5 h-5" d={ICON_PATHS.chevronUp} />
         </button>
     );
 }

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
  * Language switcher dropdown component
@@ -23,14 +24,7 @@ export function LanguageSwitcher() {
             <div className="dropdown dropdown-end">
                 <div className="btn btn-ghost btn-sm" role="button" tabIndex={0}>
                     {/* Language icon */}
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                        />
-                    </svg>
+                    <StrokeIcon className="w-4 h-4 mr-1" d={ICON_PATHS.translate} />
                     <span>{displayLanguage}</span>
                 </div>
                 <ul className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32">

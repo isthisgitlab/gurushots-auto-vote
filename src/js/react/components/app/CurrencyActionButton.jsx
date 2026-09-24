@@ -3,6 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useAutoClear } from '@/hooks/useAutoClear';
 import { useKeyUnlock, useFillExposure } from '@/api/useCurrencyActions';
 import { interp } from '@/utils/interp';
+import { spentOrStale } from '@/utils/spentOrStale';
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
 const ERROR_DISPLAY_MS = 5000;
@@ -33,8 +34,7 @@ function CurrencyActionButton({ label, icon, field, bankroll, title, body, actio
     const handleConfirm = async () => {
         const result = await run(challengeId);
         setConfirmOpen(false);
-        // A not-available outcome also means the card is stale — refresh it.
-        if ((result?.success || result?.outcome === 'not-available') && onSpent) onSpent();
+        if (spentOrStale(result) && onSpent) onSpent();
     };
 
     return (

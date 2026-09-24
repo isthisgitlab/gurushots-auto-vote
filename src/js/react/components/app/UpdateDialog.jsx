@@ -1,6 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useUpdate, UPDATE_STATES } from '@/contexts/UpdateContext';
 import { Modal } from '@/components/ui/Modal';
+import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
  * Format bytes to human-readable string
@@ -95,14 +96,7 @@ export function UpdateDialog() {
             {/* Ready State */}
             {state === UPDATE_STATES.READY && (
                 <div className="alert alert-success">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                    </svg>
+                    <StrokeIcon className="w-5 h-5" d={ICON_PATHS.vote} />
                     <span>{t('app.updateReadyToInstall')}</span>
                 </div>
             )}
@@ -110,14 +104,7 @@ export function UpdateDialog() {
             {/* Error State — SET_ERROR always carries an error payload. */}
             {state === UPDATE_STATES.ERROR && (
                 <div className="alert alert-error">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                    </svg>
+                    <StrokeIcon className="w-5 h-5" d={ICON_PATHS.xCircle} />
                     <span>{error.message}</span>
                 </div>
             )}

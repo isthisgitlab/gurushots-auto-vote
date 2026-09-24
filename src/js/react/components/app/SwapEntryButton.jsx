@@ -4,6 +4,7 @@ import { useSwapPhoto, useSwapBack } from '@/api/useCurrencyActions';
 import { interp } from '@/utils/interp';
 import { useAutoClear } from '@/hooks/useAutoClear';
 import { entryPhotoUrl } from '@/utils/formatters';
+import { spentOrStale } from '@/utils/spentOrStale';
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
 const ERROR_DISPLAY_MS = 5000;
@@ -31,10 +32,6 @@ function SwapPhoto({ photo, caption }) {
         </figure>
     );
 }
-
-// A spend that went through, or one the server reports is no longer possible
-// (the card is stale) — either way the caller refreshes.
-const spentOrStale = (result) => result?.success || result?.outcome === 'not-available';
 
 /**
  * The swap trigger button (spinner while busy, red after a failure) plus the
