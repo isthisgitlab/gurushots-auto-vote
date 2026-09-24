@@ -25,4 +25,18 @@
  */
 const oneLine = (value) => String(value).replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
 
-module.exports = { oneLine };
+/**
+ * Text for a caught value in a failure log line: its `message`, else the value
+ * itself as text, else 'unknown error'. Never empty — `logger.endOperation`
+ * records an operation as completed when its error text is empty, so a
+ * rejection with null, undefined or '' must still read as a failure.
+ *
+ * @param {unknown} error - anything a promise can reject with
+ * @returns {string}
+ */
+const failureText = (error) => {
+    const message = /** @type {{ message?: unknown } | null | undefined} */ (error)?.message;
+    return (message && String(message)) || String(error ?? '') || 'unknown error';
+};
+
+module.exports = { oneLine, failureText };

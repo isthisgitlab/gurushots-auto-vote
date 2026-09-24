@@ -204,6 +204,14 @@ describe('retry classification', () => {
         expect(timing.sleep).not.toHaveBeenCalled();
     });
 
+    test('a rejection with no error object is terminal and still resolves null', async () => {
+        axios.mockRejectedValue(null);
+
+        await expect(makePostRequest(URL, {}, '')).resolves.toBeNull();
+        expect(axios).toHaveBeenCalledTimes(1);
+        expect(timing.sleep).not.toHaveBeenCalled();
+    });
+
     test('a response with a non-numeric status is terminal', async () => {
         axios.mockRejectedValue(httpError('weird', null));
 

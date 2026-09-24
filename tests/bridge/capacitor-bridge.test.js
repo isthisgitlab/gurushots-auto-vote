@@ -204,6 +204,21 @@ describe('Capacitor bridge', () => {
             expect(onError).toHaveBeenCalledWith({ message: 'rate limited', canFallbackToBrowser: true });
         });
 
+        test('check-for-updates rejecting with null still reports the check failure', async () => {
+            updateChecker.checkForUpdates.mockRejectedValue(null);
+            const onError = jest.fn();
+            api.onUpdateError(onError);
+
+            await expect(api.checkForUpdates()).resolves.toEqual({
+                success: false,
+                error: 'Failed to check for updates',
+            });
+            expect(onError).toHaveBeenCalledWith({
+                message: 'Failed to check for updates',
+                canFallbackToBrowser: true,
+            });
+        });
+
         test('download-update without a prior check points the user at the releases page', async () => {
             await expect(api.downloadUpdate()).resolves.toEqual({
                 success: false,

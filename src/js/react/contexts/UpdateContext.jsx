@@ -97,7 +97,7 @@ export function UpdateProvider({ children }) {
             dispatch({
                 type: ACTIONS.SET_ERROR,
                 payload: {
-                    message: error.message || 'Download failed',
+                    message: error?.message || 'Download failed',
                     canFallbackToBrowser: error.canFallbackToBrowser !== false,
                 },
             });
@@ -139,7 +139,7 @@ export function UpdateProvider({ children }) {
         } catch (err) {
             dispatch({
                 type: ACTIONS.SET_ERROR,
-                payload: { message: err.message || 'Download failed', canFallbackToBrowser: true },
+                payload: { message: err?.message || 'Download failed', canFallbackToBrowser: true },
             });
         }
     }, []);
@@ -153,7 +153,7 @@ export function UpdateProvider({ children }) {
         } catch (err) {
             dispatch({
                 type: ACTIONS.SET_ERROR,
-                payload: { message: err.message || 'Installation failed', canFallbackToBrowser: false },
+                payload: { message: err?.message || 'Installation failed', canFallbackToBrowser: false },
             });
         }
     }, []);
@@ -166,7 +166,7 @@ export function UpdateProvider({ children }) {
             await window.api.skipUpdateVersion();
             dispatch({ type: ACTIONS.HIDE_DIALOG });
         } catch (err) {
-            await window.api.logError(`Error skipping update version: ${err.message || err}`);
+            await window.api.logError(`Error skipping update version: ${err?.message || err}`);
         }
     }, []);
 
@@ -186,7 +186,7 @@ export function UpdateProvider({ children }) {
             await window.api.openExternalUrl(urlResult.url);
             dispatch({ type: ACTIONS.HIDE_DIALOG });
         } catch (err) {
-            await window.api.logError(`Error opening download URL: ${err.message || err}`);
+            await window.api.logError(`Error opening download URL: ${err?.message || err}`);
         }
     }, []);
 

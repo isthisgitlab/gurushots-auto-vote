@@ -9,6 +9,7 @@
 
 const settings = require('../settings');
 const logger = require('../logger');
+const { failureText } = require('../format/logSafe');
 const cancellation = require('../voting/cancellation');
 const { extractAuthResult, clearAuthToken } = require('./auth');
 const { voteAllChallengesManual } = require('./manualVote');
@@ -50,8 +51,8 @@ class BaseMiddleware {
             logger.withCategory('authentication').endOperation('cli-login', null, 'Invalid credentials');
             return { success: false, error: 'Login failed. Please check your credentials.' };
         } catch (error) {
-            logger.withCategory('authentication').endOperation('cli-login', null, error?.message || error);
-            return { success: false, error: error?.message || error };
+            logger.withCategory('authentication').endOperation('cli-login', null, failureText(error));
+            return { success: false, error: failureText(error) };
         }
     }
 
@@ -152,8 +153,8 @@ class BaseMiddleware {
             }
             return result;
         } catch (error) {
-            logger.withCategory('voting').endOperation('cli-vote', null, error?.message || error);
-            return { success: false, error: error?.message || String(error) };
+            logger.withCategory('voting').endOperation('cli-vote', null, failureText(error));
+            return { success: false, error: failureText(error) };
         }
     }
 
@@ -185,7 +186,7 @@ class BaseMiddleware {
             const summary = `Manual vote: ${voted} voted, ${skipped} skipped of ${challenges.length}`;
             logger.withCategory('voting').endOperation('cli-vote-manual', summary);
         } catch (error) {
-            logger.withCategory('voting').endOperation('cli-vote-manual', null, error?.message || error);
+            logger.withCategory('voting').endOperation('cli-vote-manual', null, failureText(error));
         }
     }
 

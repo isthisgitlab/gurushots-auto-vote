@@ -39,7 +39,7 @@ const handleGetAutoClaimStatus = async () => {
         return { success: true, ...getAutoClaimStatus() };
     } catch (error) {
         logger.withCategory('claim').error('Error reading auto-claim status:', error);
-        return { success: false, error: error?.message || 'Could not read auto-claim status' };
+        return errorResult(error, 'Could not read auto-claim status');
     }
 };
 
@@ -349,7 +349,7 @@ const handleGetMemberChallenges = async (event, filter) => {
         return { success: true, items: Array.isArray(items) ? items : [] };
     } catch (error) {
         logger.withCategory('api').error('Error handling get-member-challenges request:', error);
-        return { success: false, items: [], error: error?.message || 'Failed to list challenges' };
+        return { ...errorResult(error, 'Failed to list challenges'), items: [] };
     }
 };
 

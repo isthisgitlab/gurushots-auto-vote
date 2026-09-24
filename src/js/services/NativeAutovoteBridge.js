@@ -25,7 +25,7 @@ const getPlugin = () => {
         }
         return pluginInstance;
     } catch (err) {
-        logger.withCategory('voting').warning('NativeAutovoteBridge.getPlugin failed', err.message);
+        logger.withCategory('voting').warning('NativeAutovoteBridge.getPlugin failed', err?.message);
         return null;
     }
 };
@@ -38,7 +38,7 @@ const start = async () => {
         return { ...result, available: true };
     } catch (err) {
         logger.withCategory('voting').error('AutoVoteBackground.start failed', err);
-        return { running: false, available: true, error: err.message };
+        return { running: false, available: true, error: err?.message };
     }
 };
 
@@ -50,7 +50,7 @@ const stop = async () => {
         return { ...result, available: true };
     } catch (err) {
         logger.withCategory('voting').error('AutoVoteBackground.stop failed', err);
-        return { running: false, available: true, error: err.message };
+        return { running: false, available: true, error: err?.message };
     }
 };
 
@@ -61,7 +61,7 @@ const getStatus = async () => {
         const result = await plugin.getStatus();
         return { ...result, available: true };
     } catch (err) {
-        return { running: false, available: true, error: err.message };
+        return { running: false, available: true, error: err?.message };
     }
 };
 

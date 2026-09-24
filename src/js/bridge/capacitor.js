@@ -30,6 +30,7 @@ const logHandlers = require('../ipc/log.handlers');
 const actionsHandlers = require('../ipc/actions.handlers');
 const computationsHandlers = require('../ipc/computations.handlers');
 const currencyHandlers = require('../ipc/currency.handlers');
+const { errorResult } = require('../ipc/errorResult');
 
 const settings = require('../settings');
 const logger = require('../logger');
@@ -124,8 +125,9 @@ const buildAllHandlers = () => {
                 emit('update-not-available', { version: result.version || pkg.version });
                 return { success: true, updateInfo: null };
             } catch (error) {
-                emit('update-error', { message: error?.message, canFallbackToBrowser: true });
-                return { success: false, error: error?.message };
+                const failure = errorResult(error, 'Failed to check for updates');
+                emit('update-error', { message: failure.error, canFallbackToBrowser: true });
+                return failure;
             }
         },
         'download-update': async () => {

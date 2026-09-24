@@ -75,6 +75,12 @@ describe('cliLogin', () => {
         await expect(mw.cliLogin('a', 'b')).resolves.toEqual({ success: false, error: 'boom' });
         expect(cat.endOperation).toHaveBeenCalledWith('cli-login', null, 'boom');
     });
+
+    test('a null rejection is still logged and reported as a failure', async () => {
+        const mw = make({ authenticate: jest.fn().mockRejectedValue(null) });
+        await expect(mw.cliLogin('a', 'b')).resolves.toEqual({ success: false, error: 'unknown error' });
+        expect(cat.endOperation).toHaveBeenCalledWith('cli-login', null, 'unknown error');
+    });
 });
 
 describe('guiLogin', () => {

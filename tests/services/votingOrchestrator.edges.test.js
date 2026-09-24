@@ -335,5 +335,7 @@ describe('non-Error throws on the vote and pass level', () => {
         api.getActiveChallenges.mockRejectedValue('');
         const result = await run(api);
         expect(result).toEqual({ success: false, error: 'Voting process failed' });
+        // An empty rejection must still close the operation as failed, not completed.
+        expect(log.endOperation).toHaveBeenCalledWith('voting-process', null, 'unknown error');
     });
 });

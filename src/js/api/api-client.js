@@ -161,8 +161,10 @@ const coerceNonNegInt = (value, fallback) => {
  */
 const isRetryableError = (error) => {
     // A TypeError (or similar) means an adapter/programmer bug, not a
-    // transient network failure — retrying it just wastes the backoff.
-    if (error instanceof TypeError) return false;
+    // transient network failure — retrying it just wastes the backoff. So
+    // does a rejection with no error object at all (a custom adapter
+    // rejecting with null/undefined).
+    if (error == null || error instanceof TypeError) return false;
     if (!error.response) return true; // network error / no response
     if (error.code === 'ECONNABORTED') return true; // client timeout
     const status = error.response.status;
@@ -240,7 +242,7 @@ const makePostRequest = async (url, headers, data = '') => {
             return response.data;
         } catch (error) {
             const duration = Date.now() - startTime;
-            const status = error.response?.status || 'NO_RESPONSE';
+            const status = error?.response?.status || 'NO_RESPONSE';
 
             // Log failed response with full error details
             logger.withCategory('api').api('API Error Response', {
@@ -248,9 +250,9 @@ const makePostRequest = async (url, headers, data = '') => {
                 url: url,
                 status: status,
                 duration: duration,
-                error: error.message,
-                responseData: error.response?.data || null,
-                timeout: error.code === 'ECONNABORTED',
+                error: error?.message,
+                responseData: error?.response?.data || null,
+                timeout: error?.code === 'ECONNABORTED',
             });
 
             if (!isRetryableError(error) || attempt >= maxRetries) {
