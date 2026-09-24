@@ -286,6 +286,37 @@ repeated six times is one that gets forgotten at one of them.
 - Labels must be **stemmed word tokens** — the lexicon has no multi-word keys, so a raw multi-word label
   always misses.
 
+### 4a. Visual re-rank (on-device image model)
+
+- `rankVisually()` (`services/visionVerifier.js`) runs a bundled, 8-bit quantized **SigLIP** model
+  (`zero-shot-image-classification`, `@huggingface/transformers`) over the **top 12 tag-ranked
+  candidates** of every challenge. Like the lexicon it only orders photos — it is never part of the vote
+  decision. One call site feeds every submission path: `verifyFillPick()` in `autoFill.js` (auto, emergency,
+  manual, and fill-new fills via `runFillAttempt`, plus swaps via `rankCandidatesForChallenge`), and
+  `pickJoinPhoto()` for auto-join.
+- **Prompts come from the challenge, never a theme list**: `a photo of <subject>` from
+  `visualSubjectWords()` (the title subject — series prefix, negated words and `ignoreTitleWords` removed,
+  **unstemmed**, and deliberately without `abstractTitleWords`, which reads "leaves" as a verb) plus
+  `descriptionLead()` — the first two sentences of `welcome_message`, HTML and the shared rewards text
+  stripped. Unlike the semantic theme vector, the description is safe here: SigLIP reads a sentence as a
+  sentence rather than averaging its words, and it is averaged with the title prompt, not used alone.
+- **It only reorders and never empties a pick.** A photo's fit is the mean logit over the prompts; photos
+  more than `ln(10)` below the best fit move behind the rest, and tag/popularity order is kept inside both
+  groups. It **abstains** (original order) when the title has no visual subject, when no photo reaches
+  `ABSTAIN_LOGIT` for any prompt, or on any load/inference/URL failure. Both thresholds were calibrated on
+  16 live challenges (2026-09-24) — re-measure against real shortlists before moving them.
+- **Packaging, per shell** — the model is fetched and sha256-pinned at build time by
+  `scripts/fetch-vision-model.js`; nothing downloads at runtime (`allowRemoteModels = false`).
+    - Electron: `extraResources` → `Resources/vision-model`, native `onnxruntime-node` in `app.asar.unpacked`.
+      The Android-only copies under `dist/` and the standalone `onnxruntime-web` package are excluded from
+      the asar, and `scripts/afterPack.js` deletes other OS/CPU `onnxruntime-node` binaries.
+    - CLI: the build embeds a `pnpm deploy --prod` tree + model as a SEA asset (pruned to the host OS/CPU by
+      `pruneVisionRuntime`); `services/visionCliAssets.js` verifies its sha256, extracts it once per version
+      into `<userData>/vision/<sha>`, and removes finished copies from earlier versions unless one was marked in use
+      within the last hour (an older CLI still running may not have loaded its model yet).
+    - Android: `dist/` is the WebView root, so `vision-model/` and the single-threaded ORT WASM files are
+      served from it and inference runs on the `wasm` device with one thread.
+
 ## 5. Safety / idempotency guards
 
 - **Defensive optional-chaining on every per-challenge API read** — one unguarded throw dumps the entire

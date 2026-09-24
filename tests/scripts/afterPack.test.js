@@ -21,6 +21,8 @@ jest.mock('@electron/fuses', () => ({
     },
 }));
 
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { flipFuses, FuseV1Options } = require('@electron/fuses');
 const afterPack = require('../../scripts/afterPack').default;
@@ -61,6 +63,35 @@ describe('afterPack', () => {
             [FuseV1Options.OnlyLoadAppFromAsar]: true,
         });
         expect(logSpy).toHaveBeenCalledWith(`[afterPack] Hardened Electron fuses for ${platform}: ${expectedBinary}`);
+    });
+
+    test.each([
+        ['darwin', 3, ['GuruShotsAutoVote.app', 'Contents', 'Resources'], 'darwin', ['arm64']],
+        ['mas', 4, ['GuruShotsAutoVote.app', 'Contents', 'Resources'], 'darwin', ['arm64', 'x64']],
+        ['win32', 1, ['resources'], 'win32', ['x64']],
+        ['linux', 3, ['resources'], 'linux', ['arm64']],
+    ])('keeps only the %s (arch %i) onnxruntime binaries', async (platform, arch, resourcesPath, keptOs, keptArchs) => {
+        const appOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'after-pack-'));
+        try {
+            const bin = path.join(
+                appOutDir,
+                ...resourcesPath,
+                'app.asar.unpacked',
+                'node_modules',
+                'onnxruntime-node',
+                'bin',
+                'napi-v6',
+            );
+            for (const target of ['darwin/arm64', 'darwin/x64', 'linux/x64', 'linux/arm64', 'win32/x64']) {
+                fs.mkdirSync(path.join(bin, target), { recursive: true });
+                fs.writeFileSync(path.join(bin, target, 'onnxruntime_binding.node'), 'x');
+            }
+            await afterPack({ ...makeContext(platform), appOutDir, arch });
+            expect(fs.readdirSync(bin)).toEqual([keptOs]);
+            expect(fs.readdirSync(path.join(bin, keptOs)).sort()).toEqual(keptArchs);
+        } finally {
+            fs.rmSync(appOutDir, { recursive: true, force: true });
+        }
     });
 
     test('propagates a flipFuses failure so the build fails', async () => {

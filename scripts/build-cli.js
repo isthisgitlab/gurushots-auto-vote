@@ -51,11 +51,40 @@ async function bundleCli() {
     console.log('✅ CLI bundled');
 }
 
+// Each CLI target is built on its native runner, so the embedded runtime only
+// ever loads this host's onnxruntime-node binary; the package ships every
+// OS/arch. transformers' Node build also inlines the web runtime it uses, so
+// the standalone onnxruntime-web package is never loaded. Both are dropped
+// from the archive that the SEA binary embeds.
+function pruneVisionRuntime(pnpmDir, platform = process.platform, arch = process.arch) {
+    if (!fs.existsSync(pnpmDir)) return;
+    const remove = (target) => fs.rmSync(target, { recursive: true, force: true });
+    for (const entry of fs.readdirSync(pnpmDir)) {
+        if (entry.startsWith('onnxruntime-web@')) {
+            remove(path.join(pnpmDir, entry));
+            continue;
+        }
+        const binRoot = path.join(pnpmDir, entry, 'node_modules', 'onnxruntime-node', 'bin');
+        if (!entry.startsWith('onnxruntime-node@') || !fs.existsSync(binRoot)) continue;
+        for (const napi of fs.readdirSync(binRoot)) {
+            for (const os of fs.readdirSync(path.join(binRoot, napi))) {
+                const osDir = path.join(binRoot, napi, os);
+                if (os !== platform) {
+                    remove(osDir);
+                    continue;
+                }
+                for (const cpu of fs.readdirSync(osDir)) if (cpu !== arch) remove(path.join(osDir, cpu));
+            }
+        }
+    }
+}
+
 async function prepareVisionRuntime() {
     const modelDir = await ensureVisionModel();
     const deployDir = path.join(ROOT, '.cache', 'vision-cli-deploy');
     fs.rmSync(deployDir, { recursive: true, force: true });
     execFileSync('pnpm', ['deploy', '--prod', '--ignore-scripts', deployDir], { cwd: ROOT, stdio: 'inherit' });
+    pruneVisionRuntime(path.join(deployDir, 'node_modules', '.pnpm'));
     fs.cpSync(modelDir, path.join(deployDir, 'vision-model'), { recursive: true });
     const archive = path.join(BUILD_DIR, 'vision-runtime.tar.gz');
     execFileSync('tar', ['-czf', archive, '-C', deployDir, 'node_modules', 'vision-model'], { stdio: 'inherit' });
@@ -205,6 +234,7 @@ module.exports = {
     platforms,
     ensureDir,
     bundleCli,
+    pruneVisionRuntime,
     prepareVisionRuntime,
     generateSeaBlob,
     getOfficialNodeBinary,

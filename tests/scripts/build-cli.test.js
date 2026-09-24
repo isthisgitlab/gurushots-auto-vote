@@ -302,3 +302,41 @@ describe('build-cli', () => {
         });
     });
 });
+
+describe('pruneVisionRuntime', () => {
+    const os = require('node:os');
+    let pnpmDir;
+    const tree = (...parts) => path.join(pnpmDir, ...parts);
+    const onnxBin = (...parts) => tree('onnxruntime-node@1.0.0', 'node_modules', 'onnxruntime-node', 'bin', ...parts);
+
+    beforeEach(() => {
+        jest.restoreAllMocks();
+        pnpmDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vision-prune-'));
+        for (const target of ['darwin/arm64', 'darwin/x64', 'linux/x64', 'win32/x64']) {
+            fs.mkdirSync(onnxBin('napi-v6', target), { recursive: true });
+        }
+        fs.mkdirSync(tree('onnxruntime-web@1.0.0', 'node_modules', 'onnxruntime-web'), { recursive: true });
+        fs.mkdirSync(tree('onnxruntime-node@2.0.0-no-bin'), { recursive: true });
+        fs.mkdirSync(tree('sharp@1.0.0'), { recursive: true });
+    });
+    afterEach(() => fs.rmSync(pnpmDir, { recursive: true, force: true }));
+
+    test('keeps only the host onnxruntime binary and drops the unused web runtime', () => {
+        buildCli.pruneVisionRuntime(pnpmDir, 'darwin', 'arm64');
+        expect(fs.readdirSync(pnpmDir).sort()).toEqual([
+            'onnxruntime-node@1.0.0',
+            'onnxruntime-node@2.0.0-no-bin',
+            'sharp@1.0.0',
+        ]);
+        expect(fs.readdirSync(onnxBin('napi-v6'))).toEqual(['darwin']);
+        expect(fs.readdirSync(onnxBin('napi-v6', 'darwin'))).toEqual(['arm64']);
+    });
+
+    test('defaults to the build host and tolerates a missing store', () => {
+        buildCli.pruneVisionRuntime(pnpmDir);
+        expect(fs.readdirSync(onnxBin('napi-v6'))).toEqual(
+            ['darwin', 'linux', 'win32'].filter((platform) => platform === process.platform),
+        );
+        expect(() => buildCli.pruneVisionRuntime(path.join(pnpmDir, 'missing'))).not.toThrow();
+    });
+});

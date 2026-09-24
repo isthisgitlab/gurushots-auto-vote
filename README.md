@@ -43,7 +43,7 @@ The desktop app now enforces this for GUI instances: launching it a second time 
 - **Final-window exposure** — a separate, usually lower exposure ceiling for a configurable window before close (default the final hour).
 - **Boost** — auto-applies boost near the deadline, on a chosen entry slot.
 - **Turbo (earn + apply)** — auto-plays the mini-game to _earn_ turbo, then auto-_applies_ it to a chosen entry before the deadline.
-- **Auto-fill** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, theme-aware photo selection, and an emergency safety net.
+- **Auto-fill** — submits photos into empty entry slots near the deadline, staggered to avoid vote dilution, with tag filters, theme-aware photo selection double-checked by an on-device image model, and an emergency safety net.
 - **Auto-join** — discovers open (un-joined) challenges and joins them automatically (off by default); once on it joins all of them by default, narrowed by an include/exclude challenge-type list or a saved title profile. Paid challenges are gated by per-challenge and per-cycle coin caps and never charged without a completed join. Manual joining is available too, via a collapsible "Discover" list in the GUI and the `discover`/`join` CLI commands.
 - **Bankroll display** — shows your keys / swaps / fills / coins next to the timer in the GUI and via the `bankroll` (alias `coins`) CLI command.
 - **Per-challenge overrides** — every voting setting has a global default that any individual challenge can override.
@@ -62,19 +62,21 @@ The desktop app now enforces this for GUI instances: launching it a second time 
 
 | Platform          | Download                                                                                                                                                             | Size    | Type                |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------------------- |
-| **Windows**       | [📥 GuruShotsAutoVote-v1.8.5-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x64.exe)                 | ~96 MB  | Portable Executable |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.8.5-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.dmg)             | ~108 MB | DMG Installer       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.8.5-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.app.zip)     | ~120 MB | App Bundle (ZIP)    |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.8.5-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x86_64.AppImage) | ~98 MB  | AppImage            |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.8.5-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.AppImage)   | ~91 MB  | AppImage            |
+| **Windows**       | [📥 GuruShotsAutoVote-v1.8.5-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x64.exe)                 | ~270 MB | Portable Executable |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.8.5-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.dmg)             | ~310 MB | DMG Installer       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.8.5-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.app.zip)     | ~335 MB | App Bundle (ZIP)    |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.8.5-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x86_64.AppImage) | ~270 MB | AppImage            |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.8.5-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.AppImage)   | ~255 MB | AppImage            |
 
 > **macOS:** Apple Silicon (arm64) only — there is no Intel (x86_64) build. The **DMG** is the simplest install; the **APP** zip is an alternative if you'd rather drop the bundle in yourself.
+
+> **Why the downloads are large:** every build (GUI, Android, and CLI) ships a ~200 MB image-recognition model (Google SigLIP, 8-bit quantized) plus its runtime. Auto-fill uses it to check that a photo actually shows the challenge's subject — see [Visual check](#auto-fill-missing-entries). It runs entirely on your device: nothing is downloaded on first use, no API key or account is needed, and no photo is uploaded anywhere.
 
 #### 📱 Mobile (Android sideload — no Play Store)
 
 | Platform                     | Download                                                                                                                                     | Size    | Type       |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------- |
-| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.8.5.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5.apk) | ~5.2 MB | Signed APK |
+| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.8.5.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5.apk) | ~160 MB | Signed APK |
 
 The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin plugin that runs voting cycles natively in the background via `AlarmManager` and a foreground service. Voting continues with the phone locked and the app swiped away from recents.
 
@@ -82,9 +84,9 @@ The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin
 
 | Platform              | Download                                                                                                                             | Size    | Type                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------- | ------------------- |
-| **macOS CLI**         | [📥 gurucli-v1.8.5-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-mac)             | ~101 MB | Terminal Executable |
-| **Linux CLI (x64)**   | [📥 gurucli-v1.8.5-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux)         | ~113 MB | Terminal Executable |
-| **Linux CLI (ARM64)** | [📥 gurucli-v1.8.5-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-arm) | ~111 MB | Terminal Executable |
+| **macOS CLI**         | [📥 gurucli-v1.8.5-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-mac)             | ~375 MB | Terminal Executable |
+| **Linux CLI (x64)**   | [📥 gurucli-v1.8.5-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux)         | ~355 MB | Terminal Executable |
+| **Linux CLI (ARM64)** | [📥 gurucli-v1.8.5-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-arm) | ~350 MB | Terminal Executable |
 
 > There is no Windows CLI build — on Windows, use the GUI app above.
 
@@ -117,6 +119,8 @@ Prefer a specific version? Browse **[all releases](https://github.com/isthisgitl
 4. Clear the quarantine flag (browser downloads only): `xattr -d com.apple.quarantine ./gurucli-v1.8.5-mac`
 5. Run: `./gurucli-v1.8.5-mac help`
 
+The first time the CLI fills a slot, it unpacks its bundled image model and runtime (~560 MB) into `~/Library/Application Support/gurushots-auto-vote/vision/`. This happens once per version; after unpacking, a new version removes older copies that haven't been used in the last hour.
+
 #### 🐧 Linux
 
 **GUI (AppImage):**
@@ -131,6 +135,8 @@ Prefer a specific version? Browse **[all releases](https://github.com/isthisgitl
 2. `cd ~/Downloads`
 3. `chmod +x gurucli-v1.8.5-linux`
 4. `./gurucli-v1.8.5-linux help`
+
+The first time the CLI fills a slot, it unpacks its bundled image model and runtime (~550 MB) into `~/.config/gurushots-auto-vote/vision/`. This happens once per version; after unpacking, a new version removes older copies that haven't been used in the last hour.
 
 #### 📱 Android (sideload)
 
@@ -276,6 +282,7 @@ When a challenge allows multiple submissions and you've left slots empty, those 
 - **Tag filters** — `mustIncludeTags` is a hard filter (only photos matching all tags are eligible); `shouldIncludeTags` is a soft preference. `fillWithoutTagMatch` decides what happens when must-include tags are set but nothing matches every tag: fill anyway (default) or leave the slot empty.
 - **Per-title tag rules** — because GuruShots recycles each challenge under a fresh ID every rotation, ID-keyed overrides are lost. Tag rules keyed on the (stable) challenge title are matched case-insensitively and merged into the effective must/should-include tag lists at fill time. Managed in the GUI Settings modal under **Per-Title Tag Rules** (GUI only).
 - **Photo selection** — candidates are gathered with an always-on server-side themed search against GuruShots' own tag index — using your must/should-include tags when set, otherwise keywords from the challenge title — and fall back to your full eligible library if that surfaces nothing. Each candidate is then ranked by an always-on semantic theme score (how well it fits the challenge, `0`–`1`) — with keyword/stem matching against the photo's vision labels as the fallback when semantic data is unavailable — and ties broken by achievement count, total votes, views, then upload date.
+- **Visual check** — before a photo is submitted, an on-device image model looks at the top 12 ranked candidates and compares each one with the challenge — its title subject (series prefix, negated words like "No Humans", and your `ignoreTitleWords` removed) and the opening of its description (HTML and the standard rewards text stripped). Photos that clearly don't show the subject move behind the ones that do; among the photos that pass, the ranking above is kept, so popularity still decides. It works on every challenge with no configuration. It never leaves a slot empty: when the title has no visual subject ("Photo of the Day", "Guru of The Week"), when no photo clearly matches (abstract themes like "It's all About Balance"), or when the model can't run, the ranking above is used unchanged. The same check runs for auto-fill, emergency fill, the `+1`/`+N` buttons, fill-new boost/turbo, swaps, and auto-join. It takes about 1–1.5 s per challenge on a desktop CPU and longer on a phone; the model loads once, on the first fill after launch.
 - **Fill-new boost/turbo** — with `boostFillNew` / `turboFillNew` on, auto-fill submits a fresh photo and immediately boosts / turbos that new entry, so an available boost or turbo isn't left unused on an empty slot.
 - **Manual buttons** — each card with empty slots shows **`+1`** (submit the best-ranked photo into one slot) and **`+N`** (fill all remaining slots at once, ignoring the spacing). Manual clicks ignore the `autoFill` toggle and are disabled while auto-vote is running.
 
@@ -287,7 +294,7 @@ Newly-filled entries are picked up by the boost and turbo gates on the _next_ cy
 
 ### Auto-join challenges
 
-Everything above operates on challenges you've already joined. **Auto-join** (off by default) discovers **open, un-joined** challenges each cycle and joins the ones you want. It runs as a pre-step before voting on every platform (GUI, CLI `start`, Android), and joining a challenge means submitting a photo — auto-join reuses the same photo picker as auto-fill (tags, themed search, semantic ranking).
+Everything above operates on challenges you've already joined. **Auto-join** (off by default) discovers **open, un-joined** challenges each cycle and joins the ones you want. It runs as a pre-step before voting on every platform (GUI, CLI `start`, Android), and joining a challenge means submitting a photo — auto-join reuses the same photo picker as auto-fill (tags, themed search, semantic ranking, visual check).
 
 - **Scope — which challenges get joined.** Turn on `autoJoin` and it joins **all** open challenges by default; narrow it with the type lists (optional):
     - `autoJoinTypes` — an **include** list of challenge types, comma-separated (e.g. `flash,contest`). Leave it **empty to join all types** (the default).
@@ -431,6 +438,8 @@ Files are rotated daily (`<type>-YYYY-MM-DD.log`) and auto-pruned by age and siz
 
 From the CLI, tail any of them with `logs [--error|--api|--settings] [--lines=<n>]`. Credentials are redacted before anything is written to disk.
 
+The visual check logs under the `autoFill` category: `Visual check reordered picks for [Challenge …]` when it changed which photo gets submitted, and `Visual check unavailable for [Challenge …]` when the model couldn't run (the tag ranking was used instead). No line means it agreed with the ranking or abstained.
+
 ## 🔍 Troubleshooting
 
 **"No authentication token found" / "Token expired"** — log in again from the login screen (CLI: run `login`). Tokens are tied to your account; if it keeps happening, check your system clock.
@@ -440,6 +449,8 @@ From the CLI, tail any of them with `logs [--error|--api|--settings] [--lines=<n
 **"API Rate Limit Exceeded" / "Too Many Requests"** — stop **all** instances (GUI and CLI), wait 5–10 minutes, and make sure only one is running.
 
 **Auto-vote runs but nothing happens** — confirm you have active challenges, that your exposure isn't already at the trigger (default 100%), and that `voteOnlyInLastMinute` isn't on while challenges are still outside their last-minute window. Check the logs for the per-challenge skip reason.
+
+**Auto-fill picked an off-theme photo** — the visual check only chooses among the top 12 candidates the tag search found, so if none of them shows the subject it can't help: add `mustIncludeTags`/`shouldIncludeTags` for that challenge (or a per-title tag rule) so better candidates reach the shortlist. A `Visual check unavailable` log line means the image model failed to load or run; the CLI unpacks its model on first use (see [Install per platform](#install-per-platform)), so check free disk space.
 
 **Window opens off-screen** — restart the app; from the CLI run `reset-windows`.
 
@@ -455,6 +466,7 @@ If you're still stuck, check the logs and [open an issue](https://github.com/ist
 - Credentials are redacted from logs — sensitive keys are masked before any log write.
 - Your token is stored locally in the app's settings file and is sent only to GuruShots; settings and config never leave your device.
 - Error messages don't expose sensitive information.
+- The auto-fill image check runs locally with a bundled model; it only downloads your own photo thumbnails from GuruShots and sends nothing to any other service.
 
 ## 📄 License & Support
 

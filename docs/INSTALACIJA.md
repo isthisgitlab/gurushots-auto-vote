@@ -37,7 +37,7 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 - **Beigu loga ekspozīcija** — atsevišķs, parasti zemāks ekspozīcijas slieksnis konfigurējamam beigu logam (noklusējums pēdējā stunda).
 - **Boost** — automātiski pielieto boost tuvu beigām, izvēlētajai foto vietai.
 - **Turbo (iegūt + pielietot)** — automātiski spēlē mini-spēli, lai _iegūtu_ turbo, pēc tam automātiski _pielieto_ to izvēlētajai foto vietai pirms beigām.
-- **Auto-aizpilde** — iesniedz fotogrāfijas tukšajās foto vietās tuvu beigām, ar laika atstarpi, lai izvairītos no balsu atšķaidīšanas, ar tagu filtriem, tematiski atbilstošu foto izvēli un avārijas drošības tīklu.
+- **Auto-aizpilde** — iesniedz fotogrāfijas tukšajās foto vietās tuvu beigām, ar laika atstarpi, lai izvairītos no balsu atšķaidīšanas, ar tagu filtriem, tematiski atbilstošu foto izvēli, ko papildus pārbauda ierīcē strādājošs attēlu modelis, un avārijas drošības tīklu.
 - **Auto-pievienošanās** — atrod atvērtos (nepievienotos) izaicinājumus un pievienojas tiem automātiski (pēc noklusējuma izslēgts); kad ieslēgts, pēc noklusējuma pievienojas visiem, sašaurinot ar tipu iekļaušanas/izslēgšanas sarakstu vai saglabātu nosaukuma profilu. Maksas izaicinājumus ierobežo monētu limiti (par izaicinājumu un ciklā), un monētas nekad netiek tērētas bez pabeigtas pievienošanās. Pieejama arī manuāla pievienošanās — sakļaujams "Atklāt" saraksts grafiskajā lietotnē un `discover`/`join` CLI komandas.
 - **Konta atlikums** — parāda jūsu atslēgas / maiņas / aizpildes / monētas blakus taimerim grafiskajā lietotnē un ar `bankroll` (alias `coins`) CLI komandu.
 - **Iestatījumi katram izaicinājumam** — katram balsošanas iestatījumam ir globālais noklusējums, ko jebkurš izaicinājums var pārrakstīt.
@@ -56,19 +56,21 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 
 | Platforma         | Lejupielāde                                                                                                                                                          | Izmērs  | Tips                  |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------- |
-| **Windows**       | [📥 GuruShotsAutoVote-v1.8.5-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x64.exe)                 | ~96 MB  | Portatīva izpildfaila |
-| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.8.5-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.dmg)             | ~108 MB | DMG instalētājs       |
-| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.8.5-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.app.zip)     | ~120 MB | App komplekts (ZIP)   |
-| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.8.5-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x86_64.AppImage) | ~98 MB  | AppImage              |
-| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.8.5-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.AppImage)   | ~91 MB  | AppImage              |
+| **Windows**       | [📥 GuruShotsAutoVote-v1.8.5-x64.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x64.exe)                 | ~270 MB | Portatīva izpildfaila |
+| **macOS (DMG)**   | [📥 GuruShotsAutoVote-v1.8.5-arm64.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.dmg)             | ~310 MB | DMG instalētājs       |
+| **macOS (APP)**   | [📥 GuruShotsAutoVote-v1.8.5-arm64.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.app.zip)     | ~335 MB | App komplekts (ZIP)   |
+| **Linux (x64)**   | [📥 GuruShotsAutoVote-v1.8.5-x86_64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x86_64.AppImage) | ~270 MB | AppImage              |
+| **Linux (ARM64)** | [📥 GuruShotsAutoVote-v1.8.5-arm64.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64.AppImage)   | ~255 MB | AppImage              |
 
 > **macOS:** tikai Apple Silicon (arm64) — Intel (x86_64) būvējuma nav. **DMG** ir vienkāršākā instalācija; **APP** zip ir alternatīva, ja vēlaties ievietot komplektu pats.
+
+> **Kāpēc lejupielādes ir lielas:** katrā būvējumā (grafiskajā lietotnē, Android un CLI) ir iekļauts ~200 MB attēlu atpazīšanas modelis (Google SigLIP, 8 bitu kvantizēts) un tā izpildvide. Auto-aizpilde to izmanto, lai pārbaudītu, vai fotogrāfijā tiešām redzams izaicinājuma temats — skatiet [Vizuālā pārbaude](#trūkstošo-ierakstu-auto-aizpilde). Tas darbojas tikai jūsu ierīcē: pirmajā lietošanas reizē nekas netiek lejupielādēts, nav vajadzīga API atslēga vai konts, un neviena fotogrāfija netiek nekur augšupielādēta.
 
 #### 📱 Mobilā lietotne (Android, sānielāde — bez Play Store)
 
 | Platforma                     | Lejupielāde                                                                                                                                  | Izmērs  | Tips           |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------------- |
-| **Android (8.0+, sānielāde)** | [📥 GuruShotsAutoVote-v1.8.5.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5.apk) | ~5.2 MB | Parakstīts APK |
+| **Android (8.0+, sānielāde)** | [📥 GuruShotsAutoVote-v1.8.5.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5.apk) | ~160 MB | Parakstīts APK |
 
 Android versija ir Capacitor apvalks ap to pašu React saskarni plus Kotlin spraudnis, kas balsošanas ciklus izpilda native līmenī fonā ar `AlarmManager` un foreground servisu. Balsošana turpinās, kad telefons ir bloķēts un lietotne aizvilkta no nesenajiem.
 
@@ -76,9 +78,9 @@ Android versija ir Capacitor apvalks ap to pašu React saskarni plus Kotlin spra
 
 | Platforma             | Lejupielāde                                                                                                                          | Izmērs  | Tips                  |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------- | --------------------- |
-| **macOS CLI**         | [📥 gurucli-v1.8.5-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-mac)             | ~101 MB | Termināļa izpildfaila |
-| **Linux CLI (x64)**   | [📥 gurucli-v1.8.5-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux)         | ~113 MB | Termināļa izpildfaila |
-| **Linux CLI (ARM64)** | [📥 gurucli-v1.8.5-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-arm) | ~111 MB | Termināļa izpildfaila |
+| **macOS CLI**         | [📥 gurucli-v1.8.5-mac](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-mac)             | ~375 MB | Termināļa izpildfaila |
+| **Linux CLI (x64)**   | [📥 gurucli-v1.8.5-linux](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux)         | ~355 MB | Termināļa izpildfaila |
+| **Linux CLI (ARM64)** | [📥 gurucli-v1.8.5-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-arm) | ~350 MB | Termināļa izpildfaila |
 
 > Windows CLI būvējuma nav — uz Windows izmantojiet augšā esošo grafisko lietotni.
 
@@ -111,6 +113,8 @@ Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.c
 4. Notīriet karantīnas karogu (tikai pārlūka lejupielādēm): `xattr -d com.apple.quarantine ./gurucli-v1.8.5-mac`
 5. Palaidiet: `./gurucli-v1.8.5-mac help`
 
+Pirmajā reizē, kad CLI aizpilda vietu, tā izpako iekļauto attēlu modeli un izpildvidi (~560 MB) mapē `~/Library/Application Support/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jauna versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
+
 #### 🐧 Linux
 
 **Grafiskā lietotne (AppImage):**
@@ -125,6 +129,8 @@ Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.c
 2. `cd ~/Downloads`
 3. `chmod +x gurucli-v1.8.5-linux`
 4. `./gurucli-v1.8.5-linux help`
+
+Pirmajā reizē, kad CLI aizpilda vietu, tā izpako iekļauto attēlu modeli un izpildvidi (~550 MB) mapē `~/.config/gurushots-auto-vote/vision/`. Tas notiek vienreiz katrai versijai; pēc izpakošanas jauna versija izdzēš vecākās kopijas, kas pēdējā stundā nav izmantotas.
 
 #### 📱 Android (sānielāde)
 
@@ -265,6 +271,7 @@ Kad izaicinājums ļauj iesniegt vairākas fotogrāfijas un esat atstājuši tuk
 - **Tagu filtri** — `mustIncludeTags` ir cietais filtrs (atbilstošas tikai fotogrāfijas ar visiem tagiem); `shouldIncludeTags` ir mīkstā preference. `fillWithoutTagMatch` izlemj, kas notiek, kad must-include tagi ir iestatīti, bet nekas neatbilst visiem tagiem: tomēr aizpildīt (noklusējums) vai atstāt vietu tukšu.
 - **Tagu noteikumi pēc nosaukuma** — tā kā GuruShots katrā rotācijā atkārto izaicinājumu ar jaunu ID, ID piesaistītie pārrakstījumi tiek zaudēti. Tagu noteikumi, kas piesaistīti (stabilajam) izaicinājuma nosaukumam, tiek salīdzināti reģistrnejutīgi un aizpildes brīdī apvienoti efektīvajos must/should-include tagu sarakstos. Pārvaldāmi grafiskās lietotnes Iestatījumu logā sadaļā **Tagu noteikumi pēc nosaukuma** (tikai grafiskajā lietotnē).
 - **Fotogrāfiju izvēle** — kandidātus savāc ar vienmēr ieslēgtu servera puses tematisko meklēšanu paša GuruShots tagu indeksā — izmantojot jūsu must/should-include tagus, ja tie ir iestatīti, citādi atslēgvārdus no izaicinājuma nosaukuma — un atkāpjoties uz jūsu pilno atbilstošo bibliotēku, ja tā neko neuzrāda. Pēc tam katru kandidātu ranžē vienmēr ieslēgts semantiskais tēmas rezultāts (cik labi tas atbilst izaicinājumam, `0`–`1`) — ar atslēgvārdu/saknes salīdzināšanu pret fotogrāfijas vīzijas iezīmēm kā rezerves variantu, kad semantiskie dati nav pieejami — un neizšķirtus gadījumus risina pēc sasniegumu skaita, kopējā balsu skaita, skatījumu skaita, tad augšupielādes datuma.
+- **Vizuālā pārbaude** — pirms fotogrāfijas iesniegšanas ierīcē strādājošs attēlu modelis apskata 12 augstāk ranžētos kandidātus un salīdzina katru ar izaicinājumu — tā nosaukuma tematu (bez sērijas priedēkļa, noliegtajiem vārdiem kā "No Humans" un jūsu `ignoreTitleWords`) un apraksta sākumu (bez HTML un standarta balvu teksta). Fotogrāfijas, kurās temats acīmredzami nav redzams, tiek pārvietotas aiz tām, kurās tas ir; starp pārbaudi izturējušajām saglabājas augstāk aprakstītā ranžēšana, tāpēc popularitāte joprojām izšķir. Darbojas katrā izaicinājumā bez iestatīšanas. Tā nekad neatstāj vietu tukšu: ja nosaukumā nav vizuāla temata ("Photo of the Day", "Guru of The Week"), ja neviena fotogrāfija skaidri neatbilst (abstraktas tēmas kā "It's all About Balance") vai ja modeli neizdodas palaist, tiek izmantota augstāk aprakstītā ranžēšana bez izmaiņām. Tā pati pārbaude darbojas auto-aizpildei, ārkārtas aizpildei, `+1`/`+N` pogām, jaunās foto boost/turbo, foto maiņai un auto-pievienošanās. Galddatora procesoram tā aizņem ~1–1,5 s katram izaicinājumam, telefonā ilgāk; modelis tiek ielādēts vienreiz, pirmajā aizpildē pēc palaišanas.
 - **Jaunās foto boost/turbo** — ar ieslēgtu `boostFillNew` / `turboFillNew` auto-aizpilde iesniedz jaunu fotogrāfiju un uzreiz pielieto boost / turbo šim jaunajam ierakstam, lai pieejamais boost vai turbo nepaliktu neizmantots tukšā vietā.
 - **Manuālās pogas** — katrai kartītei ar tukšām vietām ir **`+1`** (iesniegt labāk ranžēto fotogrāfiju vienā vietā) un **`+N`** (aizpildīt visas atlikušās vietas uzreiz, ignorējot atstarpi). Manuālie klikšķi ignorē `autoFill` slēdzi un ir atspējoti, kamēr auto-balsošana darbojas.
 
@@ -276,7 +283,7 @@ Jaunaizpildītos ierakstus boost un turbo noteikumi pamana automātiski _nākama
 
 ### Auto-pievienošanās izaicinājumiem
 
-Viss iepriekšējais darbojas ar izaicinājumiem, kuriem jau esat pievienojies. **Auto-pievienošanās** (pēc noklusējuma izslēgta) katrā ciklā atrod **atvērtos, nepievienotos** izaicinājumus un pievienojas tiem, kurus vēlaties. Tā darbojas kā solis pirms balsošanas visās platformās (grafiskā lietotne, CLI `start`, Android), un pievienošanās nozīmē foto iesniegšanu — auto-pievienošanās izmanto to pašu foto izvēli kā auto-aizpilde (tagi, tematiskā meklēšana, semantiskā ranžēšana).
+Viss iepriekšējais darbojas ar izaicinājumiem, kuriem jau esat pievienojies. **Auto-pievienošanās** (pēc noklusējuma izslēgta) katrā ciklā atrod **atvērtos, nepievienotos** izaicinājumus un pievienojas tiem, kurus vēlaties. Tā darbojas kā solis pirms balsošanas visās platformās (grafiskā lietotne, CLI `start`, Android), un pievienošanās nozīmē foto iesniegšanu — auto-pievienošanās izmanto to pašu foto izvēli kā auto-aizpilde (tagi, tematiskā meklēšana, semantiskā ranžēšana, vizuālā pārbaude).
 
 - **Tvērums — kurus izaicinājumus pievienot.** Ieslēdz `autoJoin`, un tas pēc noklusējuma pievienojas **visiem** atvērtajiem izaicinājumiem; sašaurini ar tipu sarakstiem (pēc izvēles):
     - `autoJoinTypes` — **iekļaušanas** saraksts ar izaicinājumu tipiem, atdalīti ar komatu (piem., `flash,contest`). Atstāj **tukšu, lai pievienotos visiem tipiem** (noklusējums).
@@ -415,6 +422,8 @@ Faili tiek rotēti katru dienu (`<tips>-YYYY-MM-DD.log`) un automātiski tīrīt
 
 No CLI jebkuru no tiem var apskatīt ar `logs [--error|--api|--settings] [--lines=<n>]`. Akreditācijas dati tiek aizklāti pirms jebkas tiek ierakstīts diskā.
 
+Vizuālā pārbaude raksta žurnālā kategorijā `autoFill`: `Visual check reordered picks for [Challenge …]`, ja tā mainīja iesniedzamo fotogrāfiju, un `Visual check unavailable for [Challenge …]`, ja modeli neizdevās palaist (tad tika izmantota tagu ranžēšana). Ja ieraksta nav, pārbaude piekrita ranžēšanai vai atturējās.
+
 ## 🔍 Problēmu risināšana
 
 **"Nav atrasts autentifikācijas tokens" / "Token beidzies"** — pieslēdzieties vēlreiz no pieslēgšanās ekrāna (CLI: palaidiet `login`). Tokeni ir saistīti ar jūsu kontu; ja tas atkārtojas, pārbaudiet sistēmas pulksteni.
@@ -424,6 +433,8 @@ No CLI jebkuru no tiem var apskatīt ar `logs [--error|--api|--settings] [--line
 **"API Rate Limit Exceeded" / "Too Many Requests"** — apturiet **visas** instances (grafisko lietotni un CLI), pagaidiet 5–10 minūtes un pārliecinieties, ka darbojas tikai viena.
 
 **Auto-balsošana darbojas, bet nekas nenotiek** — pārbaudiet, vai jums ir aktīvi izaicinājumi, vai ekspozīcija jau nav pie sliekšņa (noklusējums 100%), un vai `voteOnlyInLastMinute` nav ieslēgts, kamēr izaicinājumi vēl ir ārpus pēdējās minūtes loga. Pārbaudiet žurnālfailus, lai redzētu izlaišanas iemeslu katram izaicinājumam.
+
+**Auto-aizpilde izvēlējās tematam neatbilstošu fotogrāfiju** — vizuālā pārbaude izvēlas tikai starp 12 augstākajiem kandidātiem, ko atrada tagu meklēšana, tāpēc, ja nevienā no tiem temats nav redzams, tā nevar palīdzēt: pievienojiet šim izaicinājumam `mustIncludeTags`/`shouldIncludeTags` (vai tagu noteikumu pēc nosaukuma), lai sarakstā nonāktu labāki kandidāti. Žurnāla ieraksts `Visual check unavailable` nozīmē, ka attēlu modeli neizdevās ielādēt vai palaist; CLI modeli izpako pirmajā lietošanas reizē (skatiet [Instalācija katrai platformai](#instalācija-katrai-platformai)), tāpēc pārbaudiet brīvo vietu diskā.
 
 **Logs atveras ārpus ekrāna** — restartējiet lietotni; no CLI palaidiet `reset-windows`.
 
@@ -437,6 +448,7 @@ Ja joprojām esat iestrēdzis, pārbaudiet žurnālfailus un [atveriet problēmu
 - Akreditācijas dati tiek aizklāti no žurnāliem — jutīgās atslēgas tiek maskētas pirms jebkura ieraksta žurnālā.
 - Jūsu tokens tiek glabāts lokāli lietotnes iestatījumu failā un tiek nosūtīts tikai GuruShots; iestatījumi un konfigurācija nekad nepamet jūsu ierīci.
 - Kļūdu ziņojumi neatklāj jutīgu informāciju.
+- Auto-aizpildes attēlu pārbaude darbojas lokāli ar iekļautu modeli; tā tikai lejupielādē jūsu pašu fotogrāfiju sīktēlus no GuruShots un neko nesūta citiem pakalpojumiem.
 
 ## 📄 Licence un atbalsts
 

@@ -216,6 +216,10 @@ pnpm build:mac    # macOS
 pnpm build:linux  # Linux
 ```
 
+The first build needs network access: it downloads the pinned SigLIP image model (~200 MB, sha256-verified)
+into `.cache/vision-model/`, which every GUI, Android, and CLI build bundles for the auto-fill visual check.
+Later builds reuse the cache offline.
+
 ## 🤝 Code of Conduct
 
 - Be respectful and inclusive

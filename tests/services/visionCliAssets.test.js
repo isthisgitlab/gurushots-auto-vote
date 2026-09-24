@@ -66,6 +66,34 @@ describe('extraction failure paths', () => {
 
     const staging = () => fs.readdirSync(path.join(directory, 'userdata', 'vision'));
 
+    test('a new version removes finished older copies, but not recently used or unfinished ones', () => {
+        mockSea.getAsset.mockImplementation((name) => (name.endsWith('.sha256') ? digest : bytes));
+        const vision = path.join(directory, 'userdata', 'vision');
+        const finished = (name, ageMs) => {
+            fs.mkdirSync(path.join(vision, name), { recursive: true });
+            const marker = path.join(vision, name, '.ready');
+            fs.writeFileSync(marker, name);
+            const at = new Date(Date.now() - ageMs);
+            fs.utimesSync(marker, at, at);
+        };
+        finished('old-version', 2 * 60 * 60 * 1000);
+        finished('running-version', 5 * 60 * 1000);
+        fs.mkdirSync(path.join(vision, 'other-version.4242'), { recursive: true });
+
+        const result = extractVisionCliAssets();
+        expect(staging().sort()).toEqual([path.basename(result.root), 'other-version.4242', 'running-version'].sort());
+    });
+
+    test('every call marks the copy in use', () => {
+        mockSea.getAsset.mockImplementation((name) => (name.endsWith('.sha256') ? digest : bytes));
+        const { root } = extractVisionCliAssets();
+        const marker = path.join(root, '.ready');
+        const past = new Date(Date.now() - 3 * 60 * 60 * 1000);
+        fs.utimesSync(marker, past, past);
+        extractVisionCliAssets();
+        expect(Date.now() - fs.statSync(marker).mtimeMs).toBeLessThan(60 * 1000);
+    });
+
     test('a tampered embedded archive is refused and leaves no staging files', () => {
         mockSea.getAsset.mockImplementation((name) => (name.endsWith('.sha256') ? '0'.repeat(64) : bytes));
         expect(() => extractVisionCliAssets()).toThrow('Embedded vision runtime checksum mismatch');

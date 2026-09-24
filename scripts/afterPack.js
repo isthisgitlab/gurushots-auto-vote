@@ -19,11 +19,41 @@
  * swapped-in unpacked app dir (asar:true is the electron-builder default here).
  */
 
+const fs = require('fs');
 const path = require('path');
 const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
 
+/**
+ * onnxruntime-node (local image inference, services/visionVerifier.js) ships
+ * prebuilt binaries for every OS and CPU — 30–130 MB that this package can
+ * never load. They sit in app.asar.unpacked (see asarUnpack), so they are plain
+ * files here. A per-platform electron-builder `files` exclusion can't do this:
+ * a platform list holding only negations makes electron-builder fall back to
+ * packing the whole repository.
+ */
+// electron-builder's Arch enum (builder-util) → onnxruntime's directory names.
+// Anything else (universal) keeps every architecture.
+const ONNX_ARCH_DIRS = Object.freeze({ 1: 'x64', 3: 'arm64' });
+
+const pruneForeignOnnxBinaries = (resourcesDir, targetOs, targetArch) => {
+    const binRoot = path.join(resourcesDir, 'app.asar.unpacked', 'node_modules', 'onnxruntime-node', 'bin');
+    if (!fs.existsSync(binRoot)) return;
+    const remove = (target) => fs.rmSync(target, { recursive: true, force: true });
+    for (const napi of fs.readdirSync(binRoot)) {
+        for (const os of fs.readdirSync(path.join(binRoot, napi))) {
+            const osDir = path.join(binRoot, napi, os);
+            if (os !== targetOs) {
+                remove(osDir);
+                continue;
+            }
+            if (!targetArch) continue;
+            for (const cpu of fs.readdirSync(osDir)) if (cpu !== targetArch) remove(path.join(osDir, cpu));
+        }
+    }
+};
+
 exports.default = async function afterPack(context) {
-    const { appOutDir, packager, electronPlatformName } = context;
+    const { appOutDir, packager, electronPlatformName, arch } = context;
     const productName = packager.appInfo.productFilename;
     const isMac = electronPlatformName === 'darwin' || electronPlatformName === 'mas';
 
@@ -42,6 +72,13 @@ exports.default = async function afterPack(context) {
         // whole Linux/Linux-ARM build.
         electronBinary = path.join(appOutDir, packager.executableName);
     }
+
+    // Before the fuse flip, whose ad-hoc re-sign must cover the final tree.
+    pruneForeignOnnxBinaries(
+        isMac ? path.join(appOutDir, `${productName}.app`, 'Contents', 'Resources') : path.join(appOutDir, 'resources'),
+        isMac ? 'darwin' : electronPlatformName,
+        ONNX_ARCH_DIRS[arch],
+    );
 
     await flipFuses(electronBinary, {
         version: FuseVersion.V1,
