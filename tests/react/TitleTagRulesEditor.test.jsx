@@ -1,6 +1,6 @@
 /**
  * Component tests for TitleTagRulesEditor.jsx — the controlled list editor
- * for title→tags rules in the global settings modal. The translation manager
+ * for challenge rules in the global settings modal. The translation manager
  * mock returns each key verbatim, so labels/placeholders are the i18n keys.
  */
 
@@ -260,6 +260,111 @@ describe('TitleTagRulesEditor', () => {
                 { title: 'A', mustIncludeTags: [], shouldIncludeTags: [] },
                 { title: 'B', mustIncludeTags: [], shouldIncludeTags: ['sky'] },
             ]);
+        });
+    });
+
+    /**
+     * Class conditions (type, photo count, runtime range), the ordering
+     * controls, and the broad-rule warning.
+     */
+    describe('class conditions and ordering', () => {
+        const row = (over = {}) => ({ title: '', mustIncludeTags: [], shouldIncludeTags: [], ...over });
+        const pick = (label, next) => {
+            const select = screen.getByLabelText(label);
+            select.value = next;
+            select.dispatchEvent(new window.Event('change', { bubbles: true }));
+        };
+
+        test('editing the challenge type emits it and the suggestions render', () => {
+            const onChange = jest.fn();
+            const { container } = render(
+                <TitleTagRulesEditor value={[row()]} onChange={onChange} types={['default', 'flash']} />,
+            );
+            fireEvent.change(screen.getByLabelText('app.titleRuleType'), { target: { value: 'flash' } });
+            expect(onChange).toHaveBeenCalledWith([row({ type: 'flash' })]);
+            const options = Array.from(container.querySelectorAll('#gs-rule-types option')).map((o) => o.value);
+            expect(options).toEqual(['default', 'flash']);
+        });
+
+        test('the photo count emits a number, and Any emits the empty sentinel', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={[row({ pics: 2 })]} onChange={onChange} />);
+            expect(screen.getByLabelText('app.titleRulePics').value).toBe('2');
+            pick('app.titleRulePics', '4');
+            expect(onChange).toHaveBeenLastCalledWith([row({ pics: 4 })]);
+            pick('app.titleRulePics', '');
+            expect(onChange).toHaveBeenLastCalledWith([row({ pics: '' })]);
+        });
+
+        test('the runtime range emits numbers and an empty field emits "any"', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={[row({ maxHours: 24 })]} onChange={onChange} />);
+            expect(screen.getByLabelText('app.titleRuleMinHours').value).toBe('');
+            expect(screen.getByLabelText('app.titleRuleMaxHours').value).toBe('24');
+            fireEvent.change(screen.getByLabelText('app.titleRuleMinHours'), { target: { value: '168' } });
+            expect(onChange).toHaveBeenLastCalledWith([row({ maxHours: 24, minHours: 168 })]);
+            fireEvent.change(screen.getByLabelText('app.titleRuleMaxHours'), { target: { value: '' } });
+            expect(onChange).toHaveBeenLastCalledWith([row({ maxHours: '' })]);
+        });
+
+        test('the percent join anchor emits a number and caps at 99', () => {
+            const onChange = jest.fn();
+            render(<TitleTagRulesEditor value={[row()]} onChange={onChange} />);
+            const input = screen.getByLabelText('app.titleRulePercentElapsed');
+            expect(input.getAttribute('max')).toBe('99');
+            fireEvent.change(input, { target: { value: '75' } });
+            expect(onChange).toHaveBeenLastCalledWith([row({ autoJoinAfterPercentElapsed: 75 })]);
+        });
+
+        test('rules move up and down; the arrows at the ends are disabled', () => {
+            const onChange = jest.fn();
+            const value = [row({ pics: 4 }), row({ title: 'A' })];
+            render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+            expect(screen.getByLabelText('app.titleRuleMoveUp 1').disabled).toBe(true);
+            expect(screen.getByLabelText('app.titleRuleMoveDown 2').disabled).toBe(true);
+            fireEvent.click(screen.getByLabelText('app.titleRuleMoveDown 1'));
+            expect(onChange).toHaveBeenLastCalledWith([value[1], value[0]]);
+            fireEvent.click(screen.getByLabelText('app.titleRuleMoveUp 2'));
+            expect(onChange).toHaveBeenLastCalledWith([value[1], value[0]]);
+        });
+
+        test('the order hint and sort button appear only with several rules', () => {
+            const { rerender } = render(<TitleTagRulesEditor value={[row({ pics: 4 })]} onChange={jest.fn()} />);
+            expect(screen.queryByText('app.titleRuleSortDefault')).toBeNull();
+            expect(screen.queryByText('app.titleRuleOrderHint')).toBeNull();
+            rerender(<TitleTagRulesEditor value={[row({ pics: 4 }), row({ title: 'A' })]} onChange={jest.fn()} />);
+            expect(screen.getByText('app.titleRuleOrderHint')).toBeTruthy();
+        });
+
+        test('sorting puts title rules first, then photos + runtime, photos, runtime', () => {
+            const onChange = jest.fn();
+            const runtime = row({ minHours: 168 });
+            const pics = row({ pics: 4 });
+            const both = row({ pics: 4, minHours: 168 });
+            const titled = row({ title: 'Hats' });
+            render(<TitleTagRulesEditor value={[runtime, pics, both, titled]} onChange={onChange} />);
+            fireEvent.click(screen.getByText('app.titleRuleSortDefault'));
+            expect(onChange).toHaveBeenCalledWith([titled, both, pics, runtime]);
+        });
+
+        test('a title-less rule that turns auto-join or auto-submit on shows the broad warning', () => {
+            const { rerender } = render(
+                <TitleTagRulesEditor value={[row({ pics: 4, autoJoin: true })]} onChange={jest.fn()} />,
+            );
+            expect(screen.getByText('app.titleRuleBroadWarning')).toBeTruthy();
+            rerender(<TitleTagRulesEditor value={[row({ pics: 4, autoFill: true })]} onChange={jest.fn()} />);
+            expect(screen.getByText('app.titleRuleBroadWarning')).toBeTruthy();
+        });
+
+        test('no broad warning for a titled rule, an Off value, or a rule with no condition yet', () => {
+            const { rerender } = render(
+                <TitleTagRulesEditor value={[row({ title: 'A', autoJoin: true })]} onChange={jest.fn()} />,
+            );
+            expect(screen.queryByText('app.titleRuleBroadWarning')).toBeNull();
+            rerender(<TitleTagRulesEditor value={[row({ pics: 4, autoJoin: false })]} onChange={jest.fn()} />);
+            expect(screen.queryByText('app.titleRuleBroadWarning')).toBeNull();
+            rerender(<TitleTagRulesEditor value={[row({ autoJoin: true })]} onChange={jest.fn()} />);
+            expect(screen.queryByText('app.titleRuleBroadWarning')).toBeNull();
         });
     });
 });

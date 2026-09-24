@@ -438,77 +438,6 @@ describe('SettingsModal tier bands', () => {
     });
 });
 
-/**
- * Category join-timing rules render INSIDE the auto-join group, not as a
- * section of their own — they override nothing but that group's timing keys,
- * so splitting them off puts the rules far from the setting they modify.
- *
- * Worth pinning because the placement is a string comparison on the group id:
- * a typo there hides the whole editor with no error anywhere, and the rest of
- * this suite renders an empty schema, so nothing else would notice.
- */
-describe('SettingsModal \u2014 category rules placement', () => {
-    const withAutoJoinGroup = () => {
-        mockSchemaState.schema = {
-            autoJoin: { type: 'boolean', default: false, group: 'autoJoin', label: 'app.autoJoin' },
-        };
-        mockSchemaState.groups = [{ id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' }];
-        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
-    };
-
-    afterEach(() => {
-        // Mirrors the tier-bands describe's reset exactly, `defaults` included.
-        // This describe never touches `defaults`, but an incomplete teardown is
-        // a trap for whatever describe gets inserted after it.
-        mockSchemaState.schema = {};
-        mockSchemaState.defaults = {};
-        mockSchemaState.groups = undefined;
-        mockSchemaState.tiers = undefined;
-    });
-
-    test('the editor renders within the auto-join group, not as a standalone section', () => {
-        withAutoJoinGroup();
-        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-
-        // The editor is present at all (its empty-state line is the cheapest
-        // stable marker — the translation manager returns keys in tests).
-        const marker = screen.getByText('app.noCategoryRules');
-        expect(marker).not.toBeNull();
-
-        // ...and it is nested under the auto-join group's heading rather than a
-        // sibling of it. Walking up from the editor must reach the element that
-        // also contains the group heading.
-        const groupHeading = screen.getByText('app.groupAutoJoin');
-        const group = groupHeading.parentElement;
-        expect(group.contains(marker)).toBe(true);
-    });
-
-    test('the editor does not leak into a DIFFERENT group', () => {
-        // A rendered group that is NOT auto-join. This is the case that actually
-        // exercises the `id === 'autoJoin'` comparison: with the suite's empty
-        // default schema tierSchemaEntries returns [] and the loop never runs at
-        // all, so that version proved nothing about the id check.
-        mockSchemaState.schema = {
-            mockMode: { type: 'boolean', default: false, group: 'general', label: 'app.mockMode' },
-        };
-        mockSchemaState.groups = [{ id: 'general', label: 'app.groupGeneral', tier: 'entries' }];
-        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
-
-        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-
-        // The group really did render — otherwise the absence below is vacuous.
-        expect(screen.getByText('app.groupGeneral')).not.toBeNull();
-        expect(screen.queryByText('app.noCategoryRules')).toBeNull();
-    });
-
-    test('with nothing rendered at all, the editor is not orphaned outside the loop', () => {
-        // Empty schema: guards against a standalone always-rendered section
-        // being reintroduced outside the tier-band loop (what this replaced).
-        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        expect(screen.queryByText('app.noCategoryRules')).toBeNull();
-    });
-});
-
 const clickButtonByText = (text, index = 0) => {
     const buttons = Array.from(document.querySelectorAll('button')).filter((b) => b.textContent.trim() === text);
     fireEvent.click(buttons[index]);
@@ -698,14 +627,6 @@ describe('SettingsModal — timezone select and custom zones', () => {
 });
 
 describe('SettingsModal — rule loading', () => {
-    const withAutoJoinGroup = () => {
-        mockSchemaState.schema = {
-            autoJoin: { type: 'boolean', default: false, group: 'autoJoin', label: 'app.autoJoin' },
-        };
-        mockSchemaState.groups = [{ id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' }];
-        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
-    };
-
     afterEach(() => {
         mockSchemaState.schema = {};
         mockSchemaState.defaults = {};
@@ -713,16 +634,20 @@ describe('SettingsModal — rule loading', () => {
         mockSchemaState.tiers = undefined;
     });
 
-    test('malformed payloads fall back to empty lists while category rules load', async () => {
-        withAutoJoinGroup();
+    test('malformed payloads fall back to empty lists', async () => {
         window.api.getTitleRules.mockResolvedValueOnce({ not: 'an array' });
         window.api.getChallengeProfiles.mockResolvedValueOnce(null);
-        window.api.getCategoryRules.mockResolvedValueOnce([{ type: 'flash', pics: '' }]);
 
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
 
-        expect(await screen.findByDisplayValue('flash')).toBeTruthy();
+        await waitFor(() => expect(window.api.getChallengeProfiles).toHaveBeenCalled());
         expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
+    });
+
+    test('the rule editor offers the known challenge types as suggestions', () => {
+        const { container } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        const options = Array.from(container.querySelectorAll('#gs-rule-types option')).map((o) => o.value);
+        expect(options).toEqual(['default', 'exhibition', 'flash', 'speed']);
     });
 
     test.each([
@@ -762,29 +687,6 @@ describe('SettingsModal — save outcomes', () => {
         mockSchemaState.defaults = {};
         mockSchemaState.groups = undefined;
         mockSchemaState.tiers = undefined;
-    });
-
-    test('a rejected category-rule save shows its error and editing a rule clears it', async () => {
-        mockSchemaState.schema = {
-            autoJoin: { type: 'boolean', default: false, group: 'autoJoin', label: 'app.autoJoin' },
-        };
-        mockSchemaState.groups = [{ id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' }];
-        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
-        window.api.getCategoryRules.mockResolvedValueOnce([{ type: 'flash' }]);
-        window.api.setCategoryRules.mockResolvedValueOnce(false);
-        const onClose = jest.fn();
-
-        render(<SettingsModal isOpen={true} onClose={onClose} />);
-        await screen.findByDisplayValue('flash');
-        clickButtonByText('app.save');
-
-        expect(await screen.findByText('app.categoryRulesSaveError')).toBeTruthy();
-        expect(window.api.setCategoryRules).toHaveBeenCalledWith([{ type: 'flash' }]);
-        expect(onClose).not.toHaveBeenCalled();
-
-        fireEvent.change(screen.getByDisplayValue('flash'), { target: { value: 'speed' } });
-        expect(screen.queryByText('app.categoryRulesSaveError')).toBeNull();
-        expect(screen.getByDisplayValue('speed')).toBeTruthy();
     });
 
     test('editing a title rule after a rejected save clears the title error', async () => {
@@ -924,16 +826,11 @@ describe('SettingsModal — editing rules without a pending error', () => {
         mockSchemaState.tiers = undefined;
     });
 
-    test('edits land in both editors and no error alert appears', async () => {
-        mockSchemaState.schema = {
-            autoJoin: { type: 'boolean', default: false, group: 'autoJoin', label: 'app.autoJoin' },
-        };
-        mockSchemaState.groups = [{ id: 'autoJoin', label: 'app.groupAutoJoin', tier: 'entries' }];
-        mockSchemaState.tiers = [{ id: 'entries', label: 'app.tierEntries' }];
-        window.api.getTitleRules.mockResolvedValueOnce([{ title: 'Hats', mustIncludeTags: [], shouldIncludeTags: [] }]);
-        window.api.getCategoryRules.mockResolvedValueOnce([{ type: 'flash' }]);
+    test('edits land in the rule editor and no error alert appears', async () => {
+        window.api.getTitleRules.mockResolvedValueOnce([
+            { title: 'Hats', type: 'flash', mustIncludeTags: [], shouldIncludeTags: [] },
+        ]);
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
-        await screen.findByDisplayValue('flash');
         await screen.findByDisplayValue('Hats');
 
         fireEvent.change(screen.getByDisplayValue('flash'), { target: { value: 'speed' } });

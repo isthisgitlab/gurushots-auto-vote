@@ -46,50 +46,27 @@ const inFlight = new Set();
 
 const cat = () => logger.withCategory('join');
 
-// ---- settings resolution (by TITLE — un-joined ids are not in the id cache) ----
+// ---- settings resolution (by RULE — un-joined ids are not in the id cache) ----
 
 /**
  * Resolve one setting for an un-joined candidate. The id-keyed
- * getEffectiveSetting(key, id) cannot see a title profile for a challenge the
- * user has not joined (its id was never cached from get_my_active_challenges),
- * so we read the title rule directly and fall back to the global default.
+ * getEffectiveSetting(key, id) cannot see a rule for a challenge the user has
+ * not joined (its id was never cached from get_my_active_challenges), so we
+ * match the rules against the candidate payload itself and fall back to the
+ * global default.
  *
- * Precedence, most specific first: the title rule's own INLINE override → the
- * named profile that rule inherits → the global default. Inline wins because it
- * is written against this one title, while a profile is shared across every
- * title that names it — so editing one title's window must not require forking
- * a whole profile.
+ * Precedence: rules in list order, the first matching rule that sets the key
+ * wins — a rule's inline override before the profile it names — then the
+ * global default. See `_ruleValuesFor` in settings.js.
  */
 const resolveJoinSetting = (key, challenge) => {
     // Pass the whole candidate, never just its title: a rule may be keyed on the
-    // challenge's own `tags`, and an un-joined candidate carries them.
-    const hasMatchable = !!(challenge?.title || (Array.isArray(challenge?.tags) && challenge.tags.length > 0));
-    if (hasMatchable) {
-        // Optional-chained like every other per-challenge settings read here: an
-        // older persisted facade (or a partial stub in a test) must degrade to
-        // "no inline override", never throw mid-pass.
-        const inline = settings.getTitleRuleOverrides?.(challenge);
-        if (inline && Object.prototype.hasOwnProperty.call(inline, key)) {
-            return inline[key];
-        }
-    }
-    // getTitleProfile returns { name, values } (or null) — the overrides live
-    // under `.values`, so read from there, not off the profile object itself.
-    const profile = hasMatchable ? settings.getTitleProfile(challenge) : null;
-    const values = profile && !profile.suppressed ? profile.values : null;
-    if (values && Object.prototype.hasOwnProperty.call(values, key)) {
-        return values[key];
-    }
-    // CATEGORY tier: keyed on the challenge's own `type` / `max_photo_submits`,
-    // so it applies to a whole class of challenges rather than one title. It
-    // sits BELOW the title tiers (a rule naming this exact title is the more
-    // specific instruction) and ABOVE the global default. Optional-chained like
-    // every other per-challenge settings read here: an older persisted facade
-    // must degrade to "no category override", never throw mid-pass.
-    const category = settings.getCategoryRuleOverrides?.(challenge);
-    if (category && Object.prototype.hasOwnProperty.call(category, key)) {
-        return category[key];
-    }
+    // challenge's own tags, type, photo count or runtime, and an un-joined
+    // candidate carries them. Optional-chained like every other per-challenge
+    // settings read here: an older persisted facade (or a partial stub in a
+    // test) must degrade to "no rule", never throw mid-pass.
+    const fromRules = settings.resolveRuleSetting?.(key, challenge);
+    if (fromRules) return fromRules.value;
     return settings.getEffectiveSetting(key, null);
 };
 
@@ -102,13 +79,13 @@ const parseTypeList = (value) =>
         : [];
 
 /**
- * True when at least one saved title rule turns auto-join ON for its title —
- * either inline on the rule or through the named profile it inherits — i.e.
- * some title would auto-join even with the master default off. Used only as the
- * pass-level fast-path check.
+ * True when at least one saved rule turns auto-join ON — either inline on the
+ * rule or through the named profile it inherits — i.e. some challenge would
+ * auto-join even with the master default off. Used only as the pass-level
+ * fast-path check.
  *
- * A tag-only rule (the older auto-fill feature: no inline autoJoin, no profile)
- * still returns false, so it must never keep the pass alive every cycle.
+ * A rule that only adds photo tags (no inline autoJoin, no profile) still
+ * returns false, so it must never keep the pass alive every cycle.
  */
 const anyTitleRuleEnablesAutoJoin = () => {
     let rules;
@@ -118,35 +95,30 @@ const anyTitleRuleEnablesAutoJoin = () => {
         return false;
     }
     if (!Array.isArray(rules)) return false;
+    let profiles = null;
     for (const rule of rules) {
-        // Read the rule's OWN inline value directly. Going back through the
-        // matcher here would be wrong: a `contains` or tag-keyed rule has no
-        // single challenge to match against at arming time, and a more specific
-        // rule could win and hide this one's `autoJoin: true`. Arming only asks
-        // "could any rule ever turn joining on?", which the rule answers itself.
+        // Read the rule's OWN values directly. Going back through the matcher
+        // here would be wrong: a `contains` or class-keyed rule has no single
+        // challenge to match against at arming time, and a higher rule could
+        // win and hide this one's `autoJoin: true`. Arming only asks "could any
+        // rule ever turn joining on?", which the rule answers itself.
         if (rule && Object.prototype.hasOwnProperty.call(rule, 'autoJoin')) {
             if (rule.autoJoin === true) return true;
             continue;
         }
-        // A rule may list several titles; any of them resolving to an
-        // auto-joining profile arms the pass.
-        const titles = settings.titleRuleTitles(rule);
-        for (const title of titles) {
-            if (!title) continue;
-            const profile = settings.getTitleProfile(title);
-            if (profile && !profile.suppressed && profile.values && profile.values.autoJoin === true) {
-                return true;
-            }
-        }
+        const profileName = typeof rule?.profile === 'string' ? rule.profile : '';
+        if (!profileName) continue;
+        profiles = profiles || settings.getChallengeProfiles() || {};
+        if (profiles[profileName]?.autoJoin === true) return true;
     }
     return false;
 };
 
 /**
- * Whether auto-join is armed at all — the master default is on, OR some title
- * rule enables it (inline or via its profile). Mirrors the pass short-circuit
+ * Whether auto-join is armed at all — the master default is on, OR some rule
+ * enables it (inline or via its profile). Mirrors the pass short-circuit
  * condition; used to drive the "auto-join active" UI indicator so it reflects
- * the per-title case too.
+ * the per-rule case too.
  * @returns {boolean}
  */
 const isAutoJoinActive = () => {
@@ -155,19 +127,14 @@ const isAutoJoinActive = () => {
 };
 
 /**
- * A per-title opt-in deliberate enough to bypass the type filters: a named
- * profile on the title, or an inline `autoJoin: true` on its rule. Both are the
- * user naming this exact title and saying "join it", which is the same intent
- * the profile bypass already encodes.
+ * A rule opt-in deliberate enough to bypass the type filters — see
+ * `hasRuleJoinOptIn` in settings.js: the rules resolve `autoJoin` to true, or
+ * the applying profile comes from a rule naming a title or challenge tag.
  *
- * An inline WINDOW alone is deliberately not enough — "join this title late"
- * says when, not whether, so it must not smuggle an excluded type into scope.
+ * An inline WINDOW alone is deliberately not enough — "join this late" says
+ * when, not whether, so it must not smuggle an excluded type into scope.
  */
-const hasTitleOptIn = (challenge) => {
-    if (!challenge?.title && !(Array.isArray(challenge?.tags) && challenge.tags.length > 0)) return false;
-    if (settings.getTitleRuleOverrides?.(challenge)?.autoJoin === true) return true;
-    return !!settings.getTitleProfile(challenge);
-};
+const hasTitleOptIn = (challenge) => settings.hasRuleJoinOptIn?.(challenge) === true;
 
 /** Per-candidate scope/coin/timing config, resolved by rule (inline → profile → global). */
 const resolveCandidateConfig = (challenge) => ({

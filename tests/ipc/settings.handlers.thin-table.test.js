@@ -36,8 +36,6 @@ const EXPECTED_THIN_HANDLERS = [
     ['get-effective-setting', 'getEffectiveSetting', null],
     ['get-title-rules', 'getTitleRules', null],
     ['set-title-rules', 'setTitleRules', false],
-    ['get-category-rules', 'getCategoryRules', null],
-    ['set-category-rules', 'setCategoryRules', false],
     ['get-title-profile', 'getTitleProfile', null],
     ['get-challenge-overrides', 'getChallengeOverrides', null],
     ['replace-challenge-overrides', 'replaceChallengeOverrides', false],

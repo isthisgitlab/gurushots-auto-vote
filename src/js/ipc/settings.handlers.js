@@ -36,8 +36,6 @@ const THIN_HANDLERS = [
     ['get-effective-setting', 'getEffectiveSetting', null, 'getting effective setting'],
     ['get-title-rules', 'getTitleRules', null, 'getting title rules'],
     ['set-title-rules', 'setTitleRules', false, 'setting title rules'],
-    ['get-category-rules', 'getCategoryRules', null, 'getting category rules'],
-    ['set-category-rules', 'setCategoryRules', false, 'setting category rules'],
     ['get-title-profile', 'getTitleProfile', null, 'getting title profile'],
     ['get-challenge-overrides', 'getChallengeOverrides', null, 'getting challenge overrides'],
     ['replace-challenge-overrides', 'replaceChallengeOverrides', false, 'replacing challenge overrides'],

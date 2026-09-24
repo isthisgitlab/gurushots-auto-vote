@@ -143,6 +143,7 @@ describe('time-unit migration in loadSettings', () => {
             _scheduledFillListsMigratedV1: true,
             _scheduledFillListBoundsV1: true,
             _finalWindowExposureRenamedV1: true,
+            _challengeRulesOrderedV1: true,
         });
 
         settings.loadSettings();

@@ -11,12 +11,11 @@ import { deriveWindowHints } from '@/utils/windowHints';
 import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
 import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
-import { CategoryRulesEditor } from './CategoryRulesEditor';
 
 // Challenge types seen on the live API (verified 2026-09-19). Suggestions for
-// the category-rule type field only — it stays free text, so a type this build
-// has never seen can still be typed in.
-const CATEGORY_RULE_TYPE_SUGGESTIONS = ['default', 'exhibition', 'flash', 'speed'];
+// the rule type field only — it stays free text, so a type this build has never
+// seen can still be typed in.
+const RULE_TYPE_SUGGESTIONS = ['default', 'exhibition', 'flash', 'speed'];
 import { Modal } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { ResetButton } from '@/components/ui/ResetButton';
@@ -27,11 +26,6 @@ function useTitleRuleEditorState(isOpen) {
     const [titleRules, setTitleRules] = useState([]);
     const [profiles, setProfiles] = useState({});
     const [titleRulesError, setTitleRulesError] = useState(false);
-    // Category rules load and save on the same latch as title rules: both are
-    // rule arrays persisted outside the settings table, and a partial load must
-    // not let a save overwrite either with an empty default.
-    const [categoryRules, setCategoryRules] = useState([]);
-    const [categoryRulesError, setCategoryRulesError] = useState(false);
     const loadedRef = useRef(false);
 
     useEffect(() => {
@@ -39,13 +33,11 @@ function useTitleRuleEditorState(isOpen) {
         let cancelled = false;
         loadedRef.current = false;
         setTitleRulesError(false);
-        setCategoryRulesError(false);
-        Promise.all([window.api.getTitleRules(), window.api.getChallengeProfiles(), window.api.getCategoryRules()])
-            .then(([saved, savedProfiles, savedCategories]) => {
+        Promise.all([window.api.getTitleRules(), window.api.getChallengeProfiles()])
+            .then(([saved, savedProfiles]) => {
                 if (cancelled) return;
                 setTitleRules(Array.isArray(saved) ? saved : []);
                 setProfiles(savedProfiles && typeof savedProfiles === 'object' ? savedProfiles : {});
-                setCategoryRules(Array.isArray(savedCategories) ? savedCategories : []);
                 loadedRef.current = true;
             })
             .catch(async (error) => {
@@ -62,10 +54,6 @@ function useTitleRuleEditorState(isOpen) {
         profiles,
         titleRulesError,
         setTitleRulesError,
-        categoryRules,
-        setCategoryRules,
-        categoryRulesError,
-        setCategoryRulesError,
         loadedRef,
     };
 }
@@ -113,18 +101,8 @@ export function SettingsModal({ isOpen, onClose }) {
         if (tzInputVisible) tzInputRef.current?.focus();
     }, [tzInputVisible]);
 
-    const {
-        titleRules,
-        setTitleRules,
-        profiles,
-        titleRulesError,
-        setTitleRulesError,
-        categoryRules,
-        setCategoryRules,
-        categoryRulesError,
-        setCategoryRulesError,
-        loadedRef,
-    } = useTitleRuleEditorState(isOpen);
+    const { titleRules, setTitleRules, profiles, titleRulesError, setTitleRulesError, loadedRef } =
+        useTitleRuleEditorState(isOpen);
     // True when commit() reported schema writes rejected by validation —
     // shown as an alert and the modal stays open (mirrors titleRulesError).
     const [saveError, setSaveError] = useState(false);
@@ -205,17 +183,8 @@ export function SettingsModal({ isOpen, onClose }) {
                     setTitleRulesError(true);
                     return;
                 }
-                // Same contract for the category rules: false means the facade
-                // rejected a row (duplicate condition, out-of-range value), so
-                // surface it and keep the modal open rather than lose the edit.
-                const savedCategories = await window.api.setCategoryRules(categoryRules);
-                if (savedCategories === false) {
-                    setCategoryRulesError(true);
-                    return;
-                }
             }
             setTitleRulesError(false);
-            setCategoryRulesError(false);
             if (uiValues.language !== language) {
                 setLanguage(uiValues.language);
             }
@@ -232,8 +201,6 @@ export function SettingsModal({ isOpen, onClose }) {
     }, [
         commit,
         titleRules,
-        categoryRules,
-        setCategoryRulesError,
         uiValues.language,
         language,
         setLanguage,
@@ -594,64 +561,13 @@ export function SettingsModal({ isOpen, onClose }) {
                                                 </div>
                                             ))}
                                         </div>
-                                        {/* Category rules belong to this group: they override
-                                            nothing but its join-timing keys. They cannot be part
-                                            of the schema-driven grid above (a rule ARRAY is not a
-                                            settings entry — it persists in challengeSettings over
-                                            its own IPC channel), so the group renders them itself
-                                            rather than exiling them to a section of their own.
-
-                                            Coupling to know about: tierSchemaEntries drops a group
-                                            with no visible entries, so if the autoJoin group were
-                                            ever pruned to zero settings this editor would silently
-                                            stop rendering while its rules still load and save. The
-                                            autoJoin toggle itself keeps the group non-empty today.
-                                            Move this if that stops being true. */}
-                                        {id === 'autoJoin' && (
-                                            // A labelled region, NOT a second <h6>: the group's own
-                                            // title above is already an h6, and h6 is the deepest
-                                            // level HTML has - so a nested one would appear as its
-                                            // SIBLING in a screen reader's heading outline and hide
-                                            // that these rules are scoped to auto-join. role=group +
-                                            // aria-labelledby announces the label without adding a
-                                            // false section boundary. Rendered once, so a static id
-                                            // cannot collide.
-                                            <div
-                                                className="mt-4 rounded-box bg-base-200/40 p-3"
-                                                role="group"
-                                                aria-labelledby="category-rules-label"
-                                            >
-                                                <p
-                                                    id="category-rules-label"
-                                                    className="font-medium text-sm opacity-70 mb-1"
-                                                >
-                                                    {t('app.categoryRules')}
-                                                </p>
-                                                <p className="text-xs text-base-content/60 mb-3">
-                                                    {t('app.categoryRulesDesc')}
-                                                </p>
-                                                {categoryRulesError && (
-                                                    <div className="alert alert-error mb-3 py-2 text-sm" role="alert">
-                                                        <span>{t('app.categoryRulesSaveError')}</span>
-                                                    </div>
-                                                )}
-                                                <CategoryRulesEditor
-                                                    value={categoryRules}
-                                                    types={CATEGORY_RULE_TYPE_SUGGESTIONS}
-                                                    onChange={(next) => {
-                                                        if (categoryRulesError) setCategoryRulesError(false);
-                                                        setCategoryRules(next);
-                                                    }}
-                                                />
-                                            </div>
-                                        )}
                                     </div>
                                 ))}
                             </div>
                         ))}
                     </div>
 
-                    {/* Per-Title Tag Rules Section */}
+                    {/* Challenge Rules Section */}
                     <div>
                         <h4 className="font-semibold text-base mb-1 border-b border-base-300 pb-2">
                             {t('app.titleTagRules')}
@@ -665,6 +581,7 @@ export function SettingsModal({ isOpen, onClose }) {
                         <TitleTagRulesEditor
                             value={titleRules}
                             profiles={profiles}
+                            types={RULE_TYPE_SUGGESTIONS}
                             onChange={(next) => {
                                 if (titleRulesError) setTitleRulesError(false);
                                 setTitleRules(next);

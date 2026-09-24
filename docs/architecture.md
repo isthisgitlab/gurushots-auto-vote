@@ -118,13 +118,12 @@ Domain terms used throughout, in reader's terms:
   runs inside the shared `fetchChallengesAndVote` (`api/main.js` real / `mock/index.js` mock) before the
   voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
   single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
-  enable is **resolved per candidate by title (rule-inline → profile → master)**, not a hard global gate —
-  the master value is only the default, so a title rule can enable joining for its title with the master
-  off, either inline on the rule itself or through the named profile it inherits. Inline wins because it is
-  written against one title while a profile is shared by every title naming it. The pass only short-circuits
-  wholesale when the master is off **and** no title rule turns it on (a tag-only rule never does);
-  everything else (scope/coin caps/join window) is title-resolved too, except `autoJoinCycleCoinBudget`,
-  which is genuinely pass-global.
+  enable is **resolved per candidate by rule (see challenge rules below) → master**, not a hard global gate —
+  the master value is only the default, so a rule can enable joining for the challenges it matches with the
+  master off, either inline on the rule itself or through the named profile it inherits. The pass only
+  short-circuits wholesale when the master is off **and** no rule turns it on (a rule that only adds photo
+  tags never does); everything else (scope/coin caps/join window) is rule-resolved too, except
+  `autoJoinCycleCoinBudget`, which is genuinely pass-global.
 - **The join window gates WHEN, never WHETHER.** Two settings express it, both on the `0` = off sentinel:
   `autoJoinWithinHoursOfEnd` joins a candidate once it is within that many hours of its own `close_time`,
   and `autoJoinAfterPercentElapsed` joins it once that percentage of its own lifetime
@@ -132,11 +131,11 @@ Domain terms used throughout, in reader's terms:
   (`skipped:too-early`) and reconsidered next cycle, not rejected. It is **fail-closed**: a candidate whose
   `close_time` cannot be read is not joined while a window is set (percent mode additionally needs
   `start_time`, and reports `skipped:start-time-unknown`), and the pass logs that candidate's actual field
-  names once per pass. Unlike the type filters, a title opt-in does **not** bypass the window (bypassing an
+  names once per pass. Unlike the type filters, a rule opt-in does **not** bypass the window (bypassing an
   explicit "join late" would invert it), and the manual single-join path ignores the window entirely — a
   click is the user overriding timing.
 - **Percent and hours never combine — `resolveJoinWindow` picks exactly ONE.** Percent wins whenever it is
-  above 0, so a category rule saying "90%" fully _replaces_ an inherited hours window instead of
+  above 0, so a rule saying "90%" fully _replaces_ an inherited hours window instead of
   intersecting with it; the effective timing for a candidate is therefore always readable off a single
   number. The reason percent exists at all: hours-before-close does not transfer across challenge lengths.
   The live open list carries 2h flash challenges and 515.7h exhibitions side by side, so one absolute window
@@ -144,35 +143,46 @@ Domain terms used throughout, in reader's terms:
   thing to both. The percent ceiling is **99, not 100**: a challenge is only 100% elapsed once `close_time`
   has passed, at which point the gate already reports `already-closed` — allowing 100 would ship a maximum
   that silently never joins. Out-of-range values clamp to 99 (as late as possible), never to "never".
-- **Category rules key join timing on the CHALLENGE CLASS, not the title.** A rule in
-  `challengeSettings.categoryRules` matches on the challenge's `type`, on its `max_photo_submits`, or on
-  both (AND; a rule naming both beats one naming either alone, ties break by position). They exist because
-  entry timing really tracks how long a challenge runs, and those two fields are the payload's usable
-  proxies for it — on the live account 4-photo defaults run 24h, 2-photo ones 48h and 3-photo ones 72h,
-  which is why a per-category window is the natural way to say it. Note the proxy is **imperfect and must
-  not be treated as a length**: the same account's 4-photo challenges span 24h, 72h, 168h and 515.7h, so a
-  photo-count rule alone mis-times the long ones — that is exactly what the percent anchor is for. Category
-  rules may override **timing only** (`autoJoinWithinHoursOfEnd`, `autoJoinAfterPercentElapsed`);
-  deliberately not `autoJoin` itself or the coin caps, since one careless row would otherwise spend money
-  across a whole class of challenges.
-- **Join-setting precedence, most specific first: title-rule inline → title profile → CATEGORY → global
-  default.** `resolveJoinSetting` walks exactly that chain. A title names one challenge and so outranks a
-  category naming dozens; the global default is the floor. An omitted key at any tier means _inherit_ and is
-  never written as a value, so no rule can freeze today's default into storage.
-- **Title rules match on conditions, not just an exact title.** A rule carries a title condition (with a
-  `match` mode: `exact` — the default and the pre-existing behavior — `starts`, or `contains`), a
-  `challengeTag` condition, or both; every condition present must hold (AND), and a rule with neither
-  matches nothing. Because several rules can now match one challenge, `_findRuleIn` picks a deterministic
-  winner by **specificity**: exact (3) > starts (2) > contains (1) > tag-only (0), +1 for carrying both
-  conditions, ties broken by the longer title pattern and then by the earlier position — never by Map or
-  object iteration order. Rules de-duplicate on the whole condition (title + mode + tag), so `abc`/exact and
-  `abc`/contains coexist. `_findRuleIn` takes its rules array explicitly because the validation paths match
-  against an in-progress settings **snapshot** rather than what is on disk.
+- **Challenge rules match on conditions; the LIST ORDER is the precedence.** A rule in
+  `challengeSettings.titleRules` carries any mix of conditions — titles (one `match` mode for all of them:
+  `exact`, the default, `starts`, or `contains`), `challengeTag`, `type`, `pics` (`max_photo_submits`) and a
+  runtime range `minHours`/`maxHours` over `close_time` - `start_time` — and every condition present must
+  hold (AND); a rule with none matches nothing, and a runtime condition fails closed when either time is
+  unreadable. The pure matcher and the default order live in the dependency-free
+  `settings/challengeRules.js` so the renderer can use them too. Runtime exists because entry timing and
+  tactics really track how long a challenge runs, and photo count is only an **imperfect proxy** for it: on
+  the live account 4-photo defaults run 24h, 2-photo ones 48h and 3-photo ones 72h, yet 4-photo challenges
+  also span 72h, 168h and 515.7h — so "4 photos" and "4 photos + at least 168h" are different rules.
+- **Resolution cascades per key (`_ruleValuesFor`).** The matching rules are walked in list order and, for
+  each setting, the FIRST rule that sets it wins — its own inline value first, then (for the first rule
+  naming a profile only) that profile's value; a key it leaves unset falls through to the next matching
+  rule, then to the global default. Only **one profile** ever applies to a challenge, because profiles are
+  validated as a whole value set (cross-field rules like `exposureTarget >= exposure`) and mixing keys from
+  two could assemble a combination neither allows. An omitted key at any tier means _inherit_ and is never
+  written as a value, so no rule can freeze today's default into storage. Id-keyed callers
+  (`getEffectiveSetting`) resolve the same cascade through the in-memory facts cache
+  (`rememberChallengeTitles`: tags, type, photo count, start/close time per id), below any per-challenge
+  manual override; the join pass resolves un-joined candidates off their own payload
+  (`resolveRuleSetting`).
+- **Default order: a title beats a class.** `sortRulesByDefaultOrder` ranks rules naming a title first
+  (exact 3 > starts 2 > contains 1, +1 per class condition, then the longer pattern — the specificity ranking title rules were written against), then title-less rules
+  by condition count, then photo count > runtime > type > tag — so "4 photos + 7 days" > "4 photos" >
+  "7 days". The user can reorder freely in the editor or reset to this order; saving keeps the order given.
+  The one-time `_challengeRulesOrderedV1` migration applies this order to saved rules and appends the former
+  `categoryRules` below them; because the cascade lets a lower rule fill keys a higher one leaves unset, it
+  logs a warning for every possibly-overlapping pair where that could newly switch `autoJoin`/`autoFill` on.
+  Rules de-duplicate on the whole condition (last wins, at the first one's position), so `abc`/exact and
+  `abc`/contains coexist.
+- **A title-less rule may switch joining or auto-submit ON** for everything it matches; the editor warns
+  when one does, since a single row can then spend coins/photos across a whole class of challenges. It does
+  **not** bypass the join type filters through a profile alone (`hasRuleJoinOptIn`): only an explicit
+  resolved `autoJoin: true`, or a profile from a rule naming a title or challenge tag, does — "every
+  4-photo challenge votes like this" says how, not whether.
 - **Challenge tags ≠ photo tags — the two must not be conflated.** `mustIncludeTags`/`shouldIncludeTags`
   choose which of the user's PHOTOS to submit; a rule's `challengeTag` and the `autoJoinChallengeTags` /
   `autoJoinExcludeChallengeTags` settings choose which CHALLENGES to act on, from the API's own classifiers
   (`Exhibition`, `Comm`, `No comm`, `Turbo`, `Magazine`, `special 4 pic`, `N photos`, `MV`, `Strong`).
-  The join-scope lists mirror the type lists exactly (empty include = all, exclude subtracts, a title opt-in
+  The join-scope lists mirror the type lists exactly (empty include = all, exclude subtracts, a rule opt-in
   bypasses both), and types and tags are independent axes that must BOTH pass.
 - **Tag resolution for id-keyed callers** rides an in-memory `activeChallengeTags` map filled by
   `rememberChallengeTitles` alongside the title cache — deliberately NOT the persisted `titlePins` blob,
@@ -340,7 +350,7 @@ repeated six times is one that gets forgotten at one of them.
   cross-process lockfile (`acquireUnlockLock`, real-fs platforms, TTL stale-recovery, fail-open) guard the
   check→unlock→mark section; a corrupt/unreadable join-state **refuses to spend** (fail-safe, not fail-open);
   the pass is cancellation-checked between candidates and before each spend, and each candidate is
-  independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a title opt-in
+  independently try/caught. Decision precedence in `VotingLogic.shouldJoinChallenge` (pure): a rule opt-in
   (a named profile, or an inline `autoJoin: true` on the rule) wins over the type-exclude veto; otherwise the
   default scope is join-all, an `autoJoinTypes` include-list (when non-empty) narrows it, and
   `autoJoinExcludeTypes` subtracts. The join window (`joinWindowRefusal`) is evaluated **after** the scope

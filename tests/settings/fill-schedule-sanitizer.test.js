@@ -205,6 +205,7 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
             _scheduledFillListsMigratedV1: true,
             _scheduledFillListBoundsV1: true,
             _finalWindowExposureRenamedV1: true,
+            _challengeRulesOrderedV1: true,
         });
 
         const loaded = settings.loadSettings();
@@ -228,6 +229,7 @@ describe('_autoFillScheduleBoundsV1 sanitizer pass in loadSettings', () => {
             _scheduledFillListsMigratedV1: true,
             _scheduledFillListBoundsV1: true,
             _finalWindowExposureRenamedV1: true,
+            _challengeRulesOrderedV1: true,
         });
 
         const loaded = settings.loadSettings();

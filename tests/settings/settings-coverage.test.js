@@ -397,7 +397,7 @@ describe('settings facade — edge cases', () => {
 
     describe('title rules', () => {
         test('getTitleRules tolerates a non-array stored value', () => {
-            seed({ challengeSettings: { globalDefaults: {}, titleRules: 'x' } });
+            seed({ _challengeRulesOrderedV1: true, challengeSettings: { globalDefaults: {}, titleRules: 'x' } });
             expect(settings.getTitleRules()).toEqual([]);
         });
 
@@ -412,13 +412,13 @@ describe('settings facade — edge cases', () => {
                     ],
                 },
             });
-            expect(settings.getTitleRuleOverrides({ tags: ['exhibition'] })).toEqual({ autoJoin: false });
-            expect(settings.getTitleRuleOverrides({ tags: ['comm'] })).toEqual({});
+            expect(settings.resolveRuleSetting('autoJoin', { tags: ['exhibition'] })).toEqual({ value: false });
+            expect(settings.resolveRuleSetting('autoJoin', { tags: ['comm'] })).toBeNull();
         });
 
-        test('getTitleRuleOverrides re-validates a hand-edited inline value', () => {
+        test('resolveRuleSetting re-validates a hand-edited inline value', () => {
             seed({ challengeSettings: { globalDefaults: {}, titleRules: [{ title: 'Alpha', autoJoin: 'yes' }] } });
-            expect(settings.getTitleRuleOverrides('Alpha')).toEqual({});
+            expect(settings.resolveRuleSetting('autoJoin', 'Alpha')).toBeNull();
         });
 
         test('setTitleRules rejects invalid tag-only rules', () => {
@@ -475,7 +475,10 @@ describe('settings facade — edge cases', () => {
         });
 
         test('getTitleProfile: non-array rules and a dangling profile reference resolve to null', () => {
-            seed({ challengeSettings: { globalDefaults: {}, titleRules: null, profiles: { P: {} } } });
+            seed({
+                _challengeRulesOrderedV1: true,
+                challengeSettings: { globalDefaults: {}, titleRules: null, profiles: { P: {} } },
+            });
             expect(settings.getTitleProfile('Alpha')).toBeNull();
             seed({ challengeSettings: { globalDefaults: {}, titleRules: [{ title: 'Alpha', profile: 'Missing' }] } });
             expect(settings.getTitleProfile({ title: 'Alpha' })).toBeNull();
@@ -540,46 +543,137 @@ describe('settings facade — edge cases', () => {
         });
     });
 
-    describe('category rules', () => {
-        test('no rules → no match; condition-less rules are skipped', () => {
-            seed({ challengeSettings: { globalDefaults: {} } });
-            expect(settings.findCategoryRule({ type: 'exhibition' })).toBeNull();
+    describe('category-rule migration', () => {
+        test('category rules move below the title rules, most conditions first, and the key is dropped', () => {
             seed({
                 challengeSettings: {
                     globalDefaults: {},
+                    titleRules: [
+                        { challengeTag: 'Exhibition', mustIncludeTags: ['x'], shouldIncludeTags: [] },
+                        { title: 'Alpha', match: 'contains', mustIncludeTags: ['a'], shouldIncludeTags: [] },
+                        { title: 'Alpha Beta', mustIncludeTags: ['b'], shouldIncludeTags: [] },
+                    ],
                     categoryRules: [
-                        { autoJoinWithinHoursOfEnd: 5 },
-                        { type: 'exhibition', autoJoinWithinHoursOfEnd: 3 },
+                        { type: 'flash', autoJoinWithinHoursOfEnd: 2 },
+                        null,
+                        { type: 'default', pics: 4, autoJoinAfterPercentElapsed: 75, stray: 1 },
                     ],
                 },
             });
-            expect(settings.getCategoryRuleOverrides({ type: 'Exhibition' })).toEqual({ autoJoinWithinHoursOfEnd: 3 });
-        });
-
-        test('empty / null inline values read as inherit', () => {
-            seed({
-                challengeSettings: {
-                    globalDefaults: {},
-                    categoryRules: [
-                        { type: 'exhibition', autoJoinWithinHoursOfEnd: '', autoJoinAfterPercentElapsed: null },
-                    ],
+            const stored = saved();
+            expect(stored._challengeRulesOrderedV1).toBe(true);
+            expect(stored.challengeSettings.categoryRules).toBeUndefined();
+            expect(stored.challengeSettings.titleRules).toEqual([
+                { title: 'Alpha Beta', mustIncludeTags: ['b'], shouldIncludeTags: [] },
+                { title: 'Alpha', match: 'contains', mustIncludeTags: ['a'], shouldIncludeTags: [] },
+                { challengeTag: 'Exhibition', mustIncludeTags: ['x'], shouldIncludeTags: [] },
+                {
+                    title: '',
+                    mustIncludeTags: [],
+                    shouldIncludeTags: [],
+                    type: 'default',
+                    pics: 4,
+                    autoJoinAfterPercentElapsed: 75,
                 },
-            });
-            expect(settings.getCategoryRuleOverrides({ type: 'exhibition' })).toEqual({});
-        });
-
-        test('setCategoryRules enforces the rule cap and rebuilds a null container', () => {
-            seed({ challengeSettings: null });
-            const tooMany = Array.from({ length: 21 }, (_, i) => ({ type: `t${i}` }));
-            expect(settings.setCategoryRules(tooMany)).toBe(false);
-            expect(store.write).not.toHaveBeenCalled();
-
-            expect(settings.setCategoryRules([{ type: ' Exhibition ', pics: 4, autoJoinWithinHoursOfEnd: 2 }])).toBe(
-                true,
-            );
-            expect(saved().challengeSettings.categoryRules).toEqual([
-                { type: 'exhibition', pics: 4, autoJoinWithinHoursOfEnd: 2 },
+                { title: '', mustIncludeTags: [], shouldIncludeTags: [], type: 'flash', autoJoinWithinHoursOfEnd: 2 },
             ]);
+            expect(cat.info).toHaveBeenCalledWith('Moved 2 category rule(s) into the challenge rules list', null);
+            // A migrated category rule keeps working through the unified resolver.
+            expect(settings.resolveRuleSetting('autoJoinWithinHoursOfEnd', { title: 'Zeta', type: 'flash' })).toEqual({
+                value: 2,
+            });
+        });
+
+        test('warns when a lower rule could now switch auto-join / auto-submit on under a higher one', () => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { P: { exposure: 70 }, Joiner: { autoFill: true } },
+                    titleRules: [
+                        // Tag rule: ranked below the title rule by the migration.
+                        { challengeTag: 'Exhibition', autoJoin: true, mustIncludeTags: [], shouldIncludeTags: [] },
+                        { title: 'Seaside', profile: 'P', mustIncludeTags: [], shouldIncludeTags: [] },
+                    ],
+                },
+            });
+            expect(cat.warning).toHaveBeenCalledWith(
+                'Challenge rules: "Exhibition" may now also turn autoJoin on for challenges matched by "Seaside" — review the rule order',
+                null,
+            );
+
+            // A lower rule's PROFILE counts only when the higher rule names none.
+            cat.warning.mockClear();
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { Joiner: { autoFill: true } },
+                    titleRules: [
+                        { title: 'Sea', match: 'contains', mustIncludeTags: ['x'], shouldIncludeTags: [] },
+                        { challengeTag: 'Comm', profile: 'Joiner', mustIncludeTags: [], shouldIncludeTags: [] },
+                    ],
+                },
+            });
+            expect(cat.warning).toHaveBeenCalledWith(
+                expect.stringContaining('"Comm" may now also turn autoFill on'),
+                null,
+            );
+        });
+
+        test.each([
+            [
+                'disjoint exact titles',
+                [
+                    { title: 'Alpha', mustIncludeTags: ['a'] },
+                    { title: 'Beta', autoJoin: true },
+                ],
+            ],
+            [
+                'different photo counts',
+                [
+                    { title: '', pics: 4, mustIncludeTags: ['a'] },
+                    { title: '', pics: 2, autoFill: true },
+                ],
+            ],
+            [
+                'different types',
+                [
+                    { title: '', type: 'flash', mustIncludeTags: ['a'] },
+                    { title: '', type: 'speed', autoFill: true },
+                ],
+            ],
+            [
+                "the higher rule's profile decides the key",
+                [
+                    { title: 'Gamma', match: 'starts', profile: 'P' },
+                    { challengeTag: 'Comm', profile: 'Joiner' },
+                ],
+            ],
+            [
+                'an explicit false',
+                [{ title: 'Delta', mustIncludeTags: ['a'] }, { challengeTag: 'Turbo', autoJoin: false }, null],
+            ],
+        ])('no fall-through warning for %s', (_label, titleRules) => {
+            seed({
+                challengeSettings: {
+                    globalDefaults: {},
+                    profiles: { P: { autoJoin: false }, Joiner: { autoJoin: true }, Broken: null },
+                    titleRules,
+                },
+            });
+            expect(cat.warning).not.toHaveBeenCalledWith(expect.stringContaining('may now also turn'), null);
+        });
+
+        test('runs once, tolerates missing lists and a corrupt container, and logs nothing without categories', () => {
+            seed({ challengeSettings: { globalDefaults: {} } });
+            expect(saved().challengeSettings.titleRules).toEqual([]);
+            expect(cat.info).not.toHaveBeenCalledWith(expect.stringContaining('category rule'), null);
+
+            seed({ challengeSettings: 'corrupt' });
+            expect(saved()._challengeRulesOrderedV1).toBe(true);
+
+            // Flag already set: a later categoryRules key is left alone.
+            seed({ _challengeRulesOrderedV1: true, challengeSettings: { globalDefaults: {}, categoryRules: [] } });
+            expect(saved().challengeSettings.categoryRules).toEqual([]);
         });
     });
 
@@ -643,7 +737,10 @@ describe('settings facade — edge cases', () => {
         });
 
         test('overwriting a profile tolerates non-array rules and renames only its own assignments', () => {
-            seed({ challengeSettings: { globalDefaults: {}, profiles: { A: {} }, titleRules: 'x' } });
+            seed({
+                _challengeRulesOrderedV1: true,
+                challengeSettings: { globalDefaults: {}, profiles: { A: {} }, titleRules: 'x' },
+            });
             expect(settings.saveChallengeProfile('a', { exposure: 70 })).toBe(true);
             expect(saved().challengeSettings.profiles).toEqual({ a: { exposure: 70 } });
 
@@ -678,7 +775,10 @@ describe('settings facade — edge cases', () => {
             expect(cs.profiles.A).toBeUndefined();
             expect(cs.titleRules).toEqual([{ title: 'Y', profile: 'B' }]);
 
-            seed({ challengeSettings: { globalDefaults: {}, profiles: { A: {} }, titleRules: null } });
+            seed({
+                _challengeRulesOrderedV1: true,
+                challengeSettings: { globalDefaults: {}, profiles: { A: {} }, titleRules: null },
+            });
             expect(settings.deleteChallengeProfile('A')).toBe(true);
             expect(saved().challengeSettings.profiles).toEqual({});
         });

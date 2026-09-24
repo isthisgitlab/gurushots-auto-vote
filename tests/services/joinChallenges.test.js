@@ -30,12 +30,11 @@ jest.mock('../../src/js/settings', () => ({
         };
         return map[key];
     }),
-    getTitleProfile: jest.fn(() => null),
     getEffectiveTagSetting: jest.fn(() => []),
     getTitleRules: jest.fn(() => []),
-    titleRuleTitles: jest.fn((rule) => [rule?.title].filter((t) => typeof t === 'string')),
-    getTitleRuleOverrides: jest.fn(() => ({})),
-    getCategoryRuleOverrides: jest.fn(() => ({})),
+    getChallengeProfiles: jest.fn(() => ({})),
+    resolveRuleSetting: jest.fn(() => null),
+    hasRuleJoinOptIn: jest.fn(() => false),
 }));
 
 const cancellation = require('../../src/js/voting/cancellation');
@@ -50,10 +49,18 @@ const {
     inFlight,
 } = require('../../src/js/services/joinChallenges');
 
-// The facade's rule readers take a CHALLENGE (so a tag-keyed rule can match on
-// its tags) and still accept a bare title. Mocks must honour both, or they test
-// a signature the real module no longer has.
-const titleOf = (target) => (typeof target === 'string' ? target : target?.title);
+// The facade's rule readers take a CHALLENGE (so a rule keyed on tags, type,
+// photo count or runtime can match on the candidate itself).
+const titleOf = (target) => target?.title;
+
+// The facade resolves a key through the matching rules (list order, inline
+// before profile). Tests describe what the rules contribute for a candidate as
+// a plain map; this stands in for that cascade.
+const rulesGive = (valuesFor) =>
+    settings.resolveRuleSetting.mockImplementation((key, target) => {
+        const values = valuesFor(target) || {};
+        return Object.prototype.hasOwnProperty.call(values, key) ? { value: values[key] } : null;
+    });
 
 const makeStore = () => {
     let s = null;
@@ -83,11 +90,11 @@ beforeEach(() => {
     cancellation.isCancelled.mockReturnValue(false);
     photoPicker.pickPhotosForChallenge.mockReturnValue(['imgA']);
     // Reset settings mocks to defaults so per-test overrides never leak.
-    settings.getTitleProfile.mockReturnValue(null);
     settings.getEffectiveTagSetting.mockReturnValue([]);
     settings.getTitleRules.mockReturnValue([]);
-    settings.getTitleRuleOverrides.mockReturnValue({});
-    settings.getCategoryRuleOverrides.mockReturnValue({});
+    settings.getChallengeProfiles.mockReturnValue({});
+    settings.resolveRuleSetting.mockReturnValue(null);
+    settings.hasRuleJoinOptIn.mockReturnValue(false);
     settings.getEffectiveSetting.mockImplementation((key) => DEFAULT_SETTINGS[key]);
     inFlight.clear();
 });
@@ -245,84 +252,75 @@ describe('isAutoJoinActive', () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? true : DEFAULT_SETTINGS[k]));
         expect(isAutoJoinActive()).toBe(true);
     });
-    test('true when a title profile enables it even with master off', () => {
+    test('true when a rule profile enables it even with master off', () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         settings.getTitleRules.mockReturnValue([{ title: 'X', profile: 'p' }]);
-        settings.getTitleProfile.mockImplementation((t) =>
-            titleOf(t) === 'X' ? { name: 'p', values: { autoJoin: true } } : null,
-        );
+        settings.getChallengeProfiles.mockReturnValue({ p: { autoJoin: true } });
+        expect(isAutoJoinActive()).toBe(true);
+    });
+    test('a title-less rule whose profile enables it arms too', () => {
+        settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
+        settings.getTitleRules.mockReturnValue([{ title: '', pics: 4, profile: 'Quad' }]);
+        settings.getChallengeProfiles.mockReturnValue({ Quad: { autoJoin: true } });
         expect(isAutoJoinActive()).toBe(true);
     });
     test('false when master off and no profile enables it', () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
-        settings.getTitleRules.mockReturnValue([{ title: 'Tagged', mustIncludeTags: ['x'] }]);
-        settings.getTitleProfile.mockReturnValue(null);
+        settings.getTitleRules.mockReturnValue([
+            { title: 'Tagged', mustIncludeTags: ['x'] },
+            { title: 'Off', profile: 'p' },
+            { title: 'Unknown', profile: 'missing' },
+        ]);
+        settings.getChallengeProfiles.mockReturnValue({ p: { autoJoin: false } });
+        expect(isAutoJoinActive()).toBe(false);
+        // Profiles are read once per check, not once per rule.
+        expect(settings.getChallengeProfiles).toHaveBeenCalledTimes(1);
+    });
+    test('a facade returning no profile map is treated as empty', () => {
+        settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
+        settings.getTitleRules.mockReturnValue([{ title: 'X', profile: 'p' }, null]);
+        settings.getChallengeProfiles.mockReturnValue(null);
         expect(isAutoJoinActive()).toBe(false);
     });
 });
 
-describe('resolveJoinSetting — title profile (.values)', () => {
-    test('reads the override from profile.values, not off the profile object', () => {
-        settings.getTitleProfile.mockReturnValue({ name: 'p', values: { autoJoinMaxCoins: 50 } });
+describe('resolveJoinSetting', () => {
+    test('returns the value the rules resolve, passing the whole candidate', () => {
+        rulesGive(() => ({ autoJoinMaxCoins: 50 }));
         settings.getEffectiveSetting.mockReturnValue(999);
-        expect(resolveJoinSetting('autoJoinMaxCoins', { title: 'X' })).toBe(50);
+        const candidate = { title: 'X', tags: ['Exhibition'], max_photo_submits: 4 };
+        expect(resolveJoinSetting('autoJoinMaxCoins', candidate)).toBe(50);
+        expect(settings.resolveRuleSetting).toHaveBeenCalledWith('autoJoinMaxCoins', candidate);
     });
 
-    test('suppressed profile falls back to the global default', () => {
-        settings.getTitleProfile.mockReturnValue({ name: 'p', values: { autoJoinMaxCoins: 50 }, suppressed: true });
-        settings.getEffectiveSetting.mockReturnValue(999);
-        expect(resolveJoinSetting('autoJoinMaxCoins', { title: 'X' })).toBe(999);
-    });
-
-    test('no profile → global default', () => {
-        settings.getTitleProfile.mockReturnValue(null);
+    test('no rule sets the key → global default', () => {
         settings.getEffectiveSetting.mockReturnValue(7);
         expect(resolveJoinSetting('autoJoinMaxCoins', { title: 'X' })).toBe(7);
-    });
-});
-
-describe('resolveJoinSetting — inline rule override precedence', () => {
-    test('an inline value wins over the profile AND the global default', () => {
-        settings.getTitleRuleOverrides.mockReturnValue({ autoJoinMaxCoins: 5 });
-        settings.getTitleProfile.mockReturnValue({ name: 'p', values: { autoJoinMaxCoins: 50 } });
-        settings.getEffectiveSetting.mockReturnValue(999);
-        expect(resolveJoinSetting('autoJoinMaxCoins', { title: 'X' })).toBe(5);
+        expect(settings.getEffectiveSetting).toHaveBeenCalledWith('autoJoinMaxCoins', null);
     });
 
-    test('an inline false is honored, not treated as absent', () => {
-        settings.getTitleRuleOverrides.mockReturnValue({ autoJoin: false });
+    test('a rule false is honored, not treated as absent', () => {
+        rulesGive(() => ({ autoJoin: false }));
         settings.getEffectiveSetting.mockReturnValue(true);
         expect(resolveJoinSetting('autoJoin', { title: 'X' })).toBe(false);
     });
 
-    test('an inline 0 window is honored, not treated as absent', () => {
-        settings.getTitleRuleOverrides.mockReturnValue({ autoJoinWithinHoursOfEnd: 0 });
+    test('a rule 0 window is honored, not treated as absent', () => {
+        rulesGive(() => ({ autoJoinWithinHoursOfEnd: 0 }));
         settings.getEffectiveSetting.mockReturnValue(24);
         expect(resolveJoinSetting('autoJoinWithinHoursOfEnd', { title: 'X' })).toBe(0);
     });
 
-    test('a key the rule does not set still falls through to the profile', () => {
-        settings.getTitleRuleOverrides.mockReturnValue({ autoJoin: true });
-        settings.getTitleProfile.mockReturnValue({ name: 'p', values: { autoJoinMaxCoins: 50 } });
-        expect(resolveJoinSetting('autoJoinMaxCoins', { title: 'X' })).toBe(50);
-    });
-
-    test('a titleless candidate skips the title lookups entirely', () => {
-        settings.getEffectiveSetting.mockReturnValue(7);
-        expect(resolveJoinSetting('autoJoinMaxCoins', { id: 1 })).toBe(7);
-        expect(settings.getTitleRuleOverrides).not.toHaveBeenCalled();
-    });
-
-    test('degrades to the profile when the settings facade predates this feature', () => {
-        // An older persisted facade has no getTitleRuleOverrides at all; the
+    test('degrades to the global default when the settings facade has no rule resolver', () => {
+        // An older persisted facade has no resolveRuleSetting at all; the
         // optional call must not throw mid-pass.
-        const saved = settings.getTitleRuleOverrides;
-        delete settings.getTitleRuleOverrides;
+        const saved = settings.resolveRuleSetting;
+        delete settings.resolveRuleSetting;
         try {
-            settings.getTitleProfile.mockReturnValue({ name: 'p', values: { autoJoinMaxCoins: 50 } });
-            expect(resolveJoinSetting('autoJoinMaxCoins', { title: 'X' })).toBe(50);
+            settings.getEffectiveSetting.mockReturnValue(7);
+            expect(resolveJoinSetting('autoJoinMaxCoins', { title: 'X' })).toBe(7);
         } finally {
-            settings.getTitleRuleOverrides = saved;
+            settings.resolveRuleSetting = saved;
         }
     });
 });
@@ -337,12 +335,11 @@ describe('runJoinPass', () => {
         expect(deps.getMemberChallenges).not.toHaveBeenCalled();
     });
 
-    test('master off with only tag-only title rules (no join profile) → pass short-circuits, no API calls', async () => {
+    test('master off with only photo-tag rules (no join profile) → pass short-circuits, no API calls', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
-        // A tag-only rule (the older auto-fill feature) carries no profile that
-        // enables autoJoin, so getTitleProfile resolves null → pass must not run.
+        // A rule that only adds photo tags carries no profile that enables
+        // autoJoin, so nothing arms the pass → it must not run.
         settings.getTitleRules.mockReturnValue([{ title: 'Tagged', mustIncludeTags: ['x'] }]);
-        settings.getTitleProfile.mockReturnValue(null);
         const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash' }]) });
         const res = await runJoinPass('tok', Date.now(), deps);
         expect(res.ran).toBe(false);
@@ -350,14 +347,13 @@ describe('runJoinPass', () => {
         expect(deps.getBankroll).not.toHaveBeenCalled();
     });
 
-    test('master off but a title profile enables autoJoin → that title joins, others skip (master → profile)', async () => {
-        // Master default off; but title rules exist and the profiled title turns
+    test('master off but a rule profile enables autoJoin → that title joins, others skip (master → profile)', async () => {
+        // Master default off; but rules exist and the profiled title turns
         // autoJoin on for itself.
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         settings.getTitleRules.mockReturnValue([{ title: 'Joinable', profile: 'p' }]);
-        settings.getTitleProfile.mockImplementation((target) =>
-            titleOf(target) === 'Joinable' ? { name: 'p', values: { autoJoin: true } } : null,
-        );
+        settings.getChallengeProfiles.mockReturnValue({ p: { autoJoin: true } });
+        rulesGive((target) => (titleOf(target) === 'Joinable' ? { autoJoin: true } : {}));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
                 { id: 1, join_coins: 0, type: 'flash', title: 'Joinable' },
@@ -371,12 +367,10 @@ describe('runJoinPass', () => {
         expect(res.joined).toBe(1);
     });
 
-    test('master ON but a title profile disables autoJoin → that title is skipped, others join', async () => {
-        // Safety-relevant mirror of the enable case: an explicit false in the
-        // profile must win over the master-on default (hasOwnProperty, not truthy).
-        settings.getTitleProfile.mockImplementation((target) =>
-            titleOf(target) === 'Excluded' ? { name: 'p', values: { autoJoin: false } } : null,
-        );
+    test('master ON but a rule disables autoJoin → that title is skipped, others join', async () => {
+        // Safety-relevant mirror of the enable case: an explicit false from the
+        // rules must win over the master-on default (hasOwnProperty, not truthy).
+        rulesGive((target) => (titleOf(target) === 'Excluded' ? { autoJoin: false } : {}));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
                 { id: 1, join_coins: 0, type: 'flash', title: 'Excluded' },
@@ -593,9 +587,7 @@ describe('runJoinPass — join window', () => {
         // Global says "join on sight"; the rule for this title says "only in the
         // last 24h" — the title must still be deferred.
         withWindow(0);
-        settings.getTitleRuleOverrides.mockImplementation((target) =>
-            titleOf(target) === 'abc' ? { autoJoinWithinHoursOfEnd: 24 } : {},
-        );
+        rulesGive((target) => (titleOf(target) === 'abc' ? { autoJoinWithinHoursOfEnd: 24 } : {}));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
                 { id: 1, join_coins: 0, type: 'flash', title: 'abc', close_time: NOW_SEC + 48 * HOUR },
@@ -694,7 +686,7 @@ describe('runJoinPass — inline rule arming', () => {
     test('master off but an inline autoJoin:true rule arms the pass', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         settings.getTitleRules.mockReturnValue([{ title: 'Joinable', autoJoin: true }]);
-        settings.getTitleRuleOverrides.mockImplementation((t) => (titleOf(t) === 'Joinable' ? { autoJoin: true } : {}));
+        rulesGive((t) => (titleOf(t) === 'Joinable' ? { autoJoin: true } : {}));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
                 { id: 1, join_coins: 0, type: 'flash', title: 'Joinable' },
@@ -710,8 +702,8 @@ describe('runJoinPass — inline rule arming', () => {
     test('an inline autoJoin:false is not rescued by a profile that says true', async () => {
         settings.getEffectiveSetting.mockImplementation((k) => (k === 'autoJoin' ? false : DEFAULT_SETTINGS[k]));
         settings.getTitleRules.mockReturnValue([{ title: 'X', profile: 'p', autoJoin: false }]);
-        settings.getTitleRuleOverrides.mockReturnValue({ autoJoin: false });
-        settings.getTitleProfile.mockReturnValue({ name: 'p', values: { autoJoin: true } });
+        settings.getChallengeProfiles.mockReturnValue({ p: { autoJoin: true } });
+        rulesGive(() => ({ autoJoin: false }));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash', title: 'X' }]),
         });
@@ -720,11 +712,12 @@ describe('runJoinPass — inline rule arming', () => {
         expect(deps.getMemberChallenges).not.toHaveBeenCalled();
     });
 
-    test('an inline autoJoin:true is a title opt-in that bypasses an excluded type', async () => {
+    test('a rule opt-in bypasses an excluded type', async () => {
         settings.getEffectiveSetting.mockImplementation((k) =>
             k === 'autoJoinExcludeTypes' ? 'flash' : DEFAULT_SETTINGS[k],
         );
-        settings.getTitleRuleOverrides.mockImplementation((t) => (titleOf(t) === 'Wanted' ? { autoJoin: true } : {}));
+        rulesGive((t) => (titleOf(t) === 'Wanted' ? { autoJoin: true } : {}));
+        settings.hasRuleJoinOptIn.mockImplementation((t) => titleOf(t) === 'Wanted');
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
                 { id: 1, join_coins: 0, type: 'flash', title: 'Wanted' },
@@ -740,7 +733,7 @@ describe('runJoinPass — inline rule arming', () => {
         settings.getEffectiveSetting.mockImplementation((k) =>
             k === 'autoJoinExcludeTypes' ? 'flash' : DEFAULT_SETTINGS[k],
         );
-        settings.getTitleRuleOverrides.mockReturnValue({ autoJoinWithinHoursOfEnd: 24 });
+        rulesGive(() => ({ autoJoinWithinHoursOfEnd: 24 }));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [{ id: 1, join_coins: 0, type: 'flash', title: 'Timed' }]),
         });
@@ -783,9 +776,9 @@ describe('runJoinPass — challenge tags', () => {
         // A tag-keyed rule has no title to match on, so this only passes if the
         // pass hands the whole candidate to the facade.
         const seen = [];
-        settings.getTitleRuleOverrides.mockImplementation((target) => {
+        settings.resolveRuleSetting.mockImplementation((key, target) => {
             seen.push(target);
-            return {};
+            return null;
         });
         const deps = makeDeps({ getMemberChallenges: jest.fn(async () => candidates()) });
         await runJoinPass('tok', Date.now(), deps);
@@ -796,9 +789,7 @@ describe('runJoinPass — challenge tags', () => {
         const HOUR = 3600;
         const nowMs = 1_700_000_000_000;
         const nowSec = nowMs / 1000;
-        settings.getTitleRuleOverrides.mockImplementation((target) =>
-            (target?.tags || []).includes('Exhibition') ? { autoJoinWithinHoursOfEnd: 24 } : {},
-        );
+        rulesGive((target) => ((target?.tags || []).includes('Exhibition') ? { autoJoinWithinHoursOfEnd: 24 } : {}));
         const deps = makeDeps({
             getMemberChallenges: jest.fn(async () => [
                 // Tagged Exhibition and far from closing -> deferred by the rule.
@@ -855,13 +846,11 @@ describe('joinChallengeSingle — manual', () => {
 });
 
 /**
- * Category-keyed join timing inside the pass: a rule matched on the challenge's
- * own type / photo count overrides the global window, and the percent-elapsed
- * anchor replaces the hours window rather than intersecting with it.
- *
- * Precedence under test: title-inline -> title-profile -> CATEGORY -> global.
+ * Join timing from a rule matched on the candidate's class (photo count here):
+ * the rule's window overrides the global one, and the percent-elapsed anchor
+ * replaces the hours window rather than intersecting with it.
  */
-describe('runJoinPass \u2014 category join timing', () => {
+describe('runJoinPass \u2014 join timing from class rules', () => {
     const HOUR = 3600;
     const NOW_MS = 1_700_000_000_000;
     const NOW_SEC = NOW_MS / 1000;
@@ -881,20 +870,20 @@ describe('runJoinPass \u2014 category join timing', () => {
             Object.prototype.hasOwnProperty.call(map, k) ? map[k] : DEFAULT_SETTINGS[k],
         );
 
-    test('a category rule overrides the global window for its category', async () => {
+    test('a photo-count rule overrides the global window for its class', async () => {
         // Global says "only in the last hour" \u2014 this candidate has 4h left.
         globalSetting({ autoJoinWithinHoursOfEnd: 1 });
-        // The category rule widens it to 6h, so this one joins.
-        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinWithinHoursOfEnd: 6 });
+        // The rule widens it to 6h, so this one joins.
+        rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinWithinHoursOfEnd: 6 } : {}));
         const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(1);
         expect(deps.submitToChallenge).toHaveBeenCalled();
     });
 
-    test('a category rule can also make the timing STRICTER than the global', async () => {
+    test('a class rule can also make the timing STRICTER than the global', async () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 48 });
-        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinWithinHoursOfEnd: 1 });
+        rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinWithinHoursOfEnd: 1 } : {}));
         const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(0);
@@ -906,7 +895,7 @@ describe('runJoinPass \u2014 category join timing', () => {
         // The global hours window alone would defer (1h allowed, 4h left).
         globalSetting({ autoJoinWithinHoursOfEnd: 1 });
         // 83% elapsed clears a 75% anchor, so the candidate joins.
-        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinAfterPercentElapsed: 75 });
+        rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinAfterPercentElapsed: 75 } : {}));
         const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(1);
@@ -914,21 +903,11 @@ describe('runJoinPass \u2014 category join timing', () => {
 
     test('a percent rule defers a candidate that has not run long enough yet', async () => {
         globalSetting({ autoJoinWithinHoursOfEnd: 0 });
-        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinAfterPercentElapsed: 90 });
+        rulesGive((target) => (target?.max_photo_submits === 4 ? { autoJoinAfterPercentElapsed: 90 } : {}));
         const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
         const res = await runJoinPass('tok', NOW_MS, deps);
         expect(res.joined).toBe(0);
         expect(res.results[0].status).toBe('skipped:too-early');
-    });
-
-    test('a title-rule override still wins over the category rule', async () => {
-        globalSetting({ autoJoinWithinHoursOfEnd: 0 });
-        settings.getCategoryRuleOverrides.mockReturnValue({ autoJoinAfterPercentElapsed: 90 });
-        // The title says "join any time", and a title is the more specific rule.
-        settings.getTitleRuleOverrides.mockReturnValue({ autoJoinAfterPercentElapsed: 10 });
-        const deps = makeDeps({ getMemberChallenges: jest.fn(async () => [candidate()]) });
-        const res = await runJoinPass('tok', NOW_MS, deps);
-        expect(res.joined).toBe(1);
     });
 
     test('the same percent anchor defers a long challenge and joins a short one', async () => {
@@ -971,24 +950,18 @@ describe('joinChallenges — edge paths', () => {
     const errors = () => logger.withCategory().error.mock.calls.map(([msg]) => msg);
 
     describe('title matching', () => {
-        test('a titleless candidate that carries challenge tags still consults the title-rule tiers', () => {
-            settings.getTitleRuleOverrides.mockReturnValue({ autoJoinMaxCoins: 7 });
+        test('a titleless candidate still consults the rules (they may key on tags, type, photos, runtime)', () => {
+            rulesGive(() => ({ autoJoinMaxCoins: 7 }));
             expect(resolveJoinSetting('autoJoinMaxCoins', { tags: ['Exhibition'] })).toBe(7);
-            expect(settings.getTitleRuleOverrides).toHaveBeenCalledWith({ tags: ['Exhibition'] });
+            expect(settings.resolveRuleSetting).toHaveBeenCalledWith('autoJoinMaxCoins', { tags: ['Exhibition'] });
         });
 
-        test('an empty tag list with no title is not matchable', () => {
-            settings.getTitleRuleOverrides.mockReturnValue({ autoJoinMaxCoins: 7 });
-            expect(resolveJoinSetting('autoJoinMaxCoins', { tags: [] })).toBe(150);
-            expect(settings.getTitleRuleOverrides).not.toHaveBeenCalled();
-        });
-
-        test('a tag-keyed profile is a title opt-in for a titleless candidate (bypasses excluded type)', async () => {
+        test('a rule opt-in on a titleless candidate bypasses an excluded type', async () => {
             settings.getEffectiveSetting.mockImplementation((k) =>
                 k === 'autoJoinExcludeTypes' ? 'flash' : DEFAULT_SETTINGS[k],
             );
-            settings.getTitleProfile.mockImplementation((target) =>
-                Array.isArray(target?.tags) && target.tags.includes('Exhibition') ? { name: 'p', values: {} } : null,
+            settings.hasRuleJoinOptIn.mockImplementation(
+                (target) => Array.isArray(target?.tags) && target.tags.includes('Exhibition'),
             );
             const deps = makeDeps({
                 getMemberChallenges: jest.fn(async () => [
@@ -1014,13 +987,13 @@ describe('joinChallenges — edge paths', () => {
             expect(isAutoJoinActive()).toBe(false);
         });
 
-        test('blank titles are skipped; a later title resolving to an auto-join profile arms', () => {
-            settings.titleRuleTitles.mockReturnValueOnce(['', 'Real']);
-            settings.getTitleRules.mockReturnValue([{ titles: ['', 'Real'], profile: 'p' }]);
-            settings.getTitleProfile.mockImplementation((t) => (t === 'Real' ? { values: { autoJoin: true } } : null));
+        test('a rule without a profile name is skipped; a later profiled rule arms', () => {
+            settings.getTitleRules.mockReturnValue([
+                { title: 'A', profile: '' },
+                { title: 'B', profile: 'p' },
+            ]);
+            settings.getChallengeProfiles.mockReturnValue({ p: { autoJoin: true } });
             expect(isAutoJoinActive()).toBe(true);
-            expect(settings.getTitleProfile).toHaveBeenCalledTimes(1);
-            expect(settings.getTitleProfile).toHaveBeenCalledWith('Real');
         });
     });
 

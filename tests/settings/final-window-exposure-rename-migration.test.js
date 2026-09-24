@@ -28,6 +28,7 @@ const ALL_MIGRATION_FLAGS = {
     _scheduledFillListsMigratedV1: true,
     _scheduledFillListBoundsV1: true,
     _finalWindowExposureRenamedV1: true,
+    _challengeRulesOrderedV1: true,
 };
 
 describe('last-hour → final-window key rename migration in loadSettings', () => {
