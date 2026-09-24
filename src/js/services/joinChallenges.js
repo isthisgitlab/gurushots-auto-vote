@@ -24,7 +24,7 @@
  *   4. Budget decrements only after a confirmed unlock.
  *   5. Cancellation is honored between candidates and before each spend.
  *
- * deps (injected by api/main.js real / mock/index.js mock):
+ * deps (injected by strategies/real/index.js real / mock/index.js mock):
  *   { getMemberChallenges, getBankroll, coinsUnlock, submitToChallenge,
  *     getEligiblePhotos, joinStateStore, acquireUnlockLock } — joinStateStore is
  *   null and acquireUnlockLock absent in mock (no real state touched, mirroring
@@ -57,7 +57,7 @@ const cat = () => logger.withCategory('join');
  *
  * Precedence: rules in list order, the first matching rule that sets the key
  * wins — a rule's inline override before the profile it names — then the
- * global default. See `_ruleValuesFor` in settings.js.
+ * global default. See `ruleValuesFor` in settings/ruleResolution.js.
  */
 const resolveJoinSetting = (key, challenge) => {
     // Pass the whole candidate, never just its title: a rule may be keyed on the
@@ -128,7 +128,7 @@ const isAutoJoinActive = () => {
 
 /**
  * A rule opt-in deliberate enough to bypass the type filters — see
- * `hasRuleJoinOptIn` in settings.js: the rules resolve `autoJoin` to true, or
+ * `hasRuleJoinOptIn` in settings/titleRules.js: the rules resolve `autoJoin` to true, or
  * the applying profile comes from a rule naming a title or challenge tag.
  *
  * An inline WINDOW alone is deliberately not enough — "join this late" says
@@ -426,6 +426,117 @@ const performJoin = async (challenge, token, deps, needsCoins) => {
 // ---- automatic per-cycle pass ----
 
 /**
+ * Mutable per-pass join state: the balance and budget kept locally accurate as
+ * the pass spends, the clock the join window is measured against, and whether
+ * the one-per-pass missing-timing diagnostic has fired.
+ *
+ * @typedef {{
+ *   bankroll: ({coins?: number}|null),
+ *   remainingBudget: number,
+ *   nowSec: number,
+ *   missingCloseTimeLogged: boolean,
+ * }} JoinPassState
+ */
+
+/**
+ * One balance read for the whole pass. A throw here (or a null return) means
+ * "balance unknown" ⇒ no paid joins.
+ */
+const readPassBankroll = async (token, deps) => {
+    try {
+        return await deps.getBankroll(token);
+    } catch (error) {
+        cat().warning(`could not read balance (paid joins skipped this pass): ${error?.message || error}`, null);
+        return null;
+    }
+};
+
+/**
+ * close_time is epoch SECONDS everywhere in this codebase; `now` arrives as
+ * epoch ms. A caller that omits it falls back to the wall clock rather than
+ * computing a window against 0, which would fail every candidate closed.
+ */
+const toPassNowSec = (now) => Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
+
+/**
+ * @param {object} challenge
+ * @param {JoinPassState} pass
+ */
+const decideCandidateJoin = (challenge, pass) => {
+    const cfg = resolveCandidateConfig(challenge);
+    return shouldJoinChallenge({
+        challenge,
+        bankroll: pass.bankroll,
+        remainingBudget: pass.remainingBudget,
+        includeTypes: cfg.includeTypes,
+        excludeTypes: cfg.excludeTypes,
+        maxCoins: cfg.maxCoins,
+        hasProfileMatch: cfg.hasProfileMatch,
+        includeTags: cfg.includeTags,
+        excludeTags: cfg.excludeTags,
+        joinWithinSec: cfg.joinWithinSec,
+        joinAfterPercentElapsed: cfg.joinAfterPercentElapsed,
+        nowSec: pass.nowSec,
+    });
+};
+
+/**
+ * Both timing fields get the same one-per-pass diagnostic: each means the window
+ * silently stopped joining, which is otherwise indistinguishable from "nothing
+ * to join".
+ *
+ * @param {object} challenge
+ * @param {string} reason
+ * @param {JoinPassState} pass
+ */
+const noteTimingRefusal = (challenge, reason, pass) => {
+    if (reason !== 'close-time-unknown' && reason !== 'start-time-unknown') return;
+    if (pass.missingCloseTimeLogged) return;
+    pass.missingCloseTimeLogged = true;
+    warnMissingCloseTime(challenge, reason);
+};
+
+/**
+ * Decide and (when due) perform one candidate's join, keeping the pass's
+ * balance and budget in step with what it spent.
+ *
+ * @param {object} challenge
+ * @param {string} token
+ * @param {object} deps
+ * @param {JoinPassState} pass
+ * @returns {Promise<string>} the candidate's result status
+ */
+const joinCandidate = async (challenge, token, deps, pass) => {
+    // Per-candidate enable (master → profile): skip titles auto-join is off
+    // for, BEFORE resolving the rest of the config (avoid redundant work).
+    if (resolveJoinSetting('autoJoin', challenge) !== true) {
+        return 'skipped:autojoin-off';
+    }
+    const decision = decideCandidateJoin(challenge, pass);
+    if (!decision.join) {
+        noteTimingRefusal(challenge, decision.reason, pass);
+        return `skipped:${decision.reason}`;
+    }
+    // Guard each candidate: one bad candidate (unexpected throw) must not
+    // abort the rest of the pass — mirrors the per-challenge voting loop.
+    let outcome;
+    try {
+        outcome = await performJoin(challenge, token, deps, decision.needsCoins);
+    } catch (error) {
+        cat().warning(`join failed for ${logger.challengeTag(challenge)}: ${error?.message || error}`, null);
+        return 'error';
+    }
+    if (outcome.charged > 0) {
+        pass.remainingBudget -= outcome.charged;
+        // A charge only follows a passed affordability check, which already
+        // proved Number(bankroll.coins) finite. Coerce the same way so a
+        // numeric-string balance is still decremented for the rest of the pass.
+        pass.bankroll.coins = Number(pass.bankroll.coins) - outcome.charged;
+    }
+    return outcome.status;
+};
+
+/**
  * Automatic join pass — a pre-step in fetchChallengesAndVote. The `autoJoin`
  * enable is resolved per candidate by title (rule-inline → profile → master), so
  * a titled candidate joins even when the master default is off; the pass only
@@ -451,7 +562,7 @@ const runJoinPass = async (token, now, deps) => {
     // un-joined candidate has no cached id for a per-challenge override to key
     // off). So we can only skip the pass entirely when the master is off AND no
     // title profile turns it on. Effective per-candidate enable is resolved in
-    // the loop below.
+    // joinCandidate.
     const masterOn = settings.getEffectiveSetting('autoJoin', null) === true;
     // When the master default is off, the pass is still needed if any saved title
     // profile turns autoJoin ON for its title. Check that precisely (a tag-only
@@ -472,23 +583,15 @@ const runJoinPass = async (token, now, deps) => {
         return { ran: true, joined: 0, results: [] };
     }
 
-    // One balance read for the whole pass; kept locally accurate as we spend.
-    // A throw here (or a null return) means "balance unknown" ⇒ no paid joins.
-    let bankroll = null;
-    try {
-        bankroll = await deps.getBankroll(token);
-    } catch (error) {
-        cat().warning(`could not read balance (paid joins skipped this pass): ${error?.message || error}`, null);
-    }
-    let remainingBudget = Number(settings.getEffectiveSetting('autoJoinCycleCoinBudget', null)) || 0;
-
-    // close_time is epoch SECONDS everywhere in this codebase; `now` arrives as
-    // epoch ms. A caller that omits it falls back to the wall clock rather than
-    // computing a window against 0, which would fail every candidate closed.
-    const nowSec = Math.floor((Number.isFinite(now) && now > 0 ? now : Date.now()) / 1000);
-
-    // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
-    let missingCloseTimeLogged = false;
+    const bankroll = await readPassBankroll(token, deps);
+    /** @type {JoinPassState} */
+    const pass = {
+        bankroll,
+        remainingBudget: Number(settings.getEffectiveSetting('autoJoinCycleCoinBudget', null)) || 0,
+        nowSec: toPassNowSec(now),
+        // One diagnostic per pass, not per candidate (see warnMissingCloseTime).
+        missingCloseTimeLogged: false,
+    };
 
     const results = [];
     let joined = 0;
@@ -497,60 +600,9 @@ const runJoinPass = async (token, now, deps) => {
             cat().warning('join pass cancelled by user', null);
             break;
         }
-        // Per-candidate enable (master → profile): skip titles auto-join is off
-        // for, BEFORE resolving the rest of the config (avoid redundant work).
-        if (resolveJoinSetting('autoJoin', challenge) !== true) {
-            results.push({ id: challenge?.id, status: 'skipped:autojoin-off' });
-            continue;
-        }
-        const cfg = resolveCandidateConfig(challenge);
-        const decision = shouldJoinChallenge({
-            challenge,
-            bankroll,
-            remainingBudget,
-            includeTypes: cfg.includeTypes,
-            excludeTypes: cfg.excludeTypes,
-            maxCoins: cfg.maxCoins,
-            hasProfileMatch: cfg.hasProfileMatch,
-            includeTags: cfg.includeTags,
-            excludeTags: cfg.excludeTags,
-            joinWithinSec: cfg.joinWithinSec,
-            joinAfterPercentElapsed: cfg.joinAfterPercentElapsed,
-            nowSec,
-        });
-        if (!decision.join) {
-            // Both timing fields get the same one-per-pass diagnostic: each
-            // means the window silently stopped joining, which is otherwise
-            // indistinguishable from "nothing to join".
-            if (
-                (decision.reason === 'close-time-unknown' || decision.reason === 'start-time-unknown') &&
-                !missingCloseTimeLogged
-            ) {
-                missingCloseTimeLogged = true;
-                warnMissingCloseTime(challenge, decision.reason);
-            }
-            results.push({ id: challenge?.id, status: `skipped:${decision.reason}` });
-            continue;
-        }
-        // Guard each candidate: one bad candidate (unexpected throw) must not
-        // abort the rest of the pass — mirrors the per-challenge voting loop.
-        let outcome;
-        try {
-            outcome = await performJoin(challenge, token, deps, decision.needsCoins);
-        } catch (error) {
-            cat().warning(`join failed for ${logger.challengeTag(challenge)}: ${error?.message || error}`, null);
-            results.push({ id: challenge?.id, status: 'error' });
-            continue;
-        }
-        if (outcome.charged > 0) {
-            remainingBudget -= outcome.charged;
-            // A charge only follows a passed affordability check, which already
-            // proved Number(bankroll.coins) finite. Coerce the same way so a
-            // numeric-string balance is still decremented for the rest of the pass.
-            bankroll.coins = Number(bankroll.coins) - outcome.charged;
-        }
-        if (outcome.status === 'joined') joined += 1;
-        results.push({ id: challenge?.id, status: outcome.status });
+        const status = await joinCandidate(challenge, token, deps, pass);
+        if (status === 'joined') joined += 1;
+        results.push({ id: challenge?.id, status });
     }
 
     if (joined > 0) {

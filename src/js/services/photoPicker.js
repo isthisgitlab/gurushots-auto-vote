@@ -1215,6 +1215,50 @@ const pickPhotosForChallenge = (challenge, eligiblePhotos, slotsToFill, opts = {
 };
 
 /**
+ * Apply the hard filters (must-include tags, letter prefix) to stemmed photos.
+ *
+ * When they eliminate everything, relax to the unfiltered set so the slot still
+ * gets filled (off-theme best performer) — unless the caller opted out with
+ * fillWithoutTagMatch:false, or no hard filter was set at all.
+ *
+ * @returns {Array<object>|null} the surviving stemmed photos, or null for "pick nothing"
+ */
+const applyHardFilters = (withStems, mustStems, letterPrefix, opts) => {
+    let filtered = withStems;
+    if (mustStems.length > 0) {
+        filtered = filtered.filter(({ wordStems }) => photoMatchesAllStems(wordStems, mustStems));
+    }
+    if (letterPrefix) {
+        filtered = filtered.filter(({ wholeStems }) =>
+            wholeStems.some((s) => s.length >= MIN_USER_TAG_STEM_LENGTH && s[0] === letterPrefix),
+        );
+    }
+    if (filtered.length > 0) return filtered;
+    const hadHardFilter = mustStems.length > 0 || Boolean(letterPrefix);
+    if (!hadHardFilter || opts.fillWithoutTagMatch === false) return null;
+    notifyFallback(opts, { letterPrefix, mustStems, excludedStems: [] });
+    return withStems;
+};
+
+/**
+ * A negated title ("No Humans") excludes photos whose labels show the negated
+ * subject. Same all-or-nothing fallback as the hard filters: only when EVERY
+ * remaining photo shows it does the picker relax (or return null under
+ * fillWithoutTagMatch:false). A photo with no labels cannot be judged and is kept.
+ *
+ * @returns {Array<object>|null} the surviving stemmed photos, or null for "pick nothing"
+ */
+const applyExcludedSubjectFilter = (filtered, challenge, opts) => {
+    const excluded = excludedSubjectOf(challenge, opts.ignoreWords || null);
+    if (!excluded) return filtered;
+    const kept = filtered.filter(({ wordStems }) => !photoShowsExcluded(wordStems, excluded));
+    if (kept.length > 0) return kept;
+    if (opts.fillWithoutTagMatch === false) return null;
+    notifyFallback(opts, { letterPrefix: null, mustStems: [], excludedStems: excluded.stems });
+    return filtered;
+};
+
+/**
  * Filter + score candidates, WITHOUT sorting or slicing.
  *
  * Split out of pickPhotosForChallenge so one fill can score once and then both
@@ -1257,44 +1301,10 @@ const buildScoredCandidates = (challenge, eligiblePhotos, opts = {}) => {
         wordStems: labelWordStems(photo),
         wholeStems: wholeLabelStems(photo),
     }));
-    let filtered = withStems;
-    if (mustStems.length > 0) {
-        filtered = filtered.filter(({ wordStems }) => photoMatchesAllStems(wordStems, mustStems));
-    }
-    if (letterPrefix) {
-        filtered = filtered.filter(({ wholeStems }) =>
-            wholeStems.some((s) => s.length >= MIN_USER_TAG_STEM_LENGTH && s[0] === letterPrefix),
-        );
-    }
-    if (filtered.length === 0) {
-        // A hard filter (must-tags and/or the letter filter) eliminated
-        // everything. Unless the caller opted out, relax to the unfiltered set so
-        // the slot still gets filled (off-theme best performer).
-        const hadHardFilter = mustStems.length > 0 || Boolean(letterPrefix);
-        if (hadHardFilter && opts.fillWithoutTagMatch !== false) {
-            filtered = withStems;
-            notifyFallback(opts, { letterPrefix, mustStems, excludedStems: [] });
-        } else {
-            return [];
-        }
-    }
-
-    // A negated title ("No Humans") excludes photos whose labels show the
-    // negated subject. Same all-or-nothing fallback as the hard filters above:
-    // only when EVERY remaining photo shows it does the picker relax (or return
-    // [] under fillWithoutTagMatch:false). A photo with no labels cannot be
-    // judged and is kept.
-    const excluded = excludedSubjectOf(challenge, opts.ignoreWords || null);
-    if (excluded) {
-        const kept = filtered.filter(({ wordStems }) => !photoShowsExcluded(wordStems, excluded));
-        if (kept.length > 0) {
-            filtered = kept;
-        } else if (opts.fillWithoutTagMatch === false) {
-            return [];
-        } else {
-            notifyFallback(opts, { letterPrefix: null, mustStems: [], excludedStems: excluded.stems });
-        }
-    }
+    const hardFiltered = applyHardFilters(withStems, mustStems, letterPrefix, opts);
+    if (!hardFiltered) return [];
+    const filtered = applyExcludedSubjectFilter(hardFiltered, challenge, opts);
+    if (!filtered) return [];
 
     // Optional semantic tiers — see semanticTiersOf. No map (the default) → both
     // are 0 for every photo → they are inert and the sort is identical to the

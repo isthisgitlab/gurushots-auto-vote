@@ -507,7 +507,7 @@ const getSlotsRemaining = (challenge) => {
  * Rows of an autoFillSchedule value that are actually usable. The value comes
  * straight off the persisted settings blob via getEffectiveSetting — no zod
  * re-validation happens on read — and these helpers sit on the per-challenge
- * dispatch path in api/main.js that has no per-challenge try/catch, so a throw
+ * dispatch path in strategies/real/index.js that has no per-challenge try/catch, so a throw
  * here would abort the whole voting cycle for every challenge. Anything that
  * isn't an array of { count, seconds } objects with finite numbers is silently
  * dropped (mirrors getSlotsRemaining's Number.isFinite convention). Length is
@@ -638,6 +638,86 @@ const reflectEntryFlag = (challenge, imageId, field) => {
 };
 
 /**
+ * Whether a re-fetched `member` has a shape every later consumer of the
+ * challenge object can survive: the entries array (the merge guards), member.boost
+ * (runBoost destructures it without a guard and reads .timeout), and
+ * ranking.exposure (evaluateVotingDecision reads .exposure_factor off it
+ * unguarded). A partial payload would otherwise crash the whole voting pass, not
+ * just this challenge — stale beats crashed.
+ */
+const isAdoptableMember = (member) =>
+    Boolean(member) &&
+    typeof member === 'object' &&
+    Array.isArray(member.ranking?.entries) &&
+    member.ranking?.exposure != null &&
+    Boolean(member.boost) &&
+    typeof member.boost === 'object';
+
+/**
+ * Merge, don't blindly replace: entries reflected locally earlier this cycle
+ * (reflectNewEntry after a fill-new submit) may not have propagated into
+ * get_my_active_challenges yet — dropping them would resurrect the very
+ * double-submit the refresh exists to prevent. Union by id only grows the entry
+ * count, which errs toward fewer submits. An id-less prev entry (malformed) can't
+ * be matched, so it is kept — again the fewer-submits direction. Mutates
+ * `freshEntries`.
+ */
+const mergeLocalEntries = (prevEntries, freshEntries) => {
+    const freshIds = new Set(
+        freshEntries.filter((entry) => entry && entry.id != null).map((entry) => String(entry.id)),
+    );
+    for (const entry of prevEntries) {
+        // An id-less entry (malformed upstream data) can't be matched by id;
+        // dedupe it by object identity instead so a repeated refresh — or the
+        // mock-mode case where prev and fresh are the same array — never
+        // appends a second copy of it.
+        const isDuplicate = entry?.id == null ? freshEntries.includes(entry) : freshIds.has(String(entry.id));
+        if (entry && !isDuplicate) {
+            freshEntries.push(entry);
+        }
+    }
+};
+
+/**
+ * Id → raised boost/turbo flags for every id-bearing entry that has either set.
+ * @returns {Map<string, {turbo: boolean, boosted: boolean}>}
+ */
+const collectRaisedEntryFlags = (entries) => {
+    const flags = new Map();
+    for (const entry of entries) {
+        if (!entry || entry.id == null) continue;
+        if (entry.turbo || entry.boosted) {
+            flags.set(String(entry.id), { turbo: !!entry.turbo, boosted: !!entry.boosted });
+        }
+    }
+    return flags;
+};
+
+/**
+ * Carry locally-raised boost/turbo flags across the member swap.
+ *
+ * Replacing `member` wholesale means an entry that IS in the fresh payload comes back
+ * with the server's flags — and the server has not registered an apply from seconds ago,
+ * so it reports turbo/boosted false. That would silently undo reflectEntryFlag: with the
+ * default action order (turbo, then autoFill, then boost) a turbo applied earlier in the
+ * pass would have its flag wiped by the refresh, and boost would then pick the very entry
+ * turbo had just consumed. Only ever raise a flag, never clear one — if either side says an
+ * entry is taken, treat it as taken. That errs toward using a different entry, which is the
+ * safe direction: boost and turbo may both be spent, but never on the same entry. Mutates
+ * `freshEntries`.
+ */
+const carryLocalEntryFlags = (prevEntries, freshEntries) => {
+    const localFlags = collectRaisedEntryFlags(prevEntries);
+    if (localFlags.size === 0) return;
+    for (const entry of freshEntries) {
+        const flags = entry && entry.id != null ? localFlags.get(String(entry.id)) : null;
+        if (!flags) continue;
+        if (flags.turbo) entry.turbo = true;
+        if (flags.boosted) entry.boosted = true;
+    }
+};
+
+/**
  * Re-fetch live challenge state right before a submit so an entry added
  * outside this pass (e.g. a manual submission made while autorun was working
  * through earlier challenges) is seen before we consume a slot. The
@@ -694,75 +774,17 @@ const refreshChallengeState = async (challenge, token, { getActiveChallenges, lo
         );
         return 'gone';
     }
-    // Adopt only a member shape every later consumer of THIS challenge object
-    // can survive: the entries array (the guards here), member.boost (runBoost
-    // destructures it without a guard and reads .timeout), and ranking.exposure
-    // (evaluateVotingDecision reads .exposure_factor off it unguarded). A
-    // partial payload would otherwise crash the whole voting pass, not just
-    // this challenge — stale beats crashed.
     const member = fresh.member;
-    if (
-        !member ||
-        typeof member !== 'object' ||
-        !Array.isArray(member.ranking?.entries) ||
-        member.ranking?.exposure == null ||
-        !member.boost ||
-        typeof member.boost !== 'object'
-    ) {
+    if (!isAdoptableMember(member)) {
         staleWarning('malformed challenge payload');
         return 'unavailable';
     }
-    // Merge, don't blindly replace: entries reflected locally earlier this
-    // cycle (reflectNewEntry after a fill-new submit) may not have propagated
-    // into get_my_active_challenges yet — dropping them would resurrect the
-    // very double-submit this refresh exists to prevent. Union by id only
-    // grows the entry count, which errs toward fewer submits. prevEntries is
-    // sliced because in mock mode `fresh` can be the identical cached object,
-    // making prev and fresh the same array. An id-less prev entry (malformed)
-    // can't be matched, so it is kept — again the fewer-submits direction.
+    // prevEntries is sliced because in mock mode `fresh` can be the identical
+    // cached object, making prev and fresh the same array.
     const prevEntries = getEntries(challenge).slice();
     challenge.member = member;
-    const freshEntries = member.ranking.entries;
-    const freshIds = new Set(
-        freshEntries.filter((entry) => entry && entry.id != null).map((entry) => String(entry.id)),
-    );
-    for (const entry of prevEntries) {
-        // An id-less entry (malformed upstream data) can't be matched by id;
-        // dedupe it by object identity instead so a repeated refresh — or the
-        // mock-mode case where prev and fresh are the same array — never
-        // appends a second copy of it.
-        const isDuplicate = entry?.id == null ? freshEntries.includes(entry) : freshIds.has(String(entry.id));
-        if (entry && !isDuplicate) {
-            freshEntries.push(entry);
-        }
-    }
-
-    // Carry locally-raised boost/turbo flags across the swap.
-    //
-    // Replacing `member` wholesale means an entry that IS in the fresh payload comes back
-    // with the server's flags — and the server has not registered an apply from seconds ago,
-    // so it reports turbo/boosted false. That silently undid reflectEntryFlag: with the
-    // default action order (turbo, then autoFill, then boost) a turbo applied earlier in the
-    // pass had its flag wiped by this refresh, and boost then picked the very entry turbo had
-    // just consumed. Only ever raise a flag, never clear one — if either side says an entry
-    // is taken, treat it as taken. That errs toward using a different entry, which is the
-    // safe direction: boost and turbo may both be spent, but never on the same entry.
-    const localFlags = new Map();
-    for (const entry of prevEntries) {
-        if (!entry || entry.id == null) continue;
-        if (entry.turbo || entry.boosted) {
-            localFlags.set(String(entry.id), { turbo: !!entry.turbo, boosted: !!entry.boosted });
-        }
-    }
-    if (localFlags.size > 0) {
-        for (const entry of freshEntries) {
-            const flags = entry && entry.id != null ? localFlags.get(String(entry.id)) : null;
-            if (!flags) continue;
-            if (flags.turbo) entry.turbo = true;
-            if (flags.boosted) entry.boosted = true;
-        }
-    }
-
+    mergeLocalEntries(prevEntries, member.ranking.entries);
+    carryLocalEntryFlags(prevEntries, member.ranking.entries);
     return 'refreshed';
 };
 

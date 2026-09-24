@@ -27,11 +27,64 @@ const { boostApplyThreshold } = require('../voting/boostWindow');
 const { ruleOpensAt } = require('../voting/currencyAuto');
 
 /**
+ * Resolve each challenge's per-challenge config in parallel, fail-soft: a
+ * resolver that throws yields null for that challenge, which the caller skips.
+ *
+ * @template T
+ * @param {Array} challenges
+ * @param {(challengeId: string) => T|Promise<T>} resolve
+ * @returns {Promise<Array<T|null>>}
+ */
+const resolveConfigsFailSoft = (challenges, resolve) =>
+    Promise.all(
+        challenges.map(async (challenge) => {
+            try {
+                return await resolve(challenge.id.toString());
+            } catch {
+                return null;
+            }
+        }),
+    );
+
+// Fall back to the id so a missing/empty title never logs as "undefined".
+const challengeLabel = (challenge) => challenge.title || `challenge ${challenge.id}`;
+
+// 60..3540s == 1..59 min; mirrors VotingLogic's lead-minute clamps (rawLeadMin,
+// getBoostPrefillLeadSec) so a corrupt sub-minute/over-max override falls back
+// to the schema default (15 min) identically here.
+const clampLeadSec = (leadSec) => (Number.isFinite(leadSec) && leadSec >= 60 && leadSec <= 3540 ? leadSec : 900);
+
+// Strictly after `now` and sooner than the best boundary found so far (none yet
+// = Infinity, so a non-finite start never wins).
+const isSoonerUpcomingStart = (startTime, now, best) =>
+    startTime > now && startTime < (best ? best.startTime : Infinity);
+
+/** @returns {{challengeId, challengeTitle, startTime:number, leadMin:number}} */
+const leadWindowStart = (challenge, startTime, leadSec) => ({
+    challengeId: challenge.id,
+    challengeTitle: challengeLabel(challenge),
+    startTime,
+    leadMin: Math.round(leadSec / 60),
+});
+
+/**
  * Per-challenge pre-final-window-top-up config for the cadence cap.
  * @callback ResolveFinalWindowTopUp
  * @param {string} challengeId - Challenge id as a string.
  * @returns {{enabled: boolean, leadSec: number, durationSec: number}|Promise<{enabled: boolean, leadSec: number, durationSec: number}>}
  */
+
+/**
+ * Top-up window start for one challenge, or null when its config is off/unreadable.
+ * @returns {{startTime:number, leadSec:number}|null}
+ */
+const finalWindowTopUpWindow = (challenge, config) => {
+    if (!config || config.enabled !== true) return null;
+    const leadSec = clampLeadSec(config.leadSec);
+    // Mirrors VotingLogic's finalWindowSec clamp (>= 60s, else legacy hour).
+    const durationSec = Number.isFinite(config.durationSec) && config.durationSec >= 60 ? config.durationSec : 3600;
+    return { startTime: Number(challenge.close_time) - (durationSec + leadSec), leadSec };
+};
 
 /**
  * Soonest upcoming pre-final-window top-up window START strictly after `now`
@@ -54,38 +107,12 @@ const { ruleOpensAt } = require('../voting/currencyAuto');
  * @returns {Promise<{challengeId, challengeTitle, startTime:number, leadMin:number}|null>}
  */
 async function soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTopUp) {
-    const configs = await Promise.all(
-        eligible.map(async (challenge) => {
-            try {
-                return await resolveFinalWindowTopUp(challenge.id.toString());
-            } catch {
-                return null;
-            }
-        }),
-    );
-
+    const configs = await resolveConfigsFailSoft(eligible, resolveFinalWindowTopUp);
     let best = null;
-    let earliest = Infinity;
     for (let i = 0; i < eligible.length; i++) {
-        const config = configs[i];
-        if (!config || config.enabled !== true) continue;
-        // 60..3540s == 1..59 min; mirrors VotingLogic's rawLeadMin clamp so a
-        // corrupt sub-minute/over-max override falls back identically here.
-        const leadSec =
-            Number.isFinite(config.leadSec) && config.leadSec >= 60 && config.leadSec <= 3540 ? config.leadSec : 900;
-        // Mirrors VotingLogic's finalWindowSec clamp (>= 60s, else legacy hour).
-        const durationSec = Number.isFinite(config.durationSec) && config.durationSec >= 60 ? config.durationSec : 3600;
-        const challenge = eligible[i];
-        const startTime = Number(challenge.close_time) - (durationSec + leadSec);
-        if (startTime > now && startTime < earliest) {
-            earliest = startTime;
-            best = {
-                challengeId: challenge.id,
-                // Fall back to the id so a missing title never logs as "undefined".
-                challengeTitle: challenge.title || `challenge ${challenge.id}`,
-                startTime,
-                leadMin: Math.round(leadSec / 60),
-            };
+        const window = finalWindowTopUpWindow(eligible[i], configs[i]);
+        if (window && isSoonerUpcomingStart(window.startTime, now, best)) {
+            best = leadWindowStart(eligible[i], window.startTime, window.leadSec);
         }
     }
     return best;
@@ -100,6 +127,37 @@ async function soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTop
  * @param {string} challengeId - Challenge id as a string.
  * @returns {{enabled: boolean, leadSec: number, boostTimeSec: number, keyUnlockedBoostTimeSec: number}|Promise<{enabled: boolean, leadSec: number, boostTimeSec: number, keyUnlockedBoostTimeSec: number}>}
  */
+
+/**
+ * Pre-boost fill window start for one challenge, or null when it has none.
+ * @returns {{startTime:number, leadSec:number}|null}
+ */
+const boostPrefillWindow = (challenge, config) => {
+    if (!config || config.enabled !== true) return null;
+    const closeTime = Number(challenge.close_time);
+    if (!Number.isFinite(closeTime)) return null;
+
+    const boostTimeSec = Number(config.boostTimeSec);
+    // Mirrors VotingLogic.getEffectiveKeyUnlockedBoostTime: an explicit 0 is the
+    // off sentinel and must be honoured, but a missing/negative/NaN value falls
+    // back to the schema default rather than skipping the challenge — otherwise
+    // the rule would be armed at 900s for a boundary the scheduler never wakes for.
+    const rawKeyUnlocked = Number(config.keyUnlockedBoostTimeSec);
+    const keyUnlockedBoostTimeSec = Number.isFinite(rawKeyUnlocked) && rawKeyUnlocked >= 0 ? rawKeyUnlocked : 900;
+    const { thresholdSec, branch } = boostApplyThreshold(challenge.member?.boost, closeTime, {
+        boostTimeSec,
+        keyUnlockedBoostTimeSec,
+    });
+    if (branch === null) return null;
+    // `0 = off` on the window this branch actually measures against; mirrors
+    // VotingLogic.getBoostPrefillState.
+    const windowSec = branch === 'timer' ? boostTimeSec : keyUnlockedBoostTimeSec;
+    if (!Number.isFinite(windowSec) || windowSec <= 0) return null;
+    if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) return null;
+
+    const leadSec = clampLeadSec(config.leadSec);
+    return { startTime: closeTime - (thresholdSec + leadSec), leadSec };
+};
 
 /**
  * Soonest upcoming pre-boost fill window START strictly after `now` across
@@ -129,64 +187,20 @@ async function soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTop
  * @returns {Promise<{challengeId, challengeTitle, startTime:number, leadMin:number}|null>}
  */
 async function soonestBoostPrefillStart(eligible, now, resolveBoostPrefill) {
-    const configs = await Promise.all(
-        eligible.map(async (challenge) => {
-            try {
-                return await resolveBoostPrefill(challenge.id.toString());
-            } catch {
-                return null;
-            }
-        }),
-    );
-
+    const configs = await resolveConfigsFailSoft(eligible, resolveBoostPrefill);
     let best = null;
-    let earliest = Infinity;
     for (let i = 0; i < eligible.length; i++) {
-        const config = configs[i];
-        if (!config || config.enabled !== true) continue;
-        const challenge = eligible[i];
-        const closeTime = Number(challenge.close_time);
-        if (!Number.isFinite(closeTime)) continue;
-
-        const boostTimeSec = Number(config.boostTimeSec);
-        // Mirrors VotingLogic.getEffectiveKeyUnlockedBoostTime: an explicit 0 is the
-        // off sentinel and must be honoured, but a missing/negative/NaN value falls
-        // back to the schema default rather than skipping the challenge — otherwise
-        // the rule would be armed at 900s for a boundary the scheduler never wakes for.
-        const rawKeyUnlocked = Number(config.keyUnlockedBoostTimeSec);
-        const keyUnlockedBoostTimeSec = Number.isFinite(rawKeyUnlocked) && rawKeyUnlocked >= 0 ? rawKeyUnlocked : 900;
-        const { thresholdSec, branch } = boostApplyThreshold(challenge.member?.boost, closeTime, {
-            boostTimeSec,
-            keyUnlockedBoostTimeSec,
-        });
-        if (branch === null) continue;
-        // `0 = off` on the window this branch actually measures against; mirrors
-        // VotingLogic.getBoostPrefillState.
-        const windowSec = branch === 'timer' ? boostTimeSec : keyUnlockedBoostTimeSec;
-        if (!Number.isFinite(windowSec) || windowSec <= 0) continue;
-        if (!Number.isFinite(thresholdSec) || thresholdSec <= 0) continue;
-
-        // 60..3540s == 1..59 min; mirrors VotingLogic's getBoostPrefillLeadSec.
-        const leadSec =
-            Number.isFinite(config.leadSec) && config.leadSec >= 60 && config.leadSec <= 3540 ? config.leadSec : 900;
-        const startTime = closeTime - (thresholdSec + leadSec);
-        if (startTime > now && startTime < earliest) {
-            earliest = startTime;
-            best = {
-                challengeId: challenge.id,
-                // Fall back to the id so a missing title never logs as "undefined".
-                challengeTitle: challenge.title || `challenge ${challenge.id}`,
-                startTime,
-                leadMin: Math.round(leadSec / 60),
-            };
+        const window = boostPrefillWindow(eligible[i], configs[i]);
+        if (window && isSoonerUpcomingStart(window.startTime, now, best)) {
+            best = leadWindowStart(eligible[i], window.startTime, window.leadSec);
         }
     }
     return best;
 }
 
 /**
- * @typedef {{afterStartSec?: number, beforeEndSec?: number, afterPercent?: number}} CurrencyRuleTiming
- * @typedef {(challengeId: string) => ({key: CurrencyRuleTiming|null, swap: CurrencyRuleTiming|null, fill: CurrencyRuleTiming|null}|Promise<{key: CurrencyRuleTiming|null, swap: CurrencyRuleTiming|null, fill: CurrencyRuleTiming|null}>)} ResolveCurrencyAuto
+ * @typedef {import('../voting/currencyAuto').RuleTiming} RuleTiming
+ * @typedef {(challengeId: string) => ({key: RuleTiming|null, swap: RuleTiming|null, fill: RuleTiming|null}|Promise<{key: RuleTiming|null, swap: RuleTiming|null, fill: RuleTiming|null}>)} ResolveCurrencyAuto
  *   Per-challenge timing of each ENABLED currency-automation rule (null = rule off).
  */
 
@@ -215,15 +229,7 @@ const CURRENCY_ACTION_OFFERED = {
  */
 async function soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto) {
     const open = (Array.isArray(challenges) ? challenges : []).filter((c) => Number(c?.close_time) > now);
-    const configs = await Promise.all(
-        open.map(async (challenge) => {
-            try {
-                return await resolveCurrencyAuto(challenge.id.toString());
-            } catch {
-                return null;
-            }
-        }),
-    );
+    const configs = await resolveConfigsFailSoft(open, resolveCurrencyAuto);
 
     let best = null;
     for (let i = 0; i < open.length; i++) {
@@ -236,7 +242,7 @@ async function soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto) {
             if (best === null || startTime < best.startTime) {
                 best = {
                     challengeId: challenge.id,
-                    challengeTitle: challenge.title || `challenge ${challenge.id}`,
+                    challengeTitle: challengeLabel(challenge),
                     startTime,
                     action,
                 };
@@ -279,8 +285,7 @@ const soonestThresholdEntry = (eligible, thresholds, now) => {
             earliestEntryTime = thresholdEntryTime;
             nextEntry = {
                 challengeId: challenge.id,
-                // Fall back to the id so a missing/empty title never logs as "undefined".
-                challengeTitle: challenge.title || `challenge ${challenge.id}`,
+                challengeTitle: challengeLabel(challenge),
                 entryTime: thresholdEntryTime,
                 lastMinuteThreshold: effectiveLastMinuteThreshold,
             };
@@ -317,6 +322,25 @@ async function isAnyChallengeInThresholdWindow(challenges, now, resolveThreshold
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
     return anyInWindow(eligible, thresholds, now);
 }
+
+/**
+ * Cap the cadence so the next cycle lands on `boundarySec` instead of sleeping
+ * past it — only when the boundary is sooner than the current delay. Floored at
+ * `minGapMs` so a boundary that is already here can't busy-loop. Mutates `cadence`.
+ *
+ * @param {{delayMs:number, mode:string}} cadence
+ * @param {number} boundarySec - Unix timestamp (seconds) of the boundary
+ * @param {number} now - Unix timestamp (seconds)
+ * @param {number} minGapMs
+ * @param {string} mode - the mode to report when this boundary wins
+ */
+const capCadenceToBoundary = (cadence, boundarySec, now, minGapMs, mode) => {
+    const msUntilBoundary = (boundarySec - now) * 1000;
+    if (msUntilBoundary < cadence.delayMs) {
+        cadence.delayMs = Math.max(minGapMs, msUntilBoundary);
+        cadence.mode = mode;
+    }
+};
 
 /**
  * Single source of cadence truth for every host. Decide how long to wait before
@@ -392,72 +416,47 @@ async function computeNextCycleDelayMs(
         };
     }
 
+    // Every boundary below is the same "cap to the soonest upcoming boundary"
+    // shape, applied in this fixed order; whichever boundary is sooner wins, and
+    // an exact tie keeps the earlier-applied mode.
+    const cadence = { delayMs: normalDelayMs, mode: 'normal' };
+    const capTo = (boundarySec, mode) => capCadenceToBoundary(cadence, boundarySec, now, minGapMs, mode);
+
     const nextEntry = soonestThresholdEntry(eligible, thresholds, now);
-    let delayMs = normalDelayMs;
-    let mode = 'normal';
-    if (nextEntry) {
-        const msUntilEntry = (nextEntry.entryTime - now) * 1000;
-        if (msUntilEntry < delayMs) {
-            delayMs = Math.max(minGapMs, msUntilEntry);
-            mode = 'approaching';
-        }
-    }
+    if (nextEntry) capTo(nextEntry.entryTime, 'approaching');
 
-    let nextScheduled = null;
-    if (resolveScheduledFill && timezone) {
-        nextScheduled = await soonestScheduledStart(eligible, now, resolveScheduledFill, timezone);
-        if (nextScheduled) {
-            const msUntilStart = (nextScheduled.startTime - now) * 1000;
-            if (msUntilStart < delayMs) {
-                delayMs = Math.max(minGapMs, msUntilStart);
-                mode = 'scheduled';
-            }
-        }
-    }
+    const nextScheduled =
+        resolveScheduledFill && timezone
+            ? await soonestScheduledStart(eligible, now, resolveScheduledFill, timezone)
+            : null;
+    if (nextScheduled) capTo(nextScheduled.startTime, 'scheduled');
 
-    // Pre-final-window top-up boundary — same "cap to the soonest upcoming window
-    // start" shape as scheduled fill above; whichever boundary is sooner wins.
-    let nextFinalWindowTopUp = null;
-    if (resolveFinalWindowTopUp) {
-        nextFinalWindowTopUp = await soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTopUp);
-        if (nextFinalWindowTopUp) {
-            const msUntilStart = (nextFinalWindowTopUp.startTime - now) * 1000;
-            if (msUntilStart < delayMs) {
-                delayMs = Math.max(minGapMs, msUntilStart);
-                mode = 'pre-final-window';
-            }
-        }
-    }
+    const nextFinalWindowTopUp = resolveFinalWindowTopUp
+        ? await soonestFinalWindowTopUpStart(eligible, now, resolveFinalWindowTopUp)
+        : null;
+    if (nextFinalWindowTopUp) capTo(nextFinalWindowTopUp.startTime, 'pre-final-window');
 
-    // Pre-boost fill boundary — same "cap to the soonest upcoming window start"
-    // shape as the two caps above; whichever boundary is sooner wins.
-    let nextBoostPrefill = null;
-    if (resolveBoostPrefill) {
-        nextBoostPrefill = await soonestBoostPrefillStart(eligible, now, resolveBoostPrefill);
-        if (nextBoostPrefill) {
-            const msUntilStart = (nextBoostPrefill.startTime - now) * 1000;
-            if (msUntilStart < delayMs) {
-                delayMs = Math.max(minGapMs, msUntilStart);
-                mode = 'pre-boost';
-            }
-        }
-    }
+    const nextBoostPrefill = resolveBoostPrefill
+        ? await soonestBoostPrefillStart(eligible, now, resolveBoostPrefill)
+        : null;
+    if (nextBoostPrefill) capTo(nextBoostPrefill.startTime, 'pre-boost');
 
-    // Currency-automation rule opening — same "cap to the soonest upcoming
-    // boundary" shape; whichever boundary is sooner wins.
-    let nextCurrencyRule = null;
-    if (resolveCurrencyAuto) {
-        nextCurrencyRule = await soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto);
-        if (nextCurrencyRule) {
-            const msUntilStart = (nextCurrencyRule.startTime - now) * 1000;
-            if (msUntilStart < delayMs) {
-                delayMs = Math.max(minGapMs, msUntilStart);
-                mode = 'currency-rule';
-            }
-        }
-    }
+    // Currency rules consider every still-open challenge (flash included), not
+    // just the threshold-eligible set.
+    const nextCurrencyRule = resolveCurrencyAuto
+        ? await soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto)
+        : null;
+    if (nextCurrencyRule) capTo(nextCurrencyRule.startTime, 'currency-rule');
 
-    return { delayMs, mode, nextEntry, nextScheduled, nextFinalWindowTopUp, nextBoostPrefill, nextCurrencyRule };
+    return {
+        delayMs: cadence.delayMs,
+        mode: cadence.mode,
+        nextEntry,
+        nextScheduled,
+        nextFinalWindowTopUp,
+        nextBoostPrefill,
+        nextCurrencyRule,
+    };
 }
 
 module.exports = {

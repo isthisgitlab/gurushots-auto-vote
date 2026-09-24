@@ -3,8 +3,8 @@
  * Voting Logic Service
  *
  * Centralized business logic for voting decisions.
- * This service contains all the voting rules and logic that was previously
- * duplicated across api/main.js, mock/index.js, and index.js
+ * The one home of the voting rules, shared by strategies/real, mock/index.js
+ * and the Electron main process.
  */
 
 // Cast to any at the boundary: the settings facade isn't `// @ts-check`ed yet,
@@ -1566,6 +1566,69 @@ const joinWindowRefusal = (challenge, joinWithinSec, nowSec, percentElapsed) => 
 };
 
 /**
+ * Why a candidate's type/tag scope refuses the join, or null when it is in scope.
+ *
+ * Default is join everything; a non-empty include list narrows; the exclude list
+ * always subtracts. Types and challenge tags are two independent axes and BOTH
+ * must pass.
+ *
+ * @param {string} type normalized lowercase challenge type ('' = none)
+ * @param {string[]} tags normalized lowercase challenge tags
+ * @param {{includeTypes: string[], excludeTypes: string[], includeTags: string[], excludeTags: string[]}} filters
+ * @returns {string|null}
+ */
+const joinScopeRefusal = (type, tags, { includeTypes, excludeTypes, includeTags, excludeTags }) => {
+    if (Array.isArray(excludeTypes) && type !== '' && excludeTypes.includes(type)) {
+        return 'excluded-type';
+    }
+    const hasIncludeFilter = Array.isArray(includeTypes) && includeTypes.length > 0;
+    if (hasIncludeFilter && !(type !== '' && includeTypes.includes(type))) {
+        return 'out-of-scope';
+    }
+    if (Array.isArray(excludeTags) && excludeTags.some((tag) => tags.includes(tag))) {
+        return 'excluded-tag';
+    }
+    const hasTagFilter = Array.isArray(includeTags) && includeTags.length > 0;
+    // A challenge with NO tags can never satisfy a require-list, the same
+    // way a typeless one cannot satisfy an include-list.
+    if (hasTagFilter && !includeTags.some((tag) => tags.includes(tag))) {
+        return 'tag-out-of-scope';
+    }
+    return null;
+};
+
+/**
+ * Why a PAID join (cost > 0) is refused, or null when it may spend.
+ *
+ * @param {number} needsCoins positive join cost
+ * @param {{coins?: number}|null} bankroll live balance, or null if unread
+ * @param {number} maxCoins per-challenge coin cap (0 = free only)
+ * @param {number} remainingBudget coins still spendable this cycle
+ * @returns {string|null}
+ */
+const paidJoinRefusal = (needsCoins, bankroll, maxCoins, remainingBudget) => {
+    if (!Number.isFinite(maxCoins) || maxCoins <= 0) return 'paid-disabled';
+    if (needsCoins > maxCoins) return 'over-per-challenge-cap';
+    // Fail-safe: unknown balance never spends.
+    const coins = Number(bankroll?.coins);
+    if (bankroll == null || !Number.isFinite(coins)) return 'balance-unknown';
+    if (coins < needsCoins) return 'insufficient-coins';
+    if (!Number.isFinite(remainingBudget) || needsCoins > remainingBudget) return 'over-cycle-budget';
+    return null;
+};
+
+/**
+ * @param {{type?: string, tags?: string[]}|undefined} challenge
+ * @returns {{type: string, tags: string[]}} lowercase-trimmed type ('' = none) and string tags
+ */
+const normalizeJoinFacets = (challenge) => ({
+    type: typeof challenge?.type === 'string' ? challenge.type.trim().toLowerCase() : '',
+    tags: Array.isArray(challenge?.tags)
+        ? challenge.tags.filter((tag) => typeof tag === 'string').map((tag) => tag.trim().toLowerCase())
+        : [],
+});
+
+/**
  * Pure decision for whether to auto-join ONE un-joined challenge.
  *
  * No I/O: the caller resolves settings (by title-profile) and the live bankroll
@@ -1635,32 +1698,12 @@ const shouldJoinChallenge = ({
     const rawCost = Number(challenge?.join_coins);
     const needsCoins = Number.isFinite(rawCost) && rawCost > 0 ? rawCost : 0;
 
-    const type = typeof challenge?.type === 'string' ? challenge.type.trim().toLowerCase() : '';
-    const tags = Array.isArray(challenge?.tags)
-        ? challenge.tags.filter((tag) => typeof tag === 'string').map((tag) => tag.trim().toLowerCase())
-        : [];
     // A saved title profile is a deliberate per-title opt-in and wins over the
     // general type/tag filters (bypasses exclude + include narrowing).
-    // Otherwise: default is join everything; a non-empty include list narrows;
-    // the exclude list always subtracts. Types and challenge tags are two
-    // independent axes and BOTH must pass.
     if (hasProfileMatch !== true) {
-        if (Array.isArray(excludeTypes) && type !== '' && excludeTypes.includes(type)) {
-            return { join: false, needsCoins, reason: 'excluded-type' };
-        }
-        const hasIncludeFilter = Array.isArray(includeTypes) && includeTypes.length > 0;
-        if (hasIncludeFilter && !(type !== '' && includeTypes.includes(type))) {
-            return { join: false, needsCoins, reason: 'out-of-scope' };
-        }
-        if (Array.isArray(excludeTags) && excludeTags.some((tag) => tags.includes(tag))) {
-            return { join: false, needsCoins, reason: 'excluded-tag' };
-        }
-        const hasTagFilter = Array.isArray(includeTags) && includeTags.length > 0;
-        // A challenge with NO tags can never satisfy a require-list, the same
-        // way a typeless one cannot satisfy an include-list.
-        if (hasTagFilter && !includeTags.some((tag) => tags.includes(tag))) {
-            return { join: false, needsCoins, reason: 'tag-out-of-scope' };
-        }
+        const { type, tags } = normalizeJoinFacets(challenge);
+        const scopeRefusal = joinScopeRefusal(type, tags, { includeTypes, excludeTypes, includeTags, excludeTags });
+        if (scopeRefusal) return { join: false, needsCoins, reason: scopeRefusal };
     }
 
     // Timing window, after the scope filters (so an out-of-scope candidate still
@@ -1676,24 +1719,8 @@ const shouldJoinChallenge = ({
         return { join: true, needsCoins: 0, reason: 'free' };
     }
 
-    // Paid from here down.
-    if (!Number.isFinite(maxCoins) || maxCoins <= 0) {
-        return { join: false, needsCoins, reason: 'paid-disabled' };
-    }
-    if (needsCoins > maxCoins) {
-        return { join: false, needsCoins, reason: 'over-per-challenge-cap' };
-    }
-    // Fail-safe: unknown balance never spends.
-    const coins = Number(bankroll?.coins);
-    if (bankroll == null || !Number.isFinite(coins)) {
-        return { join: false, needsCoins, reason: 'balance-unknown' };
-    }
-    if (coins < needsCoins) {
-        return { join: false, needsCoins, reason: 'insufficient-coins' };
-    }
-    if (!Number.isFinite(remainingBudget) || needsCoins > remainingBudget) {
-        return { join: false, needsCoins, reason: 'over-cycle-budget' };
-    }
+    const costRefusal = paidJoinRefusal(needsCoins, bankroll, maxCoins, remainingBudget);
+    if (costRefusal) return { join: false, needsCoins, reason: costRefusal };
     return { join: true, needsCoins, reason: 'paid' };
 };
 
