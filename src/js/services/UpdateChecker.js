@@ -121,7 +121,7 @@ const checkForUpdates = async ({ currentVersion, isBetaChannel = false, assetSuf
             releaseDate: release.published_at || null,
         };
     } catch (error) {
-        return { ...empty, error: error.message || 'Failed to check for updates' };
+        return { ...empty, error: error?.message || 'Failed to check for updates' };
     }
 };
 

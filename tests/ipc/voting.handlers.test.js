@@ -320,6 +320,7 @@ describe('error envelopes — handlers never throw to the renderer', () => {
     test.each([
         ['its message', new Error('cycle broke'), 'cycle broke'],
         ['the generic fallback', new Error(''), 'Failed to run voting cycle'],
+        ['the generic fallback for a null rejection', null, 'Failed to run voting cycle'],
     ])('run-voting-cycle returns %s when the middleware rejects', async (_label, err, expected) => {
         throwingMiddleware(err);
         await expect(buildHandlers()['run-voting-cycle']()).resolves.toEqual({ success: false, error: expected });
@@ -328,6 +329,7 @@ describe('error envelopes — handlers never throw to the renderer', () => {
     test.each([
         ['its message', new Error('cycle broke'), 'cycle broke'],
         ['the generic fallback', new Error(''), 'Failed to run voting cycle'],
+        ['the generic fallback for a null rejection', null, 'Failed to run voting cycle'],
     ])('run-voting-cycle-for-challenge returns %s when the middleware rejects', async (_label, err, expected) => {
         throwingMiddleware(err);
         await expect(buildHandlers()['run-voting-cycle-for-challenge']({}, 7)).resolves.toEqual({
@@ -336,9 +338,12 @@ describe('error envelopes — handlers never throw to the renderer', () => {
         });
     });
 
-    test('gui-vote uses the generic fallback when the error has no message', async () => {
+    test.each([
+        ['has no message', new Error('')],
+        ['is null', null],
+    ])('gui-vote uses the generic fallback when the error %s', async (_label, err) => {
         setToken('tok');
-        throwingMiddleware(new Error(''));
+        throwingMiddleware(err);
         await expect(buildHandlers()['gui-vote']()).resolves.toEqual({
             success: false,
             error: 'Failed to load challenges',
@@ -348,6 +353,7 @@ describe('error envelopes — handlers never throw to the renderer', () => {
     test.each([
         ['its message', new Error('vote-all broke'), 'vote-all broke'],
         ['the generic fallback', new Error(''), 'Failed to vote on all challenges manually'],
+        ['the generic fallback for a null rejection', null, 'Failed to vote on all challenges manually'],
     ])('vote-all-challenges-manual returns %s when the loop throws', async (_label, err, expected) => {
         setToken('tok');
         stubStrategy([buildChallenge({ id: 1 })]);
@@ -361,8 +367,10 @@ describe('error envelopes — handlers never throw to the renderer', () => {
     test.each([
         ['vote-on-challenge', new Error('fetch broke'), 'fetch broke'],
         ['vote-on-challenge', new Error(''), 'Failed to vote on challenge'],
+        ['vote-on-challenge', null, 'Failed to vote on challenge'],
         ['vote-on-challenge-manual', new Error('fetch broke'), 'fetch broke'],
         ['vote-on-challenge-manual', new Error(''), 'Failed to vote on challenge manually'],
+        ['vote-on-challenge-manual', null, 'Failed to vote on challenge manually'],
     ])('%s returns the error envelope when the fetch rejects', async (channel, err, expected) => {
         setToken('tok');
         apiFactory.getApiStrategy = jest

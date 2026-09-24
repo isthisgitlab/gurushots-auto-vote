@@ -50,8 +50,8 @@ class BaseMiddleware {
             logger.withCategory('authentication').endOperation('cli-login', null, 'Invalid credentials');
             return { success: false, error: 'Login failed. Please check your credentials.' };
         } catch (error) {
-            logger.withCategory('authentication').endOperation('cli-login', null, error.message || error);
-            return { success: false, error: error.message || error };
+            logger.withCategory('authentication').endOperation('cli-login', null, error?.message || error);
+            return { success: false, error: error?.message || error };
         }
     }
 
@@ -61,7 +61,7 @@ class BaseMiddleware {
             if (ok) return { success: true, token, data: response };
             return { success: false, error: 'Invalid credentials' };
         } catch (error) {
-            return { success: false, error: error.message || 'Authentication failed' };
+            return { success: false, error: error?.message || 'Authentication failed' };
         }
     }
 
@@ -152,8 +152,8 @@ class BaseMiddleware {
             }
             return result;
         } catch (error) {
-            logger.withCategory('voting').endOperation('cli-vote', null, error.message || error);
-            return { success: false, error: error.message || String(error) };
+            logger.withCategory('voting').endOperation('cli-vote', null, error?.message || error);
+            return { success: false, error: error?.message || String(error) };
         }
     }
 
@@ -185,7 +185,7 @@ class BaseMiddleware {
             const summary = `Manual vote: ${voted} voted, ${skipped} skipped of ${challenges.length}`;
             logger.withCategory('voting').endOperation('cli-vote-manual', summary);
         } catch (error) {
-            logger.withCategory('voting').endOperation('cli-vote-manual', null, error.message || error);
+            logger.withCategory('voting').endOperation('cli-vote-manual', null, error?.message || error);
         }
     }
 

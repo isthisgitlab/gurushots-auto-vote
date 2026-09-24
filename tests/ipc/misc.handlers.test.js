@@ -53,6 +53,14 @@ describe('misc.handlers open-external-url scheme gate', () => {
         expect(res.success).toBe(false);
         expect(res.error).toBe('boom');
     });
+
+    test('falls back to a fixed message when shell.openExternal rejects with null', async () => {
+        openExternalMock.mockRejectedValueOnce(null);
+        await expect(handler({}, 'https://example.com')).resolves.toEqual({
+            success: false,
+            error: 'Failed to open external URL',
+        });
+    });
 });
 
 describe('misc.handlers reload-window', () => {
@@ -97,6 +105,18 @@ describe('misc.handlers reload-window', () => {
         const handlers = buildHandlers({ getMainWindow: () => main, getLoginWindow: () => null });
         await expect(handlers['reload-window']()).resolves.toEqual({ success: false, error: 'crashed' });
     });
+
+    test('falls back to a fixed message when reload throws null', async () => {
+        const main = win();
+        main.reload.mockImplementation(() => {
+            throw null;
+        });
+        const handlers = buildHandlers({ getMainWindow: () => main, getLoginWindow: () => null });
+        await expect(handlers['reload-window']()).resolves.toEqual({
+            success: false,
+            error: 'Failed to reload window',
+        });
+    });
 });
 
 describe('misc.handlers refresh-menu', () => {
@@ -131,6 +151,13 @@ describe('misc.handlers refresh-menu', () => {
 
         await expect(handlers['refresh-menu']()).resolves.toEqual({ success: false, error: 'io' });
         expect(updateMenuTranslations).not.toHaveBeenCalled();
+    });
+
+    test('falls back to a fixed message when the language load rejects with null', async () => {
+        global.translationManager = { loadLanguageFromSettings: jest.fn().mockRejectedValue(null) };
+        const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
+
+        await expect(handlers['refresh-menu']()).resolves.toEqual({ success: false, error: 'Failed to refresh menu' });
     });
 });
 

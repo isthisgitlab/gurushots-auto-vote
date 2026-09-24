@@ -185,6 +185,31 @@ describe('clear-skip-version', () => {
     });
 });
 
+describe('null rejections — handlers never throw to the renderer', () => {
+    test.each([
+        ['check-for-updates', 'checkForUpdates', { success: false, error: 'Failed to check for updates' }],
+        [
+            'download-update',
+            'downloadUpdate',
+            {
+                success: false,
+                error: 'Failed to download update',
+                fallbackUrl: 'https://github.com/example/releases',
+            },
+        ],
+        ['install-update', 'quitAndInstall', { success: false, error: 'Failed to install update' }],
+        ['skip-update-version', 'skipVersion', { success: false, error: 'Failed to skip update version' }],
+        ['clear-skip-version', 'clearSkipVersion', { success: false, error: 'Failed to clear skipped version' }],
+    ])('%s falls back to a fixed message when the updater throws null', async (channel, method, expected) => {
+        const updater = makeUpdater({
+            [method]: jest.fn(() => {
+                throw null;
+            }),
+        });
+        await expect(buildHandlers(makeDeps(updater))[channel]()).resolves.toEqual(expected);
+    });
+});
+
 describe('get-releases-url and can-auto-update', () => {
     test('get-releases-url returns the releases page', () => {
         expect(buildHandlers(makeDeps())['get-releases-url']()).toEqual({

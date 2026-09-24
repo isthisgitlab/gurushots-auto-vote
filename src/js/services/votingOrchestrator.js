@@ -192,7 +192,7 @@ const runBoost = async (ctx) => {
             // On null/falsy result, applyBoost already logged endOperation with the failure
             // reason — no caller-side fallback log needed (mirrors the turbo handling shape).
         } catch (error) {
-            logger.withCategory('boost').endOperation(`boost-${challenge.id}`, null, error.message || error);
+            logger.withCategory('boost').endOperation(`boost-${challenge.id}`, null, error?.message || error);
         }
     } else {
         const timeDisplay = formatDuration(timeUntilDisplayBase);
@@ -286,7 +286,7 @@ const runTurboApply = async (ctx) => {
                     .endOperation(`turbo-apply-${challenge.id}`, null, 'Apply request returned ok=false');
             }
         } catch (error) {
-            logger.withCategory('turbo').endOperation(`turbo-apply-${challenge.id}`, null, error.message || error);
+            logger.withCategory('turbo').endOperation(`turbo-apply-${challenge.id}`, null, error?.message || error);
         }
     }
 };
@@ -443,7 +443,7 @@ const playAutoTurbo = async (challenge, now, { api, token }) => {
         const summary = `played=${result.played} correct=${result.correct} flipped=${result.flipped} doubleFailed=${result.doubleFailed} won=${result.won}`;
         logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, summary);
     } catch (error) {
-        logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, null, error.message || error);
+        logger.withCategory('turbo').endOperation(`turbo-earn-${challenge.id}`, null, error?.message || error);
     }
 };
 
@@ -643,7 +643,7 @@ const voteOnChallenge = async (challenge, decision, pass, onVoteLanded) => {
         }
     } catch (error) {
         outcome.voteThrew = true;
-        logger.withCategory('voting').endOperation(`vote-${challenge.id}`, null, error.message || error);
+        logger.withCategory('voting').endOperation(`vote-${challenge.id}`, null, error?.message || error);
     }
     return outcome;
 };
@@ -790,8 +790,8 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
 
         return { success: true, message: 'Voting process completed successfully', challenges: allChallenges };
     } catch (error) {
-        logger.withCategory('voting').endOperation('voting-process', null, error.message || error);
-        return { success: false, error: error.message || 'Voting process failed' };
+        logger.withCategory('voting').endOperation('voting-process', null, error?.message || error);
+        return { success: false, error: error?.message || 'Voting process failed' };
     }
 };
 

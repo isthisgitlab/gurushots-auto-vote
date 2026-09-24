@@ -161,6 +161,13 @@ describe('refresh-api', () => {
         apiFactory.refreshApi.mockImplementationOnce(boom);
         await expect(handlers['refresh-api']()).resolves.toEqual({ success: false, error: 'boom' });
     });
+
+    test('falls back to a fixed message when refresh throws null', async () => {
+        apiFactory.refreshApi.mockImplementationOnce(() => {
+            throw null;
+        });
+        await expect(handlers['refresh-api']()).resolves.toEqual({ success: false, error: 'Failed to refresh API' });
+    });
 });
 
 describe('boost threshold channels', () => {
@@ -202,6 +209,16 @@ describe('boost threshold channels', () => {
             success: false,
             error: 'boom',
         });
+    });
+
+    test.each([
+        ['set-boost-threshold', 'setChallengeOverride', ['c1', 600], 'Failed to set boost threshold'],
+        ['set-default-boost-threshold', 'setGlobalDefault', [300], 'Failed to set default boost threshold'],
+    ])('%s falls back to a fixed message when the write throws null', async (channel, method, args, expected) => {
+        settings[method] = jest.fn(() => {
+            throw null;
+        });
+        await expect(handlers[channel]({}, ...args)).resolves.toEqual({ success: false, error: expected });
     });
 });
 

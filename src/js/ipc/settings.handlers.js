@@ -20,6 +20,7 @@ try {
 }
 const settings = require('../settings');
 const { registerHandlers } = require('./registerHandlers');
+const { errorResult } = require('./errorResult');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 
@@ -147,7 +148,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                 return { success: true };
             } catch (error) {
                 logger.withCategory('api').error('Error handling refresh-api request:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to refresh API');
             }
         },
 
@@ -166,7 +167,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                 return { success: true };
             } catch (error) {
                 logger.withCategory('settings').error('Error setting boost threshold:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to set boost threshold');
             }
         },
 
@@ -176,7 +177,7 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                 return { success: true };
             } catch (error) {
                 logger.withCategory('settings').error('Error setting default boost threshold:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to set default boost threshold');
             }
         },
 

@@ -168,6 +168,30 @@ describe('log.handlers — stream edge cases and register', () => {
         expect(logger.categories.ui.error).toHaveBeenCalledWith('Error stopping log stream:', expect.any(Error));
     });
 
+    test('start-log-stream falls back to a fixed message when the sender throws null', async () => {
+        const sender = {
+            on: jest.fn(() => {
+                throw null;
+            }),
+        };
+        await expect(handlers['start-log-stream']({ sender })).resolves.toEqual({
+            success: false,
+            error: 'Failed to start log stream',
+        });
+    });
+
+    test('stop-log-stream falls back to a fixed message when reading the sender throws null', async () => {
+        const event = {
+            get sender() {
+                throw null;
+            },
+        };
+        await expect(handlers['stop-log-stream'](event)).resolves.toEqual({
+            success: false,
+            error: 'Failed to stop log stream',
+        });
+    });
+
     test('register wires every channel and installs the global fan-out hook', async () => {
         const channels = new Map();
         logHandlers.register({ handle: (channel, impl) => channels.set(channel, impl) });

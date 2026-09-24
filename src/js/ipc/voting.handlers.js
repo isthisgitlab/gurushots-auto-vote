@@ -14,6 +14,7 @@
 
 const settings = require('../settings');
 const { registerHandlers } = require('./registerHandlers');
+const { errorResult } = require('./errorResult');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 const cancellation = require('../voting/cancellation');
@@ -137,7 +138,7 @@ const buildHandlers = () => ({
             return await middleware.guiVote();
         } catch (error) {
             logger.withCategory('voting').error('Error handling gui-vote request:', error);
-            return { success: false, error: error.message || 'Failed to load challenges' };
+            return errorResult(error, 'Failed to load challenges');
         }
     },
 
@@ -147,7 +148,7 @@ const buildHandlers = () => ({
             return await runStrategyOnceViaMiddleware(null);
         } catch (error) {
             logger.withCategory('voting').error('Error handling run-voting-cycle request:', error);
-            return { success: false, error: error.message || 'Failed to run voting cycle' };
+            return errorResult(error, 'Failed to run voting cycle');
         }
     },
 
@@ -160,7 +161,7 @@ const buildHandlers = () => ({
             return await runStrategyOnceViaMiddleware(challengeId);
         } catch (error) {
             logger.withCategory('voting').error('Error handling run-voting-cycle-for-challenge request:', error);
-            return { success: false, error: error.message || 'Failed to run voting cycle' };
+            return errorResult(error, 'Failed to run voting cycle');
         }
     },
 
@@ -207,7 +208,7 @@ const buildHandlers = () => ({
             };
         } catch (error) {
             logger.withCategory('voting').error('Error handling vote-all-challenges-manual request:', error);
-            return { success: false, error: error.message || 'Failed to vote on all challenges manually' };
+            return errorResult(error, 'Failed to vote on all challenges manually');
         }
     },
 
@@ -223,7 +224,7 @@ const buildHandlers = () => ({
             return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: false });
         } catch (error) {
             logger.withCategory('voting').error('Error handling vote-on-challenge request:', error);
-            return { success: false, error: error.message || 'Failed to vote on challenge' };
+            return errorResult(error, 'Failed to vote on challenge');
         }
     },
 
@@ -232,7 +233,7 @@ const buildHandlers = () => ({
             return await voteOnSingleChallenge(challengeId, challengeTitle, { manual: true });
         } catch (error) {
             logger.withCategory('voting').error('Error handling vote-on-challenge-manual request:', error);
-            return { success: false, error: error.message || 'Failed to vote on challenge manually' };
+            return errorResult(error, 'Failed to vote on challenge manually');
         }
     },
 });

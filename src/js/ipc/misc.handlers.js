@@ -6,6 +6,7 @@
 
 const { shell } = require('electron');
 const { registerHandlers } = require('./registerHandlers');
+const { errorResult } = require('./errorResult');
 const logger = require('../logger');
 const { updateMenuTranslations } = require('../ui/applicationMenu');
 const { isSafeExternalUrl } = require('../format/urlSafe');
@@ -29,7 +30,7 @@ const buildHandlers = (deps) => {
                 return { success: true };
             } catch (error) {
                 logger.withCategory('ui').error('Error opening external URL:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to open external URL');
             }
         },
 
@@ -48,7 +49,7 @@ const buildHandlers = (deps) => {
                 return { success: false, error: 'No active window to reload' };
             } catch (error) {
                 logger.withCategory('ui').error('Error reloading window:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to reload window');
             }
         },
 
@@ -61,7 +62,7 @@ const buildHandlers = (deps) => {
                 return { success: true };
             } catch (error) {
                 logger.withCategory('ui').error('Error refreshing menu:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to refresh menu');
             }
         },
     };

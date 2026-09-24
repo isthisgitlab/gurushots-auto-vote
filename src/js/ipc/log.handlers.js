@@ -14,6 +14,7 @@
 
 const logger = require('../logger');
 const { registerHandlers } = require('./registerHandlers');
+const { errorResult } = require('./errorResult');
 
 const logStreamWindows = new Set();
 
@@ -76,7 +77,7 @@ const buildHandlers = () => ({
             return { success: true };
         } catch (error) {
             logger.withCategory('ui').error('Error starting log stream:', error);
-            return { success: false, error: error.message };
+            return errorResult(error, 'Failed to start log stream');
         }
     },
 
@@ -86,7 +87,7 @@ const buildHandlers = () => ({
             return { success: true };
         } catch (error) {
             logger.withCategory('ui').error('Error stopping log stream:', error);
-            return { success: false, error: error.message };
+            return errorResult(error, 'Failed to stop log stream');
         }
     },
 });

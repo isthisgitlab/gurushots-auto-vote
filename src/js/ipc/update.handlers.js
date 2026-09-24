@@ -11,6 +11,7 @@
 
 const logger = require('../logger');
 const { registerHandlers } = require('./registerHandlers');
+const { errorResult } = require('./errorResult');
 const AutoUpdater = require('../services/AutoUpdater');
 const { getReleasesUrl } = require('../services/UpdateChecker');
 
@@ -46,7 +47,7 @@ const buildHandlers = (deps) => {
                 return { success: true, updateInfo };
             } catch (error) {
                 logger.withCategory('update').error('Error checking for updates:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to check for updates');
             }
         },
 
@@ -61,8 +62,7 @@ const buildHandlers = (deps) => {
             } catch (error) {
                 logger.withCategory('update').error('Error downloading update:', error);
                 return {
-                    success: false,
-                    error: error.message,
+                    ...errorResult(error, 'Failed to download update'),
                     fallbackUrl: getReleasesUrl(),
                 };
             }
@@ -78,7 +78,7 @@ const buildHandlers = (deps) => {
                 return { success: true };
             } catch (error) {
                 logger.withCategory('update').error('Error installing update:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to install update');
             }
         },
 
@@ -96,7 +96,7 @@ const buildHandlers = (deps) => {
                 return { success: false, error: 'No update info available' };
             } catch (error) {
                 logger.withCategory('update').error('Error skipping update version:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to skip update version');
             }
         },
 
@@ -106,7 +106,7 @@ const buildHandlers = (deps) => {
                 return { success: true };
             } catch (error) {
                 logger.withCategory('update').error('Error clearing skip version:', error);
-                return { success: false, error: error.message };
+                return errorResult(error, 'Failed to clear skipped version');
             }
         },
 

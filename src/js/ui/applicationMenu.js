@@ -197,7 +197,7 @@ async function checkForUpdatesFromMenu() {
             type: 'error',
             title: t('menu.updateError'),
             message: t('menu.updateErrorMessage'),
-            detail: error.message,
+            detail: error?.message,
             buttons: [t('common.ok')],
         });
     }

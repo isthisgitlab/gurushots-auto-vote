@@ -10,6 +10,7 @@
 
 const settings = require('../settings');
 const { registerHandlers } = require('./registerHandlers');
+const { errorResult } = require('./errorResult');
 const logger = require('../logger');
 const apiFactory = require('../apiFactory');
 const auth = require('../services/auth');
@@ -26,9 +27,6 @@ const { rememberChallenges } = require('../windows/quitGuard');
 const turboMiniGameInFlight = new Set();
 
 const sanitizeForLog = logger.sanitizeLogString;
-
-/** Shared catch-path result: `{ success: false, error }` with a fallback message. */
-const errorResult = (error, fallback) => ({ success: false, error: error?.message || fallback });
 
 /** Re-fetch the active list and resolve one challenge from it (null when it is gone). */
 const fetchLiveChallenge = async (strategy, token, challengeId) => {

@@ -124,8 +124,8 @@ const buildAllHandlers = () => {
                 emit('update-not-available', { version: result.version || pkg.version });
                 return { success: true, updateInfo: null };
             } catch (error) {
-                emit('update-error', { message: error.message, canFallbackToBrowser: true });
-                return { success: false, error: error.message };
+                emit('update-error', { message: error?.message, canFallbackToBrowser: true });
+                return { success: false, error: error?.message };
             }
         },
         'download-update': async () => {
