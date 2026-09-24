@@ -30,6 +30,13 @@ global.translationManager = translationManager;
 // effective service worker block.
 app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
 
+// Chromium encrypts the persist:gurushots cookie store with a key it keeps in
+// the macOS Keychain, and re-prompts for it whenever the Electron binary
+// changes. Nothing here relies on those cookies (the auth token lives in the
+// settings store, API calls go through Node), so skip the real Keychain.
+// No-op on other platforms.
+app.commandLine.appendSwitch('use-mock-keychain');
+
 // Enforce a single running instance. A second launch would share the same
 // userData dir and fight over Chromium's LevelDB locks (the source of the
 // "Failed to delete the database: Database IO error" startup error).

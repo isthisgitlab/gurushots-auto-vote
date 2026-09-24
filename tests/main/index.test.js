@@ -187,10 +187,11 @@ afterEach(() => {
 });
 
 describe('module bootstrap', () => {
-    it('publishes the translation manager, disables service workers and wires every IPC module', async () => {
+    it('publishes the translation manager, disables service workers and the real keychain, and wires every IPC module', async () => {
         load();
         expect(global.translationManager).toBe(require('../../src/js/translations/index').translationManager);
         expect(m.app.commandLine.appendSwitch).toHaveBeenCalledWith('disable-features', 'ServiceWorker');
+        expect(m.app.commandLine.appendSwitch).toHaveBeenCalledWith('use-mock-keychain');
         for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency']) {
             expect(require(`../../src/js/ipc/${mod}.handlers`).register.mock.calls[0][0]).toBe(m.ipcMain);
         }
