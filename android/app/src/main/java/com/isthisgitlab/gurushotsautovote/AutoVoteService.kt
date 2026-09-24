@@ -169,8 +169,9 @@ class AutoVoteService : Service() {
             cycleWakeLock = acquireWakelock()
             mainHandler.postDelayed(cycleWatchdog, CYCLE_TIMEOUT_MS)
             Log.i(TAG, "Cycle ${cycleCount + 1} starting (JS)")
-            // ensureWebView() above set it on this (main) thread; only handleStop's
-            // main-thread block clears it, so it can't be null here.
+            // ensureWebView() above set it on this (main) thread, and it is only
+            // cleared on the main thread too (handleStop's posted block,
+            // onDestroy), so it can't be null here.
             webView!!.evaluateJavascript(
                 "(function(){try{" +
                     "if(window.GS&&window.GS.runOneCycle){window.GS.runOneCycle();}" +
