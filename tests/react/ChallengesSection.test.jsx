@@ -17,6 +17,7 @@ jest.mock('@/api/useActiveChallenges', () => ({ useActiveChallenges: jest.fn() }
 jest.mock('@/components/app/ChallengeCard', () => ({
     ChallengeCard: ({
         challenge,
+        settingsVersion,
         defaultCompact,
         compactActions,
         bankroll,
@@ -27,6 +28,7 @@ jest.mock('@/components/app/ChallengeCard', () => ({
         <div
             data-testid="card"
             data-id={challenge.id}
+            data-settings-version={String(settingsVersion)}
             data-compact={String(defaultCompact)}
             data-compact-actions={String(compactActions)}
             data-bankroll={String(bankroll)}
@@ -302,6 +304,24 @@ describe('ChallengesProvider + ChallengesSection', () => {
             expect(screen.getByText('app.compact')).toBeTruthy();
             // compactCards + compactCardActions, read once on mount and once per change.
             expect(mockApi.getGlobalDefault).toHaveBeenCalledTimes(4);
+        });
+
+        it('re-reads card settings in place on settings-changed instead of remounting the cards', async () => {
+            renderSection();
+            await settle();
+            const before = screen.getAllByTestId('card');
+            expect(before.map((c) => c.dataset.settingsVersion)).toEqual(['0', '0']);
+
+            await act(async () => {
+                fireSettingsChanged();
+            });
+            await settle();
+
+            const after = screen.getAllByTestId('card');
+            // Same DOM nodes: an in-flight card action keeps its busy state.
+            expect(after[0]).toBe(before[0]);
+            expect(after[1]).toBe(before[1]);
+            expect(after.map((c) => c.dataset.settingsVersion)).toEqual(['1', '1']);
         });
 
         it('passes the compactCardActions setting to every card and resyncs it on settings-changed', async () => {

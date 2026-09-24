@@ -44,9 +44,10 @@ function useGlobalCardDensity() {
         sync();
         const off = ipc.onSettingsChanged(() => {
             sync();
-            // Bump refreshKey so each ChallengeCard re-fetches its
-            // effective setting (any per-challenge override + the new
-            // global default).
+            // Bump refreshKey so each ChallengeCard re-reads its effective
+            // settings (any per-challenge override + the new global default)
+            // in place — cards are not remounted, so an in-flight action
+            // keeps its busy state.
             setRefreshKey((k) => k + 1);
         });
         return () => {
@@ -211,7 +212,8 @@ export function ChallengesSection({
             <div id="challenges-container" className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-3">
                 {challenges.map((challenge) => (
                     <ChallengeCard
-                        key={`${challenge.id}-${refreshKey}`}
+                        key={challenge.id}
+                        settingsVersion={refreshKey}
                         challenge={challenge}
                         defaultCompact={globalCompact}
                         compactActions={compactActions}

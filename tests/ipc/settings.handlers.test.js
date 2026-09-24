@@ -325,8 +325,8 @@ describe('register (Electron)', () => {
     });
 
     test('broadcasts settings-changed to every open window after a successful save', async () => {
-        const winA = { webContents: { send: jest.fn() } };
-        const winB = { webContents: { send: jest.fn() } };
+        const winA = { isDestroyed: () => false, webContents: { send: jest.fn() } };
+        const winB = { isDestroyed: () => false, webContents: { send: jest.fn() } };
         getAllWindowsMock.mockReturnValue([winA, winB]);
         settings.saveSettings = jest.fn().mockReturnValue(true);
         const ipcMain = makeIpcMain();
@@ -337,5 +337,26 @@ describe('register (Electron)', () => {
 
         expect(winA.webContents.send).toHaveBeenCalledWith('settings-changed', payload);
         expect(winB.webContents.send).toHaveBeenCalledWith('settings-changed', payload);
+    });
+
+    test('skips a window destroyed mid-save and still reports the write as saved', async () => {
+        const closed = {
+            isDestroyed: () => true,
+            webContents: {
+                send: jest.fn(() => {
+                    throw new Error('Object has been destroyed');
+                }),
+            },
+        };
+        const open = { isDestroyed: () => false, webContents: { send: jest.fn() } };
+        getAllWindowsMock.mockReturnValue([closed, open]);
+        settings.saveSettings = jest.fn().mockReturnValue(true);
+        const ipcMain = makeIpcMain();
+        register(ipcMain);
+
+        await expect(ipcMain.channels.get('save-settings')(undefined, { theme: 'dark' })).resolves.toBe(true);
+
+        expect(closed.webContents.send).not.toHaveBeenCalled();
+        expect(open.webContents.send).toHaveBeenCalledWith('settings-changed', { theme: 'dark' });
     });
 });

@@ -258,8 +258,10 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
 
 const register = (ipcMain) => {
     const broadcastSettingsChange = (newSettings) => {
+        // A window closing mid-save must not turn a landed write into a
+        // reported failure (a send to a destroyed window throws).
         BrowserWindow.getAllWindows().forEach((win) => {
-            win.webContents.send('settings-changed', newSettings);
+            if (!win.isDestroyed()) win.webContents.send('settings-changed', newSettings);
         });
     };
     registerHandlers(ipcMain, buildHandlers({ broadcastSettingsChange }));

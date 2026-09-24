@@ -204,6 +204,8 @@ describe('useSettingsForm — commit and revert', () => {
             result.current.handleFormChange('exposure', 80);
             result.current.handleFormChange('autoBoost', false);
             result.current.handleUiChange('theme', 'light');
+            // The language is left to the caller's setLanguage.
+            result.current.handleUiChange('language', 'en');
             // Same content, new array reference: still unchanged.
             result.current.handleUiChange('customTimezones', [...result.current.uiValues.customTimezones]);
         });
@@ -268,7 +270,7 @@ describe('useSettingsForm — commit and revert', () => {
         expect(result.current.formValues).toEqual({ exposure: 70, autoBoost: true });
     });
 
-    test('commit before hydration writes every value (no baseline to diff against)', async () => {
+    test('commit before hydration writes every value but the language (no baseline to diff against)', async () => {
         const props = baseProps({ isOpen: false });
         const { result } = renderForm(props);
         act(() => result.current.handleFormChange('exposure', 5));
@@ -277,7 +279,9 @@ describe('useSettingsForm — commit and revert', () => {
             await result.current.commit();
         });
 
-        expect(props.updateSetting).toHaveBeenCalledTimes(Object.keys(DEFAULT_UI_VALUES).length);
+        // The language goes through the translation provider's setLanguage.
+        expect(props.updateSetting).toHaveBeenCalledTimes(Object.keys(DEFAULT_UI_VALUES).length - 1);
+        expect(props.updateSetting).not.toHaveBeenCalledWith('language', expect.anything());
         expect(window.api.setGlobalDefault).toHaveBeenCalledWith('exposure', 5);
     });
 

@@ -154,6 +154,10 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
         setSaving(true);
         try {
             for (const [key, value] of Object.entries(uiValues)) {
+                // The language is saved by the caller through the translation
+                // provider's setLanguage (one write, and the UI switches only
+                // once it lands), never here.
+                if (key === 'language') continue;
                 const persisted = persistedUiRef.current;
                 if (persisted && valuesEqual(value, persisted[key])) continue;
                 await updateSetting(key, value);

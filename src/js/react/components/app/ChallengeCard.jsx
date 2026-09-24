@@ -19,6 +19,7 @@ import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardA
  */
 export function ChallengeCard({
     challenge,
+    settingsVersion = 0,
     defaultCompact = false,
     compactActions = false,
     timeRemaining,
@@ -33,6 +34,7 @@ export function ChallengeCard({
     const { hasCustomSettings, autoFillEnabled, isCompact, hasCompactOverride, toggleCompact } = useChallengeSettings(
         challenge.id,
         defaultCompact,
+        settingsVersion,
     );
     // Advisory deadline-action preview + boost/turbo conflict flag (read-only,
     // computed main-side). Failure yields empty actions / false — the card just

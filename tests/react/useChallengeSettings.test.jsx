@@ -6,8 +6,8 @@
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 
-function Probe({ id = 42, initialCompact }) {
-    const s = useChallengeSettings(id, initialCompact);
+function Probe({ id = 42, initialCompact, version }) {
+    const s = useChallengeSettings(id, initialCompact, version);
     return (
         <div>
             <span data-testid="state">
@@ -133,5 +133,47 @@ describe('unmount mid-reload drops the pending results', () => {
         // Resolving after unmount must not throw / warn about state updates.
         await act(async () => d.resolve(true));
         expect(window.api.getEffectiveSetting.mock.calls.map((c) => c[0])).toEqual(['autoFill', 'compactCards']);
+    });
+});
+
+describe('useChallengeSettings — settingsVersion', () => {
+    const deferred = () => {
+        let resolve;
+        const promise = new Promise((r) => {
+            resolve = r;
+        });
+        return { promise, resolve };
+    };
+
+    test('a new settingsVersion re-reads the values without remounting', async () => {
+        const { rerender } = render(<Probe version={0} />);
+        await waitFor(() => expect(state().compact).toBe(false));
+        const node = screen.getByTestId('state');
+
+        effective.compactCards = true;
+        rerender(<Probe version={1} />);
+
+        await waitFor(() => expect(state().compact).toBe(true));
+        expect(screen.getByTestId('state')).toBe(node);
+    });
+
+    test('an older reload settling after a newer one does not overwrite its values', async () => {
+        const first = deferred();
+        let calls = 0;
+        window.api.getSettingsSchema = jest.fn(() => {
+            calls += 1;
+            return calls === 1 ? first.promise : Promise.resolve({ schema: { compactCards: { perChallenge: true } } });
+        });
+        effective.compactCards = true;
+        const { rerender } = render(<Probe version={0} />);
+        await waitFor(() => expect(window.api.getSettingsSchema).toHaveBeenCalledTimes(1));
+
+        rerender(<Probe version={1} />);
+        await waitFor(() => expect(state().compact).toBe(true));
+
+        effective.compactCards = false;
+        await act(async () => first.resolve({ schema: { compactCards: { perChallenge: true } } }));
+
+        expect(state().compact).toBe(true);
     });
 });
