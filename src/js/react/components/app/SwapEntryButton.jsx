@@ -32,6 +32,47 @@ function SwapPhoto({ photo, caption }) {
     );
 }
 
+// A spend that went through, or one the server reports is no longer possible
+// (the card is stale) — either way the caller refreshes.
+const spentOrStale = (result) => result?.success || result?.outcome === 'not-available';
+
+/**
+ * The swap trigger button (spinner while busy, red after a failure) plus the
+ * inline outcome text of that failure.
+ */
+function SwapTrigger({ idleClassName, label, busy, error, onClick }) {
+    const { t } = useTranslation();
+    return (
+        <>
+            <button className={`btn btn-xs ${error ? 'btn-error' : idleClassName}`} onClick={onClick} disabled={busy}>
+                {busy ? <span className="loading loading-spinner loading-xs" /> : label}
+            </button>
+            {error && (
+                <span className="text-error" role="alert">
+                    {currencyOutcomeText(t, error)}
+                </span>
+            )}
+        </>
+    );
+}
+
+/**
+ * Swap confirm modal: the current photo beside the one that would take its
+ * slot (once known), then the caller's explanation.
+ */
+function SwapConfirmModal({ current, other, otherCaption, children, ...modalProps }) {
+    const { t } = useTranslation();
+    return (
+        <CurrencyConfirmModal {...modalProps} field="swaps">
+            <div className="flex gap-3">
+                <SwapPhoto photo={current} caption={t('app.currencySwapCurrent')} />
+                {other && <SwapPhoto photo={other} caption={otherCaption} />}
+            </div>
+            {children}
+        </CurrencyConfirmModal>
+    );
+}
+
 /**
  * Per-entry Swap button. Click → the app suggests a replacement (spends
  * nothing; the button spins meanwhile) → confirm modal shows current vs
@@ -63,41 +104,32 @@ export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, on
     const handleConfirm = async () => {
         const result = await commit.run(challengeId, entry.id, candidate.id);
         setCandidate(null);
-        if (result?.success || result?.outcome === 'not-available') onSpent();
+        if (spentOrStale(result)) onSpent();
     };
-
-    const busy = preview.loading || commit.loading;
 
     return (
         <>
-            <button
-                className={`btn btn-xs ${error ? 'btn-error' : 'btn-accent'}`}
+            <SwapTrigger
+                idleClassName="btn-accent"
+                label={`🔄 ${t('app.currencySwap')}`}
+                busy={preview.loading || commit.loading}
+                error={error}
                 onClick={handlePreview}
-                disabled={busy}
-            >
-                {busy ? <span className="loading loading-spinner loading-xs" /> : `🔄 ${t('app.currencySwap')}`}
-            </button>
-            {error && (
-                <span className="text-error" role="alert">
-                    {currencyOutcomeText(t, error)}
-                </span>
-            )}
-            <CurrencyConfirmModal
+            />
+            <SwapConfirmModal
                 isOpen={candidate !== null}
                 onClose={() => setCandidate(null)}
                 onConfirm={handleConfirm}
                 title={t('app.currencySwapTitle')}
-                field="swaps"
                 bankroll={bankroll}
                 spending={commit.loading}
+                current={entry}
+                other={candidate}
+                otherCaption={t('app.currencySwapReplacement')}
             >
-                <div className="flex gap-3">
-                    <SwapPhoto photo={entry} caption={t('app.currencySwapCurrent')} />
-                    {candidate && <SwapPhoto photo={candidate} caption={t('app.currencySwapReplacement')} />}
-                </div>
                 <p>{t('app.currencySwapBody')}</p>
                 {warnActioned && <p className="text-warning">{t('app.currencySwapBoostedWarning')}</p>}
-            </CurrencyConfirmModal>
+            </SwapConfirmModal>
         </>
     );
 }
@@ -124,7 +156,7 @@ export function SwapBackButton({ entry, swapBack, challengeId, bankroll, onSpent
     const handleConfirm = async () => {
         const result = await run(challengeId, entry.id);
         setConfirmOpen(false);
-        if (result?.success || result?.outcome === 'not-available') onSpent();
+        if (spentOrStale(result)) onSpent();
     };
 
     const original = { id: swapBack.previousId, member_id: swapBack.previousMemberId };
@@ -132,33 +164,26 @@ export function SwapBackButton({ entry, swapBack, challengeId, bankroll, onSpent
 
     return (
         <>
-            <button
-                className={`btn btn-xs ${error ? 'btn-error' : 'btn-info'}`}
+            <SwapTrigger
+                idleClassName="btn-info"
+                label={`↩️ ${t('app.currencySwapBack')}`}
+                busy={loading}
+                error={error}
                 onClick={() => setConfirmOpen(true)}
-                disabled={loading}
-            >
-                {loading ? <span className="loading loading-spinner loading-xs" /> : `↩️ ${t('app.currencySwapBack')}`}
-            </button>
-            {error && (
-                <span className="text-error" role="alert">
-                    {currencyOutcomeText(t, error)}
-                </span>
-            )}
-            <CurrencyConfirmModal
+            />
+            <SwapConfirmModal
                 isOpen={confirmOpen}
                 onClose={() => setConfirmOpen(false)}
                 onConfirm={handleConfirm}
                 title={t('app.currencySwapBackTitle')}
-                field="swaps"
                 bankroll={bankroll}
                 spending={loading}
+                current={entry}
+                other={original}
+                otherCaption={t('app.currencySwapBackOriginal')}
             >
-                <div className="flex gap-3">
-                    <SwapPhoto photo={entry} caption={t('app.currencySwapCurrent')} />
-                    <SwapPhoto photo={original} caption={t('app.currencySwapBackOriginal')} />
-                </div>
                 <p>{interp(t('app.currencySwapBackBody'), { kind: kindLabel })}</p>
-            </CurrencyConfirmModal>
+            </SwapConfirmModal>
         </>
     );
 }

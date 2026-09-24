@@ -102,27 +102,32 @@
             });
         }
 
+        // Reach the persisted settings: the preload bridge's `bridgeMethod`
+        // in a renderer, else the Node settings facade. A bridge failure
+        // propagates to the caller; a facade failure is logged at `level`
+        // with `facadeFailure` and resolves undefined.
+        async withSettings(bridgeMethod, viaBridge, viaFacade, level, facadeFailure) {
+            if (typeof window !== 'undefined' && window.api && window.api[bridgeMethod]) {
+                return viaBridge(window.api);
+            }
+            try {
+                return viaFacade(require('../settings'));
+            } catch (error) {
+                require('../logger').withCategory('translation')[level](facadeFailure, error);
+                return undefined;
+            }
+        }
+
         // Load language from settings
         async loadLanguageFromSettings() {
             try {
-                let savedLanguage;
-
-                // Check if we're in a browser context with window.api
-                if (typeof window !== 'undefined' && window.api && window.api.getSettings) {
-                    const settings = await window.api.getSettings();
-                    savedLanguage = settings.language;
-                } else {
-                    // Fallback for Node.js context
-                    try {
-                        const settings = require('../settings');
-                        savedLanguage = settings.getSetting('language');
-                    } catch (error) {
-                        const logger = require('../logger');
-                        logger
-                            .withCategory('translation')
-                            .warning('Could not load language from settings (Node.js):', error);
-                    }
-                }
+                const savedLanguage = await this.withSettings(
+                    'getSettings',
+                    async (api) => (await api.getSettings()).language,
+                    (settings) => settings.getSetting('language'),
+                    'warning',
+                    'Could not load language from settings (Node.js):',
+                );
 
                 // Load translations for the saved language
                 await this.loadTranslations(savedLanguage);
@@ -139,23 +144,20 @@
                 // Load translations for the new language first
                 await this.loadTranslations(language);
 
-                // Check if we're in a browser context with window.api
-                if (typeof window !== 'undefined' && window.api && window.api.setSetting) {
-                    await window.api.setSetting('language', language);
-                    this.currentLanguage = language;
-                } else {
-                    // Fallback for Node.js context
-                    try {
-                        const settings = require('../settings');
+                const saved = await this.withSettings(
+                    'setSetting',
+                    async (api) => {
+                        await api.setSetting('language', language);
+                        return true;
+                    },
+                    (settings) => {
                         settings.setSetting('language', language);
-                        this.currentLanguage = language;
-                    } catch (error) {
-                        const logger = require('../logger');
-                        logger
-                            .withCategory('translation')
-                            .error('Could not save language to settings (Node.js):', error);
-                    }
-                }
+                        return true;
+                    },
+                    'error',
+                    'Could not save language to settings (Node.js):',
+                );
+                if (saved) this.currentLanguage = language;
             } catch (error) {
                 const logger = require('../logger');
                 logger.withCategory('translation').error('Could not save language to settings:', error);

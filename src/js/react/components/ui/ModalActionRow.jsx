@@ -1,29 +1,8 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { ResetIcon } from './ResetButton';
+import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 
-/**
- * Save-checkmark glyph shared by the modal action rows.
- */
-function SaveIcon() {
-    return (
-        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-        </svg>
-    );
-}
-
-function TrashIcon() {
-    return (
-        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
-        </svg>
-    );
-}
+const ROW_ICON_CLASS = 'w-4 h-4 mr-2';
 
 /**
  * Shared Save / secondary / Cancel action row used by the settings
@@ -55,11 +34,15 @@ export function ModalActionRow({
         <div className={bordered ? 'flex justify-end gap-2 pt-4 border-t border-base-300' : 'flex justify-end gap-2'}>
             <button className="btn btn-latvian" onClick={onSave} disabled={saving}>
                 {saving && <span className="loading loading-spinner loading-xs" />}
-                <SaveIcon />
+                <StrokeIcon d={ICON_PATHS.save} className={ROW_ICON_CLASS} />
                 {t('app.save')}
             </button>
             <button className="btn btn-warning" onClick={onSecondary}>
-                {secondaryIcon === 'trash' ? <TrashIcon /> : <ResetIcon className="w-4 h-4 mr-2" />}
+                {secondaryIcon === 'trash' ? (
+                    <StrokeIcon d={ICON_PATHS.trash} className={ROW_ICON_CLASS} />
+                ) : (
+                    <ResetIcon className={ROW_ICON_CLASS} />
+                )}
                 {secondaryLabel}
             </button>
             <button className="btn" onClick={onCancel}>

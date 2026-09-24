@@ -7,23 +7,19 @@ import { BoostWindowBanner } from './BoostWindowBanner';
 import { LowExposureBanner } from './LowExposureBanner';
 import { ChallengeNav } from './ChallengeNav';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
-import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
+import { IconActionButton } from '@/components/ui/IconActionButton';
 import { ResetIcon } from '@/components/ui/ResetButton';
+import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
+
+const TOOLBAR_ICON_CLASS = 'w-4 h-4 mr-1';
 
 /**
- * Challenges section with Vote All, Refresh buttons, and challenge cards
+ * Global card density: the compactCards default and the compactCardActions
+ * switch, kept in sync with settings-changed events, plus `refreshKey` — bumped
+ * whenever a setting changes so each ChallengeCard remounts and re-reads its
+ * effective setting (any per-challenge override + the new global default).
  */
-export function ChallengesSection({
-    timezone,
-    autovoteRunning,
-    isLoggedIn,
-    onChallengeSettingsClick,
-    bankroll = null,
-    onBankrollChanged,
-}) {
-    const { t } = useTranslation();
-    const { challenges, loading, error, refetch } = useChallenges();
-    const times = useTimers(challenges);
+function useGlobalCardDensity() {
     const [globalCompact, setGlobalCompact] = useState(false);
     const [compactActions, setCompactActions] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
@@ -57,7 +53,7 @@ export function ChallengesSection({
         };
     }, []);
 
-    const handleToggleGlobalCompact = useCallback(async () => {
+    const toggleGlobalCompact = useCallback(async () => {
         const next = !globalCompact;
         try {
             await window.api.setGlobalDefault('compactCards', next);
@@ -68,16 +64,36 @@ export function ChallengesSection({
         }
     }, [globalCompact]);
 
-    // Shared success path for the Vote All / Run buttons below.
+    return { globalCompact, compactActions, refreshKey, toggleGlobalCompact };
+}
+
+/**
+ * Challenges section with Vote All, Refresh buttons, and challenge cards
+ */
+export function ChallengesSection({
+    timezone,
+    autovoteRunning,
+    isLoggedIn,
+    onChallengeSettingsClick,
+    bankroll = null,
+    onBankrollChanged,
+}) {
+    const { t } = useTranslation();
+    const { challenges, loading, error, refetch } = useChallenges();
+    const times = useTimers(challenges);
+    const { globalCompact, compactActions, refreshKey, toggleGlobalCompact } = useGlobalCardDensity();
+
+    // Shared success path for the Vote All / Run buttons below (awaited, so
+    // their spinner holds until the refreshed list lands).
     const refetchAfterAction = useCallback(() => refetch(true), [refetch]);
+
+    // Per-card success path: refresh without holding the card's spinner.
+    const handleVoteComplete = useCallback(() => {
+        refetch(true);
+    }, [refetch]);
 
     const handleRefresh = useCallback(() => {
         refetch();
-    }, [refetch]);
-
-    const handleVoteComplete = useCallback(() => {
-        // Refresh challenges after a vote
-        refetch(true);
     }, [refetch]);
 
     // A key / swap / fill spend changes both the challenge and the balance.
@@ -130,47 +146,27 @@ export function ChallengesSection({
             <div className="flex flex-wrap gap-2 mb-4 items-center">
                 {!autovoteRunning && (
                     <>
-                        <AsyncActionButton
+                        <IconActionButton
                             className="btn btn-latvian btn-sm"
                             action={() => window.api.voteAllChallengesManual()}
                             onSuccess={refetchAfterAction}
                             failureLogPrefix="Vote All failed"
                             errorLogPrefix="Error during Vote All"
                             loadingLabel={t('app.votingAll')}
-                            idleContent={
-                                <>
-                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth="2"
-                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                                        />
-                                    </svg>
-                                    {t('app.voteAll')}
-                                </>
-                            }
+                            icon={ICON_PATHS.vote}
+                            iconClassName={TOOLBAR_ICON_CLASS}
+                            label={t('app.voteAll')}
                         />
-                        <AsyncActionButton
+                        <IconActionButton
                             className="btn btn-latvian btn-sm"
                             action={() => window.api.runVotingCycle()}
                             onSuccess={refetchAfterAction}
                             failureLogPrefix="Run failed"
                             errorLogPrefix="Error during Run"
                             loadingLabel={t('app.running')}
-                            idleContent={
-                                <>
-                                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth="2"
-                                            d="M13 10V3L4 14h7v7l9-11h-7z"
-                                        />
-                                    </svg>
-                                    {t('app.run')}
-                                </>
-                            }
+                            icon={ICON_PATHS.run}
+                            iconClassName={TOOLBAR_ICON_CLASS}
+                            label={t('app.run')}
                         />
                         <button className="btn btn-ghost btn-sm" onClick={handleRefresh} disabled={loading}>
                             {loading ? <span className="loading loading-spinner loading-xs" /> : <ResetIcon />}
@@ -187,24 +183,11 @@ export function ChallengesSection({
                     ("click to get details"), matching the per-card toggle in
                     ChallengeCard. The icon follows the same rule: it depicts
                     the view you are about to switch TO. */}
-                <button className="btn btn-ghost btn-sm sm:ml-auto" onClick={handleToggleGlobalCompact}>
-                    <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        {globalCompact ? (
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M4 6h16M4 12h16M4 18h7"
-                            />
-                        ) : (
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M4 6h16M4 10h16M4 14h16M4 18h16"
-                            />
-                        )}
-                    </svg>
+                <button className="btn btn-ghost btn-sm sm:ml-auto" onClick={toggleGlobalCompact}>
+                    <StrokeIcon
+                        d={globalCompact ? ICON_PATHS.listCompact : ICON_PATHS.listDetailed}
+                        className={TOOLBAR_ICON_CLASS}
+                    />
                     {globalCompact ? t('app.details') : t('app.compact')}
                 </button>
             </div>

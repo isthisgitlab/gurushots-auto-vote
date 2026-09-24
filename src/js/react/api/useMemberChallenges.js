@@ -1,5 +1,8 @@
-import { useCallback } from 'react';
-import { useIpcQuery } from './useIpcQuery';
+import { useIpcResultQuery } from './useIpcQuery';
+
+const fetchMemberChallenges = () => window.api.getMemberChallenges();
+const selectItems = (result) => (Array.isArray(result.items) ? result.items : []);
+const fetchFailed = (result) => ({ data: [], error: new Error(result?.error || 'fetch_failed') });
 
 /**
  * Fetches the list of un-joined ("open") challenges the member can join, via
@@ -8,18 +11,10 @@ import { useIpcQuery } from './useIpcQuery';
  * @returns {{ items: Array<object>, loading: boolean, error: Error|null, refetch: function }}
  */
 export function useMemberChallenges() {
-    const queryFn = useCallback(() => window.api.getMemberChallenges(), []);
-
-    const apply = useCallback((result, { setData, setError }) => {
-        if (result?.success) {
-            setData(Array.isArray(result.items) ? result.items : []);
-            setError(null);
-            return;
-        }
-        setData([]);
-        setError(new Error(result?.error || 'fetch_failed'));
-    }, []);
-
-    const { data, loading, error, refetch } = useIpcQuery(queryFn, { initialData: [], apply });
+    const { data, loading, error, refetch } = useIpcResultQuery(fetchMemberChallenges, {
+        initialData: [],
+        select: selectItems,
+        fail: fetchFailed,
+    });
     return { items: data, loading, error, refetch };
 }

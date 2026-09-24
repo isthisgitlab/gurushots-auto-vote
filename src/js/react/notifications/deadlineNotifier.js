@@ -33,6 +33,43 @@ import {
 } from '../../services/deadlineNotifications';
 
 /**
+ * Fetch each challenge's deadline actions, one IPC round trip at a time.
+ * get-deadline-actions returns {success, actions} | {success:false} and never
+ * throws; anything that didn't resolve cleanly is skipped. Only id/title are
+ * read — the challenge objects belong to the voting pass, so they are treated
+ * as read-only.
+ *
+ * @param {Array|unknown} challenges
+ * @param {(challenge:Object)=>Promise<{success:boolean, actions?:Array}>} getDeadlineActions
+ * @returns {Promise<Array<{id:unknown, title:unknown, actions:Array}>>}
+ */
+async function collectDeadlineActions(challenges, getDeadlineActions) {
+    const list = Array.isArray(challenges) ? challenges : [];
+    const perChallengeActions = [];
+    for (const challenge of list) {
+        const res = await getDeadlineActions(challenge);
+        if (!res || res.success !== true || !Array.isArray(res.actions)) continue;
+        perChallengeActions.push({ id: challenge?.id, title: challenge?.title, actions: res.actions });
+    }
+    return perChallengeActions;
+}
+
+/**
+ * Report a failed notifier cycle to the optional diagnostic sink, which is
+ * itself best-effort: a throwing sink is swallowed too.
+ *
+ * @param {((message:string)=>void)|undefined} log
+ * @param {any} error
+ */
+function logCycleFailure(log, error) {
+    try {
+        log?.(`deadline notification cycle failed: ${error?.message ?? error}`);
+    } catch {
+        /* the diagnostic sink itself is best-effort */
+    }
+}
+
+/**
  * Build the per-cycle notifier. Holds the dedupe Set + a re-entrancy flag, so
  * create ONE instance and reuse it across cycles (a fresh instance every cycle
  * would never dedupe).
@@ -63,17 +100,7 @@ export function createDeadlineNotifier({ getSettings, getDeadlineActions, transl
             // Feature off (the default) → zero per-challenge work.
             if (!config.anyEnabled) return;
 
-            const list = Array.isArray(challenges) ? challenges : [];
-            const perChallengeActions = [];
-            for (const challenge of list) {
-                // get-deadline-actions returns {success, actions} | {success:false};
-                // it never throws. Skip anything that didn't resolve cleanly.
-                // Only id/title are read here — the challenge objects belong to
-                // the voting pass, so treat them as read-only.
-                const res = await getDeadlineActions(challenge);
-                if (!res || res.success !== true || !Array.isArray(res.actions)) continue;
-                perChallengeActions.push({ id: challenge?.id, title: challenge?.title, actions: res.actions });
-            }
+            const perChallengeActions = await collectDeadlineActions(challenges, getDeadlineActions);
 
             const due = computeDueNotifications(perChallengeActions, now, config);
             const fresh = dedupe.filterNew(due);
@@ -82,11 +109,7 @@ export function createDeadlineNotifier({ getSettings, getDeadlineActions, transl
         } catch (error) {
             // Self-contained: swallow so a decision/IPC failure can neither reach
             // the scheduler nor vanish without a trace (mirrors nodeNotify.js).
-            try {
-                log?.(`deadline notification cycle failed: ${error?.message ?? error}`);
-            } catch {
-                /* the diagnostic sink itself is best-effort */
-            }
+            logCycleFailure(log, error);
         } finally {
             running = false;
         }

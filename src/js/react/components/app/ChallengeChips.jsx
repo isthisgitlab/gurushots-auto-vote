@@ -1,4 +1,5 @@
 import { scrollToChallenge } from '@/utils/scrollToChallenge';
+import { PulseDot } from '../ui/PulseDot';
 
 /**
  * Bordered panel above the challenge list holding a heading (emoji +
@@ -33,5 +34,39 @@ export function ChallengeChip({ challengeId, className = '', title, children }) 
         >
             {children}
         </button>
+    );
+}
+
+const alwaysPulse = () => true;
+
+/**
+ * Alert summary above the challenge list: a ChipListPanel with one chip per
+ * flagged challenge (status dot + title + caller-supplied detail), each
+ * scrolling to its card. Renders nothing when `items` is empty. Shared by
+ * BoostWindowBanner and LowExposureBanner; the colour classes are passed whole
+ * (never assembled) so Tailwind's scanner sees them.
+ *
+ * @param {object} props
+ * @param {string} props.icon
+ * @param {string} props.label - already-translated heading
+ * @param {Array<{id: string|number, title: string}>} props.items
+ * @param {string} props.chipClassName - DaisyUI button colour class for every chip
+ * @param {string} props.dotVariant - PulseDot colour variant
+ * @param {(item: object) => boolean} [props.pulse] - whether an item's dot pings
+ * @param {(item: object) => import('react').ReactNode} props.detail - trailing chip text
+ */
+export function ChallengeAlertPanel({ icon, label, items, chipClassName, dotVariant, pulse = alwaysPulse, detail }) {
+    if (items.length === 0) return null;
+
+    return (
+        <ChipListPanel icon={icon} label={label} count={items.length}>
+            {items.map((c) => (
+                <ChallengeChip key={c.id} challengeId={c.id} className={chipClassName}>
+                    <PulseDot variant={dotVariant} pulse={pulse(c)} size="status-sm" />
+                    <span>{c.title}</span>
+                    {detail(c)}
+                </ChallengeChip>
+            ))}
+        </ChipListPanel>
     );
 }

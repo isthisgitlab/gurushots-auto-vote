@@ -2,8 +2,10 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { formatDuration } from '@/utils/formatters';
 import { openBoostWindows } from '../../../voting/boostWindow';
 import { useTick } from '@/hooks/useTick';
-import { ChipListPanel, ChallengeChip } from './ChallengeChips';
-import { PulseDot } from '../ui/PulseDot';
+import { ChallengeAlertPanel } from './ChallengeChips';
+
+const countdownDetail = (c) =>
+    c.remaining != null && <span className="font-semibold">· {formatDuration(c.remaining)} left</span>;
 
 /**
  * Compact summary placed above the challenge list naming the challenges whose
@@ -28,19 +30,14 @@ export function BoostWindowBanner({ challenges }) {
     const hasCountdown = openBoostWindows(challenges, Math.floor(Date.now() / 1000)).some((c) => c.remaining != null);
     const now = useTick(1000, hasCountdown);
 
-    const open = openBoostWindows(challenges, now);
-
-    if (open.length === 0) return null;
-
     return (
-        <ChipListPanel icon="🚀" label={t('app.boostWindowOpen')} count={open.length}>
-            {open.map((c) => (
-                <ChallengeChip key={c.id} challengeId={c.id} className="btn-info">
-                    <PulseDot variant="info" size="status-sm" />
-                    <span>{c.title}</span>
-                    {c.remaining != null && <span className="font-semibold">· {formatDuration(c.remaining)} left</span>}
-                </ChallengeChip>
-            ))}
-        </ChipListPanel>
+        <ChallengeAlertPanel
+            icon="🚀"
+            label={t('app.boostWindowOpen')}
+            items={openBoostWindows(challenges, now)}
+            chipClassName="btn-info"
+            dotVariant="info"
+            detail={countdownDetail}
+        />
     );
 }

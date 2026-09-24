@@ -21,62 +21,21 @@ import { WelcomeModal } from '@/components/app/WelcomeModal';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
+import { useDisclosure } from '@/hooks/useDisclosure';
+import { useDocumentTheme } from '@/hooks/useDocumentTheme';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
 
+const NO_CHALLENGE = { id: null, title: '' };
+
 /**
- * Main app content (inside all providers)
+ * Show the first-run welcome once per launch until dismissed. A ref (not
+ * settings state) gates it: a failed persist triggers a settings refetch that
+ * re-runs the effect with the flag still false, and without the ref that would
+ * reopen the modal mid-session. Persisted via the settings facade so it stays
+ * dismissed across launches/platforms.
  */
-function AppContent() {
-    const { ready, t } = useTranslation();
-    const { settings, loading: settingsLoading, updateSetting } = useSettings();
-    const { challenges, refetch: refetchChallenges } = useChallenges();
-    const { bankroll, refetch: refetchBankroll } = useBankroll();
-    const { active: autoJoinActive } = useAutoJoinActive();
-    const autovote = useAutovote();
-    const autoClaimStatus = useAutoClaimStatus(autovote.nextRunAt, autovote.running);
-
-    // After a join changes state, refresh balances + the active-challenge list.
-    const handleJoined = useCallback(() => {
-        refetchBankroll();
-        refetchChallenges();
-    }, [refetchBankroll, refetchChallenges]);
-
-    // An autovote cycle can spend or earn currency (auto-join, turbos, key
-    // unlocks, fills, reward claims), but only the challenge list is refreshed
-    // by the provider — re-read the balances after every completed cycle too,
-    // or the header bankroll stays frozen at its mount-time value.
-    useEffect(() => {
-        if (autovote.cycles > 0) refetchBankroll();
-    }, [autovote.cycles, refetchBankroll]);
-
-    // Local state
-    const [settingsModalOpen, setSettingsModalOpen] = useState(false);
-    const [challengeSettingsOpen, setChallengeSettingsOpen] = useState(false);
-    const [selectedChallenge, setSelectedChallenge] = useState({ id: null, title: '' });
+function useWelcomeGate(settings, settingsLoading, updateSetting) {
     const [welcomeOpen, setWelcomeOpen] = useState(false);
-    const [logsOpen, setLogsOpen] = useState(false);
-
-    // Live challenge object backing the per-challenge settings modal. Resolved
-    // from the context (not snapshotted) so its applicability hints re-render as
-    // the challenge auto-refreshes — a freed entry slot re-enables Auto Fill
-    // without reopening.
-    const selectedChallengeObj = useMemo(
-        () => challenges.find((c) => String(c.id) === String(selectedChallenge.id)) ?? null,
-        [challenges, selectedChallenge.id],
-    );
-
-    // Apply theme
-    useEffect(() => {
-        if (settings?.theme) {
-            document.documentElement.setAttribute('data-theme', settings.theme);
-        }
-    }, [settings?.theme]);
-
-    // Show the first-run welcome once per launch until dismissed. A ref (not
-    // settings state) gates it: a failed persist triggers a settings refetch
-    // that re-runs this effect with the flag still false, and without the ref
-    // that would reopen the modal mid-session. Persisted via the settings
-    // facade so it stays dismissed across launches/platforms.
     const welcomeHandledRef = useRef(false);
     const settingsReady = !settingsLoading && Boolean(settings);
     const onboardingCompleted = settings?.onboardingCompleted;
@@ -99,7 +58,123 @@ function AppContent() {
         }
     }, [updateSetting]);
 
-    // Handle logout
+    return { welcomeOpen, handleWelcomeClose };
+}
+
+/**
+ * Which challenge the per-challenge settings modal is open for.
+ */
+function useChallengeSettingsTarget(challenges) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [selected, setSelected] = useState(NO_CHALLENGE);
+
+    // Live challenge object backing the modal. Resolved from the context (not
+    // snapshotted) so its applicability hints re-render as the challenge
+    // auto-refreshes — a freed entry slot re-enables Auto Fill without
+    // reopening.
+    const selectedChallenge = useMemo(
+        () => challenges.find((c) => String(c.id) === String(selected.id)) ?? null,
+        [challenges, selected.id],
+    );
+
+    // Skip when the modal is already open for the same challenge so rapid taps
+    // don't churn parent state and re-thrash the modal's effects (rapid clicks
+    // were producing a blank page when the in-flight load raced the
+    // re-render). No refetch on open: challenge state is tick-driven (60s
+    // auto-refresh) and selectedChallenge is derived live from that context,
+    // so the modal's applicability hints stay current without an imperative
+    // fetch.
+    const open = useCallback(
+        (challengeId, challengeTitle) => {
+            if (isOpen && selected.id === challengeId) return;
+            setSelected({ id: challengeId, title: challengeTitle });
+            setIsOpen(true);
+        },
+        [isOpen, selected.id],
+    );
+
+    const close = useCallback(() => {
+        setIsOpen(false);
+        setSelected(NO_CHALLENGE);
+    }, []);
+
+    return { isOpen, selected, selectedChallenge, open, close };
+}
+
+/**
+ * The app's modals and dialogs, each isolated in its own ErrorBoundary.
+ */
+function AppModals({ settingsModal, challengeSettings, logsModal, welcomeOpen, onWelcomeClose }) {
+    return (
+        <>
+            {/* Settings Modal */}
+            <ErrorBoundary>
+                <SettingsModal isOpen={settingsModal.isOpen} onClose={settingsModal.close} />
+            </ErrorBoundary>
+
+            {/* Challenge Settings Modal — keyed by challenge id so a
+                challenge change forces a fresh modal instance with no
+                carry-over state from a previous open. */}
+            <ErrorBoundary>
+                <ChallengeSettingsModal
+                    key={challengeSettings.selected.id ?? 'closed'}
+                    isOpen={challengeSettings.isOpen}
+                    onClose={challengeSettings.close}
+                    challengeId={challengeSettings.selected.id}
+                    challengeTitle={challengeSettings.selected.title}
+                    challenge={challengeSettings.selectedChallenge}
+                />
+            </ErrorBoundary>
+
+            {/* In-app Logs viewer (Android; Electron uses the menu window) */}
+            <ErrorBoundary>
+                <LogsModal isOpen={logsModal.isOpen} onClose={logsModal.close} />
+            </ErrorBoundary>
+
+            {/* Update Dialog */}
+            <UpdateDialog />
+
+            {/* First-run onboarding */}
+            <ErrorBoundary>
+                <WelcomeModal isOpen={welcomeOpen} onClose={onWelcomeClose} />
+            </ErrorBoundary>
+        </>
+    );
+}
+
+/**
+ * Main app content (inside all providers)
+ */
+function AppContent() {
+    const { ready, t } = useTranslation();
+    const { settings, loading: settingsLoading, updateSetting } = useSettings();
+    const { challenges, refetch: refetchChallenges } = useChallenges();
+    const { bankroll, refetch: refetchBankroll } = useBankroll();
+    const { active: autoJoinActive } = useAutoJoinActive();
+    const autovote = useAutovote();
+    const autoClaimStatus = useAutoClaimStatus(autovote.nextRunAt, autovote.running);
+    const settingsModal = useDisclosure();
+    // In-app log viewer; the Navbar button is Capacitor-gated.
+    const logsModal = useDisclosure();
+    const challengeSettings = useChallengeSettingsTarget(challenges);
+    const { welcomeOpen, handleWelcomeClose } = useWelcomeGate(settings, settingsLoading, updateSetting);
+
+    useDocumentTheme(settings?.theme);
+
+    // After a join changes state, refresh balances + the active-challenge list.
+    const handleJoined = useCallback(() => {
+        refetchBankroll();
+        refetchChallenges();
+    }, [refetchBankroll, refetchChallenges]);
+
+    // An autovote cycle can spend or earn currency (auto-join, turbos, key
+    // unlocks, fills, reward claims), but only the challenge list is refreshed
+    // by the provider — re-read the balances after every completed cycle too,
+    // or the header bankroll stays frozen at its mount-time value.
+    useEffect(() => {
+        if (autovote.cycles > 0) refetchBankroll();
+    }, [autovote.cycles, refetchBankroll]);
+
     const handleLogout = useCallback(async () => {
         try {
             // Stop autovote if running
@@ -112,46 +187,6 @@ function AppContent() {
         }
     }, [autovote]);
 
-    // Handle settings click
-    const handleSettingsClick = useCallback(() => {
-        setSettingsModalOpen(true);
-    }, []);
-
-    // Handle logs click (in-app log viewer; Navbar button is Capacitor-gated)
-    const handleLogsClick = useCallback(() => {
-        setLogsOpen(true);
-    }, []);
-
-    const handleLogsClose = useCallback(() => {
-        setLogsOpen(false);
-    }, []);
-
-    // Handle challenge settings click. Skip when the modal is already
-    // open for the same challenge so rapid taps don't churn parent state
-    // and re-thrash the modal's effects (rapid clicks were producing a
-    // blank page when the in-flight load raced the re-render).
-    const handleChallengeSettingsClick = useCallback(
-        (challengeId, challengeTitle) => {
-            if (challengeSettingsOpen && selectedChallenge.id === challengeId) return;
-            setSelectedChallenge({ id: challengeId, title: challengeTitle });
-            setChallengeSettingsOpen(true);
-            // No refetch on open: challenge state is tick-driven (60s auto-refresh)
-            // and selectedChallengeObj is derived live from that context, so the
-            // modal's applicability hints stay current without an imperative fetch.
-        },
-        [challengeSettingsOpen, selectedChallenge.id],
-    );
-
-    const handleChallengeSettingsClose = useCallback(() => {
-        setChallengeSettingsOpen(false);
-        setSelectedChallenge({ id: null, title: '' });
-    }, []);
-
-    const handleSettingsClose = useCallback(() => {
-        setSettingsModalOpen(false);
-    }, []);
-
-    // Handle autovote toggle
     const handleAutovoteToggle = useCallback(async () => {
         await autovote.toggle();
     }, [autovote]);
@@ -172,8 +207,8 @@ function AppContent() {
                     {/* Navbar */}
                     <Navbar
                         isMock={isMock}
-                        onLogsClick={handleLogsClick}
-                        onSettingsClick={handleSettingsClick}
+                        onLogsClick={logsModal.open}
+                        onSettingsClick={settingsModal.open}
                         onLogout={handleLogout}
                     />
 
@@ -202,7 +237,7 @@ function AppContent() {
                         timezone={timezone}
                         autovoteRunning={autovote.running}
                         isLoggedIn={isLoggedIn}
-                        onChallengeSettingsClick={handleChallengeSettingsClick}
+                        onChallengeSettingsClick={challengeSettings.open}
                         bankroll={bankroll}
                         onBankrollChanged={refetchBankroll}
                     />
@@ -212,37 +247,13 @@ function AppContent() {
                         <DiscoverSection isLoggedIn={isLoggedIn} bankroll={bankroll} onJoined={handleJoined} />
                     </ErrorBoundary>
 
-                    {/* Settings Modal */}
-                    <ErrorBoundary>
-                        <SettingsModal isOpen={settingsModalOpen} onClose={handleSettingsClose} />
-                    </ErrorBoundary>
-
-                    {/* Challenge Settings Modal — keyed by challenge id so a
-                        challenge change forces a fresh modal instance with no
-                        carry-over state from a previous open. */}
-                    <ErrorBoundary>
-                        <ChallengeSettingsModal
-                            key={selectedChallenge.id ?? 'closed'}
-                            isOpen={challengeSettingsOpen}
-                            onClose={handleChallengeSettingsClose}
-                            challengeId={selectedChallenge.id}
-                            challengeTitle={selectedChallenge.title}
-                            challenge={selectedChallengeObj}
-                        />
-                    </ErrorBoundary>
-
-                    {/* In-app Logs viewer (Android; Electron uses the menu window) */}
-                    <ErrorBoundary>
-                        <LogsModal isOpen={logsOpen} onClose={handleLogsClose} />
-                    </ErrorBoundary>
-
-                    {/* Update Dialog */}
-                    <UpdateDialog />
-
-                    {/* First-run onboarding */}
-                    <ErrorBoundary>
-                        <WelcomeModal isOpen={welcomeOpen} onClose={handleWelcomeClose} />
-                    </ErrorBoundary>
+                    <AppModals
+                        settingsModal={settingsModal}
+                        challengeSettings={challengeSettings}
+                        logsModal={logsModal}
+                        welcomeOpen={welcomeOpen}
+                        onWelcomeClose={handleWelcomeClose}
+                    />
                 </ErrorBoundary>
             </div>
 

@@ -16,6 +16,257 @@ import { useLatestRef } from '../hooks/useLatestRef';
 const AutovoteContext = createContext(null);
 
 /**
+ * Cancel the cadence chain's armed timer, if any, leaving the slot as-is.
+ *
+ * @param {{ current: any }} timerRef
+ */
+function cancelCycleTimer(timerRef) {
+    if (timerRef.current) {
+        clearTimeout(timerRef.current);
+    }
+}
+
+/**
+ * Cancel the armed timer and empty the slot, so the old timeout is stale under
+ * the chain's generation guard.
+ *
+ * @param {{ current: any }} timerRef
+ */
+function clearCycleTimer(timerRef) {
+    cancelCycleTimer(timerRef);
+    timerRef.current = null;
+}
+
+/**
+ * Persist the running flag so a remount of the app (Capacitor re-launch,
+ * Electron window reopen) resumes — or, once cleared, does not resume — voting.
+ * Best-effort: a failure only means the next launch won't match.
+ *
+ * @param {boolean} running
+ */
+async function persistRunningFlag(running) {
+    try {
+        await window.api.setSetting('autovoteRunning', running);
+    } catch {
+        /* ignore */
+    }
+}
+
+/**
+ * Hand scheduling to the Android background host. On Capacitor the native
+ * AutoVote plugin owns the foreground notification, AlarmManager schedule and
+ * per-cycle HTTP work — voting continues even when the WebView is destroyed
+ * (app swiped from recents). Where the native plugin is not available, fall
+ * back to the foreground-notification-only plugin so there is still a visual
+ * indicator. Both are no-ops on Electron.
+ */
+async function startBackgroundHost() {
+    const native = await nativeAutovote.start();
+    if (!native.available) {
+        await foregroundService.start({ body: 'Auto-vote running — preparing first cycle' });
+    }
+}
+
+/**
+ * Stop the native background loop on Capacitor (the plugin tears down its own
+ * foreground notification), falling back to the simple foreground-service
+ * controller when native is not available.
+ */
+async function stopBackgroundHost() {
+    const native = await nativeAutovote.stop();
+    if (!native.available) {
+        await foregroundService.stop();
+    }
+}
+
+/**
+ * Record a successful cycle: bump the counter, stamp the last-run time, and
+ * refresh the persistent notification text on Capacitor so the user can see
+ * at a glance when the last cycle ran without opening the app (no-op on
+ * Electron).
+ *
+ * @param {Function} dispatch
+ */
+function recordCycleSuccess(dispatch) {
+    dispatch({ type: ACTIONS.INCREMENT_CYCLE });
+    const lastRunStr = new Date().toLocaleTimeString('lv-LV');
+    dispatch({ type: ACTIONS.UPDATE_LAST_RUN, payload: lastRunStr });
+    foregroundService.update({ body: `Last cycle: ${lastRunStr}` });
+}
+
+/**
+ * Run a single voting cycle. On success resolves with the active-challenge
+ * list the cycle fetched, so the threshold scheduler can reuse it instead of
+ * issuing a second IPC fetch; resolves falsy on failure / not-running /
+ * not-logged-in (callers fall back to fetching).
+ *
+ * @param {object} deps
+ * @param {{ current: boolean }} deps.runningRef
+ * @param {Function} deps.dispatch
+ * @param {Function} [deps.onChallengesRefresh]
+ * @returns {Promise<Array|boolean>} The fetched challenge list on success (or
+ *   `true` when the cycle succeeded without surfacing one), `false` otherwise.
+ *   Consumers MUST treat any non-array as "fetch fresh" (Array.isArray guard).
+ */
+async function runRendererVotingCycle({ runningRef, dispatch, onChallengesRefresh }) {
+    if (!runningRef.current) {
+        return false;
+    }
+
+    try {
+        const settings = await window.api.getSettings();
+        if (!settings.token) {
+            dispatch({ type: ACTIONS.SET_ERROR, payload: 'Not logged in' });
+            return false;
+        }
+
+        const result = await window.api.runVotingCycle();
+
+        if (!runningRef.current) {
+            return false;
+        }
+
+        if (!result?.success) {
+            dispatch({ type: ACTIONS.SET_ERROR, payload: result?.error || 'Voting failed' });
+            return false;
+        }
+
+        recordCycleSuccess(dispatch);
+        if (onChallengesRefresh) {
+            onChallengesRefresh();
+        }
+
+        // Hand the fetched list back so the threshold scheduler can skip its
+        // own fetch. Fall back to `true` (truthy, but not an array) when no
+        // list is present so callers fetch fresh.
+        return result.challenges ?? true;
+    } catch (err) {
+        dispatch({ type: ACTIONS.SET_ERROR, payload: err.message || 'Voting error' });
+        return false;
+    }
+}
+
+/**
+ * Build the per-cycle OS deadline-notifier for this platform: the notifier on
+ * Electron, `null` on native Android, where the native foreground service is
+ * authoritative — so the notifier is NOT wired there at all (that both avoids a
+ * dual-loop double-fire and the per-cycle IPC that would only be discarded).
+ * See deadlineNotifier.js header.
+ */
+function createRendererDeadlineNotifier() {
+    const isNativePlatform = globalThis.Capacitor?.isNativePlatform?.() === true;
+    const deliver = resolveRendererDelivery(isNativePlatform);
+    return deliver
+        ? createDeadlineNotifier({
+              getSettings: () => window.api.getSettings(),
+              getDeadlineActions: (challenge) => window.api.getDeadlineActions(challenge),
+              translate: (key) => globalThis.translationManager?.t?.(key) ?? key,
+              deliver,
+              log: (msg) => window.api.logDebug?.(msg),
+          })
+        : null;
+}
+
+/**
+ * The shared cadence chain (decide delay → arm the single timer → run cycle
+ * → re-arm) from src/js/scheduling/cadenceChain.js — the same loop the
+ * CLI/Android scheduler drives. This only supplies the WebView transport:
+ * settings + challenges over IPC, the per-challenge IPC resolvers, the timer
+ * slot (`cycleTimerRef`, whose identity doubles as the staleness guard for
+ * start()/rearmSchedule() takeovers), and best-effort IPC logging.
+ *
+ * @param {object} deps
+ * @param {{ current: boolean }} deps.runningRef
+ * @param {{ current: any }} deps.cycleTimerRef
+ * @param {() => Promise<Array|boolean>} deps.runVotingCycle
+ * @param {Function} deps.dispatch
+ * @param {Function|null} deps.notifier - per-cycle deadline notifier, or null when not wired
+ */
+function createRendererCadenceChain({ runningRef, cycleTimerRef, runVotingCycle, dispatch, notifier }) {
+    return createCadenceChain({
+        isRunning: () => runningRef.current,
+        getTimer: () => cycleTimerRef.current,
+        setTimer: (handle) => {
+            cycleTimerRef.current = handle;
+        },
+        loadSettings: () => window.api.getSettings(),
+        fetchChallenges: (settings) => window.api.getActiveChallenges(settings.token),
+        resolveLastMinuteCheckMinutes: () => window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
+        resolveThreshold,
+        resolveScheduledFill,
+        resolveFinalWindowTopUp,
+        resolveBoostPrefill,
+        resolveCurrencyAuto,
+        runCycle: () => runVotingCycle(),
+        log: {
+            // Best-effort parity log (optional-chained so a host without
+            // logDebug, e.g. a minimal Capacitor bridge, can't abort
+            // scheduling). Normal-mode lines stay CLI-only — no IPC spam
+            // for the common case.
+            cadence: (mode, message) => (mode === 'normal' ? undefined : window.api.logDebug?.(message)),
+            decisionError: (err) => window.api.logWarning(`${DECISION_ERROR_MESSAGE}: ${err.message || err}`),
+            // runVotingCycle catches internally and resolves false, so a
+            // rejection here is a can't-happen TODAY — but that is an
+            // invariant of a different module. Log best-effort instead
+            // of swallowing so a future regression can't fail silently.
+            cycleError: (err) => window.api.logWarning?.(`Voting cycle failed: ${err?.message || err}`),
+            // A renderer timer that fired far late means the page was
+            // throttled/frozen or the machine suspended, and every
+            // deadline inside that gap went unserved. Warning, not
+            // debug: this is the only trace of a silently missed fill,
+            // and it lands on the Logs page the user actually reads.
+            // Wording is shared with the Node host so the two surfaces
+            // cannot drift.
+            overslept: (lateMs, waitMs) => window.api.logWarning?.(formatOversleptMessage(lateMs, waitMs)),
+        },
+        // Surface the next armed cycle as an absolute wall-clock instant
+        // for the status header's countdown; null clears it. dispatch is
+        // stable across renders.
+        onScheduled: (waitMs) =>
+            dispatch({
+                type: ACTIONS.SET_NEXT_RUN,
+                payload: typeof waitMs === 'number' ? Date.now() + waitMs : null,
+            }),
+        // Best-effort per-cycle OS notification for upcoming deadline
+        // actions. Stable instance (see the provider's notifierRef) so it
+        // dedupes across cycles; the chain fires it in its own isolated
+        // wrapper so a throw here can never affect scheduling. `undefined` on
+        // native Android (notifier not wired) so the chain skips the hook.
+        onCycleChallenges: notifier || undefined,
+    });
+}
+
+/**
+ * Auto-resume on mount if a previous session left autovoteRunning persisted
+ * as true (user toggled Start, then closed the app or restarted the device).
+ * Skips when there is no token, otherwise the loop would error every cycle
+ * until the user logs in. The only dependency is a stable ref, so this runs
+ * once per mount — no extra ran-once guard. `start` is read through that ref:
+ * its identity changes with its own deps (runVotingCycle / threshold
+ * scheduling), and this must stay a single mount-time check, not re-trigger
+ * on each change; start()'s own running guard prevents double-starts.
+ *
+ * @param {() => Promise<void>} start
+ */
+function useResumeOnMount(start) {
+    const startRef = useLatestRef(start);
+    useEffect(() => {
+        const maybeResume = async () => {
+            try {
+                const wasRunning = await window.api.getSetting('autovoteRunning');
+                if (!wasRunning) return;
+                const settings = await window.api.getSettings();
+                if (!settings?.token) return;
+                await startRef.current();
+            } catch {
+                /* ignore — leave UI in stopped state on failure */
+            }
+        };
+        maybeResume();
+    }, [startRef]);
+}
+
+/**
  * Provider for autovote state machine
  */
 export function AutovoteProvider({ children, onChallengesRefresh }) {
@@ -32,23 +283,10 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     // Per-cycle OS deadline-notifier. Created ONCE (a fresh instance each render
     // would never dedupe): it holds the fired-key Set + re-entrancy guard across
     // cycles. `undefined` = not yet initialized; the stored value is the notifier
-    // on Electron or `null` on native Android, where the native foreground
-    // service is authoritative — so the notifier is NOT wired there at all (that
-    // both avoids a dual-loop double-fire and the per-cycle IPC that would only
-    // be discarded). See deadlineNotifier.js header.
+    // on Electron or `null` on native Android.
     const notifierRef = useRef(undefined);
     if (notifierRef.current === undefined) {
-        const isNativePlatform = globalThis.Capacitor?.isNativePlatform?.() === true;
-        const deliver = resolveRendererDelivery(isNativePlatform);
-        notifierRef.current = deliver
-            ? createDeadlineNotifier({
-                  getSettings: () => window.api.getSettings(),
-                  getDeadlineActions: (challenge) => window.api.getDeadlineActions(challenge),
-                  translate: (key) => globalThis.translationManager?.t?.(key) ?? key,
-                  deliver,
-                  log: (msg) => window.api.logDebug?.(msg),
-              })
-            : null;
+        notifierRef.current = createRendererDeadlineNotifier();
     }
 
     // Keep runningRef in sync with state. Publishing through a window
@@ -63,134 +301,22 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
     }, [state.running]);
 
     // Cleanup on unmount
-    useEffect(() => {
-        return () => {
-            if (cycleTimerRef.current) {
-                clearTimeout(cycleTimerRef.current);
-            }
-        };
-    }, []);
+    useEffect(() => () => cancelCycleTimer(cycleTimerRef), []);
 
-    /**
-     * Run a single voting cycle. On success resolves with the active-challenge
-     * list the cycle fetched, so the threshold scheduler can reuse it instead of
-     * issuing a second IPC fetch; resolves falsy on failure / not-running /
-     * not-logged-in (callers fall back to fetching).
-     *
-     * @returns {Promise<Array|boolean>} The fetched challenge list on success (or
-     *   `true` when the cycle succeeded without surfacing one), `false` otherwise.
-     *   Consumers MUST treat any non-array as "fetch fresh" (Array.isArray guard).
-     */
-    const runVotingCycle = useCallback(async () => {
-        if (!runningRef.current) {
-            return false;
-        }
+    const runVotingCycle = useCallback(
+        () => runRendererVotingCycle({ runningRef, dispatch, onChallengesRefresh }),
+        [onChallengesRefresh],
+    );
 
-        try {
-            const settings = await window.api.getSettings();
-            if (!settings.token) {
-                dispatch({ type: ACTIONS.SET_ERROR, payload: 'Not logged in' });
-                return false;
-            }
-
-            const result = await window.api.runVotingCycle();
-
-            if (!runningRef.current) {
-                return false;
-            }
-
-            if (result?.success) {
-                dispatch({ type: ACTIONS.INCREMENT_CYCLE });
-                const lastRunStr = new Date().toLocaleTimeString('lv-LV');
-                dispatch({ type: ACTIONS.UPDATE_LAST_RUN, payload: lastRunStr });
-
-                // Refresh the persistent notification text on Capacitor
-                // so the user can see at a glance when the last cycle
-                // ran without opening the app. No-op on Electron.
-                foregroundService.update({ body: `Last cycle: ${lastRunStr}` });
-
-                // Trigger challenges refresh
-                if (onChallengesRefresh) {
-                    onChallengesRefresh();
-                }
-
-                // Hand the fetched list back so the threshold scheduler can skip
-                // its own fetch. Fall back to `true` (truthy, but not an array)
-                // when no list is present so callers fetch fresh.
-                return result?.challenges ?? true;
-            } else {
-                dispatch({ type: ACTIONS.SET_ERROR, payload: result?.error || 'Voting failed' });
-                return false;
-            }
-        } catch (err) {
-            dispatch({ type: ACTIONS.SET_ERROR, payload: err.message || 'Voting error' });
-            return false;
-        }
-    }, [onChallengesRefresh]);
-
-    /**
-     * The shared cadence chain (decide delay → arm the single timer → run cycle
-     * → re-arm) from src/js/scheduling/cadenceChain.js — the same loop the
-     * CLI/Android scheduler drives. This provider only supplies the WebView
-     * transport: settings + challenges over IPC, the per-challenge IPC
-     * resolvers, the timer slot (cycleTimerRef, whose identity doubles as the
-     * staleness guard for start()/rearmSchedule() takeovers), and best-effort
-     * IPC logging. Re-created when runVotingCycle changes identity, exactly
-     * like the previous useCallback-based scheduleNext.
-     */
+    // Re-created when runVotingCycle changes identity.
     const cadenceChain = useMemo(
         () =>
-            createCadenceChain({
-                isRunning: () => runningRef.current,
-                getTimer: () => cycleTimerRef.current,
-                setTimer: (handle) => {
-                    cycleTimerRef.current = handle;
-                },
-                loadSettings: () => window.api.getSettings(),
-                fetchChallenges: (settings) => window.api.getActiveChallenges(settings.token),
-                resolveLastMinuteCheckMinutes: () =>
-                    window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
-                resolveThreshold,
-                resolveScheduledFill,
-                resolveFinalWindowTopUp,
-                resolveBoostPrefill,
-                resolveCurrencyAuto,
-                runCycle: () => runVotingCycle(),
-                log: {
-                    // Best-effort parity log (optional-chained so a host without
-                    // logDebug, e.g. a minimal Capacitor bridge, can't abort
-                    // scheduling). Normal-mode lines stay CLI-only — no IPC spam
-                    // for the common case.
-                    cadence: (mode, message) => (mode === 'normal' ? undefined : window.api.logDebug?.(message)),
-                    decisionError: (err) => window.api.logWarning(`${DECISION_ERROR_MESSAGE}: ${err.message || err}`),
-                    // runVotingCycle catches internally and resolves false, so a
-                    // rejection here is a can't-happen TODAY — but that is an
-                    // invariant of a different module. Log best-effort instead
-                    // of swallowing so a future regression can't fail silently.
-                    cycleError: (err) => window.api.logWarning?.(`Voting cycle failed: ${err?.message || err}`),
-                    // A renderer timer that fired far late means the page was
-                    // throttled/frozen or the machine suspended, and every
-                    // deadline inside that gap went unserved. Warning, not
-                    // debug: this is the only trace of a silently missed fill,
-                    // and it lands on the Logs page the user actually reads.
-                    // Wording is shared with the Node host so the two surfaces
-                    // cannot drift.
-                    overslept: (lateMs, waitMs) => window.api.logWarning?.(formatOversleptMessage(lateMs, waitMs)),
-                },
-                // Surface the next armed cycle as an absolute wall-clock instant
-                // for the status header's countdown; null clears it. dispatch is
-                // stable across renders.
-                onScheduled: (waitMs) =>
-                    dispatch({
-                        type: ACTIONS.SET_NEXT_RUN,
-                        payload: typeof waitMs === 'number' ? Date.now() + waitMs : null,
-                    }),
-                // Best-effort per-cycle OS notification for upcoming deadline
-                // actions. Stable instance (see notifierRef) so it dedupes across
-                // cycles; the chain fires it in its own isolated wrapper so a
-                // throw here can never affect scheduling. `undefined` on native
-                // Android (notifier not wired) so the chain skips the hook.
-                onCycleChallenges: notifierRef.current || undefined,
+            createRendererCadenceChain({
+                runningRef,
+                cycleTimerRef,
+                runVotingCycle,
+                dispatch,
+                notifier: notifierRef.current,
             }),
         [runVotingCycle],
     );
@@ -206,10 +332,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
      */
     const rearmSchedule = useCallback(async () => {
         if (!runningRef.current) return;
-        if (cycleTimerRef.current) {
-            clearTimeout(cycleTimerRef.current);
-            cycleTimerRef.current = null;
-        }
+        clearCycleTimer(cycleTimerRef);
         await scheduleNext();
     }, [scheduleNext]);
 
@@ -227,31 +350,14 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         runningRef.current = true;
         await window.api.setCancelVoting(false);
 
-        // Persist the running flag so a remount of the app (Capacitor
-        // re-launch, Electron window reopen) can resume voting without
-        // the user tapping Start again. Best-effort; failure here just
-        // means the resume on next launch won't kick in.
-        try {
-            await window.api.setSetting('autovoteRunning', true);
-        } catch {
-            /* ignore */
-        }
+        // Persist the running flag so a remount can resume voting without
+        // the user tapping Start again.
+        await persistRunningFlag(true);
 
-        // On Capacitor, hand off scheduling to the native AutoVote
-        // plugin. It owns the foreground notification, AlarmManager
-        // schedule, and per-cycle HTTP work — voting continues even
-        // when the WebView is destroyed (app swiped from recents).
-        // The JS-side cycle below still runs while the app is open
-        // so the user gets immediate visual feedback (cycle counter,
-        // last-run timestamp) and the in-app boost / turbo / fill
-        // surfaces continue to work.
-        const native = await nativeAutovote.start();
-        if (!native.available) {
-            // Fall back to the foreground-notification-only plugin so
-            // there is still a visual indicator on Android builds
-            // where the native plugin is not available.
-            await foregroundService.start({ body: 'Auto-vote running — preparing first cycle' });
-        }
+        // The JS-side cycle below still runs while the app is open so the
+        // user gets immediate visual feedback (cycle counter, last-run
+        // timestamp) and the in-app boost / turbo / fill surfaces keep working.
+        await startBackgroundHost();
 
         // Run immediately
         const initialCycleStartMs = Date.now();
@@ -261,10 +367,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         // in-window / capped approaching / normal) means start() no longer needs
         // to special-case "already inside a window" — scheduleNext picks the
         // right cadence from the initial cycle's challenge list.
-        if (cycleTimerRef.current) {
-            clearTimeout(cycleTimerRef.current);
-            cycleTimerRef.current = null;
-        }
+        clearCycleTimer(cycleTimerRef);
         await scheduleNext(initialChallenges, initialCycleStartMs);
     }, [runVotingCycle, scheduleNext]);
 
@@ -282,26 +385,12 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
 
         // Clear the persisted running flag so a relaunch does not
         // auto-resume an explicitly stopped session.
-        try {
-            await window.api.setSetting('autovoteRunning', false);
-        } catch {
-            /* ignore */
-        }
+        await persistRunningFlag(false);
 
-        // Stop the native background loop on Capacitor; the plugin
-        // tears down its own foreground notification. Fall back to
-        // the simple foreground-service controller if native is not
-        // available.
-        const native = await nativeAutovote.stop();
-        if (!native.available) {
-            await foregroundService.stop();
-        }
+        await stopBackgroundHost();
 
         // Clear the cadence timer.
-        if (cycleTimerRef.current) {
-            clearTimeout(cycleTimerRef.current);
-            cycleTimerRef.current = null;
-        }
+        clearCycleTimer(cycleTimerRef);
 
         // Trigger challenges refresh to show vote buttons
         if (onChallengesRefresh) {
@@ -309,31 +398,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         }
     }, [onChallengesRefresh]);
 
-    // Auto-resume on mount if a previous session left autovoteRunning
-    // persisted as true (user toggled Start, then closed the app or
-    // restarted the device). Runs once on mount; the runningRef guard
-    // inside start() prevents double-starts. Skips when there is no
-    // token, otherwise the loop would error every cycle until the user
-    // logs in.
-    // (The only dependency is a stable ref, so this runs once per mount — no
-    // extra ran-once guard.) `start` is read through that ref: its identity
-    // changes with its own deps (runVotingCycle / threshold scheduling), and
-    // this must stay a single mount-time check, not re-trigger on each change.
-    const startRef = useLatestRef(start);
-    useEffect(() => {
-        const maybeResume = async () => {
-            try {
-                const wasRunning = await window.api.getSetting('autovoteRunning');
-                if (!wasRunning) return;
-                const settings = await window.api.getSettings();
-                if (!settings?.token) return;
-                await startRef.current();
-            } catch {
-                /* ignore — leave UI in stopped state on failure */
-            }
-        };
-        maybeResume();
-    }, [startRef]);
+    useResumeOnMount(start);
 
     /**
      * Toggle autovote

@@ -1,5 +1,6 @@
 import { useTranslation } from '@/contexts/TranslationContext';
-import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
+import { IconActionButton } from '@/components/ui/IconActionButton';
+import { ICON_PATHS } from '@/components/ui/StrokeIcon';
 
 /**
  * Run button for a single challenge — fires one full auto-strategy
@@ -10,26 +11,15 @@ export function RunButton({ challengeId, onVoteComplete }) {
     const { t } = useTranslation();
 
     return (
-        <AsyncActionButton
+        <IconActionButton
             className="btn btn-latvian btn-xs px-1"
             action={() => window.api.runVotingCycleForChallenge(challengeId)}
             onSuccess={onVoteComplete}
             failureLogPrefix="Run failed"
             errorLogPrefix="Error running cycle"
             loadingLabel={t('app.running')}
-            idleContent={
-                <>
-                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                            d="M13 10V3L4 14h7v7l9-11h-7z"
-                        />
-                    </svg>
-                    {t('app.run')}
-                </>
-            }
+            icon={ICON_PATHS.run}
+            label={t('app.run')}
         />
     );
 }

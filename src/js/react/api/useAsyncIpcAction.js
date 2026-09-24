@@ -50,3 +50,17 @@ export function useAsyncIpcAction(ipcInvoker, labels = {}) {
 
     return { run, loading, error, clearError };
 }
+
+/**
+ * useAsyncIpcAction with its `run` exposed under a domain name (e.g.
+ * `applyBoost`, `fillNow`) — the shape of the single-action IPC hooks.
+ *
+ * @param {string} runName - key the action's `run` is returned under
+ * @param {(...args: any[]) => Promise<any>} ipcInvoker - bound window.api method
+ * @param {{ failureMessage?: string, errorMessage?: string }} [labels]
+ * @returns {Record<string, any>} `{ [runName]: run, loading, error, clearError }`
+ */
+export function useNamedIpcAction(runName, ipcInvoker, labels) {
+    const { run, loading, error, clearError } = useAsyncIpcAction(ipcInvoker, labels);
+    return { [runName]: run, loading, error, clearError };
+}

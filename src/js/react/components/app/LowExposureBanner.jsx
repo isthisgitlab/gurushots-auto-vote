@@ -1,7 +1,9 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { lowExposureChallenges } from '@/utils/challengeAlerts';
-import { ChipListPanel, ChallengeChip } from './ChallengeChips';
-import { PulseDot } from '../ui/PulseDot';
+import { ChallengeAlertPanel } from './ChallengeChips';
+
+const pulseAtZero = (c) => c.exposure === 0;
+const exposureDetail = (c) => <span className="font-semibold">· {c.exposure}%</span>;
 
 /**
  * Summary placed above the challenge list naming the running challenges whose
@@ -13,19 +15,16 @@ import { PulseDot } from '../ui/PulseDot';
  */
 export function LowExposureBanner({ challenges }) {
     const { t } = useTranslation();
-    const low = lowExposureChallenges(challenges, Math.floor(Date.now() / 1000));
-
-    if (low.length === 0) return null;
 
     return (
-        <ChipListPanel icon="👁" label={t('app.lowExposure')} count={low.length}>
-            {low.map((c) => (
-                <ChallengeChip key={c.id} challengeId={c.id} className="btn-error">
-                    <PulseDot variant="error" pulse={c.exposure === 0} size="status-sm" />
-                    <span>{c.title}</span>
-                    <span className="font-semibold">· {c.exposure}%</span>
-                </ChallengeChip>
-            ))}
-        </ChipListPanel>
+        <ChallengeAlertPanel
+            icon="👁"
+            label={t('app.lowExposure')}
+            items={lowExposureChallenges(challenges, Math.floor(Date.now() / 1000))}
+            chipClassName="btn-error"
+            dotVariant="error"
+            pulse={pulseAtZero}
+            detail={exposureDetail}
+        />
     );
 }

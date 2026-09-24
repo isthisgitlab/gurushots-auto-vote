@@ -1,102 +1,12 @@
-import { useMemo } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
-import {
-    formatEndTime,
-    formatDuration,
-    getBoostStatus,
-    getTurboStatus,
-    getLevelStatus,
-    isBoostWindowOpen,
-} from '@/utils/formatters';
-import { isLowExposure } from '@/utils/challengeAlerts';
-import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
-import { useTurbo } from '@/api/useTurbo';
-import { useFillChallenge } from '@/api/useFillChallenge';
+import { deriveChallengeCardView } from '@/utils/challengeCardView';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useSwapBacks } from '@/api/useSwapBacks';
-import { DeadlineTimeline } from './DeadlineTimeline';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { useTick } from '@/hooks/useTick';
-import { useAutoClear } from '@/hooks/useAutoClear';
-import { VoteButton } from './VoteButton';
-import { RunButton } from './RunButton';
-import { EntryBadge } from './EntryBadge';
-import { ChallengeBadgeRow } from './ChallengeBadgeRow';
-import { CardDensityToggle } from './CardDensityToggle';
 import { ChallengeCardCompact } from './ChallengeCardCompact';
-import { CurrencyCellButton } from './CurrencyActionButton';
-import { canKeyUnlock, canSwapEntry, canFillExposure } from '../../../voting/currencyActions';
-
-const TURBO_ERROR_DISPLAY_MS = 5000;
-const FILL_ERROR_DISPLAY_MS = 5000;
-
-/**
- * "Earn turbo" mini-game button (detailed turbo cell, compact action row).
- * Locked while a play is in flight or the autovote loop (which plays turbo
- * itself) is running.
- */
-function EarnTurboButton({ turboError, playingTurbo, disabled, onPlay, label }) {
-    return (
-        <button
-            className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
-            onClick={onPlay}
-            disabled={disabled}
-        >
-            {playingTurbo ? <span className="loading loading-spinner loading-xs" /> : <>🎯 {label}</>}
-        </button>
-    );
-}
-
-/**
- * "+1" / "+N" submit buttons (detailed entries cell, compact action row). "+N"
- * only appears when more than one slot is open. `icon` prefixes both labels
- * where the entries cell isn't there to say what they add.
- */
-function FillButtons({ fillError, filling, autovoteRunning, slotsRemaining, onFill, icon = '' }) {
-    const disabled = filling || autovoteRunning;
-    const spinner = <span className="loading loading-spinner loading-xs" />;
-    return (
-        <>
-            <button
-                className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
-                onClick={() => onFill('one')}
-                disabled={disabled}
-            >
-                {filling ? spinner : `${icon}+1`}
-            </button>
-            {slotsRemaining > 1 && (
-                <button className="btn btn-xs btn-warning" onClick={() => onFill('all')} disabled={disabled}>
-                    {filling ? spinner : `${icon}+${slotsRemaining}`}
-                </button>
-            )}
-        </>
-    );
-}
-
-/**
- * Per-challenge settings button (detailed header, compact action row).
- */
-function SettingsButton({ onClick, label }) {
-    return (
-        <button className="btn btn-ghost btn-xs px-1" onClick={onClick}>
-            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-            </svg>
-            {label}
-        </button>
-    );
-}
+import { ChallengeCardDetail } from './ChallengeCardDetail';
+import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardActions';
 
 /**
  * Challenge card. Renders either the full detailed card (every stat and every
@@ -124,8 +34,6 @@ export function ChallengeCard({
         challenge.id,
         defaultCompact,
     );
-    const { playAutoTurbo, loading: playingTurbo, error: turboError, clearError: clearTurboError } = useTurbo();
-    const { fillNow, loading: filling, error: fillError, clearError: clearFillError } = useFillChallenge();
     // Advisory deadline-action preview + boost/turbo conflict flag (read-only,
     // computed main-side). Failure yields empty actions / false — the card just
     // renders without them, never an error surface.
@@ -144,112 +52,16 @@ export function ChallengeCard({
     const timeText =
         timeRemaining && typeof timeRemaining === 'object' ? timeRemaining.value : timeRemaining || t('common.loading');
 
-    const member = challenge.member;
-    const entries = member.ranking.entries || [];
-    const exposureFactor = member.ranking.exposure.exposure_factor;
-    const boostStatus = getBoostStatus(member.boost);
-    const turboStatus = getTurboStatus(member.turbo);
-    const userProgress = member.ranking.total;
-
-    const turboState = member.turbo?.state;
-    const turboCooldownPassed =
-        turboState === 'TIMER' && typeof member.turbo?.time_to_open === 'number' && member.turbo.time_to_open <= now;
-    const challengeStillOpen = challenge.close_time > now;
-    const canPlayAutoTurbo =
-        challengeStillOpen && (turboState === 'FREE' || turboState === 'IN_PROGRESS' || turboCooldownPassed);
-
-    useAutoClear(turboError, clearTurboError, TURBO_ERROR_DISPLAY_MS);
-    useAutoClear(fillError, clearFillError, FILL_ERROR_DISPLAY_MS);
-
-    const handlePlayAutoTurbo = async () => {
-        const result = await playAutoTurbo(challenge.id, challenge.title);
-        if (result?.success) onVoteComplete();
-    };
-
-    const handleOpenSettings = () => onSettingsClick(challenge.id, challenge.title);
-
-    const handleFill = async (mode) => {
-        const result = await fillNow(challenge.id, mode);
-        if (result?.success) onVoteComplete();
-    };
-
-    const slotsRemaining = Math.max(0, (challenge.max_photo_submits || 0) - entries.length);
-    const canFill = challengeStillOpen && slotsRemaining > 0;
-
-    // At-a-glance alerts (see utils/challengeAlerts): an open boost window gets
-    // a blue ring + pulsing badge, low exposure a red border + badge and a red
-    // exposure figure, so the card stands out in a long list without reading it.
-    const boostOpen = isBoostWindowOpen(member.boost, now);
-    // Time left in a timed boost window, preformatted for the badge; null for a
-    // key-unlocked boost, which has no timer. Ticks with `now`.
-    const boostTimeLeft =
-        boostOpen && member.boost?.state === 'AVAILABLE' && member.boost.timeout > 0
-            ? formatDuration(member.boost.timeout - now)
-            : null;
-    const lowExposure = isLowExposure(challenge, now);
-    const exposureClass = lowExposure ? 'text-error font-bold' : '';
-    const cardAlertClass = `${lowExposure ? 'border-2 border-error' : 'border'}${boostOpen ? ' ring-2 ring-info ring-offset-2 ring-offset-base-100' : ''}`;
-
-    const showAutoFillBadge = autoFillEnabled && slotsRemaining > 0;
-
-    // Bankroll-currency actions — shown only when the balance and the
-    // challenge both allow them (shared predicates; the main process re-checks
-    // the live state before spending). Refresh balances + challenges after.
-    const showKeyUnlock = canKeyUnlock(challenge, bankroll, now);
-    const showFillExposure = canFillExposure(challenge, bankroll, now);
-    const swapAvailable = canSwapEntry(challenge, bankroll, now);
-
-    // Manual "vote to 100%" override. Shown even while the scheduled
-    // autovote loop is running so a single challenge can be pushed to 100%
-    // without stopping the bot first. Safe to overlap a strategy pass: the
-    // manual path (evaluateManualVotingToHundred) bypasses thresholds and the
-    // vote is naturally bounded (the API caps exposure at 100%), unlike the
-    // full-strategy Run button below which stays hidden to avoid racing
-    // turbo/boost/fill actions. Both gates read the per-second `now` tick (not
-    // a raw Date.now()) so they flip the moment a challenge starts.
-    const showVoteButton = challenge.start_time < now && exposureFactor < 100;
-
-    // Run button: fires one full auto-strategy cycle for this card.
-    // Hidden while the scheduled autovote loop is active to avoid
-    // racing concurrent strategy passes for the same challenge.
-    const showRunButton = !autovoteRunning && challenge.start_time < now;
-
-    // Next level info
-    const getNextLevelInfo = () => {
-        if (
-            challenge.ranking_levels &&
-            userProgress &&
-            userProgress.level !== undefined &&
-            challenge.type !== 'flash'
-        ) {
-            const currentLevel = userProgress.level;
-            const nextLevel = currentLevel + 1;
-            const nextLevelKey = `level_${nextLevel}`;
-
-            if (challenge.ranking_levels[nextLevelKey]) {
-                const votesNeeded = challenge.ranking_levels[nextLevelKey] - userProgress.votes;
-                const levelNames = ['', 'POPULAR', 'SKILLED', 'PREMIER', 'ELITE', 'ALL STAR'];
-                return {
-                    nextLevel,
-                    votesNeeded,
-                    levelName: levelNames[nextLevel] || `LEVEL ${nextLevel}`,
-                };
-            }
-        }
-        return null;
-    };
-
-    const nextLevelInfo = getNextLevelInfo();
-    const endTime = formatEndTime(challenge.close_time, timezone);
-    const sanitizedWelcome = useMemo(
-        () => sanitizeWelcomeMessage(challenge.welcome_message),
-        [challenge.welcome_message],
-    );
-
-    // Only reachable from the URL row, which renders only when challenge.url is set.
-    const handleOpenUrl = async () => {
-        await window.api.openExternalUrl(`https://gurushots.com/challenge/${challenge.url}`);
-    };
+    const view = deriveChallengeCardView(challenge, { now, bankroll, autovoteRunning, autoFillEnabled });
+    const actions = useChallengeCardActions({
+        challenge,
+        view,
+        bankroll,
+        autovoteRunning,
+        onVoteComplete,
+        onSettingsClick,
+        onCurrencySpent,
+    });
 
     // id + scroll-mt make the card a smooth-scroll target for the anchor chips
     // in BoostWindowBanner and ChallengeNav (both go through scrollToChallenge,
@@ -257,86 +69,34 @@ export function ChallengeCard({
     // edge after scrollIntoView. Keep `challenge-${id}` in sync with
     // scrollToChallenge. Shared by both layouts.
     const cardId = `challenge-${challenge.id}`;
-    const cardClass = `${cardAlertClass} rounded-lg p-3 bg-base-100 scroll-mt-4`;
+    const cardClass = `${view.cardAlertClass} rounded-lg p-3 bg-base-100 scroll-mt-4`;
     const badgeRowProps = {
         challenge,
-        boostOpen,
-        boostTimeLeft,
-        lowExposure,
-        exposureFactor,
-        showAutoFillBadge,
+        boostOpen: view.boostOpen,
+        boostTimeLeft: view.boostTimeLeft,
+        lowExposure: view.lowExposure,
+        exposureFactor: view.exposureFactor,
+        showAutoFillBadge: view.showAutoFillBadge,
         hasCustomSettings,
     };
 
-    // Challenge-level action elements, shared by the detailed card's header and
-    // cells and the compact tile's action row, so both offer the same actions
-    // under the same gates. `false` when the action isn't offered right now.
-    const voteButton = showVoteButton && (
-        <VoteButton challengeId={challenge.id} challengeTitle={challenge.title} onVoteComplete={onVoteComplete} />
-    );
-    const runButton = showRunButton && <RunButton challengeId={challenge.id} onVoteComplete={onVoteComplete} />;
-    const settingsButton = challenge.type !== 'flash' && (
-        <SettingsButton onClick={handleOpenSettings} label={t('app.settings')} />
-    );
-    const earnTurboButton = canPlayAutoTurbo && (
-        <EarnTurboButton
-            turboError={turboError}
-            playingTurbo={playingTurbo}
-            disabled={playingTurbo || autovoteRunning}
-            onPlay={handlePlayAutoTurbo}
-            label={t('app.earnTurbo')}
-        />
-    );
-    const fillExposureButton = showFillExposure && (
-        <CurrencyCellButton kind="fill" challenge={challenge} bankroll={bankroll} onSpent={onCurrencySpent} />
-    );
-    const keyUnlockButton = showKeyUnlock && (
-        <CurrencyCellButton kind="key" challenge={challenge} bankroll={bankroll} onSpent={onCurrencySpent} />
-    );
-    const fillButtonProps = { fillError, filling, autovoteRunning, slotsRemaining, onFill: handleFill };
-
     if (isCompact) {
-        // The row is omitted when the setting is off or nothing is offered.
-        // [&>.btn]:mt-0 drops the top margin the cell-placed buttons carry.
-        const hasActions =
-            voteButton ||
-            runButton ||
-            earnTurboButton ||
-            canFill ||
-            fillExposureButton ||
-            keyUnlockButton ||
-            settingsButton;
-        const actions = compactActions && hasActions && (
-            <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-1 [&>.btn]:mt-0">
-                    {voteButton}
-                    {runButton}
-                    {earnTurboButton}
-                    {canFill && <FillButtons {...fillButtonProps} icon="🖼 " />}
-                    {fillExposureButton}
-                    {keyUnlockButton}
-                    {settingsButton}
-                </div>
-                {turboError && <div className="text-error text-xs">{turboError}</div>}
-                {fillError && <div className="text-error text-xs">{fillError}</div>}
-            </div>
-        );
         return (
             <div id={cardId} className={cardClass}>
                 <ChallengeCardCompact
                     challenge={challenge}
                     badgeRowProps={badgeRowProps}
                     timeText={timeText}
-                    exposureFactor={exposureFactor}
-                    exposureClass={exposureClass}
-                    boostStatus={boostStatus}
-                    turboStatus={turboStatus}
-                    entries={entries}
+                    exposureFactor={view.exposureFactor}
+                    exposureClass={view.exposureClass}
+                    boostStatus={view.boostStatus}
+                    turboStatus={view.turboStatus}
+                    entries={view.entries}
                     hasCompactOverride={hasCompactOverride}
                     onToggleCompact={toggleCompact}
                     boostBlocked={boostBlocked}
                     deadlineActions={deadlineActions}
-                    actions={actions}
+                    actions={buildCompactActionRow({ actions, canFill: view.canFill, enabled: compactActions })}
                 />
             </div>
         );
@@ -345,190 +105,23 @@ export function ChallengeCard({
     return (
         // col-span-full: a detailed card takes a whole row of the grid.
         <div id={cardId} className={`${cardClass} col-span-full`}>
-            <div className="space-y-2">
-                {/* Header stacks vertically: the title gets the full card
-                    width (so it truncates far less), and the action buttons
-                    sit on their own row beneath it, wrapping as needed rather
-                    than squeezing the title. */}
-                <div className="flex flex-col gap-2">
-                    <div className="min-w-0">
-                        <h3 className="font-bold text-base truncate">{challenge.title}</h3>
-                        {/* Welcome message. truncate prevents long welcome text from forcing the card wider. sanitizeWelcomeMessage strips medium-editor toolbar leakage and allowlists safe tags. */}
-                        {sanitizedWelcome && (
-                            <div
-                                className="text-xs text-base-content/60 truncate"
-                                dangerouslySetInnerHTML={{ __html: sanitizedWelcome }}
-                            />
-                        )}
-                        <ChallengeBadgeRow {...badgeRowProps} />
-                        {challenge.url && (
-                            <div className="text-xs text-base-content/40 mt-1">
-                                <button
-                                    onClick={handleOpenUrl}
-                                    className="font-mono hover:text-latvian hover:underline text-left"
-                                >
-                                    gurushots.com/challenge/{challenge.url}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                    <div className="flex flex-wrap gap-1 shrink-0">
-                        {voteButton}
-                        {runButton}
-                        <CardDensityToggle
-                            isCompact={false}
-                            hasOverride={hasCompactOverride}
-                            onToggle={toggleCompact}
-                        />
-                        {settingsButton}
-                    </div>
-                </div>
-
-                {/* Challenge Statistics — stacks 2-up on phones, 4-up on tablets+. */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.entries')}</div>
-                        <div>{challenge.entries.toLocaleString()}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.players')}</div>
-                        <div>{challenge.players.toLocaleString()}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.votes')}</div>
-                        <div>{challenge.votes.toLocaleString()}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.prize')}</div>
-                        <div>{challenge.prizes_worth}</div>
-                    </div>
-                </div>
-
-                {/* User Progress — full bar + level + next-level info. */}
-                {userProgress && userProgress.votes > 0 && (
-                    <div className="bg-base-200 rounded p-2">
-                        <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-medium">{t('app.yourProgress')}</span>
-                            <span
-                                className={`badge badge-xs ${getLevelStatus(userProgress.level, userProgress.level_name).colorClass}`}
-                            >
-                                {userProgress.level_name} {userProgress.level}
-                            </span>
-                        </div>
-                        <div className="flex justify-between text-xs mb-1">
-                            <span>
-                                {t('app.rank')} {userProgress.rank} {t('app.of')} {challenge.players}
-                            </span>
-                            <span>
-                                {userProgress.votes} {t('app.votes')}
-                            </span>
-                        </div>
-                        <progress className="progress progress-latvian w-full" value={userProgress.percent} max="100" />
-                        {challenge.type !== 'flash' && (
-                            <div className="text-xs text-base-content/60 mt-1">{userProgress.next_message}</div>
-                        )}
-                        {nextLevelInfo && (
-                            <div className="text-xs text-base-content/60 mt-1">
-                                {t('app.next')}: {nextLevelInfo.levelName} ({nextLevelInfo.votesNeeded}{' '}
-                                {t('app.votesNeeded')})
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                {/* 6-cell stats grid — stacks 2-up on phones, 3-up on small tablets, 6-up on desktop */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.time')}</div>
-                        <div className={timeText === 'Ended' ? 'text-error' : 'text-success'}>{timeText}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.ends')}</div>
-                        <div className="text-xs">{endTime}</div>
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.exposure')}</div>
-                        <div className={exposureClass}>{exposureFactor}%</div>
-                        {fillExposureButton}
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.boost')}</div>
-                        <div className={boostStatus.colorClass}>{boostStatus.text}</div>
-                        {keyUnlockButton}
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.turbo')}</div>
-                        <div className={turboStatus.colorClass}>{turboStatus.text}</div>
-                        {earnTurboButton}
-                        {turboError && <div className="text-error text-xs mt-1">{turboError}</div>}
-                        {!turboError && canPlayAutoTurbo && autovoteRunning && (
-                            <div className="text-base-content/60 text-xs mt-1">
-                                {t('app.autoTurboRunsWithAutovote')}
-                            </div>
-                        )}
-                    </div>
-                    <div className="text-center p-2 bg-base-200 rounded">
-                        <div className="font-medium">{t('app.yourEntries')}</div>
-                        <div>
-                            {entries.length}/{challenge.max_photo_submits}
-                        </div>
-                        {canFill && (
-                            <div className="flex gap-1 mt-1 justify-center">
-                                <FillButtons {...fillButtonProps} />
-                            </div>
-                        )}
-                        {fillError && <div className="text-error text-xs mt-1">{fillError}</div>}
-                    </div>
-                </div>
-
-                {/* Challenge Tags */}
-                {challenge.tags && challenge.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                        {challenge.tags.map((tag, index) => (
-                            <span key={index} className="badge badge-ghost badge-xs">
-                                {tag}
-                            </span>
-                        ))}
-                    </div>
-                )}
-
-                {/* Entry Details — entry-level boost / turbo badges and actions. */}
-                {entries.length > 0 && (
-                    <div>
-                        <div className="text-xs text-base-content/60 mb-1">{t('app.entryDetails')}:</div>
-                        <div className="flex flex-wrap gap-1">
-                            {entries.map((entry) => (
-                                <EntryBadge
-                                    key={entry.id}
-                                    entry={entry}
-                                    challengeId={challenge.id}
-                                    boostAvailable={boostStatus.text.includes('Available')}
-                                    turboAvailable={member.turbo?.state === 'WON'}
-                                    onBoostApplied={onVoteComplete}
-                                    onTurboApplied={onVoteComplete}
-                                    swapAvailable={swapAvailable}
-                                    bankroll={bankroll}
-                                    onSwapped={onCurrencySpent}
-                                    swapBack={swapBacks.find((r) => r.currentId === String(entry.id)) ?? null}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Boost/turbo conflict — a boost is available but the only entry
-                    already has Turbo, so it can't be placed. The compact tile
-                    shows the same state as a one-line note. */}
-                {boostBlocked && (
-                    <div className="alert alert-warning py-2 text-xs" role="alert">
-                        <span>{t('app.boostConflictWarning')}</span>
-                    </div>
-                )}
-
-                {/* Advisory timeline of the automation's upcoming deadline
-                    actions (the compact tile shows only the next one). */}
-                <DeadlineTimeline actions={deadlineActions} />
-            </div>
+            <ChallengeCardDetail
+                challenge={challenge}
+                view={view}
+                badgeRowProps={badgeRowProps}
+                timeText={timeText}
+                timezone={timezone}
+                actions={actions}
+                autovoteRunning={autovoteRunning}
+                hasCompactOverride={hasCompactOverride}
+                onToggleCompact={toggleCompact}
+                boostBlocked={boostBlocked}
+                deadlineActions={deadlineActions}
+                swapBacks={swapBacks}
+                bankroll={bankroll}
+                onVoteComplete={onVoteComplete}
+                onCurrencySpent={onCurrencySpent}
+            />
         </div>
     );
 }

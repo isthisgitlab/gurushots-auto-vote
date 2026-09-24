@@ -1,19 +1,10 @@
-import { useAsyncIpcAction } from './useAsyncIpcAction';
+import { useNamedIpcAction } from './useAsyncIpcAction';
+
+const fillNowIpc = (challengeId, mode) => window.api.fillChallengeNow(challengeId, mode);
+const LABELS = { failureMessage: 'Photo submit failed', errorMessage: 'Photo submit error' };
 
 /**
  * Hook for the manual photo-submit action via IPC.
  * Mirrors useTurbo: { fillNow, loading, error, clearError }.
  */
-export function useFillChallenge() {
-    const action = useAsyncIpcAction((challengeId, mode) => window.api.fillChallengeNow(challengeId, mode), {
-        failureMessage: 'Photo submit failed',
-        errorMessage: 'Photo submit error',
-    });
-
-    return {
-        fillNow: action.run,
-        loading: action.loading,
-        error: action.error,
-        clearError: action.clearError,
-    };
-}
+export const useFillChallenge = () => useNamedIpcAction('fillNow', fillNowIpc, LABELS);

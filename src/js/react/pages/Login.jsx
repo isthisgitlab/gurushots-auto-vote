@@ -8,6 +8,7 @@ import { LanguageSwitcher } from '@/components/login/LanguageSwitcher';
 import { SettingsToggles } from '@/components/login/SettingsToggles';
 import { ModeInfoText } from '@/components/login/ModeInfoText';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
+import { useDocumentTheme } from '@/hooks/useDocumentTheme';
 
 /**
  * Login page content component
@@ -44,10 +45,7 @@ function LoginPageContent() {
         }
     }, [envInfo]);
 
-    // Apply theme to document
-    useEffect(() => {
-        document.documentElement.setAttribute('data-theme', theme);
-    }, [theme]);
+    useDocumentTheme(theme);
 
     // Handle theme change
     const handleThemeChange = useCallback(

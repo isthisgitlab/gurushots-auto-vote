@@ -1,5 +1,15 @@
-import { useCallback } from 'react';
-import { useIpcQuery } from './useIpcQuery';
+import { useIpcResultQuery } from './useIpcQuery';
+
+const fetchBankroll = () => window.api.getBankroll();
+const selectBalances = (result) => ({
+    keys: result.keys,
+    swaps: result.swaps,
+    fills: result.fills,
+    coins: result.coins,
+});
+// null (not 0) so the UI shows a "couldn't check" placeholder rather than
+// implying an empty balance.
+const noBalances = () => ({ data: null });
 
 /**
  * Fetches the account bankroll (keys/swaps/fills/coins) via IPC. The token is
@@ -14,19 +24,9 @@ import { useIpcQuery } from './useIpcQuery';
  *   loading: boolean, error: Error|null, refetch: function }}
  */
 export function useBankroll() {
-    const queryFn = useCallback(() => window.api.getBankroll(), []);
-
-    const apply = useCallback((result, { setData, setError }) => {
-        if (result?.success) {
-            setData({ keys: result.keys, swaps: result.swaps, fills: result.fills, coins: result.coins });
-            setError(null);
-            return;
-        }
-        // null (not 0) so the UI shows a "couldn't check" placeholder rather than
-        // implying an empty balance.
-        setData(null);
-    }, []);
-
-    const { data, loading, error, refetch } = useIpcQuery(queryFn, { initialData: null, apply });
+    const { data, loading, error, refetch } = useIpcResultQuery(fetchBankroll, {
+        select: selectBalances,
+        fail: noBalances,
+    });
     return { bankroll: data, loading, error, refetch };
 }

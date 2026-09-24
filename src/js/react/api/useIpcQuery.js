@@ -84,3 +84,30 @@ export function useIpcQuery(queryFn, options = {}) {
 
     return { data, setData, loading, error, setError, refetch };
 }
+
+/**
+ * useIpcQuery for a handler that resolves a `{ success, ... }` envelope: a
+ * successful result stores `select(result)` and clears the error; anything
+ * else stores and surfaces what `fail(result)` returns. `queryFn`, `select`
+ * and `fail` must be referentially stable (module-level) — `refetch` keys on
+ * them.
+ *
+ * @param {(...args: any[]) => Promise<any>} queryFn
+ * @param {{
+ *   initialData?: any,
+ *   select: (result: any) => any,
+ *   fail: (result: any) => { data: any, error?: Error },
+ * }} options
+ * @returns {ReturnType<typeof useIpcQuery>}
+ */
+export function useIpcResultQuery(queryFn, { initialData = null, select, fail }) {
+    const apply = useCallback(
+        (result, { setData, setError }) => {
+            const next = result?.success ? { data: select(result), error: null } : fail(result);
+            setData(next.data);
+            setError(next.error ?? null);
+        },
+        [select, fail],
+    );
+    return useIpcQuery(queryFn, { initialData, apply });
+}
