@@ -542,6 +542,9 @@
             compactCards: 'Kompaktas kartītes',
             compactCardsDesc:
                 'Rādīt izaicinājumus kā mazākas kartītes, lai ekrānā ietilpst vairāk; izslēdz, lai redzētu pilna izmēra kartītes ar vairāk detaļām.',
+            compactCardActions: 'Darbības kompaktajās kartītēs',
+            compactCardActionsDesc:
+                'Rādīt izaicinājuma darbību pogas (Balsot, Palaist, Iegūt Turbo, iesniegšana, Iestatījumi) arī kompaktajās kartītēs, lai varētu rīkoties, neatverot pilno kartīti. Darbības ar atsevišķiem foto paliek pilnajā kartītē.',
             compact: 'Kompakts',
             details: 'Detaļas',
             configureBoost: 'Konfigurēt "Boost" izaicinājumam:',

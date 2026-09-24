@@ -18,11 +18,13 @@ function Stat({ icon, label, className = '', children }) {
 }
 
 /**
- * Compact challenge tile — a READ-ONLY summary. It shows state (time, exposure,
- * rank, boost/turbo, entries and each entry's boost/turbo mark) but offers no
- * actions: every call (vote, run, earn turbo, fill, per-entry boost/turbo, photo
- * preview, settings) lives in the detailed card, reached through the density
- * toggle, which is the only control here.
+ * Compact challenge tile — a summary of state (time, exposure, rank,
+ * boost/turbo, entries and each entry's boost/turbo mark). By default it offers
+ * no actions and the density toggle is its only control. With the
+ * compactCardActions setting on, the parent passes `actions`: a footer row of
+ * the challenge-level actions (vote, run, earn turbo, submit, currency spends,
+ * settings). Per-entry actions (boost/turbo placement, swap, photo preview)
+ * stay in the detailed card either way.
  *
  * Several tiles share a grid row (see ChallengesSection), so everything is
  * sized for a ~16rem column: one truncating title line, a 2-column stat grid.
@@ -43,6 +45,7 @@ export function ChallengeCardCompact({
     onToggleCompact,
     boostBlocked,
     deadlineActions,
+    actions,
 }) {
     const { t } = useTranslation();
     const progress = challenge.member.ranking.total;
@@ -113,6 +116,8 @@ export function ChallengeCardCompact({
             )}
 
             <DeadlineTimeline actions={deadlineActions} compact />
+
+            {actions}
         </div>
     );
 }

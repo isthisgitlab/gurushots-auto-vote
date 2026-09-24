@@ -1,17 +1,19 @@
 /**
  * Tests for the compact ChallengeCard tile and its grid span.
  *
- * The compact tile is READ-ONLY: it shows state (time, exposure, rank,
+ * By default the compact tile only shows state (time, exposure, rank,
  * boost/turbo, entries, per-entry boost/turbo glyphs) and its only control is
- * the density toggle — every action lives in the detailed card. A detailed card
- * spans the full grid row; a compact tile does not, so several share a row.
+ * the density toggle. With `compactActions` (the compactCardActions setting) it
+ * adds a row of the challenge-level actions; per-entry actions stay in the
+ * detailed card either way. A detailed card spans the full grid row; a compact
+ * tile does not, so several share a row.
  *
  * Hooks are stubbed the same way as ChallengeCard.badges.test.jsx; the action
  * buttons are NOT mocked here, so their absence in compact mode is real.
  * `t(key)` returns the key (see tests/react setup).
  */
 
-import { render, screen } from './helpers/test-utils';
+import { render, screen, fireEvent } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
 import { getEntryStatus } from '@/utils/formatters';
 import { buildChallenge } from '../helpers/challengeFixtures';
@@ -27,11 +29,14 @@ const mockChallengeSettings = {
 jest.mock('@/hooks/useChallengeSettings', () => ({
     useChallengeSettings: () => mockChallengeSettings,
 }));
+const mockTurbo = { playAutoTurbo: jest.fn(), loading: false, error: null, clearError: jest.fn() };
+const mockFill = { fillNow: jest.fn(), loading: false, error: null, clearError: jest.fn() };
+
 jest.mock('@/api/useTurbo', () => ({
-    useTurbo: () => ({ playAutoTurbo: jest.fn(), loading: false, error: null, clearError: jest.fn() }),
+    useTurbo: () => mockTurbo,
 }));
 jest.mock('@/api/useFillChallenge', () => ({
-    useFillChallenge: () => ({ fillNow: jest.fn(), loading: false, error: null, clearError: jest.fn() }),
+    useFillChallenge: () => mockFill,
 }));
 
 const nowSec = () => Math.floor(Date.now() / 1000);
@@ -69,7 +74,7 @@ const makeChallenge = () =>
         },
     });
 
-const renderCard = (challenge = makeChallenge(), timeRemaining = '2h 30m') =>
+const renderCard = (challenge = makeChallenge(), timeRemaining = '2h 30m', props = {}) =>
     render(
         <ChallengeCard
             challenge={challenge}
@@ -78,11 +83,14 @@ const renderCard = (challenge = makeChallenge(), timeRemaining = '2h 30m') =>
             autovoteRunning={false}
             onVoteComplete={jest.fn()}
             onSettingsClick={jest.fn()}
+            {...props}
         />,
     );
 
 beforeEach(() => {
     Object.assign(mockChallengeSettings, { isCompact: true, hasCompactOverride: false, toggleCompact: jest.fn() });
+    Object.assign(mockTurbo, { playAutoTurbo: jest.fn().mockResolvedValue(null), loading: false, error: null });
+    Object.assign(mockFill, { fillNow: jest.fn().mockResolvedValue(null), loading: false, error: null });
 });
 
 describe('compact ChallengeCard tile', () => {
@@ -141,6 +149,80 @@ describe('compact ChallengeCard tile', () => {
         const card = container.querySelector('#challenge-202');
         expect(card).not.toBeNull();
         expect(card.classList.contains('col-span-full')).toBe(false);
+    });
+});
+
+describe('compact ChallengeCard tile with compactActions', () => {
+    const renderWithActions = (challenge = makeChallenge(), props = {}) =>
+        renderCard(challenge, '2h 30m', { compactActions: true, ...props });
+    const buttonTexts = () => screen.getAllByRole('button').map((b) => b.textContent);
+
+    test('offers the challenge-level actions, but no per-entry ones', () => {
+        renderWithActions();
+        const texts = buttonTexts();
+        expect(texts).toEqual(
+            expect.arrayContaining(['app.details', 'app.vote', 'app.run', '🎯 app.earnTurbo', '🖼 +1', 'app.settings']),
+        );
+        // One open slot → no "+N" button; no per-entry Boost / Turbo / swap.
+        expect(texts).toHaveLength(6);
+    });
+
+    test('offers "+N" when several slots are open', () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = challenge.member.ranking.entries.slice(0, 1);
+        renderWithActions(challenge);
+        expect(buttonTexts()).toEqual(expect.arrayContaining(['🖼 +1', '🖼 +3']));
+    });
+
+    test('the actions fire the same handlers as in the detailed card', async () => {
+        const onSettingsClick = jest.fn();
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = challenge.member.ranking.entries.slice(0, 1);
+        renderWithActions(challenge, { onSettingsClick });
+
+        fireEvent.click(screen.getByText('🎯 app.earnTurbo'));
+        expect(mockTurbo.playAutoTurbo).toHaveBeenCalledWith(202, 'Harbour Lights');
+        fireEvent.click(screen.getByText('🖼 +1'));
+        expect(mockFill.fillNow).toHaveBeenCalledWith(202, 'one');
+        fireEvent.click(screen.getByText('🖼 +3'));
+        expect(mockFill.fillNow).toHaveBeenCalledWith(202, 'all');
+        fireEvent.click(screen.getByText('app.settings'));
+        expect(onSettingsClick).toHaveBeenCalledWith(202, 'Harbour Lights');
+    });
+
+    test('offers the currency spends the balance and challenge allow', () => {
+        const challenge = {
+            ...makeChallenge(),
+            boost_enable: true,
+            fill_enable: true,
+            fill_locked: false,
+        };
+        challenge.member.boost = { state: 'LOCKED', timeout: null };
+        renderWithActions(challenge, { bankroll: { keys: 3, swaps: 2, fills: 5, coins: 0 } });
+        expect(screen.getByText(/app\.currencyKeyUnlock$/)).toBeTruthy();
+        expect(screen.getByText(/app\.currencyFillExposure$/)).toBeTruthy();
+    });
+
+    test('shows turbo and submit errors under the row', () => {
+        mockTurbo.error = 'turbo failed';
+        mockFill.error = 'submit failed';
+        renderWithActions();
+        expect(screen.getByText('turbo failed')).toBeTruthy();
+        expect(screen.getByText('submit failed')).toBeTruthy();
+    });
+
+    test('omits the row when no action is offered', () => {
+        // Flash (no settings), ended (no turbo / submit), fully exposed and not
+        // started (no vote / run), no bankroll (no currency spends).
+        const challenge = {
+            ...makeChallenge(),
+            type: 'flash',
+            start_time: nowSec() + 600,
+            close_time: nowSec() - 60,
+        };
+        challenge.member.ranking.exposure.exposure_factor = 100;
+        renderWithActions(challenge);
+        expect(buttonTexts()).toEqual(['app.details']);
     });
 });
 

@@ -15,11 +15,20 @@ import { mockApi } from './helpers/setup';
 jest.mock('@/api/useActiveChallenges', () => ({ useActiveChallenges: jest.fn() }));
 
 jest.mock('@/components/app/ChallengeCard', () => ({
-    ChallengeCard: ({ challenge, defaultCompact, bankroll, onVoteComplete, onCurrencySpent, onSettingsClick }) => (
+    ChallengeCard: ({
+        challenge,
+        defaultCompact,
+        compactActions,
+        bankroll,
+        onVoteComplete,
+        onCurrencySpent,
+        onSettingsClick,
+    }) => (
         <div
             data-testid="card"
             data-id={challenge.id}
             data-compact={String(defaultCompact)}
+            data-compact-actions={String(compactActions)}
             data-bankroll={String(bankroll)}
         >
             {challenge.title}
@@ -192,10 +201,12 @@ describe('ChallengesProvider + ChallengesSection', () => {
             expect(cards.map((c) => c.dataset.id)).toEqual(['1', '2']);
             expect(cards[0].dataset.bankroll).toBe('null');
             expect(cards[0].dataset.compact).toBe('false');
+            expect(cards[0].dataset.compactActions).toBe('false');
             expect(screen.getByText('errors.fetchFailed')).toBeTruthy();
             expect(screen.getByText('app.voteAll')).toBeTruthy();
             expect(screen.getByText('app.run')).toBeTruthy();
             expect(mockApi.getGlobalDefault).toHaveBeenCalledWith('compactCards');
+            expect(mockApi.getGlobalDefault).toHaveBeenCalledWith('compactCardActions');
         });
 
         it('hides the manual action buttons while autovote runs', () => {
@@ -295,7 +306,24 @@ describe('ChallengesProvider + ChallengesSection', () => {
             });
             await settle();
             expect(screen.getByText('app.compact')).toBeTruthy();
-            expect(mockApi.getGlobalDefault).toHaveBeenCalledTimes(2);
+            // compactCards + compactCardActions, read once on mount and once per change.
+            expect(mockApi.getGlobalDefault).toHaveBeenCalledTimes(4);
+        });
+
+        it('passes the compactCardActions setting to every card and resyncs it on settings-changed', async () => {
+            mockApi.getGlobalDefault.mockImplementation(async (key) => key === 'compactCardActions');
+            renderSection();
+            await settle();
+            expect(screen.getAllByTestId('card').map((c) => c.dataset.compactActions)).toEqual(['true', 'true']);
+            // Only the actions switch is on — the cards themselves stay detailed.
+            expect(screen.getAllByTestId('card')[0].dataset.compact).toBe('false');
+
+            mockApi.getGlobalDefault.mockResolvedValue(false);
+            await act(async () => {
+                settingsListener();
+            });
+            await settle();
+            expect(screen.getAllByTestId('card')[0].dataset.compactActions).toBe('false');
         });
 
         it('falls back to detailed cards when reading the default fails', async () => {

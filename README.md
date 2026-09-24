@@ -404,9 +404,10 @@ All of these support per-challenge overrides except where noted.
 
 **Display**
 
-| Setting        | Default | Range / values | Description                                       |
-| -------------- | ------- | -------------- | ------------------------------------------------- |
-| `compactCards` | `false` | bool           | Compact challenge-card layout (GUI display only). |
+| Setting              | Default | Range / values | Description                                                                                                                                     |
+| -------------------- | ------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `compactCards`       | `false` | bool           | Compact challenge-card layout (GUI display only).                                                                                               |
+| `compactCardActions` | `false` | bool           | Show the challenge-level action buttons (Vote, Run, Earn Turbo, submit, currency spends, Settings) on compact cards (GUI display only, global). |
 
 ## 📐 Recommended Setups
 

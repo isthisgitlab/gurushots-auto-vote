@@ -31,8 +31,9 @@ const TURBO_ERROR_DISPLAY_MS = 5000;
 const FILL_ERROR_DISPLAY_MS = 5000;
 
 /**
- * "Earn turbo" mini-game button in the detailed turbo cell. Locked while a
- * play is in flight or the autovote loop (which plays turbo itself) is running.
+ * "Earn turbo" mini-game button (detailed turbo cell, compact action row).
+ * Locked while a play is in flight or the autovote loop (which plays turbo
+ * itself) is running.
  */
 function EarnTurboButton({ turboError, playingTurbo, disabled, onPlay, label }) {
     return (
@@ -47,30 +48,69 @@ function EarnTurboButton({ turboError, playingTurbo, disabled, onPlay, label }) 
 }
 
 /**
- * "+1" fill button in the detailed entries cell.
+ * "+1" / "+N" submit buttons (detailed entries cell, compact action row). "+N"
+ * only appears when more than one slot is open. `icon` prefixes both labels
+ * where the entries cell isn't there to say what they add.
  */
-function FillOneButton({ fillError, filling, autovoteRunning, onFill }) {
+function FillButtons({ fillError, filling, autovoteRunning, slotsRemaining, onFill, icon = '' }) {
+    const disabled = filling || autovoteRunning;
+    const spinner = <span className="loading loading-spinner loading-xs" />;
     return (
-        <button
-            className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
-            onClick={onFill}
-            disabled={filling || autovoteRunning}
-        >
-            {filling ? <span className="loading loading-spinner loading-xs" /> : '+1'}
+        <>
+            <button
+                className={`btn btn-xs ${fillError ? 'btn-error' : 'btn-info'}`}
+                onClick={() => onFill('one')}
+                disabled={disabled}
+            >
+                {filling ? spinner : `${icon}+1`}
+            </button>
+            {slotsRemaining > 1 && (
+                <button className="btn btn-xs btn-warning" onClick={() => onFill('all')} disabled={disabled}>
+                    {filling ? spinner : `${icon}+${slotsRemaining}`}
+                </button>
+            )}
+        </>
+    );
+}
+
+/**
+ * Per-challenge settings button (detailed header, compact action row).
+ */
+function SettingsButton({ onClick, label }) {
+    return (
+        <button className="btn btn-ghost btn-xs px-1" onClick={onClick}>
+            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+            </svg>
+            {label}
         </button>
     );
 }
 
 /**
  * Challenge card. Renders either the full detailed card (every stat and every
- * action) or, when compactCards is on for this challenge, the read-only
- * ChallengeCardCompact tile. The root element is the grid item in
+ * action) or, when compactCards is on for this challenge, the
+ * ChallengeCardCompact tile. `compactActions` (the global compactCardActions
+ * setting) gives that tile a row of the challenge-level actions; per-entry
+ * actions stay in the detailed card. The root element is the grid item in
  * ChallengesSection's #challenges-container: a detailed card spans the full
  * row, compact tiles share one.
  */
 export function ChallengeCard({
     challenge,
     defaultCompact = false,
+    compactActions = false,
     timeRemaining,
     timezone,
     autovoteRunning,
@@ -125,6 +165,8 @@ export function ChallengeCard({
         const result = await playAutoTurbo(challenge.id, challenge.title);
         if (result?.success) onVoteComplete();
     };
+
+    const handleOpenSettings = () => onSettingsClick(challenge.id, challenge.title);
 
     const handleFill = async (mode) => {
         const result = await fillNow(challenge.id, mode);
@@ -226,7 +268,59 @@ export function ChallengeCard({
         hasCustomSettings,
     };
 
+    // Challenge-level action elements, shared by the detailed card's header and
+    // cells and the compact tile's action row, so both offer the same actions
+    // under the same gates. `false` when the action isn't offered right now.
+    const voteButton = showVoteButton && (
+        <VoteButton challengeId={challenge.id} challengeTitle={challenge.title} onVoteComplete={onVoteComplete} />
+    );
+    const runButton = showRunButton && <RunButton challengeId={challenge.id} onVoteComplete={onVoteComplete} />;
+    const settingsButton = challenge.type !== 'flash' && (
+        <SettingsButton onClick={handleOpenSettings} label={t('app.settings')} />
+    );
+    const earnTurboButton = canPlayAutoTurbo && (
+        <EarnTurboButton
+            turboError={turboError}
+            playingTurbo={playingTurbo}
+            disabled={playingTurbo || autovoteRunning}
+            onPlay={handlePlayAutoTurbo}
+            label={t('app.earnTurbo')}
+        />
+    );
+    const fillExposureButton = showFillExposure && (
+        <CurrencyCellButton kind="fill" challenge={challenge} bankroll={bankroll} onSpent={onCurrencySpent} />
+    );
+    const keyUnlockButton = showKeyUnlock && (
+        <CurrencyCellButton kind="key" challenge={challenge} bankroll={bankroll} onSpent={onCurrencySpent} />
+    );
+    const fillButtonProps = { fillError, filling, autovoteRunning, slotsRemaining, onFill: handleFill };
+
     if (isCompact) {
+        // The row is omitted when the setting is off or nothing is offered.
+        // [&>.btn]:mt-0 drops the top margin the cell-placed buttons carry.
+        const hasActions =
+            voteButton ||
+            runButton ||
+            earnTurboButton ||
+            canFill ||
+            fillExposureButton ||
+            keyUnlockButton ||
+            settingsButton;
+        const actions = compactActions && hasActions && (
+            <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-1 [&>.btn]:mt-0">
+                    {voteButton}
+                    {runButton}
+                    {earnTurboButton}
+                    {canFill && <FillButtons {...fillButtonProps} icon="🖼 " />}
+                    {fillExposureButton}
+                    {keyUnlockButton}
+                    {settingsButton}
+                </div>
+                {turboError && <div className="text-error text-xs">{turboError}</div>}
+                {fillError && <div className="text-error text-xs">{fillError}</div>}
+            </div>
+        );
         return (
             <div id={cardId} className={cardClass}>
                 <ChallengeCardCompact
@@ -242,6 +336,7 @@ export function ChallengeCard({
                     onToggleCompact={toggleCompact}
                     boostBlocked={boostBlocked}
                     deadlineActions={deadlineActions}
+                    actions={actions}
                 />
             </div>
         );
@@ -278,41 +373,14 @@ export function ChallengeCard({
                         )}
                     </div>
                     <div className="flex flex-wrap gap-1 shrink-0">
-                        {showVoteButton && (
-                            <VoteButton
-                                challengeId={challenge.id}
-                                challengeTitle={challenge.title}
-                                onVoteComplete={onVoteComplete}
-                            />
-                        )}
-                        {showRunButton && <RunButton challengeId={challenge.id} onVoteComplete={onVoteComplete} />}
+                        {voteButton}
+                        {runButton}
                         <CardDensityToggle
                             isCompact={false}
                             hasOverride={hasCompactOverride}
                             onToggle={toggleCompact}
                         />
-                        {challenge.type !== 'flash' && (
-                            <button
-                                className="btn btn-ghost btn-xs px-1"
-                                onClick={() => onSettingsClick(challenge.id, challenge.title)}
-                            >
-                                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth="2"
-                                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                                    />
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth="2"
-                                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                    />
-                                </svg>
-                                {t('app.settings')}
-                            </button>
-                        )}
+                        {settingsButton}
                     </div>
                 </div>
 
@@ -381,39 +449,17 @@ export function ChallengeCard({
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.exposure')}</div>
                         <div className={exposureClass}>{exposureFactor}%</div>
-                        {showFillExposure && (
-                            <CurrencyCellButton
-                                kind="fill"
-                                challenge={challenge}
-                                bankroll={bankroll}
-                                onSpent={onCurrencySpent}
-                            />
-                        )}
+                        {fillExposureButton}
                     </div>
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.boost')}</div>
                         <div className={boostStatus.colorClass}>{boostStatus.text}</div>
-                        {showKeyUnlock && (
-                            <CurrencyCellButton
-                                kind="key"
-                                challenge={challenge}
-                                bankroll={bankroll}
-                                onSpent={onCurrencySpent}
-                            />
-                        )}
+                        {keyUnlockButton}
                     </div>
                     <div className="text-center p-2 bg-base-200 rounded">
                         <div className="font-medium">{t('app.turbo')}</div>
                         <div className={turboStatus.colorClass}>{turboStatus.text}</div>
-                        {canPlayAutoTurbo && (
-                            <EarnTurboButton
-                                turboError={turboError}
-                                playingTurbo={playingTurbo}
-                                disabled={playingTurbo || autovoteRunning}
-                                onPlay={handlePlayAutoTurbo}
-                                label={t('app.earnTurbo')}
-                            />
-                        )}
+                        {earnTurboButton}
                         {turboError && <div className="text-error text-xs mt-1">{turboError}</div>}
                         {!turboError && canPlayAutoTurbo && autovoteRunning && (
                             <div className="text-base-content/60 text-xs mt-1">
@@ -428,25 +474,7 @@ export function ChallengeCard({
                         </div>
                         {canFill && (
                             <div className="flex gap-1 mt-1 justify-center">
-                                <FillOneButton
-                                    fillError={fillError}
-                                    filling={filling}
-                                    autovoteRunning={autovoteRunning}
-                                    onFill={() => handleFill('one')}
-                                />
-                                {slotsRemaining > 1 && (
-                                    <button
-                                        className="btn btn-xs btn-warning"
-                                        onClick={() => handleFill('all')}
-                                        disabled={filling || autovoteRunning}
-                                    >
-                                        {filling ? (
-                                            <span className="loading loading-spinner loading-xs" />
-                                        ) : (
-                                            `+${slotsRemaining}`
-                                        )}
-                                    </button>
-                                )}
+                                <FillButtons {...fillButtonProps} />
                             </div>
                         )}
                         {fillError && <div className="text-error text-xs mt-1">{fillError}</div>}

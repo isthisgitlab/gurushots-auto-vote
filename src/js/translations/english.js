@@ -532,6 +532,9 @@
             compactCards: 'Compact Cards',
             compactCardsDesc:
                 'Show challenges as smaller cards so more fit on screen at once; turn off for full-size cards with more detail.',
+            compactCardActions: 'Actions on Compact Cards',
+            compactCardActionsDesc:
+                'Keep the challenge action buttons (Vote, Run, Earn Turbo, submit, Settings) on compact cards, so you can act without opening the full card. Per-photo actions stay on the full card.',
             compact: 'Compact',
             details: 'Details',
             configureBoost: 'Configure Boost for',

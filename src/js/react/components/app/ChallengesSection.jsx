@@ -25,18 +25,23 @@ export function ChallengesSection({
     const { challenges, loading, error, refetch } = useChallenges();
     const times = useTimers(challenges);
     const [globalCompact, setGlobalCompact] = useState(false);
+    const [compactActions, setCompactActions] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    // Read the global compactCards default + listen for settings-changed
-    // events so the toggle below stays in sync if it gets flipped
-    // elsewhere (e.g. via the Settings modal).
+    // Read the global compactCards default and the compactCardActions switch
+    // + listen for settings-changed events so the toggle below stays in sync
+    // if it gets flipped elsewhere (e.g. via the Settings modal).
     useEffect(() => {
         const sync = async () => {
             try {
-                const value = await window.api.getGlobalDefault('compactCards');
-                setGlobalCompact(value === true);
+                const [compact, actions] = await Promise.all([
+                    window.api.getGlobalDefault('compactCards'),
+                    window.api.getGlobalDefault('compactCardActions'),
+                ]);
+                setGlobalCompact(compact === true);
+                setCompactActions(actions === true);
             } catch {
-                /* default to false (cards open in detailed view) */
+                /* default to false (detailed cards, action-free compact tiles) */
             }
         };
         sync();
@@ -225,6 +230,7 @@ export function ChallengesSection({
                         key={`${challenge.id}-${refreshKey}`}
                         challenge={challenge}
                         defaultCompact={globalCompact}
+                        compactActions={compactActions}
                         timeRemaining={times[challenge.id]}
                         timezone={timezone}
                         autovoteRunning={autovoteRunning}

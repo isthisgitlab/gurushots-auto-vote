@@ -324,12 +324,13 @@ Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 
 **Vispārīgi**
 
-| Iestatījums      | Noklusējums | Diapazons / vērtības                         | Apraksts                                                                             |
-| ---------------- | ----------- | -------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `exposure`       | `100`       | 1–100 %                                      | Normālā sliekšņa vērtība: balsot, kamēr ekspozīcija ir zem tā.                       |
-| `exposureTarget` | `0`         | `0` vai 1–100 % (ja iestatīts, ≥ `exposure`) | Balsot līdz šim %, kad iedarbojas normālais noteikums. `0` = apstāties pie sliekšņa. |
-| `onlyBoost`      | `false`     | bool                                         | Izlaist normālo balsošanu; pielietot tikai boost/turbo.                              |
-| `compactCards`   | `false`     | bool                                         | Kompakts izaicinājumu kartīšu izkārtojums (tikai grafiskās lietotnes attēlojums).    |
+| Iestatījums          | Noklusējums | Diapazons / vērtības                         | Apraksts                                                                                                                                                      |
+| -------------------- | ----------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exposure`           | `100`       | 1–100 %                                      | Normālā sliekšņa vērtība: balsot, kamēr ekspozīcija ir zem tā.                                                                                                |
+| `exposureTarget`     | `0`         | `0` vai 1–100 % (ja iestatīts, ≥ `exposure`) | Balsot līdz šim %, kad iedarbojas normālais noteikums. `0` = apstāties pie sliekšņa.                                                                          |
+| `onlyBoost`          | `false`     | bool                                         | Izlaist normālo balsošanu; pielietot tikai boost/turbo.                                                                                                       |
+| `compactCards`       | `false`     | bool                                         | Kompakts izaicinājumu kartīšu izkārtojums (tikai grafiskās lietotnes attēlojums).                                                                             |
+| `compactCardActions` | `false`     | bool                                         | Izaicinājuma darbību pogas (balsošana, palaišana, Turbo, iesniegšana, valūtas tēriņi, iestatījumi) kompaktajās kartītēs (tikai grafiskajā lietotnē, globāls). |
 
 **Boost**
 

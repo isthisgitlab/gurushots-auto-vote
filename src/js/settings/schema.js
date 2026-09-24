@@ -405,6 +405,18 @@ const SETTINGS_SCHEMA = {
         label: 'app.compactCards',
         description: 'app.compactCardsDesc',
     },
+    // Global only: adds the challenge-level action buttons to every compact
+    // tile. Display-only, like compactCards.
+    compactCardActions: {
+        type: 'boolean',
+        default: false,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'display',
+        label: 'app.compactCardActions',
+        description: 'app.compactCardActionsDesc',
+    },
 
     // --- Boost ---
     autoBoost: {
