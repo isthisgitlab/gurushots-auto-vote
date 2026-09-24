@@ -3,6 +3,7 @@ import { useTurbo } from '@/api/useTurbo';
 import { useFillChallenge } from '@/api/useFillChallenge';
 import { useAutoClear } from '@/hooks/useAutoClear';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
+import { ActionButton } from '@/components/ui/ActionButton';
 import { VoteButton } from './VoteButton';
 import { RunButton } from './RunButton';
 import { CurrencyCellButton } from './CurrencyActionButton';
@@ -16,13 +17,9 @@ const FILL_ERROR_DISPLAY_MS = 5000;
  */
 function EarnTurboButton({ turboError, playingTurbo, onPlay, label }) {
     return (
-        <button
-            className={`btn btn-sm mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
-            onClick={onPlay}
-            disabled={playingTurbo}
-        >
+        <ActionButton variant="info" error={turboError} className="mt-1" onClick={onPlay} disabled={playingTurbo}>
             {playingTurbo ? <span className="loading loading-spinner loading-xs" /> : <>🎯 {label}</>}
-        </button>
+        </ActionButton>
     );
 }
 
@@ -35,13 +32,9 @@ export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon =
     const spinner = <span className="loading loading-spinner loading-xs" />;
     return (
         <>
-            <button
-                className={`btn btn-sm ${fillError ? 'btn-error' : 'btn-info'}`}
-                onClick={() => onFill('one')}
-                disabled={filling}
-            >
+            <ActionButton variant="info" error={fillError} onClick={() => onFill('one')} disabled={filling}>
                 {filling ? spinner : `${icon}+1`}
-            </button>
+            </ActionButton>
             {slotsRemaining > 1 && (
                 <button className="btn btn-sm btn-warning" onClick={() => onFill('all')} disabled={filling}>
                     {filling ? spinner : `${icon}+${slotsRemaining}`}

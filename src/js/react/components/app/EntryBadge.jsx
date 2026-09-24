@@ -3,6 +3,7 @@ import { useBoost } from '@/api/useBoost';
 import { useTurbo } from '@/api/useTurbo';
 import { useAutoClear } from '@/hooks/useAutoClear';
 import { getEntryStatus } from '@/utils/formatters';
+import { ActionButton } from '@/components/ui/ActionButton';
 import { EntryPhoto } from './EntryPhoto';
 import { SwapEntryButton, SwapBackButton } from './SwapEntryButton';
 
@@ -77,22 +78,26 @@ export function EntryBadge({
                 {t('app.rank')} {entry.rank} ({entry.votes} {t('app.votes')})
             </span>
             {showBoostButton && (
-                <button
-                    className={`btn btn-sm ml-1 ${boostError ? 'btn-error' : 'btn-success'}`}
+                <ActionButton
+                    variant="success"
+                    error={boostError}
+                    className="ml-1"
                     onClick={handleBoost}
                     disabled={boosting}
                 >
                     {boosting ? <span className="loading loading-spinner loading-xs" /> : `🚀 ${t('app.boost')}`}
-                </button>
+                </ActionButton>
             )}
             {showTurboButton && (
-                <button
-                    className={`btn btn-sm ml-1 ${turboError ? 'btn-error' : 'btn-warning'}`}
+                <ActionButton
+                    variant="warning"
+                    error={turboError}
+                    className="ml-1"
                     onClick={handleTurbo}
                     disabled={turboing}
                 >
                     {turboing ? <span className="loading loading-spinner loading-xs" /> : `⚡ ${t('app.turbo')}`}
-                </button>
+                </ActionButton>
             )}
             {swapAvailable && (
                 // ml-2 + gap: keep Swap an 8px step away from Boost/Turbo so

@@ -4,6 +4,7 @@ import { useAutoClear } from '@/hooks/useAutoClear';
 import { useKeyUnlock, useFillExposure } from '@/api/useCurrencyActions';
 import { interp } from '@/utils/interp';
 import { spentOrStale } from '@/utils/spentOrStale';
+import { ActionButton } from '@/components/ui/ActionButton';
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
 const ERROR_DISPLAY_MS = 5000;
@@ -39,8 +40,10 @@ function CurrencyActionButton({ label, icon, field, bankroll, title, body, actio
 
     return (
         <>
-            <button
-                className={`btn btn-sm mt-1 ${error ? 'btn-error' : 'btn-accent'}`}
+            <ActionButton
+                variant="accent"
+                error={error}
+                className="mt-1"
                 onClick={() => setConfirmOpen(true)}
                 disabled={loading}
             >
@@ -51,7 +54,7 @@ function CurrencyActionButton({ label, icon, field, bankroll, title, body, actio
                         {icon} {label}
                     </>
                 )}
-            </button>
+            </ActionButton>
             {error && (
                 <div className="text-error text-xs mt-1" role="alert">
                     {currencyOutcomeText(t, error)}

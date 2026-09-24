@@ -5,6 +5,7 @@ import { interp } from '@/utils/interp';
 import { useAutoClear } from '@/hooks/useAutoClear';
 import { entryPhotoUrl } from '@/utils/formatters';
 import { spentOrStale } from '@/utils/spentOrStale';
+import { ActionButton } from '@/components/ui/ActionButton';
 import { CurrencyConfirmModal, currencyOutcomeText } from './CurrencyConfirmModal';
 
 const ERROR_DISPLAY_MS = 5000;
@@ -37,13 +38,13 @@ function SwapPhoto({ photo, caption }) {
  * The swap trigger button (spinner while busy, red after a failure) plus the
  * inline outcome text of that failure.
  */
-function SwapTrigger({ idleClassName, label, busy, error, onClick }) {
+function SwapTrigger({ variant, label, busy, error, onClick }) {
     const { t } = useTranslation();
     return (
         <>
-            <button className={`btn btn-sm ${error ? 'btn-error' : idleClassName}`} onClick={onClick} disabled={busy}>
+            <ActionButton variant={variant} error={error} onClick={onClick} disabled={busy}>
                 {busy ? <span className="loading loading-spinner loading-xs" /> : label}
-            </button>
+            </ActionButton>
             {error && (
                 <span className="text-error" role="alert">
                     {currencyOutcomeText(t, error)}
@@ -107,7 +108,7 @@ export function SwapEntryButton({ entry, challengeId, bankroll, warnActioned, on
     return (
         <>
             <SwapTrigger
-                idleClassName="btn-accent"
+                variant="accent"
                 label={`🔄 ${t('app.currencySwap')}`}
                 busy={preview.loading || commit.loading}
                 error={error}
@@ -162,7 +163,7 @@ export function SwapBackButton({ entry, swapBack, challengeId, bankroll, onSpent
     return (
         <>
             <SwapTrigger
-                idleClassName="btn-info"
+                variant="info"
                 label={`↩️ ${t('app.currencySwapBack')}`}
                 busy={loading}
                 error={error}
