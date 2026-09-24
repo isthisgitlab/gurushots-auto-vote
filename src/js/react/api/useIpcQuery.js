@@ -30,17 +30,22 @@ function claimFlight(inFlightRef) {
  *   latestOnly?: boolean,
  * }} [options]
  *   - initialData: initial `data` state (default null)
- *   - subscribe: refetch on window.api.onSettingsChanged (default false)
+ *   - subscribe: refetch on window.api.onSettingsChanged (default false).
+ *     These refetches run in the background: they never raise `loading`
+ *     (the data already on screen stays up while it revalidates) and skip
+ *     `showLoading`; data, error and singleFlight apply as for any call
  *   - singleFlight: drop refetch calls that overlap an in-flight one
  *   - enabled: run the automatic fetch (and the subscription) only while
  *     true (default true); flipping it back on fetches again
  *   - latestOnly: a call superseded before it settles — by a newer call, or
  *     by the automatic fetch being re-keyed, disabled or unmounted — drops
- *     its outcome (data, error and the loading reset), like a cancelled effect.
+ *     its outcome (data, error and the loading reset), like a cancelled effect;
+ *     whichever call settles current clears `loading`, background ones too.
  *     Not combinable with singleFlight or showLoading (throws).
  *   - clearErrorOnStart: clear `error` when a refetch starts (default true)
  *   - showLoading: per-call predicate (gets the refetch args) deciding
- *     whether this call toggles `loading`; defaults to always
+ *     whether a mount fetch or manual refetch toggles `loading`; defaults to
+ *     always
  *   - apply: custom result application (dedup, derived errors, side
  *     effects); default stores the resolved value as `data`
  * @returns {{ data: any, setData: Function, loading: boolean, error: any, setError: Function, refetch: (...args: any[]) => Promise<void> }}
@@ -57,10 +62,11 @@ export function useIpcQuery(queryFn, options = {}) {
         latestOnly = false,
     } = options;
 
-    // latestOnly drops a superseded call's loading reset, which is only safe
-    // when every started call runs and owns its loading toggle: singleFlight
-    // can drop the replacement call and showLoading can skip its toggle, and
-    // either would leave `loading` stuck on.
+    // latestOnly drops a superseded call's loading reset and leaves clearing
+    // `loading` to the call that settles current, which is only safe when every
+    // started call runs: singleFlight can drop the replacement call and leave
+    // `loading` stuck on. showLoading is refused with it so a latestOnly query
+    // has exactly one loading rule.
     if (latestOnly && (singleFlight || showLoading)) {
         throw new Error('useIpcQuery: latestOnly cannot be combined with singleFlight or showLoading');
     }
@@ -71,11 +77,13 @@ export function useIpcQuery(queryFn, options = {}) {
     const inFlightRef = useRef(false);
     const callIdRef = useRef(0);
 
-    const refetch = useCallback(
-        async (...args) => {
+    // One call of either kind: `background` ones (the settings-changed
+    // subscription) never raise `loading`.
+    const run = useCallback(
+        async (background, ...args) => {
             if (singleFlight && !claimFlight(inFlightRef)) return;
             const callId = ++callIdRef.current;
-            const toggleLoading = showLoading ? showLoading(...args) : true;
+            const toggleLoading = !background && (showLoading ? showLoading(...args) : true);
             if (toggleLoading) setLoading(true);
             if (clearErrorOnStart) setError(null);
             let outcome;
@@ -99,25 +107,31 @@ export function useIpcQuery(queryFn, options = {}) {
             } catch (err) {
                 setError(err);
             } finally {
-                if (toggleLoading && !superseded) setLoading(false);
+                // Under latestOnly the call that settles current clears
+                // `loading` even when it never raised it: a background call can
+                // supersede a foreground one, whose own reset is then dropped.
+                if (latestOnly ? !superseded : toggleLoading) setLoading(false);
                 if (singleFlight) inFlightRef.current = false;
             }
         },
         [queryFn, singleFlight, clearErrorOnStart, showLoading, apply, latestOnly],
     );
 
-    useAutoFetch(refetch, { enabled, subscribe, latestOnly, callIdRef });
+    const refetch = useCallback((...args) => run(false, ...args), [run]);
+    const revalidate = useCallback(() => run(true), [run]);
+
+    useAutoFetch(refetch, revalidate, { enabled, subscribe, latestOnly, callIdRef });
 
     return { data, setData, loading, error, setError, refetch };
 }
 
 /**
- * useIpcQuery's automatic fetches: on mount / whenever `refetch` is re-keyed
- * while `enabled`, and on settings-changed when `subscribe` is set. With
- * `latestOnly`, the effect cleanup (re-key, disable, unmount) supersedes the
- * call it started by advancing the shared call id.
+ * useIpcQuery's automatic fetches: `refetch` on mount / whenever it is re-keyed
+ * while `enabled`, and the background `revalidate` on settings-changed when
+ * `subscribe` is set. With `latestOnly`, the effect cleanup (re-key, disable,
+ * unmount) supersedes the call it started by advancing the shared call id.
  */
-function useAutoFetch(refetch, { enabled, subscribe, latestOnly, callIdRef }) {
+function useAutoFetch(refetch, revalidate, { enabled, subscribe, latestOnly, callIdRef }) {
     useEffect(() => {
         if (!enabled) return undefined;
         refetch();
@@ -130,9 +144,9 @@ function useAutoFetch(refetch, { enabled, subscribe, latestOnly, callIdRef }) {
     useEffect(() => {
         if (!enabled || !subscribe || !window.api?.onSettingsChanged) return undefined;
         return window.api.onSettingsChanged(() => {
-            refetch();
+            revalidate();
         });
-    }, [enabled, subscribe, refetch]);
+    }, [enabled, subscribe, revalidate]);
 }
 
 /**

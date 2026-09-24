@@ -210,17 +210,24 @@ describe('watchSettingsFile change detection', () => {
         expect(fs.watch).toHaveBeenCalledWith('/tmp/settings.json', expect.any(Function));
     });
 
-    test('a nested reload-required change reloads the main window instead of broadcasting', async () => {
+    test('a nested reload-required change reloads the main window and broadcasts to the others only', async () => {
+        const mainSend = jest.fn();
+        const mainWindow = { isDestroyed: () => false, reload, webContents: { send: mainSend } };
+        BrowserWindow.getAllWindows.mockReturnValueOnce([
+            mainWindow,
+            { isDestroyed: () => false, webContents: { send: mockSend } },
+        ]);
         settings.loadSettings.mockReturnValue({ ui: { theme: 'light' } });
         settings.isReloadRequired.mockImplementation((key) => key === 'ui');
-        watchSettingsFile(deps());
+        watchSettingsFile(deps({ getMainWindow: () => mainWindow }));
 
         settings.loadSettings.mockReturnValue({ ui: { theme: 'dark' } });
         await emitChange();
 
         expect(settings.isReloadRequired).toHaveBeenCalledWith('ui');
         expect(reload).toHaveBeenCalledTimes(1);
-        expect(mockSend).not.toHaveBeenCalled();
+        expect(mainSend).not.toHaveBeenCalled();
+        expect(mockSend).toHaveBeenCalledWith('settings-changed', { ui: { theme: 'dark' } });
         expect(infoLines()).toEqual([
             '🔄 Reload-required settings changed, reloading main window...',
             '  • ui.theme: light → dark (reload required)',

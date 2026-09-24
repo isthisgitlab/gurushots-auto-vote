@@ -115,7 +115,7 @@ Domain terms used throughout, in reader's terms:
 - `now` is re-read per challenge (a pass can take minutes, so a single clock would miss windows that open
   mid-pass).
 - **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.js`)
-  runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.js` real / `mock/index.js` mock) before the
+  runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.js` real / `mock/strategy.js` mock) before the
   voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
   single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
   enable is **resolved per candidate by rule (see challenge rules below) → master**, not a hard global gate —
@@ -432,13 +432,18 @@ repeated six times is one that gets forgotten at one of them.
 - **All backend calls go through `window.api.*`** — there is zero Electron-vs-Capacitor branching in
   components. Build on the shared envelopes: `react/api/useIpcQuery.js` (data/loading/error + stable
   `refetch`, optional subscribe) and `react/api/useAsyncIpcAction.js` (loading + `{success,error}`
-  handling). `useSettings`, `useActiveChallenges`, `useAuth`, `useBoost`, etc. all build on these — don't
-  call `window.api` raw in a component.
+  handling). `useSettings`, `useActiveChallenges`, `useAuth`, `useBoost`, etc. all build on these. One-shot
+  calls, event subscriptions and best-effort logging go through `react/api/ipc.js` (`logRendererError` never
+  throws). Nothing else under `src/js/react/` touches `window.api`; ESLint enforces it.
+- **Settings changes reach every window.** A successful `set-setting` / `save-settings` broadcasts
+  `settings-changed` to every open window (Electron) or the in-process bus (Capacitor); `useIpcQuery`
+  subscribers refetch in the background without toggling `loading`, and the translation provider reads
+  `language` straight from the payload.
 - **No router.** "Pages" are separate mount entry points chosen by auth state: `mountApp()` / `mountLogin()`
   (`react/pages/App.jsx`). Electron swaps native windows; Capacitor swaps React trees into `#root`.
 - **No toast library.** Error surfaces are: inline DaisyUI `alert` banners with a translated message; and
   `react/components/ui/ErrorBoundary.jsx` (an `alert alert-error` with Dismiss/Reload) wrapped around every
-  major subtree. Action failures generally log via `window.api.logError` rather than showing a banner.
+  major subtree. Action failures generally log via `ipc.logRendererError` rather than showing a banner.
 - **Error-message content quality (UX).** User-facing error text follows _what happened → why → what to do
   next_, uses a translated string, and **never** dumps raw HTTP status codes or internal result shapes at
   the user — internal detail goes to `logError`, not the UI.

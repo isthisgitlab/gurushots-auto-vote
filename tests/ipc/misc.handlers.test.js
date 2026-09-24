@@ -13,6 +13,8 @@ jest.mock('electron', () => ({
 jest.mock('../../src/js/ui/applicationMenu', () => ({
     updateMenuTranslations: jest.fn(),
 }));
+const mockTranslationManager = { loadLanguageFromSettings: jest.fn() };
+jest.mock('../../src/js/translations/index', () => ({ translationManager: mockTranslationManager }));
 jest.mock('../../src/js/logger', () => {
     const cat = { warning: jest.fn(), error: jest.fn(), info: jest.fn() };
     return { withCategory: jest.fn(() => cat) };
@@ -121,20 +123,15 @@ describe('misc.handlers reload-window', () => {
 
 describe('misc.handlers refresh-menu', () => {
     const { updateMenuTranslations } = require('../../src/js/ui/applicationMenu');
-    let savedTranslationManager;
+    const { loadLanguageFromSettings } = mockTranslationManager;
 
     beforeEach(() => {
         updateMenuTranslations.mockClear();
-        savedTranslationManager = global.translationManager;
-    });
-
-    afterEach(() => {
-        global.translationManager = savedTranslationManager;
+        loadLanguageFromSettings.mockReset();
     });
 
     test('reloads the language from settings before rebuilding the menu', async () => {
-        const loadLanguageFromSettings = jest.fn().mockResolvedValue(undefined);
-        global.translationManager = { loadLanguageFromSettings };
+        loadLanguageFromSettings.mockResolvedValue(undefined);
         const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
 
         await expect(handlers['refresh-menu']()).resolves.toEqual({ success: true });
@@ -146,7 +143,7 @@ describe('misc.handlers refresh-menu', () => {
     });
 
     test('does not rebuild the menu when the language load fails', async () => {
-        global.translationManager = { loadLanguageFromSettings: jest.fn().mockRejectedValue(new Error('io')) };
+        loadLanguageFromSettings.mockRejectedValue(new Error('io'));
         const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
 
         await expect(handlers['refresh-menu']()).resolves.toEqual({ success: false, error: 'io' });
@@ -154,7 +151,7 @@ describe('misc.handlers refresh-menu', () => {
     });
 
     test('falls back to a fixed message when the language load rejects with null', async () => {
-        global.translationManager = { loadLanguageFromSettings: jest.fn().mockRejectedValue(null) };
+        loadLanguageFromSettings.mockRejectedValue(null);
         const handlers = buildHandlers({ getMainWindow: jest.fn(), getLoginWindow: jest.fn() });
 
         await expect(handlers['refresh-menu']()).resolves.toEqual({ success: false, error: 'Failed to refresh menu' });

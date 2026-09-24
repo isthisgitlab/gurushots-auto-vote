@@ -17,6 +17,10 @@ export const ICON_PATHS = {
     listCompact: 'M4 6h16M4 12h16M4 18h7',
     // Four full lines — the detailed list layout.
     listDetailed: 'M4 6h16M4 10h16M4 14h16M4 18h16',
+    // Four corner arrows pointing out — expand a compact card to details.
+    expand: 'M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4',
+    // Four corner arrows pointing in — collapse a detailed card to compact.
+    collapse: 'M9 9V4M9 9H4M9 9L4 4m11 5h5m-5 0V4m0 5l5-5M9 15v5m0-5H4m5 0l-5 5m11-5h5m-5 0v5m0-5l5 5',
     // Cog (outline + hub) — per-challenge settings and the app Settings button.
     cog: [
         'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z',
@@ -48,14 +52,21 @@ export const ICON_PATHS = {
  * Stroked outline SVG icon (`currentColor`, round caps/joins, width 2) — the
  * shape every inline button glyph shares. `d` is one path string or an array
  * of them for a multi-path glyph; `className` carries the Tailwind size and
- * spacing. Decorative: the button around it carries the accessible name.
+ * spacing. `filled` also fills the shape with `currentColor` (default: outline
+ * only). Decorative: the button around it carries the accessible name.
  *
- * @param {{ d: string | string[], className: string }} props
+ * @param {{ d: string | string[], className: string, filled?: boolean }} props
  */
-export function StrokeIcon({ d, className }) {
+export function StrokeIcon({ d, className, filled = false }) {
     const paths = Array.isArray(d) ? d : [d];
     return (
-        <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <svg
+            className={className}
+            fill={filled ? 'currentColor' : 'none'}
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+        >
             {paths.map((path) => (
                 <path key={path} strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={path} />
             ))}

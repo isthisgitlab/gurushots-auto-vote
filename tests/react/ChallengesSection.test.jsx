@@ -10,7 +10,7 @@ import { render as bareRender } from '@testing-library/preact';
 import { ChallengesProvider, useChallenges } from '@/contexts/ChallengesContext';
 import { ChallengesSection } from '@/components/app/ChallengesSection';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
-import { mockApi } from './helpers/setup';
+import { mockApi, fireSettingsChanged } from './helpers/setup';
 
 jest.mock('@/api/useActiveChallenges', () => ({ useActiveChallenges: jest.fn() }));
 
@@ -46,7 +46,6 @@ const EARLY = { id: 1, title: 'Early', close_time: now + 3000, start_time: now -
 describe('ChallengesProvider + ChallengesSection', () => {
     let hookState;
     let refetch;
-    let settingsListener;
 
     const setHook = (patch) => {
         hookState = { ...hookState, ...patch };
@@ -73,11 +72,6 @@ describe('ChallengesProvider + ChallengesSection', () => {
         mockApi.setGlobalDefault.mockResolvedValue(undefined);
         mockApi.voteAllChallengesManual.mockResolvedValue({ success: true });
         mockApi.runVotingCycle.mockResolvedValue({ success: true });
-        settingsListener = null;
-        mockApi.onSettingsChanged.mockImplementation((cb) => {
-            settingsListener = cb;
-            return jest.fn();
-        });
     });
 
     afterEach(() => {
@@ -302,7 +296,7 @@ describe('ChallengesProvider + ChallengesSection', () => {
 
             mockApi.getGlobalDefault.mockResolvedValue(false);
             await act(async () => {
-                settingsListener();
+                fireSettingsChanged();
             });
             await settle();
             expect(screen.getByText('app.compact')).toBeTruthy();
@@ -320,7 +314,7 @@ describe('ChallengesProvider + ChallengesSection', () => {
 
             mockApi.getGlobalDefault.mockResolvedValue(false);
             await act(async () => {
-                settingsListener();
+                fireSettingsChanged();
             });
             await settle();
             expect(screen.getAllByTestId('card')[0].dataset.compactActions).toBe('false');

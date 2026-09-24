@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSessionLoad } from './useSessionLoad';
+import * as ipc from '@/api/ipc';
 
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
@@ -17,8 +18,8 @@ const perChallengeOnly = (schema, values) => {
 // challenge's title-rule profile.
 const fetchChallengeSession = (challengeId, challengeTitle) =>
     Promise.all([
-        window.api.getChallengeOverrides(challengeId.toString()),
-        window.api.getTitleProfile(challengeTitle, challengeId.toString()),
+        ipc.getChallengeOverrides(challengeId.toString()),
+        ipc.getTitleProfile(challengeTitle, challengeId.toString()),
     ]);
 
 /**
@@ -87,7 +88,7 @@ function useOverridesSave({ isOpen, challengeId, schema, overrides, suppressed, 
 
         setSaving(true);
         try {
-            const saved = await window.api.replaceChallengeOverrides(challengeId.toString(), overrides, suppressed);
+            const saved = await ipc.replaceChallengeOverrides(challengeId.toString(), overrides, suppressed);
             if (saved === false) {
                 setSaveError(true);
                 return;
@@ -102,7 +103,7 @@ function useOverridesSave({ isOpen, challengeId, schema, overrides, suppressed, 
             // scheduled fill takes effect now, not after the current wait.
             await rearmSchedule();
         } catch (err) {
-            await window.api.logError(`Error saving challenge settings: ${err.message || err}`);
+            await ipc.logRendererError(`Error saving challenge settings: ${err.message || err}`);
         } finally {
             setSaving(false);
         }

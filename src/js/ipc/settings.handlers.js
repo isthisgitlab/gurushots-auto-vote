@@ -54,9 +54,11 @@ const THIN_HANDLERS = [
     ['is-global-default-modified', 'isGlobalDefaultModified', false, 'checking if global default is modified'],
 ];
 
-// Capacitor has no filesystem watcher to rebroadcast settings mutations.
-// Notify renderer subscribers after successful user-facing writes so cards
-// immediately re-read effective global/profile/per-challenge values.
+// Capacitor has no filesystem watcher to rebroadcast settings mutations, and
+// Electron's watcher reloads only the main window for reload-required keys.
+// Notify every renderer subscriber after a successful user-facing write so
+// cards immediately re-read effective global/profile/per-challenge values and
+// every open window follows a saved language (set-setting broadcasts too).
 const CHANGE_BROADCAST_CHANNELS = new Set([
     'set-global-default',
     'set-challenge-override',
@@ -102,7 +104,11 @@ const buildHandlers = ({ broadcastSettingsChange } = {}) => {
                 if (typeof key !== 'string') {
                     throw new Error('Invalid key type, expected string');
                 }
-                return settings.setSetting(key, value);
+                const result = settings.setSetting(key, value);
+                if (result && typeof broadcastSettingsChange === 'function') {
+                    broadcastSettingsChange(settings.loadSettings());
+                }
+                return result;
             } catch (error) {
                 logger.withCategory('settings').error(`Error handling set-setting request for key "${key}":`, error);
                 return false;

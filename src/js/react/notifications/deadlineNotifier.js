@@ -6,7 +6,7 @@
  * services/deadlineNotifications.js, safe in this bundle — and only bridges the
  * renderer's IPC + platform delivery:
  *
- *   - config + per-challenge deadline actions come over window.api (the same
+ *   - config + per-challenge deadline actions come over IPC (the same
  *     get-deadline-actions channel the timeline already uses; no new channel);
  *   - delivery is platform-picked by the caller (Electron Web Notification).
  *
@@ -75,13 +75,13 @@ function logCycleFailure(log, error) {
  * would never dedupe).
  *
  * @param {Object} deps
- * @param {()=>Promise<Object>} deps.getSettings - window.api.getSettings
+ * @param {()=>Promise<Object>} deps.getSettings - the getSettings IPC
  * @param {(challenge:Object)=>Promise<{success:boolean, actions?:Array}>} deps.getDeadlineActions -
- *   window.api.getDeadlineActions (returns the {success, actions} wrapper — never throws)
+ *   the getDeadlineActions IPC (returns the {success, actions} wrapper — never throws)
  * @param {(key:string)=>string} deps.translate - returns a raw i18n template
  * @param {(n:{title:string, body:string})=>void} deps.deliver - platform delivery
  * @param {(message:string)=>void} [deps.log] - optional best-effort diagnostic sink
- *   (e.g. window.api.logDebug); a failure is logged here rather than vanishing.
+ *   (e.g. ipc.logRendererDebug); a failure is logged here rather than vanishing.
  * @returns {(challenges:Array, now:number)=>Promise<void>}
  */
 export function createDeadlineNotifier({ getSettings, getDeadlineActions, translate, deliver, log }) {

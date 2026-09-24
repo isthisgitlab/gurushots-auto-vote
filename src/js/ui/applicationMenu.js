@@ -1,33 +1,17 @@
 const { Menu, dialog, app, BrowserWindow } = require('electron');
 const logger = require('../logger');
+const { translationManager } = require('../translations/index');
 
 /**
  * Application Menu Module
  * Handles creation and management of the native application menu
  */
 
-let translationManager = null;
-
-// Initialize translation manager
-function initializeTranslations() {
-    if (global.translationManager) {
-        translationManager = global.translationManager;
-    }
-}
-
-// Get translated text
-function t(key) {
-    if (translationManager) {
-        return translationManager.t(key);
-    }
-    return key;
-}
+// Translated text in the main process's current language.
+const t = (key) => translationManager.t(key);
 
 // Create application menu
 function createApplicationMenu() {
-    // Initialize translations
-    initializeTranslations();
-
     const isMac = process.platform === 'darwin';
 
     const template = [
@@ -216,11 +200,8 @@ function showAbout() {
     });
 }
 
-// Update menu with current translations
+// Rebuild the menu in the translation manager's current language
 function updateMenuTranslations() {
-    // Re-initialize translations to get latest language
-    initializeTranslations();
-    // Recreate menu with new translations
     createApplicationMenu();
 }
 

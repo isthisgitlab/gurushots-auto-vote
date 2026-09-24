@@ -10,6 +10,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { IconActionButton } from '@/components/ui/IconActionButton';
 import { ResetIcon } from '@/components/ui/ResetButton';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
+import * as ipc from '@/api/ipc';
 
 const TOOLBAR_ICON_CLASS = 'w-4 h-4 mr-1';
 
@@ -31,8 +32,8 @@ function useGlobalCardDensity() {
         const sync = async () => {
             try {
                 const [compact, actions] = await Promise.all([
-                    window.api.getGlobalDefault('compactCards'),
-                    window.api.getGlobalDefault('compactCardActions'),
+                    ipc.getGlobalDefault('compactCards'),
+                    ipc.getGlobalDefault('compactCardActions'),
                 ]);
                 setGlobalCompact(compact === true);
                 setCompactActions(actions === true);
@@ -41,7 +42,7 @@ function useGlobalCardDensity() {
             }
         };
         sync();
-        const off = window.api.onSettingsChanged?.(() => {
+        const off = ipc.onSettingsChanged(() => {
             sync();
             // Bump refreshKey so each ChallengeCard re-fetches its
             // effective setting (any per-challenge override + the new
@@ -56,7 +57,7 @@ function useGlobalCardDensity() {
     const toggleGlobalCompact = useCallback(async () => {
         const next = !globalCompact;
         try {
-            await window.api.setGlobalDefault('compactCards', next);
+            await ipc.setGlobalDefault('compactCards', next);
             setGlobalCompact(next);
             setRefreshKey((k) => k + 1);
         } catch {
@@ -148,7 +149,7 @@ export function ChallengesSection({
                     <>
                         <IconActionButton
                             className="btn btn-latvian btn-sm"
-                            action={() => window.api.voteAllChallengesManual()}
+                            action={() => ipc.voteAllChallengesManual()}
                             onSuccess={refetchAfterAction}
                             failureLogPrefix="Vote All failed"
                             errorLogPrefix="Error during Vote All"
@@ -159,7 +160,7 @@ export function ChallengesSection({
                         />
                         <IconActionButton
                             className="btn btn-latvian btn-sm"
-                            action={() => window.api.runVotingCycle()}
+                            action={() => ipc.runVotingCycle()}
                             onSuccess={refetchAfterAction}
                             failureLogPrefix="Run failed"
                             errorLogPrefix="Error during Run"

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { getIntentByName, intentValuesMatch } from '../../../settings/intentProfiles';
+import * as ipc from '@/api/ipc';
 
 // How long an armed confirm button (delete / overwrite) stays armed before
 // falling back to its idle state.
@@ -62,10 +63,10 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
 
     const refreshProfiles = useCallback(async () => {
         try {
-            const result = await window.api.getChallengeProfiles();
+            const result = await ipc.getChallengeProfiles();
             setProfiles(result && typeof result === 'object' ? result : {});
         } catch (err) {
-            await window.api.logError(`Error loading challenge profiles: ${err.message || err}`);
+            await ipc.logRendererError(`Error loading challenge profiles: ${err.message || err}`);
             setProfiles({});
         }
     }, []);
@@ -107,7 +108,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
         disarm();
         setBusy(true);
         try {
-            const deleted = await window.api.deleteChallengeProfile(selectedName);
+            const deleted = await ipc.deleteChallengeProfile(selectedName);
             if (deleted !== true) {
                 setErrorText(t('app.profileSaveError'));
                 return;
@@ -117,7 +118,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
             await refreshProfiles();
             onProfilesChanged({ name: selectedName, deleted: true });
         } catch (err) {
-            await window.api.logError(`Error deleting challenge profile: ${err.message || err}`);
+            await ipc.logRendererError(`Error deleting challenge profile: ${err.message || err}`);
         } finally {
             setBusy(false);
         }
@@ -153,7 +154,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
         disarm();
         setBusy(true);
         try {
-            const saved = await window.api.saveChallengeProfile(trimmed, overrides);
+            const saved = await ipc.saveChallengeProfile(trimmed, overrides);
             if (saved) {
                 setErrorText('');
                 setNewName('');
@@ -164,7 +165,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
                 setErrorText(t('app.profileSaveError'));
             }
         } catch (err) {
-            await window.api.logError(`Error saving challenge profile: ${err.message || err}`);
+            await ipc.logRendererError(`Error saving challenge profile: ${err.message || err}`);
             setErrorText(t('app.profileSaveError'));
         } finally {
             setBusy(false);

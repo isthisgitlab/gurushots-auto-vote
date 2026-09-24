@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useIpcQuery } from '@/api/useIpcQuery';
+import * as ipc from '@/api/ipc';
 
 /**
  * A modal's load-on-open over IPC, built on useIpcQuery: `load()` runs while
@@ -35,7 +36,7 @@ export function useSessionLoad(load, { enabled, onLoad, failureLog }) {
                 return;
             }
             setError(result.reason ?? new Error(failureLog));
-            await window.api.logError(`${failureLog}: ${result.reason?.message || result.reason}`);
+            await ipc.logRendererError(`${failureLog}: ${result.reason?.message || result.reason}`);
         },
         [onLoad, failureLog],
     );

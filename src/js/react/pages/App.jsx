@@ -24,6 +24,7 @@ import { ScrollToTopButton } from '@/components/ui/ScrollToTopButton';
 import { useDisclosure } from '@/hooks/useDisclosure';
 import { useDocumentTheme } from '@/hooks/useDocumentTheme';
 import { DEFAULT_TIMEZONE } from '../../settings/uiDefaults';
+import * as ipc from '@/api/ipc';
 
 const NO_CHALLENGE = { id: null, title: '' };
 
@@ -54,7 +55,7 @@ function useWelcomeGate(settings, settingsLoading, updateSetting) {
         } catch (err) {
             // Won't reappear this session (ref-gated); log so a persistent
             // write failure (e.g. Android storage I/O) stays diagnosable.
-            await window.api.logError(`Failed to persist onboardingCompleted: ${err?.message || err}`);
+            await ipc.logRendererError(`Failed to persist onboardingCompleted: ${err?.message || err}`);
         }
     }, [updateSetting]);
 
@@ -181,9 +182,9 @@ function AppContent() {
             if (autovote.running) {
                 await autovote.stop();
             }
-            await window.api.logout();
+            await ipc.logout();
         } catch (err) {
-            await window.api.logError(`Error during logout: ${err.message || err}`);
+            await ipc.logRendererError(`Error during logout: ${err.message || err}`);
         }
     }, [autovote]);
 

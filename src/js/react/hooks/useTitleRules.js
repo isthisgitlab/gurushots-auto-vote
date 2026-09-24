@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSessionLoad } from './useSessionLoad';
+import * as ipc from '@/api/ipc';
 
-const fetchTitleRules = () => Promise.all([window.api.getTitleRules(), window.api.getChallengeProfiles()]);
+const fetchTitleRules = () => Promise.all([ipc.getTitleRules(), ipc.getChallengeProfiles()]);
 
 /**
  * Editor state for the challenge (title-tag) rules section of the global
@@ -44,7 +45,7 @@ export function useTitleRules(isOpen) {
 
     const persist = useCallback(async () => {
         if (loaded) {
-            const saved = await window.api.setTitleRules(rules);
+            const saved = await ipc.setTitleRules(rules);
             if (saved === false) {
                 setError(true);
                 return false;

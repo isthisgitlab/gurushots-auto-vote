@@ -38,6 +38,13 @@ jest.mock('electron', () => {
     };
 });
 
+// The menu reads the Node translation manager's current language; a test
+// swaps `translate` to simulate a language switch.
+const mockTranslation = { translate: (k) => k };
+jest.mock('../../src/js/translations/index', () => ({
+    translationManager: { t: (k) => mockTranslation.translate(k) },
+}));
+
 jest.mock('../../src/js/services/AutoUpdater', () =>
     jest.fn().mockImplementation((win) => {
         mockAutoUpdaterCtor(win);
@@ -75,13 +82,12 @@ const flush = () => new Promise((r) => setImmediate(r));
 
 beforeEach(() => {
     jest.clearAllMocks();
-    delete global.translationManager;
+    mockTranslation.translate = (k) => k;
     loadMenu();
 });
 
 afterEach(() => {
     setPlatform(originalPlatform);
-    delete global.translationManager;
 });
 
 describe('createApplicationMenu', () => {
@@ -131,21 +137,21 @@ describe('createApplicationMenu', () => {
         ]);
     });
 
-    it('uses the global translation manager when one is present', () => {
-        global.translationManager = { t: jest.fn((k) => `T(${k})`) };
+    it('labels the menu through the translation manager', () => {
+        mockTranslation.translate = jest.fn((k) => `T(${k})`);
         menuModule.createApplicationMenu();
 
         const labels = builtTemplate().map((m) => m.label);
         expect(labels).toContain('T(menu.edit)');
         expect(labels).toContain('T(menu.help)');
-        expect(global.translationManager.t).toHaveBeenCalledWith('menu.checkForUpdates');
+        expect(mockTranslation.translate).toHaveBeenCalledWith('menu.checkForUpdates');
     });
 
-    it('updateMenuTranslations picks up a translation manager set later and rebuilds', () => {
+    it('updateMenuTranslations rebuilds the menu in the current language', () => {
         menuModule.createApplicationMenu();
         expect(builtTemplate().map((m) => m.label)).toContain('menu.edit');
 
-        global.translationManager = { t: (k) => `LV:${k}` };
+        mockTranslation.translate = (k) => `LV:${k}`;
         menuModule.updateMenuTranslations();
 
         expect(electron.Menu.buildFromTemplate).toHaveBeenCalledTimes(2);

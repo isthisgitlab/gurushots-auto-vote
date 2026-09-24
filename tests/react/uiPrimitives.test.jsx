@@ -10,6 +10,7 @@ import { StatusBadge, ConnectionBadge } from '@/components/ui/StatusBadge';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
+import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { mockApi } from './helpers/setup';
 
 beforeEach(() => {
@@ -184,6 +185,23 @@ describe('AsyncActionButton edges', () => {
         render(<AsyncActionButton {...base} action={jest.fn().mockRejectedValue('plain string')} />);
         fireEvent.click(screen.getByText('go'));
         await waitFor(() => expect(mockApi.logError).toHaveBeenCalledWith('Errored: plain string'));
+    });
+});
+
+describe('StrokeIcon', () => {
+    test('is an unfilled outline by default', () => {
+        const { container } = render(<StrokeIcon d={ICON_PATHS.save} className="w-4 h-4" />);
+        const svg = container.querySelector('svg');
+        expect(svg.getAttribute('fill')).toBe('none');
+        expect(svg.getAttribute('stroke')).toBe('currentColor');
+    });
+
+    test('filled fills the shape with currentColor and keeps the stroke', () => {
+        const { container } = render(<StrokeIcon d={ICON_PATHS.expand} className="w-3 h-3" filled />);
+        const svg = container.querySelector('svg');
+        expect(svg.getAttribute('fill')).toBe('currentColor');
+        expect(svg.getAttribute('stroke')).toBe('currentColor');
+        expect(svg.querySelector('path').getAttribute('d')).toBe(ICON_PATHS.expand);
     });
 });
 

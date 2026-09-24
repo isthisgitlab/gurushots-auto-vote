@@ -1,6 +1,6 @@
 /**
  * Capacitor entry point. Defers React mount until the bridge is
- * installed (so window.api exists when the first useSettings hook
+ * installed (so it exists when the first useSettings hook
  * fires) and settings.initializeAsync has hydrated the in-memory
  * cache from @capacitor/preferences. Then loads App and mounts it.
  *
@@ -88,8 +88,8 @@ const bootstrap = async () => {
         globalThis.addEventListener('pagehide', flush);
     }
     // Wire login-success / logout from the bridge to swap mounts.
-    // Login.jsx calls window.api.login() after a successful auth;
-    // App.jsx calls window.api.logout() from the navbar's logout button.
+    // Login.jsx calls the login IPC after a successful auth;
+    // App.jsx calls the logout IPC from the navbar's logout button.
     subscribe('login-success', () => mountForCurrentAuthState());
     subscribe('logout', () => mountForCurrentAuthState());
 

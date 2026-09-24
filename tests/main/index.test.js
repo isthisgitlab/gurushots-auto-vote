@@ -183,13 +183,12 @@ afterEach(() => {
     processOnSpy.mockRestore();
     setPlatform(originalPlatform);
     jest.useRealTimers();
-    delete global.translationManager;
 });
 
 describe('module bootstrap', () => {
-    it('publishes the translation manager, disables service workers and the real keychain, and wires every IPC module', async () => {
+    it('disables service workers and the real keychain, and wires every IPC module', async () => {
         load();
-        expect(global.translationManager).toBe(require('../../src/js/translations/index').translationManager);
+        expect(global.translationManager).toBeUndefined();
         expect(m.app.commandLine.appendSwitch).toHaveBeenCalledWith('disable-features', 'ServiceWorker');
         expect(m.app.commandLine.appendSwitch).toHaveBeenCalledWith('use-mock-keychain');
         for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency']) {

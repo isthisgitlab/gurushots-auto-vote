@@ -2,15 +2,16 @@
  * GUI-side (WebView) resolvers for the shared cadence math
  * (src/js/scheduling/thresholdWindow.js), the async-IPC counterpart of
  * src/js/scheduling/nodeResolvers.js: per-challenge values come back over
- * window.api.getEffectiveSetting instead of the synchronous settings facade.
+ * the getEffectiveSetting IPC channel (react/api/ipc.js) instead of the synchronous settings facade.
  * AutovoteContext injects these into the shared cadence chain
  * (src/js/scheduling/cadenceChain.js) so the loop and math are written once.
  */
 
 import { computeNextCycleDelayMs as computeNextDelayMs } from '../../scheduling/thresholdWindow';
+import * as ipc from '../api/ipc';
 
 // WebView resolver: per-challenge lastMinuteThreshold over IPC (Promise).
-export const resolveThreshold = (challengeId) => window.api.getEffectiveSetting('lastMinuteThreshold', challengeId);
+export const resolveThreshold = (challengeId) => ipc.getEffectiveSetting('lastMinuteThreshold', challengeId);
 
 // WebView resolver for the scheduled-fill cadence cap: the three per-challenge
 // keys over the same key-agnostic IPC channel, batched per challenge. Both
@@ -19,9 +20,9 @@ export const resolveThreshold = (challengeId) => window.api.getEffectiveSetting(
 // cap for multi-entry configs).
 export const resolveScheduledFill = async (challengeId) => {
     const [enabled, timesOfDay, beforeEndSecs] = await Promise.all([
-        window.api.getEffectiveSetting('useScheduledFill', challengeId),
-        window.api.getEffectiveSetting('scheduledFillTime', challengeId),
-        window.api.getEffectiveSetting('scheduledFillBeforeEnd', challengeId),
+        ipc.getEffectiveSetting('useScheduledFill', challengeId),
+        ipc.getEffectiveSetting('scheduledFillTime', challengeId),
+        ipc.getEffectiveSetting('scheduledFillBeforeEnd', challengeId),
     ]);
     return { enabled: enabled === true, timesOfDay, beforeEndSecs };
 };
@@ -32,10 +33,10 @@ export const resolveScheduledFill = async (challengeId) => {
 // is the configurable final-window length; thresholdWindow.js re-guards it.
 export const resolveFinalWindowTopUp = async (challengeId) => {
     const [voteBeforeFinalWindow, useFinalWindowExposure, leadMin, durationSec] = await Promise.all([
-        window.api.getEffectiveSetting('voteBeforeFinalWindow', challengeId),
-        window.api.getEffectiveSetting('useFinalWindowExposure', challengeId),
-        window.api.getEffectiveSetting('voteBeforeFinalWindowLeadMin', challengeId),
-        window.api.getEffectiveSetting('finalWindowDuration', challengeId),
+        ipc.getEffectiveSetting('voteBeforeFinalWindow', challengeId),
+        ipc.getEffectiveSetting('useFinalWindowExposure', challengeId),
+        ipc.getEffectiveSetting('voteBeforeFinalWindowLeadMin', challengeId),
+        ipc.getEffectiveSetting('finalWindowDuration', challengeId),
     ]);
     return {
         enabled: voteBeforeFinalWindow === true && useFinalWindowExposure === true,
@@ -52,12 +53,12 @@ export const resolveFinalWindowTopUp = async (challengeId) => {
 // live boost state and re-guards the `0 = off` sentinel.
 export const resolveBoostPrefill = async (challengeId) => {
     const [voteBeforeBoost, autoBoost, onlyBoost, leadMin, boostTime, keyUnlockedBoostTime] = await Promise.all([
-        window.api.getEffectiveSetting('voteBeforeBoost', challengeId),
-        window.api.getEffectiveSetting('autoBoost', challengeId),
-        window.api.getEffectiveSetting('onlyBoost', challengeId),
-        window.api.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId),
-        window.api.getEffectiveSetting('boostTime', challengeId),
-        window.api.getEffectiveSetting('keyUnlockedBoostTime', challengeId),
+        ipc.getEffectiveSetting('voteBeforeBoost', challengeId),
+        ipc.getEffectiveSetting('autoBoost', challengeId),
+        ipc.getEffectiveSetting('onlyBoost', challengeId),
+        ipc.getEffectiveSetting('voteBeforeBoostLeadMin', challengeId),
+        ipc.getEffectiveSetting('boostTime', challengeId),
+        ipc.getEffectiveSetting('keyUnlockedBoostTime', challengeId),
     ]);
     return {
         enabled: voteBeforeBoost === true && autoBoost === true && onlyBoost !== true,
@@ -71,10 +72,10 @@ export const resolveBoostPrefill = async (challengeId) => {
 // nodeResolvers.resolveCurrencyAuto: each ENABLED rule's timing, null when off.
 const currencyTimingOf = async (enableKey, prefix, challengeId) => {
     const [enabled, afterStart, beforeEnd, afterPercent] = await Promise.all([
-        window.api.getEffectiveSetting(enableKey, challengeId),
-        window.api.getEffectiveSetting(`${prefix}AfterStart`, challengeId),
-        window.api.getEffectiveSetting(`${prefix}BeforeEnd`, challengeId),
-        window.api.getEffectiveSetting(`${prefix}AfterPercent`, challengeId),
+        ipc.getEffectiveSetting(enableKey, challengeId),
+        ipc.getEffectiveSetting(`${prefix}AfterStart`, challengeId),
+        ipc.getEffectiveSetting(`${prefix}BeforeEnd`, challengeId),
+        ipc.getEffectiveSetting(`${prefix}AfterPercent`, challengeId),
     ]);
     return enabled === true
         ? { afterStartSec: Number(afterStart), beforeEndSec: Number(beforeEnd), afterPercent: Number(afterPercent) }

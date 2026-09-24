@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import * as ipc from '@/api/ipc';
 
 /**
  * Reads the per-challenge effective values + override flags that
@@ -44,21 +45,19 @@ export function useChallengeSettings(challengeId, initialCompact = false) {
     const reload = useCallback(async () => {
         const id = challengeId.toString();
         try {
-            const { schema } = (await window.api.getSettingsSchema()) || {};
+            const { schema } = (await ipc.getSettingsSchema()) || {};
             if (!schema || !mountedRef.current) return;
             const perChallengeKeys = Object.entries(schema)
                 .filter(([, config]) => config.perChallenge)
                 .map(([key]) => key);
-            const overrideResults = await Promise.all(
-                perChallengeKeys.map((key) => window.api.getChallengeOverride(key, id)),
-            );
+            const overrideResults = await Promise.all(perChallengeKeys.map((key) => ipc.getChallengeOverride(key, id)));
             if (!mountedRef.current) return;
             setHasCustomSettings(overrideResults.some((o) => o !== null));
 
             const [fillOn, compact, compactOverride] = await Promise.all([
-                window.api.getEffectiveSetting('autoFill', id),
-                window.api.getEffectiveSetting('compactCards', id),
-                window.api.getChallengeOverride('compactCards', id),
+                ipc.getEffectiveSetting('autoFill', id),
+                ipc.getEffectiveSetting('compactCards', id),
+                ipc.getChallengeOverride('compactCards', id),
             ]);
             if (!mountedRef.current) return;
             setAutoFillEnabled(fillOn === true);
@@ -82,9 +81,9 @@ export function useChallengeSettings(challengeId, initialCompact = false) {
         const id = challengeId.toString();
         try {
             if (hasCompactOverride) {
-                await window.api.removeChallengeOverride('compactCards', id);
+                await ipc.removeChallengeOverride('compactCards', id);
             } else {
-                await window.api.setChallengeOverride('compactCards', id, !isCompact);
+                await ipc.setChallengeOverride('compactCards', id, !isCompact);
             }
             await reload();
         } catch {

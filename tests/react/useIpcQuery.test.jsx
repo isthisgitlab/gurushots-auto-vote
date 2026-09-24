@@ -61,6 +61,68 @@ describe('useIpcQuery', () => {
         expect(unsubscribe).toHaveBeenCalled();
     });
 
+    // Captures the settings-changed listener the hook registers and hands back
+    // a queryFn whose calls settle only when the test says so.
+    const subscribedDeferredQuery = () => {
+        const events = {};
+        window.api = {
+            onSettingsChanged: jest.fn((cb) => {
+                events.fire = cb;
+                return () => {};
+            }),
+        };
+        const calls = [];
+        const queryFn = jest.fn(
+            () =>
+                new Promise((resolve) => {
+                    calls.push(resolve);
+                }),
+        );
+        return { events, calls, queryFn };
+    };
+
+    test('subscribe: a settings-changed refetch runs in the background; a manual refetch still toggles loading', async () => {
+        const { events, calls, queryFn } = subscribedDeferredQuery();
+        const { result } = renderHook(() => useIpcQuery(queryFn, { subscribe: true }));
+        await act(async () => calls[0]('first'));
+        expect(result.current.loading).toBe(false);
+
+        act(() => events.fire());
+        expect(calls).toHaveLength(2);
+        expect(result.current.loading).toBe(false); // never flipped while in flight
+        await act(async () => calls[1]('second'));
+        expect(result.current.data).toBe('second');
+        expect(result.current.loading).toBe(false);
+
+        let pending;
+        act(() => {
+            pending = result.current.refetch();
+        });
+        expect(result.current.loading).toBe(true);
+        await act(async () => {
+            calls[2]('third');
+            await pending;
+        });
+        expect(result.current.data).toBe('third');
+        expect(result.current.loading).toBe(false);
+    });
+
+    test('subscribe + singleFlight: a background refetch overlapping an in-flight call is dropped', async () => {
+        const { events, calls, queryFn } = subscribedDeferredQuery();
+        const { result } = renderHook(() => useIpcQuery(queryFn, { subscribe: true, singleFlight: true }));
+
+        act(() => events.fire()); // mount call still in flight
+        expect(queryFn).toHaveBeenCalledTimes(1);
+        await act(async () => calls[0]('mount'));
+        expect(result.current.data).toBe('mount');
+
+        act(() => events.fire()); // flight released: runs now
+        expect(queryFn).toHaveBeenCalledTimes(2);
+        await act(async () => calls[1]('bg'));
+        expect(result.current.data).toBe('bg');
+        expect(result.current.loading).toBe(false);
+    });
+
     test('showLoading gates the loading toggle per call', async () => {
         const queryFn = jest.fn().mockResolvedValue('x');
         // Stable reference — like queryFn/apply, showLoading keys refetch's
@@ -222,6 +284,28 @@ describe('useIpcQuery', () => {
             rerender({ enabled: false });
             await act(async () => finishApply());
             expect(result.current.data).toBe('kept');
+            expect(result.current.loading).toBe(false);
+        });
+
+        test('a background refetch that supersedes a foreground call clears the loading it raised', async () => {
+            const { queryFn, calls } = deferredQuery();
+            let fire;
+            window.api = {
+                onSettingsChanged: (cb) => {
+                    fire = cb;
+                    return () => {};
+                },
+            };
+            const { result } = renderHook(() => useIpcQuery(queryFn, { latestOnly: true, subscribe: true }));
+            expect(result.current.loading).toBe(true);
+
+            act(() => fire());
+            await act(async () => calls[0].resolve('stale'));
+            expect(result.current.data).toBeNull();
+            expect(result.current.loading).toBe(true);
+
+            await act(async () => calls[1].resolve('fresh'));
+            expect(result.current.data).toBe('fresh');
             expect(result.current.loading).toBe(false);
         });
 

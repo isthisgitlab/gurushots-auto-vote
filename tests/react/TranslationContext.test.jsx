@@ -223,6 +223,74 @@ describe('TranslationContext', () => {
         expect(ctx.language).toBe('lv');
     });
 
+    describe('following a language saved elsewhere', () => {
+        let fire;
+        let unsubscribe;
+        let savedOnSettingsChanged;
+
+        beforeEach(() => {
+            savedOnSettingsChanged = mockApi.onSettingsChanged;
+            unsubscribe = jest.fn();
+            mockApi.onSettingsChanged = jest.fn((cb) => {
+                fire = cb;
+                return unsubscribe;
+            });
+        });
+
+        afterEach(() => {
+            mockApi.onSettingsChanged = savedOnSettingsChanged;
+        });
+
+        it('adopts the broadcast language on the provider and the page translator without a refetch', async () => {
+            const { findByText, getByText, unmount } = renderProvider();
+            await findByText('ready');
+            mockApi.getSetting.mockClear();
+            const staleT = ctx.t;
+
+            act(() => fire({ language: 'en', theme: 'dark' }));
+
+            expect(ctx.language).toBe('en');
+            expect(ctx.t).not.toBe(staleT);
+            expect(mockTranslator.setCurrentLanguage).toHaveBeenLastCalledWith('en');
+            expect(getByText('ready')).toBeTruthy();
+            expect(mockApi.getSetting).not.toHaveBeenCalled();
+            expect(mockApi.setSetting).not.toHaveBeenCalled();
+            expect(mockApi.refreshMenu).not.toHaveBeenCalled();
+
+            unmount();
+            expect(unsubscribe).toHaveBeenCalledTimes(1);
+        });
+
+        it('an unknown broadcast language resolves to English', async () => {
+            const { findByText } = renderProvider();
+            await findByText('ready');
+
+            act(() => fire({ language: 'de' }));
+
+            expect(ctx.language).toBe('en');
+        });
+
+        it('a payload without a language (or no payload) leaves the language alone', async () => {
+            const { findByText } = renderProvider();
+            await findByText('ready');
+            mockTranslator.setCurrentLanguage.mockClear();
+            const before = ctx;
+
+            act(() => fire({ theme: 'dark' }));
+            act(() => fire(undefined));
+
+            expect(ctx).toBe(before);
+            expect(mockTranslator.setCurrentLanguage).not.toHaveBeenCalled();
+        });
+
+        it('works without a settings-changed channel', async () => {
+            delete mockApi.onSettingsChanged;
+            const { findByText } = renderProvider();
+            expect(await findByText('ready')).toBeTruthy();
+            expect(ctx.language).toBe('lv');
+        });
+    });
+
     it('keeps the context value stable across an unrelated provider re-render', async () => {
         let renders = 0;
         const Consumer = memo(function Consumer() {

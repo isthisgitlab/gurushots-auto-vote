@@ -16,6 +16,7 @@ import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList, globalSettingHints } from './SettingHints';
 import { ApplicationSettingsSection } from './ApplicationSettingsSection';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
+import * as ipc from '@/api/ipc';
 
 // Challenge types seen on the live API (verified 2026-09-19). Suggestions for
 // the rule type field only — it stays free text, so a type this build has never
@@ -185,7 +186,7 @@ export function SettingsModal({ isOpen, onClose }) {
             // setting takes effect now, not after the current wait elapses.
             await rearmSchedule();
         } catch (err) {
-            await window.api.logError(`Error saving settings: ${err.message || err}`);
+            await ipc.logRendererError(`Error saving settings: ${err.message || err}`);
         }
     }, [commit, persistTitleRules, uiValues.language, language, setLanguage, rearmSchedule, onClose]);
 

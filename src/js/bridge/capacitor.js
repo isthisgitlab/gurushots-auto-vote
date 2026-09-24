@@ -77,8 +77,9 @@ const wrap =
         Promise.resolve(impl(null, ...args));
 
 const buildAllHandlers = () => {
-    // The Capacitor save-settings broadcaster routes through the local
-    // pub/sub so React's onSettingsChanged subscribers fire.
+    // Every successful settings write (save-settings, set-setting and the
+    // mutating passthroughs) broadcasts through the local pub/sub so React's
+    // onSettingsChanged subscribers fire.
     const settingsDeps = {
         broadcastSettingsChange: (newSettings) => emit('settings-changed', newSettings),
     };

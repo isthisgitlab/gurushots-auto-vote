@@ -92,6 +92,25 @@ describe('set-setting', () => {
         settings.setSetting = jest.fn(boom);
         await expect(handlers['set-setting']({}, 'theme', 'dark')).resolves.toBe(false);
     });
+
+    test('broadcasts the freshly loaded settings after a successful write', async () => {
+        const broadcastSettingsChange = jest.fn();
+        settings.setSetting = jest.fn().mockReturnValue(true);
+        settings.loadSettings = jest.fn().mockReturnValue({ language: 'lv', theme: 'dark' });
+        const h = buildHandlers({ broadcastSettingsChange });
+
+        await expect(h['set-setting']({}, 'language', 'lv')).resolves.toBe(true);
+        expect(broadcastSettingsChange).toHaveBeenCalledWith({ language: 'lv', theme: 'dark' });
+    });
+
+    test('does not broadcast a rejected write', async () => {
+        const broadcastSettingsChange = jest.fn();
+        settings.setSetting = jest.fn().mockReturnValue(false);
+        const h = buildHandlers({ broadcastSettingsChange });
+
+        await expect(h['set-setting']({}, 'language', 'lv')).resolves.toBe(false);
+        expect(broadcastSettingsChange).not.toHaveBeenCalled();
+    });
 });
 
 describe('save-settings', () => {

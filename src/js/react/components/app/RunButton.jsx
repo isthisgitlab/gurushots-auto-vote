@@ -1,6 +1,7 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { IconActionButton } from '@/components/ui/IconActionButton';
 import { ICON_PATHS } from '@/components/ui/StrokeIcon';
+import * as ipc from '@/api/ipc';
 
 /**
  * Run button for a single challenge — fires one full auto-strategy
@@ -13,7 +14,7 @@ export function RunButton({ challengeId, onVoteComplete }) {
     return (
         <IconActionButton
             className="btn btn-latvian btn-xs px-1"
-            action={() => window.api.runVotingCycleForChallenge(challengeId)}
+            action={() => ipc.runVotingCycleForChallenge(challengeId)}
             onSuccess={onVoteComplete}
             failureLogPrefix="Run failed"
             errorLogPrefix="Error running cycle"

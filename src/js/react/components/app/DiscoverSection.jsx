@@ -5,6 +5,7 @@ import { Modal, ModalActions } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { interp } from '@/utils/interp';
+import * as ipc from '@/api/ipc';
 
 // Map a join outcome status to a translated, colored inline message. Distinct
 // wording for the money-critical "charged but not joined" case, which also
@@ -55,7 +56,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
             const id = challenge?.id;
             setBusyId(id);
             try {
-                const res = await window.api.joinChallenge(id, spendCoins);
+                const res = await ipc.joinChallenge(id, spendCoins);
                 setResults((prev) => ({ ...prev, [id]: res }));
                 // Refetch on any outcome that changes what's joinable (joined,
                 // coins charged, or the challenge is gone) so a stale row/button

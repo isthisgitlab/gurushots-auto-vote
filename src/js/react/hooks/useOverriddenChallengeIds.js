@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import { useIpcQuery } from '@/api/useIpcQuery';
+import * as ipc from '@/api/ipc';
 
 // Stable empty result so consumers never see a changing identity while the
 // first fetch is in flight (or after a failed one).
@@ -40,7 +41,7 @@ export function useOverriddenChallengeIds(challenges) {
     const queryFn = useCallback(async () => {
         const ids = JSON.parse(idsKey);
         if (ids.length === 0) return NONE;
-        const maps = await Promise.all(ids.map((id) => window.api.getChallengeOverrides(id)));
+        const maps = await Promise.all(ids.map((id) => ipc.getChallengeOverrides(id)));
         // The handler falls back to null on error — treat that as "no
         // overrides" rather than marking the chip on a failed read.
         return new Set(ids.filter((_, i) => maps[i] && Object.keys(maps[i]).length > 0));

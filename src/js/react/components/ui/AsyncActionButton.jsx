@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import * as ipc from '@/api/ipc';
 
 /**
  * Shared envelope for a button that fires an async IPC action: toggles a
  * local loading state (spinner + loading label while pending), calls
  * `onSuccess` when the result reports success, and logs failures/throws
- * via window.api.logError. Extracted from the identical bodies of
+ * via ipc.logRendererError. Extracted from the identical bodies of
  * VoteButton, RunButton, and the Vote All / Run buttons in
  * ChallengesSection — each caller keeps its exact label, icon, and
  * DaisyUI classes.
@@ -43,10 +44,10 @@ export function AsyncActionButton({
             if (result?.success) {
                 await onSuccess();
             } else {
-                await window.api.logError(`${failureLogPrefix}: ${result?.error || 'Unknown error'}`);
+                await ipc.logRendererError(`${failureLogPrefix}: ${result?.error || 'Unknown error'}`);
             }
         } catch (err) {
-            await window.api.logError(`${errorLogPrefix}: ${err.message || err}`);
+            await ipc.logRendererError(`${errorLogPrefix}: ${err.message || err}`);
         } finally {
             setLoading(false);
         }

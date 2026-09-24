@@ -21,9 +21,6 @@ const { holdQuitForOpenBoosts, bypassQuitGuard, resetQuitGuard } = require('./wi
 const { createApplicationMenu } = require('./ui/applicationMenu');
 const { translationManager } = require('./translations/index');
 
-// Initialize global translation manager for menu module access
-global.translationManager = translationManager;
-
 // Disable service workers at the application level. Kept deliberately:
 // with contextIsolation on, the preload.js register() patch only covers
 // the isolated world — this switch is the only main-world-and-subframe-

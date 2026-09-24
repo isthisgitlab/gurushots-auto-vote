@@ -1,5 +1,6 @@
 import { Component } from 'react';
 import { rendererTranslator } from '../../../translations/renderer';
+import * as ipc from '@/api/ipc';
 
 /**
  * Translate through the page translator rather than the useTranslation hook:
@@ -42,14 +43,10 @@ export class ErrorBoundary extends Component {
         const dedupeKey = error?.message || String(error);
         if (this.loggedErrorKey === dedupeKey) return;
         this.loggedErrorKey = dedupeKey;
-        if (window.api?.logError) {
-            // Fire-and-forget — swallow rejections so a logging failure
-            // during error handling doesn't surface as an unhandled
-            // promise rejection on top of the original crash.
-            Promise.resolve(
-                window.api.logError(`React error boundary caught: ${detail}\nComponent stack:${componentStack}`),
-            ).catch(() => {});
-        }
+        // Fire-and-forget: the helper swallows a missing sink and a rejection,
+        // so a logging failure during error handling can't surface as an
+        // unhandled promise rejection on top of the original crash.
+        void ipc.logRendererError(`React error boundary caught: ${detail}\nComponent stack:${componentStack}`);
     }
 
     handleDismiss() {

@@ -9,6 +9,7 @@ const { registerHandlers } = require('./registerHandlers');
 const { errorResult } = require('./errorResult');
 const logger = require('../logger');
 const { updateMenuTranslations } = require('../ui/applicationMenu');
+const { translationManager } = require('../translations/index');
 const { isSafeExternalUrl } = require('../format/urlSafe');
 
 const buildHandlers = (deps) => {
@@ -55,9 +56,9 @@ const buildHandlers = (deps) => {
 
         'refresh-menu': async () => {
             try {
-                // Update global translation manager language from settings,
-                // then refresh menu so any user-visible labels reflect it.
-                await global.translationManager.loadLanguageFromSettings();
+                // Adopt the saved language in the main-process translator,
+                // then rebuild the menu so its labels reflect it.
+                await translationManager.loadLanguageFromSettings();
                 updateMenuTranslations();
                 return { success: true };
             } catch (error) {

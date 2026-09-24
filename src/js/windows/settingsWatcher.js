@@ -1,9 +1,9 @@
 /**
  * Settings-file watcher for the Electron main process. Watches the
- * settings.json the facade owns and, on change, either reloads the main
- * window (reload-required keys), broadcasts a `settings-changed` event to
- * all renderer windows (so React hooks can refetch without a full reload —
- * catches CLI-originated changes), or just logs the diff.
+ * settings.json the facade owns and, on change, logs the diff, reloads the
+ * main window when a reload-required key changed, and broadcasts a
+ * `settings-changed` event to every other renderer window (so React hooks can
+ * refetch without a full reload — catches CLI-originated changes).
  *
  * Extracted from index.js's createMainWindow — window creation has nothing
  * to do with file watching. The caller owns the returned fs.FSWatcher's
@@ -247,15 +247,20 @@ function watchSettingsFile({ getMainWindow, getMainWindowCreatedTime, onSettings
                 notifyObserver(newSettings);
 
                 const mainWindow = getMainWindow();
-                if (shouldReload && mainWindow && !mainWindow.isDestroyed()) {
+                const reloadingMain = shouldReload && mainWindow && !mainWindow.isDestroyed();
+                if (reloadingMain) {
                     mainWindow.reload();
-                } else if (hasChanges) {
+                }
+                if (hasChanges) {
                     // hasChanges is only set after a successful load, so
                     // newSettings is always populated here.
-                    // Notify all renderer windows so React hooks can refetch
-                    // without a full reload. Catches CLI-originated changes.
+                    // Notify the renderer windows so React hooks can refetch
+                    // without a full reload (catches CLI-originated changes).
+                    // A main window that is reloading re-reads everything
+                    // anyway; the others (e.g. Logs) still have to follow a
+                    // reload-required key such as the language.
                     BrowserWindow.getAllWindows().forEach((win) => {
-                        if (!win.isDestroyed()) {
+                        if (!win.isDestroyed() && !(reloadingMain && win === mainWindow)) {
                             win.webContents.send('settings-changed', newSettings);
                         }
                     });

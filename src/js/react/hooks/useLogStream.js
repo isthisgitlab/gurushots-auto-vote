@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import * as ipc from '@/api/ipc';
 
 const MAX_ENTRIES = 1000;
 
@@ -32,16 +33,16 @@ export function useLogStream() {
             });
         };
 
-        // window.api is the manifest-generated surface on both shells, so the
+        // The bridge is the manifest-generated surface on both shells, so the
         // log-stream methods always exist; onLogMessage always returns its
         // unsubscribe and get-log-backlog always resolves an array.
         async function connect() {
             try {
-                const result = await window.api.startLogStream();
+                const result = await ipc.startLogStream();
                 if (!result.success || !mountedRef.current) return;
                 setConnected(true);
 
-                unsubscribeRef.current = window.api.onLogMessage((logData) => {
+                unsubscribeRef.current = ipc.onLogMessage((logData) => {
                     if (!mountedRef.current) return;
                     if (!seeded) {
                         liveBuffer.push(logData);
@@ -50,7 +51,7 @@ export function useLogStream() {
                     }
                 });
 
-                const backlog = await window.api.getLogBacklog();
+                const backlog = await ipc.getLogBacklog();
                 if (!mountedRef.current) return;
 
                 // Backlog is oldest→newest. Reverse so newest renders at top.
@@ -76,7 +77,7 @@ export function useLogStream() {
                 unsubscribeRef.current();
                 unsubscribeRef.current = null;
             }
-            window.api.stopLogStream();
+            ipc.stopLogStream();
         };
     }, []);
 

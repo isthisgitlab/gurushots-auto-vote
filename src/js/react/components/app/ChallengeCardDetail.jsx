@@ -8,6 +8,7 @@ import { EntryBadge } from './EntryBadge';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
 import { FillButtons } from './ChallengeCardActions';
+import * as ipc from '@/api/ipc';
 
 /**
  * One labelled cell of the detailed card's stat grids.
@@ -35,7 +36,7 @@ function DetailHeader({ challenge, badgeRowProps, actions, hasCompactOverride, o
 
     // Only reachable from the URL row, which renders only when challenge.url is set.
     const handleOpenUrl = async () => {
-        await window.api.openExternalUrl(`https://gurushots.com/challenge/${challenge.url}`);
+        await ipc.openExternalUrl(`https://gurushots.com/challenge/${challenge.url}`);
     };
 
     return (

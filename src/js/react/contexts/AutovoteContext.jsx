@@ -13,6 +13,7 @@ import {
 import { createDeadlineNotifier, resolveRendererDelivery } from '../notifications/deadlineNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { rendererTranslator } from '../../translations/renderer';
+import * as ipc from '../api/ipc';
 
 const AutovoteContext = createContext(null);
 
@@ -47,7 +48,7 @@ function clearCycleTimer(timerRef) {
  */
 async function persistRunningFlag(running) {
     try {
-        await window.api.setSetting('autovoteRunning', running);
+        await ipc.setSetting('autovoteRunning', running);
     } catch {
         /* ignore */
     }
@@ -115,13 +116,13 @@ async function runRendererVotingCycle({ runningRef, dispatch, onChallengesRefres
     }
 
     try {
-        const settings = await window.api.getSettings();
+        const settings = await ipc.getSettings();
         if (!settings.token) {
             dispatch({ type: ACTIONS.SET_ERROR, payload: 'Not logged in' });
             return false;
         }
 
-        const result = await window.api.runVotingCycle();
+        const result = await ipc.runVotingCycle();
 
         if (!runningRef.current) {
             return false;
@@ -159,11 +160,11 @@ function createRendererDeadlineNotifier() {
     const deliver = resolveRendererDelivery(isNativePlatform);
     return deliver
         ? createDeadlineNotifier({
-              getSettings: () => window.api.getSettings(),
-              getDeadlineActions: (challenge) => window.api.getDeadlineActions(challenge),
+              getSettings: () => ipc.getSettings(),
+              getDeadlineActions: (challenge) => ipc.getDeadlineActions(challenge),
               translate: (key) => rendererTranslator.t(key),
               deliver,
-              log: (msg) => window.api.logDebug?.(msg),
+              log: (msg) => ipc.logRendererDebug(msg),
           })
         : null;
 }
@@ -190,9 +191,9 @@ function createRendererCadenceChain({ runningRef, cycleTimerRef, runVotingCycle,
         setTimer: (handle) => {
             cycleTimerRef.current = handle;
         },
-        loadSettings: () => window.api.getSettings(),
-        fetchChallenges: (settings) => window.api.getActiveChallenges(settings.token),
-        resolveLastMinuteCheckMinutes: () => window.api.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
+        loadSettings: () => ipc.getSettings(),
+        fetchChallenges: (settings) => ipc.getActiveChallenges(settings.token),
+        resolveLastMinuteCheckMinutes: () => ipc.getEffectiveSetting('lastMinuteCheckFrequency', 'global'),
         resolveThreshold,
         resolveScheduledFill,
         resolveFinalWindowTopUp,
@@ -200,17 +201,17 @@ function createRendererCadenceChain({ runningRef, cycleTimerRef, runVotingCycle,
         resolveCurrencyAuto,
         runCycle: () => runVotingCycle(),
         log: {
-            // Best-effort parity log (optional-chained so a host without
-            // logDebug, e.g. a minimal Capacitor bridge, can't abort
-            // scheduling). Normal-mode lines stay CLI-only — no IPC spam
-            // for the common case.
-            cadence: (mode, message) => (mode === 'normal' ? undefined : window.api.logDebug?.(message)),
-            decisionError: (err) => window.api.logWarning(`${DECISION_ERROR_MESSAGE}: ${err.message || err}`),
+            // Best-effort parity log (the logRenderer* helpers tolerate a
+            // host without the log method, e.g. a minimal Capacitor bridge,
+            // so logging can't abort scheduling). Normal-mode lines stay
+            // CLI-only — no IPC spam for the common case.
+            cadence: (mode, message) => (mode === 'normal' ? undefined : ipc.logRendererDebug(message)),
+            decisionError: (err) => ipc.logRendererWarning(`${DECISION_ERROR_MESSAGE}: ${err.message || err}`),
             // runVotingCycle catches internally and resolves false, so a
             // rejection here is a can't-happen TODAY — but that is an
             // invariant of a different module. Log best-effort instead
             // of swallowing so a future regression can't fail silently.
-            cycleError: (err) => window.api.logWarning?.(`Voting cycle failed: ${err?.message || err}`),
+            cycleError: (err) => ipc.logRendererWarning(`Voting cycle failed: ${err?.message || err}`),
             // A renderer timer that fired far late means the page was
             // throttled/frozen or the machine suspended, and every
             // deadline inside that gap went unserved. Warning, not
@@ -218,7 +219,7 @@ function createRendererCadenceChain({ runningRef, cycleTimerRef, runVotingCycle,
             // and it lands on the Logs page the user actually reads.
             // Wording is shared with the Node host so the two surfaces
             // cannot drift.
-            overslept: (lateMs, waitMs) => window.api.logWarning?.(formatOversleptMessage(lateMs, waitMs)),
+            overslept: (lateMs, waitMs) => ipc.logRendererWarning(formatOversleptMessage(lateMs, waitMs)),
         },
         // Surface the next armed cycle as an absolute wall-clock instant
         // for the status header's countdown; null clears it. dispatch is
@@ -254,9 +255,9 @@ function useResumeOnMount(start) {
     useEffect(() => {
         const maybeResume = async () => {
             try {
-                const wasRunning = await window.api.getSetting('autovoteRunning');
+                const wasRunning = await ipc.getSetting('autovoteRunning');
                 if (!wasRunning) return;
-                const settings = await window.api.getSettings();
+                const settings = await ipc.getSettings();
                 if (!settings?.token) return;
                 await startRef.current();
             } catch {
@@ -349,7 +350,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         // the awaits below (and the cycle/scheduling that follow) would still
         // see runningRef.current === false and bail before arming the timer.
         runningRef.current = true;
-        await window.api.setCancelVoting(false);
+        await ipc.setCancelVoting(false);
 
         // Persist the running flag so a remount can resume voting without
         // the user tapping Start again.
@@ -382,7 +383,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         // Mark stopped synchronously so an in-flight scheduleNext / timer
         // callback sees it immediately rather than after the next render flush.
         runningRef.current = false;
-        await window.api.setCancelVoting(true);
+        await ipc.setCancelVoting(true);
 
         // Clear the persisted running flag so a relaunch does not
         // auto-resume an explicitly stopped session.

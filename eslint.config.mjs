@@ -169,6 +169,25 @@ export default [
             ],
         },
     },
+    // Renderer IPC boundary. Components, hooks and contexts reach the shell
+    // bridge only through src/js/react/api/ (the ipc.js wrappers and the
+    // query/action hooks), so the bridge surface stays in one place and no
+    // component grows per-platform branching.
+    {
+        files: ['src/js/react/**/*.jsx', 'src/js/react/**/*.js'],
+        ignores: ['src/js/react/api/**'],
+        rules: {
+            'no-restricted-properties': [
+                'error',
+                ...['window', 'globalThis'].map((object) => ({
+                    object,
+                    property: 'api',
+                    message:
+                        'Call the shell bridge through src/js/react/api/ (e.g. `import * as ipc from "@/api/ipc"`).',
+                })),
+            ],
+        },
+    },
     // Jest test files. `pnpm lint` only scans src/ + scripts/, but the lefthook
     // pre-commit hook lints any staged *.{js,jsx} — tests included — so the Jest
     // globals (describe/it/test/expect/jest/beforeEach/…) must be declared here

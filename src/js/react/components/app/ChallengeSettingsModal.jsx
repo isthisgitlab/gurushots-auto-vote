@@ -12,12 +12,13 @@ import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
 import { ChallengeProfilesBar } from './ChallengeProfilesBar';
 import { ChallengeSettingsGroup } from './ChallengeSettingsGroup';
 import { challengeSettingHints } from './SettingHints';
+import * as ipc from '@/api/ipc';
 
 // The window hints only read the app settings; an unreadable read falls back
 // to the defaults rather than blocking the modal.
 const fetchAppSettings = async () => {
     try {
-        return (await window.api.getSettings()) || {};
+        return (await ipc.getSettings()) || {};
     } catch {
         return {};
     }

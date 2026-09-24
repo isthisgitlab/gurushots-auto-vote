@@ -10,6 +10,7 @@
  */
 
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
+import { fireSettingsChanged } from './helpers/setup';
 import { ChallengeNav } from '@/components/app/ChallengeNav';
 
 const challenge = (id, title) => ({ id, title });
@@ -18,8 +19,6 @@ describe('ChallengeNav', () => {
     beforeEach(() => {
         window.api.getChallengeOverrides.mockReset();
         window.api.getChallengeOverrides.mockResolvedValue({});
-        window.api.onSettingsChanged.mockReset();
-        window.api.onSettingsChanged.mockReturnValue(undefined);
     });
 
     afterEach(() => jest.restoreAllMocks());
@@ -87,12 +86,6 @@ describe('ChallengeNav', () => {
     test('picks up an override saved after mount, via settings-changed', async () => {
         // The modal saving an override broadcasts settings-changed; the marker
         // has to follow without a remount.
-        let fireSettingsChanged;
-        window.api.onSettingsChanged.mockImplementation((cb) => {
-            fireSettingsChanged = cb;
-            return () => {};
-        });
-
         render(<ChallengeNav challenges={[challenge(5, 'Later')]} />);
 
         const chip = screen.getByRole('button', { name: /Later/ });

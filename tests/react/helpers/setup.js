@@ -113,7 +113,9 @@ Object.assign(mockApi, {
     // Window
     reloadWindow: jest.fn().mockResolvedValue(undefined),
 
-    // Settings events
+    // Settings events — a real multi-listener registry (see below), because
+    // several subscribers share the one channel on a page (TranslationProvider
+    // alongside the component under test).
     onSettingsChanged: jest.fn(),
 
     // Effective settings
@@ -132,6 +134,27 @@ Object.assign(mockApi, {
     deleteChallengeProfile: jest.fn().mockResolvedValue(true),
     applyChallengeProfile: jest.fn().mockResolvedValue(true),
 });
+
+// Every live settings-changed listener. Each registration gets its own
+// unsubscribe (a jest.fn, so tests can assert on it) that removes only that
+// listener, like the preload and Capacitor bridges.
+const settingsListeners = new Set();
+const subscribeSettingsListener = (listener) => {
+    settingsListeners.add(listener);
+    return jest.fn(() => {
+        settingsListeners.delete(listener);
+    });
+};
+
+/**
+ * Broadcast a settings-changed event to every registered listener, the way a
+ * successful settings write does.
+ *
+ * @param {object} [payload]
+ */
+function fireSettingsChanged(payload) {
+    for (const listener of [...settingsListeners]) listener(payload);
+}
 
 // Mock the page translator (translations/renderer.js) that TranslationProvider,
 // ErrorBoundary and Modal translate through. `t` returns the key so tests can
@@ -152,13 +175,18 @@ Object.assign(global.window, {
     api: mockApi,
 });
 
-// Reset all mocks before each test
+// Reset all mocks before each test. The settings-changed registry starts
+// empty with its default implementation back in place (a file's own
+// beforeEach can still override it).
 beforeEach(() => {
     jest.clearAllMocks();
+    settingsListeners.clear();
+    mockApi.onSettingsChanged = jest.fn(subscribeSettingsListener);
 });
 
 // Export mocks for use in tests
 module.exports = {
     mockApi,
     mockTranslator,
+    fireSettingsChanged,
 };

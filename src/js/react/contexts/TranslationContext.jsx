@@ -1,11 +1,12 @@
-import { createContext, useContext, useCallback, useMemo } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo } from 'react';
 import { rendererTranslator } from '../../translations/renderer';
 import { DEFAULT_LANGUAGE, isSupportedLanguage, resolveLanguage } from '../../translations/translator';
 import { useIpcQuery } from '../api/useIpcQuery';
+import * as ipc from '../api/ipc';
 
 const TranslationContext = createContext(null);
 
-const fetchLanguage = () => window.api.getSetting('language');
+const fetchLanguage = () => ipc.getSetting('language');
 
 // Hand the saved language to the page translator before publishing it, so
 // hook-less consumers (ErrorBoundary, Modal) render in the same language.
@@ -17,14 +18,15 @@ const applyLanguage = (saved, { setData }) => {
 
 /** Fire-and-forget: a language that failed to save is logged, never thrown. */
 const logLanguageSaveFailure = (reason) => {
-    Promise.resolve(window.api.logError?.(`Could not save language to settings: ${reason}`)).catch(() => {});
+    void ipc.logRendererError(`Could not save language to settings: ${reason}`);
 };
 
 /**
- * The renderer's translation adapter: reads the saved language over
- * window.api, persists changes the same way, and exposes `t` bound to the
- * current language. `ready` turns true once the saved language has been read
- * (or the read failed, leaving English).
+ * The renderer's translation adapter: reads the saved language through the
+ * ipc module, persists changes the same way, follows a language saved
+ * elsewhere (another window, the CLI) through settings-changed, and exposes
+ * `t` bound to the current language. `ready` turns true once the saved
+ * language has been read (or the read failed, leaving English).
  */
 export function TranslationProvider({ children }) {
     const {
@@ -32,6 +34,21 @@ export function TranslationProvider({ children }) {
         setData,
         loading,
     } = useIpcQuery(fetchLanguage, { initialData: DEFAULT_LANGUAGE, apply: applyLanguage });
+
+    // Every successful settings write broadcasts settings-changed, so a
+    // language saved in another window (or edited through the CLI) lands here
+    // without a reload, straight from the payload: no refetch, so `ready`
+    // never flips back. A payload without `language` (a partial save-settings)
+    // did not change it. This window's own setLanguage is echoed back too;
+    // applying the same language again is a no-op.
+    useEffect(
+        () =>
+            ipc.onSettingsChanged((changed) => {
+                if (changed?.language === undefined) return;
+                applyLanguage(changed.language, { setData });
+            }),
+        [setData],
+    );
 
     // A new `t` per language re-renders memoized consumers, so the text
     // always matches `language`.
@@ -48,7 +65,7 @@ export function TranslationProvider({ children }) {
             if (!isSupportedLanguage(lang)) return false;
             let saved;
             try {
-                saved = await window.api.setSetting('language', lang);
+                saved = await ipc.setSetting('language', lang);
             } catch (error) {
                 logLanguageSaveFailure(error?.message ?? error);
                 return false;
@@ -59,7 +76,7 @@ export function TranslationProvider({ children }) {
             }
             rendererTranslator.setCurrentLanguage(lang);
             setData(lang);
-            Promise.resolve(window.api.refreshMenu?.()).catch(() => {});
+            Promise.resolve(ipc.refreshMenu()).catch(() => {});
             return true;
         },
         [setData],

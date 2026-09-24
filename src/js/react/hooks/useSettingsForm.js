@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getUiDefaultSettings } from '../../settings/uiDefaults';
+import * as ipc from '@/api/ipc';
 
 /**
  * Module-scope defaults for the UI settings half of the modal. Sourced
@@ -161,7 +162,7 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
             for (const [key, value] of Object.entries(formValues)) {
                 const persisted = persistedFormRef.current;
                 if (persisted && valuesEqual(value, persisted[key])) continue;
-                const saved = await window.api.setGlobalDefault(key, value);
+                const saved = await ipc.setGlobalDefault(key, value);
                 if (saved === false) rejectedKeys.push(key);
                 else if (persisted) persisted[key] = value;
             }

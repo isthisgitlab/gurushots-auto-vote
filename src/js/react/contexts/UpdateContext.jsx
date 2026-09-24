@@ -1,4 +1,5 @@
 import { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
+import * as ipc from '../api/ipc';
 
 // Update states
 export const UPDATE_STATES = {
@@ -81,19 +82,19 @@ export function UpdateProvider({ children }) {
 
     // Setup IPC event listeners
     useEffect(() => {
-        const unsubscribeAvailable = window.api.onUpdateAvailable((updateInfo) => {
+        const unsubscribeAvailable = ipc.onUpdateAvailable((updateInfo) => {
             dispatch({ type: ACTIONS.SET_AVAILABLE, payload: updateInfo });
         });
 
-        const unsubscribeProgress = window.api.onDownloadProgress((progress) => {
+        const unsubscribeProgress = ipc.onDownloadProgress((progress) => {
             dispatch({ type: ACTIONS.UPDATE_PROGRESS, payload: progress });
         });
 
-        const unsubscribeDownloaded = window.api.onUpdateDownloaded(() => {
+        const unsubscribeDownloaded = ipc.onUpdateDownloaded(() => {
             dispatch({ type: ACTIONS.SET_READY });
         });
 
-        const unsubscribeError = window.api.onUpdateError((error) => {
+        const unsubscribeError = ipc.onUpdateError((error) => {
             dispatch({
                 type: ACTIONS.SET_ERROR,
                 payload: {
@@ -117,18 +118,18 @@ export function UpdateProvider({ children }) {
      */
     const startDownload = useCallback(async () => {
         try {
-            const canAutoUpdateResult = await window.api.canAutoUpdate();
+            const canAutoUpdateResult = await ipc.canAutoUpdate();
 
             if (!canAutoUpdateResult.canAutoUpdate) {
                 // Fall back to browser download
-                const urlResult = await window.api.getReleasesUrl();
-                await window.api.openExternalUrl(urlResult.url);
+                const urlResult = await ipc.getReleasesUrl();
+                await ipc.openExternalUrl(urlResult.url);
                 dispatch({ type: ACTIONS.HIDE_DIALOG });
                 return;
             }
 
             dispatch({ type: ACTIONS.SET_DOWNLOADING });
-            const result = await window.api.downloadUpdate();
+            const result = await ipc.downloadUpdate();
 
             if (!result.success) {
                 dispatch({
@@ -149,7 +150,7 @@ export function UpdateProvider({ children }) {
      */
     const installUpdate = useCallback(async () => {
         try {
-            await window.api.installUpdate();
+            await ipc.installUpdate();
         } catch (err) {
             dispatch({
                 type: ACTIONS.SET_ERROR,
@@ -163,10 +164,10 @@ export function UpdateProvider({ children }) {
      */
     const skipVersion = useCallback(async () => {
         try {
-            await window.api.skipUpdateVersion();
+            await ipc.skipUpdateVersion();
             dispatch({ type: ACTIONS.HIDE_DIALOG });
         } catch (err) {
-            await window.api.logError(`Error skipping update version: ${err?.message || err}`);
+            await ipc.logRendererError(`Error skipping update version: ${err?.message || err}`);
         }
     }, []);
 
@@ -182,11 +183,11 @@ export function UpdateProvider({ children }) {
      */
     const openBrowserDownload = useCallback(async () => {
         try {
-            const urlResult = await window.api.getReleasesUrl();
-            await window.api.openExternalUrl(urlResult.url);
+            const urlResult = await ipc.getReleasesUrl();
+            await ipc.openExternalUrl(urlResult.url);
             dispatch({ type: ACTIONS.HIDE_DIALOG });
         } catch (err) {
-            await window.api.logError(`Error opening download URL: ${err?.message || err}`);
+            await ipc.logRendererError(`Error opening download URL: ${err?.message || err}`);
         }
     }, []);
 
