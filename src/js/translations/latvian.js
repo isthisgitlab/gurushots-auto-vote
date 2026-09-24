@@ -386,6 +386,8 @@
                 'Piešķir izaicinājumiem profilu, savu pievienošanās laiku un foto tagus pēc tā, kas saglabājas starp atkārtojumiem: nosaukuma, taga, veida, bilžu skaita vai ilguma. Noteikumi darbojas arī tad, ja izaicinājums atgriežas ar jaunu id; manuāliem viena izaicinājuma iestatījumiem ir priekšroka. Tagi tiek apvienoti.',
             titleTagRulesSaveError:
                 'Neizdevās saglabāt noteikumus. Pārbaudi profilus, nosaukumu/tagu garumu, vai visas vērtības ir pieļaujamajā diapazonā ("Ilgst vismaz" nedrīkst pārsniegt "Ilgst ne vairāk kā") un pretrunas ar atvērtu izaicinājumu manuālajiem iestatījumiem. Pārējie iestatījumi saglabāti.',
+            titleTagRulesLoadError:
+                'Neizdevās ielādēt izaicinājumu noteikumus, tāpēc tie ir paslēpti, lai tos nepārrakstītu. Pārējos iestatījumus joprojām var saglabāt; aizver un atver Iestatījumus vēlreiz, lai mēģinātu no jauna.',
             titleTagRuleTitle: 'Izaicinājuma nosaukums',
             titleTagRuleTitlePlaceholder: "piem., Let's See Hats",
             titleRuleTitlesLabel: 'Izaicinājumu nosaukumi (pietiek ar vienu)',
@@ -762,6 +764,8 @@
             refresh: 'Atjaunot',
             challengeOverrideInfo:
                 'Šeit konfigurētie iestatījumi aizstās globālos noklusējumus tikai šim izaicinājumam.',
+            challengeOverridesLoadError:
+                'Neizdevās ielādēt šī izaicinājuma saglabātos iestatījumus, tāpēc tos tagad nevar labot — saglabāšana tos pārrakstītu. Aizver šo logu un atver to vēlreiz; ja kļūda atkārtojas, pārbaudi kļūdu žurnālu.',
             mockMode: 'Testa režīms',
             logout: 'Iziet',
             status: 'Statuss',

@@ -383,6 +383,8 @@
                 'Give challenges a profile, their own join timing and optional photo tags by what survives a rotation: title, tag, type, photo count or length. Rules reapply when a challenge returns with a new id; manual settings for one challenge still win. Tags combine with profile/global tags.',
             titleTagRulesSaveError:
                 'Could not save the rules. Check profile names, title/tag lengths, that every value is in range ("runs at least" must not exceed "runs at most"), and conflicts with manual settings for open challenges. Other settings were saved.',
+            titleTagRulesLoadError:
+                "Couldn't load your challenge rules, so they're hidden to keep them from being overwritten. Your other settings can still be saved; close and reopen Settings to try again.",
             titleTagRuleTitle: 'Challenge title',
             titleTagRuleTitlePlaceholder: "e.g. Let's See Hats",
             titleRuleTitlesLabel: 'Challenge titles (any one matches)',
@@ -750,6 +752,8 @@
             // Additional keys for React components
             refresh: 'Refresh',
             challengeOverrideInfo: 'Settings configured here will override global defaults for this challenge only.',
+            challengeOverridesLoadError:
+                "Couldn't load this challenge's saved settings, so they can't be edited now — saving would overwrite them. Close this window and open it again; if it keeps failing, check the error log.",
             mockMode: 'Mock Mode',
             logout: 'Logout',
             status: 'Status',

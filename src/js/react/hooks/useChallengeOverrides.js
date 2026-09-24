@@ -15,10 +15,12 @@ const perChallengeOnly = (schema, values) => {
  * Load a challenge's stored overrides and title-rule profile once per
  * (open, challenge) session into the caller's state setters (stable useState
  * setters, so they never re-trigger the load). Returns whether a load is in
- * flight.
+ * flight and whether the last load failed — a failed load leaves the form on
+ * empty overrides, which must never be saved over the stored ones.
  */
 function useLoadOnOpen({ isOpen, challengeId, challengeTitle, schema, setOverrides, setTitleProfile }) {
     const [loading, setLoading] = useState(true);
+    const [loadFailed, setLoadFailed] = useState(false);
     // Load existing overrides once per (open, challengeId) session.
     //
     // Two intertwined concerns:
@@ -45,6 +47,7 @@ function useLoadOnOpen({ isOpen, challengeId, challengeTitle, schema, setOverrid
         let cancelled = false;
         const load = async () => {
             setLoading(true);
+            setLoadFailed(false);
             try {
                 // Single batch IPC call (the facade's own-property-safe sparse
                 // map) instead of one round-trip per schema key.
@@ -58,6 +61,7 @@ function useLoadOnOpen({ isOpen, challengeId, challengeTitle, schema, setOverrid
                 loadedForChallengeRef.current = loadKey;
             } catch (err) {
                 if (cancelled) return;
+                setLoadFailed(true);
                 await window.api.logError(`Error loading challenge overrides: ${err.message || err}`);
             } finally {
                 if (!cancelled) setLoading(false);
@@ -69,7 +73,7 @@ function useLoadOnOpen({ isOpen, challengeId, challengeTitle, schema, setOverrid
             cancelled = true;
         };
     }, [isOpen, challengeId, challengeTitle, schema, setOverrides, setTitleProfile]);
-    return loading;
+    return { loading, loadFailed };
 }
 
 /**
@@ -113,7 +117,14 @@ export function useChallengeOverrides({
         }
     }, [isOpen, refetchSchema]);
 
-    const loading = useLoadOnOpen({ isOpen, challengeId, challengeTitle, schema, setOverrides, setTitleProfile });
+    const { loading, loadFailed } = useLoadOnOpen({
+        isOpen,
+        challengeId,
+        challengeTitle,
+        schema,
+        setOverrides,
+        setTitleProfile,
+    });
 
     const changeOverride = useCallback((key, value) => {
         setOverrides((prev) => ({ ...prev, [key]: value }));
@@ -137,6 +148,9 @@ export function useChallengeOverrides({
         // to false — the Save button is then reachable but Object.keys(null)
         // would throw. Bail out instead of crashing the boundary.
         if (!challengeId || !schema) return;
+        // The form holds empty overrides after a failed load; saving them
+        // would wipe the challenge's stored settings.
+        if (loadFailed) return;
 
         setSaving(true);
         try {
@@ -163,7 +177,7 @@ export function useChallengeOverrides({
         } finally {
             setSaving(false);
         }
-    }, [challengeId, overrides, schema, titleProfile, rearmSchedule, onClose]);
+    }, [challengeId, overrides, schema, loadFailed, titleProfile, rearmSchedule, onClose]);
 
     const profileValues = titleProfile?.suppressed ? {} : (titleProfile?.values ?? {});
     const inheritedOf = (key) =>
@@ -199,6 +213,7 @@ export function useChallengeOverrides({
         inheritedOf,
         effectiveOf,
         loading,
+        loadFailed,
         saving,
         saveError,
         profileReplacesWarning,

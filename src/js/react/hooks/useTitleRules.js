@@ -9,12 +9,15 @@ import { useState, useEffect, useRef, useCallback } from 'react';
  * was skipped), `false` when validation rejected it — `error` is then set so
  * the modal can stay open with the edit intact. The write is skipped when the
  * initial load failed, else a failed load could overwrite saved rules with the
- * empty default. `change(next)` clears a stale error as the user edits.
+ * empty default; `loadFailed` is then set so the editor is replaced by an alert
+ * rather than accepting edits that would be dropped. `change(next)` clears a
+ * stale error as the user edits.
  */
 export function useTitleRules(isOpen) {
     const [rules, setRules] = useState([]);
     const [profiles, setProfiles] = useState({});
     const [error, setError] = useState(false);
+    const [loadFailed, setLoadFailed] = useState(false);
     const loadedRef = useRef(false);
 
     useEffect(() => {
@@ -22,6 +25,7 @@ export function useTitleRules(isOpen) {
         let cancelled = false;
         loadedRef.current = false;
         setError(false);
+        setLoadFailed(false);
         Promise.all([window.api.getTitleRules(), window.api.getChallengeProfiles()])
             .then(([saved, savedProfiles]) => {
                 if (cancelled) return;
@@ -30,6 +34,8 @@ export function useTitleRules(isOpen) {
                 loadedRef.current = true;
             })
             .catch(async (err) => {
+                if (cancelled) return;
+                setLoadFailed(true);
                 await window.api.logError(`Error loading title rules: ${err?.message || err}`);
             });
         return () => {
@@ -54,5 +60,5 @@ export function useTitleRules(isOpen) {
         return true;
     }, [rules]);
 
-    return { rules, profiles, error, change, persist };
+    return { rules, profiles, error, loadFailed, change, persist };
 }

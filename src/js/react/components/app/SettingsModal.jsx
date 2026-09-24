@@ -83,12 +83,18 @@ function TitleRulesSection({ titleRules }) {
                     <span>{t('app.titleTagRulesSaveError')}</span>
                 </div>
             )}
-            <TitleTagRulesEditor
-                value={titleRules.rules}
-                profiles={titleRules.profiles}
-                types={RULE_TYPE_SUGGESTIONS}
-                onChange={titleRules.change}
-            />
+            {titleRules.loadFailed ? (
+                <div className="alert alert-error py-2 text-sm" role="alert">
+                    <span>{t('app.titleTagRulesLoadError')}</span>
+                </div>
+            ) : (
+                <TitleTagRulesEditor
+                    value={titleRules.rules}
+                    profiles={titleRules.profiles}
+                    types={RULE_TYPE_SUGGESTIONS}
+                    onChange={titleRules.change}
+                />
+            )}
         </div>
     );
 }

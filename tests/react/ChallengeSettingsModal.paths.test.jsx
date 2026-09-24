@@ -153,11 +153,13 @@ describe('loading', () => {
     test.each([
         ['an Error', new Error('ipc'), 'Error loading challenge overrides: ipc'],
         ['a bare value', 'ipc', 'Error loading challenge overrides: ipc'],
-    ])('a failed load (%s) is logged and the form still renders', async (_label, rejection, logged) => {
+    ])('a failed load (%s) is logged and replaces the form with an alert', async (_label, rejection, logged) => {
         mockApi.getChallengeOverrides.mockRejectedValue(rejection);
         renderModal();
-        await loaded();
+        await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('app.challengeOverridesLoadError'));
         expect(mockApi.logError).toHaveBeenCalledWith(logged);
+        // No Save: the form would hold empty overrides and wipe the stored ones.
+        expect(screen.queryByRole('button', { name: 'app.save' })).toBeNull();
     });
 
     test('a load that fails after the modal closed is dropped silently', async () => {

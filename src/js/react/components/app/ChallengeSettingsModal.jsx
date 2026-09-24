@@ -113,6 +113,10 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
                 (every settings write broadcasts one) must not blank the form. */}
             {(schemaLoading && !schema) || form.loading ? (
                 <InlineLoader text={t('common.loading')} />
+            ) : form.loadFailed ? (
+                <div className="alert alert-error text-sm" role="alert">
+                    <span>{t('app.challengeOverridesLoadError')}</span>
+                </div>
             ) : (
                 <div className="space-y-4">
                     {form.saveError && (

@@ -653,10 +653,35 @@ describe('SettingsModal — rule loading', () => {
     test.each([
         [new Error('ipc down'), 'Error loading title rules: ipc down'],
         ['plain failure', 'Error loading title rules: plain failure'],
-    ])('a failed load is logged (%p)', async (failure, message) => {
+    ])('a failed load is logged and replaces the editor with an alert (%p)', async (failure, message) => {
         window.api.getTitleRules.mockRejectedValueOnce(failure);
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         await waitFor(() => expect(window.api.logError).toHaveBeenCalledWith(message));
+        expect(screen.getByText('app.titleTagRulesLoadError')).toBeTruthy();
+        // The editor is gone, so no edit can be made that the skipped save would drop.
+        expect(screen.queryByText('app.noTitleTagRules')).toBeNull();
+    });
+
+    test('a load that fails after the modal closed is dropped silently', async () => {
+        let rejectStale;
+        window.api.getTitleRules
+            .mockReturnValueOnce(
+                new Promise((_, reject) => {
+                    rejectStale = reject;
+                }),
+            )
+            .mockReturnValueOnce(new Promise(() => {}));
+
+        const { rerender } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        rerender(<SettingsModal isOpen={false} onClose={jest.fn()} />);
+        rerender(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        rejectStale(new Error('late'));
+        await new Promise((r) => setTimeout(r, 0));
+
+        expect(window.api.logError).not.toHaveBeenCalledWith('Error loading title rules: late');
+        expect(screen.queryByText('app.titleTagRulesLoadError')).toBeNull();
+        expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
     });
 
     test('a load that resolves after the modal closed is discarded', async () => {
