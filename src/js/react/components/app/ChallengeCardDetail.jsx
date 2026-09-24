@@ -168,7 +168,7 @@ function EntryDetails({ challenge, view, swapBacks, bankroll, onVoteComplete, on
     return (
         <div>
             <div className="text-xs text-base-content/60 mb-1">{t('app.entryDetails')}:</div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-col items-start gap-1">
                 {view.entries.map((entry) => (
                     <EntryBadge
                         key={entry.id}
