@@ -301,6 +301,12 @@ describe('fill', () => {
         expect(onVoteComplete).not.toHaveBeenCalled();
     });
 
+    test('+1 and +N are hidden while autovote runs', () => {
+        renderCard(makeChallenge(), { autovoteRunning: true });
+        expect(screen.queryByText('+1')).toBeNull();
+        expect(screen.queryByText('+3')).toBeNull();
+    });
+
     test('a single open slot offers only +1; no slots or unknown max offers none', () => {
         const oneSlot = makeChallenge({
             max_photo_submits: 2,

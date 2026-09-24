@@ -66,7 +66,10 @@ export function deriveChallengeCardView(challenge, { now, bankroll, autovoteRunn
         userProgress: member.ranking.total,
         canPlayAutoTurbo,
         slotsRemaining,
-        canFill: challengeStillOpen && slotsRemaining > 0,
+        // Manual photo submit (+1 / +N). Hidden while the scheduled autovote
+        // loop is active, like the Run button, so it can't race the loop's own
+        // auto-submit for the same slot.
+        canFill: !autovoteRunning && challengeStillOpen && slotsRemaining > 0,
         boostOpen,
         // Time left in a timed boost window, preformatted for the badge; null
         // for a key-unlocked boost, which has no timer. Ticks with `now`.

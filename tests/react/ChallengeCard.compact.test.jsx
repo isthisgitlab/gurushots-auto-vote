@@ -174,6 +174,16 @@ describe('compact ChallengeCard tile with compactActions', () => {
         expect(buttonTexts()).toEqual(expect.arrayContaining(['🖼 +1', '🖼 +3']));
     });
 
+    test('hides Run and "+1" / "+N" while autovote runs', () => {
+        const challenge = makeChallenge();
+        challenge.member.ranking.entries = challenge.member.ranking.entries.slice(0, 1);
+        renderWithActions(challenge, { autovoteRunning: true });
+        const texts = buttonTexts();
+        expect(texts).not.toContain('app.run');
+        expect(texts.some((text) => text.startsWith('🖼'))).toBe(false);
+        expect(texts).toContain('app.vote');
+    });
+
     test('the actions fire the same handlers as in the detailed card', async () => {
         const onSettingsClick = jest.fn();
         const challenge = makeChallenge();

@@ -32,8 +32,8 @@ function EarnTurboButton({ turboError, playingTurbo, disabled, onPlay, label }) 
  * only appears when more than one slot is open. `icon` prefixes both labels
  * where the entries cell isn't there to say what they add.
  */
-export function FillButtons({ fillError, filling, autovoteRunning, slotsRemaining, onFill, icon = '' }) {
-    const disabled = filling || autovoteRunning;
+export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon = '' }) {
+    const disabled = filling;
     const spinner = <span className="loading loading-spinner loading-xs" />;
     return (
         <>
@@ -135,7 +135,6 @@ export function useChallengeCardActions({
         fillButtonProps: {
             fillError,
             filling,
-            autovoteRunning,
             slotsRemaining: view.slotsRemaining,
             onFill: handleFill,
         },
