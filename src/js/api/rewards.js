@@ -12,8 +12,8 @@
  * Both claim calls answer a bare `{success:true}` — no updated balances.
  *
  * SECURITY: every dynamic value is encodeURIComponent'd into the form body, and
- * this module never logs the headers object (the log redaction allowlist does
- * not cover the literal `x-token` header key).
+ * this module never logs the headers object (log redaction is a key allowlist,
+ * so it only guards the header names it lists).
  */
 
 const { makePostRequest } = require('./api-client');
