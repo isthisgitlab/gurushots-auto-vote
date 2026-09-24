@@ -3,7 +3,7 @@
  * Voting Logic Service
  *
  * Centralized business logic for voting decisions.
- * The one home of the voting rules, shared by strategies/real, mock/index.js
+ * The one home of the voting rules, shared by strategies/real, mock/strategy.js
  * and the Electron main process.
  *
  * Facade — the only module callers import. It re-exports the public surface
