@@ -152,8 +152,7 @@ const describeBoundaryCadence = (decision, waitMs) => {
  *
  * `prefetched` lets a just-completed cycle hand over the active list it
  * already fetched, so we skip a redundant fetch. A non-array
- * (null/undefined, a legacy boolean, or a cycle that failed before
- * fetching) falls back to a fresh fetch. In normal mode the wait is
+ * (null/undefined, a boolean, or a cycle that failed before fetching) falls back to a fresh fetch. In normal mode the wait is
  * anchored to the *start* of the previous cycle so the gap between cycle
  * starts ≈ the rolled delay regardless of how long the cycle took; in
  * approaching/last-minute/scheduled mode the wait runs from cycle

@@ -83,8 +83,9 @@ const { sleep } = require('../timing');
 
 /**
  * Which kind of boost the challenge currently offers. Optional-chained to match
- * shouldApplyBoost/shouldApplyTurbo, which already guard the same tree: a payload
- * without `member` used to throw straight out of the per-action loop.
+ * shouldApplyBoost/shouldApplyTurbo, which guard the same tree, so a payload
+ * without `member` reads as "no boost" instead of throwing out of the
+ * per-action loop.
  *
  * @param {Object} challenge
  * @returns {{boost: Object, isTimerBasedAvailable: boolean, isKeyUnlockedAvailable: boolean}}
@@ -232,9 +233,8 @@ const applyAvailableBoost = async (ctx, isTimerBasedAvailable, timeUntilDisplayB
  */
 const logBoostNotReady = (challenge, isTimerBasedAvailable, timeUntilDisplayBase, effectiveBoostTime) => {
     const timeDisplay = formatDuration(timeUntilDisplayBase);
-    // Both branches render the threshold they actually use. The key-unlocked message
-    // used to hardcode "10m" while the code applied at 15, which misled anyone
-    // debugging it; it is now a setting, so read it rather than restating a constant.
+    // Both branches render the threshold they actually use: the key-unlocked window
+    // is a setting, so it is read here rather than restated as a constant.
     const keyUnlockedWindow = votingLogic.getEffectiveKeyUnlockedBoostTime(challenge.id.toString());
     const reason = isTimerBasedAvailable
         ? `${timeDisplay} until deadline (threshold: ${effectiveBoostTime / 60}m)`

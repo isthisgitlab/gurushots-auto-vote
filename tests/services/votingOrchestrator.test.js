@@ -138,7 +138,7 @@ describe('metadata cleanup injection', () => {
         await runVotingPass('tok', null, deps(api));
         // Nothing to assert beyond "did not throw and completed" — the null
         // injection point is the guarantee; the mock binder test pins that
-        // mock/index.js actually passes null.
+        // mock/strategy.js actually passes null.
     });
 });
 

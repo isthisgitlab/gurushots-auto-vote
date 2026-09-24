@@ -1,8 +1,9 @@
 /**
  * Guards the hand-built `api` surface both strategies hand to runVotingPass.
  *
- * WHY THIS EXISTS: src/js/strategies/real/index.js and src/js/mock/index.js each construct
- * that object as a literal, listing every method by hand, while
+ * WHY THIS EXISTS: src/js/strategies/real/index.js (an object literal) and
+ * src/js/mock/strategy.js (the VOTING_PASS_ENDPOINTS name list) each list every
+ * method by hand, while
  * votingOrchestrator turns it into the `fillDeps` bundle the auto-fill pipeline
  * consumes. Nothing forces the two lists to agree — and when `getImageData`
  * was added to the API surface but not to these literals, every scheduled fill
