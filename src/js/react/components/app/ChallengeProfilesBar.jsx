@@ -178,7 +178,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
 
             <div className="flex flex-wrap items-center gap-2">
                 <select
-                    className="select select-bordered select-sm flex-1 min-w-40"
+                    className="select select-sm flex-1 min-w-40"
                     aria-label={t('app.challengeProfiles')}
                     value={selectedName}
                     onChange={(e) => handleSelect(e.target.value)}
@@ -214,7 +214,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
             <div className="flex flex-wrap items-center gap-2">
                 <input
                     type="text"
-                    className="input input-bordered input-sm flex-1 min-w-40"
+                    className="input input-sm flex-1 min-w-40"
                     placeholder={t('app.profileNamePlaceholder')}
                     aria-label={t('app.saveAsProfile')}
                     value={newName}

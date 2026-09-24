@@ -35,7 +35,7 @@ const secondsOutOfRange = (seconds) =>
 function HoursMinutesInputs({ seconds, onChange, labelPrefix, widthClass, hoursMax, invalid, describedBy, disabled }) {
     const { t } = useTranslation();
     const { hours, minutes } = secondsToHoursMinutes(seconds);
-    const className = `input input-bordered input-sm ${widthClass}${invalid ? ' input-error' : ''}`;
+    const className = `input input-sm ${widthClass}${invalid ? ' input-error' : ''}`;
     return (
         <>
             <input
@@ -301,7 +301,7 @@ const TIME_OF_DAY_ROWS = {
             controls: (
                 <input
                     type="time"
-                    className={`input input-bordered input-sm w-32 ${duplicate ? 'input-error' : ''}`}
+                    className={`input input-sm w-32 ${duplicate ? 'input-error' : ''}`}
                     aria-label={`${label} ${index + 1}`}
                     aria-describedby={hintId}
                     value={row}

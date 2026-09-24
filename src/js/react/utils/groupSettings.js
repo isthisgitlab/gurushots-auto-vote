@@ -19,7 +19,7 @@ export const SETTINGS_GRID_CLASS = 'grid grid-cols-1 lg:grid-cols-2 gap-x-5 gap-
  * makes a multi-column grid readable — without it, neighbouring settings of
  * different heights blur into one another.
  */
-export const SETTING_CELL_CLASS = 'form-control rounded-box border border-base-300 p-3';
+export const SETTING_CELL_CLASS = 'flex flex-col rounded-box border border-base-300 p-3';
 
 /**
  * Bucket schema entries into ordered UI sections for the settings modals.

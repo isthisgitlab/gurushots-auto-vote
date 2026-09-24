@@ -11,7 +11,7 @@ function UiSettingCell({ inputId, group, labelKey, descKey, children }) {
     return (
         <div className={SETTING_CELL_CLASS}>
             <SettingLabel inputId={inputId} group={group}>
-                <span className="label-text font-medium">{t(labelKey)}</span>
+                <span className="font-medium">{t(labelKey)}</span>
                 <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
             </SettingLabel>
             <p className="text-xs text-base-content/60 mb-2">{t(descKey)}</p>
@@ -32,7 +32,7 @@ function UiNumberInputs({ fields, uiValues, handleUiChange }) {
             <span className="text-sm">{t(labelKey)}</span>
             <input
                 type="number"
-                className={`input input-bordered input-sm ${widthClass}`}
+                className={`input input-sm ${widthClass}`}
                 min={min}
                 max={max}
                 step={step}
@@ -107,7 +107,7 @@ function CustomTimezoneInput({ timezoneInput }) {
             type="text"
             aria-label={t('app.addCustomTimezone')}
             placeholder={t('app.timezonePlaceholder')}
-            className={`input input-bordered input-sm mt-2 w-60 ${timezoneInput.error ? 'input-error' : ''}`}
+            className={`input input-sm mt-2 w-60 ${timezoneInput.error ? 'input-error' : ''}`}
             value={timezoneInput.value}
             onChange={(e) => timezoneInput.change(e.target.value)}
             onKeyDown={(e) => {
@@ -168,7 +168,7 @@ function LanguageSetting({ uiValues, handleUiChange, handleResetUi }) {
         >
             <select
                 id="ui-language"
-                className="select select-bordered select-sm"
+                className="select select-sm"
                 value={uiValues.language}
                 onChange={(e) => handleUiChange('language', e.target.value)}
             >
@@ -187,7 +187,7 @@ function TimezoneSetting({ uiValues, handleUiChange, handleResetUi, timezoneInpu
             <div className="flex items-center gap-2 flex-wrap">
                 <select
                     id="ui-timezone"
-                    className="select select-bordered select-sm w-48"
+                    className="select select-sm w-48"
                     value={timezone}
                     onChange={(e) => handleUiChange('timezone', e.target.value)}
                 >

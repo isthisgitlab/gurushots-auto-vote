@@ -45,11 +45,11 @@ export function SettingsToggles({
             <div className="grid grid-cols-3 gap-2">
                 {/* Theme Toggle */}
                 <div className="flex flex-col items-center">
-                    <label className="label-text mb-2" htmlFor="login-theme">
+                    <label className="label mb-2" htmlFor="login-theme">
                         {t('common.theme')}
                     </label>
                     <div className="flex items-center justify-center">
-                        <span className="label-text mr-2">{t('common.light')}</span>
+                        <span className="mr-2">{t('common.light')}</span>
                         <input
                             id="login-theme"
                             type="checkbox"
@@ -57,17 +57,17 @@ export function SettingsToggles({
                             checked={theme === 'dark'}
                             onChange={handleThemeToggle}
                         />
-                        <span className="label-text ml-2">{t('common.dark')}</span>
+                        <span className="ml-2">{t('common.dark')}</span>
                     </div>
                 </div>
 
                 {/* Stay Logged In Toggle */}
                 <div className="flex flex-col items-center">
-                    <label className="label-text mb-2" htmlFor="login-stay-logged-in">
+                    <label className="label mb-2" htmlFor="login-stay-logged-in">
                         {t('login.stayLoggedIn')}
                     </label>
                     <div className="flex items-center justify-center">
-                        <span className="invisible label-text mr-2">Off</span>
+                        <span className="invisible mr-2">Off</span>
                         <input
                             id="login-stay-logged-in"
                             type="checkbox"
@@ -75,17 +75,17 @@ export function SettingsToggles({
                             checked={stayLoggedIn}
                             onChange={handleStayLoggedInToggle}
                         />
-                        <span className="invisible label-text ml-2">On</span>
+                        <span className="invisible ml-2">On</span>
                     </div>
                 </div>
 
                 {/* Mock Mode Toggle */}
                 <div className="flex flex-col items-center">
-                    <label className="label-text mb-2" htmlFor="login-mock-mode">
+                    <label className="label mb-2" htmlFor="login-mock-mode">
                         {t('login.mockMode')}
                     </label>
                     <div className="flex items-center justify-center">
-                        <span className="invisible label-text mr-2">Off</span>
+                        <span className="invisible mr-2">Off</span>
                         <input
                             id="login-mock-mode"
                             type="checkbox"
@@ -93,7 +93,7 @@ export function SettingsToggles({
                             checked={mockMode}
                             onChange={handleMockModeToggle}
                         />
-                        <span className="invisible label-text ml-2">On</span>
+                        <span className="invisible ml-2">On</span>
                     </div>
                 </div>
             </div>

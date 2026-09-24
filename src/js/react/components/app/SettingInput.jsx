@@ -71,7 +71,7 @@ export function TagsField({ id, settingKey, value, onChange, onReset, placeholde
             <input
                 id={id}
                 type="text"
-                className="input input-bordered input-sm flex-1"
+                className="input input-sm flex-1"
                 placeholder={placeholder}
                 value={draft}
                 onChange={handleChange}
@@ -160,7 +160,7 @@ function NumberField({ id, settingKey, config, value, onChange, onReset, disable
                 <input
                     id={id}
                     type="number"
-                    className={`input input-bordered input-sm w-24 ${invalid ? 'input-error' : ''}`}
+                    className={`input input-sm w-24 ${invalid ? 'input-error' : ''}`}
                     min={config.min}
                     max={config.max}
                     value={value}
@@ -180,7 +180,7 @@ function TextField({ id, settingKey, value, onChange, onReset, disabled }) {
             <input
                 id={id}
                 type="text"
-                className="input input-bordered input-sm"
+                className="input input-sm"
                 value={value}
                 onChange={(e) => onChange(settingKey, e.target.value)}
                 disabled={disabled}

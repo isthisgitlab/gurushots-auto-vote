@@ -47,7 +47,7 @@ function ChallengeDefaultsSection({
                                 {entries.map(([key, config]) => (
                                     <div key={key} className={SETTING_CELL_CLASS}>
                                         <SettingLabel inputId={`setting-${key}`} type={config.type}>
-                                            <span className="label-text font-medium">{t(config.label)}</span>
+                                            <span className="font-medium">{t(config.label)}</span>
                                             <span className="badge badge-ghost badge-xs ml-2">
                                                 {t('app.globalDefault')}
                                             </span>

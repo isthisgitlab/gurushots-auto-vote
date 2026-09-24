@@ -27,11 +27,11 @@ const MAX_RUNTIME_HOURS = 2000;
 function TristateSelect({ rule, settingKey, labelKey, onPatch }) {
     const { t } = useTranslation();
     return (
-        <div className="form-control gap-1">
-            <span className="label-text text-sm">{t(labelKey)}</span>
+        <div className="flex flex-col gap-1">
+            <span className="text-sm">{t(labelKey)}</span>
             <select
                 aria-label={t(labelKey)}
-                className="select select-bordered select-sm w-full"
+                className="select select-sm w-full"
                 value={triValue(rule[settingKey])}
                 onChange={(event) => onPatch(triPatch(settingKey, event.target.value))}
             >
@@ -55,11 +55,11 @@ function RuleNumberField({ rule, settingKey, labelKey, unitKey, placeholderKey, 
     const { t } = useTranslation();
     const raw = rule[settingKey];
     return (
-        <div className="form-control gap-1">
-            <span className="label-text text-sm">{t(labelKey)}</span>
+        <div className="flex flex-col gap-1">
+            <span className="text-sm">{t(labelKey)}</span>
             {/* A div, not a <label>: the input carries its own aria-label, and a
                 wrapping label without a matching id trips jsx-a11y/label-has-for. */}
-            <div className="input input-bordered input-sm flex items-center gap-2">
+            <div className="input input-sm flex items-center gap-2">
                 <input
                     type="number"
                     min={min}
@@ -126,11 +126,11 @@ function RuleProfileSelect({ rule, profiles, onPatch }) {
     const { t } = useTranslation();
     const names = Object.keys(profiles).sort();
     return (
-        <div className="form-control gap-1">
-            <span className="label-text text-sm">{t('app.titleRuleProfile')}</span>
+        <div className="flex flex-col gap-1">
+            <span className="text-sm">{t('app.titleRuleProfile')}</span>
             <select
                 aria-label={t('app.titleRuleProfile')}
-                className="select select-bordered select-sm w-full"
+                className="select select-sm w-full"
                 value={rule.profile ?? ''}
                 onChange={(event) => onPatch({ profile: event.target.value })}
             >
@@ -171,7 +171,7 @@ function RuleTitleList({ rule, onPatch }) {
                 <div key={titleIndex} className="flex items-center gap-2">
                     <input
                         type="text"
-                        className="input input-bordered input-sm flex-1"
+                        className="input input-sm flex-1"
                         placeholder={t('app.titleTagRuleTitlePlaceholder')}
                         aria-label={`${t('app.titleTagRuleTitle')} ${titleIndex + 1}`}
                         value={title}
@@ -206,34 +206,34 @@ function RuleClassConditions({ rule, onPatch }) {
     const { t } = useTranslation();
     return (
         <div className="grid gap-2 sm:grid-cols-2">
-            <div className="form-control gap-1">
-                <span className="label-text text-sm">{t('app.titleRuleChallengeTag')}</span>
+            <div className="flex flex-col gap-1">
+                <span className="text-sm">{t('app.titleRuleChallengeTag')}</span>
                 <input
                     type="text"
-                    className="input input-bordered input-sm w-full"
+                    className="input input-sm w-full"
                     placeholder={t('app.titleRuleChallengeTagPlaceholder')}
                     aria-label={t('app.titleRuleChallengeTag')}
                     value={rule.challengeTag ?? ''}
                     onChange={(e) => onPatch({ challengeTag: e.target.value })}
                 />
             </div>
-            <div className="form-control gap-1">
-                <span className="label-text text-sm">{t('app.titleRuleType')}</span>
+            <div className="flex flex-col gap-1">
+                <span className="text-sm">{t('app.titleRuleType')}</span>
                 <input
                     type="text"
                     list="gs-rule-types"
-                    className="input input-bordered input-sm w-full"
+                    className="input input-sm w-full"
                     placeholder={t('app.titleRuleTypePlaceholder')}
                     aria-label={t('app.titleRuleType')}
                     value={rule.type ?? ''}
                     onChange={(e) => onPatch({ type: e.target.value })}
                 />
             </div>
-            <div className="form-control gap-1">
-                <span className="label-text text-sm">{t('app.titleRulePics')}</span>
+            <div className="flex flex-col gap-1">
+                <span className="text-sm">{t('app.titleRulePics')}</span>
                 <select
                     aria-label={t('app.titleRulePics')}
-                    className="select select-bordered select-sm w-full"
+                    className="select select-sm w-full"
                     value={String(rule.pics ?? '')}
                     onChange={(event) => {
                         const next = event.target.value;
@@ -261,7 +261,7 @@ function RuleBehaviour({ rule, onPatch }) {
     const { t } = useTranslation();
     return (
         <div className="space-y-2">
-            <span className="label-text text-sm font-medium">{t('app.titleRuleOverridesLabel')}</span>
+            <span className="text-sm font-medium">{t('app.titleRuleOverridesLabel')}</span>
             <div className="grid gap-2 sm:grid-cols-2">
                 {TRISTATE_OVERRIDES.map((field) => (
                     <TristateSelect key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
@@ -278,9 +278,9 @@ function RuleTagsField({ index, rule, settingKey, labelKey, onPatch }) {
     const { t } = useTranslation();
     const id = `title-rule-${index}-${settingKey}`;
     return (
-        <div className="form-control">
+        <div className="flex flex-col">
             <label className="label py-1" htmlFor={id}>
-                <span className="label-text text-sm">{t(labelKey)}</span>
+                <span className="text-sm">{t(labelKey)}</span>
             </label>
             <TagsField
                 id={id}
@@ -299,7 +299,7 @@ function RuleHeader({ index, count, onMove, onRemove }) {
     return (
         <div className="flex items-center gap-2">
             <span className="badge badge-ghost badge-sm">{index + 1}</span>
-            <span className="label-text text-sm font-medium flex-1">{t('app.titleRuleConditionsLabel')}</span>
+            <span className="text-sm font-medium flex-1">{t('app.titleRuleConditionsLabel')}</span>
             <button
                 type="button"
                 className="btn btn-ghost btn-xs"
@@ -346,7 +346,7 @@ function RuleCard({ index, count, rule, profiles, onPatch, onMove, onRemove }) {
             <div className="flex items-center gap-2">
                 <select
                     aria-label={t('app.titleRuleMatch')}
-                    className="select select-bordered select-sm w-32"
+                    className="select select-sm w-32"
                     value={rule.match ?? 'exact'}
                     onChange={(e) => onPatch({ match: e.target.value })}
                 >
@@ -354,11 +354,11 @@ function RuleCard({ index, count, rule, profiles, onPatch, onMove, onRemove }) {
                     <option value="starts">{t('app.titleRuleMatchStarts')}</option>
                     <option value="contains">{t('app.titleRuleMatchContains')}</option>
                 </select>
-                <span className="label-text text-sm flex-1">{t('app.titleRuleTitlesLabel')}</span>
+                <span className="text-sm flex-1">{t('app.titleRuleTitlesLabel')}</span>
             </div>
             <RuleTitleList rule={rule} onPatch={onPatch} />
             <RuleClassConditions rule={rule} onPatch={onPatch} />
-            <p className="label-text-alt text-xs opacity-60">{t('app.titleRuleConditionsHint')}</p>
+            <p className="text-xs opacity-60">{t('app.titleRuleConditionsHint')}</p>
             <RuleProfileSelect rule={rule} profiles={profiles} onPatch={onPatch} />
             <RuleBehaviour rule={rule} onPatch={onPatch} />
             {isBroadSpendingRule(rule) && (
@@ -428,7 +428,7 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {}, types = []
 
             {rules.length > 1 && (
                 <div className="flex items-center gap-2">
-                    <p className="label-text-alt text-xs opacity-60 flex-1">{t('app.titleRuleOrderHint')}</p>
+                    <p className="text-xs opacity-60 flex-1">{t('app.titleRuleOrderHint')}</p>
                     <button
                         type="button"
                         className="btn btn-ghost btn-xs"

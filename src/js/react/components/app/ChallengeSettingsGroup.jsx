@@ -47,7 +47,7 @@ function ChallengeSettingCell({ settingKey: key, config, applicable, challenge, 
     return (
         <div className={SETTING_CELL_CLASS}>
             <SettingLabel inputId={inputId} type={config.type}>
-                <span className="label-text font-medium">{t(config.label)}</span>
+                <span className="font-medium">{t(config.label)}</span>
                 <div className="flex gap-1">
                     <ValueSourceBadge hasOverride={hasOverride} hasProfileValue={hasProfileValue} />
                 </div>

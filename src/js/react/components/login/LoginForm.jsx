@@ -70,48 +70,44 @@ export function LoginForm({ onSubmit, loading = false, initialUsername = '' }) {
     return (
         <form className="space-y-4" onSubmit={handleSubmit} noValidate>
             {/* Username field */}
-            <div className="form-control w-full">
+            <div className="flex flex-col w-full">
                 <label className="label" htmlFor="username">
-                    <span className="label-text">{t('login.username')}</span>
+                    <span>{t('login.username')}</span>
                 </label>
                 <input
                     id="username"
                     type="text"
-                    className={`input w-full border ${errors.username ? 'border-error' : 'border-gray-300'} focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200`}
+                    className={`input w-full ${errors.username ? 'input-error' : ''}`}
                     placeholder={t('login.usernamePlaceholder')}
                     value={username}
                     onChange={handleUsernameChange}
                     disabled={loading}
                     autoComplete="username"
                 />
-                {errors.username && (
-                    <div className="label-text-alt text-latvian font-medium mt-1">{errors.username}</div>
-                )}
+                {errors.username && <div className="text-error font-medium mt-1">{errors.username}</div>}
             </div>
 
             {/* Password field */}
-            <div className="form-control w-full">
+            <div className="flex flex-col w-full">
                 <label className="label" htmlFor="password">
-                    <span className="label-text">{t('login.password')}</span>
+                    <span>{t('login.password')}</span>
                 </label>
                 <input
                     id="password"
                     type="password"
-                    className={`input w-full border ${errors.password ? 'border-error' : 'border-gray-300'} focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all duration-200`}
+                    className={`input w-full ${errors.password ? 'input-error' : ''}`}
                     placeholder={t('login.passwordPlaceholder')}
                     value={password}
                     onChange={handlePasswordChange}
                     disabled={loading}
                     autoComplete="current-password"
                 />
-                {errors.password && (
-                    <div className="label-text-alt text-latvian font-medium mt-1">{errors.password}</div>
-                )}
+                {errors.password && <div className="text-error font-medium mt-1">{errors.password}</div>}
             </div>
 
             {/* Submit button */}
-            <div className="form-control w-full mt-6">
-                <button type="submit" className="btn bg-latvian text-white w-full" disabled={loading}>
+            <div className="flex flex-col w-full mt-6">
+                <button type="submit" className="btn btn-latvian w-full" disabled={loading}>
                     {loading ? (
                         <>
                             <span>{t('login.loggingIn')}</span>

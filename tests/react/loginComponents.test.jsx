@@ -17,8 +17,8 @@ describe('LoginForm', () => {
         expect(onSubmit).not.toHaveBeenCalled();
         expect(screen.getByText('login.usernameRequired')).toBeTruthy();
         expect(screen.getByText('login.passwordRequired')).toBeTruthy();
-        expect(document.getElementById('username').className).toContain('border-error');
-        expect(document.getElementById('password').className).toContain('border-error');
+        expect(document.getElementById('username').className).toContain('input-error');
+        expect(document.getElementById('password').className).toContain('input-error');
     });
 
     test('typing clears the matching field error only', () => {
@@ -31,7 +31,7 @@ describe('LoginForm', () => {
         expect(screen.queryByText('login.passwordRequired')).toBeNull();
         // With no error showing, further typing leaves errors alone.
         fireEvent.input(document.getElementById('password'), { target: { value: 'pw' } });
-        expect(document.getElementById('password').className).toContain('border-gray-300');
+        expect(document.getElementById('password').className).not.toContain('input-error');
     });
 
     test('submits the trimmed username and raw password', () => {
