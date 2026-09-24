@@ -10,9 +10,9 @@ export function ResetIcon({ className = 'w-4 h-4' }) {
 }
 
 /**
- * Small outlined icon button that resets a setting to its default. Renders
- * exactly the markup the inline copies produced: `btn btn-outline btn-sm`
- * with the ResetIcon; `title` is optional (omitted → no attribute).
+ * Small outlined icon button that resets a setting to its default. Uses
+ * `btn btn-outline btn-sm` with the ResetIcon; `title` is optional
+ * (omitted → no attribute).
  */
 export function ResetButton({ title, onClick }) {
     return (

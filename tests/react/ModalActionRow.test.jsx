@@ -1,8 +1,7 @@
 /**
  * Tests for the shared ModalActionRow (components/ui/ModalActionRow) —
  * the Save / secondary / Cancel row used twice by SettingsModal and once
- * by ChallengeSettingsModal. Asserts the class strings and handler
- * wiring match the previous inline copies.
+ * by ChallengeSettingsModal. Asserts the button styles and handler wiring.
  */
 
 import { render, fireEvent } from './helpers/test-utils';

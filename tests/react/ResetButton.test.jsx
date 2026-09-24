@@ -1,7 +1,6 @@
 /**
  * Tests for the shared ResetButton / ResetIcon (components/ui/ResetButton).
- * The button must render the exact DaisyUI markup the inline copies
- * uses (btn btn-outline btn-sm + w-4 h-4 svg).
+ * The button uses outlined DaisyUI markup and the shared reset icon.
  */
 
 import { render, fireEvent } from './helpers/test-utils';
