@@ -385,6 +385,20 @@ describe('fill-challenge-now', () => {
         expect(result).toMatchObject({ success: true, submitted: 3, skipped: 1, message: 'Submitted 3 entries' });
     });
 
+    test('preserves the visual stand-down code for a localized manual-fill message', async () => {
+        stubAuthGuardOk();
+        stubStrategy({ getActiveChallenges: jest.fn().mockResolvedValue({ challenges: [{ id: 123 }] }) });
+        autoFill.fillChallengeNow = jest.fn().mockResolvedValue({
+            success: false,
+            submitted: 0,
+            skipped: 1,
+            errorCode: 'no-visual-match',
+            error: 'No photo matched the challenge in the image check.',
+        });
+        const result = await buildHandlers()['fill-challenge-now']({}, '123', 'one');
+        expect(result).toMatchObject({ success: false, errorCode: 'no-visual-match' });
+    });
+
     test('forwards the settings module in deps so tag rules apply', async () => {
         stubAuthGuardOk();
         const liveChallenge = { id: 123, title: 'C' };

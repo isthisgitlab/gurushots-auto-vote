@@ -18,6 +18,10 @@ allowBuilds:
     # lefthook's only build script is a convenience that auto-runs `lefthook install`;
     # our `prepare` script does that explicitly, so no lifecycle script is needed here.
     lefthook: false
+    # Local image inference downloads the pinned native ONNX binding at install time.
+    onnxruntime-node: true
+    # protobufjs postinstall only prints a donation message; runtime needs no build.
+    protobufjs: false
 # 6h gate — deliberately below the pnpm 12 default of 1440 (24h), so this is
 # looser than Dependabot's cooldown (.github/dependabot.yml) rather than aligned
 # with it. Note this only gates what pnpm resolves; `pnpm bump` (npm-check-updates)

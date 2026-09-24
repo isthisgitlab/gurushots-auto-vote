@@ -19,9 +19,15 @@ const mockFs = {
     mkdirSync: jest.fn(),
     writeFileSync: jest.fn(),
     copyFileSync: jest.fn(),
+    cpSync: jest.fn(),
+    readdirSync: jest.fn().mockReturnValue([]),
+    rmSync: jest.fn(),
 };
 jest.mock('esbuild', () => mockEsbuild);
 jest.mock('fs', () => mockFs);
+jest.mock('../../scripts/fetch-vision-model', () => ({
+    stageVisionWebAssets: jest.fn().mockResolvedValue(undefined),
+}));
 
 const esbuild = mockEsbuild;
 const fs = mockFs;
@@ -128,7 +134,7 @@ describe('scripts/build-react.js', () => {
             await run([], undefined);
 
             expect(fs.mkdirSync).toHaveBeenCalledWith(DIST, { recursive: true });
-            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(fs.copyFileSync).not.toHaveBeenCalledWith(LEXICON, realPath.join(DIST, 'semantic-vectors.json'));
             expect(esbuild.build).toHaveBeenCalledTimes(ENTRY_NAMES.length - 1);
             const opts = esbuild.build.mock.calls[0][0];
             expect(opts.minify).toBe(false);

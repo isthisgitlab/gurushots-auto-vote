@@ -15,8 +15,12 @@ jest.unmock('node:path');
 
 jest.mock('esbuild', () => ({ build: jest.fn(() => Promise.resolve()) }));
 jest.mock('node:child_process', () => ({ execFileSync: jest.fn() }));
+jest.mock('../../scripts/fetch-vision-model', () => ({
+    ensureVisionModel: jest.fn().mockResolvedValue('/mock/vision-model'),
+}));
 
 const fs = require('node:fs');
+const realReadFileSync = fs.readFileSync;
 const path = require('node:path');
 const { build } = require('esbuild');
 const { execFileSync } = require('node:child_process');
@@ -29,7 +33,7 @@ const DIST_DIR = path.join(ROOT, 'dist');
 const BUILD_DIR = path.join(ROOT, 'build', 'cli');
 const NODE_CACHE_DIR = path.join(ROOT, '.cache', 'node-binaries');
 const LEXICON = path.join(ROOT, 'src', 'assets', 'semantic-vectors.json');
-const SEA_BLOB = path.join(DIST_DIR, 'sea-prep.blob');
+const SEA_BLOB = path.join(BUILD_DIR, 'sea-prep.blob');
 const POSTJECT = path.join(ROOT, 'node_modules', '.bin', 'postject');
 const NODE_VER = process.versions.node;
 
@@ -55,6 +59,13 @@ describe('build-cli', () => {
             existing.add(p);
         });
         jest.spyOn(fs, 'copyFileSync').mockImplementation(() => {});
+        jest.spyOn(fs, 'cpSync').mockImplementation(() => {});
+        jest.spyOn(fs, 'rmSync').mockImplementation(() => {});
+        jest.spyOn(fs, 'readFileSync').mockImplementation((file, ...args) =>
+            String(file).endsWith('vision-runtime.tar.gz')
+                ? Buffer.from('test archive')
+                : realReadFileSync(file, ...args),
+        );
         jest.spyOn(fs, 'chmodSync').mockImplementation(() => {});
         exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined);
         logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -106,7 +117,7 @@ describe('build-cli', () => {
                 outfile: path.join(DIST_DIR, 'cli-bundled.js'),
                 platform: 'node',
                 format: 'cjs',
-                external: ['electron'],
+                external: ['electron', '@huggingface/transformers'],
             }),
         );
     });
@@ -117,23 +128,30 @@ describe('build-cli', () => {
         test('embeds the lexicon asset when present', () => {
             existing.add(LEXICON);
             expect(buildCli.generateSeaBlob()).toBe(SEA_BLOB);
-            expect(fs.writeFileSync.mock.calls[0][0]).toBe(path.join(DIST_DIR, 'sea-config.json'));
+            expect(fs.writeFileSync.mock.calls[0][0]).toBe(path.join(BUILD_DIR, 'sea-config.json'));
             expect(writtenConfig()).toEqual({
                 main: path.join(DIST_DIR, 'cli-bundled.js'),
                 output: SEA_BLOB,
                 disableExperimentalSEAWarning: true,
-                assets: { 'semantic-vectors.json': LEXICON },
+                assets: {
+                    'semantic-vectors.json': LEXICON,
+                    'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
+                    'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
+                },
             });
             expect(execFileSync).toHaveBeenCalledWith(
                 process.execPath,
-                ['--experimental-sea-config', path.join(DIST_DIR, 'sea-config.json')],
+                ['--experimental-sea-config', path.join(BUILD_DIR, 'sea-config.json')],
                 { stdio: 'inherit' },
             );
         });
 
-        test('omits assets when the lexicon is absent', () => {
+        test('still embeds the visual runtime when the lexicon is absent', () => {
             buildCli.generateSeaBlob();
-            expect(writtenConfig()).not.toHaveProperty('assets');
+            expect(writtenConfig().assets).toEqual({
+                'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
+                'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
+            });
         });
     });
 
@@ -189,14 +207,13 @@ describe('build-cli', () => {
     });
 
     describe('buildPlatform', () => {
-        test('darwin: strips with -u -r, injects with the Mach-O segment and ad-hoc signs', async () => {
+        test('darwin: preserves native addon symbols, injects with the Mach-O segment and ad-hoc signs', async () => {
             existing.add(nodeBinary('darwin', 'arm64'));
             const out = path.join(BUILD_DIR, 'gurucli-vX-mac');
             await buildCli.buildPlatform({ output: 'gurucli-vX-mac', plat: 'darwin', arch: 'arm64' }, SEA_BLOB);
             expect(fs.copyFileSync).toHaveBeenCalledWith(nodeBinary('darwin', 'arm64'), out);
             expect(fs.chmodSync).toHaveBeenCalledWith(out, 0o755);
             expect(execFileSync.mock.calls).toEqual([
-                ['strip', ['-u', '-r', out], { stdio: 'inherit' }],
                 [
                     POSTJECT,
                     [
@@ -215,12 +232,11 @@ describe('build-cli', () => {
             ]);
         });
 
-        test('linux: plain strip, no Mach-O segment, no codesign', async () => {
+        test('linux: preserves native addon symbols, no Mach-O segment or codesign', async () => {
             existing.add(nodeBinary('linux', 'x64'));
             const out = path.join(BUILD_DIR, 'gurucli-vX-linux');
             await buildCli.buildPlatform({ output: 'gurucli-vX-linux', plat: 'linux', arch: 'x64' }, SEA_BLOB);
             expect(execFileSync.mock.calls).toEqual([
-                ['strip', [out], { stdio: 'inherit' }],
                 [
                     POSTJECT,
                     [

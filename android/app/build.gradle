@@ -5,6 +5,9 @@ apply plugin: 'jacoco'
 android {
     namespace = "com.isthisgitlab.gurushotsautovote"
     compileSdk = rootProject.ext.compileSdkVersion
+    kotlinOptions {
+        jvmTarget = '21'
+    }
     defaultConfig {
         applicationId "com.isthisgitlab.gurushotsautovote"
         minSdkVersion rootProject.ext.minSdkVersion

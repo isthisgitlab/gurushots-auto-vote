@@ -273,6 +273,47 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
     });
 
+    test('visual verification can replace the ranked photo before submission', async () => {
+        const challenge = makeChallenge({ entries: [{ id: 'e1' }], closeIn: 19 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const pickVisuallyVerified = jest.fn().mockResolvedValue(['p2']);
+        const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
+            submitToChallenge,
+            pickVisuallyVerified,
+        });
+        expect(result).toBe('submitted');
+        expect(pickVisuallyVerified).toHaveBeenCalledWith(
+            challenge,
+            expect.arrayContaining(['p1', 'p2']),
+            expect.any(Array),
+            1,
+            expect.any(Object),
+        );
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p2'], 'tok');
+    });
+
+    test('a later cycle leaves the slot empty when remaining photos are visually weak', async () => {
+        const challenge = makeChallenge({ title: 'Banisters', entries: [{ id: 'e1' }], closeIn: 19 * 60 });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
+        const pickVisuallyVerified = jest.fn().mockResolvedValueOnce(['handrail']).mockResolvedValueOnce([]);
+        const deps = {
+            settings: makeSettings({ autoFill: true }),
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('handrail'), allowedPhoto('motorcycle')]),
+            submitToChallenge,
+            pickVisuallyVerified,
+        };
+
+        expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
+        expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('skipped');
+        expect(pickVisuallyVerified).toHaveBeenCalledTimes(2);
+        expect(submitToChallenge).toHaveBeenCalledTimes(1);
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['handrail'], 'tok');
+    });
+
     test('schedule: single {2 @ T-10m} row, T-11m → not yet due → skipped', async () => {
         const challenge = makeChallenge({ maxSubmits: 2, entries: [{ id: 'e1' }], closeIn: 11 * 60 });
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
@@ -1221,6 +1262,25 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
 });
 
 describe('fillChallengeNow — manual fill', () => {
+    test('explains when visual verification finds no matching photo', async () => {
+        const challenge = makeChallenge({ title: 'Banisters', closeIn: 86400 });
+        const submitToChallenge = jest.fn();
+        const result = await fillChallengeNow(challenge, 'tok', 'one', {
+            logger: makeLogger(),
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('motorcycle')]),
+            submitToChallenge,
+            pickVisuallyVerified: jest.fn().mockResolvedValue([]),
+        });
+        expect(result).toEqual({
+            success: false,
+            submitted: 0,
+            skipped: 4,
+            errorCode: 'no-visual-match',
+            error: 'No photo matched the challenge in the image check. The slot is still empty. Choose a photo manually.',
+        });
+        expect(submitToChallenge).not.toHaveBeenCalled();
+    });
+
     test("mode='one' submits exactly 1 photo regardless of slots remaining", async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });

@@ -33,6 +33,7 @@ const {
     hasThemeMatch,
 } = require('./photoPicker');
 const { getSemanticScores } = require('./semantic');
+const { pickVisuallyVerified } = require('./visionVerifier');
 const lexicon = require('./semantic/lexicon');
 const { resolveTermsToTags } = require('./tagResolver');
 const { enrichCandidates, resetPassState: resetPhotoStatsPassState } = require('./photoStats');
@@ -1058,6 +1059,22 @@ const rankCandidatesForChallenge = async (challenge, token, deps, opts = {}) => 
     return { status: 'ranked', picked };
 };
 
+const verifyFillPick = async (challenge, scored, eligible, picked, deps) => {
+    const ranked = finalizePick(scored, Math.max(12, picked.length));
+    const selected = new Set(picked.map(String));
+    const preferred = [...picked, ...ranked.filter((id) => !selected.has(String(id)))];
+    try {
+        const verifier = deps.pickVisuallyVerified || pickVisuallyVerified;
+        const result = await verifier(challenge, preferred, eligible, picked.length, deps.logger);
+        return Array.isArray(result) ? result : picked;
+    } catch (error) {
+        deps.logger
+            .withCategory('autoFill')
+            .warning(`Visual check failed for ${deps.logger.challengeTag(challenge)}: ${error.message || error}`, null);
+        return picked;
+    }
+};
+
 /**
  * The one fill pipeline all four public entry points share:
  *
@@ -1198,6 +1215,11 @@ const runFillAttempt = async ({
         }
     }
 
+    picked = await verifyFillPick(challenge, scored, eligible, picked, deps);
+    if (picked.length === 0) {
+        return { status: 'visual-stand-down' };
+    }
+
     try {
         const result = await submitToChallenge(challenge.id, picked, token);
         if (result && result.ok) {
@@ -1317,7 +1339,8 @@ const maybeAutoFillChallenge = async (challenge, token, now, deps) => {
         },
     });
     if (attempt.status === 'no-pick') return 'no-eligible-photos';
-    if (attempt.status === 'gone' || attempt.status === 'refresh-stand-down') return 'skipped';
+    if (attempt.status === 'gone' || attempt.status === 'refresh-stand-down' || attempt.status === 'visual-stand-down')
+        return 'skipped';
     if (attempt.status !== 'submitted') return 'error';
 
     // Reflect the consumed slot locally so a due turbo/boost later this
@@ -1511,7 +1534,12 @@ const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {
         },
     });
     if (attempt.status === 'no-pick') return 'no-eligible-photos';
-    if (attempt.status === 'probe-stand-down' || attempt.status === 'gone' || attempt.status === 'refresh-stand-down') {
+    if (
+        attempt.status === 'probe-stand-down' ||
+        attempt.status === 'gone' ||
+        attempt.status === 'refresh-stand-down' ||
+        attempt.status === 'visual-stand-down'
+    ) {
         return 'skipped';
     }
     if (attempt.status !== 'submitted') return 'error';
@@ -1626,6 +1654,15 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     if (attempt.status === 'no-pick') {
         return { success: false, submitted: 0, skipped: slotsRemaining, error: attempt.detail };
     }
+    if (attempt.status === 'visual-stand-down') {
+        return {
+            success: false,
+            submitted: 0,
+            skipped: slotsRemaining,
+            errorCode: 'no-visual-match',
+            error: 'No photo matched the challenge in the image check. The slot is still empty. Choose a photo manually.',
+        };
+    }
     if (attempt.status === 'submit-rejected') {
         return {
             success: false,
@@ -1636,7 +1673,7 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     }
     if (attempt.status !== 'submitted') {
         // Only 'submit-threw' can reach here — manual fill wires no probe,
-        // pick-guard, or refresh hook, so those statuses cannot occur.
+        // pick-guard, or refresh hook, and visual stand-down is handled above.
         return {
             success: false,
             submitted: 0,
@@ -1728,6 +1765,7 @@ const submitNewEntryForAction = async (challenge, token, deps) => {
     if (attempt.status === 'no-pick') {
         return { ok: false, imageId: null, reason: 'no-eligible' };
     }
+    if (attempt.status === 'visual-stand-down') return { ok: false, imageId: null, reason: 'no-visual-match' };
     if (attempt.status === 'gone') return { ok: false, imageId: null, reason: 'challenge-gone' };
     if (attempt.status === 'refresh-stand-down') return { ok: false, imageId: null, reason: 'no-slots' };
     if (attempt.status !== 'submitted') return { ok: false, imageId: null, reason: 'submit-failed' };

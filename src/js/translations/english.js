@@ -367,6 +367,8 @@
             validationOutOfRange: 'Enter a value between {min} and {max}.',
             validationAtLeast: 'Enter a value of {min} or more.',
             autoFillBadge: 'auto-fill',
+            visualNoMatch:
+                'No photo matched the challenge in the image check. The slot is still empty. Choose a photo manually.',
             customBadge: 'custom',
             customSettingsHint: 'Has custom settings',
             mustIncludeTags: 'Must Include Tags',
@@ -380,10 +382,10 @@
                 'Words to strip from a challenge title before it is used to find matching photos. Challenge titles usually qualify their subject rather than just naming it — "Epic Lighthouses" is about lighthouses, not "epic" — and those extra words both blur the theme and use up the small number of searches per challenge. The list is pre-filled with common ones; edit it freely. Remove a word if a challenge really is about it. Series prefixes like "Color Hunt:" are handled automatically and do not need an entry.',
             fillWithoutTagMatch: 'Fill Even Without a Tag Match',
             fillWithoutTagMatchDesc:
-                'Only matters when Must Include Tags is set. Because a photo must match every tag, this triggers more often when several tags are required. When on (default), if none of your photos match all those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a fully matching photo exists.',
+                'Only matters when Must Include Tags is set. Because a photo must match every tag, this triggers more often when several tags are required. When on (default), if none of your photos match all those tags the best available photo is added anyway so the slot is not left empty. When off, the slot stays empty until a fully matching photo exists. Where image checking is available, the slot can still stay empty if no photo looks relevant.',
             emergencyFill: 'Emergency Fill',
             emergencyFillDesc:
-                'Safety net that runs in the last minutes of a challenge when auto-fill would otherwise leave entry slots empty — either because auto-fill is off, or because your Must Include Tags match no photo and Fill Without Tag Match is off. When a challenge is within this much time of closing, it fills the remaining slots with your best available photos anyway, even if they do not match your tags. This overrides those settings on purpose, so the challenge does not end with unused slots. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this window no longer than the Last Minute Threshold (default 10 minutes) so the app is already checking frequently for the whole of it.',
+                'Safety net that runs in the last minutes of a challenge when auto-fill would otherwise leave entry slots empty — either because auto-fill is off, or because your Must Include Tags match no photo and Fill Without Tag Match is off. When a challenge is within this much time of closing, it fills the remaining slots with your best available photos anyway, even if they do not match your tags. This overrides those settings on purpose. Where image checking is available, a slot can still stay empty if no photo looks relevant. Within this same window it also applies any available Boost and any won Turbo — even if Auto-Apply Boost or Auto-Apply Turbo is off for the challenge — so they are not wasted when it closes. Entered as hours and minutes in the GUI. Default 5 minutes; set to 0 to disable it (which also turns off this last-minute Boost/Turbo override). Tip: keep this window no longer than the Last Minute Threshold (default 10 minutes) so the app is already checking frequently for the whole of it.',
             emergencyFillHelp:
                 'A last-minutes safety net measured as time-before-close. Set to 0 to disable it entirely (which also drops its last-minute Boost/Turbo rescue). 0 means "off" here — unlike the Exposure Target settings where 0 means "follow the trigger".',
             tagsPlaceholder: 'e.g. sunset, beach, ocean',

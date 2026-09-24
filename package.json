@@ -97,10 +97,12 @@
         "@capacitor/core": "^8.5.2",
         "@capacitor/preferences": "^8.0.1",
         "@capawesome-team/capacitor-android-foreground-service": "^8.1.0",
+        "@huggingface/transformers": "4.3.0",
         "@preact/signals": "^2.11.2",
         "axios": "^1.20.0",
         "electron-updater": "^6.8.9",
         "preact": "^10.29.8",
+        "tar": "7.5.22",
         "zod": "^4.6.5"
     },
     "devDependencies": {
@@ -134,6 +136,7 @@
         "lefthook": "^2.1.14",
         "marked": "^18.0.14",
         "marked-gfm-heading-id": "^4.1.4",
+        "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0",
         "postject": "1.0.0-alpha.6",
         "prettier": "4.0.0-alpha.13",
         "tailwindcss": "^4.3.3",
@@ -169,6 +172,16 @@
             "src/js/**/*",
             "src/assets/**/*",
             "package.json"
+        ],
+        "extraResources": [
+            {
+                "from": ".cache/vision-model",
+                "to": "vision-model"
+            }
+        ],
+        "asarUnpack": [
+            "**/onnxruntime-node/bin/**/*",
+            "**/@img/**/*"
         ],
         "directories": {
             "output": "build"

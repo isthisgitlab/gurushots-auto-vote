@@ -4,8 +4,10 @@ const { build } = require('esbuild');
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const packageJson = require('../package.json');
 const { runIfMain } = require('./lib/run-if-main');
+const { ensureVisionModel } = require('./fetch-vision-model');
 
 const { version } = packageJson;
 
@@ -39,7 +41,7 @@ async function bundleCli() {
         target: 'node26',
         format: 'cjs',
         outfile: path.join(DIST_DIR, 'cli-bundled.js'),
-        external: ['electron'],
+        external: ['electron', '@huggingface/transformers'],
         minify: false,
         sourcemap: false,
         define: {
@@ -49,10 +51,23 @@ async function bundleCli() {
     console.log('✅ CLI bundled');
 }
 
-function generateSeaBlob() {
+async function prepareVisionRuntime() {
+    const modelDir = await ensureVisionModel();
+    const deployDir = path.join(ROOT, '.cache', 'vision-cli-deploy');
+    fs.rmSync(deployDir, { recursive: true, force: true });
+    execFileSync('pnpm', ['deploy', '--prod', '--ignore-scripts', deployDir], { cwd: ROOT, stdio: 'inherit' });
+    fs.cpSync(modelDir, path.join(deployDir, 'vision-model'), { recursive: true });
+    const archive = path.join(BUILD_DIR, 'vision-runtime.tar.gz');
+    execFileSync('tar', ['-czf', archive, '-C', deployDir, 'node_modules', 'vision-model'], { stdio: 'inherit' });
+    const digest = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+    fs.writeFileSync(path.join(BUILD_DIR, 'vision-runtime.sha256'), digest);
+    fs.rmSync(deployDir, { recursive: true, force: true });
+}
+
+function generateSeaBlob(nodeBinary = process.execPath) {
     console.log('📦 Generating SEA blob...');
-    const seaConfigPath = path.join(DIST_DIR, 'sea-config.json');
-    const seaBlobPath = path.join(DIST_DIR, 'sea-prep.blob');
+    const seaConfigPath = path.join(BUILD_DIR, 'sea-config.json');
+    const seaBlobPath = path.join(BUILD_DIR, 'sea-prep.blob');
     const seaConfig = {
         main: path.join(DIST_DIR, 'cli-bundled.js'),
         output: seaBlobPath,
@@ -66,8 +81,13 @@ function generateSeaBlob() {
     if (fs.existsSync(lexiconAsset)) {
         seaConfig.assets = { 'semantic-vectors.json': lexiconAsset };
     }
+    seaConfig.assets = {
+        ...seaConfig.assets,
+        'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
+        'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
+    };
     fs.writeFileSync(seaConfigPath, JSON.stringify(seaConfig, null, 2));
-    execFileSync(process.execPath, ['--experimental-sea-config', seaConfigPath], { stdio: 'inherit' });
+    execFileSync(nodeBinary, ['--experimental-sea-config', seaConfigPath], { stdio: 'inherit' });
     console.log('✅ SEA blob generated');
     return seaBlobPath;
 }
@@ -118,13 +138,9 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
     fs.copyFileSync(sourceBinary, outputBinary);
     fs.chmodSync(outputBinary, 0o755);
 
-    // Linux nodejs.org tarballs ship unstripped (~25-30 MB of reclaimable debug info).
-    // macOS strip wants -u -r to tolerate indirect references / universal slices.
-    // Each CLI target builds on its native-arch runner (mac on macos-26, linux x64 on
-    // ubuntu-latest, linux arm64 on ubuntu-24.04-arm), so the host's `strip` always
-    // matches the target ELF/Mach-O.
-    const stripArgs = plat === 'darwin' ? ['-u', '-r', outputBinary] : [outputBinary];
-    execFileSync('strip', stripArgs, { stdio: 'inherit' });
+    // Keep Node's exported N-API symbols: the embedded vision runtime loads
+    // sharp and ONNX native addons from its self-extracted bundle. Stripping
+    // the executable removes those symbols and causes dlopen to fail.
 
     // Invoke postject's local binary directly to avoid a runtime dependency on `pnpm` being
     // on PATH (the CLI build is called via `node scripts/build-cli.js`, which may not inherit
@@ -137,8 +153,8 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
     execFileSync(postjectBin, postjectArgs, { stdio: 'inherit' });
 
     if (plat === 'darwin') {
-        // Apple Silicon AMFI rejects unsigned binaries. strip + postject invalidated the
-        // nodejs.org signature; -f lets codesign overwrite the broken state with ad-hoc.
+        // Apple Silicon AMFI rejects unsigned binaries. postject invalidated the
+        // nodejs.org signature; -f lets codesign overwrite it with ad-hoc.
         // No Developer ID / notarization — users still see the Gatekeeper prompt on
         // browser-downloaded binaries and bypass via xattr or right-click → Open.
         execFileSync('codesign', ['-f', '--sign', '-', outputBinary], { stdio: 'inherit' });
@@ -163,14 +179,14 @@ async function main() {
     ensureDir(BUILD_DIR);
 
     try {
-        await bundleCli();
-        const seaBlobPath = generateSeaBlob();
-
         const targets = platformArg ? platforms.filter((p) => p.input === platformArg) : platforms;
-
-        if (platformArg && targets.length === 0) {
-            throw new Error(`Unknown platform: ${platformArg}`);
-        }
+        if (platformArg && targets.length === 0) throw new Error(`Unknown platform: ${platformArg}`);
+        await bundleCli();
+        await prepareVisionRuntime();
+        // Homebrew's Node can disable SEA; the official binary is also the
+        // injection target, so generate the blob with that exact build.
+        const hostNode = await getOfficialNodeBinary(process.platform, process.arch);
+        const seaBlobPath = generateSeaBlob(hostNode);
 
         for (const t of targets) {
             await buildPlatform(t, seaBlobPath);
@@ -185,4 +201,13 @@ async function main() {
 
 runIfMain(require.main, module, main);
 
-module.exports = { platforms, ensureDir, bundleCli, generateSeaBlob, getOfficialNodeBinary, buildPlatform, main };
+module.exports = {
+    platforms,
+    ensureDir,
+    bundleCli,
+    prepareVisionRuntime,
+    generateSeaBlob,
+    getOfficialNodeBinary,
+    buildPlatform,
+    main,
+};

@@ -11,8 +11,8 @@
  *   1. dist/cli-bundled.js — the esbuild bundle of our CLI + shared core. This
  *      is OUR code; a jump here means we pulled in something heavy.
  *   2. build/cli/gurucli-* — the final SEA binaries. The budget here is loose;
- *      it only catches gross regressions (e.g. a skipped `strip`, a wrong-arch
- *      copy, or a doubled binary), not small code changes.
+ *      it only catches gross regressions (e.g. a wrong-arch copy or a doubled
+ *      embedded model), not small code changes.
  *
  * Both checks are skipped (not failed) when the artifact is absent, so the
  * script is safe to run before any build. In CI it runs after build:cli, where
@@ -31,7 +31,7 @@ const CLI_BUILD_DIR = path.join(ROOT, 'build', 'cli');
 // Guardrail budgets. Generous on purpose — these catch packaging mistakes, not
 // incremental growth. Revisit when actual CI sizes are established.
 const MAX_BUNDLE_MB = 5; // dist/cli-bundled.js (our code, unminified)
-const MAX_BINARY_MB = 150; // each SEA binary (Node runtime + our blob)
+const MAX_BINARY_MB = 600; // Node with exported N-API symbols + embedded local vision runtime/model
 
 const MB = 1024 * 1024;
 const fmt = (bytes) => `${(bytes / MB).toFixed(1)} MB`;
