@@ -139,7 +139,7 @@ const runSubjectGate = (config, lex) => {
     for (const f of failures) console.error(`   - ${f}`);
     console.error(
         '\n   Fix the axis first — `abstractAnchors` / `excludeParents` — then rebuild. Move\n' +
-            '   CONCRETE_SUBJECT_MIN / ABSTRACT_WORD_MAX (src/js/services/photoPicker.js) only for a case\n' +
+            '   CONCRETE_SUBJECT_MIN / ABSTRACT_WORD_MAX (src/js/services/photoPicker/title.js) only for a case\n' +
             '   that genuinely sits on the boundary, and never edit a case to match the output.',
     );
     process.exit(1);
@@ -319,7 +319,7 @@ const main = async ({ lex = lexicon, config = CONFIG, matchFloor = SEMANTIC_MATC
                 '   2. if the WHOLE related distribution sits low, raise RETROFIT_BETA in\n' +
                 '      scripts/fetch-embeddings.js and re-run fetch + build (offline once cached).\n' +
                 '      MEAN_CENTER is already on — do not turn it off to inflate related scores.\n' +
-                '   3. only then adjust SEMANTIC_MATCH_FLOOR (src/js/services/photoPicker.js), keeping it\n' +
+                '   3. only then adjust SEMANTIC_MATCH_FLOOR (src/js/services/photoPicker/tiers.js), keeping it\n' +
                 '      strictly inside p99(unrelated) < FLOOR < p25(related). Do NOT widen the gate itself.',
         );
         process.exit(1);

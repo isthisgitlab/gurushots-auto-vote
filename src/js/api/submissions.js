@@ -181,7 +181,7 @@ const getEligiblePhotos = async (challengeId, token, options = {}) => {
  * WHY THIS EXISTS: get_photos_private returns `votes: 0` for every library
  * photo and no `achievements` field at all, so the auto-fill picker's
  * popularity tiers were flat zero on real data and ranking collapsed to
- * views/upload-date (see the header of services/photoPicker.js). This
+ * views/upload-date (see the header of services/photoPicker/tiers.js). This
  * endpoint returns the real `votes`, `views` and `achievements`, and is what
  * services/photoStats.js uses to enrich candidates before ranking.
  *

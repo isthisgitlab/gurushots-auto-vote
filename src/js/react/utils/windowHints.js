@@ -6,7 +6,7 @@
  * so both hint blocks derive their state from here rather than each carrying
  * its own copy of the occurrence math.
  *
- * Mirrors `_triggerWindowState` in `services/VotingLogic.js`: same cap slice,
+ * Mirrors `_triggerWindowState` in `services/decisions/triggerWindows.js`: same cap slice,
  * same "active needs at least one USABLE entry" rule, same corrupt-value
  * fallbacks. Keeping the two in step is the point — a hint must never promise
  * a window the decision path won't open, or stay silent about one it will.

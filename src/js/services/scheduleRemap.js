@@ -12,8 +12,8 @@
  * compresses — a challenge allowing more images than the schedule covers is
  * left untouched.
  *
- * Shared between the voting core (services/autoFill.js) and the React
- * renderer (ChallengeSettingsModal's per-challenge hint), following the
+ * Shared between the voting core (services/autoFill/schedule.js) and the React
+ * renderer (the per-challenge settings modal's hint), following the
  * randomDelay.js precedent: pure functions — no logger, no settings I/O —
  * so the module stays bundle-friendly for both runtimes.
  */
@@ -23,9 +23,9 @@
 // it. schema.js carries a back-reference comment; keep the two in sync.
 const MAX_SCHEDULE_COUNT = 4;
 
-// Mirror of autoFill.js MAX_SCHEDULE_ROWS_READ, applied here as well because
+// Mirror of autoFill/schedule.js MAX_SCHEDULE_ROWS_READ, applied here as well because
 // the renderer calls this module directly on the raw settings value — without
-// autoFill.js's getValidScheduleRows cap on the path — and re-runs it on every
+// autoFill/schedule.js's getValidScheduleRows cap on the path — and re-runs it on every
 // modal render. A corrupted, hand-edited blob with a pathologically long array
 // must not walk in full per keystroke.
 const MAX_ROWS_READ = 100;
@@ -41,7 +41,7 @@ const isSaneCount = (c) => Number.isInteger(c) && c >= 2 && c <= MAX_SCHEDULE_CO
  * fire with its own seconds value — reproducing the too-early-fill bug this
  * module exists to fix. Dropping it is fail-closed (fewer fills; emergency
  * fill remains the safety net). Non-array input is tolerated because the
- * renderer calls these directly, without autoFill.js's getValidScheduleRows
+ * renderer calls these directly, without autoFill/schedule.js's getValidScheduleRows
  * guard on the path — settings still resolving during initial load must not
  * throw inside a React render.
  *

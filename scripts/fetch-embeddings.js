@@ -521,7 +521,7 @@ const main = async ({
         fail([
             `bad stem-merge rate ${(badRate * 100).toFixed(2)}% exceeds the ` +
                 `${MAX_BAD_COLLISION_RATE * 100}% ceiling — the stemmer is merging unrelated words at scale.`,
-            'Inspect the samples above; fix the stemmer edge case (src/js/services/photoPicker.js) before committing.',
+            'Inspect the samples above; fix the stemmer edge case (src/js/services/photoPicker/stemming.js) before committing.',
         ]);
     }
 

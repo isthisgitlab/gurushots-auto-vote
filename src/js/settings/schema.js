@@ -1398,7 +1398,7 @@ const SETTINGS_SCHEMA = {
     // a subject: it dilutes the pooled theme vector and, because only
     // SEARCH_TERMS_CAP terms are searched, it can push the real subject out
     // entirely. The series prefix in "Color Hunt: Green" is handled structurally
-    // (see titleSubject in services/photoPicker.js) and needs no entry here.
+    // (see titleSubject in services/photoPicker/title.js) and needs no entry here.
     //
     // Seeded rather than hardcoded on purpose: every word is visible and
     // removable. Delete one if a challenge genuinely IS about it — "Negative

@@ -51,7 +51,7 @@
  * clear the SAME floor, capped at SEMANTIC_SUPPORT_CAP. It is a COUNT of
  * on-theme labels, never an average over all of them - averaging is the shape
  * that measured how generic a photo was, and nothing here reintroduces it. The
- * picker ranks it strictly below the max (see tier 3 in photoPicker.js), so it
+ * picker ranks it strictly below the max (see tier 3 in photoPicker/tiers.js), so it
  * only ever orders photos the max already agreed are on theme.
  *
  * The floor needs no re-derivation for this: the quantity being thresholded is

@@ -602,7 +602,7 @@ describe('photoPicker', () => {
                 allowed('themeMatch', ['Pink'], 1000, { achievements: [], votes: 0 }),
                 // Highest votes — outranks the badge-heavier photo below, because
                 // raw popularity is the stronger signal (see the tier list in
-                // photoPicker.js's header).
+                // photoPicker/tiers.js's header).
                 allowed('highVotes', ['Misc'], 5000, { achievements: [], votes: 800 }),
                 // More achievements, but fewer votes
                 allowed('manyWins', ['Misc'], 1000, { achievements: ['a', 'b'], votes: 100 }),

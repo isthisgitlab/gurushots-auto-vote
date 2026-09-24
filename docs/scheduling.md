@@ -117,7 +117,7 @@ the next round opens. The triggers mirror scheduled fill exactly — daily
 A 01:30–06:00 night pause is `votingPauseTime: ['01:30']` with a duration of 270.
 
 The decision side lives in `getVotingPauseState`
-(`src/js/services/VotingLogic.js`), which shares `_triggerWindowState` with
+(`src/js/services/decisions/triggerWindows.js`), which shares `_triggerWindowState` with
 `getScheduledFillState` so the two can never drift on entry/corruption
 semantics. Its branch in `_runVotingRules` sits **below** flash, last-minute
 and the pre-boost fill (a challenge that really closes mid-pause still gets its

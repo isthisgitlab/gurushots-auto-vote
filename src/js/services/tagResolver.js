@@ -146,7 +146,7 @@ const resolveTermsToTags = async (terms, challenge, deps) => {
     // deadline. Sequential chains would stack to SEARCH_TERMS_CAP x
     // (MAX_BACKOFF_STEPS + 1) round-trips end to end; this bounds the wall clock
     // to the slowest single chain, the same reasoning that parallelises
-    // searchUnion in autoFill.js.
+    // searchUnion in autoFill/candidates.js.
     const chains = await Promise.all(
         usable.map(async (term) => {
             for (let step = 0; step <= MAX_BACKOFF_STEPS; step++) {

@@ -26,7 +26,7 @@ const resolveScheduledFill = (challengeId) => ({
 
 // Per-challenge pre-final-window top-up config for the cadence cap (./thresholdWindow.js).
 // Enabled only when BOTH the final-window feature and this opt-in are on — matching the
-// rule engine's gate in VotingLogic._runVotingRules. leadSec is minutes → seconds and
+// rule engine's gate in _runVotingRules (services/decisions/ruleEngine.js). leadSec is minutes → seconds and
 // durationSec is the configurable final-window length; thresholdWindow.js re-guards a
 // non-positive/NaN value for both.
 const resolveFinalWindowTopUp = (challengeId) => ({

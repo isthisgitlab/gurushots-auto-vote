@@ -68,7 +68,8 @@ const MIN_AUTOCOMPLETE_CHARS = 3;
 // words and the live endpoint returns about five of them, so these ceilings sit
 // far above anything legitimate while keeping the per-entry validation work in
 // tagResolver bounded regardless of what comes back. Mirrors the
-// MAX_TOKENISE_CHARS / MAX_LABELS_PER_PHOTO caps in photoPicker.js.
+// MAX_TOKENISE_CHARS / MAX_LABELS_PER_PHOTO caps in services/photoPicker/
+// (stemming.js, labels.js).
 const MAX_TAG_LENGTH = 120;
 const MAX_AUTOCOMPLETE_ITEMS = 25;
 
