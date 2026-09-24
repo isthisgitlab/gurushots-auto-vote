@@ -98,7 +98,6 @@ Commands:
   boost    - Apply a boost to a challenge: boost --challenge=<id> [--image=<id>]
   turbo    - Play the turbo mini-game on a challenge: turbo --challenge=<id>
   submit   - Submit photo(s) to a challenge's empty slots: submit --challenge=<id> [--all]
-             (formerly 'fill', still accepted; not the same as fill-exposure)
   unlock-boost  - Spend a key to unlock a locked boost (does not apply it):
              unlock-boost --challenge=<id> [--yes]
   swap     - Spend a swap to replace an entered photo with a different one:
@@ -227,9 +226,7 @@ const main = async () => {
                 process.exit(0);
                 break;
             }
-            // `fill` is the pre-rename name, kept so existing scripts still work.
-            case 'submit':
-            case 'fill': {
+            case 'submit': {
                 const { challengeId, rest } = extractChallenge(args.slice(1));
                 requireChallenge({ challengeId }, 'Usage: submit --challenge=<id> [--all]');
                 await fillChallenge(challengeId, { all: rest.includes('--all') });

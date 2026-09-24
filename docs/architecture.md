@@ -27,7 +27,7 @@ Domain terms used throughout, in reader's terms:
 - **auto-fill** — automatically submit new photo entries into a challenge's open slots. User-facing text
   calls this **Auto-Submit** (and `emergencyFill` **Emergency Submit**): to GuruShots players a **fill** is the
   currency that tops exposure up to 100% (`autoExposureFill`, the `fills` balance), so the UI, CLI and README
-  reserve "fill" for that. Code ids, setting keys and log categories keep the `autoFill`/`emergencyFill` names.
+  reserve "fill" for that.
 - **boost** — a one-shot exposure multiplier applied to a single entry.
 - **turbo** — a timed exposure surge on an entry.
 - **flash** — a challenge _type_ that is always auto-targeted to 100%.

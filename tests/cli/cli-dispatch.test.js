@@ -287,14 +287,11 @@ describe('challenge-scoped actions', () => {
         expect(m.actions.turboChallenge).toHaveBeenCalledWith('5');
     });
 
-    // `fill` is the pre-rename alias of `submit` and must keep dispatching.
     test.each([
-        ['submit', ['--challenge=5', '--all'], true],
-        ['submit', ['--challenge=5'], false],
-        ['fill', ['--challenge=5', '--all'], true],
-        ['fill', ['--challenge=5'], false],
-    ])('%s %p', async (cmd, tail, all) => {
-        const m = await run([cmd, ...tail]);
+        [['--challenge=5', '--all'], true],
+        [['--challenge=5'], false],
+    ])('submit %p', async (tail, all) => {
+        const m = await run(['submit', ...tail]);
         expect(m.actions.fillChallenge).toHaveBeenCalledWith('5', { all });
     });
 

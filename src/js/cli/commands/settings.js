@@ -454,7 +454,7 @@ Time settings (stored in SECONDS — the GUI enters them as hours+minutes):
 Scheduled voting (vote exposure up to 100% at chosen times — per-challenge, set
 with set-global-default or set-setting --challenge=<id>; every entry opens its
 own voting window, all OR'd; older single values migrate to arrays
-automatically. Keys keep their historical "Fill" names):
+automatically):
   useScheduledFill           - Master switch (default: false). Inert until a
                                time below is set; never applies to flash or
                                boost-only challenges.
@@ -504,9 +504,8 @@ few votes. Same per-challenge scoping and JSON value format):
     set-global-default votingPauseTime '["01:30"]'
     set-global-default votingPauseDurationMinutes 270
 
-Auto-Submit schedule (photo submission; JSON array of {count, seconds} rows;
-replaces the old autoFillIntervalMinutes — existing values are migrated
-automatically. Keys keep their historical "autoFill" names):
+Auto-Submit schedule (JSON array of {count, seconds} rows; replaces the old
+autoFillIntervalMinutes — existing values are migrated automatically):
   autoFillSchedule     - Each row: have at least <count> entries once <seconds>
                          remain before close. Counts 2-4 (max 3 rows, unique) —
                          challenges allow at most 4 images and image 1 always
