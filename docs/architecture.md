@@ -329,6 +329,16 @@ repeated six times is one that gets forgotten at one of them.
       within the last hour (an older CLI still running may not have loaded its model yet).
     - Android: `dist/` is the WebView root, so `vision-model/` and the single-threaded ORT WASM files are
       served from it and inference runs on the `wasm` device with one thread.
+- **Lite builds** (`build:<os>:lite`, `build:cli:<target>:lite`, `build:android:lite`) ship none of the above:
+  `scripts/electron-builder-lite.js` drops `extraResources` and the transformers/onnxruntime/sharp packages,
+  `build-cli.js --lite` embeds no runtime asset, and `build-react.js --lite` clears the model and WASM files from
+  `dist/` and leaves transformers out of the bundles. `hasBundledModel()` (a fetch of
+  `vision-model/config.json` on Android, the `vision-runtime.sha256` SEA asset on the CLI, the model folder
+  otherwise; cached) makes `rankVisually()` keep the tag order without a warning. It also keeps updates on lite:
+  the Android update check asks for `-lite.apk` (`pickAsset()` never gives a plain suffix a `-lite` asset), and
+  the lite desktop app reads `lite*.yml` via the `channel` in its `app-update.yml`. electron-updater's GitHub
+  provider replaces that channel with the prerelease one on beta tags and falls back to `latest*.yml` (the full
+  build), so `AutoUpdater` turns `allowPrerelease` off for lite.
 
 ## 5. Safety / idempotency guards
 

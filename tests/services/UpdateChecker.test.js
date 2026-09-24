@@ -54,6 +54,18 @@ describe('UpdateChecker', () => {
             expect(pickAsset(release, '.apk')).toEqual({ name: 'app.apk', browser_download_url: 'apk-url' });
         });
 
+        it('keeps the full and lite builds apart whatever order the release lists them in', () => {
+            const both = {
+                assets: [
+                    { name: 'GuruShotsAutoVote-v2.0.0-lite.apk', browser_download_url: 'lite-url' },
+                    { name: 'GuruShotsAutoVote-v2.0.0.apk', browser_download_url: 'full-url' },
+                ],
+            };
+            expect(pickAsset(both, '.apk').browser_download_url).toBe('full-url');
+            expect(pickAsset(both, '-lite.apk').browser_download_url).toBe('lite-url');
+            expect(pickAsset({ assets: both.assets.slice(0, 1) }, '.apk')).toBeNull();
+        });
+
         it('returns null when nothing matches', () => {
             expect(pickAsset(release, '.exe')).toBeNull();
         });

@@ -5,7 +5,7 @@ const mockRuntime = {
     isElectron: jest.fn(() => true),
     isPackaged: jest.fn(() => true),
 };
-const mockSea = { isSea: jest.fn(() => false) };
+const mockSea = { isSea: jest.fn(() => false), getAsset: jest.fn(() => 'sha') };
 const mockClassifier = jest.fn();
 const mockTransformers = {
     env: { backends: { onnx: { wasm: {} } } },
@@ -25,9 +25,11 @@ jest.mock('node:module', () => ({ createRequire: mockCreateRequire }));
 jest.mock('@huggingface/transformers', () => mockTransformers);
 jest.mock('../../src/js/services/visionCliAssets', () => ({ extractVisionCliAssets: mockExtract }));
 
+const fs = require('node:fs');
 const path = require('node:path');
 const {
     rankVisually,
+    hasBundledModel,
     orderByVisualFit,
     challengePrompts,
     descriptionLead,
@@ -68,6 +70,9 @@ beforeEach(() => {
     mockRuntime.isElectron.mockReturnValue(true);
     mockRuntime.isPackaged.mockReturnValue(true);
     mockSea.isSea.mockReturnValue(false);
+    mockSea.getAsset.mockReturnValue('sha');
+    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    global.fetch = jest.fn(async () => ({ ok: true }));
     // Reset in place: the dynamic-import interop keeps a reference to the
     // original env object, so replacing it would hide the module's writes.
     for (const { env } of [mockTransformers, mockSeaTransformers]) {
@@ -79,6 +84,8 @@ beforeEach(() => {
 
 afterAll(() => {
     delete process.resourcesPath;
+    delete global.fetch;
+    jest.restoreAllMocks();
 });
 
 describe('descriptionLead', () => {
@@ -285,5 +292,55 @@ describe('rankVisually', () => {
         await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
         expect(mockExtract).not.toHaveBeenCalled();
         expect(mockTransformers.env.localModelPath).toBe(path.join(__dirname, '..', '..', '.cache') + path.sep);
+    });
+
+    test('a lite build without the model keeps the tag order quietly and checks only once', async () => {
+        fs.existsSync.mockReturnValue(false);
+        const logger = makeLogger();
+        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger })).toEqual([hex('a')]);
+        await rankVisually(LEAVES, ids, eligible, 1, { logger });
+        expect(fs.existsSync).toHaveBeenCalledTimes(1);
+        expect(fs.existsSync).toHaveBeenCalledWith(
+            path.join(`/app/resources${path.sep}`, 'vision-model', 'config.json'),
+        );
+        expect(mockTransformers.pipeline).not.toHaveBeenCalled();
+        expect(logger.scoped.warning).not.toHaveBeenCalled();
+    });
+});
+
+describe('hasBundledModel', () => {
+    test.each([
+        ['serves the model config', async () => ({ ok: true }), true],
+        ['answers 404', async () => ({ ok: false }), false],
+        ['cannot fetch at all', async () => Promise.reject(new Error('offline')), false],
+    ])('the Android WebView sees the model when its webDir %s', async (_name, response, expected) => {
+        mockRuntime.isCapacitor.mockReturnValue(true);
+        global.fetch.mockImplementation(response);
+        expect(await hasBundledModel()).toBe(expected);
+        expect(global.fetch).toHaveBeenCalledWith('vision-model/config.json');
+    });
+
+    test('the SEA CLI looks for the embedded runtime asset', async () => {
+        mockRuntime.isCli.mockReturnValue(true);
+        mockSea.isSea.mockReturnValue(true);
+        expect(await hasBundledModel()).toBe(true);
+        expect(mockSea.getAsset).toHaveBeenCalledWith('vision-runtime.sha256');
+
+        __resetForTests();
+        mockSea.getAsset.mockImplementation(() => {
+            throw new Error('ERR_SINGLE_EXECUTABLE_APPLICATION_ASSET_NOT_FOUND');
+        });
+        expect(await hasBundledModel()).toBe(false);
+        expect(fs.existsSync).not.toHaveBeenCalled();
+    });
+
+    test('a source-run CLI checks the build cache', async () => {
+        mockRuntime.isCli.mockReturnValue(true);
+        mockRuntime.isElectron.mockReturnValue(false);
+        fs.existsSync.mockReturnValue(false);
+        expect(await hasBundledModel()).toBe(false);
+        expect(fs.existsSync).toHaveBeenCalledWith(
+            path.join(path.join(__dirname, '..', '..', '.cache') + path.sep, 'vision-model', 'config.json'),
+        );
     });
 });

@@ -54,6 +54,9 @@ const mockSettings = {
 
 jest.mock('../../src/js/settings', () => mockSettings);
 
+const mockHasBundledModel = jest.fn(async () => true);
+jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
+
 const mockQuitGuard = { bypassQuitGuard: jest.fn() };
 jest.mock('../../src/js/windows/quitGuard', () => mockQuitGuard);
 
@@ -117,6 +120,20 @@ describe('AutoUpdater', () => {
             expect(mockAutoUpdater.checkForUpdates).toHaveBeenCalled();
             expect(result).toBeDefined();
             expect(result.latestVersion).toBe('0.7.0');
+        });
+
+        it('a full build keeps the default prerelease handling', async () => {
+            delete mockAutoUpdater.allowPrerelease;
+            await autoUpdater.checkForUpdates();
+            expect(mockAutoUpdater.allowPrerelease).toBeUndefined();
+        });
+
+        it('a lite build (no bundled vision model) never takes prereleases', async () => {
+            mockHasBundledModel.mockResolvedValueOnce(false);
+            await autoUpdater.checkForUpdates();
+            expect(mockAutoUpdater.allowPrerelease).toBe(false);
+            expect(mockAutoUpdater.checkForUpdates).toHaveBeenCalled();
+            delete mockAutoUpdater.allowPrerelease;
         });
 
         it('should skip check if checked within 24 hours', async () => {

@@ -41,6 +41,12 @@ const guiSection = (v) =>
         `- GuruShotsAutoVote-v${v}-x86_64.AppImage`,
         `- GuruShotsAutoVote-v${v}-arm64.AppImage`,
         `- GuruShotsAutoVote-v${v}.apk`,
+        `- GuruShotsAutoVote-v${v}-x64-lite.exe`,
+        `- GuruShotsAutoVote-v${v}-arm64-lite.dmg`,
+        `- GuruShotsAutoVote-v${v}-arm64-lite.app.zip`,
+        `- GuruShotsAutoVote-v${v}-x86_64-lite.AppImage`,
+        `- GuruShotsAutoVote-v${v}-arm64-lite.AppImage`,
+        `${DL}/GuruShotsAutoVote-v${v}-lite.apk`,
         `${DL}/GuruShotsAutoVote-v${v}-x64.exe`,
         `${DL}/GuruShotsAutoVote-v${v}-arm64.dmg`,
         `${DL}/GuruShotsAutoVote-v${v}-arm64.app.zip`,
@@ -57,6 +63,7 @@ const cliSection = (v) =>
         `${DL}/gurucli-v${v}-mac`,
         `${DL}/gurucli-v${v}-linux-arm`,
         `${DL}/gurucli-v${v}-linux`,
+        `${DL}/gurucli-v${v}-linux-arm-lite`,
         `./gurucli-v${v}-[platform]`,
     ].join('\n');
 
@@ -128,11 +135,13 @@ describe('scripts/readme-version.js', () => {
 
             expect(mockFiles.get(README)).toBe(readme('2.0.0'));
             expect(mockFiles.get(README_LV)).toBe(readmeLv('2.0.0'));
-            // -linux-arm must not be clobbered by the bare -linux rule.
+            // -linux-arm must not be clobbered by the bare -linux rule, nor the
+            // lite APK by the full one (its `-lite` reads like a prerelease tag).
             expect(mockFiles.get(README)).toContain('gurucli-v2.0.0-linux-arm');
-            expect(out()).toContain('✓ README.md: 20 occurrence(s) updated to v2.0.0');
-            expect(out()).toContain('✓ README.lv.md: 20 occurrence(s) updated');
-            expect(out()).toContain('40 total replacement(s) for v2.0.0.');
+            expect(mockFiles.get(README)).toContain('GuruShotsAutoVote-v2.0.0-lite.apk');
+            expect(out()).toContain('✓ README.md: 28 occurrence(s) updated to v2.0.0');
+            expect(out()).toContain('✓ README.lv.md: 28 occurrence(s) updated');
+            expect(out()).toContain('56 total replacement(s) for v2.0.0.');
         });
 
         test('reports files already at the current version without writing', () => {

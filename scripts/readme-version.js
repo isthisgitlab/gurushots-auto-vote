@@ -32,6 +32,8 @@ const dl = `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/
 //
 // Ordering note: `-linux-arm` rules MUST precede `-linux` because /-linux/ matches inside
 // /-linux-arm/. Insert any new variants (e.g. `-linux-riscv`) BEFORE the bare `-linux` rules.
+// The gurucli rules also cover the `-lite` binaries (the suffix follows the matched text); the
+// `.apk` rules look behind for `-lite` because `v` would otherwise read it as a prerelease tag.
 const rules = [
     [`\\*\\*Latest Version: v${v}`, `**Latest Version: v${vRepl}`, 'always'],
     [`GuruShotsAutoVote-v${v}-x64\\.exe`, `GuruShotsAutoVote-v${vRepl}-x64.exe`, 'always'],
@@ -39,7 +41,13 @@ const rules = [
     [`GuruShotsAutoVote-v${v}-arm64\\.app\\.zip`, `GuruShotsAutoVote-v${vRepl}-arm64.app.zip`, 'always'],
     [`GuruShotsAutoVote-v${v}-x86_64\\.AppImage`, `GuruShotsAutoVote-v${vRepl}-x86_64.AppImage`, 'always'],
     [`GuruShotsAutoVote-v${v}-arm64\\.AppImage`, `GuruShotsAutoVote-v${vRepl}-arm64.AppImage`, 'always'],
-    [`GuruShotsAutoVote-v${v}\\.apk`, `GuruShotsAutoVote-v${vRepl}.apk`, 'always'],
+    [`GuruShotsAutoVote-v${v}(?<!-lite)\\.apk`, `GuruShotsAutoVote-v${vRepl}.apk`, 'always'],
+    [`GuruShotsAutoVote-v${v}-x64-lite\\.exe`, `GuruShotsAutoVote-v${vRepl}-x64-lite.exe`, 'always'],
+    [`GuruShotsAutoVote-v${v}-arm64-lite\\.dmg`, `GuruShotsAutoVote-v${vRepl}-arm64-lite.dmg`, 'always'],
+    [`GuruShotsAutoVote-v${v}-arm64-lite\\.app\\.zip`, `GuruShotsAutoVote-v${vRepl}-arm64-lite.app.zip`, 'always'],
+    [`GuruShotsAutoVote-v${v}-x86_64-lite\\.AppImage`, `GuruShotsAutoVote-v${vRepl}-x86_64-lite.AppImage`, 'always'],
+    [`GuruShotsAutoVote-v${v}-arm64-lite\\.AppImage`, `GuruShotsAutoVote-v${vRepl}-arm64-lite.AppImage`, 'always'],
+    [`GuruShotsAutoVote-v${v}-lite\\.apk`, `GuruShotsAutoVote-v${vRepl}-lite.apk`, 'always'],
     [`gurucli-v${v}-mac`, `gurucli-v${vRepl}-mac`, 'cli'],
     [`gurucli-v${v}-linux-arm`, `gurucli-v${vRepl}-linux-arm`, 'cli'],
     [`gurucli-v${v}-linux`, `gurucli-v${vRepl}-linux`, 'cli'],
@@ -48,7 +56,7 @@ const rules = [
     [`${dl}/GuruShotsAutoVote-v${v}-arm64\\.app\\.zip`, `${dl}/GuruShotsAutoVote-v${vRepl}-arm64.app.zip`, 'always'],
     [`${dl}/GuruShotsAutoVote-v${v}-x86_64\\.AppImage`, `${dl}/GuruShotsAutoVote-v${vRepl}-x86_64.AppImage`, 'always'],
     [`${dl}/GuruShotsAutoVote-v${v}-arm64\\.AppImage`, `${dl}/GuruShotsAutoVote-v${vRepl}-arm64.AppImage`, 'always'],
-    [`${dl}/GuruShotsAutoVote-v${v}\\.apk`, `${dl}/GuruShotsAutoVote-v${vRepl}.apk`, 'always'],
+    [`${dl}/GuruShotsAutoVote-v${v}(?<!-lite)\\.apk`, `${dl}/GuruShotsAutoVote-v${vRepl}.apk`, 'always'],
     [`${dl}/gurucli-v${v}-mac`, `${dl}/gurucli-v${vRepl}-mac`, 'cli'],
     [`${dl}/gurucli-v${v}-linux-arm`, `${dl}/gurucli-v${vRepl}-linux-arm`, 'cli'],
     [`${dl}/gurucli-v${v}-linux`, `${dl}/gurucli-v${vRepl}-linux`, 'cli'],

@@ -70,7 +70,7 @@ The desktop app now enforces this for GUI instances: launching it a second time 
 
 > **macOS:** Apple Silicon (arm64) only — there is no Intel (x86_64) build. The **DMG** is the simplest install; the **APP** zip is an alternative if you'd rather drop the bundle in yourself.
 
-> **Why the downloads are large:** every build (GUI, Android, and CLI) ships a ~200 MB image-recognition model (Google SigLIP, 8-bit quantized) plus its runtime. Auto-submit uses it to check that a photo actually shows the challenge's subject — see [Visual check](#auto-submit-missing-entries). It runs entirely on your device: nothing is downloaded on first use, no API key or account is needed, and no photo is uploaded anywhere.
+> **Why the downloads are large:** every build (GUI, Android, and CLI) ships a ~200 MB image-recognition model (Google SigLIP, 8-bit quantized) plus its runtime. Auto-submit uses it to check that a photo actually shows the challenge's subject — see [Visual check](#auto-submit-missing-entries). It runs entirely on your device: nothing is downloaded on first use, no API key or account is needed, and no photo is uploaded anywhere. Don't want it? Take a [lite build](#-lite-builds-no-image-model) instead.
 
 #### 📱 Mobile (Android sideload — no Play Store)
 
@@ -89,6 +89,22 @@ The Android build is a Capacitor wrapper around the same React UI, plus a Kotlin
 | **Linux CLI (ARM64)** | [📥 gurucli-v1.8.5-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-arm) | ~350 MB | Terminal Executable |
 
 > There is no Windows CLI build — on Windows, use the GUI app above.
+
+#### 🪶 Lite builds (no image model)
+
+Every download above also comes as a **lite** build without the image model and its runtime: the macOS DMG shrinks from ~310 MB to ~130 MB and the macOS CLI from ~375 MB to ~140 MB. Everything else works the same — auto-submit just skips the [visual check](#auto-submit-missing-entries) and keeps its tag-based ranking. A lite GUI or Android install is only offered lite updates (the lite desktop app skips pre-releases).
+
+| Platform                     | Download                                                                                                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Windows**                  | [📥 GuruShotsAutoVote-v1.8.5-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x64-lite.exe)                 |
+| **macOS (DMG)**              | [📥 GuruShotsAutoVote-v1.8.5-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64-lite.dmg)             |
+| **macOS (APP)**              | [📥 GuruShotsAutoVote-v1.8.5-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64-lite.app.zip)     |
+| **Linux (x64)**              | [📥 GuruShotsAutoVote-v1.8.5-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x86_64-lite.AppImage) |
+| **Linux (ARM64)**            | [📥 GuruShotsAutoVote-v1.8.5-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64-lite.AppImage)   |
+| **Android (8.0+, sideload)** | [📥 GuruShotsAutoVote-v1.8.5-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-lite.apk)                         |
+| **macOS CLI**                | [📥 gurucli-v1.8.5-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-mac-lite)                                             |
+| **Linux CLI (x64)**          | [📥 gurucli-v1.8.5-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-lite)                                         |
+| **Linux CLI (ARM64)**        | [📥 gurucli-v1.8.5-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-arm-lite)                                 |
 
 Prefer a specific version? Browse **[all releases](https://github.com/isthisgitlab/gurushots-auto-vote/releases)** or the **[latest release notes](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest)**.
 

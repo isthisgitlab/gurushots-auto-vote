@@ -250,37 +250,55 @@ jobs:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   NODE_ENV: production
 
-            - name: Zip macOS .app file with version
+            # Same app without the local vision model and its runtime, for users
+            # who don't want it (scripts/electron-builder-lite.js → build/lite/).
+            - name: Build lite Electron app
+              run: pnpm build:${{ matrix.platform }}:lite
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  NODE_ENV: production
+
+            - name: Zip macOS .app files with version
               if: matrix.platform == 'mac'
               run: |
                   set -euo pipefail
                   VERSION=$(node -p "require('./package.json').version")
-                  APP="build/mac-arm64/GuruShotsAutoVote.app"
-                  ZIP="build/GuruShotsAutoVote-v${VERSION}-arm64.app.zip"
-                  if [ -d "$APP" ]; then
-                    # ditto, not zip: the bundle's frameworks are reached through symlinks
-                    # (Versions/Current and friends) and zip without -y dereferences them.
-                    ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
+                  for OUT in build build/lite; do
+                    SUFFIX=$([ "$OUT" = build/lite ] && echo -lite || true)
+                    APP="$OUT/mac-arm64/GuruShotsAutoVote.app"
+                    ZIP="$OUT/GuruShotsAutoVote-v${VERSION}-arm64${SUFFIX}.app.zip"
+                    if [ -d "$APP" ]; then
+                      # ditto, not zip: the bundle's frameworks are reached through symlinks
+                      # (Versions/Current and friends) and zip without -y dereferences them.
+                      ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
-                    # Guard against that regression returning: dereferencing duplicated
-                    # Electron Framework and tripled the archive (v1.4.1 shipped 363 MB
-                    # for a 311 MB bundle). Count the source bundle rather than hardcode
-                    # a total, so this catches a partial dereference too and survives an
-                    # Electron bump that changes the framework layout.
-                    EXPECTED=$(find "$APP" -type l | wc -l | tr -d ' ')
-                    CHECK=$(mktemp -d)
-                    ditto -x -k "$ZIP" "$CHECK"
-                    ACTUAL=$(find "$CHECK/$(basename "$APP")" -type l | wc -l | tr -d ' ')
-                    rm -rf "$CHECK"
-                    if [ "$ACTUAL" -ne "$EXPECTED" ]; then
-                      echo "::error::.app.zip kept $ACTUAL of $EXPECTED symlinks — archiver regression"
-                      exit 1
+                      # Guard against that regression returning: dereferencing duplicated
+                      # Electron Framework and tripled the archive (v1.4.1 shipped 363 MB
+                      # for a 311 MB bundle). Count the source bundle rather than hardcode
+                      # a total, so this catches a partial dereference too and survives an
+                      # Electron bump that changes the framework layout.
+                      EXPECTED=$(find "$APP" -type l | wc -l | tr -d ' ')
+                      CHECK=$(mktemp -d)
+                      ditto -x -k "$ZIP" "$CHECK"
+                      ACTUAL=$(find "$CHECK/$(basename "$APP")" -type l | wc -l | tr -d ' ')
+                      rm -rf "$CHECK"
+                      if [ "$ACTUAL" -ne "$EXPECTED" ]; then
+                        echo "::error::.app.zip kept $ACTUAL of $EXPECTED symlinks — archiver regression"
+                        exit 1
+                      fi
                     fi
-                  fi
+                  done
 
             - name: Build Linux ARM app
               if: matrix.platform == 'linux'
               run: pnpm build:linux-arm
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  NODE_ENV: production
+
+            - name: Build lite Linux ARM app
+              if: matrix.platform == 'linux'
+              run: pnpm build:linux-arm:lite
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
                   NODE_ENV: production
@@ -313,6 +331,12 @@ jobs:
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+            - name: Build lite CLI app (macOS/Linux only)
+              if: matrix.platform != 'win'
+              run: pnpm build:cli:${{ matrix.platform }}:lite
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
             - name: Check CLI artifact size (macOS/Linux only)
               if: matrix.platform != 'win'
               run: pnpm size:cli
@@ -327,6 +351,11 @@ jobs:
                       build/*.exe
                       build/*.AppImage
                       build/latest*.yml
+                      build/lite/*.dmg
+                      build/lite/GuruShotsAutoVote-v*.app.zip
+                      build/lite/*.exe
+                      build/lite/*.AppImage
+                      build/lite/lite*.yml
                       ${{ matrix.platform != 'win' && 'build/cli/' || '' }}
                   retention-days: 1
 
@@ -371,6 +400,11 @@ jobs:
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+            - name: Build lite CLI Linux ARM app (native arm64 runner)
+              run: pnpm build:cli:linux-arm:lite
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
             - name: Check CLI artifact size
               run: pnpm size:cli
 
@@ -378,7 +412,7 @@ jobs:
               uses: actions/upload-artifact@v7
               with:
                   name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-linux-arm-builds' || 'linux-arm-builds' }}
-                  path: build/cli/gurucli-v*-linux-arm
+                  path: build/cli/gurucli-v*-linux-arm*
                   retention-days: 1
 
     build-android:
@@ -404,14 +438,6 @@ jobs:
             - name: Setup Android SDK
               uses: android-actions/setup-android@v4
 
-            - name: Build renderer
-              env:
-                  NODE_ENV: production
-              run: pnpm build:prep
-
-            - name: Sync Capacitor
-              run: pnpm exec cap sync android
-
             - name: Decode keystore
               env:
                   KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -432,27 +458,30 @@ jobs:
                   sed -i "s/versionName \".*\"/versionName \"$VERSION\"/" android/app/build.gradle
                   sed -i "s/versionCode [0-9]*/versionCode $RUN_NUMBER/" android/app/build.gradle
 
-            - name: Build signed APK
+            # Two APKs from one webDir, one after the other: the full build and
+            # the lite one without the local vision model (build:prep:lite).
+            - name: Build signed APKs with version
               env:
+                  NODE_ENV: production
                   KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
                   KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
                   KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
               shell: bash
               run: |
-                  cd android
-                  ./gradlew assembleRelease \
-                    -Pandroid.injected.signing.store.file=$(pwd)/app/release.jks \
-                    -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-                    -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
-                    -Pandroid.injected.signing.key.password=$KEY_PASSWORD
-
-            - name: Rename APK with version
-              shell: bash
-              run: |
+                  set -euo pipefail
                   VERSION=$(node -p "require('./package.json').version")
                   mkdir -p build
-                  mv android/app/build/outputs/apk/release/app-release.apk \
-                     build/GuruShotsAutoVote-v${VERSION}.apk
+                  for VARIANT in full lite; do
+                    if [ "$VARIANT" = lite ]; then pnpm build:prep:lite; SUFFIX=-lite; else pnpm build:prep; SUFFIX=; fi
+                    pnpm exec cap sync android
+                    (cd android && ./gradlew assembleRelease \
+                      -Pandroid.injected.signing.store.file=$(pwd)/app/release.jks \
+                      -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
+                      -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
+                      -Pandroid.injected.signing.key.password=$KEY_PASSWORD)
+                    mv android/app/build/outputs/apk/release/app-release.apk \
+                       build/GuruShotsAutoVote-v${VERSION}${SUFFIX}.apk
+                  done
 
             - name: Upload Android artifact
               uses: actions/upload-artifact@v7
@@ -555,6 +584,9 @@ jobs:
                       ### 📱 Mobile Application
                       - **Android**: APK (sideload — no Play Store). Enable "Install unknown apps" for your file manager / browser, then download and tap to install.
 
+                      ### 🪶 Lite Builds
+                      Every download above also comes as a `-lite` file without the local AI photo check, for a much smaller download. Auto-fill then keeps its tag-based photo order. Updates stay on the lite builds.
+
                       ### 🔗 Build Info
                       - Commit: ${{ github.sha }}
                       - Version: ${{ steps.get_version.outputs.VERSION }}
@@ -567,12 +599,22 @@ jobs:
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/GuruShotsAutoVote-v*.app.zip
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/latest-mac.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/GuruShotsAutoVote-v*.AppImage
-                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/latest-linux.yml
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/latest-linux*.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/GuruShotsAutoVote-v*.exe
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/latest.yml
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/lite/GuruShotsAutoVote-v*.dmg
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/lite/GuruShotsAutoVote-v*.app.zip
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/lite/lite-mac.yml
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/lite/GuruShotsAutoVote-v*.AppImage
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/lite/lite-linux*.yml
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/lite/GuruShotsAutoVote-v*.exe
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/lite/lite.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac-lite
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux-lite
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-arm-builds/gurucli-v*-linux-arm-lite
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}android-builds/GuruShotsAutoVote-v*.apk
               env:
                   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

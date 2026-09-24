@@ -64,7 +64,7 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 
 > **macOS:** tikai Apple Silicon (arm64) — Intel (x86_64) būvējuma nav. **DMG** ir vienkāršākā instalācija; **APP** zip ir alternatīva, ja vēlaties ievietot komplektu pats.
 
-> **Kāpēc lejupielādes ir lielas:** katrā būvējumā (grafiskajā lietotnē, Android un CLI) ir iekļauts ~200 MB attēlu atpazīšanas modelis (Google SigLIP, 8 bitu kvantizēts) un tā izpildvide. Auto-iesniegšana to izmanto, lai pārbaudītu, vai fotogrāfijā tiešām redzams izaicinājuma temats — skatiet [Vizuālā pārbaude](#trūkstošo-ierakstu-auto-iesniegšana). Tas darbojas tikai jūsu ierīcē: pirmajā lietošanas reizē nekas netiek lejupielādēts, nav vajadzīga API atslēga vai konts, un neviena fotogrāfija netiek nekur augšupielādēta.
+> **Kāpēc lejupielādes ir lielas:** katrā būvējumā (grafiskajā lietotnē, Android un CLI) ir iekļauts ~200 MB attēlu atpazīšanas modelis (Google SigLIP, 8 bitu kvantizēts) un tā izpildvide. Auto-iesniegšana to izmanto, lai pārbaudītu, vai fotogrāfijā tiešām redzams izaicinājuma temats — skatiet [Vizuālā pārbaude](#trūkstošo-ierakstu-auto-iesniegšana). Tas darbojas tikai jūsu ierīcē: pirmajā lietošanas reizē nekas netiek lejupielādēts, nav vajadzīga API atslēga vai konts, un neviena fotogrāfija netiek nekur augšupielādēta. Nevēlaties to? Izvēlieties [vieglo būvējumu](#-vieglie-būvējumi-bez-attēlu-modeļa).
 
 #### 📱 Mobilā lietotne (Android, sānielāde — bez Play Store)
 
@@ -83,6 +83,22 @@ Android versija ir Capacitor apvalks ap to pašu React saskarni plus Kotlin spra
 | **Linux CLI (ARM64)** | [📥 gurucli-v1.8.5-linux-arm](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-arm) | ~350 MB | Termināļa izpildfaila |
 
 > Windows CLI būvējuma nav — uz Windows izmantojiet augšā esošo grafisko lietotni.
+
+#### 🪶 Vieglie būvējumi (bez attēlu modeļa)
+
+Katra iepriekš minētā lejupielāde ir pieejama arī kā **vieglais** (lite) būvējums bez attēlu modeļa un tā izpildvides: macOS DMG samazinās no ~310 MB līdz ~130 MB, macOS CLI — no ~375 MB līdz ~140 MB. Viss pārējais darbojas tāpat — auto-iesniegšana vienkārši izlaiž [vizuālo pārbaudi](#trūkstošo-ierakstu-auto-iesniegšana) un saglabā tagu ranžēšanu. Vieglajai grafiskās lietotnes vai Android instalācijai tiek piedāvāti tikai vieglie atjauninājumi (vieglā galddatora lietotne izlaiž beta versijas).
+
+| Platforma                     | Lejupielāde                                                                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Windows**                   | [📥 GuruShotsAutoVote-v1.8.5-x64-lite.exe](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x64-lite.exe)                 |
+| **macOS (DMG)**               | [📥 GuruShotsAutoVote-v1.8.5-arm64-lite.dmg](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64-lite.dmg)             |
+| **macOS (APP)**               | [📥 GuruShotsAutoVote-v1.8.5-arm64-lite.app.zip](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64-lite.app.zip)     |
+| **Linux (x64)**               | [📥 GuruShotsAutoVote-v1.8.5-x86_64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-x86_64-lite.AppImage) |
+| **Linux (ARM64)**             | [📥 GuruShotsAutoVote-v1.8.5-arm64-lite.AppImage](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-arm64-lite.AppImage)   |
+| **Android (8.0+, sānielāde)** | [📥 GuruShotsAutoVote-v1.8.5-lite.apk](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/GuruShotsAutoVote-v1.8.5-lite.apk)                         |
+| **macOS CLI**                 | [📥 gurucli-v1.8.5-mac-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-mac-lite)                                             |
+| **Linux CLI (x64)**           | [📥 gurucli-v1.8.5-linux-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-lite)                                         |
+| **Linux CLI (ARM64)**         | [📥 gurucli-v1.8.5-linux-arm-lite](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download/gurucli-v1.8.5-linux-arm-lite)                                 |
 
 Nepieciešama konkrēta versija? Apskatiet **[visus izlaidumus](https://github.com/isthisgitlab/gurushots-auto-vote/releases)** vai **[jaunākā izlaiduma piezīmes](https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest)**.
 

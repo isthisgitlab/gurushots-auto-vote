@@ -37,6 +37,7 @@ const { isSafeExternalUrl } = require('../format/urlSafe');
 const { clearAuthToken } = require('../services/auth');
 const updateChecker = require('../services/UpdateChecker');
 const androidUpdateInstaller = require('../services/AndroidUpdateInstaller');
+const { hasBundledModel } = require('../services/visionVerifier');
 const pkg = require('../../../package.json');
 
 // Cached result of the most recent check-for-updates call. download-update
@@ -94,7 +95,7 @@ const buildAllHandlers = () => {
                 const result = await updateChecker.checkForUpdates({
                     currentVersion: pkg.version,
                     isBetaChannel: pkg.version.includes('-'),
-                    assetSuffix: '.apk',
+                    assetSuffix: (await hasBundledModel()) ? '.apk' : '-lite.apk',
                 });
                 if (result.updateAvailable) {
                     // Honor a user-skipped version — the settings facade is

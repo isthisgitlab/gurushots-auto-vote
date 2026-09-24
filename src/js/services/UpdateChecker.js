@@ -49,11 +49,19 @@ const compareSemver = (a, b) => {
 
 /**
  * Pick the asset whose filename matches the requested platform glob.
- * E.g. '.apk' for Android, '.dmg' for macOS DMG.
+ * E.g. '.apk' for Android, '.dmg' for macOS DMG, '-lite.apk' for the lite
+ * Android build. Lite assets share each release with the full ones, so a
+ * plain suffix never matches them.
  */
 const pickAsset = (release, suffix) => {
     if (!release?.assets) return null;
-    return release.assets.find((a) => typeof a.name === 'string' && a.name.endsWith(suffix)) || null;
+    const liteSuffix = suffix.startsWith('-lite') ? null : `-lite${suffix}`;
+    return (
+        release.assets.find(
+            (a) =>
+                typeof a.name === 'string' && a.name.endsWith(suffix) && !(liteSuffix && a.name.endsWith(liteSuffix)),
+        ) || null
+    );
 };
 
 /**
@@ -62,7 +70,7 @@ const pickAsset = (release, suffix) => {
  * @param {Object} opts
  * @param {string} opts.currentVersion - Current app version (without leading 'v').
  * @param {boolean} [opts.isBetaChannel] - When true, picks the newest prerelease instead of the production latest.
- * @param {string} [opts.assetSuffix] - File extension to pick from release assets (e.g. '.apk'). If omitted,
+ * @param {string} [opts.assetSuffix] - File suffix to pick from release assets (e.g. '.apk'). If omitted,
  *   downloadUrl falls back to the release HTML page so the user can download manually.
  * @returns {Promise<{
  *   updateAvailable: boolean,

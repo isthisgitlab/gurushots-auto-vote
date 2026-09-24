@@ -153,6 +153,12 @@ describe('build-cli', () => {
                 'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
             });
         });
+
+        test('a lite blob embeds no visual runtime', () => {
+            existing.add(LEXICON);
+            buildCli.generateSeaBlob(process.execPath, { lite: true });
+            expect(writtenConfig().assets).toEqual({ 'semantic-vectors.json': LEXICON });
+        });
     });
 
     describe('getOfficialNodeBinary', () => {
@@ -281,6 +287,17 @@ describe('build-cli', () => {
             process.argv = ['node', 'build-cli.js', 'gurucli-linux-arm'];
             await buildCli.main();
             expect(builtOutputs()).toEqual([`gurucli-v${version}-linux-arm`]);
+            expect(exitSpy).not.toHaveBeenCalled();
+        });
+
+        test('--lite builds "-lite" binaries without preparing the visual runtime', async () => {
+            const { ensureVisionModel } = require('../../scripts/fetch-vision-model');
+            ensureVisionModel.mockClear();
+            process.argv = ['node', 'build-cli.js', 'gurucli-mac', '--lite'];
+            await buildCli.main();
+            expect(builtOutputs()).toEqual([`gurucli-v${version}-mac-lite`]);
+            expect(ensureVisionModel).not.toHaveBeenCalled();
+            expect(execFileSync).not.toHaveBeenCalledWith('pnpm', expect.anything(), expect.anything());
             expect(exitSpy).not.toHaveBeenCalled();
         });
 

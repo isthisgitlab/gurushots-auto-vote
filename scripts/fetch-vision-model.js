@@ -52,22 +52,26 @@ const ensureVisionModel = async ({ modelDir = MODEL_DIR, fetchImpl = fetch, file
     return modelDir;
 };
 
+// dist/ is also the Android webDir, so a lite build (build-react.js --lite)
+// must not inherit the model or WASM runtime a full build left there.
+const removeVisionWebAssets = (distDir) => {
+    fs.rmSync(path.join(distDir, 'vision-model'), { recursive: true, force: true });
+    for (const name of fs.readdirSync(distDir)) {
+        if (name.startsWith('ort-wasm-simd-threaded.')) fs.rmSync(path.join(distDir, name), { force: true });
+    }
+};
+
 const stageVisionWebAssets = async (distDir, options) => {
     const modelDir = await ensureVisionModel(options);
-    // dist/ is also the Android webDir. Remove CLI outputs from older builds.
+    // Remove CLI outputs from older builds.
     for (const name of ['vision-runtime.tar.gz', 'vision-runtime.sha256', 'sea-prep.blob', 'sea-config.json']) {
         fs.rmSync(path.join(distDir, name), { force: true });
     }
+    removeVisionWebAssets(distDir);
     fs.cpSync(modelDir, path.join(distDir, 'vision-model'), { recursive: true });
     const transformersEntry = require.resolve('@huggingface/transformers');
     const ortEntry = require.resolve('onnxruntime-web/webgpu', { paths: [path.dirname(transformersEntry)] });
-    const wasmAssets = ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm'];
-    for (const name of fs.readdirSync(distDir)) {
-        if (name.startsWith('ort-wasm-simd-threaded.') && !wasmAssets.includes(name)) {
-            fs.rmSync(path.join(distDir, name), { force: true });
-        }
-    }
-    for (const name of wasmAssets) {
+    for (const name of ['ort-wasm-simd-threaded.asyncify.mjs', 'ort-wasm-simd-threaded.asyncify.wasm']) {
         fs.copyFileSync(path.join(path.dirname(ortEntry), name), path.join(distDir, name));
     }
 };
@@ -80,4 +84,4 @@ const main = () =>
 
 runIfMain(require.main, module, main);
 
-module.exports = { FILES, MODEL_DIR, ensureVisionModel, stageVisionWebAssets, main };
+module.exports = { FILES, MODEL_DIR, ensureVisionModel, removeVisionWebAssets, stageVisionWebAssets, main };

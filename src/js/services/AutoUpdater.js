@@ -4,6 +4,7 @@ const logger = require('../logger');
 const metadata = require('../metadata');
 const settings = require('../settings');
 const { getReleasesUrl: releasesPageUrl } = require('./UpdateChecker');
+const { hasBundledModel } = require('./visionVerifier');
 const { bypassQuitGuard } = require('../windows/quitGuard');
 
 /**
@@ -232,6 +233,12 @@ class AutoUpdater {
 
             // Save check time
             metadata.setLastUpdateCheck(Date.now());
+
+            // A lite build reads lite*.yml (the `channel` in its app-update.yml,
+            // see scripts/electron-builder-lite.js). On a prerelease the GitHub
+            // provider swaps that channel for the prerelease one and then falls
+            // back to latest*.yml, the full build, so lite stays on stable.
+            if (!(await hasBundledModel())) autoUpdater.allowPrerelease = false;
 
             // Check for updates
             const result = await autoUpdater.checkForUpdates();

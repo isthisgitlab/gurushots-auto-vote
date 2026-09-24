@@ -14,6 +14,7 @@ jest.mock('../../src/js/ipc/voting.handlers', () => ({ buildHandlers: () => ({})
 jest.mock('../../src/js/ipc/log.handlers', () => ({ buildHandlers: () => ({}) }));
 jest.mock('../../src/js/ipc/actions.handlers', () => ({ buildHandlers: () => ({}) }));
 jest.mock('../../src/js/services/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
+jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: async () => true }));
 jest.mock('../../src/js/services/UpdateChecker', () => ({
     checkForUpdates: (...args) => mockCheck(...args),
     getReleasesUrl: () => 'https://example.com/releases',

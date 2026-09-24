@@ -25,9 +25,11 @@ const mockFs = {
 };
 jest.mock('esbuild', () => mockEsbuild);
 jest.mock('fs', () => mockFs);
-jest.mock('../../scripts/fetch-vision-model', () => ({
+const mockVisionAssets = {
+    removeVisionWebAssets: jest.fn(),
     stageVisionWebAssets: jest.fn().mockResolvedValue(undefined),
-}));
+};
+jest.mock('../../scripts/fetch-vision-model', () => mockVisionAssets);
 
 const esbuild = mockEsbuild;
 const fs = mockFs;
@@ -126,6 +128,22 @@ describe('scripts/build-react.js', () => {
             expect(logged()).toContain('Building React bundles...');
             expect(logged()).toContain('React build completed! (6 bundles)');
             expect(exitSpy).not.toHaveBeenCalled();
+        });
+
+        test('the full build stages the vision assets and bundles transformers', async () => {
+            await run([], 'production');
+            expect(mockVisionAssets.stageVisionWebAssets).toHaveBeenCalledWith(DIST);
+            expect(mockVisionAssets.removeVisionWebAssets).not.toHaveBeenCalled();
+            expect(esbuild.build.mock.calls[3][0].external).not.toContain('@huggingface/transformers');
+        });
+
+        test('--lite clears the vision assets and leaves transformers out of every bundle', async () => {
+            await run(['--lite'], 'production');
+            expect(mockVisionAssets.removeVisionWebAssets).toHaveBeenCalledWith(DIST);
+            expect(mockVisionAssets.stageVisionWebAssets).not.toHaveBeenCalled();
+            expect(esbuild.build.mock.calls[3][0].external).toContain('@huggingface/transformers');
+            expect(esbuild.build.mock.calls[4][0].external).toContain('@huggingface/transformers');
+            expect(logged()).toContain('Building lite React bundles...');
         });
 
         test('creates dist/, skips missing entries and the lexicon, defaults NODE_ENV to development', async () => {

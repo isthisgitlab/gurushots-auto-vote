@@ -23,6 +23,8 @@ jest.mock('../../src/js/ipc/actions.handlers', () => ({
 jest.mock('../../src/js/ipc/computations.handlers', () => ({ buildHandlers: () => ({}) }));
 jest.mock('../../src/js/ipc/currency.handlers', () => ({ buildHandlers: () => ({}) }));
 jest.mock('../../src/js/services/AndroidUpdateInstaller', () => ({ downloadAndInstall: jest.fn() }));
+const mockHasBundledModel = jest.fn(async () => true);
+jest.mock('../../src/js/services/visionVerifier', () => ({ hasBundledModel: mockHasBundledModel }));
 jest.mock('../../src/js/services/UpdateChecker', () => ({
     checkForUpdates: jest.fn(),
     getReleasesUrl: () => 'https://example.com/releases',
@@ -167,6 +169,17 @@ describe('Capacitor bridge', () => {
             };
             expect(res).toEqual({ success: true, updateInfo });
             expect(onAvailable).toHaveBeenCalledWith(updateInfo);
+        });
+
+        test('a lite build (no bundled vision model) asks for the lite APK', async () => {
+            mockHasBundledModel.mockResolvedValueOnce(false);
+            updateChecker.checkForUpdates.mockResolvedValue(available);
+
+            await api.checkForUpdates();
+
+            expect(updateChecker.checkForUpdates).toHaveBeenCalledWith(
+                expect.objectContaining({ assetSuffix: '-lite.apk' }),
+            );
         });
 
         test('check-for-updates reports "not available" with the remote version, or our own when unknown', async () => {

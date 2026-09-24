@@ -32,6 +32,7 @@ const BOILERPLATE_RE = /join our challenge|participation reward|elite level rewa
 const HTML_ENTITIES = Object.freeze({ '&amp;': '&', '&quot;': '"', '&#39;': "'", '&apos;': "'", '&nbsp;': ' ' });
 
 let classifierPromise;
+let bundledPromise;
 let cliAssetRoot;
 
 const getModelLocation = () => {
@@ -40,6 +41,38 @@ const getModelLocation = () => {
     if (cliAssetRoot) return `${cliAssetRoot}${path.sep}`;
     if (runtime.isElectron() && runtime.isPackaged()) return `${process.resourcesPath}${path.sep}`;
     return path.join(__dirname, '..', '..', '..', '.cache') + path.sep;
+};
+
+const isModelBundled = async () => {
+    if (runtime.isCapacitor() || runtime.isHeadlessService()) {
+        const response = await fetch('vision-model/config.json').catch(() => null);
+        return Boolean(response?.ok);
+    }
+    if (runtime.isCli()) {
+        const sea = require('node:sea');
+        if (sea.isSea()) {
+            try {
+                sea.getAsset('vision-runtime.sha256');
+                return true;
+            } catch {
+                return false;
+            }
+        }
+    }
+    const path = require('node:path');
+    return require('node:fs').existsSync(path.join(getModelLocation(), 'vision-model', 'config.json'));
+};
+
+/**
+ * Whether this build ships the model. Lite builds (`build:*:lite`) leave it
+ * and its inference runtime out, so the visual check is skipped without a
+ * warning and the update check stays on the lite downloads.
+ *
+ * @returns {Promise<boolean>}
+ */
+const hasBundledModel = () => {
+    if (!bundledPromise) bundledPromise = isModelBundled();
+    return bundledPromise;
 };
 
 const loadClassifier = async () => {
@@ -162,6 +195,7 @@ const rankVisually = async (challenge, rankedIds, eligible, wantCount, { logger,
     if (candidates.some((item) => !item.url)) return original;
     const log = logger.withCategory('autoFill');
     try {
+        if (!(await hasBundledModel())) return original;
         const classifier = await getClassifier();
         const scored = [];
         for (const { id, url } of candidates) {
@@ -188,7 +222,15 @@ const rankVisually = async (challenge, rankedIds, eligible, wantCount, { logger,
 
 const __resetForTests = () => {
     classifierPromise = undefined;
+    bundledPromise = undefined;
     cliAssetRoot = undefined;
 };
 
-module.exports = { rankVisually, orderByVisualFit, challengePrompts, descriptionLead, __resetForTests };
+module.exports = {
+    rankVisually,
+    hasBundledModel,
+    orderByVisualFit,
+    challengePrompts,
+    descriptionLead,
+    __resetForTests,
+};

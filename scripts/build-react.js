@@ -3,7 +3,7 @@
 const { build, context } = require('esbuild');
 const path = require('node:path');
 const fs = require('node:fs');
-const { stageVisionWebAssets } = require('./fetch-vision-model');
+const { removeVisionWebAssets, stageVisionWebAssets } = require('./fetch-vision-model');
 
 const reactDir = path.join(__dirname, '..', 'src', 'js', 'react');
 const jsDir = path.join(__dirname, '..', 'src', 'js');
@@ -66,15 +66,19 @@ const headlessHtml = `<!doctype html>
 
 // Check if watch mode is enabled
 const isWatch = process.argv.includes('--watch');
+// --lite: the Android webDir without the local vision model, its WASM runtime
+// or the transformers code (services/visionVerifier.js skips the check).
+const isLite = process.argv.includes('--lite');
 
 async function buildReact() {
-    console.log(`🔨 Building React bundles${isWatch ? ' (watch mode)' : ''}...`);
+    console.log(`🔨 Building ${isLite ? 'lite ' : ''}React bundles${isWatch ? ' (watch mode)' : ''}...`);
 
     // Create dist directory if it doesn't exist
     if (!fs.existsSync(distDir)) {
         fs.mkdirSync(distDir, { recursive: true });
     }
-    await stageVisionWebAssets(distDir);
+    if (isLite) removeVisionWebAssets(distDir);
+    else await stageVisionWebAssets(distDir);
 
     // Emit the Capacitor entry point. Electron ignores it; the Android
     // WebView treats it as the app's root document.
@@ -158,7 +162,14 @@ async function buildReact() {
     const NODE_BUILTINS = [...NODE_BUILTINS_BARE, ...NODE_BUILTINS_BARE.map((m) => `node:${m}`)];
     // The CLI-only archive extractor is unreachable in renderer and WebView
     // runtimes; leave its Node package out of their bundles.
-    const RENDERER_EXTERNALS = [...NODE_BUILTINS, 'electron', 'electron-updater', 'node-cron', 'tar'];
+    const RENDERER_EXTERNALS = [
+        ...NODE_BUILTINS,
+        'electron',
+        'electron-updater',
+        'node-cron',
+        'tar',
+        ...(isLite ? ['@huggingface/transformers'] : []),
+    ];
     // Capacitor plugin packages must be BUNDLED (not externalized) on
     // the Capacitor entry: they are pure browser code that registers
     // proxies onto the native bridge. Externalizing them returns the

@@ -93,7 +93,7 @@ async function prepareVisionRuntime() {
     fs.rmSync(deployDir, { recursive: true, force: true });
 }
 
-function generateSeaBlob(nodeBinary = process.execPath) {
+function generateSeaBlob(nodeBinary = process.execPath, { lite = false } = {}) {
     console.log('📦 Generating SEA blob...');
     const seaConfigPath = path.join(BUILD_DIR, 'sea-config.json');
     const seaBlobPath = path.join(BUILD_DIR, 'sea-prep.blob');
@@ -110,11 +110,13 @@ function generateSeaBlob(nodeBinary = process.execPath) {
     if (fs.existsSync(lexiconAsset)) {
         seaConfig.assets = { 'semantic-vectors.json': lexiconAsset };
     }
-    seaConfig.assets = {
-        ...seaConfig.assets,
-        'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
-        'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
-    };
+    if (!lite) {
+        seaConfig.assets = {
+            ...seaConfig.assets,
+            'vision-runtime.tar.gz': path.join(BUILD_DIR, 'vision-runtime.tar.gz'),
+            'vision-runtime.sha256': path.join(BUILD_DIR, 'vision-runtime.sha256'),
+        };
+    }
     fs.writeFileSync(seaConfigPath, JSON.stringify(seaConfig, null, 2));
     execFileSync(nodeBinary, ['--experimental-sea-config', seaConfigPath], { stdio: 'inherit' });
     console.log('✅ SEA blob generated');
@@ -202,7 +204,11 @@ async function buildPlatform({ output, plat, arch }, seaBlobPath) {
 }
 
 async function main() {
-    const platformArg = process.argv[2];
+    const args = process.argv.slice(2);
+    // --lite leaves the local vision model and its runtime out of the binary;
+    // services/visionVerifier.js then skips the visual check.
+    const lite = args.includes('--lite');
+    const platformArg = args.find((arg) => !arg.startsWith('--'));
 
     ensureDir(DIST_DIR);
     ensureDir(BUILD_DIR);
@@ -211,14 +217,14 @@ async function main() {
         const targets = platformArg ? platforms.filter((p) => p.input === platformArg) : platforms;
         if (platformArg && targets.length === 0) throw new Error(`Unknown platform: ${platformArg}`);
         await bundleCli();
-        await prepareVisionRuntime();
+        if (!lite) await prepareVisionRuntime();
         // Homebrew's Node can disable SEA; the official binary is also the
         // injection target, so generate the blob with that exact build.
         const hostNode = await getOfficialNodeBinary(process.platform, process.arch);
-        const seaBlobPath = generateSeaBlob(hostNode);
+        const seaBlobPath = generateSeaBlob(hostNode, { lite });
 
         for (const t of targets) {
-            await buildPlatform(t, seaBlobPath);
+            await buildPlatform(lite ? { ...t, output: `${t.output}-lite` } : t, seaBlobPath);
         }
 
         console.log('🎉 CLI build completed');

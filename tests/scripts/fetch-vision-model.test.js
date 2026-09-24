@@ -16,7 +16,14 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
-const { FILES, MODEL_DIR, ensureVisionModel, stageVisionWebAssets, main } = require('../../scripts/fetch-vision-model');
+const {
+    FILES,
+    MODEL_DIR,
+    ensureVisionModel,
+    removeVisionWebAssets,
+    stageVisionWebAssets,
+    main,
+} = require('../../scripts/fetch-vision-model');
 
 const sha = (data) => crypto.createHash('sha256').update(data).digest('hex');
 const okResponse = (text) => ({ ok: true, status: 200, body: new Response(text).body });
@@ -109,6 +116,19 @@ describe('scripts/fetch-vision-model.js', () => {
             'vision-model',
         ]);
         expect(fs.readFileSync(path.join(distDir, 'vision-model', 'config.json'), 'utf8')).toBe('{}');
+    });
+
+    test('a lite build clears the model and WASM runtime a full build left in dist', () => {
+        const distDir = path.join(directory, 'dist');
+        fs.mkdirSync(path.join(distDir, 'vision-model'), { recursive: true });
+        fs.writeFileSync(path.join(distDir, 'vision-model', 'config.json'), '{}');
+        for (const name of ['ort-wasm-simd-threaded.asyncify.wasm', 'ort-wasm-simd-threaded.asyncify.mjs', 'app.js']) {
+            fs.writeFileSync(path.join(distDir, name), 'x');
+        }
+
+        removeVisionWebAssets(distDir);
+
+        expect(fs.readdirSync(distDir)).toEqual(['app.js']);
     });
 
     test('main reports a failed fetch through the exit code', async () => {
