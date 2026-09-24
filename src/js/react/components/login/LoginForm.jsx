@@ -77,7 +77,7 @@ export function LoginForm({ onSubmit, loading = false, initialUsername = '' }) {
                 <input
                     id="username"
                     type="text"
-                    className={`input w-full ${errors.username ? 'input-error' : ''}`}
+                    className={`input input-sm w-full ${errors.username ? 'input-error' : ''}`}
                     placeholder={t('login.usernamePlaceholder')}
                     value={username}
                     onChange={handleUsernameChange}
@@ -95,7 +95,7 @@ export function LoginForm({ onSubmit, loading = false, initialUsername = '' }) {
                 <input
                     id="password"
                     type="password"
-                    className={`input w-full ${errors.password ? 'input-error' : ''}`}
+                    className={`input input-sm w-full ${errors.password ? 'input-error' : ''}`}
                     placeholder={t('login.passwordPlaceholder')}
                     value={password}
                     onChange={handlePasswordChange}

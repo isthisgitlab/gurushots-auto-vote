@@ -50,7 +50,7 @@ export function FillButtons({ fillError, filling, slotsRemaining, onFill, icon =
 function SettingsButton({ onClick, label }) {
     return (
         <button className="btn btn-outline btn-sm" onClick={onClick}>
-            <StrokeIcon d={ICON_PATHS.cog} className="w-3 h-3 mr-1" />
+            <StrokeIcon d={ICON_PATHS.cog} className="w-4 h-4 mr-1" />
             {label}
         </button>
     );

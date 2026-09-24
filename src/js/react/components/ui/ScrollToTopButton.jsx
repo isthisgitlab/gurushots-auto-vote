@@ -35,7 +35,7 @@ export function ScrollToTopButton() {
             title={t('app.scrollToTop')}
             aria-label={t('app.scrollToTop')}
         >
-            <StrokeIcon className="w-5 h-5" d={ICON_PATHS.chevronUp} />
+            <StrokeIcon className="w-4 h-4" d={ICON_PATHS.chevronUp} />
         </button>
     );
 }

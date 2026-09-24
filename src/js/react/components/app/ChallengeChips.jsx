@@ -22,18 +22,33 @@ export function ChipListPanel({ icon, label, count, children }) {
  * ChallengeCard (id="challenge-<id>"). Content is caller-supplied so a
  * chip can carry extra detail (e.g. the boost countdown); `className`
  * appends DaisyUI button modifiers so a caller can set a chip apart
- * (e.g. the per-challenge-override marker in ChallengeNav).
+ * (e.g. the per-challenge-override marker in ChallengeNav). The chip keeps
+ * the stock btn-sm height like every other button; a title too long for
+ * the row is truncated by ChipTitle rather than wrapping the chip taller.
  */
-export function ChallengeChip({ challengeId, className = '', title, children }) {
+export function ChallengeChip({ challengeId, className = '', children }) {
     return (
         <button
             type="button"
-            title={title}
-            className={`btn btn-sm h-auto whitespace-normal text-left${className ? ` ${className}` : ''}`}
+            className={`btn btn-sm max-w-full whitespace-nowrap${className ? ` ${className}` : ''}`}
             onClick={() => scrollToChallenge(challengeId)}
         >
             {children}
         </button>
+    );
+}
+
+/**
+ * Challenge title inside a ChallengeChip: shrinks and ellipsizes when the
+ * chip hits the row width, with the full title on hover. `hint` is appended
+ * to that tooltip — the text covers most of the chip, so a chip-level hint
+ * must live here to stay visible.
+ */
+export function ChipTitle({ hint, children }) {
+    return (
+        <span className="truncate" title={hint ? `${children} — ${hint}` : children}>
+            {children}
+        </span>
     );
 }
 
@@ -63,7 +78,7 @@ export function ChallengeAlertPanel({ icon, label, items, chipClassName, dotVari
             {items.map((c) => (
                 <ChallengeChip key={c.id} challengeId={c.id} className={chipClassName}>
                     <PulseDot variant={dotVariant} pulse={pulse(c)} size="status-sm" />
-                    <span>{c.title}</span>
+                    <ChipTitle>{c.title}</ChipTitle>
                     {detail(c)}
                 </ChallengeChip>
             ))}

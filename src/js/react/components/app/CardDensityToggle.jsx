@@ -16,7 +16,7 @@ export function CardDensityToggle({ isCompact, hasOverride, onToggle }) {
         <button className="btn btn-outline btn-sm shrink-0" onClick={onToggle}>
             <StrokeIcon
                 d={isCompact ? ICON_PATHS.expand : ICON_PATHS.collapse}
-                className="w-3 h-3 mr-1"
+                className="w-4 h-4 mr-1"
                 filled={hasOverride}
             />
             {isCompact ? t('app.details') : t('app.compact')}

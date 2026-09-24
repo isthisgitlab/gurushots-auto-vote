@@ -27,7 +27,7 @@ export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
                         title={t('logs.title')}
                         aria-label={t('logs.title')}
                     >
-                        <StrokeIcon className="w-5 h-5" d={ICON_PATHS.document} />
+                        <StrokeIcon className="w-4 h-4" d={ICON_PATHS.document} />
                     </button>
                 )}
                 <button
@@ -36,7 +36,7 @@ export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
                     title={t('app.settings')}
                     aria-label={t('app.settings')}
                 >
-                    <StrokeIcon className="w-5 h-5" d={ICON_PATHS.cog} />
+                    <StrokeIcon className="w-4 h-4" d={ICON_PATHS.cog} />
                 </button>
                 <button
                     className="btn btn-outline btn-error btn-sm"
@@ -44,7 +44,7 @@ export function Navbar({ isMock, onLogsClick, onSettingsClick, onLogout }) {
                     title={t('app.logout')}
                     aria-label={t('app.logout')}
                 >
-                    <StrokeIcon className="w-5 h-5" d={ICON_PATHS.logout} />
+                    <StrokeIcon className="w-4 h-4" d={ICON_PATHS.logout} />
                 </button>
             </div>
         </div>

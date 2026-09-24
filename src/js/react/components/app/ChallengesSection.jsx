@@ -12,8 +12,6 @@ import { ResetIcon } from '@/components/ui/ResetButton';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import * as ipc from '@/api/ipc';
 
-const TOOLBAR_ICON_CLASS = 'w-4 h-4 mr-1';
-
 /**
  * Global card density: the compactCards default and the compactCardActions
  * switch, kept in sync with settings-changed events, plus `refreshKey` — bumped
@@ -157,7 +155,6 @@ export function ChallengesSection({
                             errorLogPrefix="Error during Vote All"
                             loadingLabel={t('app.votingAll')}
                             icon={ICON_PATHS.vote}
-                            iconClassName={TOOLBAR_ICON_CLASS}
                             label={t('app.voteAll')}
                         />
                         <IconActionButton
@@ -168,7 +165,6 @@ export function ChallengesSection({
                             errorLogPrefix="Error during Run"
                             loadingLabel={t('app.running')}
                             icon={ICON_PATHS.run}
-                            iconClassName={TOOLBAR_ICON_CLASS}
                             label={t('app.run')}
                         />
                         <button className="btn btn-outline btn-sm" onClick={handleRefresh} disabled={loading}>
@@ -189,7 +185,7 @@ export function ChallengesSection({
                 <button className="btn btn-outline btn-sm sm:ml-auto" onClick={toggleGlobalCompact}>
                     <StrokeIcon
                         d={globalCompact ? ICON_PATHS.listCompact : ICON_PATHS.listDetailed}
-                        className={TOOLBAR_ICON_CLASS}
+                        className="w-4 h-4 mr-1"
                     />
                     {globalCompact ? t('app.details') : t('app.compact')}
                 </button>

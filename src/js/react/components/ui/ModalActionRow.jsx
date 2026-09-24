@@ -2,7 +2,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { ResetIcon } from './ResetButton';
 import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 
-const ROW_ICON_CLASS = 'w-4 h-4 mr-2';
+const ROW_ICON_CLASS = 'w-4 h-4 mr-1';
 
 /**
  * Shared Save / secondary / Cancel action row used by the settings

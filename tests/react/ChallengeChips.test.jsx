@@ -5,7 +5,7 @@
  */
 
 import { render, screen, fireEvent } from './helpers/test-utils';
-import { ChipListPanel, ChallengeChip } from '@/components/app/ChallengeChips';
+import { ChipListPanel, ChallengeChip, ChipTitle } from '@/components/app/ChallengeChips';
 
 describe('ChipListPanel', () => {
     test('renders the heading (icon + label + count) and the chip row', () => {
@@ -30,7 +30,7 @@ describe('ChallengeChip', () => {
         render(<ChallengeChip challengeId={42}>JumpTo</ChallengeChip>);
 
         const chip = screen.getByRole('button', { name: /JumpTo/ });
-        expect(chip.className).toBe('btn btn-sm h-auto whitespace-normal text-left');
+        expect(chip.className).toBe('btn btn-sm max-w-full whitespace-nowrap');
         expect(chip.getAttribute('type')).toBe('button');
 
         const fakeCard = { scrollIntoView: jest.fn() };
@@ -39,5 +39,22 @@ describe('ChallengeChip', () => {
 
         expect(getById).toHaveBeenCalledWith('challenge-42');
         expect(fakeCard.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    });
+});
+
+describe('ChipTitle', () => {
+    test('truncates the title inside the fixed-height chip and exposes it on hover', () => {
+        const { container } = render(<ChipTitle>A very long challenge title</ChipTitle>);
+
+        const span = container.firstChild;
+        expect(span.className).toBe('truncate');
+        expect(span.getAttribute('title')).toBe('A very long challenge title');
+        expect(span.textContent).toBe('A very long challenge title');
+    });
+
+    test('appends a hint to the hover tooltip', () => {
+        const { container } = render(<ChipTitle hint="Custom settings">Title</ChipTitle>);
+
+        expect(container.firstChild.getAttribute('title')).toBe('Title — Custom settings');
     });
 });

@@ -15,12 +15,12 @@ export function AutoVoteControls({ running, status, statusClass, lastRun, cycles
                     <button className={`btn btn-sm ${running ? 'btn-error' : 'btn-latvian'}`} onClick={onToggle}>
                         {running ? (
                             <>
-                                <StrokeIcon className="w-4 h-4 mr-2" d={ICON_PATHS.close} />
+                                <StrokeIcon className="w-4 h-4 mr-1" d={ICON_PATHS.close} />
                                 {t('app.stopAutoVote')}
                             </>
                         ) : (
                             <>
-                                <StrokeIcon className="w-4 h-4 mr-2" d={ICON_PATHS.smile} />
+                                <StrokeIcon className="w-4 h-4 mr-1" d={ICON_PATHS.smile} />
                                 {t('app.startAutoVote')}
                             </>
                         )}

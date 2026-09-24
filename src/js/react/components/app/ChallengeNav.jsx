@@ -1,6 +1,6 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useOverriddenChallengeIds } from '@/hooks/useOverriddenChallengeIds';
-import { ChipListPanel, ChallengeChip } from './ChallengeChips';
+import { ChipListPanel, ChallengeChip, ChipTitle } from './ChallengeChips';
 import { PulseDot } from '../ui/PulseDot';
 import { isBoostWindowOpen } from '../../../voting/boostWindow';
 import { isLowExposure } from '@/utils/challengeAlerts';
@@ -41,16 +41,11 @@ export function ChallengeNav({ challenges }) {
                 const boostOpen = isBoostWindowOpen(c?.member?.boost, nowSec);
                 const lowExposure = isLowExposure(c, nowSec);
                 return (
-                    <ChallengeChip
-                        key={c?.id}
-                        challengeId={c?.id}
-                        className={custom ? 'btn-accent' : ''}
-                        title={custom ? t('app.customSettingsHint') : undefined}
-                    >
+                    <ChallengeChip key={c?.id} challengeId={c?.id} className={custom ? 'btn-accent' : ''}>
                         {boostOpen && <PulseDot variant="info" size="status-sm" />}
                         {lowExposure && <PulseDot variant="error" pulse={false} size="status-sm" />}
                         {custom && <span aria-hidden="true">⚙️ </span>}
-                        {c?.title}
+                        <ChipTitle hint={custom ? t('app.customSettingsHint') : undefined}>{c?.title}</ChipTitle>
                         {boostOpen && <span className="sr-only"> ({t('app.boostOpenBadge')})</span>}
                         {lowExposure && <span className="sr-only"> ({t('app.lowExposure')})</span>}
                         {custom && <span className="sr-only"> ({t('app.customSettingsHint')})</span>}

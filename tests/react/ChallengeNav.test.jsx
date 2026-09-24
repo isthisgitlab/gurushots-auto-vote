@@ -65,11 +65,11 @@ describe('ChallengeNav', () => {
 
         await waitFor(() => expect(tuned.className).toMatch(/btn-accent/));
         expect(tuned.textContent).toMatch(/⚙️/);
-        expect(tuned.getAttribute('title')).toBeTruthy();
+        expect(tuned.querySelector('.truncate').getAttribute('title')).toMatch(/^Tuned — ./);
 
         expect(plain.className).not.toMatch(/btn-accent/);
         expect(plain.textContent).not.toMatch(/⚙️/);
-        expect(plain.getAttribute('title')).toBeNull();
+        expect(plain.querySelector('.truncate').getAttribute('title')).toBe('Plain');
     });
 
     test('marks nothing when a per-challenge override read fails', async () => {
