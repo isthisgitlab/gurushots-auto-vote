@@ -1,5 +1,5 @@
 /**
- * Unit tests for the real-strategy binder in src/js/api/main.js:
+ * Unit tests for the real-strategy binder in src/js/strategies/real/index.js:
  *   - runTurboMiniGame: the pair-by-pair Turbo mini-game loop (first pick, flip
  *     on a wrong pick, early stop on WON, skip of resolved / malformed battles);
  *   - joinChallenge: the manual single-join wrapper (spendCoins must be `true`
@@ -10,9 +10,10 @@
  * Every collaborator is mocked; sleep resolves immediately so no real timer runs.
  */
 
-jest.mock('../../src/js/api/challenges', () => ({ getActiveChallenges: jest.fn() }));
+jest.mock('../../src/js/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
 jest.mock('../../src/js/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
-jest.mock('../../src/js/api/boost', () => ({ applyBoost: jest.fn(), applyBoostToEntry: jest.fn() }));
+jest.mock('../../src/js/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/js/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
 jest.mock('../../src/js/api/turbo', () => ({
     getChallengeTurbo: jest.fn(),
     submitTurboSelection: jest.fn(),
@@ -67,7 +68,7 @@ const { runVotingPass } = require('../../src/js/services/votingOrchestrator');
 const { runJoinPass, joinChallengeSingle } = require('../../src/js/services/joinChallenges');
 const { runClaimPass } = require('../../src/js/services/autoClaim');
 const rewards = require('../../src/js/api/rewards');
-const main = require('../../src/js/api/main');
+const main = require('../../src/js/strategies/real');
 
 const { runTurboMiniGame, joinChallenge, fetchChallengesAndVote } = main;
 
@@ -89,14 +90,17 @@ describe('module wiring', () => {
         let isolatedFactory;
         jest.isolateModules(() => {
             isolatedFactory = require('../../src/js/services/newEntryTracker').createMetadataEntryTracker;
-            require('../../src/js/api/main');
+            require('../../src/js/strategies/real');
         });
         expect(isolatedFactory).toHaveBeenCalledTimes(1);
         expect(isolatedFactory).toHaveBeenCalledWith();
     });
 
-    test('re-exports applyBoostToEntry from the boost module', () => {
-        expect(main.applyBoostToEntry).toBe(require('../../src/js/api/boost').applyBoostToEntry);
+    test('exposes the entry-picking boost and the title-pinned challenge read', () => {
+        expect(main.applyBoost).toBe(require('../../src/js/strategies/real/applyBoost').applyBoost);
+        expect(main.getActiveChallenges).toBe(
+            require('../../src/js/strategies/real/activeChallenges').getActiveChallenges,
+        );
     });
 });
 

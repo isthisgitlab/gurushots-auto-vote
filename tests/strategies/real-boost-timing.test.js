@@ -24,7 +24,7 @@ const mockChallenges = {
     getActiveChallenges: jest.fn(),
 };
 
-jest.mock('../../src/js/api/challenges', () => mockChallenges);
+jest.mock('../../src/js/strategies/real/activeChallenges', () => mockChallenges);
 
 // Mock the voting module
 const mockVoting = {
@@ -39,7 +39,7 @@ const mockBoost = {
     applyBoost: jest.fn(),
 };
 
-jest.mock('../../src/js/api/boost', () => mockBoost);
+jest.mock('../../src/js/strategies/real/applyBoost', () => mockBoost);
 
 // Mock the timing module
 const mockUtils = {
@@ -57,7 +57,7 @@ const mockVotingLogic = {
     evaluateVotingDecision: jest.fn(),
     shouldPlayAutoTurbo: jest.fn(() => false),
     shouldApplyTurbo: jest.fn(() => ({ apply: false, imageId: null, reason: 'mocked' })),
-    // main.js dispatches deadline actions in this order; all four are listed so
+    // votingOrchestrator dispatches deadline actions in this order; all four are listed so
     // the boost runner still executes (order is irrelevant to these assertions).
     orderDeadlineActions: jest.fn(() => [
         { action: 'boost', thresholdSec: 0 },
@@ -190,7 +190,7 @@ describe('boost timing settings', () => {
             });
 
             // Import the main module
-            const { fetchChallengesAndVote } = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
 
             await fetchChallengesAndVote(mockToken);
 
@@ -247,7 +247,7 @@ describe('boost timing settings', () => {
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(1800); // 30 minutes
 
             // Import the main module
-            const { fetchChallengesAndVote } = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
 
             await fetchChallengesAndVote(mockToken);
 
@@ -295,7 +295,7 @@ describe('boost timing settings', () => {
             mockVotingLogic.getEffectiveBoostTime.mockReturnValue(3600); // 1 hour default
 
             // Import the main module
-            const { fetchChallengesAndVote } = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
 
             await fetchChallengesAndVote(mockToken);
 
@@ -359,7 +359,7 @@ describe('boost timing settings', () => {
                 .mockReturnValueOnce(7200); // 2 hours for second challenge
 
             // Import the main module
-            const { fetchChallengesAndVote } = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
 
             await fetchChallengesAndVote(mockToken);
 
@@ -403,7 +403,7 @@ describe('boost timing settings', () => {
                 targetExposure: 100,
             });
 
-            const { fetchChallengesAndVote } = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
 
             await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
 
@@ -441,7 +441,7 @@ describe('boost timing settings', () => {
                 targetExposure: 100,
             });
 
-            const { fetchChallengesAndVote } = require('../../src/js/api/main');
+            const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
 
             await expect(fetchChallengesAndVote(mockToken)).resolves.toBeDefined();
 

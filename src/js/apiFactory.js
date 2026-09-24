@@ -5,7 +5,9 @@
  * Selects the real or mock API surface based on the current mock
  * setting and constructs the BaseMiddleware that wraps it. Each
  * surface is a plain object whose method names mirror what the
- * middleware expects — there is no class hierarchy.
+ * middleware expects — there is no class hierarchy. The real surface
+ * is the api/ endpoint wrappers plus the real-strategy composition
+ * (strategies/real); the mock surface is mockApiClient (mock/index.js).
  */
 
 const settings = require('./settings');
@@ -13,10 +15,15 @@ const BaseMiddleware = require('./services/BaseMiddleware');
 const logger = require('./logger');
 
 const { authenticate } = require('./api/login');
-const { fetchChallengesAndVote, runTurboMiniGame, joinChallenge } = require('./api/main');
-const { getActiveChallenges } = require('./api/challenges');
+const {
+    fetchChallengesAndVote,
+    getActiveChallenges,
+    applyBoost,
+    runTurboMiniGame,
+    joinChallenge,
+} = require('./strategies/real');
 const { getVoteImages, submitVotes } = require('./api/voting');
-const { applyBoost, applyBoostToEntry } = require('./api/boost');
+const { applyBoostToEntry } = require('./api/boost');
 const { applyTurbo } = require('./api/turbo');
 const { getEligiblePhotos, getImageData, submitToChallenge } = require('./api/submissions');
 const { getMemberChallenges, getBankroll } = require('./api/join');

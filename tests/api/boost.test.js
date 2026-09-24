@@ -4,7 +4,8 @@
  * Tests the boost application functionality.
  */
 
-const { applyBoost, applyBoostToEntry } = require('../../src/js/api/boost');
+const { applyBoostToEntry } = require('../../src/js/api/boost');
+const { applyBoost } = require('../../src/js/strategies/real/applyBoost');
 
 // Mock settings: default boostImageIndex=1 so the picker targets entries[0]
 // and falls back backward (with wrap) past any turboed primary. Other

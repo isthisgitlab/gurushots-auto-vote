@@ -444,7 +444,7 @@ const mockApiClient = {
 
     /**
      * Simulate playing the Turbo mini-game. Mirrors the real
-     * api/main.runTurboMiniGame result shape ({ played, correct, flipped,
+     * strategies/real runTurboMiniGame result shape ({ played, correct, flipped,
      * doubleFailed, won }) so the manual-turbo IPC handler behaves the same
      * in mock mode instead of reaching the live battle endpoints.
      */

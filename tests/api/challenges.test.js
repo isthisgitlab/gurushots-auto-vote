@@ -1,10 +1,10 @@
 /**
- * Tests for challenges.js
- *
- * Tests the active challenges fetching functionality.
+ * Tests for the active-challenges read: the api/challenges.js transport
+ * driven through the real-strategy wrapper (strategies/real/activeChallenges.js)
+ * that adds title pinning and in-flight coalescing.
  */
 
-const { getActiveChallenges } = require('../../src/js/api/challenges');
+const { getActiveChallenges } = require('../../src/js/strategies/real/activeChallenges');
 
 // Mock the api-client module
 jest.mock('../../src/js/api/api-client', () => ({

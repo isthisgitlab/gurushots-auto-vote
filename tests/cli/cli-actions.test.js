@@ -6,7 +6,7 @@
  * API swap) and the IPC handlers — so the tests assert the wiring: auth
  * guard, challenge resolution, correct dispatch + args, and success/error
  * reporting. The handlers, the middleware, the update checker, and the
- * logger are all mocked; api/boost is mocked purely to prove the CLI
+ * logger are all mocked; the real-strategy applyBoost is mocked purely to prove the CLI
  * never bypasses the factory to reach the real API surface.
  */
 
@@ -55,7 +55,7 @@ jest.mock('../../src/js/apiFactory', () => {
 // Mocked ONLY to prove the CLI never reaches the real API module directly —
 // in mock mode a direct import would fire a real boost request (the bug this
 // guards against). Every boost must flow through the middleware above.
-jest.mock('../../src/js/api/boost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/js/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
 
 jest.mock('../../src/js/ipc/actions.handlers', () => {
     const handlers = {
@@ -81,7 +81,7 @@ jest.mock('../../src/js/services/UpdateChecker', () => ({
 const logger = require('../../src/js/logger.js');
 const settings = require('../../src/js/settings.js');
 const apiFactory = require('../../src/js/apiFactory');
-const boostApi = require('../../src/js/api/boost');
+const boostApi = require('../../src/js/strategies/real/applyBoost');
 const actionsHandlers = require('../../src/js/ipc/actions.handlers').__handlers;
 const votingHandlers = require('../../src/js/ipc/voting.handlers').__handlers;
 const updateChecker = require('../../src/js/services/UpdateChecker');
@@ -115,7 +115,7 @@ describe('CLI boost command', () => {
         expect(contains(msgsAt('success'), 'Sunset')).toBe(true);
     });
 
-    test('never bypasses the factory to reach the real api/boost module (mock-mode safety)', async () => {
+    test('never bypasses the factory to reach the real-strategy applyBoost (mock-mode safety)', async () => {
         apiFactory.__applyBoost.mockResolvedValue({ ok: true });
 
         await boostChallenge('111', {});

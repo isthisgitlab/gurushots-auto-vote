@@ -4,8 +4,8 @@
  * runs main() on load. Each test sets argv and re-requires it in an isolated
  * module registry with every command module mocked, then asserts which
  * command ran, with what arguments, and the exit code. process.exit is a
- * recording no-op (so code after an exit keeps running, exactly as the
- * dispatcher's `break`s assume) and process.on is captured, never installed.
+ * recording no-op (so every exit code a run produces is observable) and
+ * process.on is captured, never installed.
  */
 
 jest.mock('../../src/js/logger.js', () => {
@@ -209,6 +209,15 @@ describe('help and unknown commands', () => {
         expect(m.msgs('error')).toEqual(['Unknown command: frobnicate']);
         expect(m.exitCodes).toEqual([1]);
     });
+
+    test.each(['constructor', 'toString', '__proto__'])(
+        'an Object.prototype name (%s) is an unknown command',
+        async (name) => {
+            const m = await run([name]);
+            expect(m.msgs('error')).toEqual([`Unknown command: ${name}`]);
+            expect(m.exitCodes).toEqual([1]);
+        },
+    );
 });
 
 describe('simple commands', () => {

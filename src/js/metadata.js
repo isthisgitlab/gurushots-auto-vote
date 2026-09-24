@@ -154,107 +154,108 @@ const validateMetadataEntry = (entry) => {
 };
 
 /**
+ * The two optional updateCheck fields: a present value that fails `isValid` is
+ * reset to null (and logged via `describe`); an absent one stays null.
+ */
+const UPDATE_CHECK_FIELDS = [
+    {
+        key: 'lastCheck',
+        label: 'lastCheck timestamp',
+        isValid: (value) => typeof value === 'number' && value > 0,
+        describe: (value) =>
+            typeof value === 'number' ? `${value} (must be > 0)` : `${value} (type: ${typeof value}, expected: number)`,
+    },
+    {
+        key: 'skipVersion',
+        label: 'skipVersion',
+        isValid: (value) => typeof value === 'string' && value.length > 0,
+        describe: (value) =>
+            typeof value === 'string'
+                ? `"${value}" (empty string)`
+                : `${value} (type: ${typeof value}, expected: non-empty string)`,
+    },
+];
+
+/**
+ * Validate the updateCheck block.
+ * @param {Object|undefined} updateCheck
+ * @returns {{updateCheck: Object, changed: boolean}}
+ */
+const validateUpdateCheck = (updateCheck) => {
+    if (!updateCheck) {
+        // Add missing updateCheck structure
+        return { updateCheck: { lastCheck: null, skipVersion: null }, changed: true };
+    }
+    const validUpdateCheck = {};
+    let changed = false;
+    for (const { key, label, isValid, describe } of UPDATE_CHECK_FIELDS) {
+        const value = updateCheck[key];
+        if (value === null || value === undefined) {
+            validUpdateCheck[key] = null;
+        } else if (isValid(value)) {
+            validUpdateCheck[key] = value;
+        } else {
+            logger
+                .withCategory('general')
+                .warning(`Invalid ${label} in metadata: ${describe(value)}, removing`, null, logger.CATEGORIES.UPDATE);
+            validUpdateCheck[key] = null;
+            changed = true;
+        }
+    }
+    return { updateCheck: validUpdateCheck, changed };
+};
+
+/**
+ * Validate every per-challenge entry into `validatedMetadata`.
+ * @param {Object} metadata - Raw metadata (its updateCheck key is skipped)
+ * @param {Object} validatedMetadata - Receives the kept (possibly repaired) entries
+ * @returns {boolean} - True if any entry was dropped or repaired
+ */
+const validateChallengeEntries = (metadata, validatedMetadata) => {
+    let changed = false;
+    let removedCount = 0;
+    for (const [challengeId, entry] of Object.entries(metadata)) {
+        if (challengeId === 'updateCheck') continue;
+
+        const validation = validateMetadataEntry(entry);
+        if (!validation.isValid) {
+            logger
+                .withCategory('challenges')
+                .warning(`Removing invalid metadata entry for challenge ${challengeId}: ${validation.reason}`);
+            removedCount++;
+            changed = true;
+            continue;
+        }
+        // validation.entry is the repaired entry — identical to `entry` unless a
+        // malformed entryIds snapshot was stripped off it.
+        validatedMetadata[challengeId] = validation.entry;
+        if (validation.repairReason) {
+            logger
+                .withCategory('challenges')
+                .warning(
+                    `Dropping invalid entryIds snapshot for challenge ${oneLineId(challengeId)}: ${validation.repairReason}`,
+                );
+            changed = true;
+        }
+    }
+
+    // Log summary if multiple entries were removed
+    if (removedCount > 1) {
+        logger.withCategory('api').warning(`Cleaned up ${removedCount} invalid metadata entries total`, null);
+    }
+    return changed;
+};
+
+/**
  * Validate entire metadata object
  * @param {Object} metadata - Metadata object to validate
  * @returns {Object} - {validatedMetadata, hasChanges}
  */
 const validateMetadata = (metadata) => {
-    const validatedMetadata = {};
-    let hasChanges = false;
-
-    // Validate update check data first
-    if (metadata.updateCheck) {
-        const updateCheck = metadata.updateCheck;
-        const validUpdateCheck = {};
-
-        // Validate lastCheck timestamp
-        if (updateCheck.lastCheck !== null && updateCheck.lastCheck !== undefined) {
-            if (typeof updateCheck.lastCheck === 'number' && updateCheck.lastCheck > 0) {
-                validUpdateCheck.lastCheck = updateCheck.lastCheck;
-            } else {
-                const valueType = typeof updateCheck.lastCheck;
-                const valueDesc =
-                    valueType === 'number'
-                        ? `${updateCheck.lastCheck} (must be > 0)`
-                        : `${updateCheck.lastCheck} (type: ${valueType}, expected: number)`;
-                logger
-                    .withCategory('general')
-                    .warning(
-                        `Invalid lastCheck timestamp in metadata: ${valueDesc}, removing`,
-                        null,
-                        logger.CATEGORIES.UPDATE,
-                    );
-                validUpdateCheck.lastCheck = null;
-                hasChanges = true;
-            }
-        } else {
-            validUpdateCheck.lastCheck = null;
-        }
-
-        // Validate skipVersion
-        if (updateCheck.skipVersion !== null && updateCheck.skipVersion !== undefined) {
-            if (typeof updateCheck.skipVersion === 'string' && updateCheck.skipVersion.length > 0) {
-                validUpdateCheck.skipVersion = updateCheck.skipVersion;
-            } else {
-                const valueType = typeof updateCheck.skipVersion;
-                const valueDesc =
-                    valueType === 'string'
-                        ? `"${updateCheck.skipVersion}" (empty string)`
-                        : `${updateCheck.skipVersion} (type: ${valueType}, expected: non-empty string)`;
-                logger
-                    .withCategory('general')
-                    .warning(`Invalid skipVersion in metadata: ${valueDesc}, removing`, null, logger.CATEGORIES.UPDATE);
-                validUpdateCheck.skipVersion = null;
-                hasChanges = true;
-            }
-        } else {
-            validUpdateCheck.skipVersion = null;
-        }
-
-        validatedMetadata.updateCheck = validUpdateCheck;
-    } else {
-        // Add missing updateCheck structure
-        validatedMetadata.updateCheck = {
-            lastCheck: null,
-            skipVersion: null,
-        };
-        hasChanges = true;
-    }
-
-    // Validate challenge entries
-    const removedEntries = [];
-    for (const [challengeId, entry] of Object.entries(metadata)) {
-        // Skip updateCheck as we handled it above
-        if (challengeId === 'updateCheck') continue;
-
-        const validation = validateMetadataEntry(entry);
-        if (validation.isValid) {
-            // validation.entry is the repaired entry — identical to `entry` unless a
-            // malformed entryIds snapshot was stripped off it.
-            validatedMetadata[challengeId] = validation.entry;
-            if (validation.repairReason) {
-                logger
-                    .withCategory('challenges')
-                    .warning(
-                        `Dropping invalid entryIds snapshot for challenge ${oneLineId(challengeId)}: ${validation.repairReason}`,
-                    );
-                hasChanges = true;
-            }
-        } else {
-            logger
-                .withCategory('challenges')
-                .warning(`Removing invalid metadata entry for challenge ${challengeId}: ${validation.reason}`);
-            removedEntries.push({ challengeId, reason: validation.reason });
-            hasChanges = true;
-        }
-    }
-
-    // Log summary if multiple entries were removed
-    if (removedEntries.length > 1) {
-        logger.withCategory('api').warning(`Cleaned up ${removedEntries.length} invalid metadata entries total`, null);
-    }
-
-    return { validatedMetadata, hasChanges };
+    const { updateCheck, changed: updateCheckChanged } = validateUpdateCheck(metadata.updateCheck);
+    const validatedMetadata = { updateCheck };
+    const entriesChanged = validateChallengeEntries(metadata, validatedMetadata);
+    return { validatedMetadata, hasChanges: updateCheckChanged || entriesChanged };
 };
 
 /**

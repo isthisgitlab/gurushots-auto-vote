@@ -7,7 +7,6 @@
 const { makePostRequest, createCommonHeaders, FORM_CONTENT_TYPE } = require('./api-client');
 const { ENDPOINTS } = require('./constants');
 const logger = require('../logger');
-const { pickBoostEntry } = require('../services/VotingLogic');
 
 /**
  * POST the GuruShots boost-photo endpoint. Concentrates the form-encoded
@@ -18,8 +17,8 @@ const { pickBoostEntry } = require('../services/VotingLogic');
  *
  * Uses URLSearchParams for RFC-compliant application/x-www-form-urlencoded
  * encoding (space → `+`, reserved chars percent-encoded). Both callers
- * normalize their ids first (applyBoost stringifies and guards the entry id,
- * applyBoostToEntry maps null/undefined to ''), so values arrive as-is.
+ * normalize their ids first (boostImage's caller stringifies and guards the
+ * entry id, applyBoostToEntry maps null/undefined to ''), so values arrive as-is.
  */
 const _postBoost = async (challengeId, imageId, token) => {
     const data = new URLSearchParams({
@@ -34,39 +33,16 @@ const _postBoost = async (challengeId, imageId, token) => {
 };
 
 /**
- * Applies a boost to a photo in a challenge
+ * Boosts an already-chosen entry of a challenge — the auto-cycle transport.
+ * Picking the entry (and flagging it as boosted) is the caller's job; see
+ * strategies/real/applyBoost.js.
  *
- * Boosts increase the visibility of your photo in a challenge.
- * Picks the entry via `boostImageIndex`, walking backward past any
- * turboed entry until a non-turboed one is found.
- *
- * @param {object} challenge - Challenge object containing id and member data
+ * @param {string} challengeId - Challenge ID (already stringified)
+ * @param {string} boostImageId - Image ID of the chosen entry
  * @param {string} token - Authentication token
  * @returns {Promise<object|null>} - API response or null if boost failed
  */
-const applyBoost = async (challenge, token) => {
-    const { id, member } = challenge;
-    const challengeId = id?.toString?.() || '';
-    const entries = member?.ranking?.entries;
-    if (!Array.isArray(entries) || entries.length === 0) {
-        logger.withCategory('voting').error('No entries available for boosting', { challengeId });
-        return null;
-    }
-    const picked = pickBoostEntry(challenge, challengeId);
-    if (!picked) {
-        logger
-            .withCategory('voting')
-            .error("Couldn't apply Boost — your only entry already has Turbo (Boost and Turbo can't share an entry)", {
-                challengeId,
-            });
-        return null;
-    }
-    const boostImageId = picked.id;
-    if (!boostImageId) {
-        logger.withCategory('voting').error('Selected boost entry has no id', { challengeId });
-        return null;
-    }
-
+const boostImage = async (challengeId, boostImageId, token) => {
     const operationId = `apply-boost-${challengeId}`;
     logger
         .withCategory('boost')
@@ -77,15 +53,6 @@ const applyBoost = async (challenge, token) => {
         logger.withCategory('boost').endOperation(operationId, null, 'Boost application failed');
         return null;
     }
-
-    // Raise the conflict flag on the local challenge object now that the boost landed.
-    // `picked` is a reference into challenge.member.ranking.entries, so a turbo running
-    // later in this same pass sees the entry as taken instead of picking it again — boost
-    // and turbo may both be spent on a challenge, but never on the same entry. Set here, at
-    // the point the apply is known to have succeeded, rather than in the caller: the response
-    // carries no entry id, and the caller would otherwise have to re-run the pick and hope it
-    // resolved the same way.
-    picked.boosted = true;
 
     logger.withCategory('boost').endOperation(operationId, `boost applied to image ${boostImageId}`);
     return response;
@@ -118,6 +85,6 @@ const applyBoostToEntry = async (challengeId, imageId, token) => {
 };
 
 module.exports = {
-    applyBoost,
+    boostImage,
     applyBoostToEntry,
 };

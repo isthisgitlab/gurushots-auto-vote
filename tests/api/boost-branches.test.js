@@ -1,5 +1,6 @@
 /**
- * Defensive-input tests for api/boost.js that complement boost.test.js:
+ * Defensive-input tests for the real-strategy applyBoost (strategies/real/applyBoost.js)
+ * and api/boost.js that complement boost.test.js:
  * missing / nullish ids, a picked entry without an id, and missing member data.
  * The entry picker (VotingLogic.pickBoostEntry) is mocked here so each guard
  * can be reached directly.
@@ -17,7 +18,8 @@ const { pickBoostEntry } = require('../../src/js/services/VotingLogic');
 const { makePostRequest } = require('../../src/js/api/api-client');
 const { ENDPOINTS } = require('../../src/js/api/constants');
 const logger = require('../../src/js/logger');
-const { applyBoost, applyBoostToEntry } = require('../../src/js/api/boost');
+const { applyBoostToEntry } = require('../../src/js/api/boost');
+const { applyBoost } = require('../../src/js/strategies/real/applyBoost');
 
 const scopedErrors = () =>
     logger.withCategory.mock.results.flatMap((r) => r.value.error.mock.calls.map((call) => [call[0], call[1]]));

@@ -7,7 +7,7 @@ import { formatSecondsAsHoursMinutes } from './timeFieldUnits';
 import { formatDuration } from '../../format/duration';
 import { entryPhotoUrl } from '../../format/photoUrl';
 
-// Re-exported from the shared core so the renderer, the CLI, and api/main all
+// Re-exported from the shared core so the renderer, the CLI, and strategies/real all
 // format durations identically — see src/js/format/duration.js.
 export { formatDuration };
 

@@ -212,7 +212,7 @@ describe('voting', () => {
 
             // A function target is a legacy caller shape — the orchestrator has passed
             // a resolved number since the exposure-threshold resolver was retired
-            // (see the _getExposureThreshold note in api/main.js). `exposure_factor <
+            // (see the _getExposureThreshold note in strategies/real/index.js). `exposure_factor <
             // someFunction` is always false, so no image is ever selected.
             const thresholdFunction = (challengeId) => {
                 return challengeId === '123' ? 80 : 100;

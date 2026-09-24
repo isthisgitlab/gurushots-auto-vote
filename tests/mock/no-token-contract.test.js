@@ -25,9 +25,12 @@ jest.mock('../../src/js/settings.js', () => ({
     SETTINGS_SCHEMA: { exposure: { default: 100 } },
 }));
 
-const realChallenges = require('../../src/js/api/challenges');
+const realChallenges = require('../../src/js/strategies/real/activeChallenges');
 const realVoting = require('../../src/js/api/voting');
-const realBoost = require('../../src/js/api/boost');
+const realBoost = {
+    ...require('../../src/js/api/boost'),
+    ...require('../../src/js/strategies/real/applyBoost'),
+};
 const { mockApiClient } = require('../../src/js/mock/index');
 
 // Contract table: [name, real call, mock call, expected resolve shape check]

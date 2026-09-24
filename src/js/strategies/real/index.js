@@ -1,29 +1,38 @@
 /**
- * GuruShots Auto Voter - Main Orchestration Module
+ * GuruShots Auto Voter - Real API strategy
  *
- * This module orchestrates all the voting operations by coordinating
- * between challenges, voting, and boost modules.
+ * Composes the api/ endpoint wrappers with the shared services into the
+ * real-mode strategy surface apiFactory exposes: the voting pass (with its
+ * join and prize-claim pre-steps), manual join, the Turbo mini-game, and the
+ * entry-picking boost and title-pinned challenge read. The mock counterpart
+ * is mockApiClient in mock/index.js.
  */
 
-const { getActiveChallenges } = require('./challenges');
-const { getVoteImages, submitVotes } = require('./voting');
-const { applyBoost, applyBoostToEntry } = require('./boost');
-const { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } = require('./turbo');
-const { getEligiblePhotos, getImageData, submitToChallenge } = require('./submissions');
-const { getCurrentMemberProfile, searchTagAutocomplete } = require('./tags');
-const { getMemberChallenges, getBankroll, coinsUnlock } = require('./join');
-const { getMyCompletedChallenges, claimChallengeResources, getMyMissions, claimMissionPrize } = require('./rewards');
-const { keyUnlock, swapPhoto, exposureAutofill } = require('./currency');
-const { cleanupStaleMetadata } = require('../metadata');
-const { swapBackLedger } = require('../swapBackStore');
-const { autoSpendLedger } = require('../currencyAutoStore');
-const { sleep, getRandomDelay } = require('../timing');
-const logger = require('../logger');
-const { runVotingPass } = require('../services/votingOrchestrator');
-const { createMetadataEntryTracker } = require('../services/newEntryTracker');
-const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges');
-const { runClaimPass } = require('../services/autoClaim');
-const { joinStateStore, acquireUnlockLock } = require('../joinStateStore');
+const { getActiveChallenges } = require('./activeChallenges');
+const { applyBoost } = require('./applyBoost');
+const { getVoteImages, submitVotes } = require('../../api/voting');
+const { applyBoostToEntry } = require('../../api/boost');
+const { getChallengeTurbo, submitTurboSelection, applyTurbo, TURBO_SELECTION_DELAY_MS } = require('../../api/turbo');
+const { getEligiblePhotos, getImageData, submitToChallenge } = require('../../api/submissions');
+const { getCurrentMemberProfile, searchTagAutocomplete } = require('../../api/tags');
+const { getMemberChallenges, getBankroll, coinsUnlock } = require('../../api/join');
+const {
+    getMyCompletedChallenges,
+    claimChallengeResources,
+    getMyMissions,
+    claimMissionPrize,
+} = require('../../api/rewards');
+const { keyUnlock, swapPhoto, exposureAutofill } = require('../../api/currency');
+const { cleanupStaleMetadata } = require('../../metadata');
+const { swapBackLedger } = require('../../swapBackStore');
+const { autoSpendLedger } = require('../../currencyAutoStore');
+const { sleep, getRandomDelay } = require('../../timing');
+const logger = require('../../logger');
+const { runVotingPass } = require('../../services/votingOrchestrator');
+const { createMetadataEntryTracker } = require('../../services/newEntryTracker');
+const { runJoinPass, joinChallengeSingle } = require('../../services/joinChallenges');
+const { runClaimPass } = require('../../services/autoClaim');
+const { joinStateStore, acquireUnlockLock } = require('../../joinStateStore');
 
 // One instance for the process: the tracker is stateless (it reads and writes
 // metadata.json on each call), but building it per pass would be pointless churn.
@@ -83,9 +92,35 @@ const joinChallenge = (challengeId, spendCoins, token) =>
     joinChallengeSingle(challengeId, token, joinDeps, { spendCoins: spendCoins === true });
 
 /**
+ * Plays one unresolved battle: picks first_image, and on a lost or errored
+ * pick flips to second_image (after the selection delay). Resolves whether a
+ * pick was correct, whether that took the flip, and whether the game is WON.
+ */
+const playTurboBattle = async (challenge, battle, token) => {
+    const first = await submitTurboSelection(challenge.id, battle.firstImageId, token);
+    if (first.ok) {
+        return { correct: true, flipped: false, won: first.state === 'WON' };
+    }
+
+    // First pick lost or errored — flip to the other image.
+    await sleep(TURBO_SELECTION_DELAY_MS);
+    const second = await submitTurboSelection(challenge.id, battle.secondImageId, token);
+    if (!second.ok) {
+        const code = second.errorCode || first.errorCode;
+        if (code) {
+            logger
+                .withCategory('turbo')
+                .warning(`${logger.challengeTag(challenge)} Turbo battle skipped, error_code=${code}`, null);
+        }
+    }
+    return { correct: !!second.ok, flipped: !!second.ok, won: !!second.ok && second.state === 'WON' };
+};
+
+/**
  * Plays through the Turbo mini-game for a single challenge.
- * Iterates pair-by-pair, picks first_image, flips to second_image on a wrong
- * pick, and stops early once the response reports state === 'WON'.
+ * Iterates pair-by-pair (see playTurboBattle), skipping resolved battles and
+ * counting malformed ones as double failures, and stops early once a response
+ * reports state === 'WON'.
  */
 const runTurboMiniGame = async (challenge, token) => {
     const set = await getChallengeTurbo(challenge.id, token);
@@ -108,35 +143,13 @@ const runTurboMiniGame = async (challenge, token) => {
         }
 
         played++;
-        const first = await submitTurboSelection(challenge.id, battle.firstImageId, token);
-        if (first.ok) {
-            correct++;
-            if (first.state === 'WON') {
-                won = true;
-                break;
-            }
-            await sleep(TURBO_SELECTION_DELAY_MS);
-            continue;
-        }
-
-        // First pick lost or errored — flip to the other image.
-        await sleep(TURBO_SELECTION_DELAY_MS);
-        const second = await submitTurboSelection(challenge.id, battle.secondImageId, token);
-        if (second.ok) {
-            correct++;
-            flipped++;
-            if (second.state === 'WON') {
-                won = true;
-                break;
-            }
-        } else {
-            doubleFailed++;
-            const code = second.errorCode || first.errorCode;
-            if (code) {
-                logger
-                    .withCategory('turbo')
-                    .warning(`${logger.challengeTag(challenge)} Turbo battle skipped, error_code=${code}`, null);
-            }
+        const outcome = await playTurboBattle(challenge, battle, token);
+        if (outcome.correct) correct++;
+        else doubleFailed++;
+        if (outcome.flipped) flipped++;
+        if (outcome.won) {
+            won = true;
+            break;
         }
         await sleep(TURBO_SELECTION_DELAY_MS);
     }
@@ -216,7 +229,8 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
 
 module.exports = {
     fetchChallengesAndVote,
-    applyBoostToEntry,
+    getActiveChallenges,
+    applyBoost,
     runTurboMiniGame,
     joinChallenge,
 };

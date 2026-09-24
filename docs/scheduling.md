@@ -345,7 +345,7 @@ engine_ stays per-shell:
 
 What they DO share is the cadence _decision_ (`computeNextCycleDelayMs`)
 and what a "cycle" means (`services/manualVote.js` for the manual to-100%
-path, `api/main.js#fetchChallengesAndVote` for the auto-strategy path).
+path, `strategies/real/index.js#fetchChallengesAndVote` for the auto-strategy path).
 Sharing the decision is what keeps last-minute entry timing correct on all
 three; sharing the timer engine would force the lowest common denominator
 (the Android constraints), which would be wrong for CLI and Electron.

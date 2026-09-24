@@ -1,7 +1,7 @@
 /**
  * Guards the hand-built `api` surface both strategies hand to runVotingPass.
  *
- * WHY THIS EXISTS: src/js/api/main.js and src/js/mock/index.js each construct
+ * WHY THIS EXISTS: src/js/strategies/real/index.js and src/js/mock/index.js each construct
  * that object as a literal, listing every method by hand, while
  * votingOrchestrator turns it into the `fillDeps` bundle the auto-fill pipeline
  * consumes. Nothing forces the two lists to agree — and when `getImageData`
@@ -61,7 +61,7 @@ describe('runVotingPass api surface wiring', () => {
     });
 
     test('real strategy passes every method the fill pipeline needs', async () => {
-        const { fetchChallengesAndVote } = require('../../src/js/api/main');
+        const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
         await fetchChallengesAndVote('tok');
         expect(runVotingPass).toHaveBeenCalledTimes(1);
         const { api } = runVotingPass.mock.calls[0][2];

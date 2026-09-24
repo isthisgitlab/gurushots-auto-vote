@@ -1,6 +1,6 @@
 /**
  * Orchestration tests for the "fill-new" boost/turbo options in
- * fetchChallengesAndVote (src/js/api/main.js).
+ * fetchChallengesAndVote (src/js/strategies/real/index.js).
  *
  * These verify the wiring only — that when boostFillNew/turboFillNew is on the
  * cycle submits a fresh entry via autoFill.submitNewEntryForAction and then
@@ -9,9 +9,10 @@
  * decision gates are covered by autoFill.test.js and turboApply.test.js.
  */
 
-jest.mock('../../src/js/api/challenges', () => ({ getActiveChallenges: jest.fn() }));
+jest.mock('../../src/js/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
 jest.mock('../../src/js/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
-jest.mock('../../src/js/api/boost', () => ({ applyBoost: jest.fn(), applyBoostToEntry: jest.fn() }));
+jest.mock('../../src/js/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/js/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
 jest.mock('../../src/js/api/turbo', () => ({
     getChallengeTurbo: jest.fn(),
     submitTurboSelection: jest.fn(),
@@ -64,13 +65,14 @@ jest.mock('../../src/js/logger', () => {
     return { withCategory: jest.fn(() => scoped), challengeTag: jest.fn(() => '[challenge]') };
 });
 
-const { getActiveChallenges } = require('../../src/js/api/challenges');
-const { applyBoost, applyBoostToEntry } = require('../../src/js/api/boost');
+const { getActiveChallenges } = require('../../src/js/strategies/real/activeChallenges');
+const { applyBoost } = require('../../src/js/strategies/real/applyBoost');
+const { applyBoostToEntry } = require('../../src/js/api/boost');
 const { applyTurbo } = require('../../src/js/api/turbo');
 const votingLogic = require('../../src/js/services/VotingLogic');
 const autoFill = require('../../src/js/services/autoFill');
 const settings = require('../../src/js/settings');
-const { fetchChallengesAndVote } = require('../../src/js/api/main');
+const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
 const { buildChallenge } = require('../helpers/challengeFixtures');
 
 const NOW = () => Math.floor(Date.now() / 1000);
@@ -242,7 +244,7 @@ describe('fetchChallengesAndVote — timer-ordered actions', () => {
 
         expect(autoFill.maybeAutoFillChallenge).toHaveBeenCalled();
         expect(applyTurbo).toHaveBeenCalledWith('12345', 'existing-1', TOKEN);
-        // main.js dispatches in the order orderDeadlineActions returns.
+        // votingOrchestrator dispatches in the order orderDeadlineActions returns.
         expect(autoFill.maybeAutoFillChallenge.mock.invocationCallOrder[0]).toBeLessThan(
             applyTurbo.mock.invocationCallOrder[0],
         );

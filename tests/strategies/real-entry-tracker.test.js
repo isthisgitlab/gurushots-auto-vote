@@ -1,5 +1,5 @@
 /**
- * Binder wiring test for the voteOnNewEntry entry tracker in src/js/api/main.js.
+ * Binder wiring test for the voteOnNewEntry entry tracker in src/js/strategies/real/index.js.
  *
  * The mock fork of this loop once silently lost auto-fill, emergency fill and
  * turbo-earn wiring, which is the documented reason the shared orchestrator
@@ -9,9 +9,10 @@
  * tests/mock/index.test.js holds the mock half.
  */
 
-jest.mock('../../src/js/api/challenges', () => ({ getActiveChallenges: jest.fn() }));
+jest.mock('../../src/js/strategies/real/activeChallenges', () => ({ getActiveChallenges: jest.fn() }));
 jest.mock('../../src/js/api/voting', () => ({ getVoteImages: jest.fn(), submitVotes: jest.fn() }));
-jest.mock('../../src/js/api/boost', () => ({ applyBoost: jest.fn(), applyBoostToEntry: jest.fn() }));
+jest.mock('../../src/js/strategies/real/applyBoost', () => ({ applyBoost: jest.fn() }));
+jest.mock('../../src/js/api/boost', () => ({ applyBoostToEntry: jest.fn() }));
 jest.mock('../../src/js/api/turbo', () => ({
     getChallengeTurbo: jest.fn(),
     submitTurboSelection: jest.fn(),
@@ -44,11 +45,11 @@ jest.mock('../../src/js/services/autoFill', () => ({
 }));
 jest.mock('../../src/js/settings', () => ({ getEffectiveSetting: jest.fn(() => false) }));
 
-const { getActiveChallenges } = require('../../src/js/api/challenges');
+const { getActiveChallenges } = require('../../src/js/strategies/real/activeChallenges');
 const metadata = require('../../src/js/metadata');
 const settings = require('../../src/js/settings');
 const votingLogic = require('../../src/js/services/VotingLogic');
-const { fetchChallengesAndVote } = require('../../src/js/api/main');
+const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
 const { buildChallenge } = require('../helpers/challengeFixtures');
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -70,7 +71,7 @@ beforeEach(() => {
     getActiveChallenges.mockResolvedValue({ challenges: [challengeWith(['a'])] });
 });
 
-describe('api/main binder — entry tracker', () => {
+describe('real strategy binder — entry tracker', () => {
     test('reads and writes snapshots through metadata.json when the setting is on', () => {
         settings.getEffectiveSetting.mockImplementation((key) => key === 'voteOnNewEntry');
 

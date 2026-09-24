@@ -1,5 +1,5 @@
 /**
- * Tests for boostImageIndex selection in api/boost.applyBoost and the
+ * Tests for boostImageIndex selection in the real-strategy applyBoost (strategies/real/applyBoost.js) and the
  * shared resolveEntryIndex helper used by both turbo and boost picks.
  *
  * GuruShots permits at most one turbo per challenge, so the picker only
@@ -21,7 +21,7 @@
  */
 
 const settings = require('../../src/js/settings');
-const { applyBoost } = require('../../src/js/api/boost');
+const { applyBoost } = require('../../src/js/strategies/real/applyBoost');
 const { resolveEntryIndex, pickEntryAvoidingConflict } = require('../../src/js/services/VotingLogic');
 const apiClient = require('../../src/js/api/api-client');
 const { buildChallenge: buildBaseChallenge } = require('../helpers/challengeFixtures');

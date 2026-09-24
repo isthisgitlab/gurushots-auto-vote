@@ -6,8 +6,6 @@
  * prove that:
  *   1) the flag round-trips correctly,
  *   2) reset() returns it to false.
- * (All callers now use this module directly — the api/main and mock
- * setCancellationFlag delegates were removed as dead code.)
  */
 
 const cancellation = require('../../src/js/voting/cancellation');

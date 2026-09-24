@@ -41,13 +41,13 @@ Domain terms used throughout, in reader's terms:
 
 ## 1. Voting decision engine
 
-- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.js` — around L294) is the **one**
+- `runVotingPass(token, filter, deps)` (`services/votingOrchestrator.js` — around L712) is the **one**
   shared loop for both real and mock strategies. **Never fork it** — a fork re-introduces the real/mock
   drift the shared loop exists to remove. Inject strategy differences via `deps`.
 - The per-challenge action **runners are strictly sequential, never parallelised**: auto-fill mutates the
   shared challenge object (`reflectNewEntry`) so a later turbo/boost in the same cycle sees the new entry
   and the consumed slot.
-- The decision engine is `_runVotingRules()` (`services/VotingLogic.js` — around L248). Its precedence
+- The decision engine is `_runVotingRules()` (`services/VotingLogic.js` — around L540). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
   (→100) → **pre-boost fill** (→100) → **voting pause** → scheduled-fill window → **pre-final-window top-up** →
   final-window rule → normal threshold. The **pre-boost fill** (`voteBeforeBoost`, default off) votes to
@@ -81,13 +81,13 @@ Domain terms used throughout, in reader's terms:
 - **Trigger ≠ target, and there are two _different_ sentinel families — do not merge them:**
     - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
       stays **active**, it simply votes up to the trigger value (legacy behavior).
-      `getEffectiveExposureTarget()` (`services/VotingLogic.js` — around L209); schema note in
-      `settings/schema.js` (around L285).
+      `getEffectiveExposureTarget()` (`services/VotingLogic.js` — around L394); schema note in
+      `settings/schema.js` (around L87).
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
       See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/VotingLogic.js` — around
-      L552: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
+      L973: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
       emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill.js` — around
-      L936: `emergencySeconds <= 0` → `'disabled'`).
+      L1494: `emergencySeconds <= 0` → `'disabled'`).
 - Magic constants: final-window width defaults to 3600 s — now the `finalWindowDuration` setting's default
   (configurable 60 s … 30 d), no longer hardcoded; key-unlock boost default window = 900 s when the setting is
   unusable (explicit `0` still = never).
@@ -95,16 +95,16 @@ Domain terms used throughout, in reader's terms:
   older rejection-sampling could loop forever on duplicate ids) and never posts an empty ballot
   (`api/voting.js` — around L59, L155).
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
-  (`services/VotingLogic.js` — around L690) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
+  (`services/VotingLogic.js` — around L1104) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
   `VotingLogic` (shared core) rather than in `api/boost.js` so mock mode honours the same rule.
 
 ## 2. Scheduling
 
-- `createCadenceChain()` (`scheduling/cadenceChain.js` — around L65) is a single recursive `setTimeout`
+- `createCadenceChain()` (`scheduling/cadenceChain.js` — around L152) is a single recursive `setTimeout`
   chain — **no cron** — shared by CLI, GUI, and Android headless. See `scheduling.md` for the three timer
   engines that drive it per platform.
 - The single cadence decision is `computeNextCycleDelayMs()` (`scheduling/thresholdWindow.js` — around
-  L141): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
+  L390): modes `last-minute` / `approaching` / `scheduled` / `normal`, with the invariant **never sleep
   past an upcoming boundary**.
 - Double-fire guard: a **stale-timer identity check** (`getTimer() !== timeoutId`) ensures only the
   current timer re-arms, so a re-armed/stopped chain can't double-fire. There is no mutex around a
@@ -115,7 +115,7 @@ Domain terms used throughout, in reader's terms:
 - `now` is re-read per challenge (a pass can take minutes, so a single clock would miss windows that open
   mid-pass).
 - **Auto-join is a pre-step of the pass, not a separate schedule.** `runJoinPass` (`services/joinChallenges.js`)
-  runs inside the shared `fetchChallengesAndVote` (`api/main.js` real / `mock/index.js` mock) before the
+  runs inside the shared `fetchChallengesAndVote` (`strategies/real/index.js` real / `mock/index.js` mock) before the
   voting pass, so all three platforms get it without forking `runVotingPass`. It is skipped for a
   single-challenge run and never allowed to abort voting (its errors are caught and logged). The `autoJoin`
   enable is **resolved per candidate by rule (see challenge rules below) → master**, not a hard global gate —
@@ -201,6 +201,14 @@ Domain terms used throughout, in reader's terms:
 
 ## 3. GuruShots API transport
 
+- **Layering**: `api/` is transport only — `api-client.js` plus one thin wrapper per endpoint, importing
+  nothing from `services/`. The real-mode strategy composes those wrappers with the services in
+  `strategies/real/`: `index.js` (`fetchChallengesAndVote` with its join/claim pre-steps, manual join, the
+  Turbo mini-game), `applyBoost.js` (picks the entry via `pickBoostEntry`, posts it through
+  `api/boost.js#boostImage`, flags it `boosted`) and `activeChallenges.js` (coalesces concurrent
+  `getActiveChallenges` calls per token and pins first-seen titles via `services/challengeTitlePin.js` on a
+  successful fetch only). `apiFactory.js` assembles the real surface from these and selects it or
+  `mock/index.js#mockApiClient`.
 - All POSTs go through `makePostRequest()` (`api/api-client.js` — around L204). **Contract: it returns the
   response body on success and `null` on ultimate failure — it never throws.** Every caller branches on
   `null`, not on a catch.
@@ -271,7 +279,7 @@ repeated six times is one that gets forgotten at one of them.
   challenge from a factory photo.
 - Both deps are **optional** in `fetchCandidatesForChallenge`; omit either and behavior is exactly the
   pre-resolution fallback. Nothing here can fail a fill. **That optionality is a safety net, not the
-  shipping state** — every real path supplies them: `api/main.js` (the `api:` bundle `votingOrchestrator`
+  shipping state** — every real path supplies them: `strategies/real/index.js` (the `api:` bundle `votingOrchestrator`
   copies into `fillDeps`, and `joinDeps`), `ipc/actions.handlers.js` (manual Fill Now), and both mock
   bundles. Note `runFillAttempt` rebuilds a fresh deps object for its
   `fetchCandidatesForChallenge` call rather than spreading `deps`, so a dep added upstream must be named
@@ -404,7 +412,7 @@ repeated six times is one that gets forgotten at one of them.
 
 ## 7. Persistence & platform detection
 
-- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.js` — around L237) is
+- **Don't hand-roll `fs`.** `createJsonStore({fileName, prefKey})` (`settings/storage.js` — around L239) is
   the reusable three-platform JSON store: sync fs at `userData/<fileName>` (mode `0o600`) on Electron/CLI,
   hydrate-once cache + ordered async write-behind to `@capacitor/preferences` on Capacitor, in-memory only
   on the Android headless service. `metadata.js` and `joinStateStore.js` (paid-unlock idempotency markers)

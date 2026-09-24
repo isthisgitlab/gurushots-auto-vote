@@ -160,6 +160,225 @@ Note: You must login first before you can vote, boost, turbo, or submit.
     `);
 };
 
+/** Log a usage error (one error line, then any usage/help lines) and yield exit code 1. */
+const usageError = (message, ...usage) => {
+    logger.withCategory('ui').error(message);
+    for (const line of usage) logger.withCategory('ui').info(line);
+    return 1;
+};
+
+/** A command that only runs `fn` and then exits 0. */
+const exitsZero = (fn) => async () => {
+    await fn();
+    return 0;
+};
+
+/** Exit code for a command reporting `false` on failure. */
+const exitCodeOf = (ok) => (ok === false ? 1 : 0);
+
+/**
+ * A per-challenge action: pull --challenge out of argv, require it (printing
+ * `usage` otherwise), then `run(challengeId, rest)` → exit code.
+ */
+const challengeCommand = (usage, run) => async (argv) => {
+    const { challengeId, rest } = extractChallenge(argv);
+    requireChallenge({ challengeId }, usage);
+    return run(challengeId, rest);
+};
+
+/** A profile command: resolve the profile name via requireProfileArgs, then `run(name, challengeId)`. */
+const profileCommand =
+    (name, run, ...options) =>
+    async (argv) => {
+        const parsed = extractChallenge(argv);
+        const profile = requireProfileArgs(name, parsed, ...options);
+        run(profile, parsed.challengeId);
+        return 0;
+    };
+
+// --challenge scopes to a single-challenge manual vote; bare `vote` votes
+// every challenge to 100%. A present-but-empty --challenge is rejected rather
+// than silently voting everything.
+const runVote = async (argv) => {
+    const challengeId = parseChallengeFlag(argv);
+    const hasChallengeFlag = argv.some((a) => a === '--challenge' || a.startsWith('--challenge='));
+    if (hasChallengeFlag && challengeId == null) {
+        return usageError(
+            'Please specify a challenge id with --challenge',
+            'Usage: vote [--challenge=<id>]  (omit --challenge to vote every challenge)',
+        );
+    }
+    if (challengeId != null) {
+        await voteChallengeManual(challengeId);
+    } else {
+        await runVotingCycle(1, { isManual: true });
+    }
+    return 0;
+};
+
+const LOG_CATEGORY_FLAGS = {
+    '--error': 'error',
+    '--api': 'api',
+    '--settings': 'settings',
+    '--lexicon': 'lexicon',
+};
+
+const runLogs = async (argv) => {
+    const category = LOG_CATEGORY_FLAGS[argv.find((arg) => Object.hasOwn(LOG_CATEGORY_FLAGS, arg))] || 'app';
+    const linesArg = argv.find((a) => a.startsWith('--lines='));
+    const lines = linesArg ? parseInt(linesArg.slice('--lines='.length), 10) || 100 : 100;
+    showLogs({ category, lines });
+    return 0;
+};
+
+const runRun = async (argv) => {
+    await runVotingCycle(1, { isManual: false, challengeId: parseChallengeFlag(argv) });
+    return 0;
+};
+
+const runJoin = async (argv) => {
+    const yes = argv.includes('--yes');
+    const id = argv.find((a) => !a.startsWith('--'));
+    await joinChallengeCmd(id, { yes });
+    return 0;
+};
+
+const runBoost = async (challengeId, rest) => {
+    const imageArg = rest.find((a) => a.startsWith('--image='));
+    const imageId = imageArg ? imageArg.slice('--image='.length) || null : null;
+    await boostChallenge(challengeId, { imageId });
+    return 0;
+};
+
+const runSwapBack = async (challengeId, rest) => {
+    const { imageId, yes } = parseSwapFlags(rest);
+    return exitCodeOf(await swapBackCmd(challengeId, { imageId, yes }));
+};
+
+/** A per-challenge action taking only a `{ [option]: flagPresent }` bag, then exiting 0. */
+const flagAction = (fn, option, flag) => async (challengeId, rest) => {
+    await fn(challengeId, { [option]: rest.includes(flag) });
+    return 0;
+};
+
+const runGetSetting = async (argv) => {
+    const { challengeId, rest } = extractChallenge(argv);
+    if (!rest[0]) return usageError('Please specify a setting key', 'Usage: get-setting <key> [--challenge=<id>]');
+    getSetting(rest[0], challengeId);
+    return 0;
+};
+
+const runSetSetting = async (argv) => {
+    const { challengeId, rest } = extractChallenge(argv);
+    if (!rest[0] || rest[1] === undefined) {
+        return usageError('Please specify both key and value', 'Usage: set-setting <key> <value> [--challenge=<id>]');
+    }
+    setSetting(rest[0], rest[1], challengeId);
+    return 0;
+};
+
+const runResetSetting = async (argv) => {
+    const { challengeId, rest } = extractChallenge(argv);
+    if (!rest[0]) return usageError('Please specify a setting key', 'Usage: reset-setting <key> [--challenge=<id>]');
+    return resetSetting(rest[0], challengeId) ? 0 : 1;
+};
+
+const runSetGlobalDefault = async ([key, value]) => {
+    if (!key || !value) {
+        return usageError(
+            'Please specify both setting key and value',
+            'Usage: set-global-default <key> <value>',
+            'Example: set-global-default exposure 80',
+        );
+    }
+    setGlobalDefault(key, value);
+    return 0;
+};
+
+const runListProfiles = async (argv) => {
+    const { rest } = extractChallenge(argv);
+    if (rest.length > 0) return usageError(`Unexpected arguments: ${rest.join(' ')}`, 'Usage: list-profiles');
+    listProfiles();
+    return 0;
+};
+
+/**
+ * Command table: name → `(argv) => exitCode`, where argv is everything after
+ * the command name. A handler resolving `undefined` leaves the process
+ * running (continuous mode).
+ */
+const COMMANDS = {
+    login: exitsZero(handleLogin),
+    logout: exitsZero(handleLogout),
+    vote: runVote,
+    run: runRun,
+    boost: challengeCommand('Usage: boost --challenge=<id> [--image=<id>]', runBoost),
+    turbo: challengeCommand('Usage: turbo --challenge=<id>', async (challengeId) => {
+        await turboChallenge(challengeId);
+        return 0;
+    }),
+    submit: challengeCommand('Usage: submit --challenge=<id> [--all]', flagAction(fillChallenge, 'all', '--all')),
+    'unlock-boost': challengeCommand(
+        'Usage: unlock-boost --challenge=<id> [--yes]',
+        flagAction(unlockBoostCmd, 'yes', '--yes'),
+    ),
+    swap: challengeCommand(SWAP_USAGE, async (challengeId, rest) =>
+        exitCodeOf(await swapCmd(challengeId, parseSwapFlags(rest))),
+    ),
+    'swap-back': challengeCommand(SWAP_BACK_USAGE, runSwapBack),
+    'fill-exposure': challengeCommand(
+        'Usage: fill-exposure --challenge=<id> [--yes]',
+        flagAction(fillExposureCmd, 'yes', '--yes'),
+    ),
+    'check-updates': exitsZero(checkUpdates),
+    // Continuous mode keeps running — no exit code.
+    start: async () => {
+        await startContinuousVoting();
+        return undefined;
+    },
+    status: exitsZero(showStatus),
+    bankroll: exitsZero(showBankroll),
+    coins: exitsZero(showBankroll),
+    discover: exitsZero(showDiscover),
+    join: runJoin,
+    'get-setting': runGetSetting,
+    'set-setting': runSetSetting,
+    'list-settings': async (argv) => {
+        listSettings(extractChallenge(argv).challengeId);
+        return 0;
+    },
+    'reset-setting': runResetSetting,
+    'set-global-default': runSetGlobalDefault,
+    'reset-all-settings': exitsZero(resetAllSettings),
+    'list-profiles': runListProfiles,
+    'save-profile': profileCommand('save-profile', saveProfileFromChallenge, {
+        needsChallenge: true,
+        challengeHint: "Please specify --challenge=<id> to snapshot that challenge's overrides",
+    }),
+    'apply-profile': profileCommand('apply-profile', applyProfile, {
+        needsChallenge: true,
+        challengeHint: 'Please specify --challenge=<id> to apply the profile to',
+    }),
+    'delete-profile': profileCommand('delete-profile', (name) => deleteProfile(name)),
+    logs: runLogs,
+    'help-settings': exitsZero(helpSettings),
+    'reset-windows': exitsZero(resetWindows),
+    help: exitsZero(showHelp),
+    '--help': exitsZero(showHelp),
+    '-h': exitsZero(showHelp),
+};
+
+const dispatch = (name, argv) => {
+    if (!name) {
+        logger.withCategory('ui').info('No command specified. Use "help" to see available commands');
+        return 1;
+    }
+    if (!Object.hasOwn(COMMANDS, name)) {
+        return usageError(`Unknown command: ${name}`, 'Use "help" to see available commands');
+    }
+    return COMMANDS[name](argv);
+};
+
 const main = async () => {
     try {
         initializeHeaders();
@@ -172,254 +391,8 @@ const main = async () => {
         }
         logger.withCategory('api').debug('main: Command is:', command);
 
-        switch (command) {
-            case 'login':
-                await handleLogin();
-                process.exit(0);
-                break;
-            case 'logout':
-                await handleLogout();
-                process.exit(0);
-                break;
-            case 'vote': {
-                // --challenge scopes to a single-challenge manual vote;
-                // bare `vote` votes every challenge to 100%. A present-but-empty
-                // --challenge is rejected rather than silently voting everything.
-                const voteTail = args.slice(1);
-                const challengeId = parseChallengeFlag(voteTail);
-                const hasChallengeFlag = voteTail.some((a) => a === '--challenge' || a.startsWith('--challenge='));
-                if (hasChallengeFlag && challengeId == null) {
-                    logger.withCategory('ui').error('Please specify a challenge id with --challenge');
-                    logger
-                        .withCategory('ui')
-                        .info('Usage: vote [--challenge=<id>]  (omit --challenge to vote every challenge)');
-                    process.exit(1);
-                    break;
-                }
-                if (challengeId != null) {
-                    await voteChallengeManual(challengeId);
-                } else {
-                    await runVotingCycle(1, { isManual: true });
-                }
-                process.exit(0);
-                break;
-            }
-            case 'run': {
-                const challengeId = parseChallengeFlag(args.slice(1));
-                await runVotingCycle(1, { isManual: false, challengeId });
-                process.exit(0);
-                break;
-            }
-            case 'boost': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                requireChallenge({ challengeId }, 'Usage: boost --challenge=<id> [--image=<id>]');
-                const imageArg = rest.find((a) => a.startsWith('--image='));
-                const imageId = imageArg ? imageArg.slice('--image='.length) || null : null;
-                await boostChallenge(challengeId, { imageId });
-                process.exit(0);
-                break;
-            }
-            case 'turbo': {
-                const { challengeId } = extractChallenge(args.slice(1));
-                requireChallenge({ challengeId }, 'Usage: turbo --challenge=<id>');
-                await turboChallenge(challengeId);
-                process.exit(0);
-                break;
-            }
-            case 'submit': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                requireChallenge({ challengeId }, 'Usage: submit --challenge=<id> [--all]');
-                await fillChallenge(challengeId, { all: rest.includes('--all') });
-                process.exit(0);
-                break;
-            }
-            case 'unlock-boost': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                requireChallenge({ challengeId }, 'Usage: unlock-boost --challenge=<id> [--yes]');
-                await unlockBoostCmd(challengeId, { yes: rest.includes('--yes') });
-                process.exit(0);
-                break;
-            }
-            case 'swap': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                requireChallenge({ challengeId }, SWAP_USAGE);
-                const ok = await swapCmd(challengeId, parseSwapFlags(rest));
-                process.exit(ok === false ? 1 : 0);
-                break;
-            }
-            case 'swap-back': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                requireChallenge({ challengeId }, SWAP_BACK_USAGE);
-                const { imageId, yes } = parseSwapFlags(rest);
-                const ok = await swapBackCmd(challengeId, { imageId, yes });
-                process.exit(ok === false ? 1 : 0);
-                break;
-            }
-            case 'fill-exposure': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                requireChallenge({ challengeId }, 'Usage: fill-exposure --challenge=<id> [--yes]');
-                await fillExposureCmd(challengeId, { yes: rest.includes('--yes') });
-                process.exit(0);
-                break;
-            }
-            case 'check-updates':
-                await checkUpdates();
-                process.exit(0);
-                break;
-            case 'start':
-                await startContinuousVoting();
-                // Don't exit for continuous mode — it keeps running.
-                break;
-            case 'status':
-                await showStatus();
-                process.exit(0);
-                break;
-            case 'bankroll':
-            case 'coins':
-                await showBankroll();
-                process.exit(0);
-                break;
-            case 'discover':
-                await showDiscover();
-                process.exit(0);
-                break;
-            case 'join': {
-                const argv = args.slice(1);
-                const yes = argv.includes('--yes');
-                const id = argv.find((a) => !a.startsWith('--'));
-                await joinChallengeCmd(id, { yes });
-                process.exit(0);
-                break;
-            }
-            case 'get-setting': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                if (!rest[0]) {
-                    logger.withCategory('ui').error('Please specify a setting key');
-                    logger.withCategory('ui').info('Usage: get-setting <key> [--challenge=<id>]');
-                    process.exit(1);
-                }
-                getSetting(rest[0], challengeId);
-                process.exit(0);
-                break;
-            }
-            case 'set-setting': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                if (!rest[0] || rest[1] === undefined) {
-                    logger.withCategory('ui').error('Please specify both key and value');
-                    logger.withCategory('ui').info('Usage: set-setting <key> <value> [--challenge=<id>]');
-                    process.exit(1);
-                }
-                setSetting(rest[0], rest[1], challengeId);
-                process.exit(0);
-                break;
-            }
-            case 'list-settings': {
-                const { challengeId } = extractChallenge(args.slice(1));
-                listSettings(challengeId);
-                process.exit(0);
-                break;
-            }
-            case 'reset-setting': {
-                const { challengeId, rest } = extractChallenge(args.slice(1));
-                if (!rest[0]) {
-                    logger.withCategory('ui').error('Please specify a setting key');
-                    logger.withCategory('ui').info('Usage: reset-setting <key> [--challenge=<id>]');
-                    process.exit(1);
-                }
-                process.exit(resetSetting(rest[0], challengeId) ? 0 : 1);
-                break;
-            }
-            case 'set-global-default':
-                if (!args[1] || !args[2]) {
-                    logger.withCategory('ui').error('Please specify both setting key and value');
-                    logger.withCategory('ui').info('Usage: set-global-default <key> <value>');
-                    logger.withCategory('ui').info('Example: set-global-default exposure 80');
-                    process.exit(1);
-                }
-                setGlobalDefault(args[1], args[2]);
-                process.exit(0);
-                break;
-            case 'reset-all-settings':
-                resetAllSettings();
-                process.exit(0);
-                break;
-            case 'list-profiles': {
-                const { rest } = extractChallenge(args.slice(1));
-                if (rest.length > 0) {
-                    logger.withCategory('ui').error(`Unexpected arguments: ${rest.join(' ')}`);
-                    logger.withCategory('ui').info('Usage: list-profiles');
-                    process.exit(1);
-                }
-                listProfiles();
-                process.exit(0);
-                break;
-            }
-            case 'save-profile': {
-                const parsed = extractChallenge(args.slice(1));
-                const name = requireProfileArgs('save-profile', parsed, {
-                    needsChallenge: true,
-                    challengeHint: "Please specify --challenge=<id> to snapshot that challenge's overrides",
-                });
-                saveProfileFromChallenge(name, parsed.challengeId);
-                process.exit(0);
-                break;
-            }
-            case 'apply-profile': {
-                const parsed = extractChallenge(args.slice(1));
-                const name = requireProfileArgs('apply-profile', parsed, {
-                    needsChallenge: true,
-                    challengeHint: 'Please specify --challenge=<id> to apply the profile to',
-                });
-                applyProfile(name, parsed.challengeId);
-                process.exit(0);
-                break;
-            }
-            case 'delete-profile': {
-                const parsed = extractChallenge(args.slice(1));
-                const name = requireProfileArgs('delete-profile', parsed);
-                deleteProfile(name);
-                process.exit(0);
-                break;
-            }
-            case 'logs': {
-                const rest = args.slice(1);
-                const categories = {
-                    '--error': 'error',
-                    '--api': 'api',
-                    '--settings': 'settings',
-                    '--lexicon': 'lexicon',
-                };
-                const category = categories[rest.find((arg) => Object.hasOwn(categories, arg))] || 'app';
-                const linesArg = rest.find((a) => a.startsWith('--lines='));
-                const lines = linesArg ? parseInt(linesArg.slice('--lines='.length), 10) || 100 : 100;
-                showLogs({ category, lines });
-                process.exit(0);
-                break;
-            }
-            case 'help-settings':
-                helpSettings();
-                process.exit(0);
-                break;
-            case 'reset-windows':
-                resetWindows();
-                process.exit(0);
-                break;
-            case 'help':
-            case '--help':
-            case '-h':
-                showHelp();
-                process.exit(0);
-                break;
-            default:
-                if (!command) {
-                    logger.withCategory('ui').info('No command specified. Use "help" to see available commands');
-                } else {
-                    logger.withCategory('ui').error(`Unknown command: ${command}`);
-                    logger.withCategory('ui').info('Use "help" to see available commands');
-                }
-                process.exit(1);
-                break;
-        }
+        const code = await dispatch(command, args.slice(1));
+        if (code !== undefined) process.exit(code);
     } catch (error) {
         logger.withCategory('api').error('Error');
         logger.withCategory('api').debug('Full main function error details:', error);
