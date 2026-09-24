@@ -15,17 +15,17 @@ const applyLanguage = (saved, { setData }) => {
     setData(language);
 };
 
+/** Fire-and-forget: a language that failed to save is logged, never thrown. */
+const logLanguageSaveFailure = (reason) => {
+    Promise.resolve(window.api.logError?.(`Could not save language to settings: ${reason}`)).catch(() => {});
+};
+
 /**
  * The renderer's translation adapter: reads the saved language over
  * window.api, persists changes the same way, and exposes `t` bound to the
  * current language. `ready` turns true once the saved language has been read
  * (or the read failed, leaving English).
  */
-/** Fire-and-forget: a language that failed to save is logged, never thrown. */
-const logLanguageSaveFailure = (reason) => {
-    Promise.resolve(window.api.logError?.(`Could not save language to settings: ${reason}`)).catch(() => {});
-};
-
 export function TranslationProvider({ children }) {
     const {
         data: language,
@@ -39,23 +39,28 @@ export function TranslationProvider({ children }) {
 
     // Persist first; the UI switches only once the language is saved. The
     // set-setting handler reports a rejected write as `false` rather than
-    // throwing, so both outcomes count as a failed save.
+    // throwing, so both outcomes count as a failed save. Resolves whether the
+    // language was saved. A saved change also reloads the main process's
+    // translator and native menu (refresh-menu; a no-op stub on Capacitor),
+    // best-effort, from this one place.
     const setLanguage = useCallback(
         async (lang) => {
-            if (!isSupportedLanguage(lang)) return;
+            if (!isSupportedLanguage(lang)) return false;
             let saved;
             try {
                 saved = await window.api.setSetting('language', lang);
             } catch (error) {
                 logLanguageSaveFailure(error?.message ?? error);
-                return;
+                return false;
             }
             if (saved === false) {
                 logLanguageSaveFailure('the settings store rejected the write');
-                return;
+                return false;
             }
             rendererTranslator.setCurrentLanguage(lang);
             setData(lang);
+            Promise.resolve(window.api.refreshMenu?.()).catch(() => {});
+            return true;
         },
         [setData],
     );

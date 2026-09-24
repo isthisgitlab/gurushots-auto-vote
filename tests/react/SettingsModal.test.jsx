@@ -11,7 +11,7 @@
  * mocked at module top with controllable state objects.
  */
 
-import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
+import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { SettingsModal } from '@/components/app/SettingsModal';
 
 const mockFormState = {
@@ -469,11 +469,12 @@ describe('SettingsModal — loading state', () => {
         expect(screen.queryByText('app.applicationSettings')).toBeNull();
     });
 
-    test('keeps the form on screen during a background schema refetch', () => {
+    test('keeps the form on screen during a background schema refetch', async () => {
         // Every settings write broadcasts a change that refetches the schema;
         // with a schema already in hand that refresh must not blank the form.
         mockSchemaState.loading = true;
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await screen.findByText('app.noTitleTagRules');
         expect(screen.queryByLabelText('Loading')).toBeNull();
         expect(screen.getByText('app.applicationSettings')).toBeTruthy();
     });
@@ -634,18 +635,33 @@ describe('SettingsModal — rule loading', () => {
         mockSchemaState.tiers = undefined;
     });
 
+    test('the rule editor waits behind a loader until the rules have loaded', async () => {
+        let resolveRules;
+        window.api.getTitleRules.mockReturnValueOnce(
+            new Promise((resolve) => {
+                resolveRules = resolve;
+            }),
+        );
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+
+        expect(screen.queryByText('app.noTitleTagRules')).toBeNull();
+
+        await act(async () => resolveRules([]));
+        expect(await screen.findByText('app.noTitleTagRules')).toBeTruthy();
+    });
+
     test('malformed payloads fall back to empty lists', async () => {
         window.api.getTitleRules.mockResolvedValueOnce({ not: 'an array' });
         window.api.getChallengeProfiles.mockResolvedValueOnce(null);
 
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
 
-        await waitFor(() => expect(window.api.getChallengeProfiles).toHaveBeenCalled());
-        expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
+        expect(await screen.findByText('app.noTitleTagRules')).toBeTruthy();
     });
 
-    test('the rule editor offers the known challenge types as suggestions', () => {
+    test('the rule editor offers the known challenge types as suggestions', async () => {
         const { container } = render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        await screen.findByText('app.noTitleTagRules');
         const options = Array.from(container.querySelectorAll('#gs-rule-types option')).map((o) => o.value);
         expect(options).toEqual(['default', 'exhibition', 'flash', 'speed']);
     });
@@ -681,7 +697,8 @@ describe('SettingsModal — rule loading', () => {
 
         expect(window.api.logError).not.toHaveBeenCalledWith('Error loading title rules: late');
         expect(screen.queryByText('app.titleTagRulesLoadError')).toBeNull();
-        expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
+        // The reopened session's own load is still pending.
+        expect(screen.getByText('common.loading')).toBeTruthy();
     });
 
     test('a load that resolves after the modal closed is discarded', async () => {
@@ -702,7 +719,8 @@ describe('SettingsModal — rule loading', () => {
         await new Promise((r) => setTimeout(r, 0));
 
         expect(screen.queryByDisplayValue('Stale')).toBeNull();
-        expect(screen.getByText('app.noTitleTagRules')).toBeTruthy();
+        // The reopened session's own load is still pending.
+        expect(screen.getByText('common.loading')).toBeTruthy();
     });
 });
 
@@ -736,6 +754,18 @@ describe('SettingsModal — save outcomes', () => {
 
         await waitFor(() => expect(onClose).toHaveBeenCalled());
         expect(window.api.setSetting).toHaveBeenCalledWith('language', 'lv');
+    });
+
+    test('a language that fails to save keeps the modal open with the save-error alert', async () => {
+        mockFormState.commit = jest.fn().mockResolvedValue([]);
+        mockFormState.uiValues.language = 'lv';
+        window.api.setSetting.mockResolvedValueOnce(false);
+        const onClose = jest.fn();
+        render(<SettingsModal isOpen={true} onClose={onClose} />);
+        clickButtonByText('app.save');
+
+        await screen.findByText('app.settingsSaveError');
+        expect(onClose).not.toHaveBeenCalled();
     });
 
     test.each([

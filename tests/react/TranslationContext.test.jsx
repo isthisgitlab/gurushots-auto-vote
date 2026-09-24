@@ -99,12 +99,61 @@ describe('TranslationContext', () => {
         expect(ctx.t).not.toBe(staleT);
     });
 
+    it('a saved language refreshes the main-process menu and resolves true', async () => {
+        const { findByText } = renderProvider();
+        await findByText('ready');
+        mockApi.refreshMenu.mockClear();
+
+        let saved;
+        await act(async () => {
+            saved = await ctx.setLanguage('en');
+        });
+
+        expect(saved).toBe(true);
+        expect(mockApi.refreshMenu).toHaveBeenCalledTimes(1);
+    });
+
+    it('a failed save resolves false and leaves the menu alone', async () => {
+        mockApi.setSetting.mockResolvedValue(false);
+        const { findByText } = renderProvider();
+        await findByText('ready');
+        mockApi.refreshMenu.mockClear();
+
+        let saved;
+        await act(async () => {
+            saved = await ctx.setLanguage('en');
+        });
+
+        expect(saved).toBe(false);
+        expect(mockApi.refreshMenu).not.toHaveBeenCalled();
+    });
+
+    it('a menu refresh that rejects (or is missing) does not fail the save', async () => {
+        const { findByText } = renderProvider();
+        await findByText('ready');
+        const savedRefresh = mockApi.refreshMenu;
+        try {
+            mockApi.refreshMenu = jest.fn().mockRejectedValue(new Error('no window'));
+            await act(async () => {
+                await expect(ctx.setLanguage('en')).resolves.toBe(true);
+            });
+            delete mockApi.refreshMenu;
+            await act(async () => {
+                await expect(ctx.setLanguage('lv')).resolves.toBe(true);
+            });
+        } finally {
+            mockApi.refreshMenu = savedRefresh;
+        }
+    });
+
     it('setLanguage ignores an unsupported language', async () => {
         const { findByText } = renderProvider();
         await findByText('ready');
+        let saved;
         await act(async () => {
-            await ctx.setLanguage('de');
+            saved = await ctx.setLanguage('de');
         });
+        expect(saved).toBe(false);
         expect(mockApi.setSetting).not.toHaveBeenCalled();
         expect(ctx.language).toBe('lv');
     });
@@ -147,7 +196,7 @@ describe('TranslationContext', () => {
         await findByText('ready');
 
         await act(async () => {
-            await expect(ctx.setLanguage('en')).resolves.toBeUndefined();
+            await expect(ctx.setLanguage('en')).resolves.toBe(false);
         });
 
         expect(mockApi.logError).toHaveBeenCalledWith('Could not save language to settings: null');
@@ -162,11 +211,11 @@ describe('TranslationContext', () => {
         try {
             mockApi.logError = jest.fn().mockRejectedValue(new Error('log down'));
             await act(async () => {
-                await expect(ctx.setLanguage('en')).resolves.toBeUndefined();
+                await expect(ctx.setLanguage('en')).resolves.toBe(false);
             });
             delete mockApi.logError;
             await act(async () => {
-                await expect(ctx.setLanguage('en')).resolves.toBeUndefined();
+                await expect(ctx.setLanguage('en')).resolves.toBe(false);
             });
         } finally {
             mockApi.logError = savedLogError;

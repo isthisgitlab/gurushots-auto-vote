@@ -54,5 +54,5 @@ export function useTitleRules(isOpen) {
         return true;
     }, [loaded, rules]);
 
-    return { rules, profiles, error, loadFailed, change, persist };
+    return { rules, profiles, error, loading, loadFailed, change, persist };
 }

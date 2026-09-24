@@ -36,7 +36,8 @@ function claimFlight(inFlightRef) {
  *     true (default true); flipping it back on fetches again
  *   - latestOnly: a call superseded before it settles — by a newer call, or
  *     by the automatic fetch being re-keyed, disabled or unmounted — drops
- *     its outcome (data, error and the loading reset), like a cancelled effect
+ *     its outcome (data, error and the loading reset), like a cancelled effect.
+ *     Not combinable with singleFlight or showLoading (throws).
  *   - clearErrorOnStart: clear `error` when a refetch starts (default true)
  *   - showLoading: per-call predicate (gets the refetch args) deciding
  *     whether this call toggles `loading`; defaults to always
@@ -55,6 +56,14 @@ export function useIpcQuery(queryFn, options = {}) {
         enabled = true,
         latestOnly = false,
     } = options;
+
+    // latestOnly drops a superseded call's loading reset, which is only safe
+    // when every started call runs and owns its loading toggle: singleFlight
+    // can drop the replacement call and showLoading can skip its toggle, and
+    // either would leave `loading` stuck on.
+    if (latestOnly && (singleFlight || showLoading)) {
+        throw new Error('useIpcQuery: latestOnly cannot be combined with singleFlight or showLoading');
+    }
 
     const [data, setData] = useState(initialData);
     const [loading, setLoading] = useState(true);

@@ -146,6 +146,15 @@ describe('useIpcQuery', () => {
     });
 
     describe('latestOnly', () => {
+        test.each([
+            ['singleFlight', { singleFlight: true }],
+            ['showLoading', { showLoading: () => true }],
+        ])('refuses to combine with %s, which could leave loading stuck', (_label, extra) => {
+            expect(() => useIpcQuery(jest.fn(), { latestOnly: true, ...extra })).toThrow(
+                'useIpcQuery: latestOnly cannot be combined with singleFlight or showLoading',
+            );
+        });
+
         const deferredQuery = () => {
             const calls = [];
             const queryFn = jest.fn(

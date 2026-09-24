@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 
@@ -7,15 +6,6 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
  */
 export function LanguageSwitcher() {
     const { t, language, setLanguage } = useTranslation();
-
-    const handleLanguageChange = useCallback(
-        async (newLang) => {
-            await setLanguage(newLang);
-            // Refresh menu with new language (a no-op stub on Capacitor).
-            await window.api.refreshMenu();
-        },
-        [setLanguage],
-    );
 
     const displayLanguage = language === 'en' ? 'English' : 'Latviešu';
 
@@ -31,7 +21,7 @@ export function LanguageSwitcher() {
                     <li>
                         <button
                             type="button"
-                            onClick={() => handleLanguageChange('en')}
+                            onClick={() => setLanguage('en')}
                             className={language === 'en' ? 'active' : ''}
                             aria-pressed={language === 'en'}
                         >
@@ -41,7 +31,7 @@ export function LanguageSwitcher() {
                     <li>
                         <button
                             type="button"
-                            onClick={() => handleLanguageChange('lv')}
+                            onClick={() => setLanguage('lv')}
                             className={language === 'lv' ? 'active' : ''}
                             aria-pressed={language === 'lv'}
                         >

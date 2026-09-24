@@ -84,7 +84,11 @@ function TitleRulesSection({ titleRules }) {
                     <span>{t('app.titleTagRulesSaveError')}</span>
                 </div>
             )}
-            {titleRules.loadFailed ? (
+            {/* No editing until the rules have loaded: an edit made meanwhile
+                would be overwritten by the load or skipped by the save. */}
+            {titleRules.loading ? (
+                <InlineLoader text={t('common.loading')} />
+            ) : titleRules.loadFailed ? (
                 <div className="alert alert-error py-2 text-sm" role="alert">
                     <span>{t('app.titleTagRulesLoadError')}</span>
                 </div>
@@ -167,8 +171,11 @@ export function SettingsModal({ isOpen, onClose }) {
             // Title rules are rejected as a whole (e.g. a tag over the length
             // cap); the hook surfaces that and the modal stays open.
             if (!(await persistTitleRules())) return;
-            if (uiValues.language !== language) {
-                setLanguage(uiValues.language);
+            // A language that fails to save keeps the modal open with the
+            // save-error alert instead of closing on a change that didn't land.
+            if (uiValues.language !== language && !(await setLanguage(uiValues.language))) {
+                setSaveError(true);
+                return;
             }
             // Close first: the re-arm reads settings and fetches the active
             // challenges over the network, and the saved modal must not sit
