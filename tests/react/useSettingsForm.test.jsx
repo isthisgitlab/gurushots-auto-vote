@@ -195,9 +195,34 @@ describe('useSettingsForm — change and reset handlers', () => {
 });
 
 describe('useSettingsForm — commit and revert', () => {
-    test('commit writes every UI value and global default, returning rejected keys', async () => {
+    test('commit writes only the values changed since open, returning rejected keys', async () => {
         // Written in formValues key order: exposure (rejected), then autoBoost.
         window.api.setGlobalDefault.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+        const props = baseProps();
+        const { result } = renderForm(props);
+        act(() => {
+            result.current.handleFormChange('exposure', 80);
+            result.current.handleFormChange('autoBoost', false);
+            result.current.handleUiChange('theme', 'light');
+            // Same content, new array reference: still unchanged.
+            result.current.handleUiChange('customTimezones', [...result.current.uiValues.customTimezones]);
+        });
+
+        let rejected;
+        await act(async () => {
+            rejected = await result.current.commit();
+        });
+
+        expect(rejected).toEqual(['exposure']);
+        expect(props.updateSetting).toHaveBeenCalledTimes(1);
+        expect(props.updateSetting).toHaveBeenCalledWith('theme', 'light');
+        expect(window.api.setGlobalDefault).toHaveBeenCalledTimes(2);
+        expect(window.api.setGlobalDefault).toHaveBeenCalledWith('exposure', 80);
+        expect(window.api.setGlobalDefault).toHaveBeenCalledWith('autoBoost', false);
+        expect(result.current.saving).toBe(false);
+    });
+
+    test('commit with no edits writes nothing', async () => {
         const props = baseProps();
         const { result } = renderForm(props);
 
@@ -206,17 +231,60 @@ describe('useSettingsForm — commit and revert', () => {
             rejected = await result.current.commit();
         });
 
-        expect(rejected).toEqual(['exposure']);
-        expect(props.updateSetting).toHaveBeenCalledTimes(Object.keys(DEFAULT_UI_VALUES).length);
-        expect(props.updateSetting).toHaveBeenCalledWith('theme', 'dark');
+        expect(rejected).toEqual([]);
+        expect(props.updateSetting).not.toHaveBeenCalled();
+        expect(window.api.setGlobalDefault).not.toHaveBeenCalled();
+    });
+
+    test('a retry after a partial save diffs against what was persisted, not the open-time values', async () => {
+        // First save: exposure is accepted, autoBoost rejected — modal stays open.
+        window.api.setGlobalDefault.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+        const props = baseProps();
+        const { result } = renderForm(props);
+        act(() => {
+            result.current.handleFormChange('exposure', 80);
+            result.current.handleFormChange('autoBoost', false);
+        });
+        await act(async () => {
+            await result.current.commit();
+        });
+
+        // The user puts exposure back to its open-time value and fixes autoBoost:
+        // exposure must still be written (disk holds 80), autoBoost retried.
+        window.api.setGlobalDefault.mockClear();
+        window.api.setGlobalDefault.mockResolvedValue(true);
+        act(() => {
+            result.current.handleFormChange('exposure', 70);
+            result.current.handleFormChange('autoBoost', true);
+        });
+        await act(async () => {
+            await result.current.commit();
+        });
+
         expect(window.api.setGlobalDefault).toHaveBeenCalledWith('exposure', 70);
-        expect(window.api.setGlobalDefault).toHaveBeenCalledWith('autoBoost', true);
-        expect(result.current.saving).toBe(false);
+        expect(window.api.setGlobalDefault).not.toHaveBeenCalledWith('autoBoost', true);
+        // revert still rolls back to the open-time snapshot.
+        act(() => result.current.revert());
+        expect(result.current.formValues).toEqual({ exposure: 70, autoBoost: true });
+    });
+
+    test('commit before hydration writes every value (no baseline to diff against)', async () => {
+        const props = baseProps({ isOpen: false });
+        const { result } = renderForm(props);
+        act(() => result.current.handleFormChange('exposure', 5));
+
+        await act(async () => {
+            await result.current.commit();
+        });
+
+        expect(props.updateSetting).toHaveBeenCalledTimes(Object.keys(DEFAULT_UI_VALUES).length);
+        expect(window.api.setGlobalDefault).toHaveBeenCalledWith('exposure', 5);
     });
 
     test('a throwing write clears the saving flag and propagates', async () => {
         const props = baseProps({ updateSetting: jest.fn().mockRejectedValue(new Error('nope')) });
         const { result } = renderForm(props);
+        act(() => result.current.handleUiChange('theme', 'light'));
 
         await act(async () => {
             await expect(result.current.commit()).rejects.toThrow('nope');

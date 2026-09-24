@@ -529,13 +529,24 @@ const pickOption = (select, value) => {
 describe('SettingsModal — loading state', () => {
     afterEach(() => {
         mockSchemaState.loading = false;
+        mockSchemaState.schema = {};
     });
 
-    test('shows the spinner instead of the form while the schema loads', () => {
+    test('shows the spinner instead of the form while the schema first loads', () => {
         mockSchemaState.loading = true;
+        mockSchemaState.schema = null;
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         expect(screen.getByLabelText('Loading')).toBeTruthy();
         expect(screen.queryByText('app.applicationSettings')).toBeNull();
+    });
+
+    test('keeps the form on screen during a background schema refetch', () => {
+        // Every settings write broadcasts a change that refetches the schema;
+        // with a schema already in hand that refresh must not blank the form.
+        mockSchemaState.loading = true;
+        render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
+        expect(screen.queryByLabelText('Loading')).toBeNull();
+        expect(screen.getByText('app.applicationSettings')).toBeTruthy();
     });
 });
 

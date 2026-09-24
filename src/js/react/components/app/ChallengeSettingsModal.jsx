@@ -172,11 +172,13 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
             }
             setSaveError(false);
 
+            // Close before the re-arm's settings read + challenge fetch, so
+            // the saved modal doesn't linger open for that round-trip.
+            onClose();
+
             // Re-arm the cadence timer so a changed per-challenge threshold /
             // scheduled fill takes effect now, not after the current wait.
             await rearmSchedule();
-
-            onClose();
         } catch (err) {
             await window.api.logError(`Error saving challenge settings: ${err.message || err}`);
         } finally {
@@ -437,7 +439,9 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={title} size="2xl">
-            {schemaLoading || loading ? (
+            {/* Schema spinner only for the first load — a background refetch
+                (every settings write broadcasts one) must not blank the form. */}
+            {(schemaLoading && !schema) || loading ? (
                 <InlineLoader text={t('common.loading')} />
             ) : (
                 <div className="space-y-4">

@@ -142,6 +142,28 @@ describe('ChallengeSettingsModal load cancellation', () => {
     });
 });
 
+describe('ChallengeSettingsModal schema loading', () => {
+    const loadedSchema = mockSchemaState.schema;
+    afterEach(() => {
+        mockSchemaState.loading = false;
+        mockSchemaState.schema = loadedSchema;
+    });
+
+    test('shows the spinner while the schema first loads', () => {
+        mockSchemaState.loading = true;
+        mockSchemaState.schema = null;
+        render(<ChallengeSettingsModal isOpen={true} onClose={jest.fn()} challengeId="1" challengeTitle="C" />);
+        expect(screen.getByLabelText('Loading')).toBeTruthy();
+    });
+
+    test('keeps the form on screen during a background schema refetch', async () => {
+        mockSchemaState.loading = true;
+        render(<ChallengeSettingsModal isOpen={true} onClose={jest.fn()} challengeId="1" challengeTitle="C" />);
+        await waitFor(() => expect(readNumberInput()).toBe('30'));
+        expect(screen.queryByLabelText('Loading')).toBeNull();
+    });
+});
+
 describe('ChallengeSettingsModal group applicability', () => {
     // Drain any leftover one-shot impls from the cancellation suite so loads
     // resolve to "no override" and the inputs render.

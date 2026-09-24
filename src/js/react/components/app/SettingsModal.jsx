@@ -219,10 +219,13 @@ export function SettingsModal({ isOpen, onClose }) {
             if (uiValues.language !== language) {
                 setLanguage(uiValues.language);
             }
+            // Close first: the re-arm reads settings and fetches the active
+            // challenges over the network, and the saved modal must not sit
+            // open for that round-trip.
+            onClose();
             // Re-arm the cadence timer so a changed threshold / scheduled-fill
             // setting takes effect now, not after the current wait elapses.
             await rearmSchedule();
-            onClose();
         } catch (err) {
             await window.api.logError(`Error saving settings: ${err.message || err}`);
         }
@@ -308,7 +311,10 @@ export function SettingsModal({ isOpen, onClose }) {
 
     return (
         <Modal isOpen={isOpen} onClose={handleCancel} title={t('app.globalSettings')} size="2xl">
-            {schemaLoading ? (
+            {/* Spinner only for the first load: every settings write broadcasts a
+                change that refetches the schema, and swapping the form out for the
+                spinner on each of those background refreshes made Save flicker. */}
+            {schemaLoading && !schema ? (
                 <InlineLoader text={t('common.loading')} />
             ) : (
                 <div className="space-y-6">

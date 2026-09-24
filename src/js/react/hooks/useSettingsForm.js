@@ -23,6 +23,13 @@ const withFallback = (value, defaultValue) => {
 };
 
 /**
+ * Structural equality for setting values (scalars, arrays, plain objects) —
+ * the same JSON comparison settings.js uses, kept local because the renderer
+ * must not import settings.js.
+ */
+const valuesEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
  * The global-default half of `defaults`: challengeOnly keys have no global
  * value (setGlobalDefault refuses them), so they never enter the global form.
  */
@@ -57,6 +64,13 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
     // effect, clobbering in-progress user edits.
     const formInitForOpenRef = useRef(false);
     const uiInitForOpenRef = useRef(false);
+    // What is on disk as far as this session knows: seeded at hydration and
+    // advanced by every accepted commit() write. Kept apart from the
+    // original* snapshots (which revert/Cancel roll back to) so a save that
+    // fails partway and keeps the modal open still diffs the retry against
+    // what was actually persisted, not against the open-time values.
+    const persistedUiRef = useRef(null);
+    const persistedFormRef = useRef(null);
     useEffect(() => {
         if (!isOpen) {
             formInitForOpenRef.current = false;
@@ -67,6 +81,7 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
             const initialFormValues = globalFormValuesOf(defaults, schema);
             setFormValues(initialFormValues);
             setOriginalFormValues({ ...initialFormValues });
+            persistedFormRef.current = { ...initialFormValues };
             formInitForOpenRef.current = true;
         }
         if (!uiInitForOpenRef.current && settings) {
@@ -76,6 +91,7 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
             }
             setUiValues(initialUiValues);
             setOriginalUiValues(initialUiValues);
+            persistedUiRef.current = { ...initialUiValues };
             uiInitForOpenRef.current = true;
         }
     }, [isOpen, defaults, schema, settings]);
@@ -121,7 +137,11 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
         document.documentElement.setAttribute('data-theme', DEFAULT_UI_VALUES.theme);
     }, [schema]);
 
-    // Persist current UI + global-default values. The caller drives close
+    // Persist the UI + global-default values that differ from what is already
+    // persisted. Only changed keys are written: each global-default write
+    // broadcasts a settings change that every subscribed view refetches on,
+    // so writing every key made Save flicker and crawl. Before hydration
+    // there is no baseline, so everything is written. The caller drives close
     // / language toggle / threshold notify around this call. Returns the
     // schema keys whose write was REJECTED (setGlobalDefault returns false
     // on schema/zod validation failure — e.g. a duplicate-count schedule)
@@ -133,11 +153,17 @@ export function useSettingsForm({ isOpen, schema, defaults, settings, refetchSet
         setSaving(true);
         try {
             for (const [key, value] of Object.entries(uiValues)) {
+                const persisted = persistedUiRef.current;
+                if (persisted && valuesEqual(value, persisted[key])) continue;
                 await updateSetting(key, value);
+                if (persisted) persisted[key] = value;
             }
             for (const [key, value] of Object.entries(formValues)) {
+                const persisted = persistedFormRef.current;
+                if (persisted && valuesEqual(value, persisted[key])) continue;
                 const saved = await window.api.setGlobalDefault(key, value);
                 if (saved === false) rejectedKeys.push(key);
+                else if (persisted) persisted[key] = value;
             }
         } finally {
             setSaving(false);
