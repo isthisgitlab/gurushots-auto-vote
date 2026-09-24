@@ -62,7 +62,7 @@ export function UpdateDialog() {
                             <span className="text-base-content/60">{t('app.latestVersion')}:</span>
                             <span className="ml-2 font-mono">{updateInfo.latestVersion}</span>
                             {updateInfo.isPrerelease && (
-                                <span className="badge badge-warning badge-xs ml-1">Pre-release</span>
+                                <span className="badge badge-warning badge-sm ml-1">Pre-release</span>
                             )}
                         </div>
                     </div>

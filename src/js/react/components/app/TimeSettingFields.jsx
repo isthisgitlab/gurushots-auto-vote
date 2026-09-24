@@ -149,7 +149,7 @@ export function ScheduleField({ settingKey, value, onChange, onReset, disabled }
                             {off && <span className="opacity-60">{t('app.autoFillScheduleOff')}</span>}
                             {outOfRange && <span className="text-error">{t('app.autoFillScheduleOutOfRange')}</span>}
                             {dominated && (
-                                <span className="badge badge-warning badge-xs">
+                                <span className="badge badge-warning badge-sm">
                                     {t('app.autoFillScheduleDominated')}
                                 </span>
                             )}

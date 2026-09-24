@@ -71,7 +71,7 @@ export function EntryBadge({
         // h-auto + py-1: a stock DaisyUI badge is ~20px tall, which would clip
         // the thumbnail. Growing the badge keeps the chip, the text and the
         // action buttons on one baseline.
-        <div className={`badge badge-outline ${entryTypeClass} flex h-auto items-center gap-1 py-1`}>
+        <div className={`badge badge-outline badge-sm ${entryTypeClass} flex h-auto items-center gap-1 py-1`}>
             <EntryPhoto entry={entry} />
             <span>{icon}</span>
             <span>

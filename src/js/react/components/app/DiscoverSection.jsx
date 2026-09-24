@@ -158,11 +158,7 @@ export function DiscoverSection({ isLoggedIn, bankroll, onJoined }) {
                                                 {c.title || c.url || t('app.discoverUntitled')}
                                             </div>
                                             <div className="flex items-center gap-2 text-xs text-base-content/60">
-                                                {c.type && (
-                                                    <StatusBadge variant="ghost" size="xs">
-                                                        {c.type}
-                                                    </StatusBadge>
-                                                )}
+                                                {c.type && <StatusBadge variant="ghost">{c.type}</StatusBadge>}
                                                 <span>
                                                     {cost > 0
                                                         ? interp(t('app.discoverCostPaid'), { coins: cost })

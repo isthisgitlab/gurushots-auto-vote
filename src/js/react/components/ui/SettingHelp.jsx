@@ -14,7 +14,7 @@ export function SettingHelp({ helpKey }) {
     return (
         <details className="text-xs mb-2">
             <summary className="cursor-pointer text-info select-none inline-flex items-center gap-1">
-                <span className="badge badge-info badge-xs">?</span>
+                <span className="badge badge-info badge-sm">?</span>
                 {t('app.settingHelpLabel')}
             </summary>
             <p className="mt-1 text-base-content/70">{t(helpKey)}</p>

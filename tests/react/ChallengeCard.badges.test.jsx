@@ -17,6 +17,7 @@
 
 import { render } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
+import { ChallengeBadgeRow } from '@/components/app/ChallengeBadgeRow';
 import { buildChallenge } from '../helpers/challengeFixtures';
 
 const mockChallengeSettings = {
@@ -109,6 +110,24 @@ describe('ChallengeCard badge row — logical/state badges', () => {
         const autoFill = badgeByText(container, '📥 app.autoFillBadge');
         expect(autoFill).toBeTruthy();
         expect(autoFill.className).toMatch(/badge-success/);
+    });
+
+    test('alert, state and configuration badges share the same size', () => {
+        const { container } = render(
+            <ChallengeBadgeRow
+                challenge={makeChallenge()}
+                boostOpen
+                boostTimeLeft="23m"
+                lowExposure
+                exposureFactor={0}
+                showAutoFillBadge
+                hasCustomSettings
+            />,
+        );
+        const badges = container.querySelectorAll('.badge');
+
+        expect(badges).toHaveLength(6);
+        expect([...badges].every((badge) => badge.classList.contains('badge-sm'))).toBe(true);
     });
 
     test('badge fallback (no type) also gets the icon and the info variant', () => {

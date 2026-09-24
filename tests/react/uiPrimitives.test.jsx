@@ -64,18 +64,18 @@ describe('PulseDot', () => {
 });
 
 describe('StatusBadge', () => {
-    test('defaults to a neutral medium badge', () => {
+    test('defaults to a neutral small badge', () => {
         const { container } = render(<StatusBadge>n</StatusBadge>);
-        expect(container.querySelector('span').className).toBe('badge badge-neutral  ');
+        expect(container.querySelector('span').className).toBe('badge badge-neutral badge-sm');
     });
 
-    test('an unknown size adds no size class', () => {
+    test('an unknown size falls back to the shared small size', () => {
         const { container } = render(
             <StatusBadge variant="elite" size="giant">
                 e
             </StatusBadge>,
         );
-        expect(container.querySelector('span').className).toBe('badge badge-elite  ');
+        expect(container.querySelector('span').className).toBe('badge badge-elite badge-sm');
     });
 });
 

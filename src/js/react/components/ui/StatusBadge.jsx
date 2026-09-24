@@ -3,7 +3,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 /**
  * DaisyUI badge component for displaying status
  */
-export function StatusBadge({ children, variant = 'neutral', size = 'md', className = '' }) {
+export function StatusBadge({ children, variant = 'neutral', size = 'sm', className = '' }) {
     const variantClass =
         {
             neutral: 'badge-neutral',
@@ -29,9 +29,9 @@ export function StatusBadge({ children, variant = 'neutral', size = 'md', classN
             sm: 'badge-sm',
             md: '',
             lg: 'badge-lg',
-        }[size] || '';
+        }[size] || 'badge-sm';
 
-    return <span className={`badge ${variantClass} ${sizeClass} ${className}`}>{children}</span>;
+    return <span className={['badge', variantClass, sizeClass, className].filter(Boolean).join(' ')}>{children}</span>;
 }
 
 /**
@@ -40,7 +40,7 @@ export function StatusBadge({ children, variant = 'neutral', size = 'md', classN
 export function ConnectionBadge({ connected }) {
     const { t } = useTranslation();
     return (
-        <StatusBadge variant={connected ? 'success' : 'error'} size="sm">
+        <StatusBadge variant={connected ? 'success' : 'error'}>
             {connected ? t('logs.connected') : t('logs.disconnected')}
         </StatusBadge>
     );

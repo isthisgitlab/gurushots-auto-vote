@@ -31,7 +31,7 @@ export function AutoVoteControls({ running, status, statusClass, lastRun, cycles
                         {/* Status Badge */}
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{t('app.status')}</span>
-                            <span className={`badge ${statusClass}`}>{status}</span>
+                            <span className={`badge badge-sm ${statusClass}`}>{status}</span>
                         </div>
 
                         {/* Last Run */}

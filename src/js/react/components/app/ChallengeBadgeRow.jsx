@@ -39,46 +39,30 @@ export function ChallengeBadgeRow({
     return (
         <div className="flex flex-wrap items-center gap-1 mt-1">
             {boostOpen && (
-                <span className="badge badge-info badge-sm gap-1 font-semibold">
+                <StatusBadge variant="info" className="gap-1 font-semibold">
                     <PulseDot variant="info" size="status-sm" />
                     🚀 {t('app.boostOpenBadge')}
                     {boostTimeLeft && <span>· ⏳ {boostTimeLeft}</span>}
-                </span>
+                </StatusBadge>
             )}
             {lowExposure && (
-                <span className="badge badge-error badge-sm gap-1 font-semibold">
+                <StatusBadge variant="error" className="gap-1 font-semibold">
                     <PulseDot variant="error" pulse={exposureFactor === 0} size="status-sm" />
                     👁 {t('app.exposure')} {exposureFactor}%
-                </span>
-            )}
-            {challenge.type && (
-                <StatusBadge variant="warning" size="xs">
-                    🏁 {challenge.type.toUpperCase()}
                 </StatusBadge>
             )}
-            {!challenge.type && challenge.badge && (
-                <StatusBadge variant="info" size="xs">
-                    🏁 {challenge.badge}
-                </StatusBadge>
-            )}
+            {challenge.type && <StatusBadge variant="warning">🏁 {challenge.type.toUpperCase()}</StatusBadge>}
+            {!challenge.type && challenge.badge && <StatusBadge variant="info">🏁 {challenge.badge}</StatusBadge>}
             {showPhotos && (
-                <StatusBadge variant="warning" size="xs">
+                <StatusBadge variant="warning">
                     🖼 {challenge.max_photo_submits} {t('app.photos')}
                 </StatusBadge>
             )}
-            {showAutoFillBadge && (
-                <StatusBadge variant="success" size="xs">
-                    📥 {t('app.autoFillBadge')}
-                </StatusBadge>
-            )}
+            {showAutoFillBadge && <StatusBadge variant="success">📥 {t('app.autoFillBadge')}</StatusBadge>}
             {hasLogicalBadge && hasCustomSettings && (
                 <span data-testid="badge-divider" className="w-px h-3 bg-base-300 mx-0.5 self-center" />
             )}
-            {hasCustomSettings && (
-                <StatusBadge variant="ghost" size="xs">
-                    ⚙️ {t('app.customBadge')}
-                </StatusBadge>
-            )}
+            {hasCustomSettings && <StatusBadge variant="ghost">⚙️ {t('app.customBadge')}</StatusBadge>}
         </div>
     );
 }

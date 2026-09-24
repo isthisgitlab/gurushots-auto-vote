@@ -10,9 +10,9 @@ import { SettingHintList } from './SettingHints';
 /** Where a setting's shown value comes from: override, title-rule profile, or the global default. */
 function ValueSourceBadge({ hasOverride, hasProfileValue }) {
     const { t } = useTranslation();
-    if (hasOverride) return <span className="badge badge-accent badge-xs">{t('app.overridden')}</span>;
-    if (hasProfileValue) return <span className="badge badge-info badge-xs">{t('app.usingProfile')}</span>;
-    return <span className="badge badge-ghost badge-xs">{t('app.usingGlobal')}</span>;
+    if (hasOverride) return <span className="badge badge-accent badge-sm">{t('app.overridden')}</span>;
+    if (hasProfileValue) return <span className="badge badge-info badge-sm">{t('app.usingProfile')}</span>;
+    return <span className="badge badge-ghost badge-sm">{t('app.usingGlobal')}</span>;
 }
 
 /**
@@ -108,7 +108,7 @@ export function ChallengeSettingsGroup({ id, label, entries, challenge, defaults
                 className="font-semibold text-base mb-3 border-b border-base-300 pb-2 flex items-center justify-between gap-2"
             >
                 <span>{t(label)}</span>
-                {!applicable && <span className="badge badge-ghost badge-xs">{t('app.notApplicable')}</span>}
+                {!applicable && <span className="badge badge-ghost badge-sm">{t('app.notApplicable')}</span>}
             </h5>
             {/* Heading, badge and reason note stay at full opacity so the *why*
                 remains readable; only the inert inputs below are dimmed. Dimming

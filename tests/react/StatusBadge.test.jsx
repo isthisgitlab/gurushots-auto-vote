@@ -14,15 +14,11 @@ const badge = (container) => container.querySelector('span.badge');
 
 describe('StatusBadge', () => {
     test('renders icon + text children with the variant and size classes', () => {
-        const { container } = render(
-            <StatusBadge variant="success" size="xs">
-                📥 hello
-            </StatusBadge>,
-        );
+        const { container } = render(<StatusBadge variant="success">📥 hello</StatusBadge>);
         const span = badge(container);
         expect(span).toBeTruthy();
         expect(span.className).toMatch(/badge-success/);
-        expect(span.className).toMatch(/badge-xs/);
+        expect(span.className).toMatch(/badge-sm/);
         expect(span.textContent).toBe('📥 hello');
     });
 

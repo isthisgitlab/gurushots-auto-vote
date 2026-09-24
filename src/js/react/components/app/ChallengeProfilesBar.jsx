@@ -204,7 +204,7 @@ export function ChallengeProfilesBar({ overrides, onApply, onProfilesChanged = (
 
             {selectedIntent && selectedProfile && (
                 <p className="text-xs">
-                    <span className={`badge badge-xs mr-1 ${selectedIntentModified ? 'badge-warning' : 'badge-info'}`}>
+                    <span className={`badge badge-sm mr-1 ${selectedIntentModified ? 'badge-warning' : 'badge-info'}`}>
                         {selectedIntentModified ? t('app.intentModified') : t('app.intentBuiltIn')}
                     </span>
                     {t(selectedIntent.descKey)}

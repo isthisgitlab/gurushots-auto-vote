@@ -85,7 +85,7 @@ function UserProgressPanel({ challenge, userProgress }) {
             <div className="flex justify-between items-center mb-1">
                 <span className="text-xs font-medium">{t('app.yourProgress')}</span>
                 <span
-                    className={`badge badge-xs ${getLevelStatus(userProgress.level, userProgress.level_name).colorClass}`}
+                    className={`badge badge-sm ${getLevelStatus(userProgress.level, userProgress.level_name).colorClass}`}
                 >
                     {userProgress.level_name} {userProgress.level}
                 </span>
@@ -257,7 +257,7 @@ export function ChallengeCardDetail({
             {challenge.tags && challenge.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                     {challenge.tags.map((tag, index) => (
-                        <span key={index} className="badge badge-ghost badge-xs">
+                        <span key={index} className="badge badge-ghost badge-sm">
                             {tag}
                         </span>
                     ))}

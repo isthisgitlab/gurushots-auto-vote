@@ -12,7 +12,7 @@ function UiSettingCell({ inputId, group, labelKey, descKey, children }) {
         <div className={SETTING_CELL_CLASS}>
             <SettingLabel inputId={inputId} group={group}>
                 <span className="font-medium">{t(labelKey)}</span>
-                <span className="badge badge-ghost badge-xs ml-2">{t('app.uiSetting')}</span>
+                <span className="badge badge-ghost badge-sm ml-2">{t('app.uiSetting')}</span>
             </SettingLabel>
             <p className="text-xs text-base-content/60 mb-2">{t(descKey)}</p>
             {children}

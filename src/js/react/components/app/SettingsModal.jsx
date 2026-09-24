@@ -48,7 +48,7 @@ function ChallengeDefaultsSection({
                                     <div key={key} className={SETTING_CELL_CLASS}>
                                         <SettingLabel inputId={`setting-${key}`} type={config.type}>
                                             <span className="font-medium">{t(config.label)}</span>
-                                            <span className="badge badge-ghost badge-xs ml-2">
+                                            <span className="badge badge-ghost badge-sm ml-2">
                                                 {t('app.globalDefault')}
                                             </span>
                                         </SettingLabel>
