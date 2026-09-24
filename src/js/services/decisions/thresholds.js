@@ -19,7 +19,7 @@ const settings = /** @type {any} */ (require('../../settings'));
  * @param {number} closeTime - Challenge close time (Unix timestamp)
  * @param {number} now - Current time (Unix timestamp)
  * @param {number} [windowSec=3600] - Final-window duration in seconds
- *   (finalWindowDuration). Defaults to the legacy fixed hour.
+ *   (finalWindowDuration). Defaults to one hour.
  * @returns {boolean} - True if within the final window
  */
 const isWithinFinalWindow = (closeTime, now, windowSec = 3600) => {
@@ -33,10 +33,9 @@ const isWithinFinalWindow = (closeTime, now, windowSec = 3600) => {
  * _runVotingRules.
  *
  * Without the clamp a corrupt or under-mocked value makes the window
- * comparison NaN-false, so the last-minute rule NEVER fires. That used to
- * merely demote the challenge to the normal threshold rule; now that the
- * voting pause sits above final-window it is the difference between "votes
- * late" and "never votes at all", because last-minute is the one rule a pause
+ * comparison NaN-false, so the last-minute rule NEVER fires. Because the
+ * voting pause sits above final-window, that is the difference between "votes
+ * late" and "never votes at all": last-minute is the one rule a pause
  * deliberately cannot block.
  *
  * Shared by the gate and by the log/message strings so the two can't disagree:
@@ -83,7 +82,7 @@ const getEffectiveFinalWindowExposureThreshold = (challengeId) => {
 
 /**
  * Resolve the effective normal-rule vote target. The schema sentinel `0` means
- * "follow the exposure trigger" (legacy behavior — target == trigger).
+ * "follow the exposure trigger" (target == trigger).
  * @param {string} challengeId - Challenge ID
  * @returns {number} - Effective target percentage
  */

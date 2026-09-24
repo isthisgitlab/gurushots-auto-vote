@@ -181,8 +181,8 @@ const TITLE_MODE_SCORE = { exact: 3, starts: 2, contains: 1 };
  *   3. then the longer title pattern (title rules only);
  *   4. then by which class conditions it carries: photo count, then runtime,
  *      then type, then tag — so "4 photos + 7 days" > "4 photos" > "7 days".
- * For title rules 1–3 reproduce the specificity ranking the matcher used to
- * apply, so an ordering migration keeps every existing winner.
+ * For title rules 1–3 reproduce the most-specific-wins ranking, so the
+ * ordering migration keeps every existing winner.
  */
 const defaultOrderKey = (rule) => {
     const conditions = ruleConditions(rule);

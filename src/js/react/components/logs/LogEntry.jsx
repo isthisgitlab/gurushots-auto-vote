@@ -26,7 +26,7 @@ export function LogEntry({ entry }) {
             {' '}
             <span className="text-yellow-400">[{category || 'general'}]</span>
             {' '}
-            {/* JSX text is escaped by the renderer; pre-escaping showed "&lt;" literally. */}
+            {/* JSX text is escaped by the renderer; pre-escaping would show "&lt;" literally. */}
             <span className="text-white">{message}</span>
         </div>
     );

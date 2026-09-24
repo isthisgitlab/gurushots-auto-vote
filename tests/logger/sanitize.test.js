@@ -67,9 +67,8 @@ describe('sanitizeForLog', () => {
     });
 
     test('redacts the literal x-token header key used by createWebHeaders', () => {
-        // docs/architecture.md §10: the redaction allowlist historically MISSED
-        // the bare `x-token` key (only `x-auth-token` matched). The join/bankroll
-        // WEB endpoints send `x-token`, so guard against that gap reappearing.
+        // docs/architecture.md §10: the bare `x-token` key must be redacted,
+        // not just `x-auth-token` — the join/bankroll WEB endpoints send it.
         const out = sanitizeForLog({ 'x-token': 'sekret', x_token: 'sekret2', keep: 'ok' });
         expect(out['x-token']).toBe('[REDACTED]');
         expect(out['x_token']).toBe('[REDACTED]');

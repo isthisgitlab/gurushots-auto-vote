@@ -9,10 +9,9 @@ import { formatTimeRemaining } from '@/utils/formatters';
  * interval mutates each signal's `.value` in place; because the map and the
  * individual signal identities persist across renders, the consuming component
  * does NOT re-render on every tick — only the DOM text nodes bound to each
- * signal update. (The previous implementation called setState every second,
- * which re-rendered the whole challenges section + its action buttons each
- * tick.) Each ChallengeCard reads its own signal's value, so a card that is
- * already re-rendering for other reasons still shows the live countdown.
+ * signal update. (Calling setState every second would re-render the whole
+ * challenges section + its action buttons each tick.) Each ChallengeCard reads
+ * its own signal's value, so a card that is already re-rendering for other reasons still shows the live countdown.
  *
  * @param {Array} challenges - Array of challenge objects with close_time
  *   (always an array — ChallengesContext normalises a missing payload to [])

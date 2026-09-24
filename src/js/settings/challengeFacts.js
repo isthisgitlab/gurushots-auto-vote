@@ -24,7 +24,7 @@ let activeChallengeFacts = new Map();
 const _finiteOrNull = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
 // The usable title of one observation, or null for an unusable/over-length one.
-// The explicit miss keeps a truncated legacy pin from being used as an
+// The explicit miss keeps a truncated stored pin from being used as an
 // apparently exact fallback.
 const _observedTitle = (challenge) => {
     const title = typeof challenge?.title === 'string' ? challenge.title.trim() : '';

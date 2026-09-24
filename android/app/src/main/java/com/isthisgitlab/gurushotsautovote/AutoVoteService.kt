@@ -40,10 +40,10 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * Foreground Service that owns background voting.
  *
- * The native AlarmManager/Doze/wakelock/notification scaffolding is kept
+ * The AlarmManager/Doze/wakelock/notification scaffolding is native
  * (it survives the app being swiped from recents and Doze deep-sleep),
- * but the per-cycle work now runs the SHARED JS voting strategy in a
- * service-owned headless WebView instead of a Kotlin re-implementation —
+ * while the per-cycle work runs the SHARED JS voting strategy in a
+ * service-owned headless WebView rather than a Kotlin re-implementation —
  * so boost / turbo / auto-fill / last-minute reach full parity with the
  * desktop scheduler from one codebase.
  *

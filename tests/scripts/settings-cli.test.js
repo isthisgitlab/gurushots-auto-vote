@@ -1,9 +1,9 @@
 /**
  * Regression tests for scripts/settings-cli.js secret redaction.
  *
- * `pnpm settings:get token` and the bare `pnpm settings:get` dump used to
- * print the raw auth token. Both branches must now redact sensitive keys
- * via logger.sanitizeForLog, with --reveal as the explicit opt-out.
+ * `pnpm settings:get token` and the bare `pnpm settings:get` dump must never
+ * print the raw auth token: both branches redact sensitive keys via
+ * logger.sanitizeForLog, with --reveal as the explicit opt-out.
  *
  * The script runs main() at require time and exits via process.exit, so
  * each case stubs process.argv/exit, requires the script in an isolated

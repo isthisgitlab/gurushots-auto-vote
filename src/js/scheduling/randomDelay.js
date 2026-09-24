@@ -6,7 +6,7 @@
  *
  * Inputs are coerced defensively because the values originate from
  * user input + a settings file that may have been hand-edited. A bad
- * value silently falls back to the legacy 3-minute default rather
+ * value silently falls back to the 3-minute default rather
  * than throwing inside the timer callback.
  */
 
@@ -53,9 +53,8 @@ const getRandomCheckFrequencyMs = (settings) => {
  * longer than the delay — recover after a short pause instead of re-firing
  * immediately); the delayMs ceiling handles a wall-clock jump backward that
  * would otherwise inflate the wait. Shared by the CLI scheduler
- * (runScheduler.js) and the GUI cadence chain (AutovoteContext.jsx) — this
- * formula drifting between the two is exactly the bug class the extraction
- * prevents.
+ * (runScheduler.js) and the GUI cadence chain (AutovoteContext.jsx) so the
+ * formula cannot drift between the two.
  *
  * @param {number} delayMs - the rolled normal-mode delay
  * @param {number|null} previousCycleStartMs - anchor; null on a standalone (re)arm

@@ -839,8 +839,8 @@ describe('voteOnNewEntry — gate, arm, record', () => {
 describe('failed challenge fetch', () => {
     // makePostRequest resolves null once retries are exhausted (the GuruShots API returning
     // 5xx for a while is the realistic trigger). challenges.js turns that into an empty list,
-    // which used to be indistinguishable from "you have no active challenges" — so an outage
-    // closed the pass as a success and the scheduler re-armed as if everything were healthy.
+    // which must stay distinguishable from "you have no active challenges" — otherwise an outage
+    // closes the pass as a success and the scheduler re-arms as if everything were healthy.
     test('reports a failure instead of a successful empty pass', async () => {
         const api = makeApi([]);
         api.getActiveChallenges = jest.fn(async () => ({ challenges: [], fetchFailed: true }));
@@ -861,8 +861,8 @@ describe('failed challenge fetch', () => {
 });
 
 describe('per-challenge error isolation', () => {
-    // A throw inside the per-challenge body used to escape into runVotingPass's single outer
-    // catch, which abandoned every remaining challenge in the pass.
+    // A throw inside the per-challenge body must not escape into runVotingPass's single outer
+    // catch, which would abandon every remaining challenge in the pass.
     test('a challenge that throws is skipped, and the rest of the pass still runs', async () => {
         const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
         votingLogic.evaluateVotingDecision
@@ -896,10 +896,10 @@ describe('per-challenge error isolation', () => {
 });
 
 describe('per-challenge clock', () => {
-    // `now` used to be captured once, before the loop, and reused for every challenge's
+    // `now` must not be captured once before the loop and reused for every challenge's
     // deadline actions and voting decision. A pass can run for minutes (2-5s inter-challenge
-    // delay, retries, paginated library walks), so every challenge after the first was judged
-    // against a clock stuck in the past — missing windows that opened mid-pass.
+    // delay, retries, paginated library walks), so every challenge after the first would be
+    // judged against a clock stuck in the past — missing windows that open mid-pass.
     test('re-reads the clock for each challenge instead of freezing it for the pass', async () => {
         const api = makeApi([makeChallenge({ id: 1 }), makeChallenge({ id: 2 })]);
         const base = Date.now();

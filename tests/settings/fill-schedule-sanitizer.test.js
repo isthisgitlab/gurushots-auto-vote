@@ -1,9 +1,8 @@
 /**
  * Tests for sanitizeFillSchedule (settings/schema.js) and the
  * `_autoFillScheduleBoundsV1` load-time block in loadSettings() that applies
- * it per scope. The editor bounds tightened after the first schedule release
- * (count 2..4, at most 3 rows, seconds ≤ 30 days), so settings persisted
- * under the old bounds are normalized once on load: out-of-range rows
+ * it per scope. Persisted schedules outside the editor bounds (count 2..4,
+ * at most 3 rows, seconds ≤ 30 days) are normalized once on load: out-of-range rows
  * dropped, duplicates deduped first-wins, rows sorted by count, extra keys
  * stripped. A conforming value is left byte-for-byte untouched (the sanitizer
  * returns null for "no change" and for non-arrays).

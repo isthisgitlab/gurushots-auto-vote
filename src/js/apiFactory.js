@@ -106,8 +106,8 @@ const withMockDebug =
  * The mock surface is derived from realApi's key list — every method
  * except getStrategyType is the matching mockApiClient method wrapped
  * in the debug preamble — so the two surfaces can never drift at
- * runtime. (The `authenticate` log label stays 'authentication' for
- * log compatibility.) The Object.fromEntries construction is opaque to
+ * runtime. (The `authenticate` log label is 'authentication' so log
+ * lines keep a stable wording.) The Object.fromEntries construction is opaque to
  * the checker, hence the cast: realApi keeps the typedef lockstep, and
  * mockApi mirrors realApi by construction.
  */

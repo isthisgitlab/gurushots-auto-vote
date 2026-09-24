@@ -1,6 +1,6 @@
 /**
  * Tests for the shared LogViewerBody (components/logs/LogViewerBody) —
- * the terminal-style log list extracted from the Logs page and LogsModal.
+ * the terminal-style log list used by the Logs page and LogsModal.
  */
 
 import { render, screen } from './helpers/test-utils';

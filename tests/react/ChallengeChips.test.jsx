@@ -1,6 +1,6 @@
 /**
  * Tests for the shared chip-list pieces (components/app/ChallengeChips)
- * extracted from ChallengeNav and BoostWindowBanner: the bordered panel
+ * used by ChallengeNav and BoostWindowBanner: the bordered panel
  * with heading + count, and the scroll-to-card chip button.
  */
 

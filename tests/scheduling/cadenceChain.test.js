@@ -163,7 +163,7 @@ describe('createCadenceChain', () => {
         await chain.scheduleNext([farChallenge()]);
         expect(deps.fetchChallenges).not.toHaveBeenCalled();
 
-        // A legacy truthy-but-not-array hand-over must fetch fresh, with the
+        // A truthy-but-not-array hand-over must fetch fresh, with the
         // fresh settings snapshot handed to the fetcher (token transport).
         const deps2 = makeDeps();
         const chain2 = createCadenceChain(deps2);
@@ -429,7 +429,7 @@ describe('createCadenceChain', () => {
         await chain.scheduleNext();
 
         expect(deps.log.decisionError).toHaveBeenCalledTimes(1);
-        // getRandomCheckFrequencyMs({}) → legacy 3-minute default.
+        // getRandomCheckFrequencyMs({}) → the 3-minute default.
         await jest.advanceTimersByTimeAsync(FIXED_DELAY_MS);
         await flushMicrotasks();
         expect(deps.runCycle).toHaveBeenCalledTimes(1);

@@ -79,7 +79,7 @@ const _runVotingRules = (challenge, now, mode, options = {}) => {
     const voteBeforeFinalWindow = settings.getEffectiveSetting('voteBeforeFinalWindow', challengeId) === true;
     // Configurable final-window duration (seconds before close). Under-mocked
     // callers / hand-edited files can yield a non-number; the schema guarantees a
-    // valid integer >= 60 otherwise. Fall back to the legacy fixed hour (3600)
+    // valid integer >= 60 otherwise. Fall back to a fixed one hour (3600)
     // rather than propagate NaN into the window math below.
     const rawFinalWindowSec = settings.getEffectiveSetting('finalWindowDuration', challengeId);
     const finalWindowSec = Number.isFinite(rawFinalWindowSec) && rawFinalWindowSec >= 60 ? rawFinalWindowSec : 3600;

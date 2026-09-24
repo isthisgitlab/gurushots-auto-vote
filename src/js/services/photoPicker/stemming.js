@@ -178,9 +178,9 @@ const STOPWORDS = new Set([
     // Abstract head-nouns. These are real nouns, but they name no visual
     // subject — in a title the MODIFIER carries all the signal and the head
     // noun carries none ("The Farm Life" is about farms; "Sea Life" is about
-    // the sea). Leaving them in was the root of the Farm-Life-picks-Sea-Life
-    // bug: "life" both drove a server-side search that pulled in sea-life
-    // photos AND scored those photos as a keyword match.
+    // the sea). Left in, "life" would both drive a server-side search that
+    // pulls in sea-life photos for a Farm Life challenge AND score those photos
+    // as a keyword match.
     //
     // Only the challenge side strips these (tokenise filters before it stems,
     // so entries are raw words). A user who TYPES "sea life" as a tag means it
@@ -332,14 +332,14 @@ const MAX_STEM_PREFIX_DELTA = 2;
  * the length difference is at most MAX_STEM_PREFIX_DELTA — enough to absorb
  * stemmer residue ("runn"/"run", "flower"/"flowers") and nothing more.
  *
- * This replaced a bidirectional substring test (`a.includes(b) || b.includes(a)`),
- * which compared characters rather than words and produced cross-theme nonsense:
+ * Not a bidirectional substring test (`a.includes(b) || b.includes(a)`): that
+ * compares characters rather than words and produces cross-theme nonsense:
  * "art"→"heart", "cat"→"catamaran", "ice"→"office", "sea"→"seagull",
- * "bud"→"buddha", and — the bug that prompted this — the keyword "life"
- * matching the label "Sea Life" in a challenge titled "The Farm Life".
+ * "bud"→"buddha", and the keyword "life" matching the label "Sea Life" in a
+ * challenge titled "The Farm Life".
  *
  * KNOWN COST, ACCEPTED: prefix-only cannot see head-final compounds, so
- * "flower" no longer matches "sunflower", nor "fish"/"goldfish" or
+ * "flower" does not match "sunflower", nor "fish"/"goldfish" or
  * "bird"/"bluebird". Suffix matching was considered and REJECTED: at any length
  * floor low enough to catch "goldfish" (4) it also admits "rain"→"train",
  * "rain"→"brain" and "hair"→"chair", which is worse than what it fixes.

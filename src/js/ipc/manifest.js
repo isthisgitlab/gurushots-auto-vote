@@ -116,8 +116,7 @@ const invokeChannels = [
 
 // Friendlier method names layered over invoke channels. applyTurbo is
 // alias-ONLY: 'apply-turbo-to-entry' is deliberately not in invokeChannels,
-// so no applyTurboToEntry method is generated (matches the historical
-// hand-written surface).
+// so no applyTurboToEntry method is generated.
 const aliases = {
     applyBoost: 'apply-boost-to-entry',
     applyTurbo: 'apply-turbo-to-entry',
@@ -132,7 +131,7 @@ const sendMethods = {
 
 // Event-listener methods. Each `api[method](callback)` subscribes to the
 // channel and returns an unsubscribe. Method name → channel (names are
-// historical and not all mechanically derivable — onDownloadProgress).
+// not all mechanically derivable — onDownloadProgress).
 const eventMethods = {
     onUpdateChecking: 'update-checking',
     onUpdateAvailable: 'update-available',

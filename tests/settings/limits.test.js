@@ -21,9 +21,9 @@ describe('settings/limits', () => {
 
     // The whole reason this module exists is that it is safe to import from
     // app-bundle.js. settings/schema.js requires zod, and a CJS require of it
-    // cannot be tree-shaken, so pulling a bound from there put ~407 KB of zod
-    // into the Electron renderer. pnpm size would eventually catch a
-    // regression, but only as a confusing budget failure in a separate CI job
+    // cannot be tree-shaken, so pulling a bound from there puts ~407 KB of zod
+    // into the Electron renderer. pnpm size would eventually catch that, but
+    // only as a confusing budget failure in a separate CI job
     // — this fails fast, right where the contract is written down.
     it('is dependency-free so renderer bundles can import it', () => {
         const source = realFs.readFileSync(LIMITS_PATH, 'utf8');

@@ -8,8 +8,8 @@
  * code, exercised in real runs.
  *
  * The vectors are real pretrained GloVe embeddings (mean-centered and
- * cluster-retrofitted — see scripts/fetch-embeddings.js), so unlike the old
- * synthetic scheme, synonyms do NOT embed to identical vectors. The properties
+ * cluster-retrofitted — see scripts/fetch-embeddings.js), so synonyms do NOT
+ * embed to identical vectors. The properties
  * under test are the ones the picker actually relies on: synonym pairs land
  * clearly above the semantic floor, unrelated pairs land clearly below it, and
  * the broad theme vocabulary (colors, events, animals, sports…) is present.
@@ -199,11 +199,10 @@ describe('buildTable — v2 packed asset decode', () => {
 });
 
 describe('stem-spelling fallback', () => {
-    // The shipped table is keyed by stems from the revision of stem() that was
-    // current when the intermediate was generated, and that one stripped '-es'
-    // unconditionally. The stemmer now only does so after a sibilant, correctly
-    // keeping the '-e' elsewhere, so a few stems spell differently than the key
-    // that holds their vector.
+    // The shipped table's keys strip '-es' unconditionally (the intermediate was
+    // generated with a stem() that did), while stem() strips it only after a
+    // sibilant, correctly keeping the '-e' elsewhere, so a few stems spell
+    // differently than the key that holds their vector.
     beforeEach(async () => {
         lexicon.__resetForTests();
         await lexicon.isAvailable();

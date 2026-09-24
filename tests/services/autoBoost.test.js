@@ -165,9 +165,8 @@ describe('isWithinEmergencyWindow', () => {
 
 /**
  * Key-unlocked boosts have no timer of their own, so boostTime — which counts down that
- * timer — cannot describe them. They used to be pinned to a hardcoded 15-minute constant
- * (while the log message claimed 10). That window is now its own setting, deliberately
- * separate from boostTime so one user-facing number is not reinterpreted as two things.
+ * timer — cannot describe them. Their window is its own setting, deliberately separate
+ * from boostTime so one user-facing number is not reinterpreted as two things.
  */
 describe('shouldApplyBoost — key-unlocked window', () => {
     beforeEach(() => jest.clearAllMocks());
@@ -191,7 +190,7 @@ describe('shouldApplyBoost — key-unlocked window', () => {
     });
 
     test('falls back to 15 minutes when the setting is absent', () => {
-        // Settings written before this key existed must keep their old behaviour rather
+        // Settings written before this key existed must keep a 15-minute window rather
         // than reading as 0 and silently disabling key-unlocked boosts altogether.
         mockSettings({ emergencyFill: 0 });
         const now = NOW();

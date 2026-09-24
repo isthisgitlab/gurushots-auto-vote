@@ -99,8 +99,8 @@ const setSetting = (key, value, challengeId = null) => {
                 .error(`Failed to set ${key} for challenge ${challengeId} — validation failed`);
             return false;
         }
-        // A schema key with no --challenge used to be written as an unvalidated top-level
-        // key that nothing ever reads — the command reported success and changed nothing.
+        // A schema key with no --challenge would otherwise be written as an unvalidated
+        // top-level key that nothing ever reads — reporting success and changing nothing.
         // Setting the global default is what the user meant; say so rather than doing it
         // silently, so a script author can see the redirect in the output.
         if (settings.SETTINGS_SCHEMA[key]) {
@@ -266,7 +266,7 @@ const resetAllSettings = () => {
     try {
         // Delegate to the facade so the CLI matches the GUI/IPC path and the
         // documented contract: it preserves token, mock flag, and apiHeaders.
-        // (Re-implementing the loop here previously wiped the auth token because
+        // (Re-implementing the loop here would wipe the auth token, because
         // getDefaultSettings() includes token:'' / mock / apiHeaders.)
         if (settings.resetAllSettings()) {
             logger

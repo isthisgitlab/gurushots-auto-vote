@@ -125,7 +125,7 @@ const applyExcludedSubjectFilter = (filtered, challenge, opts) => {
 /**
  * Filter + score candidates, WITHOUT sorting or slicing.
  *
- * Split out of pickPhotosForChallenge so one fill can score once and then both
+ * Separate from pickPhotosForChallenge so one fill can score once and then both
  * (a) work out which photos need stat enrichment and (b) produce the final
  * ranking, instead of running this loop twice. The stemming/matching inside is
  * deliberately cost-bounded (see MAX_STEMS_PER_PHOTO and friends) because it is

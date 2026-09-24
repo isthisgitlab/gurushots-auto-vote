@@ -376,7 +376,6 @@ describe('mock/index', () => {
 
                 expect(result).toEqual(voting.mockVoteSubmissionSuccess);
                 expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock submitVotes', null);
-                // Note: 'Submitting mock votes successfully' was removed from the mock implementation
             });
 
             test('should return error for empty images', async () => {
@@ -385,8 +384,6 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.submitVotes(voteImages, 'test-token')).rejects.toEqual(
                     voting.mockVoteSubmissionFailure,
                 );
-
-                // Note: This error message was changed to use logger.error
             });
 
             test('should resolve undefined for missing token (real-API parity)', async () => {
@@ -408,7 +405,6 @@ describe('mock/index', () => {
 
                 expect(result).toEqual(boost.mockBoostSuccess);
                 expect(logger.__mockApiFn).toHaveBeenCalledWith('Mock applyBoost', null);
-                // Note: 'Applying boost successfully' message was not migrated to logger
             });
 
             test('should return error when boost already used', async () => {
@@ -420,8 +416,6 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).rejects.toEqual(
                     boost.mockBoostAlreadyUsed,
                 );
-
-                // Note: 'Boost already used' message was not migrated to logger
             });
 
             test('should return error when boost not available', async () => {
@@ -433,8 +427,6 @@ describe('mock/index', () => {
                 await expect(mockIndex.mockApiClient.applyBoost(challenge, 'test-token')).rejects.toEqual(
                     boost.mockBoostFailure,
                 );
-
-                // Note: 'Boost not available' message was not migrated to logger
             });
         });
 
@@ -443,8 +435,6 @@ describe('mock/index', () => {
                 const result = await mockIndex.mockApiClient.applyBoostToEntry('123', 'img456', 'test-token');
 
                 expect(result).toEqual(boost.mockBoostSuccess);
-                // Note: This was changed to logger.api('Mock applyBoostToEntry')
-                // Note: This message was not migrated to logger in the implementation
             });
 
             test('should resolve null for missing token (real-API parity)', async () => {
@@ -507,9 +497,9 @@ describe('mock/index', () => {
 
             test('should report a failed pass for missing token (real-API parity)', async () => {
                 // Real fetchChallengesAndVote has no token guard: the pass runs and never
-                // rejects. It no longer reports success, though — a fetch that could not
+                // rejects. It does not report success, though — a fetch that could not
                 // produce a list is a failure, not an account with nothing active, and
-                // claiming success there is what made a dead API look healthy.
+                // claiming success there would make a dead API look healthy.
                 await expect(mockIndex.mockApiClient.fetchChallengesAndVote(null)).resolves.toEqual({
                     success: false,
                     error: expect.stringMatching(/could not load active challenges/i),

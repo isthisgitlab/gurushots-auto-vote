@@ -95,9 +95,9 @@ const titleSubject = (title, ignoreWords) => {
 };
 
 // Negated titles name what must NOT be in the photo: "No Humans", "Without
-// People", "People-Free". 'no'/'not' are stopwords, so before this existed
-// "No Humans" tokenised to ["human"] and every tier — theme vector, lexical
-// keywords, server search — actively ranked photos OF people first, the exact
+// People", "People-Free". 'no'/'not' are stopwords, so without this "No
+// Humans" would tokenise to ["human"] and every tier — theme vector, lexical
+// keywords, server search — would actively rank photos OF people first, the exact
 // inverse of the brief. A negated subject is therefore stripped from every
 // positive keyword source and turned into an exclusion filter instead (see
 // buildScoredCandidates).
@@ -222,8 +222,8 @@ const photoShowsExcluded = (labelStems, excluded) =>
 // Returns the lone target letter (lowercased) or null.
 //
 // SCOPE: the begins/starts-with, "X is for" and "The Letter X" families are
-// handled. A bare "L Words" intentionally returns null and keeps today's
-// behavior.
+// handled. A bare "L Words" intentionally returns null and is treated as an
+// ordinary title.
 //
 // SECURITY: `title` is an untrusted string from the GuruShots API. We cap its
 // length before matching (ReDoS defense-in-depth, though neither pattern has

@@ -205,7 +205,7 @@ describe('settings facade — challenge profiles', () => {
         });
 
         test('succeeds when a stale override on an unlisted key conflicts with a profile value', () => {
-            // The review-found ordering bug: profile saved under global
+            // Ordering case: profile saved under global
             // defaults (exposure=100 → exposureTarget=80 would be invalid, so
             // lower the default first).
             settings.setGlobalDefault('exposure', 50);

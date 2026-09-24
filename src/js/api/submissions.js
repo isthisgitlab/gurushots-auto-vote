@@ -82,7 +82,7 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage 
  *
  *   paginate: opt IN to walking the whole library instead of returning the
  *   first page. WITHOUT this flag the call returns exactly one page — the
- *   long-standing behavior every caller and test relies on. It is a explicit
+ *   contract every non-paginating caller and test relies on. It is an explicit
  *   flag rather than being inferred from `start` being absent, because
  *   "start at offset 50 AND keep paging" is a legitimate future request that
  *   presence-based detection would silently downgrade to a single page.
@@ -91,8 +91,8 @@ const fetchPhotoPage = async (challengeId, token, { limit, start, search, usage 
  *   `limit`, and stops at the first short page, at MAX_LIBRARY_PAGES, at the
  *   PAGINATE_BUDGET_MS wall-clock budget, or at the first failed/malformed
  *   page. It NEVER throws mid-walk: a transient failure on page 7 returns
- *   pages 1-6 rather than sinking a fill that used to succeed on a single
- *   request. Every early stop logs a warning.
+ *   pages 1-6 rather than sinking the whole fill over one bad page. Every
+ *   early stop logs a warning.
  *
  *   budgetMs: override the wall-clock budget for this walk. Callers running
  *   against a deadline should pass something smaller.

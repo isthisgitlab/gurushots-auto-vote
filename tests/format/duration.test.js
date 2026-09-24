@@ -1,9 +1,8 @@
 /**
  * Unit tests for the canonical duration formatter (src/js/format/duration.js)
  * shared by the CLI status, the renderer boost-window banner + challenge
- * countdown, and the voting pass's log lines. The default mode locks the
- * CLI/GUI parity the old per-shell copies promised; the includeSeconds mode
- * reproduces the former formatTimeRemaining body.
+ * countdown, and the voting pass's log lines. The default mode locks CLI/GUI
+ * parity; the includeSeconds mode covers the live countdowns.
  */
 
 const { formatDuration } = require('../../src/js/format/duration');

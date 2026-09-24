@@ -29,9 +29,8 @@ const MAX_LABELS_PER_PHOTO = 64;
  * USED ONLY BY THE LETTER-CHALLENGE FILTER. "Begins With L" reads the first
  * character of the WHOLE label — the natural reading of "begins with" — which is
  * a deliberate decision (see pickPhotosForChallenge). Do not reach for this
- * anywhere else: comparing a whole-label stem against a single-word keyword is
- * exactly the bug this module was fixed for ("sea life" matching "life"). For
- * matching, use labelWordStems.
+ * anywhere else: comparing a whole-label stem against a single-word keyword
+ * mismatches ("sea life" matching "life"). For matching, use labelWordStems.
  */
 const wholeLabelStems = (photo) => {
     if (!Array.isArray(photo?.labels)) return [];
@@ -53,9 +52,9 @@ const wholeLabelStems = (photo) => {
  *
  * THIS IS THE MATCHING REPRESENTATION — used by scorePhoto, photoMatchesAllStems
  * and countShouldMatches. It puts labels in the same word-level space that user
- * tags have always used (tokeniseTagList already splits "golden hour" into
- * ["golden","hour"]); labels being the odd one out was the root of the
- * Farm-Life-picks-Sea-Life bug.
+ * tags use (tokeniseTagList already splits "golden hour" into
+ * ["golden","hour"]); a whole-label representation would let a Farm Life
+ * challenge pick a "Sea Life" photo.
  *
  * Stopwords are KEPT: a label is not challenge boilerplate, and a user's
  * must-tag "sea life" has to be able to match the label "Sea Life" on both

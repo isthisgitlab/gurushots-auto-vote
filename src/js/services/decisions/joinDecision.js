@@ -41,12 +41,12 @@ const resolveJoinWindow = (joinWithinSec, percentElapsed) => {
 };
 
 /**
- * The join-window half of the auto-join decision, split out so the main
+ * The join-window half of the auto-join decision, kept separate so the main
  * decision reads as one list of vetoes.
  *
  * Returns the refusal reason, or null when the window does not veto — either
- * because no window is set (both sentinels 0 = off, the historical
- * join-on-sight behavior) or because the candidate is inside it.
+ * because no window is set (both sentinels 0 = off: join as soon as seen) or
+ * because the candidate is inside it.
  *
  * FAIL-CLOSED: a candidate that cannot prove it is inside the window (no
  * readable `close_time`, no readable clock, or already past its close) is
@@ -187,8 +187,8 @@ const normalizeJoinFacets = (challenge) => ({
  * (`close_time` missing, unparseable, or already past) is not joined while a
  * window is set. "Join only near the end" must never degrade into "join now" on
  * a payload the caller could not read — that is precisely the spend the setting
- * exists to prevent. With `joinWithinSec` 0 the field is not read at all, so the
- * historical behavior is untouched.
+ * exists to prevent. With `joinWithinSec` 0 the field is not read at all, so a
+ * missing `close_time` never blocks a join-as-soon-as-seen candidate.
  *
  * Fail-safe on money: a null `bankroll` (balance could not be read) blocks every
  * paid join but still allows free joins. Both coin caps use the `0 = off`

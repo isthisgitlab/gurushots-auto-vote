@@ -159,7 +159,7 @@ const resolveCandidateConfig = (challenge) => ({
     excludeTags: parseTypeList(resolveJoinSetting('autoJoinExcludeChallengeTags', challenge)),
     maxCoins: Number(resolveJoinSetting('autoJoinMaxCoins', challenge)) || 0,
     // Hours → seconds, to match close_time's unit. A non-finite/negative value
-    // degrades to 0 = "no window", i.e. the historical join-on-sight behavior.
+    // degrades to 0 = "no window", i.e. join as soon as seen.
     joinWithinSec: Math.max(0, Number(resolveJoinSetting('autoJoinWithinHoursOfEnd', challenge)) || 0) * 3600,
     // Elapsed-fraction anchor, resolved through the same tier chain. Percent and
     // hours never combine: resolveJoinWindow picks ONE (percent wins), so a
@@ -602,7 +602,7 @@ const runJoinPass = async (token, now, deps) => {
     const masterOn = settings.getEffectiveSetting('autoJoin', null) === true;
     // When the master default is off, the pass is still needed if any saved title
     // profile turns autoJoin ON for its title. Check that precisely (a tag-only
-    // title rule — the older auto-fill feature — carries no profile and can never
+    // title rule — an auto-fill tag rule — carries no profile and can never
     // enable joining, so it must NOT keep the pass alive every cycle).
     if (!masterOn && !anyTitleRuleEnablesAutoJoin()) {
         return empty;

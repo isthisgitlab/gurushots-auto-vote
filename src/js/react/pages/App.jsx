@@ -80,7 +80,7 @@ function useChallengeSettingsTarget(challenges) {
 
     // Skip when the modal is already open for the same challenge so rapid taps
     // don't churn parent state and re-thrash the modal's effects (rapid clicks
-    // were producing a blank page when the in-flight load raced the
+    // could produce a blank page when the in-flight load raced the
     // re-render). No refetch on open: challenge state is tick-driven (60s
     // auto-refresh) and selectedChallenge is derived live from that context,
     // so the modal's applicability hints stay current without an imperative

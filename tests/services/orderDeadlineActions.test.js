@@ -116,11 +116,11 @@ describe('orderDeadlineActions', () => {
     });
 
     test('2-image challenge end-aligns the default schedule: fill due at 600s, not 1800s', () => {
-        // The reported bug through the real wiring (getAutoFillThresholdSec →
+        // Through the real wiring (getAutoFillThresholdSec →
         // orderDeadlineActions): 1 entry of max 2 with the full default schedule
-        // used to open the fill window at the Image-2 row (1800s). End-aligned,
+        // must not open the fill window at the Image-2 row (1800s). End-aligned,
         // the 2nd (final) photo follows the Image-4 row → 600s, so turbo (720s)
-        // now sorts first.
+        // sorts first.
         mockSettings({ turboTime: 720, emergencyFill: 300 });
         const result = VotingLogic.orderDeadlineActions(buildChallenge());
         const autoFill = result.find((a) => a.action === 'autoFill');

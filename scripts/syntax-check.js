@@ -5,9 +5,7 @@
  *
  * Runs `node --check` on every CommonJS .js file in the project by WALKING
  * src/js, scripts, and tests — an explicit exclude list below removes the
- * ES-module/JSX islands. (The previous allowlist silently covered fewer
- * than half of src/js's directories and referenced files that no longer
- * exist.)
+ * ES-module/JSX islands.
  */
 
 const fs = require('node:fs');

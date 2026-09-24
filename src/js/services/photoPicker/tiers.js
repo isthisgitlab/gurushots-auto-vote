@@ -198,7 +198,7 @@ const sameTheme = (a, b) => compareTheme(a, b) === 0;
  * caller (logPopularityPick in services/autoFill/fillLogging.js) uses it to decide whether
  * a tie means "everything matched equally" or "nothing matched" — get that
  * backwards and the app tells a user their fill failed on the fills that
- * worked, which is the bug this predicate was extracted to stop recurring.
+ * worked.
  *
  * Every theme tier is non-negative (that is what makes the governing rule
  * enforceable — see the file header), so "matched something" is exactly "any

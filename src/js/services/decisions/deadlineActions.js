@@ -86,9 +86,8 @@ const getBoostThresholdSec = (challenge, challengeId) =>
  * The ordering is therefore user-controlled: it falls out of the time settings, so
  * widening turboTime or boostTime moves that action earlier in the pass. With the
  * defaults (turboTime 7200, autoFill's top row 1800, emergencyFill 300) the real
- * order is turbo → autoFill → emergencyFill → boost. An earlier version of this
- * comment gave "auto-fill 15m → turbo 12m" as the worked example, which inverted
- * what the defaults actually produce; the numbers, not the code order, decide.
+ * order is turbo → autoFill → emergencyFill → boost — the numbers, not the code
+ * order, decide.
  *
  * Note this sorts turbo on its configured window even when no turbo is held or
  * Auto-Apply Turbo is off — the runner then no-ops. That keeps the ordering a pure

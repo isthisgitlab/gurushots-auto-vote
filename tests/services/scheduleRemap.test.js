@@ -44,7 +44,7 @@ describe('getScheduleShift — how far the schedule end-aligns', () => {
         expect(getScheduleShift('garbage', 2)).toBe(0);
         expect(getScheduleShift([null, 42, { count: 1.5, seconds: 100 }], 2)).toBe(0);
         // Non-finite max coerces to 0 → every row shifts below count 2 and the
-        // schedule goes inert — same fail-closed outcome as the old clamp.
+        // schedule goes inert — fail closed.
         expect(getScheduleShift(DEFAULT_SCHEDULE, NaN)).toBe(4);
         expect(remapScheduleRows(DEFAULT_SCHEDULE, NaN)).toEqual([]);
     });

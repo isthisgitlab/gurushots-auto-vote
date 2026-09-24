@@ -88,8 +88,8 @@ jest.mock('../src/js/logger', () => {
 });
 
 const { getApiStrategy, getMiddleware, refreshApi } = require('../src/js/apiFactory');
-// The raw surfaces are no longer exported — the explicit override returns
-// the module-level singletons, so identity assertions still hold.
+// The raw surfaces are not exported — the explicit override returns the
+// module-level singletons, so identity assertions still hold.
 const realApi = getApiStrategy({ mock: false });
 const mockApi = getApiStrategy({ mock: true });
 const settings = require('../src/js/settings');
@@ -237,8 +237,8 @@ describe('apiFactory', () => {
             // Parity is a construction-time invariant (mockApi is built from
             // realApi's key list, with a throwing guard for missing mock
             // counterparts) — this pins it so a rename/removal on either side
-            // fails loudly here, since typecheck can no longer see through
-            // the Object.fromEntries construction.
+            // fails loudly here, since typecheck cannot see through the
+            // Object.fromEntries construction.
             expect(Object.keys(mockApi).sort()).toEqual(Object.keys(realApi).sort());
         });
 

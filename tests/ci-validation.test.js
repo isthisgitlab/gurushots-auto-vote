@@ -22,7 +22,7 @@ describe('CI Environment Validation', () => {
 
     test('test environment is node with NODE_ENV=test', () => {
         // Jest sets NODE_ENV=test when nothing else did — assert the actual
-        // value (the old `|| 'test'` fallback could never fail).
+        // value (a `|| 'test'` fallback could never fail).
         expect(process.env.NODE_ENV).toBe('test');
         expect(typeof process.versions.node).toBe('string');
     });

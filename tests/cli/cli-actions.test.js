@@ -269,7 +269,7 @@ describe('CLI runVotingCycle — challenges gated on success', () => {
     // full normal-cadence wait instead of the short offline-retry cap. Gating
     // on success (mirroring the GUI's AutovoteContext wrapper) returns null so
     // the scheduler re-fetches and detects fetchFailed. This is the CLI half of
-    // the network-outage badge/recovery fix.
+    // the network-outage badge/recovery path.
     test('a failed strategy cycle returns challenges: null even when the list is []', async () => {
         apiFactory.__cliVote.mockResolvedValue({ success: false, error: 'offline', challenges: [] });
 

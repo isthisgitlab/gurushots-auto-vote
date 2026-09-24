@@ -3,8 +3,8 @@ const { formatTimeHMS } = require('./dateFormat');
 const { createJsonStore } = require('./settings/storage');
 
 // Platform-aware transport (fs on Electron/CLI, @capacitor/preferences on
-// the Android app WebView, in-memory on the headless service). Replaces the
-// old raw-fs access that threw on every call under Capacitor.
+// the Android app WebView, in-memory on the headless service); raw fs would
+// throw on every call under Capacitor.
 const metadataStore = createJsonStore({ fileName: 'metadata.json', prefKey: 'gurushots-metadata' });
 
 /**
@@ -587,8 +587,8 @@ const setLastUpdateCheck = (timestamp) => {
 };
 
 /**
- * Read the legacy metadata-resident skipVersion (pre-consolidation store).
- * The canonical store is now the settings blob (skipUpdateVersion);
+ * Read the legacy metadata-resident skipVersion.
+ * The canonical store is the settings blob (skipUpdateVersion);
  * AutoUpdater's one-shot migration reads this, persists it into settings,
  * verifies, and then calls clearLegacySkipVersion(). The field stays
  * accepted by validation so an old metadata.json round-trips untouched

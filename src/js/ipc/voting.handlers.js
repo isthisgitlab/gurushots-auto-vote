@@ -28,9 +28,8 @@ const { findActiveChallenge } = require('../services/findActiveChallenge');
 const runStrategyOnceViaMiddleware = (challengeId) => apiFactory.getMiddleware().runVotingCycle(challengeId);
 
 // Single-target vote entry shared by vote-on-challenge and
-// vote-on-challenge-manual. The two channels carried slightly different
-// log wording but exercised the same code path; the `manual` flag now
-// flips just those wording bits.
+// vote-on-challenge-manual. The two channels differ only in log wording;
+// the `manual` flag flips those wording bits.
 const voteOnSingleChallenge = async (challengeId, challengeTitle, { manual }) => {
     // IPC boundary — validate inputs from the renderer. Without these
     // checks, parseInt(undefined) below returns NaN and the find() call

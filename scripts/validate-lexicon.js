@@ -18,7 +18,7 @@
  *                  words — disjoint slices, so shared tokens can't inflate the
  *                  distribution) or two clusters under the same parent.
  *   - unrelated  = concept pairs across the curated `unrelatedParents` list
- *                  ONLY. "Every cross-parent pair" is no longer an honest
+ *                  ONLY. "Every cross-parent pair" would not be an honest
  *                  noise model: real embeddings relate vehicle<->urban etc.
  *   - near-miss  = the `nearMissPairs` list — moderately-related-but-wrong-
  *                  theme cases (car vs street). Reported, NOT gated: the
@@ -50,7 +50,7 @@
  *      scripts/fetch-embeddings.js (tightens the curated clusters) and
  *      regenerate — offline once the archive is cached. (MEAN_CENTER is
  *      already on; turning it OFF trades noise rejection for related-pair
- *      similarity and historically failed the farm-vs-sea case.)
+ *      similarity and fails the farm-vs-sea case.)
  *   3. only then consider whether the floor itself is misplaced, and keep it
  *      inside the pre-committed percentile gate above.
  */

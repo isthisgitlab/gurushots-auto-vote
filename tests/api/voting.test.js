@@ -210,18 +210,18 @@ describe('voting', () => {
             };
             const mockToken = 'test-token';
 
-            // A function target is a legacy caller shape — the orchestrator has passed
-            // a resolved number since the exposure-threshold resolver was retired
-            // (see the _getExposureThreshold note in strategies/real/index.js). `exposure_factor <
-            // someFunction` is always false, so no image is ever selected.
+            // A function target is not a usable shape — the orchestrator passes a
+            // resolved number (see the _getExposureThreshold note in
+            // strategies/real/index.js). `exposure_factor < someFunction` is always
+            // false, so no image is ever selected.
             const thresholdFunction = (challengeId) => {
                 return challengeId === '123' ? 80 : 100;
             };
 
             const result = await submitVotes(mockVoteImages, mockToken, thresholdFunction);
 
-            // Previously this submitted a vote carrying no image_ids at all. Sending
-            // nothing is the honest outcome for an unusable target.
+            // No vote carrying zero image_ids goes out: sending nothing is the honest
+            // outcome for an unusable target.
             expect(makePostRequest).not.toHaveBeenCalled();
             expect(result).toBeUndefined();
             expect(mockWarningFn).toHaveBeenCalledWith(expect.stringContaining('No vote submitted'), null);
@@ -319,12 +319,11 @@ describe('voting', () => {
         });
     });
 
-    // Regression coverage for the vote-selection loop. The original implementation sampled
-    // `images` at random and terminated on `uniqueImageIds.size === images.length`, which is
-    // unreachable when the endpoint repeats an id — the loop then spun forever, synchronously.
-    // These tests are deliberately written against the fixed shape: a synchronous infinite
-    // loop cannot be bounded by Jest's testTimeout (that needs a free event loop), so a test
-    // that ran the old code would hang the worker rather than fail.
+    // Coverage for the vote-selection loop. It must terminate even when the endpoint repeats
+    // an id: a random-sampling loop ending on `uniqueImageIds.size === images.length` never
+    // reaches that condition and spins forever, synchronously. A synchronous infinite loop
+    // cannot be bounded by Jest's testTimeout (that needs a free event loop), so such a loop
+    // would hang the worker rather than fail.
     describe('submitVotes — selection loop', () => {
         const countOccurrences = (haystack, needle) => haystack.split(needle).length - 1;
 
@@ -355,9 +354,9 @@ describe('voting', () => {
         test('does not warn about insufficient images when the target was actually reached', async () => {
             makePostRequest.mockResolvedValueOnce({ success: true });
 
-            // Two images at 60% each overshoot the 100% target on the final one. The old
-            // exhaustion-based break warned here anyway, reporting a shortfall that never
-            // happened.
+            // Two images at 60% each overshoot the 100% target on the final one. An
+            // exhaustion-based break would warn here anyway, reporting a shortfall that
+            // never happened.
             await submitVotes(
                 buildVoteImages([
                     { id: 'img1', ratio: 60 },
@@ -375,8 +374,8 @@ describe('voting', () => {
         test('keeps voting when an image carries no usable ratio', async () => {
             makePostRequest.mockResolvedValueOnce({ success: true });
 
-            // `exposure_factor += undefined` yields NaN, and `NaN < target` is false — so the
-            // old loop stopped after a single image and submitted a near-empty ballot silently.
+            // `exposure_factor += undefined` yields NaN, and `NaN < target` is false — so a
+            // naive loop stops after a single image and submits a near-empty ballot silently.
             await submitVotes(buildVoteImages([{ id: 'img1' }, { id: 'img2' }, { id: 'img3' }]), 'test-token');
 
             const body = makePostRequest.mock.calls[0][2];

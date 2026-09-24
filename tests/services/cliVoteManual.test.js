@@ -1,11 +1,11 @@
 /**
  * BaseMiddleware.cliVoteManual — the CLI's "vote everything to 100%" command.
  *
- * getActiveChallenges always resolves a list shape and never null, so the guard here could
- * only ever check `!challengesResponse.challenges`, which is never true on failure. An API
- * outage therefore fell straight through to voting an empty list and reported
- * "Manual vote: 0 voted, 0 skipped of 0" — the same "an outage looks like a healthy empty
- * pass" misreporting fixed in runVotingPass, left open on this second entry point.
+ * getActiveChallenges always resolves a list shape and never null, so checking
+ * `!challengesResponse.challenges` never catches a failure. An API outage must not fall
+ * through to voting an empty list and reporting "Manual vote: 0 voted, 0 skipped of 0" —
+ * the same "an outage looks like a healthy empty pass" misreport runVotingPass guards
+ * against, on this second entry point.
  */
 
 jest.mock('../../src/js/settings', () => ({

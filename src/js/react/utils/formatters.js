@@ -1,6 +1,5 @@
 /**
- * Time and display formatting utilities
- * Ported from src/js/ui/formatters.js - pure functions only
+ * Time and display formatting utilities (pure functions only)
  */
 
 import { formatSecondsAsHoursMinutes } from './timeFieldUnits';

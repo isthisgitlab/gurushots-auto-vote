@@ -1,14 +1,14 @@
 /**
  * Tests for the time-unit migrations in loadSettings().
  *
- * 1. boostTime/turboTime: pre-fix, SettingInput.jsx encoded these
- *    `type: 'time'` values as minutes (h*60+m) while the runtime treated
- *    them as seconds. The migration detects values produced by the buggy
- *    GUI (range [1, 1439]) and multiplies by 60. Defaults (3600s, 7200s)
- *    are above this band so they pass through.
- * 2. emergencyFill: was a plain `number` of minutes-before-close (1-59); it
- *    is now a `time` setting in seconds. The migration multiplies stored
- *    values in (0, 60) by 60 under the `_emergencyFillTimeMigratedV1` flag.
+ * 1. boostTime/turboTime: the runtime reads these `type: 'time'` values as
+ *    seconds, but a buggy SettingInput.jsx stored them as minutes (h*60+m).
+ *    The migration detects values in that GUI's range [1, 1439] and
+ *    multiplies by 60. Defaults (3600s, 7200s) are above this band so they
+ *    pass through.
+ * 2. emergencyFill: a `time` setting in seconds, stored as a plain `number`
+ *    of minutes-before-close (1-59) in older blobs. The migration multiplies
+ *    stored values in (0, 60) by 60 under the `_emergencyFillTimeMigratedV1` flag.
  */
 
 const { buildSettingsFixture: buildFixture } = require('../helpers/challengeFixtures');
@@ -170,7 +170,7 @@ describe('time-unit migration in loadSettings', () => {
     });
 
     test('upper bound: value of exactly 1440 is left alone', () => {
-        // 1440 is outside the buggy GUI's writable range (max was 1439).
+        // 1440 is outside the buggy GUI's writable range (max 1439).
         // Anything >= 1440 must have come from elsewhere (e.g. raw JSON edit).
         setSettingsFile(
             buildFixture({

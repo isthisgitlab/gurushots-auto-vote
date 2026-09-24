@@ -161,11 +161,11 @@ const runTurboMiniGame = async (challenge, token) => {
  * Main function that fetches active challenges and processes them — thin
  * binder over the shared orchestration (services/votingOrchestrator.js),
  * which real and mock strategies both run. The endpoint references are
- * passed per call (not at module load) so jest.mock'd api modules keep
- * working in the existing suites.
+ * passed per call (not at module load) so jest.mock'd api modules take
+ * effect.
  *
  * @param {string} token - Authentication token
- * @param {number|function} [_getExposureThreshold] - Optional exposure-threshold resolver kept for caller backward-compat; unused internally (the voting-logic service reads settings directly).
+ * @param {number|function} [_getExposureThreshold] - Optional exposure-threshold resolver accepted from callers that pass one; unused internally (the voting-logic service reads settings directly).
  * @param {string|number} [challengeIdFilter] - When set, restricts the strategy pass to a single challenge (per-card "Run"). Stale-metadata cleanup still runs against the full active list before filtering.
  * @returns {Promise<{success:boolean, message?:string, error?:string, challenges?:Array}>}
  *   `challenges` is the *full* active list this cycle fetched (not the per-challenge

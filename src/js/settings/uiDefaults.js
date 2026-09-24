@@ -4,8 +4,7 @@
  * form edits. These keys live outside SETTINGS_SCHEMA (they are not
  * per-challenge values), so the schema can't supply their defaults —
  * this module is the single source of truth shared by the settings
- * facade's getDefaultSettings() and the renderer's useSettingsForm
- * (which previously hand-mirrored the values).
+ * facade's getDefaultSettings() and the renderer's useSettingsForm.
  *
  * Dependency-free on purpose: it is bundled into the renderer, so it
  * must not pull in the storage transport or logger.
@@ -42,8 +41,8 @@ const getUiDefaultSettings = () => ({
     customTimezones: [],
     stayLoggedIn: false,
     // Stored as seconds — api-client.js multiplies by 1000 before handing
-    // to axios. (A pre-refactor modal used 30000 here, which silently
-    // corrupted the stored timeout to ~8h on the first Save.)
+    // to axios. (A millisecond value like 30000 here would silently
+    // corrupt the stored timeout to ~8h on the first Save.)
     apiTimeout: 30, // API request timeout in seconds (default: 30 seconds)
     checkFrequencyMin: 3, // Lower bound (minutes). Equal to max → fixed-cadence behavior.
     checkFrequencyMax: 3, // Upper bound (minutes). Each cycle picks a random delay in [min, max].

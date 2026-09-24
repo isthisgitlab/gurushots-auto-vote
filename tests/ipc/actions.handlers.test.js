@@ -115,7 +115,7 @@ describe('get-active-challenges', () => {
 describe('authenticate', () => {
     // The handler selects the surface via getApiStrategy({ mock }) — the
     // explicit-override seam — so the test injects both surfaces there
-    // instead of reaching for raw exports (which no longer exist).
+    // (the raw surfaces are not exported).
     let mockSurface;
     let realSurface;
 

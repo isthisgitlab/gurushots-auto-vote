@@ -2,13 +2,13 @@
  * Tests for the autoFillIntervalMinutes → autoFillSchedule migration in
  * loadSettings() (`_autoFillScheduleMigratedV1`).
  *
- * The old single interval M (minutes) is converted, per scope, into an
+ * The stored single interval M (minutes) is converted, per scope, into an
  * explicit per-image schedule derived from the USER'S value (never the schema
  * default):
  *   [{ count: 2, seconds: round(3*M*60) },
  *    { count: 3, seconds: round(2*M*60) },
  *    { count: 4, seconds: round(M*60) }]
- * with M clamped to the old validator's 60-minute ceiling. The legacy key is
+ * with M clamped to that key's 60-minute ceiling. The legacy key is
  * always deleted; an existing autoFillSchedule in the same scope is never
  * overwritten.
  */

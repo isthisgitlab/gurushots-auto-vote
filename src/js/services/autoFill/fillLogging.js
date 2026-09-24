@@ -139,7 +139,8 @@ const logPopularityPick = (prefix, challenge, scored, contestedIds, picked, logg
     const sample = explained[0];
     // Predicate owned by photoPicker, which owns the tier list it reads. Stating
     // it by hand here would silently rot the day a tier is added or reordered —
-    // and the regression would be exactly the bug this branch exists to fix.
+    // and a wrong answer mislabels the tie: it warns that nothing matched the theme
+    // when photos did, or says the reverse.
     const themeMatched = hasThemeMatch(sample);
     const subject = explained.length === 1 ? 'the entry was' : `${explained.length} entries were`;
     const log = logger.withCategory('autoFill');

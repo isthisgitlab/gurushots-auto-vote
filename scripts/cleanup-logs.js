@@ -2,9 +2,8 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-// The shared resolver — this script previously hand-rolled the userData
-// path a third way (and always targeted the non-dev dir even when run
-// from source, where the logs actually live under the -dev dir).
+// The shared resolver, so this script targets the same userData dir as the
+// app (the -dev dir when run from source, where the logs actually live).
 const runtime = require('../src/js/runtime');
 const { runIfMain } = require('./lib/run-if-main');
 

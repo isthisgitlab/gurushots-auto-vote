@@ -9,7 +9,7 @@ const ChallengesContext = createContext(null);
 export function ChallengesProvider({ children, autovoteRunning }) {
     // The running flag is threaded into the hook so its cleanup pass can
     // skip stale-settings cleanup while autovote runs — prop wiring, not
-    // the old window.autovoteRunning side-channel.
+    // a window-global side-channel.
     const { data, loading, error, refetch } = useActiveChallenges(autovoteRunning);
 
     // Auto-refresh every 60 seconds while autovote is NOT running (the

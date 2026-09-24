@@ -24,8 +24,8 @@ const colors = {
 const isElectronApp = process.type === 'renderer' || process.type === 'main';
 
 // Runtime owns the single implementation of source-detection, app naming,
-// and user-data resolution — logger re-exports isSourceCode/getAppName for
-// compatibility (settings.js and tests consume them through this module).
+// and user-data resolution — logger re-exports isSourceCode/getAppName
+// because settings.js and tests consume them through this module.
 const { isSourceCode, getAppName } = runtime;
 const getUserDataPath = runtime.getAppUserDataPath;
 
@@ -263,8 +263,8 @@ const sanitizeLogString = (value, maxLength = 200) =>
 
 // Message-level counterpart to sanitizeForLog. sanitizeForLog only sees the
 // structured `data` object; it never touches the free-form message string.
-// Callers that fold a credential into the message via positional args (the
-// renderer login shim used to log `login with: <user> <password>`) would
+// Callers that fold a credential into the message via positional args (e.g.
+// a `login with: <user> <password>` line) would
 // otherwise leak plaintext to disk. This scrubs the value after any
 // sensitive key written as `key: value` or `key=value` (quotes optional)
 // and runs on every writeLog message. The key set mirrors SENSITIVE_KEY_RE;

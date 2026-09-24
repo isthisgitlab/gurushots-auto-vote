@@ -6,7 +6,7 @@
  */
 
 const { getMiddleware, getApiStrategy } = require('../../src/js/apiFactory');
-// The raw surfaces are no longer exported; the explicit override returns
+// The raw surfaces are not exported; the explicit override returns
 // the module-level singletons.
 const realApi = getApiStrategy({ mock: false });
 const mockApi = getApiStrategy({ mock: true });

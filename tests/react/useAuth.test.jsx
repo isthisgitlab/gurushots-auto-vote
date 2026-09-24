@@ -1,10 +1,9 @@
 /**
- * useAuth — the two-channel error model introduced when authenticate moved
- * onto the shared useAsyncIpcAction envelope. authError (from the envelope)
- * and flowError (login/logout transitions) merge as `authError ?? flowError`,
- * with explicit cross-channel clears at each transition so a stale value
- * from one channel can never shadow the other. These tests pin exactly that
- * contract, which previously had no coverage at all.
+ * useAuth — the two-channel error model. authError (from the shared
+ * useAsyncIpcAction envelope that authenticate runs on) and flowError
+ * (login/logout transitions) merge as `authError ?? flowError`, with explicit
+ * cross-channel clears at each transition so a stale value from one channel
+ * can never shadow the other. These tests pin exactly that contract.
  */
 
 import { render, act } from '@testing-library/preact';

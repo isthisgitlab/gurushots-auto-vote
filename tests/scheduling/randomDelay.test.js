@@ -67,9 +67,8 @@ describe('getRandomCheckFrequencyMs', () => {
 });
 
 describe('anchoredWaitMs', () => {
-    // The normal-mode anchoring formula previously lived as identical inline
-    // copies in runScheduler.js and AutovoteContext.jsx — these cases pin the
-    // shared implementation to the exact semantics both hosts relied on.
+    // The normal-mode anchoring formula shared by runScheduler.js and
+    // AutovoteContext.jsx — these cases pin the semantics both hosts rely on.
     const DELAY = 5 * MS_PER_MINUTE;
 
     test('standalone (re)arm with no anchor waits the full delay', () => {

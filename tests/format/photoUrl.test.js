@@ -31,7 +31,7 @@ describe('buildPhotoUrl', () => {
         ['a negative size', { size: -50 }, '/unsafe/200x200/'],
         ['a NaN size', { size: Number.NaN }, '/unsafe/200x200/'],
         ['an Infinite size', { size: Number.POSITIVE_INFINITY }, '/unsafe/200x200/'],
-        // Regression: rounding after the positivity check let these through as
+        // Rounding must precede the positivity check, or these slip through as
         // a 0x0 transform request instead of falling back to the default.
         ['a fraction that rounds to zero', { size: 0.4 }, '/unsafe/200x200/'],
         ['the smallest positive fraction', { size: Number.MIN_VALUE }, '/unsafe/200x200/'],

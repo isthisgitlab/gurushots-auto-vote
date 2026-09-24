@@ -266,10 +266,9 @@ describe('challenges', () => {
         });
 
         test('never writes any part of the token into the debug log payload', async () => {
-            // Security regression guard: the previous implementation logged a
-            // `tokenPrefix` slice of the real bearer token, which bypassed the
-            // logger's key-based redaction and landed in api-*.log in cleartext.
-            // No fragment of the token may appear in any logged argument.
+            // Security guard: a `tokenPrefix` slice of the real bearer token would
+            // bypass the logger's key-based redaction and land in api-*.log in
+            // cleartext. No fragment of the token may appear in any logged argument.
             const longToken = 'very-long-token-that-should-be-truncated-for-security';
             const mockResponse = { challenges: [] };
 

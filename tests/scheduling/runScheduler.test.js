@@ -5,8 +5,8 @@
  * should be ~delayMs regardless of how long any single cycle takes, and an
  * overrunning cycle should pause MIN_CYCLE_GAP_MS before firing again.
  *
- * Threshold mode no longer uses a separate node-cron switch — the next delay is
- * decided each cycle by computeNextCycleDelayMs, so the chain caps to an
+ * In threshold mode the next delay is decided each cycle by
+ * computeNextCycleDelayMs, so the chain caps to an
  * upcoming boundary (approaching), holds a fixed fast cadence while in-window
  * (last-minute), and reverts to the random cadence once the window clears.
  */
@@ -283,8 +283,7 @@ describe('createScheduler — threshold-aware cadence', () => {
 
     test('caps the next delay to an upcoming boundary instead of the random delay', async () => {
         // Boundary is 60s out; the random delay is 3 min. The next cycle must
-        // land on the 60s boundary, not overshoot to 3 min. This is the
-        // reported-bug regression lock.
+        // land on the 60s boundary, not overshoot to 3 min.
         await startWith({ success: true, challenges: [challengeEnteringIn60s()] });
 
         expect(runVotingCycle).toHaveBeenCalledTimes(1); // initial cycle only
@@ -371,9 +370,9 @@ describe('createScheduler — threshold-aware cadence', () => {
     });
 
     test('picks up a mid-run per-challenge lastMinuteThreshold change and re-caps the cadence', async () => {
-        // The reported bug, at the integration layer: a per-challenge threshold
-        // is changed mid-run; the very next cycle must respect the new boundary
-        // instead of riding out the old random cadence. 1-min normal cadence
+        // At the integration layer: a per-challenge threshold is changed
+        // mid-run; the very next cycle must respect the new boundary instead
+        // of riding out the already-armed random cadence. 1-min normal cadence
         // keeps the boundary arithmetic easy to follow.
         settings.loadSettings.mockReturnValue({ checkFrequencyMin: 1, checkFrequencyMax: 1 });
         let thresholdMin = 5;
@@ -425,7 +424,7 @@ describe('createScheduler — threshold-aware cadence', () => {
 
     test('falls back to fetching when the cycle hands over no list', async () => {
         getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });
-        // A non-array result (legacy boolean) must trigger a fresh fetch.
+        // A non-array result (a boolean) must trigger a fresh fetch.
         await startWith(true);
 
         expect(getActiveChallenges).toHaveBeenCalled();

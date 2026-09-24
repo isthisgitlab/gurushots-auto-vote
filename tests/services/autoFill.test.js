@@ -34,8 +34,7 @@ const {
 const { buildChallenge } = require('../helpers/challengeFixtures');
 
 // Mirrors the schema default: "have ≥2 entries at T-30m, ≥3 at T-20m, ≥4 at
-// T-10m" — the schedule equivalent of the old 10-minute interval on a 4-slot
-// challenge.
+// T-10m" for a 4-slot challenge.
 const DEFAULT_SCHEDULE = [
     { count: 2, seconds: 1800 },
     { count: 3, seconds: 1200 },
@@ -157,12 +156,12 @@ describe('ignore-words setting reaches the real fill path', () => {
 });
 
 describe('tag-resolution deps reach the real fill path', () => {
-    // REGRESSION: runFillAttempt rebuilds a fresh deps object for
+    // runFillAttempt rebuilds a fresh deps object for
     // fetchCandidatesForChallenge instead of spreading `deps`, so a dep the
     // orchestrator supplies is silently dropped unless it is named there too.
-    // That made tag resolution live for the join flow while never firing for
-    // ordinary auto-fill — the exact flow the feature exists to fix — and the
-    // fallback warning then blamed "no tag in your library" for a lookup that
+    // Dropping these would leave tag resolution live for the join flow but dead
+    // for ordinary auto-fill — the exact flow the feature exists for — and the
+    // fallback warning would blame "no tag in your library" for a lookup that
     // was never attempted. Drive the real entry point, not
     // fetchCandidatesForChallenge directly, or the gap is invisible.
     test('maybeAutoFillChallenge forwards searchTagAutocomplete and getCurrentMemberProfile', async () => {
@@ -616,9 +615,9 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
     });
 
     test('2-image challenge: no fill at the Image-2 time and no coverage-gap warning', async () => {
-        // The reported bug, end-to-end: at T-15m a 2-image challenge with one
-        // entry used to fill its 2nd (final) photo via the Image-2 row @ 30m.
-        // End-aligned, the 2nd photo follows the Image-4 row @ 10m, so this
+        // End-to-end: at T-15m a 2-image challenge with one entry must not
+        // fill its 2nd (final) photo via the Image-2 row @ 30m. End-aligned,
+        // the 2nd photo follows the Image-4 row @ 10m, so this
         // cycle must skip — and the coverage-gap warning must stay silent (the
         // end-aligned top target equals the challenge limit; there is no gap).
         const warning = jest.fn();
@@ -1844,11 +1843,9 @@ describe('fetchCandidatesForChallenge — theme-narrowed fetch', () => {
             jest.fn(async (_id, _tok, opts) => (opts && opts.search ? [] : [allowedPhoto('full', ['Misc'])]));
 
         test('terms from the challenge title → warning naming the searched terms', async () => {
-            // This used to debug-log, on the reasoning that an abstract title is
-            // unmatchable and warning would cry wolf. Tag resolution changed that:
-            // reaching the fallback now means the term was searched AND no library
+            // Reaching the fallback means the term was searched AND no library
             // tag could be resolved for it, so the off-theme submission that
-            // follows is worth surfacing rather than burying.
+            // follows is worth a warning rather than a debug line.
             const { logger, category } = makeSpyLogger();
             await fetchCandidatesForChallenge(
                 { id: 'c1', title: 'Pink In Nature' },
@@ -2241,8 +2238,8 @@ describe('resolveScheduleTarget — target entry count for the time remaining', 
     });
 
     test('2-image challenge no longer fills at the Image-2 time (the reported bug)', () => {
-        // T-25m: old behavior targeted 2 via the (clamped) Image-2 row @ 30m.
-        // End-aligned, the 2nd photo follows the Image-4 row @ 10m instead.
+        // T-25m: the (clamped) Image-2 row @ 30m does not apply. End-aligned,
+        // the 2nd photo follows the Image-4 row @ 10m instead.
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 1500, 2)).toBe(0);
         // Inside the remapped 10m window the fill becomes due.
         expect(resolveScheduleTarget(DEFAULT_SCHEDULE, 500, 2)).toBe(2);
@@ -2529,7 +2526,7 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
     test('union merge keeps a locally reflected entry the server has not caught up on', async () => {
         // Same-cycle read-after-write race: boost fill-new submitted seconds
         // ago (reflectNewEntry), the refresh payload lags behind — the local
-        // entry must survive the merge or the double-submit bug comes back.
+        // entry must survive the merge or the same slot gets submitted twice.
         const challenge = makeChallenge({ maxSubmits: 4, entries: [{ id: 'e1' }] });
         reflectNewEntry(challenge, 'local-fill');
         const response = freshList('c1', [{ id: 'e1' }, { id: 'server2' }]);
@@ -2549,9 +2546,9 @@ describe('pre-submit live re-check (refreshChallengeState) — stale pass snapsh
         // The refresh swaps `challenge.member` for the fresh payload wholesale. An entry that
         // is also in the fresh list therefore comes back with the SERVER's flags — and the
         // server has not registered an apply from seconds ago, so it reports turbo/boosted
-        // false. That silently undid reflectEntryFlag: under the default action order
-        // (turbo, then autoFill, then boost) a turbo applied earlier in the pass had its flag
-        // wiped here, and boost then picked the very entry turbo had just consumed.
+        // false. Taken as-is, that would undo reflectEntryFlag: under the default action order
+        // (turbo, then autoFill, then boost) a turbo applied earlier in the pass would have its
+        // flag wiped here, and boost would then pick the very entry turbo had just consumed.
         const challenge = {
             id: 'c1',
             max_photo_submits: 4,
@@ -2809,7 +2806,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
 
     test('enriched vote counts decide the pick, beating the higher-view photo', async () => {
         // 'soccer' has more views and is newer, so it wins on the unenriched
-        // data — this is exactly the reported bug. 'portfolio' has 100k votes.
+        // data. 'portfolio' has 100k votes.
         const getEligiblePhotos = jest
             .fn()
             .mockResolvedValue([libraryPhoto('soccer', 1203, 9000), libraryPhoto('portfolio', 400, 1000)]);
@@ -2959,8 +2956,8 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             submitToChallenge,
         });
 
-        // The old code warned "nothing matched the challenge theme" here and told
-        // the user to add a Per-Title Tag Rule — advice to repair a fill that
+        // Warning "nothing matched the challenge theme" here and telling the user
+        // to add a Per-Title Tag Rule would be advice to repair a fill that
         // worked. That claim must not appear at any level.
         const allMessages = [
             ...logger.__level.warning.mock.calls,
@@ -3143,7 +3140,7 @@ describe('photo-stats enrichment in the fill pipeline', () => {
             submitToChallenge,
         });
 
-        // Degrades to the old views/date ranking rather than failing.
+        // Degrades to views/date ranking rather than failing.
         expect(result).toBe('submitted');
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['soccer'], 'tok');
     });

@@ -1,6 +1,6 @@
 /**
  * Tests for the shared useAutoClear hook (hooks/useAutoClear) — the
- * clear-transient-error-after-a-delay effect extracted from EntryBadge
+ * clear-transient-error-after-a-delay effect used by EntryBadge
  * and ChallengeCard.
  */
 

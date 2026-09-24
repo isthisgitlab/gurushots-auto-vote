@@ -2,8 +2,8 @@
  * Tests for the "challenge has ended" guard in VotingLogic.
  *
  * `isWithinFinalWindow` and `isWithinLastMinuteThreshold` both require `timeUntilEnd > 0`, so
- * before this guard existed a challenge whose close_time had passed fell through every
- * time-window rule and landed on the *normal* threshold rule — voting on a closed challenge
+ * without this guard a challenge whose close_time has passed would fall through every
+ * time-window rule and land on the *normal* threshold rule — voting on a closed challenge
  * at the ordinary exposure target. The orchestrator does no close-time filtering of its own
  * (it trusts getActiveChallenges), and it captures `now` per challenge, so a challenge that
  * closes partway through a pass reaches this code with a close_time in the past.

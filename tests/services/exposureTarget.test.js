@@ -1,11 +1,10 @@
 /**
  * Tests for the exposure trigger/target split in VotingLogic.
  *
- * Today both `exposure` and `finalWindowExposure` act as a single threshold that's
- * also the loop ceiling. The new `exposureTarget` and `finalWindowExposureTarget`
- * settings let users decouple the "vote if below" trigger from the "vote up to"
- * target — with a sentinel value of 0 meaning "follow the trigger" (legacy
- * behavior, the default).
+ * `exposure` and `finalWindowExposure` are the "vote if below" triggers;
+ * `exposureTarget` and `finalWindowExposureTarget` decouple the "vote up to"
+ * target from them — with a sentinel value of 0 (the default) meaning "follow
+ * the trigger", i.e. a single threshold that's also the loop ceiling.
  */
 
 const settings = require('../../src/js/settings');

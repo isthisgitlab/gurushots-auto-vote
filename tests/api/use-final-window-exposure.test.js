@@ -251,8 +251,7 @@ describe('useFinalWindowExposure setting', () => {
 
         const result = VotingLogic.evaluateVotingDecision(challenge, now);
 
-        // Pre-fix: would return shouldVote=true because target was hardcoded to 100 and 80 < 100.
-        // Post-fix: correctly returns shouldVote=false because 80 >= 70 (configured ceiling).
+        // The target is the configured 70% ceiling, not a hardcoded 100: 80 >= 70, so no vote.
         expect(result.shouldVote).toBe(false);
         expect(result.voteReason).toContain('normal threshold');
         expect(result.voteReason).toContain('80% >= 70%');

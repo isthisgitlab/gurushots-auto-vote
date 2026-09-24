@@ -169,7 +169,7 @@ const buildSearchTerms = (challenge, opts = {}) => {
     // GuruShots search index can't express "label starts with L" — so skip title
     // tokenisation and leave terms empty; the caller then fetches the full library
     // and the client-side letter filter in pickPhotosForChallenge narrows it. A
-    // non-letter title still tokenises as before.
+    // non-letter title tokenises normally.
     if (terms.length === 0 && !detectLetterPrefix(challenge?.title)) {
         // Subject segment only: on a series title the prefix ("Color Hunt") is
         // never a tag, so searching it spends a round-trip to find nothing and
@@ -179,8 +179,8 @@ const buildSearchTerms = (challenge, opts = {}) => {
         // qualifiers in front — "Epic Lighthouses", "Dramatic Storms", "Melodic
         // Instruments" — so reversing makes the subject the first term tried and
         // the last one the cap would drop. That matters because the cap is small:
-        // "Color Hunt: Blue & Orange" used to yield [color, hunt, blue] and lose
-        // "orange" entirely.
+        // in title order "Color Hunt: Blue & Orange" would yield [color, hunt, blue]
+        // and lose "orange" entirely.
         //
         // Never search a negated subject: "No Humans" searching "human" would
         // fetch exactly the photos the challenge forbids.

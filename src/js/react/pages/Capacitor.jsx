@@ -53,7 +53,7 @@ const bootstrap = async () => {
     if (isCapacitor()) {
         installBridge();
         await initSettings();
-        // Metadata rides the same platform-aware transport now — hydrate its
+        // Metadata rides the same platform-aware transport — hydrate its
         // cache too so per-challenge vote metadata survives relaunches.
         await initializeMetadataAsync();
         // Join-state markers (paid-unlock idempotency) ride the same transport;

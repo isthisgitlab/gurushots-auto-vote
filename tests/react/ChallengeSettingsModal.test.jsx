@@ -586,10 +586,10 @@ describe('ChallengeSettingsModal scheduled-fill hints', () => {
 
     test('(b) a corrupt entry before a valid one does not derail the hint (paired sources)', async () => {
         // Hand-edited settings can hold an unparseable entry; the hint must
-        // still render for the valid sibling. (The source pairing regression
-        // — labeling 11:30's window with the corrupt '25:99' string — is
-        // structural: occurrences stay paired with their entry before
-        // filtering, so a shifted index can't mislabel.)
+        // still render for the valid sibling. (Labeling 11:30's window with the
+        // corrupt '25:99' string is ruled out structurally: occurrences stay
+        // paired with their entry before filtering, so a shifted index can't
+        // mislabel.)
         mockApi.getChallengeOverrides.mockResolvedValue({
             useScheduledFill: true,
             scheduledFillTime: ['25:99', '21:30'],

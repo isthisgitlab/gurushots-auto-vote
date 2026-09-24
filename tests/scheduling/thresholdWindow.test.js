@@ -1,14 +1,13 @@
 /**
- * Shared last-minute threshold math, extracted from the two schedulers
- * (runScheduler.js for CLI/Android, autovoteScheduler.js for the GUI) which
- * previously each carried their own copy. The only platform difference was
- * how a per-challenge threshold is resolved — sync settings.getEffectiveSetting
- * on Node vs async window.api.getEffectiveSetting in the WebView — so the core
- * takes a `resolveThreshold` function and works with either.
+ * Shared last-minute threshold math used by both schedulers (runScheduler.js
+ * for CLI/Android, autovoteScheduler.js for the GUI). The only platform
+ * difference is how a per-challenge threshold is resolved — sync
+ * settings.getEffectiveSetting on Node vs async window.api.getEffectiveSetting
+ * in the WebView — so the core takes a `resolveThreshold` function and works
+ * with either.
  *
- * These cases mirror the prior per-scheduler tests and run against BOTH a
- * synchronous and an asynchronous resolver to prove the unified core matches
- * each platform's old behavior. This is the regression lock for Workstream D.
+ * These cases run against BOTH a synchronous and an asynchronous resolver to
+ * prove the core behaves identically on each platform.
  */
 
 const {
@@ -129,7 +128,7 @@ describe.each(Object.entries(resolvers))('thresholdWindow with %s', (_label, res
         });
 
         it('caps the delay to the soonest upcoming boundary when it is sooner than the random delay', async () => {
-            // Regression lock for the reported bug: challenge closes in 17 min,
+            // Challenge closes in 17 min,
             // per-challenge threshold 16 min → boundary is 60s away. With a 3-min
             // random delay we must cap to ~60s, not overshoot to 3 min.
             const now = Math.floor(Date.now() / 1000);

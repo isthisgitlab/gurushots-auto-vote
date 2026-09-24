@@ -13,7 +13,7 @@
  *   voteBeforeLastHourLeadMin  → voteBeforeFinalWindowLeadMin
  * An existing new-key value in the same scope is never overwritten; the legacy
  * key is always deleted. The new finalWindowDuration setting needs no
- * migration (absent → schema default 3600 = legacy fixed hour).
+ * migration (absent → schema default 3600, one hour).
  */
 
 const { buildSettingsFixture: buildFixture } = require('../helpers/challengeFixtures');

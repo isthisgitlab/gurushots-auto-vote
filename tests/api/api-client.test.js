@@ -403,9 +403,9 @@ describe('api-client', () => {
         });
 
         test('CapacitorHttp adapter rejects non-2xx so retry/backoff can classify it', async () => {
-            // Regression guard: CapacitorHttp.request resolves for ALL statuses,
-            // so before finalizeAdapterResponse the foreground path treated a
-            // 429/5xx error body as a success and the retry layer never fired.
+            // CapacitorHttp.request resolves for ALL statuses, so without
+            // finalizeAdapterResponse the foreground path would treat a 429/5xx
+            // error body as a success and the retry layer would never fire.
             const runtime = require('../../src/js/runtime');
             runtime.isCapacitor.mockReturnValue(true);
 

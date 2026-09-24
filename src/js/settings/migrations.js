@@ -11,13 +11,12 @@ const { ruleConditions, sortRulesByDefaultOrder } = require('./challengeRules');
 const { RESERVED_PROFILE_NAMES, normalizeProfileName, readProfilesMap } = require('./profileStore');
 const { ruleLogLabel } = require('./titleRuleSanitize');
 
-// Migrate buggy-GUI-encoded time values. Pre-fix (versions
-// v0.7.0 through v0.8.2), SettingInput stored boostTime /
-// turboTime as minutes (h*60+m) while the runtime treated
-// them as seconds. The buggy GUI could only write values in
-// [0, 1439] (max was 23h*60+59); schema defaults (3600, 7200)
-// are above that band, so untouched defaults pass through
-// unchanged.
+// Migrate buggy-GUI-encoded time values. Blobs written by
+// v0.7.0 through v0.8.2 hold boostTime / turboTime as
+// minutes (h*60+m), which the runtime reads as seconds.
+// That GUI could only write values in [0, 1439]
+// (max 23h*60+59); schema defaults (3600, 7200) are above
+// that band, so untouched defaults pass through unchanged.
 const migrateTimeUnits = (mergedSettings) => {
     if (mergedSettings._timeUnitMigratedV1) return false;
 
@@ -55,13 +54,13 @@ const migrateTimeUnits = (mergedSettings) => {
     return true;
 };
 
-// Migrate emergencyFill from minutes to seconds. It used to be a
-// plain `number` of minutes-before-close (1-59); it's now a `time`
-// setting stored in seconds (mirrors boostTime/turboTime). The old
-// GUI/CLI could only write 1-59, so a value in (0, 60) is a stale
-// minute encoding; 0 is the off sentinel and stays 0; legitimate new
+// Migrate emergencyFill from minutes to seconds. The stored legacy
+// form is a plain `number` of minutes-before-close (1-59); the setting
+// is a `time` stored in seconds (mirrors boostTime/turboTime). The
+// minute form only ever holds 1-59, so a value in (0, 60) is a stale
+// minute encoding; 0 is the off sentinel and stays 0; legitimate
 // seconds values from the time input start at 60, so the band
-// cleanly separates old-minutes from new-seconds. This is a separate
+// cleanly separates minutes from seconds. This is a separate
 // flag because _timeUnitMigratedV1 is already set for current users.
 const migrateEmergencyFillTime = (mergedSettings) => {
     if (mergedSettings._emergencyFillTimeMigratedV1) return false;
@@ -98,21 +97,21 @@ const migrateEmergencyFillTime = (mergedSettings) => {
     return true;
 };
 
-// Migrate autoFillIntervalMinutes into autoFillSchedule. The single
-// interval M is replaced by an explicit per-image schedule; the old
+// Migrate autoFillIntervalMinutes into autoFillSchedule. The legacy
+// single interval M maps to an explicit per-image schedule: its
 // trigger (`secondsRemaining <= slotsRemaining * M*60`) maps, for the
 // common 4-slot challenge, to targets 2 @ 3M, 3 @ 2M, 4 @ 1M minutes
 // before close. Always derived from the USER'S persisted M (a 15m
 // user gets 45/30/15), never from the schema default; each scope is
 // migrated independently. Runs before cleanupObsoleteSettings, which
-// would otherwise just delete the now-schemaless legacy key.
+// would otherwise just delete the schemaless legacy key.
 const migrateAutoFillSchedule = (mergedSettings) => {
     if (mergedSettings._autoFillScheduleMigratedV1) return false;
 
     const LEGACY_KEY = 'autoFillIntervalMinutes';
-    // Clamp to the old validator's 60-minute ceiling and round: a
+    // Clamp to the legacy key's 60-minute ceiling and round: a
     // hand-edited non-integer or oversized legacy value must not
-    // migrate into a schedule the new int()/max() schema rejects.
+    // migrate into a schedule the int()/max() schema rejects.
     const toSchedule = (minutes) => {
         const m = Math.min(minutes, 60);
         return [
@@ -151,10 +150,10 @@ const migrateAutoFillSchedule = (mergedSettings) => {
 };
 
 // Sanitize persisted autoFillSchedule values to the current bounds
-// (counts 2-4, ≤3 rows, unique counts, seconds within cap). The
-// wide pre-tightening editor could store counts up to 20; because
-// the Settings modal resubmits every persisted key on save, such a
-// value would fail the tightened validator and block saving ANY
+// (counts 2-4, ≤3 rows, unique counts, seconds within cap). A
+// persisted blob can hold counts up to 20; because the Settings
+// modal resubmits every persisted key on save, such a value
+// would fail the validator and block saving ANY
 // setting. Runs after the interval→schedule migration above, whose
 // output always conforms already. Note this is a ONE-TIME pass
 // (flag-gated like the migrations), not a standing invariant:
@@ -211,12 +210,12 @@ const _eachScheduledFillScope = (mergedSettings, visit) => {
     }
 };
 
-// Migrate the scheduled-fill triggers from scalars to lists (issue #26
-// follow-up: multiple fill windows per challenge). Off-sentinel handling is
+// Migrate the scheduled-fill triggers from scalars to lists (issue #26:
+// multiple fill windows per challenge). Off-sentinel handling is
 // SCOPE-DEPENDENT and load-bearing:
 //   - globalDefaults: '' / 0 / corrupt → delete the key. Safe there only,
 //     because getGlobalDefault falls back to the schema default, which is
-//     also [] after this change.
+//     also [].
 //   - perChallenge / profiles: an off-sentinel '' / 0 migrates to [] IN
 //     PLACE — never delete. getChallengeOverride distinguishes "no override"
 //     (null → falls through to the global default) from "override present"
@@ -299,13 +298,13 @@ const migrateScheduledFillListBounds = (mergedSettings) => {
 };
 
 // Rename the "last hour exposure" feature keys to their "final window"
-// equivalents (the fixed 1h window became the configurable finalWindowDuration
+// equivalents (the window length is the configurable finalWindowDuration
 // setting). A pure key rename that must run BEFORE cleanupObsoleteSettings,
-// which would otherwise delete the now-schemaless old keys and lose the user's
+// which would otherwise delete the schemaless old keys and lose the user's
 // persisted values. Walks all three scopes via _eachScheduledFillScope
 // (globalDefaults, every perChallenge map, every non-reserved profile). The new
 // finalWindowDuration setting needs no migration: absent → schema default 3600,
-// which reproduces the legacy fixed one-hour behaviour.
+// the one-hour window the renamed keys were configured against.
 const migrateFinalWindowExposureRename = (mergedSettings) => {
     if (mergedSettings._finalWindowExposureRenamedV1) return false;
 
@@ -363,9 +362,9 @@ const _rulesMayOverlap = (a, b) => {
 };
 
 /**
- * Title rules used to apply one at a time (the most specific won outright);
- * now a key the higher rule leaves unset falls through to the next matching
- * rule. Warn about every pair where that fall-through could newly switch
+ * A key the higher title rule leaves unset falls through to the next matching
+ * rule, which a blob configured under most-specific-wins semantics may not
+ * expect. Warn about every pair where that fall-through could switch
  * auto-join or auto-submit ON, so the user can review the order.
  */
 const _warnAboutSpendingFallThrough = (titleRules, profiles) => {

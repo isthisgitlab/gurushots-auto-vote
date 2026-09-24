@@ -29,7 +29,7 @@ class BaseMiddleware {
         const response = await this.apiStrategy.authenticate(email, password);
         // Token extraction is shared with the GUI IPC handler via
         // extractAuthResult so CLI and GUI accept the same token keys /
-        // success indicators — historically _login only honoured `token`.
+        // success indicators.
         const { ok, token } = extractAuthResult(response);
         if (ok) {
             settings.setSetting('token', token);
@@ -173,8 +173,8 @@ class BaseMiddleware {
         try {
             const challengesResponse = await this.apiStrategy.getActiveChallenges(token);
             // fetchFailed is the load-bearing check: getActiveChallenges always resolves a
-            // list shape, so `!challengesResponse.challenges` can never be true on failure and
-            // an outage used to fall through to voting an empty list, reporting
+            // list shape, so `!challengesResponse.challenges` can never be true on failure;
+            // without it an outage would fall through to voting an empty list, reporting
             // "0 voted, 0 skipped of 0" as if there were simply nothing to do.
             if (!challengesResponse || challengesResponse.fetchFailed || !challengesResponse.challenges) {
                 logger.withCategory('challenges').warning('Failed to fetch challenges for manual voting', null);

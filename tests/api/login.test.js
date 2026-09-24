@@ -6,7 +6,7 @@
 
 const { authenticate } = require('../../src/js/api/login');
 
-// Mock the api-client module — login now routes through makePostRequest so the
+// Mock the api-client module — login routes through makePostRequest so the
 // CapacitorHttp adapter applies on Android.
 jest.mock('../../src/js/api/api-client', () => ({
     makePostRequest: jest.fn(),
@@ -113,8 +113,8 @@ describe('login', () => {
         });
 
         test('should encode special characters in the password', async () => {
-            // Regression: the password used to be interpolated raw, so & = %
-            // + truncated or corrupted it server-side.
+            // The password must be URL-encoded: interpolated raw, & = % +
+            // would truncate or corrupt it server-side.
             const trickyPassword = 'p&ss=w%rd+100%ä';
             makePostRequest.mockResolvedValueOnce({ token: 'test-token' });
 

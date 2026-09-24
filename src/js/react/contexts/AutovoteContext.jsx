@@ -366,7 +366,7 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         const initialChallenges = await runVotingCycle();
 
         // Hand off to the unified cadence chain. The shared decision (fast
-        // in-window / capped approaching / normal) means start() no longer needs
+        // in-window / capped approaching / normal) means start() doesn't need
         // to special-case "already inside a window" — scheduleNext picks the
         // right cadence from the initial cycle's challenge list.
         clearCycleTimer(cycleTimerRef);

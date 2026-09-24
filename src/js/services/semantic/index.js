@@ -13,22 +13,22 @@
  * It uses the static word-vector lexicon shipped with the app, which runs
  * offline on every platform. Anything going wrong (asset missing, no theme
  * text, no in-vocabulary labels) resolves to null and the caller ranks
- * lexically, exactly as before - semantic matching never breaks a fill.
+ * lexically - semantic matching never breaks a fill.
  *
  * POOLING: max over labels, NOT mean over the flattened stem bag.
  *
- * The bag was the original shape and it was wrong in both directions. A photo's
- * labels are an unordered set in which one or two entries carry the theme and
- * the rest are scene furniture ("Person", "Clothing", "Outdoors"); averaging
- * them lands near the corpus centroid, so the score measured how GENERIC a
- * photo was rather than how on-theme, and it got worse the more labels a photo
- * had. Measured against a real library on the live "Stairs" challenge:
+ * Mean over the bag is wrong in both directions. A photo's labels are an
+ * unordered set in which one or two entries carry the theme and the rest are
+ * scene furniture ("Person", "Clothing", "Outdoors"); averaging them lands near
+ * the corpus centroid, so the score measures how GENERIC a photo is rather than
+ * how on-theme, and it gets worse the more labels a photo has. Measured against
+ * a real library on the live "Stairs" challenge:
  *
  *            on-theme median   off-theme median   AUC
  *   mean            0.394             0.159       0.9715
  *   max             0.939             0.273       1.0000
  *
- * Concretely, a genuine staircase photo scored 0.389 - under the floor, forced
+ * Concretely, under mean a genuine staircase photo scored 0.389 - under the floor, forced
  * to 0, no credit at all - while a yoga photo scored 0.583 and was promoted as
  * on theme. Max-pooling separates the same two at 0.939 vs 0.483.
  *
@@ -182,7 +182,7 @@ const getSemanticScores = async (challenge, photos, ignoreWords = null) => {
             // stems each label while keeping them separate, which is what lets
             // the max below be taken over labels rather than words.
             const pooled = poolLabels(challengeVec, labelStemGroups(photo), embedCached);
-            // Every label out of vocabulary -> no signal, same as before. That is
+            // Every label out of vocabulary -> no signal. That is
             // distinct from "scored 0", which is a measured miss.
             if (pooled) scores.set(String(id), pooled);
         }

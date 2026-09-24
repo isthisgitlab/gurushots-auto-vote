@@ -4,7 +4,7 @@ on:
     # No pull_request: trigger — test.yml already runs the full suite (lint,
     # typecheck, audit, coverage, lexicon, size) on every PR. The `test` job
     # below only exists to gate the push-triggered release chain (see its
-    # comment), which never fires on a PR, so a PR trigger here was pure
+    # comment), which never fires on a PR, so a PR trigger here would be pure
     # duplicate spend.
     push:
         branches: [master, develop]
@@ -272,9 +272,8 @@ jobs:
                       # (Versions/Current and friends) and zip without -y dereferences them.
                       ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 
-                      # Guard against that regression returning: dereferencing duplicated
-                      # Electron Framework and tripled the archive (v1.4.1 shipped 363 MB
-                      # for a 311 MB bundle). Count the source bundle rather than hardcode
+                      # Guard against dereferencing: it duplicates Electron Framework and
+                      # roughly triples the archive. Count the source bundle rather than hardcode
                       # a total, so this catches a partial dereference too and survives an
                       # Electron bump that changes the framework layout.
                       EXPECTED=$(find "$APP" -type l | wc -l | tr -d ' ')
@@ -498,7 +497,7 @@ jobs:
         # A job-level permissions block REPLACES the workflow-level set (it does
         # not merge). This job commits the version bump, pushes the tag, and
         # publishes the release, so it escalates above the workflow-level
-        # contents:read default. packages:write is dropped — nothing here pushes
+        # contents:read default. packages:write is omitted — nothing here pushes
         # to GitHub Packages.
         permissions:
             contents: write

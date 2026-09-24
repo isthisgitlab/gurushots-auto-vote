@@ -23,8 +23,8 @@ const { runFillAttempt } = require('./pipeline');
  *   getEligiblePhotos: function,
  *   submitToChallenge: function,
  * }} deps - settings is required in production (the IPC handler always
- *   passes it); it is optional only so legacy failure-path unit tests can
- *   omit it, in which case tag rules degrade to "no filter".
+ *   passes it); it is optional only so failure-path unit tests can omit it,
+ *   in which case tag rules degrade to "no filter".
  * @returns {Promise<{success: boolean, submitted: number, skipped: number, error?: string}>}
  */
 const fillChallengeNow = async (challenge, token, mode, deps) => {
@@ -45,8 +45,8 @@ const fillChallengeNow = async (challenge, token, mode, deps) => {
     // enrichment to every manual fill until the next pass happened to reset it.
     resetPhotoStatsPassState();
 
-    // settings is optional for fillChallengeNow — unit tests for legacy
-    // failure paths invoke without it. The production IPC handler always
+    // settings is optional for fillChallengeNow — unit tests for failure
+    // paths invoke without it. The production IPC handler always
     // passes settings, so this branch firing in real runs would mean a
     // caller forgot to wire deps; emit a debug line so it's observable.
     let mustIncludeTags = null;

@@ -5,7 +5,7 @@ import { LogViewerBody } from '@/components/logs/LogViewerBody';
 import { ConnectionBadge } from '@/components/ui/StatusBadge';
 
 /**
- * Live log viewer body. Split out so useLogStream only subscribes while the
+ * Live log viewer body. A separate component so useLogStream only subscribes while the
  * modal is open: Modal renders null when closed, so this never mounts (and
  * never holds a stream subscription / backlog) until the user opens the viewer.
  */

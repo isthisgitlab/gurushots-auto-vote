@@ -85,7 +85,7 @@ const evaluateEmergencyFill = (challenge, challengeId, settings) => {
  *   submitToChallenge: function,
  *   getActiveChallenges?: function,
  * }} deps - getActiveChallenges enables the pre-submit live re-check; when
- *   absent the fill proceeds on pass-start data (legacy behavior).
+ *   absent the fill proceeds on pass-start data.
  * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-eligible-photos'|'error'>}
  */
 const maybeEmergencyFillChallenge = async (challenge, token, now, deps) => {

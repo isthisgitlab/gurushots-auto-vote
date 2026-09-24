@@ -263,8 +263,8 @@ const enrichCandidates = async (photos, token, deps) => {
     // just picks the reading order, and views is a decent prior for "which
     // photo is likely to have lots of votes". Because measured photos leave the
     // queue permanently, coverage still reaches every candidate; views only
-    // affects how soon. The original bug was views DECIDING the submission, not
-    // views being consulted at all.
+    // affects how soon. What must never happen is views DECIDING the submission;
+    // consulting views for the reading order is harmless.
     const needFetch = [];
     const resolved = new Map();
     const seen = new Set();

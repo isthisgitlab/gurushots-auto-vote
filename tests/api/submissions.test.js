@@ -129,9 +129,8 @@ describe('submissions', () => {
         test('a mid-walk rejection keeps the pages already fetched and warns', async () => {
             makePostRequest.mockResolvedValueOnce(page('p1', 'p2')).mockRejectedValueOnce(new Error('socket hang up'));
             const photos = await getEligiblePhotos('c1', token, { limit: 2, paginate: true });
-            // Must NOT propagate: a transient failure on page 2 previously would
-            // have been a single-request success, and throwing here would fail
-            // the whole fill.
+            // Must NOT propagate: the pages already fetched are usable, and
+            // throwing here would fail the whole fill.
             expect(photos.map((p) => p.id)).toEqual(['p1', 'p2']);
             expect(log.warning).toHaveBeenCalledWith(expect.stringContaining('reading page 2'), null);
         });

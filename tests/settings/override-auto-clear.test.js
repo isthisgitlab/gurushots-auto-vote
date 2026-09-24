@@ -2,12 +2,12 @@
  * Per-challenge override auto-clear for reference-typed settings.
  *
  * _applyChallengeOverride prunes an override that equals the effective global
- * default. That comparison was reference-equality, so array-typed settings
- * (mustIncludeTags/shouldIncludeTags) never matched their default and a
- * "set back to default" override was stored forever instead of cleared.
- * Now valuesEqual (content compare) drives the pruning; these tests assert
- * the observable boundary: getChallengeOverride / getEffectiveSetting no
- * longer report an override once the value matches the default again.
+ * default. The comparison is by content (valuesEqual): under reference
+ * equality, array-typed settings (mustIncludeTags/shouldIncludeTags) would
+ * never match their default and a "set back to default" override would be
+ * stored forever instead of cleared. These tests assert the observable
+ * boundary: getChallengeOverride / getEffectiveSetting stop reporting an
+ * override once the value matches the default again.
  *
  * Drives the in-memory headless-store seam (same as title-tag-rules.test.js)
  * so the facade's loadSettings/saveSettings round-trip without touching fs.
@@ -68,7 +68,7 @@ describe('settings facade — override auto-clear vs global default', () => {
         it('clears the override when set back to a value equal to the default', () => {
             settings.setChallengeOverride('mustIncludeTags', challengeId, ['macro']);
             // A fresh [] is content-equal but not reference-equal to the
-            // schema default — the exact case the old !== compare got wrong.
+            // schema default — the exact case a !== compare gets wrong.
             expect(settings.setChallengeOverride('mustIncludeTags', challengeId, [])).toBe(true);
             expect(settings.getChallengeOverride('mustIncludeTags', challengeId)).toBeNull();
         });

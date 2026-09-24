@@ -28,7 +28,7 @@ describe('findActiveChallenge', () => {
     });
 
     test('does NOT match a garbage-suffixed query against a numeric id (parseInt would have)', () => {
-        // parseInt('111abc') === 111 — the old comparison accepted this.
+        // parseInt('111abc') === 111 — a parseInt comparison would accept this.
         expect(findActiveChallenge(challenges, '111abc')).toBeNull();
     });
 

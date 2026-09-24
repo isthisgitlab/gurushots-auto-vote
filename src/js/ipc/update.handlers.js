@@ -1,9 +1,9 @@
 /**
  * IPC handlers for the auto-updater. The AutoUpdater instance and the
- * main BrowserWindow reference still live in index.js; we receive
+ * main BrowserWindow reference live in index.js; we receive
  * accessors so we can read/write them without owning the lifecycle.
  *
- * Lifecycle ownership stays in index.js because the AutoUpdater is
+ * Lifecycle ownership is in index.js because the AutoUpdater is
  * created lazily on the first manual `check-for-updates`, and the
  * main window's setup path needs to wire the same instance via
  * `autoUpdater.setMainWindow`.

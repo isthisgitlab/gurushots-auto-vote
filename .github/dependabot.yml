@@ -1,6 +1,6 @@
 version: 2
 
-# Automates the currency that was previously maintained by hand (`pnpm bump`).
+# Automates dependency currency; `pnpm bump` stays available for ad-hoc bumps.
 # Dependabot is pnpm-aware (updates pnpm-lock.yaml). The intentional version pins
 # survive its PRs two ways: prettier (4.0.0-alpha) and typescript (7.1.0-dev
 # nightly, lockstep with ttsc) are pre-releases, and Dependabot only offers
@@ -71,9 +71,7 @@ updates:
 
     # The '/' entry covers .github/workflows/** only — composite actions
     # nested under .github/actions/*/action.yml need their own directory,
-    # or they silently drift behind the workflows on every major bump
-    # (which is exactly how setup-node sat at v6 here while workflows
-    # moved to v7).
+    # or they silently drift behind the workflows on every major bump.
     - package-ecosystem: 'github-actions'
       directory: '/.github/actions/setup-build'
       schedule:
@@ -82,8 +80,7 @@ updates:
           - 'dependencies'
           - 'github-actions'
 
-    # The Android app's Gradle dependency tree was previously unmonitored
-    # despite being built and signed in CI.
+    # The Android app's Gradle dependency tree, which CI builds and signs.
     - package-ecosystem: 'gradle'
       directory: '/android'
       schedule:

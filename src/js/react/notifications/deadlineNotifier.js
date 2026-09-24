@@ -159,7 +159,7 @@ export function deliverElectronNotification({ title, body }) {
  * Pick the renderer delivery function for the current platform. Electron gets
  * the Web Notification deliverer; native Android gets `null`, the caller's
  * signal NOT to wire the notifier at all (the native service is authoritative
- * there — see the file header). Extracted + exported so the platform decision
+ * there — see the file header). Exported so the platform decision
  * is unit-testable rather than an inline ternary a future edit could invert.
  *
  * @param {boolean} isNativePlatform

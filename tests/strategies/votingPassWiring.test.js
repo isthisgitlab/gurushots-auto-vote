@@ -5,13 +5,13 @@
  * src/js/mock/strategy.js (the VOTING_PASS_ENDPOINTS name list) each list every
  * method by hand, while
  * votingOrchestrator turns it into the `fillDeps` bundle the auto-fill pipeline
- * consumes. Nothing forces the two lists to agree — and when `getImageData`
- * was added to the API surface but not to these literals, every scheduled fill
- * silently received `getImageData: undefined`. photoStats treats that as
- * "degrade to stats-unknown", so auto-fill, emergency fill and fill-new all
- * quietly went back to ranking on the flat votes:0 data this feature exists to
- * replace, in BOTH real and mock mode, with every unit test still green
- * (they inject deps by hand and never exercise this wiring).
+ * consumes. Nothing forces the two lists to agree — a method on the API
+ * surface but missing from these literals (e.g. `getImageData`) reaches every
+ * scheduled fill as `undefined`. photoStats treats that as "degrade to
+ * stats-unknown", so auto-fill, emergency fill and fill-new would all quietly
+ * rank on the flat votes:0 data this feature exists to replace, in BOTH real
+ * and mock mode, with every unit test still green (they inject deps by hand
+ * and never exercise this wiring).
  *
  * A missing key here is invisible at runtime, so it gets a structural test.
  */

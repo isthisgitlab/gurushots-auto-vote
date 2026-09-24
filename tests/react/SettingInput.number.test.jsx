@@ -1,18 +1,17 @@
 /**
  * The number branch of SettingInput.
  *
- * Two bugs shipped together here and both are user-visible:
+ * Two user-visible guarantees:
  *
- *   - No schema entry ever defined min/max/unit even though the IPC projection forwarded them
- *     and this component bound them, so every number field rendered unbounded, unlabelled and
- *     with no way to see why a value was refused.
- *   - `parseInt(e.target.value, 10) || 0` turned an emptied field into 0, which zod rejects
- *     for a minimum-1 key like exposure — the user got a save failure for a value they never
- *     typed.
+ *   - The schema's min/max/unit reach the field through the IPC projection, so every number
+ *     field renders bounded and labelled, with a visible reason when a value is refused.
+ *   - An emptied field is not coerced to 0 (as `parseInt(e.target.value, 10) || 0` would do),
+ *     which zod rejects for a minimum-1 key like exposure — a save failure for a value the user
+ *     never typed.
  *
  * The blank case matters most for the settings whose min is 0 (exposureTarget,
  * finalWindowExposureTarget and the two entry-slot indexes): `Number('')` is 0, so a blank field
- * looked perfectly in range, no field was highlighted, and Save then showed the generic
+ * would look perfectly in range, no field would be highlighted, and Save would show the generic
  * "check the highlighted values" banner pointing at nothing.
  */
 

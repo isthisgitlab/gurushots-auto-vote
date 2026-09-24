@@ -157,7 +157,7 @@ const _triggerWindowState = (challenge, challengeId, now, keys) => {
 /**
  * Scheduled-fill state for a challenge at `now`.
  *
- * Both triggers are LISTS (issue #26 follow-up): every scheduledFillTime
+ * Both triggers are LISTS: every scheduledFillTime
  * entry opens its own daily window and every scheduledFillBeforeEnd entry its
  * own one-shot window, all sharing scheduledFillWindowMinutes, all OR'd. See
  * _triggerWindowState for the entry semantics.

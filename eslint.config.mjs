@@ -26,7 +26,7 @@ export default [
     },
     pluginJs.configs.recommended,
     // Underscore-prefixed args/catch bindings are intentionally unused (e.g.
-    // params kept for caller positional backward-compat). Lets those sites
+    // positional params that callers still pass). Lets those sites
     // drop `eslint-disable no-unused-vars` comments, which @ttsc/lint would
     // otherwise warn about as unknown-rule directives on every typecheck run.
     {

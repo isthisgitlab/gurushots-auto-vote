@@ -80,13 +80,12 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
 
     // Vote over a shuffled, de-duplicated copy of the pool.
     //
-    // This used to sample `images` at random and terminate on
-    // `uniqueImageIds.size === images.length`. That guard is unreachable whenever the
-    // endpoint returns one image id twice — the Set can never grow to the array's length —
-    // so once every distinct id had been consumed the loop spun forever on `continue`,
-    // synchronously, with no cancellation check. Iterating a shuffled deduped list makes
-    // termination structural: each iteration consumes exactly one candidate. Shuffling first
-    // preserves the same distribution over selection order the rejection sampling had.
+    // Iterating a shuffled deduped list makes termination structural: each iteration
+    // consumes exactly one candidate. Random sampling with a `seen.size === images.length`
+    // stop is unreachable whenever the endpoint returns one image id twice — the Set can
+    // never grow to the array's length — so it would spin forever on `continue`,
+    // synchronously, with no cancellation check. Shuffling first gives the same
+    // distribution over selection order that random sampling would.
     const uniqueImages = [];
     const seenImageIds = new Set();
     for (const image of images) {
@@ -105,8 +104,8 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
     let unusableRatios = 0;
 
     for (const image of uniqueImages) {
-        // Keep the original comparison verbatim rather than negating it. A legacy caller can
-        // still pass a function as the target, and `number < function` is false — but so is
+        // Keep this comparison as written rather than negating it. A caller can pass a
+        // function as the target, and `number < function` is false — but so is
         // `number >= function`, so an inverted test would vote the whole pool instead of
         // standing down. See the thresholdFunction case in tests/api/voting.test.js.
         if (!(exposure_factor < targetExposure)) break;
@@ -115,7 +114,7 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
         votedImages += `&image_ids[]=${encodeURIComponent(image.id)}`;
 
         // A missing or non-numeric ratio must not poison the accumulator: `NaN < target` is
-        // false, so a single malformed entry used to end the loop after one vote and submit
+        // false, so a single malformed entry would end the loop after one vote and submit
         // a near-empty ballot without warning. Count it instead and keep going.
         const ratio = Number(image.ratio);
         if (Number.isFinite(ratio)) {
@@ -134,8 +133,8 @@ const submitVotes = async (voteImages, token, targetExposure = 100) => {
             );
     }
 
-    // Only a genuine shortfall is worth warning about. The old code warned whenever the pool
-    // was exhausted, including when the final image carried us past the target.
+    // Only a genuine shortfall is worth warning about — not an exhausted pool whose final
+    // image carried us past the target.
     if (votedImageIds.length > 0 && exposure_factor < targetExposure) {
         logger
             .withCategory('voting')

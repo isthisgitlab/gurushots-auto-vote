@@ -4,7 +4,7 @@ import { PulseDot } from '../ui/PulseDot';
 /**
  * Bordered panel above the challenge list holding a heading (emoji +
  * label + count) and a wrapping row of chips. Shared by ChallengeNav
- * and BoostWindowBanner, whose wrappers were structurally identical.
+ * and BoostWindowBanner.
  */
 export function ChipListPanel({ icon, label, count, children }) {
     return (

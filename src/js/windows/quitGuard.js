@@ -4,8 +4,8 @@
  *
  * WHY: the cadence chain lives in the main window's renderer, and auto-boost
  * waits until the configured Boost Time before the window closes. Quitting in
- * that gap silently forfeits the boost — the observed case was a quit 19
- * minutes before a boost deadline, relaunched after it had passed.
+ * that gap silently forfeits the boost — e.g. a quit 19 minutes before a
+ * boost deadline, relaunched after it has passed.
  *
  * Only boosts due within QUIT_WARN_HORIZON_SEC ask: an open window whose boost
  * is hours or days away (a key-unlocked boost has no expiry of its own) loses

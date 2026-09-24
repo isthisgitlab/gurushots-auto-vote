@@ -80,8 +80,7 @@ describe('evaluateManualVotingToHundred', () => {
 
     test('handles absent ranking node defensively (treats as 0% exposure)', () => {
         // Partial API response — challenge.member exists but no ranking
-        // tree yet. Pre-fix this would throw; post-fix it treats exposure
-        // as 0% and allows the vote.
+        // tree yet. Must not throw: treats exposure as 0% and allows the vote.
         const now = Math.floor(Date.now() / 1000);
         const challenge = {
             id: '222',

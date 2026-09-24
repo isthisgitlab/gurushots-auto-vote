@@ -80,7 +80,7 @@ const effectiveExposureOf = (allSettings) => {
 // holds one of these schemas; validateSetting / getValidationError run it via
 // safeParse. Centralizing the shapes keeps the per-entry declarations
 // declarative and the type/range rules in one place. zod's z.number()
-// rejects NaN and numeric strings, matching the previous typeof predicates.
+// rejects NaN and numeric strings.
 const zBool = z.boolean();
 const zString = z.string();
 const percentage = z.number().min(1).max(100); // exposure-style trigger, 1–100
@@ -114,7 +114,7 @@ const joinPercentElapsed = z.number().min(0).max(MAX_JOIN_PERCENT_ELAPSED);
 // Entry-slot index: 1-4 selects a slot, 0 is the "last entry" sentinel. GuruShots challenges
 // carry at most four submissions (max_photo_submits tops out at 4, which is also why the
 // auto-fill schedule only covers images 2-4), so anything above 4 could never name a real
-// slot — it used to be accepted and then silently clamped to the last entry at pick time.
+// slot and is rejected rather than silently clamped to the last entry at pick time.
 const MAX_ENTRY_SLOT = 4;
 const entrySlotIndex = z.number().int().min(0).max(MAX_ENTRY_SLOT);
 // Currency automation (keys / swaps / fills). Per-challenge spend caps: how many
@@ -130,10 +130,10 @@ const currencyReserve = z.number().int().min(0).max(MAX_CURRENCY_RESERVE);
 // rule. 0 = no vote condition.
 const MAX_SWAP_VOTE_CEILING = 1_000_000;
 const swapVoteCeiling = z.number().int().min(0).max(MAX_SWAP_VOTE_CEILING);
-// Shared 1–59 range, preserving the previous predicates exactly: used by both
-// lastMinuteThreshold (minutes-before-close that count as "last minute") and
-// lastMinuteCheckFrequency (poll cadence in minutes). Neither is required to be
-// an integer (matching prior behavior); the 59 ceiling keeps both within the hour.
+// Shared 1–59 range, used by both lastMinuteThreshold (minutes-before-close
+// that count as "last minute") and lastMinuteCheckFrequency (poll cadence in
+// minutes). Neither is required to be an integer; the 59 ceiling keeps both
+// within the hour.
 const minute1to59 = z.number().min(1).max(59);
 
 // Notification lead time (minutes before an action fires that a warning is
@@ -162,7 +162,7 @@ const currencyRuleSec = z.number().int().min(0).max(MAX_SCHEDULE_SECONDS);
 // Final-window duration (seconds before close during which the final-window
 // exposure rule applies). Integer, at least 60s (a shorter window is
 // meaningless against poll cadence) and capped by the same 30-day schedule
-// ceiling as every other duration. Default is 3600 (the legacy fixed hour).
+// ceiling as every other duration. Default is 3600 (one hour).
 const finalWindowDurationSec = z.number().int().min(60).max(MAX_SCHEDULE_SECONDS);
 const fillScheduleRow = z
     .object({
@@ -236,7 +236,7 @@ const tagsList = z
     )
     .max(MAX_TAGS_PER_LIST);
 
-// Scheduled fill: LISTS of triggers (issue #26 follow-up — "fill twice in a
+// Scheduled fill: LISTS of triggers (issue #26 — "fill twice in a
 // day, like 4 hours to the end and 10 hours to the end"). Each entry opens
 // its own fill window; the empty array is the off sentinel and the schema
 // default (scalar '' / 0 values in a stored blob are migrated to lists in
@@ -331,11 +331,10 @@ const sanitizeBeforeEndList = (value) => {
 /** @type {Record<string, SettingsSchemaEntry>} */
 const SETTINGS_SCHEMA = {
     // --- General ---
-    // NOTE on min/max/unit: the IPC schema projection and SettingInput have always
-    // forwarded these three fields, but no entry ever defined them — so every number input
-    // rendered unbounded and unlabelled, and the only feedback for an out-of-range value was
-    // a generic "could not be saved" banner. They mirror the zod validator directly; keep the
-    // two in step when either changes.
+    // NOTE on min/max/unit: the IPC schema projection and SettingInput forward these three
+    // fields; without them a number input renders unbounded and unlabelled, and the only
+    // feedback for an out-of-range value is a generic "could not be saved" banner. They
+    // mirror the zod validator directly; keep the two in step when either changes.
     exposure: {
         type: 'number',
         default: 100,
@@ -351,7 +350,7 @@ const SETTINGS_SCHEMA = {
     },
     exposureTarget: {
         type: 'number',
-        // 0 is a sentinel meaning "vote up to the exposure trigger value" (legacy behavior).
+        // 0 is a sentinel meaning "vote up to the exposure trigger value".
         // Any 1-100 explicitly overrides the target so the loop keeps voting past the trigger.
         default: 0,
         perChallenge: true,
@@ -400,7 +399,7 @@ const SETTINGS_SCHEMA = {
         validationOrder: 1,
         // Display-only: it changes how the challenge card is drawn, not how the
         // challenge is voted, so it sits in the `display` group rather than
-        // among the exposure knobs it used to be listed beside.
+        // among the exposure knobs.
         group: 'display',
         label: 'app.compactCards',
         description: 'app.compactCardsDesc',
@@ -872,9 +871,9 @@ const SETTINGS_SCHEMA = {
 
     // --- Final Window Exposure ---
     // Duration of the "final window" before a challenge closes during which the
-    // final-window exposure rule applies. Default 3600s (1 hour) preserves the
-    // legacy fixed one-hour behaviour; stored as seconds via the hours/minutes
-    // input. Read per-challenge by the voting rules and the top-up scheduler.
+    // final-window exposure rule applies. Default 3600s (1 hour); stored as
+    // seconds via the hours/minutes input. Read per-challenge by the voting
+    // rules and the top-up scheduler.
     finalWindowDuration: {
         type: 'time', // hours/minutes input, stored as seconds
         default: 3600, // 1 hour in seconds
@@ -920,7 +919,7 @@ const SETTINGS_SCHEMA = {
     },
     finalWindowExposureTarget: {
         type: 'number',
-        // 0 is a sentinel meaning "vote up to the finalWindowExposure trigger value" (legacy behavior).
+        // 0 is a sentinel meaning "vote up to the finalWindowExposure trigger value".
         default: 0,
         perChallenge: true,
         validation: percentageOrZero,
@@ -1164,12 +1163,11 @@ const SETTINGS_SCHEMA = {
     // title profile can turn it on for its title. Scope below decides WHICH open
     // challenges are joined; the coin caps gate paid ones.
     //
-    // NOTE: the former `autoJoinAll` boolean was removed. The scope model is now
-    // "default = all types" narrowed by autoJoinTypes; enabling autoJoin therefore
-    // joins ALL open (free) challenges unless a type list narrows it. Paid stays
-    // gated by the coin caps below (0 = free only), so no unintended spend. An
-    // orphaned autoJoinAll value in an old settings file is inert (never read;
-    // pruned by cleanupObsoleteSettings).
+    // NOTE: the scope model is "default = all types" narrowed by autoJoinTypes;
+    // enabling autoJoin therefore joins ALL open (free) challenges unless a type
+    // list narrows it. Paid stays gated by the coin caps below (0 = free only),
+    // so no unintended spend. An orphaned autoJoinAll key in a stored settings
+    // file is inert (never read; pruned by cleanupObsoleteSettings).
     autoJoin: {
         type: 'boolean',
         default: false,
@@ -1236,9 +1234,9 @@ const SETTINGS_SCHEMA = {
         description: 'app.autoJoinExcludeChallengeTagsDesc',
     },
     // Join-timing gate: only join a candidate once it is within this many hours
-    // of its close_time. 0 = off (join as soon as the candidate is seen — the
-    // historical behavior), so this is the "0 = feature off" sentinel family,
-    // NOT the exposureTarget "0 = same as trigger" one.
+    // of its close_time. 0 = off (join as soon as the candidate is seen), so
+    // this is the "0 = feature off" sentinel family, NOT the exposureTarget
+    // "0 = same as trigger" one.
     //
     // FAIL-CLOSED: while this is above 0, a candidate whose close_time cannot be
     // read is NOT joined (see VotingLogic.shouldJoinChallenge). An un-joined
@@ -1584,11 +1582,11 @@ const SETTINGS_TIERS = [
  *
  * Group ids are persisted-adjacent — `getGroupApplicability` switches on them
  * and tests assert on them — so ordering and labels change here freely, but an
- * id does not. In particular `scheduledFill` keeps its id while its labels now
+ * id does not. In particular `scheduledFill` keeps its id while its labels
  * read "Scheduled Voting": it is an exposure-voting rule (it returns a
  * `decided('scheduled', ...)` from `_runVotingRules`), not an entry fill like
- * autoFill/emergencyFill, and sharing the word "fill" with them read as if the
- * three were siblings. `autoFill`/`emergencyFill` are labelled "Auto-Submit" /
+ * autoFill/emergencyFill, and sharing the word "fill" with them would read as if
+ * the three were siblings. `autoFill`/`emergencyFill` are labelled "Auto-Submit" /
  * "Emergency Submit": in GuruShots "fill" is the currency that tops exposure up
  * to 100% (`autoExposureFill`, `fills`), so user-facing text reserves the word.
  */
@@ -1653,8 +1651,8 @@ const getValidationError = (settingKey, value, allSettings = null, challengeId =
         if (!parsed.success) {
             // Prefer zod's own issue message when it carries real information
             // (custom refine messages, "expected number" type mismatches);
-            // zod's generic refine fallback "Invalid input" adds nothing over
-            // the historical constant, so keep 'Invalid value' there.
+            // zod's generic refine fallback "Invalid input" adds nothing, so
+            // return the 'Invalid value' constant there.
             const issueMessage = parsed.error?.issues?.[0]?.message;
             return issueMessage && issueMessage !== 'Invalid input' ? issueMessage : 'Invalid value';
         }

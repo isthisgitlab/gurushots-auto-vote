@@ -8,8 +8,7 @@
  *      that landed before the page mounted.
  *
  * The streaming side stashes a fan-out function on `global.sendLogToGUI`
- * which `logger.js` calls when a log line is emitted. That global was
- * already in place before this split — we keep it for compatibility.
+ * which `logger.js` calls when a log line is emitted.
  */
 
 const logger = require('../logger');

@@ -34,14 +34,14 @@ const FULL_PX = 1200;
  */
 export function EntryPhoto({ entry }) {
     const { t } = useTranslation();
-    // Pointer-only ON PURPOSE: driving this from onFocus too meant Modal's
-    // focus restoration re-opened the peek every time the modal closed. Keyboard
+    // Pointer-only ON PURPOSE: driving this from onFocus too would make Modal's
+    // focus restoration re-open the peek every time the modal closed. Keyboard
     // reaches the photo via Enter on the chip, which opens the larger modal.
     const [hovered, setHovered] = useState(false);
     const [fullOpen, setFullOpen] = useState(false);
 
-    // Null whenever the ids aren't CDN-shaped; the badge then looks exactly as
-    // it did before this feature.
+    // Null whenever the ids aren't CDN-shaped; the badge then shows no photo
+    // chip at all.
     const thumbUrl = entryPhotoUrl(entry, { size: THUMB_PX });
     // A well-formed URL can still fail — a since-deleted photo, an absent `3_`
     // rendition, an offline session. Same outcome as a malformed id: show
@@ -83,7 +83,7 @@ export function EntryPhoto({ entry }) {
             </button>
             {hovered && (
                 // Opens DOWNWARD deliberately: anchored above, a badge in the top
-                // row pushed the card past y=0, which no amount of scrolling
+                // row would push the card past y=0, which no amount of scrolling
                 // reaches. Residual limit — no collision/flip logic, so a chip at
                 // the far right of a narrow window can still overflow sideways;
                 // fixing that needs measured positioning (an inline style, which

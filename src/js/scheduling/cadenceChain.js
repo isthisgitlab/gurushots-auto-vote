@@ -1,8 +1,8 @@
 /**
  * Shared autovote cadence chain — the recursive "decide delay → arm timer →
- * run cycle → re-arm" loop that both schedulers used to duplicate line for
- * line (runScheduler.js for CLI/Android, AutovoteContext.jsx for the GUI).
- * The MATH was already shared (./thresholdWindow, ./randomDelay); this factory
+ * run cycle → re-arm" loop both schedulers run (runScheduler.js for
+ * CLI/Android, AutovoteContext.jsx for the GUI).
+ * The MATH is shared in ./thresholdWindow and ./randomDelay; this factory
  * shares the LOOP: guard ordering, fresh-settings read per cycle, prefetched
  * challenge reuse, the normal-vs-threshold wait decision, the cadence log
  * lines, the error → plain-random-cadence fallback, and the stale-timer
@@ -11,7 +11,7 @@
  * Hosts inject transport only — how to read settings, fetch challenges,
  * resolve per-challenge values, run a cycle, store the timer handle, and emit
  * a log line — mirroring how ./nodeResolvers.js vs
- * react/contexts/autovoteScheduler.js already split the per-challenge
+ * react/contexts/autovoteScheduler.js split the per-challenge
  * resolvers by platform. CJS on purpose: required directly by the Node hosts
  * and imported by the esbuild-bundled renderer.
  */
@@ -23,7 +23,7 @@ const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 /**
  * Canonical warning emitted when deciding the next delay fails and the chain
  * falls back to the plain random cadence. Exported so each host's error log
- * keeps its exact historical shape (the CLI logs the bare message + a debug
+ * keeps its exact shape (the CLI logs the bare message + a debug
  * line; the GUI appends `: ${err.message}` over IPC) without re-typing it.
  */
 const DECISION_ERROR_MESSAGE = 'Error computing next cycle delay; using normal cadence';

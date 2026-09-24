@@ -4,8 +4,8 @@
  *
  * This closes the gap sanitizeForLog leaves: sanitizeForLog only redacts
  * keys of the structured `data` object, never the message string. Callers
- * that fold credentials into the message via positional args (the renderer
- * login shim was one) would otherwise leak plaintext to the log file.
+ * that fold credentials into the message via positional args would otherwise
+ * leak plaintext to the log file.
  */
 
 const { redactMessage, info, getRecentLogs } = jest.requireActual('../../src/js/logger.js');

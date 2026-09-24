@@ -73,11 +73,11 @@ describe('clearAuthToken', () => {
 });
 
 /**
- * stayLoggedIn used to be honoured only by the Electron quit path, so a CLI or Android user
- * who turned it off still kept a token on disk indefinitely — the opposite of what the
- * setting promises. The rule now lives with the rest of the auth core so every shell can
- * apply it; the Electron single-instance gate stays in windows/lifecycle.js because that part
- * really is Electron-specific.
+ * stayLoggedIn off must drop the token on every shell, CLI and Android included — otherwise
+ * the token stays on disk indefinitely, the opposite of what the setting promises. The rule
+ * lives with the rest of the auth core so every shell can apply it; the Electron
+ * single-instance gate stays in windows/lifecycle.js because that part really is
+ * Electron-specific.
  */
 describe('clearTokenUnlessStayingLoggedIn', () => {
     const { clearTokenUnlessStayingLoggedIn } = require('../../src/js/services/auth');

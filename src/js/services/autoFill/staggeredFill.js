@@ -24,7 +24,7 @@ const { runFillAttempt } = require('./pipeline');
  *   submitToChallenge: function,
  *   getActiveChallenges?: function,
  * }} deps - getActiveChallenges enables the pre-submit live re-check; when
- *   absent the fill proceeds on pass-start data (legacy behavior).
+ *   absent the fill proceeds on pass-start data.
  * @returns {Promise<'submitted'|'skipped'|'disabled'|'no-schedule'|'no-eligible-photos'|'error'>}
  */
 const maybeAutoFillChallenge = async (challenge, token, now, deps) => {

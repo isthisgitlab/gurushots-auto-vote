@@ -25,8 +25,7 @@ const dl = `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/
 // --check mode flags both stale matches AND zero matches when the rule is required.
 // Requirement values:
 //   'always' — required in every file (GUI download artifacts; every install doc must list them)
-//   'cli'    — required only in files that already contain a CLI section (matches the old
-//              verify-readme-version.js `required: hasCLISection` logic; a doc with no
+//   'cli'    — required only in files that already contain a CLI section (a doc with no
 //              gurucli-* references skips them)
 //   false    — optional everywhere
 //
@@ -88,7 +87,7 @@ for (const file of files) {
     let changes = 0;
     let fileFailed = false;
     // A file is treated as having a CLI section if it already references the gurucli binary.
-    // 'cli' rules are required only for such files (matches the old verify script's hasCLISection).
+    // 'cli' rules are required only for such files.
     const hasCLI = original.includes('gurucli-v') || original.includes('CLI Applications');
 
     for (const [pattern, replacement, required] of rules) {

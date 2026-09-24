@@ -65,7 +65,7 @@ describe('settings facade re-exports the schema module', () => {
     });
 
     test('exposureTarget sentinel default 0 survives the split', () => {
-        // 0 means "follow the trigger" — load-bearing for legacy behavior.
+        // 0 means "follow the trigger" — load-bearing for settings that never set a target.
         expect(settings.SETTINGS_SCHEMA.exposureTarget.default).toBe(0);
     });
 

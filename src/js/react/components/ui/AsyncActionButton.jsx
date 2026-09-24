@@ -5,10 +5,9 @@ import * as ipc from '@/api/ipc';
  * Shared envelope for a button that fires an async IPC action: toggles a
  * local loading state (spinner + loading label while pending), calls
  * `onSuccess` when the result reports success, and logs failures/throws
- * via ipc.logRendererError. Extracted from the identical bodies of
- * VoteButton, RunButton, and the Vote All / Run buttons in
- * ChallengesSection — each caller keeps its exact label, icon, and
- * DaisyUI classes.
+ * via ipc.logRendererError. Used by VoteButton, RunButton, and the
+ * Vote All / Run buttons in ChallengesSection — each caller supplies its
+ * own label, icon, and DaisyUI classes.
  *
  * @param {object} props
  * @param {string} props.className        - full DaisyUI class string for the <button>

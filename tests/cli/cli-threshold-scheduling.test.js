@@ -1,13 +1,10 @@
 /**
  * CLI/Node threshold-entry calculation.
  *
- * NOTE: this file used to re-declare *inline copies* of the threshold logic
- * and assert against those copies, so it exercised nothing in the real code
- * (the same anti-pattern the autovote scheduler test header documents). The
- * logic now lives once in src/js/scheduling/thresholdWindow.js, consumed by
+ * The logic lives in src/js/scheduling/thresholdWindow.js, consumed by
  * runScheduler.js with a synchronous settings.getEffectiveSetting resolver.
  * These tests import the real module and use a sync resolver to represent the
- * CLI/Node path. Real cron switch/revert behavior is covered by
+ * CLI/Node path. Real scheduler switch/revert behavior is covered by
  * tests/scheduling/runScheduler.test.js.
  */
 

@@ -26,7 +26,7 @@ const { runFillAttempt } = require('./pipeline');
  *   submitToChallenge: function,
  *   getActiveChallenges?: function,
  * }} deps - getActiveChallenges enables the pre-submit live re-check; when
- *   absent the fill proceeds on pass-start data (legacy behavior).
+ *   absent the fill proceeds on pass-start data.
  * @returns {Promise<{ok: boolean, imageId: string|null, reason: string}>}
  *   reason ∈ 'submitted'|'no-slots'|'challenge-gone'|'no-eligible'|'fetch-error'|'submit-failed'|'invalid-challenge'
  */

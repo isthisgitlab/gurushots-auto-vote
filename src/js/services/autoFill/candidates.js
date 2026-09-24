@@ -16,7 +16,7 @@ const { resolveMemberId } = require('./memberIdentity');
  * Always on: returns a Map<photoId, {score, support}> to merge into the picker
  * — best-label similarity plus how many labels are on theme — or null
  * when the lexicon is unavailable / the challenge has no usable theme text — in
- * which case ranking stays lexical, exactly as before. The scorer
+ * which case ranking stays lexical. The scorer
  * (`deps.getSemanticScores`, defaulting to the real module) is injectable so
  * tests can stub it. Never throws.
  *
@@ -117,10 +117,10 @@ const THEMED_SEARCH_MIN_BUDGET_MS = 1500;
  * (deduped by id) so auto-fill prefers on-theme photos — the GuruShots search
  * index is far better than our client-side label matcher. When there are no
  * terms, every search comes back empty, or none of the matches are allowed,
- * fall back to the full unfiltered library (today's behavior) so a slot still
+ * fall back to the full unfiltered library so a slot still
  * gets filled. A single search term erroring is logged and skipped rather than
  * aborting the fill; the final unfiltered fetch lets its error propagate so the
- * caller's existing catch handles it exactly as before.
+ * caller's catch handles it.
  *
  * The returned set is fed unchanged into pickPhotosForChallenge, so the
  * must/should/fillWithoutTagMatch ranking semantics are preserved.
@@ -197,8 +197,8 @@ const fetchCandidatesForChallenge = async (
         // contest-cadence word ("Guru of The Week"). There is no theme to match,
         // so the whole library is ranked and the most popular eligible photo is
         // submitted. That is the best available answer rather than a failure —
-        // but say so, because from the outside it looks identical to the bug
-        // where a theme existed and was missed.
+        // but say so, because from the outside it looks identical to a theme
+        // that existed and was missed.
         logger
             .withCategory(logLabel)
             .warning(
@@ -212,12 +212,12 @@ const fetchCandidatesForChallenge = async (
     // the tag-resolver retry that may follow them split ONE budget instead of
     // each taking a full one (see THEMED_SEARCH_BUDGET_MS). Floored rather than
     // clamped to zero: a resolved search handed 0ms would stop after page 1 and
-    // quietly reintroduce the truncation this change removes.
+    // quietly truncate the themed search to the newest page of photos.
     const themedPhaseStartedAt = Date.now();
     const remainingThemedBudgetMs = () =>
         Math.max(THEMED_SEARCH_MIN_BUDGET_MS, THEMED_SEARCH_BUDGET_MS - (Date.now() - themedPhaseStartedAt));
 
-    // One search per term, unioned by id. Extracted so the resolution retry
+    // One search per term, unioned by id. A shared helper so the resolution retry
     // below runs the identical fetch/dedupe/fault-tolerance path rather than a
     // second copy of it.
     const searchUnion = async (searchTerms) => {
@@ -229,19 +229,17 @@ const fetchCandidatesForChallenge = async (
         const settled = await Promise.allSettled(
             // Paginated, but only where it costs something. getEligiblePhotos
             // stops a walk at the first SHORT page, so a term matching fewer
-            // than one page of photos issues exactly ONE request — identical to
-            // the single-page fetch this replaced. The walk only continues when
-            // page 1 comes back FULL, which is precisely the case that used to
-            // be truncated: the server orders by date desc, so a member with
-            // more than a page of photos under the resolved tag had their older
-            // work silently excluded from every themed fill, while the
-            // UNFILTERED fallback below happily walked ten pages. The app was
-            // searching harder when it had no theme than when it had one.
+            // than one page of photos issues exactly ONE request. The walk only
+            // continues when page 1 comes back FULL: the server orders by date
+            // desc, so a single page would silently exclude the older work of a
+            // member with more than a page of photos under the resolved tag from
+            // every themed fill, while the UNFILTERED fallback below walks ten
+            // pages — searching harder with no theme than with one.
             //
             // Budgeted tighter than the fallback's own PAGINATE_BUDGET_MS: these
             // chains run concurrently on a path that can fire seconds before a
             // deadline, and a partial candidate set beats a missed close. The
-            // logLabel is now needed — a walk can emit the library-walk warnings.
+            // logLabel is passed because a walk can emit the library-walk warnings.
             searchTerms.map((term) =>
                 getEligiblePhotos(challengeId, token, {
                     search: term,
@@ -294,7 +292,7 @@ const fetchCandidatesForChallenge = async (
         // "stair" -> ["staircase"], which the search CAN use.
         //
         // This is strictly a repair of the miss path — on the happy path above
-        // we have already returned, so a fill that works today pays nothing.
+        // we have already returned, so a fill whose exact-tag search hits pays nothing.
         const resolved = await resolveTagsForTerms(terms, challenge, {
             token,
             searchTagAutocomplete,
@@ -321,15 +319,13 @@ const fetchCandidatesForChallenge = async (
         // candidate ties at zero on theme and popularity alone decides — i.e.
         // an off-theme photo is about to be submitted.
         //
-        // This warns rather than whispers. It used to debug-log the title case as
-        // "routine", on the reasoning that abstract titles can't be matched and a
-        // warning would cry wolf. Resolution changes that calculus: a concrete
-        // subject now has a real chance of being found, so reaching here means
-        // either the theme is genuinely unmatchable ("Guru of The Week") or the
-        // library truly has nothing on it. Both are worth seeing, because the
-        // alternative is the user watching an unrelated photo get submitted with
-        // no explanation anywhere — which is exactly the report that prompted
-        // this. The text names the terms so the two cases are distinguishable.
+        // This warns rather than whispers. Abstract titles can't be matched, but
+        // tag resolution gives a concrete subject a real chance of being found,
+        // so reaching here means either the theme is genuinely unmatchable
+        // ("Guru of The Week") or the library truly has nothing on it. Both are
+        // worth seeing, because the alternative is the user watching an
+        // unrelated photo get submitted with no explanation anywhere. The text
+        // names the terms so the two cases are distinguishable.
         //
         // buildSearchTerms with a null challenge yields ONLY the tag-derived terms
         // (its precedence is must -> should -> title), so an empty result proves the
@@ -352,10 +348,10 @@ const fetchCandidatesForChallenge = async (
             );
     }
     // paginate: a single page is the 100 most recently uploaded eligible photos,
-    // which silently excluded a user's older, strongest work from ever being a
-    // candidate. The themed searches above now walk too (see searchUnion) — they
+    // which would silently exclude a user's older, strongest work from ever being
+    // a candidate. The themed searches above walk too (see searchUnion) — they
     // just stop after one request whenever a term fits in a page, which is the
-    // common case — so this path is no longer the only one that can. It keeps the
+    // common case. This path keeps the
     // full PAGINATE_BUDGET_MS default rather than the tighter themed budget: by
     // the time it runs the themed searches have already found nothing, and this
     // is the last chance to put ANY photo in the slot.

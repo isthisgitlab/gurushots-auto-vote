@@ -173,11 +173,10 @@ describe('photoPicker', () => {
 
         test('a SPACE-DELIMITED hyphen separates the series from the subject', () => {
             // The live series ships this form - "Screen Stars - Tropic Paradise",
-            // plain ASCII hyphen (0x2d), not the colon the older examples used.
-            // Treating it as part of the title put "stars" in the pooled theme
-            // vector, and the semantic tier then ranked a Milky Way photo over a
-            // genuine tropical one, pre-empting the lexical tier where the
-            // tropical photo won.
+            // plain ASCII hyphen (0x2d), not a colon. Treating it as part of the
+            // title puts "stars" in the pooled theme vector, and the semantic tier
+            // then ranks a Milky Way photo over a genuine tropical one, pre-empting
+            // the lexical tier where the tropical photo wins.
             expect(buildThemeKeywords({ title: 'Screen Stars - Tropic Paradise' })).toEqual(['tropic', 'paradise']);
             expect(buildThemeKeywords({ title: 'Color Hunt - Green' })).toEqual(['green']);
         });
@@ -238,8 +237,8 @@ describe('photoPicker', () => {
 
     describe('search-term ordering', () => {
         test('reads nouns right-to-left so the subject survives the cap', () => {
-            // "Color Hunt: Blue & Orange" used to yield [color, hunt, blue] and
-            // drop "orange" entirely.
+            // Read left-to-right, "Color Hunt: Blue & Orange" would yield
+            // [color, hunt, blue] and drop "orange" entirely.
             expect(buildSearchTerms({ title: 'Color Hunt: Blue & Orange' }, {})).toEqual(['orange', 'blue']);
             expect(buildSearchTerms({ title: 'Epic Lighthouses' }, {})).toEqual(['lighthouse', 'epic']);
         });
@@ -315,8 +314,8 @@ describe('photoPicker', () => {
             expect(buildChallengeKeywords({})).toEqual([]);
         });
         test('includes welcome_message tokens', () => {
-            // This is the fix for the "Action Shots picked my last upload"
-            // failure mode — the URL slug only gives [action] (shots filtered),
+            // Guards the "Action Shots picked my last upload" failure mode —
+            // the URL slug only gives [action] (shots filtered),
             // but welcome_message gives concrete vocabulary.
             const keys = buildChallengeKeywords({
                 url: 'action-shots-2024',
@@ -397,9 +396,9 @@ describe('photoPicker', () => {
             expect(buildSearchTerms({ title: 'C is for…' }, {})).toEqual([]);
         });
         test('"The Letter X" returns [] instead of searching for the noun "letter"', () => {
-            // Regression: this used to tokenise to ['letter'] and narrow the
-            // library to mail/notes/signage — the correspondence sense — instead
-            // of leaving the full library for the client-side letter filter.
+            // Tokenising to ['letter'] would narrow the library to
+            // mail/notes/signage — the correspondence sense — instead of leaving
+            // the full library for the client-side letter filter.
             expect(buildSearchTerms({ title: "The Letter 'G'" }, {})).toEqual([]);
             expect(buildSearchTerms({ title: 'The Letter G' }, {})).toEqual([]);
             // A title that merely contains the word still tokenises normally.
@@ -422,9 +421,9 @@ describe('photoPicker', () => {
             expect(detectLetterPrefix('B Is For')).toBe('b'); // case-insensitive, end-of-string boundary
         });
         test('parses the named "The Letter X" family', () => {
-            // The form GuruShots actually ships. Before this was handled the title
-            // tokenised to the subject noun "letter" and the fill chased
-            // correspondence (mail, notes, signage) instead of G-subjects.
+            // The form GuruShots actually ships. Unparsed, the title tokenises to
+            // the subject noun "letter" and the fill chases correspondence (mail,
+            // notes, signage) instead of G-subjects.
             expect(detectLetterPrefix("The Letter 'G'")).toBe('g');
             expect(detectLetterPrefix('The Letter "G"')).toBe('g');
             expect(detectLetterPrefix('The Letter ‘G’')).toBe('g'); // curly single
@@ -585,7 +584,7 @@ describe('photoPicker', () => {
         });
 
         test('quality fallback: votes break ties when achievements equal', () => {
-            // This is the "picked my last upload" fix: a freshly-uploaded
+            // Guards the "picked my last upload" case: a freshly-uploaded
             // photo with 0 votes should NOT outrank a proven photo with
             // hundreds of votes when neither matches the theme.
             const photos = [
@@ -782,12 +781,9 @@ describe('photoPicker', () => {
         });
 
         test('strict matches(): a tag that is merely a substring of a label does NOT match', () => {
-            // This test previously pinned the opposite: matches() was a
-            // bidirectional substring test, so the tag stem 'bud' matched the label
-            // stem 'buddha'. Its own comment said it existed to catch "a future
-            // tightening of matches() (e.g. to require exact/whole-word stems)".
-            // This is that tightening — 'bud' and 'buddha' are different things.
-            // With fillWithoutTagMatch:false the slot is correctly left empty.
+            // matches() compares whole stems, not substrings: the tag stem 'bud'
+            // and the label stem 'buddha' are different things. With
+            // fillWithoutTagMatch:false the slot is correctly left empty.
             const photos = [allowed('a', ['Buddha'], 1000)];
             const picked = pickPhotosForChallenge(challenge, photos, 5, {
                 mustIncludeTags: ['bud'],
@@ -1265,9 +1261,9 @@ describe('photoPicker', () => {
         });
     });
 
-    // Regression suite for the "The Farm Life picked a Sea Life photo" bug.
-    // Four separate defects conspired; each gets a test so a partial revert of
-    // any one of them fails loudly rather than silently degrading picks.
+    // Guards against "The Farm Life" picking a Sea Life photo. Four separate
+    // rules prevent it; each gets a test so weakening any one of them fails
+    // loudly rather than silently degrading picks.
     // A plural challenge title vs. a singular vision label is the FIRST thing
     // suspected whenever an auto-fill leaves a slot empty ("the challenge said
     // Dogs, the photo is tagged dog"). It is not the cause and must stay that
@@ -1302,18 +1298,18 @@ describe('photoPicker', () => {
         const farmLife = { title: 'The Farm Life', url: 'the-farm-life' };
 
         test('the abstract head-noun "life" is not a search term or a keyword', () => {
-            // "life" used to survive tokenisation, which (a) issued a server-side
-            // search for `life` that dragged Sea Life / Still Life / Wildlife
-            // photos into the candidate pool and (b) scored them as a match. The
-            // modifier "farm" carries the whole subject; the head noun carries none.
+            // Keeping "life" would (a) issue a server-side search for `life` that
+            // drags Sea Life / Still Life / Wildlife photos into the candidate
+            // pool and (b) score them as a match. The modifier "farm" carries the
+            // whole subject; the head noun carries none.
             expect(buildSearchTerms(farmLife, {})).toEqual(['farm']);
             expect(buildChallengeKeywords(farmLife)).toEqual(['farm']);
         });
 
         test('multi-word labels are split into word stems, deduped', () => {
-            // Labels used to be stemmed as ONE string ("Sea Life" -> "sea life"),
-            // which is what let the keyword "life" substring-match them. User tags
-            // were always split; labels being the odd one out was the root cause.
+            // Stemming a label as ONE string ("Sea Life" -> "sea life") would let
+            // the keyword "life" substring-match it. Labels split into words, the
+            // same as user tags.
             expect(labelWordStems({ labels: ['Sea Life'] })).toEqual(['sea', 'life']);
             // "sea" appears in two labels but must only be counted once.
             expect(labelWordStems({ labels: ['Sea', 'Sea Life'] })).toEqual(['sea', 'life']);
@@ -1408,9 +1404,9 @@ describe('photoPicker', () => {
         });
 
         test('wholeLabelStems ignores non-string labels (so null cannot satisfy "Begins With N")', () => {
-            // The letter filter reads the first character of these stems. Before the
-            // type guard, a null label stemmed to the literal string "null" and would
-            // have counted as a label beginning with N.
+            // The letter filter reads the first character of these stems. Without the
+            // type guard, a null label would stem to the literal string "null" and
+            // count as a label beginning with N.
             expect(wholeLabelStems({ labels: [null, 'Sea Life'] })).toEqual(['sea life']);
             expect(wholeLabelStems({ labels: undefined })).toEqual([]);
         });
@@ -1418,8 +1414,8 @@ describe('photoPicker', () => {
 
     describe('matches() — whole-word, not substring', () => {
         test('rejects unrelated words that merely share characters', () => {
-            // Every one of these matched under the old bidirectional-substring
-            // rule. They are the reason a farm challenge could pick a sea photo.
+            // Every one of these matches under a bidirectional-substring rule —
+            // the way a farm challenge could pick a sea photo.
             expect(matches('heart', 'art')).toBe(false);
             expect(matches('catamaran', 'cat')).toBe(false);
             expect(matches('seagull', 'sea')).toBe(false);
@@ -1589,12 +1585,12 @@ describe('photoPicker', () => {
         });
     });
 
-    // Permanent regression guard for the "Your Legacy" report: a soccer photo
-    // with 3 badges and ~2k votes was submitted ahead of photos with 20+ badges
-    // and 100k+ votes, because get_photos_private reports votes=0 / no
-    // achievements for EVERY library photo and ranking silently collapsed to
-    // views then upload_date. Mirrors the Farm-Life/Sea-Life block above: if a
-    // future change reverts the enrichment or the tier order, this fails loudly.
+    // Guards the "Your Legacy" case: get_photos_private reports votes=0 / no
+    // achievements for EVERY library photo, so without enrichment ranking
+    // collapses to views then upload_date and a soccer photo with 3 badges and
+    // ~2k votes beats photos with 20+ badges and 100k+ votes. Mirrors the
+    // Farm-Life/Sea-Life block above: dropping the enrichment or changing the
+    // tier order fails this loudly.
     describe('"Your Legacy" regression — popularity fallback on the real payload shape', () => {
         const challenge = { title: 'Your Legacy', url: 'your-legacy' };
         const soccerLabels = [

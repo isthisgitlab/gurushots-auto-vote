@@ -1,14 +1,10 @@
 /**
  * The declared min/max on number settings must agree with their zod validators.
  *
- * These three fields (min, max, unit) have always been forwarded by the IPC schema
- * projection and read by SettingInput, but no entry ever defined them — so every number
- * input rendered with no bounds and no unit, and an out-of-range value produced only the
- * generic "some settings could not be saved" banner with nothing highlighted.
- *
- * They are now declared by hand alongside the validator, which means they can drift from it.
- * This suite pins them together: whatever a setting advertises as its range must be exactly
- * what saving actually accepts.
+ * The IPC schema projection forwards min, max and unit, and SettingInput renders them as
+ * the input's bounds. They are declared by hand alongside the validator, which means they
+ * can drift from it. This suite pins them together: whatever a setting advertises as its
+ * range must be exactly what saving actually accepts.
  */
 
 const { SETTINGS_SCHEMA, validateSetting } = require('../../src/js/settings/schema');

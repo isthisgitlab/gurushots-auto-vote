@@ -3,7 +3,7 @@
  * decides what ships in the semantic vector asset, exercised against small
  * fixtures (the network download and zip streaming stay manual, un-CI'd).
  *
- * Two fatal gates matter most and were previously asserted against nothing:
+ * Two fatal gates matter most:
  *   - a word claimed by two clusters (authoring mistake -> collision)
  *   - an authored word missing from the intermediate (stale intermediate)
  * Both must be REPORTED by the pure layer so the script entry points can fail
@@ -172,9 +172,9 @@ describe('fetch-embeddings pure pipeline', () => {
     });
 
     test('skies/ski is NOT a collision — they are different concepts', () => {
-        // This pair used to collide because "skies" stemmed to "ski": the '-ies'
-        // rule required length > 5 and "skies" is 5, so it fell through to '-es'.
-        // A "Dramatic Skies" challenge could not match a "Sky" label as a result.
+        // "skies" must stem to "sky", not "ski": the '-ies' rule has to cover
+        // 5-letter words, or "skies" falls through to '-es' and a "Dramatic
+        // Skies" challenge cannot match a "Sky" label.
         const { collisions } = collectAuthoredWords({
             concepts: [
                 { id: 'sky', parent: 'sky', words: ['skies'] },

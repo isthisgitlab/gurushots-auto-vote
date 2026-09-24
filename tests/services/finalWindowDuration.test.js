@@ -8,7 +8,7 @@
  *      windowSec handling. These call the REAL export at a non-default width.
  *   2. schema.finalWindowDuration bounds — the 'time' setting is an integer in
  *      [60, MAX_SCHEDULE_SECONDS]; sub-60, over-cap, non-integer and non-finite
- *      values must be rejected, and the schema default is the legacy fixed hour.
+ *      values must be rejected, and the schema default is one hour (3600).
  */
 
 const { isWithinFinalWindow } = require('../../src/js/services/VotingLogic');

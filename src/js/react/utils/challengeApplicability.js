@@ -55,8 +55,8 @@ export function getGroupApplicability(groupId, challenge) {
             // LOCKED for the whole challenge and can never reach AVAILABLE — unlike
             // a multi-photo challenge, where LOCKED is transient and may flip to
             // AVAILABLE later, so those must stay configurable. maxSlots === 1 also
-            // subsumes the old Boost-vs-Turbo conflict (Boost and Turbo can't share
-            // an entry, and with one turbo per challenge that only ever bit at 1/1).
+            // covers the Boost-vs-Turbo conflict (Boost and Turbo can't share an
+            // entry, and with one turbo per challenge that only bites at 1/1).
             if (maxSlots === 1) return { applicable: false, reasonKey: 'app.naBoostSinglePhoto' };
             return applicable;
         }

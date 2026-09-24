@@ -96,7 +96,7 @@ const MEAN_CENTER = true;
 // "flower") that plain distributional vectors under-represent — GloVe puts
 // sunflower<->flower at ~0.35, below any workable floor, because the words
 // appear in different contexts (oil/seeds/van Gogh vs gardens). 0 disables;
-// 1 collapses each cluster to its centroid (the old synthetic behavior).
+// 1 collapses each cluster to its centroid.
 const RETROFIT_BETA = 0.5;
 
 const ROOT = path.join(__dirname, '..');

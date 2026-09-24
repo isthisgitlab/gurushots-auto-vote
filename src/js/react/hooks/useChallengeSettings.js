@@ -3,11 +3,10 @@ import * as ipc from '@/api/ipc';
 
 /**
  * Reads the per-challenge effective values + override flags that
- * ChallengeCard renders from. Bundles four related state slots that used
- * to live inline next to unrelated render logic, and exposes a
- * `toggleCompact()` action so the card no longer has to re-derive the
- * "no override → set override; has override → remove override" sequence
- * inline.
+ * ChallengeCard renders from. Bundles four related state slots and
+ * exposes a `toggleCompact()` action so the card doesn't have to re-derive
+ * the "no override → set override; has override → remove override"
+ * sequence inline.
  *
  * Returns:
  *   hasCustomSettings   any perChallenge key has an override

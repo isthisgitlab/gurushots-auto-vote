@@ -1,6 +1,6 @@
 /**
  * Tests for the shared AsyncActionButton (components/ui/AsyncActionButton)
- * — the loading/success/logError envelope extracted from VoteButton,
+ * — the loading/success/logError envelope used by VoteButton,
  * RunButton, and the Vote All / Run buttons.
  */
 

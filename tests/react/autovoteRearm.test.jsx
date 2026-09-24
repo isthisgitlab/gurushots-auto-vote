@@ -5,9 +5,8 @@
  * The armed timer was computed from the old settings; without a re-arm, a
  * shortened check frequency (or a newly-configured threshold / scheduled-fill
  * window) is slept past until the current — possibly hours-long — wait
- * elapses. The settings modals call rearmSchedule() on save; this is the
- * regression net for that wiring (the pre-React app exposed the same re-arm
- * as window.handleThresholdSettingsChange, which the React port dropped).
+ * elapses. The settings modals call rearmSchedule() on save; these tests pin
+ * that wiring.
  */
 
 import { render, act } from '@testing-library/preact';

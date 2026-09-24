@@ -1,13 +1,13 @@
 /**
- * Regression test for the GUI (React) scheduler revert.
+ * Tests for the GUI (React) scheduler revert.
  *
  * Once the fixed last-minute setInterval is active and no challenge remains
  * within its last-minute window, the scheduler must tear down the 1-minute
  * cadence and resume the normal randomized checkFrequency cadence.
  *
- * This is the GUI-side counterpart of the runScheduler.js revert (commit
- * 963eb1e), which never reached AutovoteContext — leaving the GUI pinned at a
- * 1-minute cadence forever after a challenge's window passed.
+ * This is the GUI-side counterpart of the runScheduler.js revert; without it
+ * the GUI stays pinned at a 1-minute cadence forever after a challenge's
+ * window passes.
  */
 
 import { render, act } from '@testing-library/preact';
@@ -103,7 +103,7 @@ describe('AutovoteContext — last-minute cadence reverts to normal', () => {
 
         // The normal 3-minute cadence is live again: it was armed at the revert
         // (t≈+1min) to fire +3min later, so reaching ~+4min fires exactly one
-        // more cycle (the dead 1-min cron would have fired ~3 by now).
+        // more cycle (a lingering 1-min cadence would have fired ~3 by now).
         await act(async () => {
             await jest.advanceTimersByTimeAsync(2 * MIN + 30_000);
         });
@@ -111,7 +111,7 @@ describe('AutovoteContext — last-minute cadence reverts to normal', () => {
     });
 
     it('reuses the cycle challenge list on each tick instead of re-fetching for threshold scheduling', async () => {
-        // The voting cycle now returns the list it fetched over IPC; the
+        // The voting cycle returns the list it fetched over IPC; the
         // last-minute tick's threshold re-check must reuse it rather than issue
         // its own getActiveChallenges round-trip.
         window.api.runVotingCycle.mockResolvedValue({ success: true, challenges: activeChallenges });

@@ -1,13 +1,12 @@
 /**
  * Shared ipcMain registration for the handler modules (log, misc, settings,
  * voting, actions, update). Each module exports buildHandlers(deps) →
- * {channel: impl}; this registers every entry, replacing six identical
- * for-of loops.
+ * {channel: impl}; this registers every entry.
  *
  * Registration also adds a sender-frame check as defense-in-depth: the app
  * only ever loads its own file:// pages, so any invoke arriving from a
- * non-main frame or a non-file origin is refused. Today nothing untrusted
- * can load, so this changes no behavior — it exists so a future regression
+ * non-main frame or a non-file origin is refused. Nothing untrusted can
+ * load, so the check never fires in practice — it exists so a future regression
  * that renders remote content doesn't inherit the full IPC surface.
  * Unit tests and the Capacitor bridge call buildHandlers() directly and are
  * unaffected.

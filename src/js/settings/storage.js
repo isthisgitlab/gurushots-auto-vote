@@ -141,11 +141,10 @@ const initializeAsync = async () => {
  */
 const flushPendingWrites = () => writeChain;
 
-// One-shot notice if a pre-consolidation dev directory exists elsewhere.
-// Storage's old Electron dev branch hardcoded `<parent>/gurushots-auto-vote-dev`
-// while logger appended `-dev` to userData; runtime.getAppUserDataPath now
-// canonicalizes on the latter. When the two differ (userData basename ≠
-// package name) the old dir may still hold a settings.json.
+// One-shot notice if a legacy dev directory exists elsewhere. The legacy
+// Electron dev location is `<parent>/gurushots-auto-vote-dev`, while
+// runtime.getAppUserDataPath appends `-dev` to userData. When the two differ
+// (userData basename ≠ package name) the legacy dir may still hold a settings.json.
 let legacyDevDirChecked = false;
 const warnIfLegacyDevDir = (userDataPath) => {
     if (legacyDevDirChecked) return;

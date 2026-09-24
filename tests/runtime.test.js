@@ -27,9 +27,8 @@ describe('runtime.isHeadlessService', () => {
     });
 });
 
-// The consolidated app-identity/user-data resolution (previously duplicated
-// with DIVERGING Electron dev branches in logger.js and settings/storage.js)
-// now decides where logs AND settings physically live — pin each branch.
+// The app-identity/user-data resolution decides where logs AND settings
+// physically live — pin each branch.
 describe('runtime app identity + user-data path (single source of truth)', () => {
     const fs = require('fs');
 

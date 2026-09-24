@@ -139,8 +139,8 @@ describe('ChallengeCard badge row — override/config badge', () => {
         const custom = badgeByText(container, '⚙️ app.customBadge');
         expect(custom).toBeTruthy();
         expect(custom.className).toMatch(/badge-ghost/);
-        // The "out of logic" confusion was the override badge looking like a
-        // state badge — it must not share the auto-fill (success) styling.
+        // The override badge must not read as a state badge — it must not
+        // share the auto-fill (success) styling.
         expect(custom.className).not.toMatch(/badge-success/);
 
         const autoFill = badgeByText(container, '📥 app.autoFillBadge');

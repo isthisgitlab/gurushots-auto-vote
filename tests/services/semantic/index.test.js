@@ -139,16 +139,16 @@ describe('getSemanticScores — lexicon backend, end-to-end', () => {
     });
 
     test('multi-word labels reach the lexicon', async () => {
-        // The lexicon has no multi-word keys, so a raw label like "Sea Life" was
-        // looked up as one token and always missed — every multi-word vision label
-        // was invisible to the semantic tier. Labels are now word-stemmed first.
+        // The lexicon has no multi-word keys, so a raw label like "Sea Life" looked
+        // up as one token always misses — every multi-word vision label would be
+        // invisible to the semantic tier. Labels are word-stemmed first.
         const scores = await getSemanticScores({ title: 'Underwater' }, [{ id: 'seaLife', labels: ['Sea Life'] }]);
         expect(scores).not.toBeNull();
         expect(scores.get('seaLife').score).toBeGreaterThan(0);
     });
 
     test('the semantic tier carries the theme when the lexical matcher cannot', async () => {
-        // The bug in one assertion. No word of "The Farm Life" appears in either
+        // The Farm Life case in one assertion. No word of it appears in either
         // photo's labels, so the lexical scorer rates BOTH zero and would fall
         // through to view count. The lexicon is what knows a cow belongs on a farm
         // and a fish does not.

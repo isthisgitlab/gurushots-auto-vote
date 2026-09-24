@@ -2,11 +2,9 @@
  * Unit tests for the React autovote scheduler helpers
  * (src/js/react/contexts/autovoteScheduler.js).
  *
- * NOTE: the previous version of this file re-declared *inline copies* of the
- * scheduler logic and asserted against those copies — so it exercised nothing
- * in the real module and could never catch a regression (it didn't catch the
- * missing revert-to-normal-cadence path that pinned the GUI at a 1-minute
- * cadence). These tests import the actual exports.
+ * These tests import the actual exports rather than re-declaring the logic,
+ * so they exercise the real module (including the revert-to-normal-cadence
+ * path that keeps the GUI off a permanent 1-minute cadence).
  *
  * The helpers read per-challenge thresholds via window.api.getEffectiveSetting;
  * the node test environment has no `window`, so we inject a global stub.

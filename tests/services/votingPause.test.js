@@ -340,10 +340,9 @@ describe('voting pause never abandons a closing challenge', () => {
 });
 
 describe('the last-minute rescue survives a corrupt lastMinuteThreshold', () => {
-    // Regression guard for the clamp in getEffectiveLastMinuteThreshold. Before
-    // it, a corrupt value made the comparison NaN-false so the last-minute rule
-    // never fired — which used to mean "demoted to the normal rule", but with
-    // the pause sitting above final-window it means the challenge never votes.
+    // Guards the clamp in getEffectiveLastMinuteThreshold. Without it, a corrupt
+    // value makes the comparison NaN-false so the last-minute rule never fires —
+    // and with the pause sitting above final-window, the challenge never votes.
     test.each([['soon'], [NaN], [0], [999], [null], [undefined]])(
         'lastMinuteThreshold %p falls back to the 10m default, so a closing challenge still votes',
         (threshold) => {

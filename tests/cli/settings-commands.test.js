@@ -58,8 +58,8 @@ describe('CLI settings commands — per-challenge support', () => {
     });
 
     test('setSetting on a schema key without a challengeId sets the global default', () => {
-        // It used to write an unvalidated top-level key that nothing reads, so the command
-        // reported success and changed nothing at all. The global default is what was meant.
+        // Writing an unvalidated top-level key would be read by nothing, so the command
+        // would report success and change nothing. The global default is what is meant.
         settings.setGlobalDefault.mockReturnValue(true);
         settings.getGlobalDefault.mockReturnValue(80);
 

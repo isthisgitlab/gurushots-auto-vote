@@ -52,8 +52,8 @@ export class ErrorBoundary extends Component {
     handleDismiss() {
         // Intentionally do NOT reset loggedErrorKey. Dismiss often re-
         // triggers the same throw immediately (persistent crash); re-
-        // logging on every dismiss click was the original problem we're
-        // guarding against. The first log captured everything needed to
+        // logging on every dismiss click is exactly what this guards
+        // against. The first log captured everything needed to
         // diagnose; later recurrences of the same signature are noise.
         this.setState({ error: null });
     }

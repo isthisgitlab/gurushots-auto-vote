@@ -173,9 +173,9 @@ async function main() {
                     }
                     await informAboutGuiReload();
                 } else if (key.includes('.')) {
-                    // Arbitrary nested writes used to poke raw JSON into the
-                    // settings blob, bypassing schema validation entirely —
-                    // removed. Only the supported forms remain.
+                    // Arbitrary nested writes would poke raw JSON into the
+                    // settings blob, bypassing schema validation entirely, so
+                    // only the supported forms are accepted.
                     console.error(`❌ Unsupported nested key '${key}'`);
                     console.error('   Supported forms:');
                     console.error('     pnpm settings:set <topLevelKey> <value>');
@@ -264,9 +264,8 @@ async function main() {
 
                 // The facade's resetAllSettings already restores the schema
                 // global defaults too (it rebuilds from getDefaultSettings and
-                // preserves token/mock/apiHeaders) — the extra
-                // resetAllGlobalDefaults call this script used to make was
-                // redundant.
+                // preserves token/mock/apiHeaders), so no separate
+                // resetAllGlobalDefaults call is needed.
                 if (!resetAllSettings()) {
                     process.exit(1);
                 }

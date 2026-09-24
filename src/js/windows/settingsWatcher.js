@@ -5,7 +5,7 @@
  * `settings-changed` event to every other renderer window (so React hooks can
  * refetch without a full reload — catches CLI-originated changes).
  *
- * Extracted from index.js's createMainWindow — window creation has nothing
+ * Separate from index.js's createMainWindow — window creation has nothing
  * to do with file watching. The caller owns the returned fs.FSWatcher's
  * lifecycle (index.js closes it when the main window closes).
  */
@@ -18,7 +18,7 @@ const logger = require('../logger');
 // Debounce timeout shared across successive watchSettingsFile calls (the
 // main window can be torn down and re-created on logout/login): a new
 // watcher's first change event clears a still-pending reload scheduled by
-// the previous watcher, exactly as the old index.js module-level variable did.
+// the previous watcher.
 let settingsReloadTimeout = null;
 
 /**
@@ -93,7 +93,7 @@ function compareSettings(oldSettings, newSettings) {
  *   getMainWindow: () => (import('electron').BrowserWindow|null),
  *   getMainWindowCreatedTime: () => (number|null),
  *   onSettingsChanged?: ((settings: Object) => void)|null,
- * }} deps - accessors for the window state index.js still owns; read at
+ * }} deps - accessors for the window state index.js owns; read at
  *   event time so the watcher always sees the current window/creation time.
  *   `onSettingsChanged` is an OPTIONAL side-channel fired with a freshly
  *   loaded snapshot on EVERY exit of the debounced handler — the normal

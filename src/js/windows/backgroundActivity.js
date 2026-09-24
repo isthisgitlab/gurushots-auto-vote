@@ -12,8 +12,8 @@
  *   2. macOS App Nap — the OS suspends the whole app. No renderer flag helps;
  *      the process must hold a power assertion.
  *
- * The observed failure was a 51-minute gap between voting cycles on a 3-4
- * minute cadence, which swallowed a challenge's last auto-fill slot AND its
+ * Unmitigated, this opens gaps like 51 minutes between voting cycles on a 3-4
+ * minute cadence, enough to swallow a challenge's last auto-fill slot AND its
  * emergency-fill window. For an app whose entire job is to act on other
  * people's deadlines, "the timer didn't fire" is a correctness bug, not a
  * power-usage nicety.

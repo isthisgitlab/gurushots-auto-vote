@@ -10,8 +10,8 @@
  *
  * So the math lives here once and takes a `resolveThreshold(idString)`
  * function that may return a number or a Promise<number>; both consumers wrap
- * it with their platform's resolver. This removes the "fix BOTH" duplication
- * for the part that actually drifts. `computeNextCycleDelayMs` builds on these
+ * it with their platform's resolver, so the part that actually drifts is
+ * never duplicated. `computeNextCycleDelayMs` builds on these
  * to make the whole per-cycle cadence decision in one place, so every host
  * (CLI `runScheduler.js`, GUI `AutovoteContext.jsx`, Android `headless/index.js`)
  * drives a single setTimeout/alarm chain off the same rule rather than each

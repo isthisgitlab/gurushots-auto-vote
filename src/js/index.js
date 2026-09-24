@@ -59,8 +59,8 @@ let autoUpdater = null;
 // Track main window creation time to prevent reload during login
 let mainWindowCreatedTime = null;
 
-// Register IPC handlers extracted into focused modules. Each module
-// receives the accessors it needs to read/write the still-shared
+// Register IPC handlers from their focused modules. Each module
+// receives the accessors it needs to read/write the shared
 // module-level state (autoUpdater, mainWindow). Lifecycle of those
 // objects stays in this file.
 logIpc.register(ipcMain);
@@ -172,7 +172,7 @@ function createMainWindow() {
             // The auto-vote cadence chain is a recursive setTimeout living in
             // THIS renderer, and Chromium throttles then freezes timers on a
             // hidden page — which silently stalls the voting loop. Rationale,
-            // measurements and the App Nap half of the fix: see
+            // measurements and the App Nap counterpart: see
             // docs/scheduling.md "Staying schedulable" and
             // windows/backgroundActivity.js. Do not re-enable.
             backgroundThrottling: false,
@@ -235,8 +235,8 @@ function createMainWindow() {
     });
 
     // Watch settings file for changes and auto-reload with debouncing.
-    // Extracted to windows/settingsWatcher.js; accessors keep the watcher
-    // reading the current window state this module still owns.
+    // The watcher lives in windows/settingsWatcher.js; accessors keep it
+    // reading the current window state this module owns.
     settingsWatcher = watchSettingsFile({
         getMainWindow: () => mainWindow,
         getMainWindowCreatedTime: () => mainWindowCreatedTime,

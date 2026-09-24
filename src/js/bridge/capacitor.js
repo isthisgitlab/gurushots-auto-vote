@@ -68,7 +68,7 @@ const emit = (channel, payload) => {
 // preload.js via the channel manifest so both shells derive identically.
 const { kebabToCamel, aliases, sendMethods, eventMethods } = require('../ipc/manifest');
 
-// Wrap a handler that originally received (event, ...args) so the
+// Wrap a handler whose signature is (event, ...args) so the
 // renderer can call it as (...args). The first parameter (event) is
 // passed as null since there is no IPC event on Capacitor.
 const wrap =

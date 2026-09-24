@@ -22,14 +22,13 @@
  *
  *   VALIDATION is mandatory for anything the backoff produced. Truncation gets
  *   noisy fast — "fac" answers ["face","factory","manufacturing"], and filling
- *   a "Faces" challenge from a factory photo is the same class of bug this
- *   module exists to fix. A candidate is kept only when it is a lexical match
+ *   a "Faces" challenge from a factory photo is exactly the off-theme fill this
+ *   module exists to prevent. A candidate is kept only when it is a lexical match
  *   for the term (it simply IS the word, modulo stemming) or the shipped
  *   word-vector lexicon puts it on theme at or above SEMANTIC_MATCH_FLOOR.
  *
  * Everything here degrades to [] rather than throwing: the caller treats an
- * empty result as "no resolution available" and proceeds exactly as it did
- * before this module existed.
+ * empty result as "no resolution available" and proceeds without it.
  */
 
 const { buildThemeKeywords, matches, stem, tokenise, SEMANTIC_MATCH_FLOOR } = require('./photoPicker');
@@ -115,7 +114,7 @@ const themeBucketOf = (challengeVec, tag) => {
  * @param {object} [deps.logger]
  * @param {string} [deps.logLabel]
  * @returns {Promise<Array<string>>} resolved tags (<= MAX_RESOLVED_TAGS), or []
- *   when nothing survived — caller then behaves exactly as before.
+ *   when nothing survived — caller then proceeds without resolution.
  */
 const resolveTermsToTags = async (terms, challenge, deps) => {
     const { token, memberId, searchTagAutocomplete, logger, logLabel = 'autoFill', ignoreWords = null } = deps || {};

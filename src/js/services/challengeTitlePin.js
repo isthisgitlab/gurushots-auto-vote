@@ -20,8 +20,8 @@ const settings = require('../settings');
 const logger = require('../logger');
 
 // Bound a server-supplied title before it reaches a log line (CR/LF-stripped
-// and truncated). The sanitizer now lives in the core logger — shared with
-// the IPC shell's handlers — so both sides bound strings identically.
+// and truncated). The sanitizer lives in the core logger — shared with the
+// IPC shell's handlers — so both sides bound strings identically.
 const sanitizeForLog = logger.sanitizeLogString;
 
 // Shared with mergeTitlePins' storage cap.

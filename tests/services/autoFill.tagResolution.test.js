@@ -1,7 +1,7 @@
 /**
  * Integration cover for the tag-resolution retry inside
- * fetchCandidatesForChallenge — the path that turns the reported bug
- * ("Stairs" filled from a yoga photo) into an on-theme fill.
+ * fetchCandidatesForChallenge — the path that keeps a "Stairs" challenge
+ * from being filled with a yoga photo.
  *
  * Lives in its own file because it needs the REAL shipped lexicon, and making
  * the lexicon available inside the large autoFill.test.js would change the
@@ -87,8 +87,8 @@ describe('fetchCandidatesForChallenge — tag resolution', () => {
         const { logger, category } = makeLogger();
         const result = await fetchCandidatesForChallenge(STAIRS, 'tok', {}, { getEligiblePhotos, logger });
 
-        // This is the pre-existing behavior the bug report described: the whole
-        // library, ranked by popularity, off-theme photo included.
+        // The unresolved baseline: the whole library, ranked by popularity,
+        // off-theme photo included.
         expect(result).toEqual(LIBRARY);
         expect(getEligiblePhotos).toHaveBeenCalledWith('c-stairs', 'tok', expect.objectContaining({ paginate: true }));
         expect(category.warning).toHaveBeenCalledWith(expect.stringContaining('nothing on theme'), null);

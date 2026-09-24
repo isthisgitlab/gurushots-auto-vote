@@ -174,7 +174,7 @@ describe('headless runOneCycle', () => {
     test('reuses the cycle challenge list for the cadence decision (no second fetch)', async () => {
         const now = Math.floor(Date.now() / 1000);
         const inWindow = { id: 1, type: 'default', close_time: now + 60 };
-        // The cycle now hands back the list it fetched; computeNextDelayMs must
+        // The cycle hands back the list it fetched; computeNextDelayMs must
         // reuse it instead of issuing its own getActiveChallenges request.
         const fetchChallengesAndVote = jest.fn().mockResolvedValue({ success: true, challenges: [inWindow] });
         const getActiveChallenges = jest.fn().mockResolvedValue({ challenges: [] });

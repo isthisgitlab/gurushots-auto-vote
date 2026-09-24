@@ -12,8 +12,7 @@ import * as ipc from '@/api/ipc';
 export const DEFAULT_UI_VALUES = getUiDefaultSettings();
 
 /**
- * Per-key fallback with the same semantics the hand-written init used:
- * arrays keep the Array.isArray guard, strings treat '' as unset (||),
+ * Per-key fallback: arrays keep the Array.isArray guard, strings treat '' as unset (||),
  * and numeric/boolean keys use ?? so an explicit 0 / false from settings
  * is preserved rather than silently replaced by the default.
  */

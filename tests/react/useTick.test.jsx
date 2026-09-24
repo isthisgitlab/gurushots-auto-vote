@@ -1,6 +1,6 @@
 /**
  * Tests for the shared useTick hook (hooks/useTick) — the per-second
- * wall-clock tick extracted from ChallengeCard and BoostWindowBanner.
+ * wall-clock tick used by ChallengeCard and BoostWindowBanner.
  */
 
 import { renderHook, act } from '@testing-library/preact';

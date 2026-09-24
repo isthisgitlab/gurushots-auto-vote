@@ -90,8 +90,8 @@ describe('EntryBadge — entry thumbnail', () => {
         expect(images()).toContain(`https://photos.gurushots.com/unsafe/fit-in/400x400/${MEMBER}/3_${IMAGE}.jpg`);
     });
 
-    // The peek is pointer-only by design: driving it from onFocus meant Modal's
-    // focus restoration re-opened it every time the full-size view was closed.
+    // The peek is pointer-only by design: driving it from onFocus would let Modal's
+    // focus restoration re-open it every time the full-size view closes.
     // Keyboard access is via the chip itself — Tab to it, Enter for the modal.
     test('focus alone does not open the peek', () => {
         renderBadge(photoEntry());

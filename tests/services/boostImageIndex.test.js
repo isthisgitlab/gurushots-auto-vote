@@ -242,12 +242,11 @@ describe('pickEntryAvoidingConflict helper (direct unit tests)', () => {
 /**
  * Same-pass conflict reflection.
  *
- * The pickers read entry.turbo / entry.boosted, but nothing used to set those flags after a
- * successful apply — reflectNewEntry only ever pushed new entries with both false. The
- * challenge object is not re-fetched mid-pass, so with the default timer ordering (turbo
- * 7200s sorts ahead of boost) turbo would take entry X and boost would then still see
- * entries[X].turbo === false and pick the very same entry. GuruShots allows one boost and one
- * turbo per challenge, but on different entries, so the second apply was wasted.
+ * The pickers read entry.turbo / entry.boosted, so a successful apply must set those flags:
+ * the challenge object is not re-fetched mid-pass. Otherwise, with the default timer ordering
+ * (turbo 7200s sorts ahead of boost), turbo takes entry X and boost still sees
+ * entries[X].turbo === false and picks the very same entry. GuruShots allows one boost and one
+ * turbo per challenge, but on different entries, so the second apply would be wasted.
  */
 describe('same-pass boost/turbo conflict reflection', () => {
     beforeEach(() => {

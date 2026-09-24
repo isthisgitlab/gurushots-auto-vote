@@ -7,8 +7,7 @@ const ROW_ICON_CLASS = 'w-4 h-4 mr-2';
 /**
  * Shared Save / secondary / Cancel action row used by the settings
  * modals (SettingsModal renders it twice — top and bordered bottom —
- * and ChallengeSettingsModal once). Markup and DaisyUI classes match
- * the previous inline copies exactly.
+ * and ChallengeSettingsModal once).
  *
  * @param {object} props
  * @param {Function} props.onSave

@@ -174,8 +174,8 @@ async function buildReact() {
     // the Capacitor entry: they are pure browser code that registers
     // proxies onto the native bridge. Externalizing them returns the
     // require shim's empty object, so .Preferences.set(...) etc.
-    // throws "X is not a function" at runtime — which is what was
-    // causing "Error saving settings" silent failures on Android.
+    // throws "X is not a function" at runtime, surfacing as silent
+    // "Error saving settings" failures on Android.
     // Electron entries can keep them externalized since Electron's
     // isCapacitor() returns false and the require shim is never
     // exercised in practice.

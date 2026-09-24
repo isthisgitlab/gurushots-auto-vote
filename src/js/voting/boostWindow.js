@@ -72,7 +72,7 @@ const openBoostWindows = (challenges, now) =>
  *     and malformed data (expiry after close) merely yields a negative figure.
  *
  * The `0 = off` sentinel on both window settings is deliberately NOT applied
- * here. getBoostThresholdSec's historical contract is to stay a pure function of
+ * here. getBoostThresholdSec's contract is to stay a pure function of
  * the configured numbers so orderDeadlineActions sorts on settings rather than on
  * live state; the callers that care (describeDeadlineActions, the pre-boost fill)
  * re-check the sentinel themselves, which `branch` is returned for.

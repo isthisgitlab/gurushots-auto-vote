@@ -130,10 +130,10 @@ dependencies {
     // NOTE: org.json is intentionally NOT declared as a Maven dependency. The
     // Android platform (android.jar / the device framework) already provides
     // org.json.*, which is all the plugin's main code uses (AutoVoteSettings.kt,
-    // AutoVoteService.kt). A Maven `org.json:json` dep was
-    // redundant, pulled a duplicate copy of platform classes, and made every
-    // release build depend on downloading it from Maven Central (a transient
-    // 502 there killed assembleRelease). Do not re-add it
+    // AutoVoteService.kt). A Maven `org.json:json` dep would be
+    // redundant, pull a duplicate copy of platform classes, and make every
+    // release build depend on downloading it from Maven Central (where a
+    // transient 502 kills assembleRelease). Do not add it
     // — not even as testImplementation: the JVM unit tests run under
     // Robolectric, whose android-all runtime jar ships the real platform
     // org.json, so tests exercise exactly the implementation the device uses.

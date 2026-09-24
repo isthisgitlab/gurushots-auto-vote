@@ -8,9 +8,8 @@
  * ('NONE' states, empty entries) — equivalent to the key being absent for
  * every code path under test.
  *
- * Suites keep their historical per-file defaults (ids, titles, time bases) as
- * tiny local wrappers around this builder, so what each test asserts is
- * unchanged.
+ * Suites keep their own per-file defaults (ids, titles, time bases) as tiny
+ * local wrappers around this builder.
  *
  * `buildSettingsFixture(overrides)` is the persisted-settings-file shape the
  * settings migration/sanitizer suites feed through loadSettings.
