@@ -23,15 +23,16 @@ const PICS_CHOICES = [1, 2, 3, 4];
 // the real gate.
 const MAX_RUNTIME_HOURS = 2000;
 
-function renderTristate(index, rule, key, labelKey, updateRule, t) {
+function TristateSelect({ rule, settingKey, labelKey, onPatch }) {
+    const { t } = useTranslation();
     return (
         <div className="form-control gap-1">
             <span className="label-text text-sm">{t(labelKey)}</span>
             <select
                 aria-label={t(labelKey)}
                 className="select select-bordered select-sm w-full"
-                value={triValue(rule[key])}
-                onChange={(event) => updateRule(index, triPatch(key, event.target.value))}
+                value={triValue(rule[settingKey])}
+                onChange={(event) => onPatch(triPatch(settingKey, event.target.value))}
             >
                 <option value="">{t('app.titleRuleInherit')}</option>
                 <option value="on">{t('app.titleRuleOn')}</option>
@@ -49,7 +50,8 @@ function renderTristate(index, rule, key, labelKey, updateRule, t) {
  * 0 is the explicit "off" value for an override, so this cannot just coerce
  * with Number().
  */
-function renderNumberField({ index, rule, settingKey, labelKey, unitKey, placeholderKey, min, max, updateRule, t }) {
+function RuleNumberField({ rule, settingKey, labelKey, unitKey, placeholderKey, min, max, onPatch }) {
+    const { t } = useTranslation();
     const raw = rule[settingKey];
     return (
         <div className="form-control gap-1">
@@ -68,7 +70,7 @@ function renderNumberField({ index, rule, settingKey, labelKey, unitKey, placeho
                     value={raw === null || raw === undefined ? '' : raw}
                     onChange={(event) => {
                         const next = event.target.value;
-                        updateRule(index, { [settingKey]: next === '' ? '' : Number(next) });
+                        onPatch({ [settingKey]: next === '' ? '' : Number(next) });
                     }}
                 />
                 <span className="text-xs opacity-60">{t(unitKey)}</span>
@@ -77,7 +79,50 @@ function renderNumberField({ index, rule, settingKey, labelKey, unitKey, placeho
     );
 }
 
-function renderTitleProfileSelect(index, rule, profiles, updateRule, t) {
+// Runtime-range conditions: any-length when blank.
+const RUNTIME_FIELDS = [
+    { settingKey: 'minHours', labelKey: 'app.titleRuleMinHours' },
+    { settingKey: 'maxHours', labelKey: 'app.titleRuleMaxHours' },
+].map((field) => ({
+    ...field,
+    unitKey: 'app.unitHours',
+    placeholderKey: 'app.titleRuleAnyLength',
+    min: 1,
+    max: MAX_RUNTIME_HOURS,
+}));
+
+// Inline behaviour overrides: inherit when blank.
+const TRISTATE_OVERRIDES = [
+    { settingKey: 'autoJoin', labelKey: 'app.titleRuleAutoJoin' },
+    { settingKey: 'autoFill', labelKey: 'app.titleRuleAutoFill' },
+];
+const JOIN_TIMING_FIELDS = [
+    {
+        settingKey: 'autoJoinAfterPercentElapsed',
+        labelKey: 'app.titleRulePercentElapsed',
+        unitKey: 'app.unitPercent',
+        placeholderKey: 'app.titleRuleJoinWindowPlaceholder',
+        min: 0,
+        max: 99,
+    },
+    {
+        settingKey: 'autoJoinWithinHoursOfEnd',
+        labelKey: 'app.titleRuleJoinWindow',
+        unitKey: 'app.unitHours',
+        placeholderKey: 'app.titleRuleJoinWindowPlaceholder',
+        min: 0,
+        max: 720,
+    },
+];
+
+// Must/Should Include PHOTO tags merged in at fill time.
+const TAG_FIELDS = [
+    { settingKey: 'mustIncludeTags', labelKey: 'app.mustIncludeTags' },
+    { settingKey: 'shouldIncludeTags', labelKey: 'app.shouldIncludeTags' },
+];
+
+function RuleProfileSelect({ rule, profiles, onPatch }) {
+    const { t } = useTranslation();
     const names = Object.keys(profiles).sort();
     return (
         <div className="form-control gap-1">
@@ -86,7 +131,7 @@ function renderTitleProfileSelect(index, rule, profiles, updateRule, t) {
                 aria-label={t('app.titleRuleProfile')}
                 className="select select-bordered select-sm w-full"
                 value={rule.profile ?? ''}
-                onChange={(event) => updateRule(index, { profile: event.target.value })}
+                onChange={(event) => onPatch({ profile: event.target.value })}
             >
                 <option value="">{t('app.none')}</option>
                 {names.map((name) => (
@@ -99,7 +144,7 @@ function renderTitleProfileSelect(index, rule, profiles, updateRule, t) {
     );
 }
 
-// Mirrors MAX_TITLES_PER_RULE in settings.js; the sanitizer is the real gate.
+// Mirrors MAX_TITLES_PER_RULE in settings/titleRuleSanitize.js; the sanitizer is the real gate.
 const MAX_TITLES_PER_RULE = 50;
 
 // The editable title list of a rule. Stored rules carry `titles` only when they
@@ -114,9 +159,10 @@ const ruleTitleRows = (rule) => {
 // stays readable by single-title code; the sanitizer drops empty rows.
 const titlesPatch = (titles) => ({ titles, title: titles[0] ?? '' });
 
-function renderTitleList(index, rule, updateRule, t) {
+function RuleTitleList({ rule, onPatch }) {
+    const { t } = useTranslation();
     const titles = ruleTitleRows(rule);
-    const setTitles = (next) => updateRule(index, titlesPatch(next));
+    const setTitles = (next) => onPatch(titlesPatch(next));
     return (
         <div className="space-y-2">
             {titles.map((title, titleIndex) => (
@@ -155,7 +201,8 @@ function renderTitleList(index, rule, updateRule, t) {
     );
 }
 
-function renderClassConditions(index, rule, updateRule, t) {
+function RuleClassConditions({ rule, onPatch }) {
+    const { t } = useTranslation();
     return (
         <div className="grid gap-2 sm:grid-cols-2">
             <div className="form-control gap-1">
@@ -166,7 +213,7 @@ function renderClassConditions(index, rule, updateRule, t) {
                     placeholder={t('app.titleRuleChallengeTagPlaceholder')}
                     aria-label={t('app.titleRuleChallengeTag')}
                     value={rule.challengeTag ?? ''}
-                    onChange={(e) => updateRule(index, { challengeTag: e.target.value })}
+                    onChange={(e) => onPatch({ challengeTag: e.target.value })}
                 />
             </div>
             <div className="form-control gap-1">
@@ -178,7 +225,7 @@ function renderClassConditions(index, rule, updateRule, t) {
                     placeholder={t('app.titleRuleTypePlaceholder')}
                     aria-label={t('app.titleRuleType')}
                     value={rule.type ?? ''}
-                    onChange={(e) => updateRule(index, { type: e.target.value })}
+                    onChange={(e) => onPatch({ type: e.target.value })}
                 />
             </div>
             <div className="form-control gap-1">
@@ -189,7 +236,7 @@ function renderClassConditions(index, rule, updateRule, t) {
                     value={String(rule.pics ?? '')}
                     onChange={(event) => {
                         const next = event.target.value;
-                        updateRule(index, { pics: next === '' ? '' : Number(next) });
+                        onPatch({ pics: next === '' ? '' : Number(next) });
                     }}
                 >
                     <option value="">{t('app.titleRuleAnyPics')}</option>
@@ -201,67 +248,85 @@ function renderClassConditions(index, rule, updateRule, t) {
                 </select>
             </div>
             <div className="grid grid-cols-2 gap-2">
-                {renderNumberField({
-                    index,
-                    rule,
-                    settingKey: 'minHours',
-                    labelKey: 'app.titleRuleMinHours',
-                    unitKey: 'app.unitHours',
-                    placeholderKey: 'app.titleRuleAnyLength',
-                    min: 1,
-                    max: MAX_RUNTIME_HOURS,
-                    updateRule,
-                    t,
-                })}
-                {renderNumberField({
-                    index,
-                    rule,
-                    settingKey: 'maxHours',
-                    labelKey: 'app.titleRuleMaxHours',
-                    unitKey: 'app.unitHours',
-                    placeholderKey: 'app.titleRuleAnyLength',
-                    min: 1,
-                    max: MAX_RUNTIME_HOURS,
-                    updateRule,
-                    t,
-                })}
+                {RUNTIME_FIELDS.map((field) => (
+                    <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
+                ))}
             </div>
         </div>
     );
 }
 
-function renderBehaviour(index, rule, updateRule, t) {
+function RuleBehaviour({ rule, onPatch }) {
+    const { t } = useTranslation();
     return (
         <div className="space-y-2">
             <span className="label-text text-sm font-medium">{t('app.titleRuleOverridesLabel')}</span>
             <div className="grid gap-2 sm:grid-cols-2">
-                {renderTristate(index, rule, 'autoJoin', 'app.titleRuleAutoJoin', updateRule, t)}
-                {renderTristate(index, rule, 'autoFill', 'app.titleRuleAutoFill', updateRule, t)}
-                {renderNumberField({
-                    index,
-                    rule,
-                    settingKey: 'autoJoinAfterPercentElapsed',
-                    labelKey: 'app.titleRulePercentElapsed',
-                    unitKey: 'app.unitPercent',
-                    placeholderKey: 'app.titleRuleJoinWindowPlaceholder',
-                    min: 0,
-                    max: 99,
-                    updateRule,
-                    t,
-                })}
-                {renderNumberField({
-                    index,
-                    rule,
-                    settingKey: 'autoJoinWithinHoursOfEnd',
-                    labelKey: 'app.titleRuleJoinWindow',
-                    unitKey: 'app.unitHours',
-                    placeholderKey: 'app.titleRuleJoinWindowPlaceholder',
-                    min: 0,
-                    max: 720,
-                    updateRule,
-                    t,
-                })}
+                {TRISTATE_OVERRIDES.map((field) => (
+                    <TristateSelect key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
+                ))}
+                {JOIN_TIMING_FIELDS.map((field) => (
+                    <RuleNumberField key={field.settingKey} {...field} rule={rule} onPatch={onPatch} />
+                ))}
             </div>
+        </div>
+    );
+}
+
+function RuleTagsField({ index, rule, settingKey, labelKey, onPatch }) {
+    const { t } = useTranslation();
+    const id = `title-rule-${index}-${settingKey}`;
+    return (
+        <div className="form-control">
+            <label className="label py-1" htmlFor={id}>
+                <span className="label-text text-sm">{t(labelKey)}</span>
+            </label>
+            <TagsField
+                id={id}
+                settingKey={settingKey}
+                value={rule[settingKey]}
+                onChange={(_key, tags) => onPatch({ [settingKey]: tags })}
+                placeholder={t('app.tagsPlaceholder')}
+            />
+        </div>
+    );
+}
+
+/** Position badge plus the reorder / remove controls of one rule card. */
+function RuleHeader({ index, count, onMove, onRemove }) {
+    const { t } = useTranslation();
+    return (
+        <div className="flex items-center gap-2">
+            <span className="badge badge-ghost badge-sm">{index + 1}</span>
+            <span className="label-text text-sm font-medium flex-1">{t('app.titleRuleConditionsLabel')}</span>
+            <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                title={t('app.titleRuleMoveUp')}
+                aria-label={`${t('app.titleRuleMoveUp')} ${index + 1}`}
+                disabled={index === 0}
+                onClick={() => onMove(-1)}
+            >
+                ↑
+            </button>
+            <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                title={t('app.titleRuleMoveDown')}
+                aria-label={`${t('app.titleRuleMoveDown')} ${index + 1}`}
+                disabled={index === count - 1}
+                onClick={() => onMove(1)}
+            >
+                ↓
+            </button>
+            <button
+                className="btn btn-ghost btn-sm text-error"
+                title={t('app.removeTitleTagRule')}
+                aria-label={t('app.removeTitleTagRule')}
+                onClick={onRemove}
+            >
+                ×
+            </button>
         </div>
     );
 }
@@ -270,6 +335,42 @@ function renderBehaviour(index, rule, updateRule, t) {
 // switching joining or auto-submit ON there spends coins / photos broadly.
 const isBroadSpendingRule = (rule) =>
     rulePatterns(rule).length === 0 && hasRuleCondition(rule) && (rule.autoJoin === true || rule.autoFill === true);
+
+/** One rule: conditions, then the behaviour it applies to matching challenges. */
+function RuleCard({ index, count, rule, profiles, onPatch, onMove, onRemove }) {
+    const { t } = useTranslation();
+    return (
+        <div className="rounded-box border border-base-300 p-3 space-y-3">
+            <RuleHeader index={index} count={count} onMove={onMove} onRemove={onRemove} />
+            <div className="flex items-center gap-2">
+                <select
+                    aria-label={t('app.titleRuleMatch')}
+                    className="select select-bordered select-sm w-32"
+                    value={rule.match ?? 'exact'}
+                    onChange={(e) => onPatch({ match: e.target.value })}
+                >
+                    <option value="exact">{t('app.titleRuleMatchExact')}</option>
+                    <option value="starts">{t('app.titleRuleMatchStarts')}</option>
+                    <option value="contains">{t('app.titleRuleMatchContains')}</option>
+                </select>
+                <span className="label-text text-sm flex-1">{t('app.titleRuleTitlesLabel')}</span>
+            </div>
+            <RuleTitleList rule={rule} onPatch={onPatch} />
+            <RuleClassConditions rule={rule} onPatch={onPatch} />
+            <p className="label-text-alt text-xs opacity-60">{t('app.titleRuleConditionsHint')}</p>
+            <RuleProfileSelect rule={rule} profiles={profiles} onPatch={onPatch} />
+            <RuleBehaviour rule={rule} onPatch={onPatch} />
+            {isBroadSpendingRule(rule) && (
+                <div role="alert" className="alert alert-warning py-2 text-sm">
+                    <span>{t('app.titleRuleBroadWarning')}</span>
+                </div>
+            )}
+            {TAG_FIELDS.map((field) => (
+                <RuleTagsField key={field.settingKey} {...field} index={index} rule={rule} onPatch={onPatch} />
+            ))}
+        </div>
+    );
+}
 
 /**
  * Editor for challenge rules. GuruShots challenges rotate with a fresh id each
@@ -282,7 +383,7 @@ const isBroadSpendingRule = (rule) =>
  * photo count and its runtime range in hours. Every filled condition must hold.
  *
  * ORDER: the list order is the precedence — for each setting the first matching
- * rule that sets it wins (see settings.js `_ruleValuesFor`). The user reorders
+ * rule that sets it wins (see `ruleValuesFor` in settings/ruleResolution.js). The user reorders
  * with the arrows or resets to the default order (settings/challengeRules.js
  * `sortRulesByDefaultOrder`: title rules, then photos + runtime, photos,
  * runtime).
@@ -308,10 +409,6 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {}, types = []
 
     const updateRule = (index, patch) => {
         onChange(rules.map((rule, i) => (i === index ? { ...rule, ...patch } : rule)));
-    };
-
-    const removeRule = (index) => {
-        onChange(rules.filter((_, i) => i !== index));
     };
 
     const moveRule = (index, delta) => {
@@ -344,90 +441,16 @@ export function TitleTagRulesEditor({ value, onChange, profiles = {}, types = []
             {rules.map((rule, index) => (
                 // Index key: controlled inputs and TagsField's prop-fingerprint
                 // re-sync keep values aligned with the row when rows move.
-                <div key={index} className="rounded-box border border-base-300 p-3 space-y-3">
-                    <div className="flex items-center gap-2">
-                        <span className="badge badge-ghost badge-sm">{index + 1}</span>
-                        <span className="label-text text-sm font-medium flex-1">
-                            {t('app.titleRuleConditionsLabel')}
-                        </span>
-                        <button
-                            type="button"
-                            className="btn btn-ghost btn-xs"
-                            title={t('app.titleRuleMoveUp')}
-                            aria-label={`${t('app.titleRuleMoveUp')} ${index + 1}`}
-                            disabled={index === 0}
-                            onClick={() => moveRule(index, -1)}
-                        >
-                            ↑
-                        </button>
-                        <button
-                            type="button"
-                            className="btn btn-ghost btn-xs"
-                            title={t('app.titleRuleMoveDown')}
-                            aria-label={`${t('app.titleRuleMoveDown')} ${index + 1}`}
-                            disabled={index === rules.length - 1}
-                            onClick={() => moveRule(index, 1)}
-                        >
-                            ↓
-                        </button>
-                        <button
-                            className="btn btn-ghost btn-sm text-error"
-                            title={t('app.removeTitleTagRule')}
-                            aria-label={t('app.removeTitleTagRule')}
-                            onClick={() => removeRule(index)}
-                        >
-                            ×
-                        </button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <select
-                            aria-label={t('app.titleRuleMatch')}
-                            className="select select-bordered select-sm w-32"
-                            value={rule.match ?? 'exact'}
-                            onChange={(e) => updateRule(index, { match: e.target.value })}
-                        >
-                            <option value="exact">{t('app.titleRuleMatchExact')}</option>
-                            <option value="starts">{t('app.titleRuleMatchStarts')}</option>
-                            <option value="contains">{t('app.titleRuleMatchContains')}</option>
-                        </select>
-                        <span className="label-text text-sm flex-1">{t('app.titleRuleTitlesLabel')}</span>
-                    </div>
-                    {renderTitleList(index, rule, updateRule, t)}
-                    {renderClassConditions(index, rule, updateRule, t)}
-                    <p className="label-text-alt text-xs opacity-60">{t('app.titleRuleConditionsHint')}</p>
-                    {renderTitleProfileSelect(index, rule, profiles, updateRule, t)}
-                    {renderBehaviour(index, rule, updateRule, t)}
-                    {isBroadSpendingRule(rule) && (
-                        <div role="alert" className="alert alert-warning py-2 text-sm">
-                            <span>{t('app.titleRuleBroadWarning')}</span>
-                        </div>
-                    )}
-                    <div className="form-control">
-                        <label className="label py-1" htmlFor={`title-rule-${index}-mustIncludeTags`}>
-                            <span className="label-text text-sm">{t('app.mustIncludeTags')}</span>
-                        </label>
-                        <TagsField
-                            id={`title-rule-${index}-mustIncludeTags`}
-                            settingKey="mustIncludeTags"
-                            value={rule.mustIncludeTags}
-                            onChange={(_key, tags) => updateRule(index, { mustIncludeTags: tags })}
-                            placeholder={t('app.tagsPlaceholder')}
-                        />
-                    </div>
-
-                    <div className="form-control">
-                        <label className="label py-1" htmlFor={`title-rule-${index}-shouldIncludeTags`}>
-                            <span className="label-text text-sm">{t('app.shouldIncludeTags')}</span>
-                        </label>
-                        <TagsField
-                            id={`title-rule-${index}-shouldIncludeTags`}
-                            settingKey="shouldIncludeTags"
-                            value={rule.shouldIncludeTags}
-                            onChange={(_key, tags) => updateRule(index, { shouldIncludeTags: tags })}
-                            placeholder={t('app.tagsPlaceholder')}
-                        />
-                    </div>
-                </div>
+                <RuleCard
+                    key={index}
+                    index={index}
+                    count={rules.length}
+                    rule={rule}
+                    profiles={profiles}
+                    onPatch={(patch) => updateRule(index, patch)}
+                    onMove={(delta) => moveRule(index, delta)}
+                    onRemove={() => onChange(rules.filter((_, i) => i !== index))}
+                />
             ))}
 
             {/* Suggestions only — the type field stays free text so a type this

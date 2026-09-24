@@ -1,22 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from '@/contexts/TranslationContext';
 import { useSettingsSchema } from '@/api/useSettingsSchema';
-import { tierSchemaEntries, SETTINGS_GRID_CLASS, SETTING_CELL_CLASS } from '@/utils/groupSettings';
-import { getGroupApplicability } from '@/utils/challengeApplicability';
-import { formatSettingDefault } from '@/utils/formatters';
-import { formatSecondsAsHoursMinutes } from '@/utils/timeFieldUnits';
-import { getScheduleShift } from '../../../services/scheduleRemap';
-import { DEFAULT_TIMEZONE } from '../../../settings/uiDefaults';
-import { SettingInput, SettingLabel } from './SettingInput';
-import { deriveWindowHints } from '@/utils/windowHints';
-import { MAX_VOTING_PAUSE_MINUTES } from '../../../settings/limits';
-import { SettingHelp } from '@/components/ui/SettingHelp';
-import { ChallengeProfilesBar } from './ChallengeProfilesBar';
+import { useAutovote } from '@/contexts/AutovoteContext';
+import { useChallengeOverrides } from '@/hooks/useChallengeOverrides';
+import { tierSchemaEntries } from '@/utils/groupSettings';
 import { Modal } from '@/components/ui/Modal';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { ModalActionRow } from '@/components/ui/ModalActionRow';
 import { SettingsTierHeading } from '@/components/ui/SettingsTierHeading';
-import { useAutovote } from '@/contexts/AutovoteContext';
+import { ChallengeProfilesBar } from './ChallengeProfilesBar';
+import { ChallengeSettingsGroup } from './ChallengeSettingsGroup';
+import { challengeSettingHints } from './SettingHints';
 
 function useAppSettings(isOpen) {
     const [appSettings, setAppSettings] = useState(null);
@@ -39,6 +33,44 @@ function useAppSettings(isOpen) {
 }
 
 /**
+ * Explains what an override is, then summarises the effective settings: how
+ * many keys diverge from the global defaults right now (the per-row "Global
+ * default: …" hint shows the comparison value; this is the at-a-glance count
+ * so a user doesn't have to scan every group) and which title-rule profile
+ * applies.
+ */
+function OverridesSummary({ overrideCount, titleProfile }) {
+    const { t } = useTranslation();
+    return (
+        <>
+            <div className="alert alert-info text-sm">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                </svg>
+                <span>{t('app.challengeOverrideInfo')}</span>
+            </div>
+            <p className="text-xs" role="status">
+                {t(overrideCount ? 'app.overridesActiveSummary' : 'app.overridesNoneSummary').replace(
+                    '{0}',
+                    overrideCount,
+                )}
+                {titleProfile && !titleProfile.suppressed && (
+                    <>
+                        {' · '}
+                        {t('app.usingProfile')}: {titleProfile.name}
+                    </>
+                )}
+            </p>
+        </>
+    );
+}
+
+/**
  * Per-challenge settings modal
  */
 export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challengeTitle, challenge = null }) {
@@ -53,631 +85,78 @@ export function ChallengeSettingsModal({ isOpen, onClose, challengeId, challenge
         refetch: refetchSchema,
         loading: schemaLoading,
     } = useSettingsSchema();
-
-    // Local state for override values
-    const [overrides, setOverrides] = useState({});
-    const [saving, setSaving] = useState(false);
-    const [loading, setLoading] = useState(true);
-    // True when a setChallengeOverride write was rejected by validation —
-    // shown as an alert and the modal stays open so the edit isn't lost.
-    const [saveError, setSaveError] = useState(false);
     const appSettings = useAppSettings(isOpen);
-    const [titleProfile, setTitleProfile] = useState(null);
-    // Set when a profile Apply flips scheduledFillReplaces on for a challenge
-    // that didn't have it — that one field can silently cost a challenge its
-    // fills, so it gets a highlighted warning the generic apply-hint lacks.
-    const [profileReplacesWarning, setProfileReplacesWarning] = useState(false);
-
-    // Refresh global defaults each time the modal opens so the
-    // "Global default: …" hint reflects current persisted state.
-    useEffect(() => {
-        if (isOpen) {
-            refetchSchema();
-            setSaveError(false);
-            setProfileReplacesWarning(false);
-        }
-    }, [isOpen, refetchSchema]);
-
-    // Load existing overrides once per (open, challengeId) session.
-    //
-    // Two intertwined concerns:
-    //   1. Don't clobber in-progress user edits when useSettingsSchema
-    //      refetches and hands us a new schema reference mid-session.
-    //      Tracked by loadedForChallengeRef — once we've loaded for a
-    //      given challengeId, the effect early-returns even if schema
-    //      ref changes.
-    //   2. Drop in-flight loads when the user closes the modal or the
-    //      target challengeId changes before the IPC sequence resolves,
-    //      so a stale setOverrides can never land. Tracked by the
-    //      per-run `cancelled` flag set from the effect cleanup.
-    //
-    // The previous "single ref" guard handled (1) but missed (2), and
-    // rapid open/close cycles could land stale state — which is the
-    // most likely contributor to the blank page seen on rapid clicks.
-    const loadedForChallengeRef = useRef(null);
-    useEffect(() => {
-        if (!isOpen) {
-            loadedForChallengeRef.current = null;
-            return undefined;
-        }
-        if (!challengeId || !schema) return undefined;
-        const loadKey = `${challengeId}\0${challengeTitle}`;
-        if (loadedForChallengeRef.current === loadKey) return undefined;
-
-        let cancelled = false;
-        const load = async () => {
-            setLoading(true);
-            try {
-                // Single batch IPC call (the facade's own-property-safe sparse
-                // map) instead of one round-trip per schema key.
-                const [stored, profile] = await Promise.all([
-                    window.api.getChallengeOverrides(challengeId.toString()),
-                    window.api.getTitleProfile(challengeTitle, challengeId.toString()),
-                ]);
-                if (cancelled) return;
-                const loaded = {};
-                for (const [key, value] of Object.entries(stored || {})) {
-                    if (schema[key]?.perChallenge) loaded[key] = value;
-                }
-                setOverrides(loaded);
-                setTitleProfile(profile);
-                loadedForChallengeRef.current = loadKey;
-            } catch (err) {
-                if (cancelled) return;
-                await window.api.logError(`Error loading challenge overrides: ${err.message || err}`);
-            } finally {
-                if (!cancelled) setLoading(false);
-            }
-        };
-
-        load();
-        return () => {
-            cancelled = true;
-        };
-    }, [isOpen, challengeId, challengeTitle, schema]);
-
-    const handleOverrideChange = useCallback((key, value) => {
-        setOverrides((prev) => ({ ...prev, [key]: value }));
-    }, []);
-
-    const handleClearOverride = useCallback((key) => {
-        setOverrides((prev) => {
-            const newOverrides = { ...prev };
-            delete newOverrides[key];
-            return newOverrides;
-        });
-    }, []);
-
-    const handleClearAll = useCallback(() => {
-        setOverrides({});
-        setTitleProfile((profile) => (profile ? { ...profile, suppressed: false } : null));
-    }, []);
-
-    const handleSave = useCallback(async () => {
-        // Schema can be null if its fetch failed but schemaLoading flipped
-        // to false — the Save button is then reachable but Object.keys(null)
-        // would throw. Bail out instead of crashing the boundary.
-        if (!challengeId || !schema) return;
-
-        setSaving(true);
-        try {
-            const saved = await window.api.replaceChallengeOverrides(
-                challengeId.toString(),
-                overrides,
-                titleProfile?.suppressed === true,
-            );
-            if (saved === false) {
-                setSaveError(true);
-                return;
-            }
-            setSaveError(false);
-
-            // Close before the re-arm's settings read + challenge fetch, so
-            // the saved modal doesn't linger open for that round-trip.
-            onClose();
-
-            // Re-arm the cadence timer so a changed per-challenge threshold /
-            // scheduled fill takes effect now, not after the current wait.
-            await rearmSchedule();
-        } catch (err) {
-            await window.api.logError(`Error saving challenge settings: ${err.message || err}`);
-        } finally {
-            setSaving(false);
-        }
-    }, [challengeId, overrides, schema, titleProfile, rearmSchedule, onClose]);
+    const form = useChallengeOverrides({
+        isOpen,
+        challengeId,
+        challengeTitle,
+        schema,
+        defaults,
+        refetchSchema,
+        rearmSchedule,
+        onClose,
+    });
 
     if (!isOpen) return null;
 
-    const title = `${t('app.challengeSettings')}: ${challengeTitle}`;
-
-    // Scheduled-fill hint state, derived fresh per render from the effective
-    // (override-or-global) values — same render-time spirit as the
-    // scheduleShift hint below. Both triggers are LISTS; every entry opens
-    // its own window. A failing wall-clock computation must never break the
-    // modal, so the Intl math is guarded.
-    const profileValues = titleProfile?.suppressed ? {} : (titleProfile?.values ?? {});
-    const overrideCount = Object.keys(overrides).length;
-    const inheritedOf = (key) =>
-        Object.prototype.hasOwnProperty.call(profileValues, key)
-            ? profileValues[key]
-            : (defaults?.[key] ?? schema?.[key]?.default);
-    const effectiveOf = (key) => (key in overrides ? overrides[key] : inheritedOf(key));
-    const appTimezone = appSettings?.timezone || DEFAULT_TIMEZONE;
-    const checkFrequencyMax = Number(appSettings?.checkFrequencyMax) || 0;
-    const sfReplaces = effectiveOf('scheduledFillReplaces') === true;
-    const nowSec = Math.floor(Date.now() / 1000);
-    const closeTime = Number(challenge?.close_time) || 0;
-    const formatInTz = (epochSec) => {
-        // Range-guard BEFORE formatting: the toISOString fallback throws
-        // RangeError past ±8.64e15 ms, so an out-of-range input would take the
-        // whole modal into the ErrorBoundary rather than degrade to a label.
-        const ms = Number(epochSec) * 1000;
-        if (!Number.isFinite(ms) || Math.abs(ms) > 8.64e15) return '—';
-        try {
-            return new Intl.DateTimeFormat(undefined, {
-                timeZone: appTimezone,
-                hour: '2-digit',
-                minute: '2-digit',
-                hourCycle: 'h23',
-            }).format(ms);
-        } catch {
-            return new Date(ms).toISOString().slice(11, 16);
-        }
-    };
-    // The trigger-window derivation itself lives in utils/windowHints.js, which
-    // mirrors _triggerWindowState in services/VotingLogic.js so a hint can never
-    // claim a window the decision path won't open.
-    const derive = (keys, defaultDurationMin, policy) =>
-        deriveWindowHints({
-            keys,
-            defaultDurationMin,
-            effectiveOf,
-            timezone: appTimezone,
-            nowSec,
-            closeTime,
-            ...policy,
-        });
-    /**
-     * Render a window's producing trigger: a daily 'HH:MM' or an offset label.
-     * Only called with a derived `next.source`, which always carries its kind
-     * plus `value` (time) or `seconds` (beforeEnd) — see utils/windowHints.
-     */
-    const sourceLabel = (source) =>
-        source.kind === 'beforeEnd'
-            ? t('app.scheduledFillSourceBeforeEnd').replace(
-                  '{0}',
-                  formatSecondsAsHoursMinutes(source.seconds, t('app.hours'), t('app.minutes')),
-              )
-            : source.value;
-
-    const sf = derive(
-        {
-            enabled: 'useScheduledFill',
-            times: 'scheduledFillTime',
-            beforeEnd: 'scheduledFillBeforeEnd',
-            duration: 'scheduledFillWindowMinutes',
-        },
-        60,
-        // Scheduled fill's own policy, stated explicitly: substitute the default
-        // on corruption, no ceiling (an oversized fill window just means
-        // "always fill", which is harmless).
-        { onCorruptDuration: 'default', maxDurationMin: null },
-    );
-    const { beforeEnds: sfBeforeEnds, durationMin: sfWindowMin, durationSec: sfWindowSec } = sf;
-    const { enabled: sfEnabled, timeOccs: sfTimeOccs, timeSet: sfTimeSet, active: sfActive, next: sfNext } = sf;
-
-    const vp = derive(
-        {
-            enabled: 'useVotingPause',
-            times: 'votingPauseTime',
-            beforeEnd: 'votingPauseBeforeEnd',
-            duration: 'votingPauseDurationMinutes',
-        },
-        240,
-        // Must match getVotingPauseState's policy or the hint would advertise a
-        // pause the decision path refuses to open.
-        { onCorruptDuration: 'off', maxDurationMin: MAX_VOTING_PAUSE_MINUTES },
-    );
-    // A pause open RIGHT NOW is reported as an END time — "voting resumes at …"
-    // is what the user actually wants to know.
-    const vpOpenUntil = vp.openNow ? vp.next.start + vp.durationSec : null;
-    // Daily pauses that leave no uncovered moment — outside the last-minute
-    // rules such a challenge would never vote automatically at all.
-    const vpAllDay = vp.coversWholeDay;
-    // With replace mode on, is any fill window still reachable for THIS
-    // challenge? Unreachable means replace mode keeps blocking threshold
-    // voting with no fill ever coming (e.g. a "5h before end" profile applied
-    // to a challenge with 2h left).
-    let sfUnreachable = false;
-    if (sfActive && sfReplaces && closeTime > nowSec) {
-        const beforeEndReachable = sfBeforeEnds.some((sec) => nowSec <= closeTime - sec + sfWindowSec);
-        const timeOfDayReachable = sfTimeOccs.some(
-            ({ occ }) => nowSec - occ.prev <= sfWindowSec || occ.next < closeTime,
-        );
-        sfUnreachable = !beforeEndReachable && !timeOfDayReachable;
-    }
-    /** Conditional inline hints for the scheduled-fill keys; [] for other keys. */
-    const scheduledFillHints = (key) => {
-        const hints = [];
-        if (key === 'useScheduledFill') {
-            if (sfEnabled && !sfTimeSet && sfBeforeEnds.length === 0) {
-                hints.push({ tone: 'text-warning', text: t('app.scheduledFillNoTimesHint') });
-            }
-            // The next-window hint lives on the master-toggle row (feature-level
-            // status): a before-end-only config — the issue's own motivating
-            // case — would never see it on the daily-times row. It gates on
-            // sfEnabled like every value-derived hint: a time typed in while
-            // the toggle is off must not render an "active schedule" status.
-            if (sfEnabled && sfNext) {
-                hints.push({
-                    tone: 'text-info',
-                    text: t('app.scheduledFillNextHint')
-                        .replace('{0}', formatInTz(sfNext.start))
-                        .replace('{1}', formatInTz(sfNext.start + sfWindowSec))
-                        .replace('{2}', appTimezone)
-                        .replace('{3}', sourceLabel(sfNext.source)),
-                });
-            }
-        }
-        if (key === 'scheduledFillBeforeEnd' && sfEnabled) {
-            const wasted = sfBeforeEnds.filter((sec) => sec < sfWindowSec);
-            if (wasted.length > 0) {
-                hints.push({
-                    tone: 'text-warning',
-                    text: t('app.scheduledFillWastedWindowHint').replace(
-                        '{0}',
-                        wasted
-                            .map((sec) => formatSecondsAsHoursMinutes(sec, t('app.hours'), t('app.minutes')))
-                            .join(', '),
-                    ),
-                });
-            }
-        }
-        if (
-            key === 'scheduledFillWindowMinutes' &&
-            sfActive &&
-            checkFrequencyMax > 0 &&
-            sfWindowMin < checkFrequencyMax
-        ) {
-            hints.push({
-                tone: 'text-warning',
-                text: t('app.scheduledFillShortWindowHint').replace('{0}', String(checkFrequencyMax)),
-            });
-        }
-        if (key === 'scheduledFillReplaces') {
-            if (profileReplacesWarning) {
-                hints.push({ tone: 'text-warning font-medium', text: t('app.scheduledFillProfileReplacesWarning') });
-            }
-            if (sfUnreachable) {
-                hints.push({ tone: 'text-warning', text: t('app.scheduledFillUnreachableHint') });
-            }
-        }
-        return hints;
-    };
-
-    /**
-     * Conditional inline hints for the voting-pause keys; [] for other keys.
-     * All feature-level status sits on the master-toggle row for the same
-     * reason scheduled fill's does: a before-end-only config would never see a
-     * hint rendered on the daily-times row.
-     */
-    const votingPauseHints = (key) => {
-        const hints = [];
-        if (key !== 'useVotingPause') return hints;
-        if (vp.enabled && !vp.timeSet && vp.beforeEnds.length === 0) {
-            hints.push({ tone: 'text-warning', text: t('app.votingPauseNoTimesHint') });
-        }
-        if (vpOpenUntil) {
-            hints.push({
-                tone: 'text-warning',
-                text: t('app.votingPauseActiveHint')
-                    .replace('{0}', formatInTz(vpOpenUntil))
-                    .replace('{1}', appTimezone),
-            });
-        } else if (vp.active && vp.next) {
-            hints.push({
-                tone: 'text-info',
-                text: t('app.votingPauseNextHint')
-                    .replace('{0}', formatInTz(vp.next.start))
-                    .replace('{1}', formatInTz(vp.next.start + vp.durationSec))
-                    .replace('{2}', appTimezone)
-                    .replace('{3}', sourceLabel(vp.next.source)),
-            });
-        }
-        if (vpAllDay) {
-            hints.push({ tone: 'text-warning font-medium', text: t('app.votingPauseAllDayHint') });
-        }
-        return hints;
-    };
-
-    /**
-     * The pause's counterpart to scheduledFillShortWindowHint, and it matters
-     * MORE here: the pause is deliberately not a cadence input (see
-     * docs/scheduling.md), so the scheduler never wakes for a pause boundary.
-     * A pause shorter than the longest gap between cycles can therefore be
-     * stepped straight over, and voting proceeds as if it were never set.
-     */
-    /**
-     * Conditional inline hints for the pre-boost fill; [] for other keys.
-     *
-     * Mirrors the global settings modal: the fill spends votes, so any setting
-     * that blocks voting above the pre-boost branch in _runVotingRules cancels
-     * it silently, and a per-challenge override is exactly where that pairing
-     * gets made (overriding onlyBoost for one challenge while voteBeforeBoost is
-     * inherited on). All of it hangs off the master-toggle row.
-     */
-    const boostPrefillHints = (key) => {
-        const hints = [];
-        if (key !== 'voteBeforeBoost' || effectiveOf('voteBeforeBoost') !== true) return hints;
-        if (effectiveOf('onlyBoost') === true) {
-            hints.push({ tone: 'text-warning font-medium', text: t('app.voteBeforeBoostOnlyBoostHint') });
-        }
-        if (effectiveOf('autoBoost') !== true) {
-            hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostNoAutoBoostHint') });
-        }
-        if (effectiveOf('voteOnlyInLastMinute') === true) {
-            hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostLastMinuteOnlyHint') });
-        }
-        // Both boost clocks off (0 = off on each) means no boost is ever
-        // auto-applied, so there is no instant to fill ahead of.
-        if (Number(effectiveOf('boostTime')) === 0 && Number(effectiveOf('keyUnlockedBoostTime')) === 0) {
-            hints.push({ tone: 'text-warning', text: t('app.voteBeforeBoostNoBoostTimeHint') });
-        }
-        return hints;
-    };
-
-    const votingPauseDurationHints = (key) => {
-        if (key !== 'votingPauseDurationMinutes') return [];
-        if (!vp.active || !(checkFrequencyMax > 0) || vp.durationMin >= checkFrequencyMax) return [];
-        return [
-            {
-                tone: 'text-warning',
-                text: t('app.votingPauseShortWindowHint').replace('{0}', String(checkFrequencyMax)),
-            },
-        ];
-    };
+    const hintsFor = challengeSettingHints({
+        effectiveOf: form.effectiveOf,
+        appSettings,
+        challenge,
+        profileReplacesWarning: form.profileReplacesWarning,
+        t,
+    });
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={title} size="2xl">
+        <Modal isOpen={isOpen} onClose={onClose} title={`${t('app.challengeSettings')}: ${challengeTitle}`} size="2xl">
             {/* Schema spinner only for the first load — a background refetch
                 (every settings write broadcasts one) must not blank the form. */}
-            {(schemaLoading && !schema) || loading ? (
+            {(schemaLoading && !schema) || form.loading ? (
                 <InlineLoader text={t('common.loading')} />
             ) : (
                 <div className="space-y-4">
-                    {saveError && (
+                    {form.saveError && (
                         <div className="alert alert-error py-2 text-sm" role="alert">
                             <span>{t('app.settingsSaveError')}</span>
                         </div>
                     )}
-                    {/* Info about overrides */}
-                    <div className="alert alert-info text-sm">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                        </svg>
-                        <span>{t('app.challengeOverrideInfo')}</span>
-                    </div>
-
-                    {/* Effective-settings summary: how many keys diverge from the
-                        global defaults right now. The per-row "Global default: …"
-                        hint below shows the comparison value; this is the at-a-
-                        glance count so a user doesn't have to scan every group. */}
-                    <p className="text-xs" role="status">
-                        {t(overrideCount ? 'app.overridesActiveSummary' : 'app.overridesNoneSummary').replace(
-                            '{0}',
-                            overrideCount,
-                        )}
-                        {titleProfile && !titleProfile.suppressed && (
-                            <>
-                                {' · '}
-                                {t('app.usingProfile')}: {titleProfile.name}
-                            </>
-                        )}
-                    </p>
-
-                    {/* Named profiles: apply loads a saved tactic into the form
-                        state below (schema-filtered, belt-and-braces on top of
-                        the facade's whitelist); the Save button persists it. */}
-                    <ChallengeProfilesBar
-                        overrides={overrides}
-                        profileLimits={profileLimits}
-                        onProfilesChanged={({ name, values }) => {
-                            if (name.toLowerCase() !== titleProfile?.name?.toLowerCase()) return;
-                            setTitleProfile((profile) =>
-                                values ? { ...profile, name, values } : profile?.suppressed && { suppressed: true },
-                            );
-                        }}
-                        onApply={(values) => {
-                            // ChallengeProfilesBar only applies a selected (non-null) profile.
-                            const next = {};
-                            for (const [key, value] of Object.entries(values)) {
-                                if (schema[key]?.perChallenge) next[key] = value;
-                            }
-                            const replacesWasOn =
-                                ('scheduledFillReplaces' in overrides
-                                    ? overrides.scheduledFillReplaces
-                                    : inheritedOf('scheduledFillReplaces')) === true;
-                            setProfileReplacesWarning(next.scheduledFillReplaces === true && !replacesWasOn);
-                            setOverrides(next);
-                            setTitleProfile((profile) => ({ ...profile, suppressed: true }));
-                        }}
+                    <OverridesSummary
+                        overrideCount={Object.keys(form.overrides).length}
+                        titleProfile={form.titleProfile}
                     />
 
-                    {/* Settings grouped into static sections. Groups whose
-                        action can no longer apply to this challenge (boost/turbo
-                        already used, all entry slots full) are greyed out and
-                        their inputs disabled — a live, render-time hint derived
-                        from the challenge prop, never persisted. */}
+                    {/* Named profiles: apply loads a saved tactic into the form
+                        state below; the Save button persists it. */}
+                    <ChallengeProfilesBar
+                        overrides={form.overrides}
+                        profileLimits={profileLimits}
+                        onProfilesChanged={form.onProfilesChanged}
+                        onApply={form.applyProfile}
+                    />
+
                     {tierSchemaEntries(schema, groups, tiers, { perChallengeOnly: true }).map((band) => (
                         <div key={band.id ?? '_'}>
                             <SettingsTierHeading id={band.id} label={band.label} level="h4" />
-                            {band.groups.map(({ id, label, entries }) => {
-                                const { applicable, reasonKey } = getGroupApplicability(id, challenge);
-                                // When a group can't apply, tie its heading + reason note to
-                                // the section via role="group"/aria-* so assistive tech
-                                // announces *why* the inputs are disabled, not just that
-                                // they are (WCAG 1.3.1 — the relationship must be
-                                // programmatic, not only visual).
-                                const headingId = `challenge-group-${id}`;
-                                const reasonId = applicable ? undefined : `challenge-group-reason-${id}`;
-
-                                return (
-                                    <div
-                                        key={id}
-                                        role={applicable ? undefined : 'group'}
-                                        aria-labelledby={applicable ? undefined : headingId}
-                                        aria-describedby={reasonId}
-                                    >
-                                        <h5
-                                            id={headingId}
-                                            className="font-semibold text-base mb-3 border-b border-base-300 pb-2 flex items-center justify-between gap-2"
-                                        >
-                                            <span>{t(label)}</span>
-                                            {!applicable && (
-                                                <span className="badge badge-ghost badge-xs">
-                                                    {t('app.notApplicable')}
-                                                </span>
-                                            )}
-                                        </h5>
-                                        {/* Heading, badge and reason note stay at full opacity so the
-                                    *why* remains readable; only the inert inputs below are dimmed.
-                                    Dimming the whole group would compound with the muted text
-                                    colours and push the explanation below WCAG AA contrast. */}
-                                        {!applicable && (
-                                            <div id={reasonId} className="mb-3">
-                                                <p className="text-xs text-base-content/80">{t(reasonKey)}</p>
-                                                {/* Reassure that a stored override on this (now-inert) group is
-                                            not lost — the "Overridden" badge below still shows it. */}
-                                                <p className="text-xs text-base-content/70 mt-0.5">
-                                                    {t('app.notApplicableHint')}
-                                                </p>
-                                            </div>
-                                        )}
-                                        <div
-                                            className={
-                                                applicable ? SETTINGS_GRID_CLASS : `${SETTINGS_GRID_CLASS} opacity-60`
-                                            }
-                                        >
-                                            {entries.map(([key, config]) => {
-                                                const hasOverride = key in overrides;
-                                                const globalDefault = defaults?.[key] ?? config.default;
-                                                const hasProfileValue = Object.prototype.hasOwnProperty.call(
-                                                    profileValues,
-                                                    key,
-                                                );
-                                                const currentValue = hasOverride ? overrides[key] : inheritedOf(key);
-                                                // Live, render-time hint (same spirit as getGroupApplicability):
-                                                // when this challenge allows fewer photos than the schedule
-                                                // covers, the schedule end-aligns at runtime (scheduleRemap) —
-                                                // say so here, where a user puzzled by a fill time would look.
-                                                // The `>= 2` gate does double duty. Null guard: `challenge`
-                                                // goes null when it drops off the live 60s poll while the
-                                                // modal is open (App.jsx derives it as find(...) ?? null), and
-                                                // without the gate getScheduleShift would treat max as 0 and
-                                                // render the hint into a null dereference. Accuracy guard: on
-                                                // a single-photo challenge every remapped row lands below
-                                                // count 2 and is dropped, so no image time governs anything —
-                                                // a "final photo uses the Image N time" hint would be false.
-                                                const scheduleShift =
-                                                    key === 'autoFillSchedule' &&
-                                                    Number.isInteger(challenge?.max_photo_submits) &&
-                                                    challenge.max_photo_submits >= 2
-                                                        ? getScheduleShift(currentValue, challenge.max_photo_submits)
-                                                        : 0;
-
-                                                return (
-                                                    <div key={key} className={SETTING_CELL_CLASS}>
-                                                        <SettingLabel
-                                                            inputId={`challenge-setting-${key}`}
-                                                            type={config.type}
-                                                        >
-                                                            <span className="label-text font-medium">
-                                                                {t(config.label)}
-                                                            </span>
-                                                            <div className="flex gap-1">
-                                                                {hasOverride ? (
-                                                                    <span className="badge badge-accent badge-xs">
-                                                                        {t('app.overridden')}
-                                                                    </span>
-                                                                ) : hasProfileValue ? (
-                                                                    <span className="badge badge-info badge-xs">
-                                                                        {t('app.usingProfile')}
-                                                                    </span>
-                                                                ) : (
-                                                                    <span className="badge badge-ghost badge-xs">
-                                                                        {t('app.usingGlobal')}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        </SettingLabel>
-                                                        <p className="text-xs text-base-content/60 mb-2">
-                                                            {t(config.description)}
-                                                        </p>
-                                                        <SettingHelp helpKey={config.helpKey} />
-                                                        <SettingInput
-                                                            id={`challenge-setting-${key}`}
-                                                            settingKey={key}
-                                                            config={config}
-                                                            value={currentValue}
-                                                            onChange={handleOverrideChange}
-                                                            onReset={
-                                                                applicable && hasOverride ? handleClearOverride : null
-                                                            }
-                                                            disabled={!applicable}
-                                                        />
-                                                        {scheduleShift > 0 && (
-                                                            <p className="text-xs text-info mt-1">
-                                                                {t('app.autoFillScheduleShiftHint')
-                                                                    .replace('{0}', String(challenge.max_photo_submits))
-                                                                    .replace(
-                                                                        '{1}',
-                                                                        String(
-                                                                            challenge.max_photo_submits + scheduleShift,
-                                                                        ),
-                                                                    )}
-                                                            </p>
-                                                        )}
-                                                        {[
-                                                            ...scheduledFillHints(key),
-                                                            ...votingPauseHints(key),
-                                                            ...votingPauseDurationHints(key),
-                                                            ...boostPrefillHints(key),
-                                                        ].map((hint) => (
-                                                            <p key={hint.text} className={`text-xs mt-1 ${hint.tone}`}>
-                                                                {hint.text}
-                                                            </p>
-                                                        ))}
-                                                        <p
-                                                            className={`text-xs mt-1 ${
-                                                                hasOverride
-                                                                    ? 'text-base-content/70'
-                                                                    : 'text-base-content/40'
-                                                            }`}
-                                                        >
-                                                            {t('app.globalDefault')}:{' '}
-                                                            {formatSettingDefault(globalDefault, config, t)}
-                                                        </p>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                            {band.groups.map((group) => (
+                                <ChallengeSettingsGroup
+                                    key={group.id}
+                                    id={group.id}
+                                    label={group.label}
+                                    entries={group.entries}
+                                    challenge={challenge}
+                                    defaults={defaults}
+                                    form={form}
+                                    hintsFor={hintsFor}
+                                />
+                            ))}
                         </div>
                     ))}
 
-                    {/* Action Buttons */}
                     <ModalActionRow
                         bordered
-                        onSave={handleSave}
-                        saving={saving}
-                        onSecondary={handleClearAll}
+                        onSave={form.save}
+                        saving={form.saving}
+                        onSecondary={form.clearAll}
                         secondaryLabel={t('app.clearAll')}
                         secondaryIcon="trash"
                         onCancel={onClose}

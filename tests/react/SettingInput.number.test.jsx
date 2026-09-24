@@ -104,4 +104,16 @@ describe('SettingInput — number', () => {
         expect(input.className).toContain('input-error');
         expect(container.querySelector('.text-error')).not.toBeNull();
     });
+
+    test('a min-only setting explains the lower bound', () => {
+        const { container } = renderNumber({ config: { type: 'number', min: 1 }, value: 0 });
+
+        expect(container.querySelector('.text-error').textContent).toBe('app.validationAtLeast');
+    });
+
+    test('an unbounded setting left blank gets the generic invalid-value message', () => {
+        const { container } = renderNumber({ config: { type: 'number' }, value: '' });
+
+        expect(container.querySelector('.text-error').textContent).toBe('app.validationInvalidValue');
+    });
 });
