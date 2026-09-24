@@ -102,23 +102,20 @@ const pickVisuallyVerified = async (challenge, rankedIds, eligible, wantCount, l
         const picked = selectVisualMatches(scored, wantCount);
         if (picked.length === 0) {
             logger
-                ?.withCategory('autoFill')
-                ?.info(`Visual check found no strong match for ${logger.challengeTag(challenge)}; standing down`, null);
+                .withCategory('autoFill')
+                .info(`Visual check found no strong match for ${logger.challengeTag(challenge)}; standing down`, null);
             return picked;
         }
-        if (picked.length > 0 && picked.some((id, index) => id !== original[index])) {
+        if (picked.some((id, index) => id !== original[index])) {
             logger
-                ?.withCategory('autoFill')
-                ?.info(`Visual check skipped weak matches for ${logger.challengeTag(challenge)}`, null);
+                .withCategory('autoFill')
+                .info(`Visual check skipped weak matches for ${logger.challengeTag(challenge)}`, null);
         }
         return picked;
     } catch (error) {
         logger
-            ?.withCategory('autoFill')
-            ?.warning(
-                `Visual check unavailable for ${logger.challengeTag(challenge)}: ${error.message || error}`,
-                null,
-            );
+            .withCategory('autoFill')
+            .warning(`Visual check unavailable for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
         return original;
     }
 };

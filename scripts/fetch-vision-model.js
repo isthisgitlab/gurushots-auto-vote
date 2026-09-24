@@ -3,6 +3,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { pipeline } = require('node:stream/promises');
 const { Readable } = require('node:stream');
+const { runIfMain } = require('./lib/run-if-main');
 
 const ROOT = path.join(__dirname, '..');
 const MODEL_DIR = path.join(ROOT, '.cache', 'vision-model');
@@ -29,13 +30,14 @@ const hashFile = (file) =>
         input.on('end', () => resolve(hash.digest('hex')));
     });
 
-const ensureVisionModel = async () => {
-    for (const [source, name, expected] of FILES) {
-        const target = path.join(MODEL_DIR, name);
+// Tests inject a sandbox directory, a stubbed fetch, and fixture pins.
+const ensureVisionModel = async ({ modelDir = MODEL_DIR, fetchImpl = fetch, files = FILES } = {}) => {
+    for (const [source, name, expected] of files) {
+        const target = path.join(modelDir, name);
         if (fs.existsSync(target) && (await hashFile(target)) === expected) continue;
         fs.mkdirSync(path.dirname(target), { recursive: true });
-        const url = `https://huggingface.co/${REPOS[source].split('/').slice(0, 2).join('/')}/resolve/${REPOS[source].split('/')[2]}/${name}`;
-        const response = await fetch(url);
+        const [owner, repo, revision] = REPOS[source].split('/');
+        const response = await fetchImpl(`https://huggingface.co/${owner}/${repo}/resolve/${revision}/${name}`);
         if (!response.ok || !response.body)
             throw new Error(`Vision model download failed: ${name} (HTTP ${response.status})`);
         const temporary = `${target}.${process.pid}.tmp`;
@@ -47,11 +49,11 @@ const ensureVisionModel = async () => {
             fs.rmSync(temporary, { force: true });
         }
     }
-    return MODEL_DIR;
+    return modelDir;
 };
 
-const stageVisionWebAssets = async (distDir) => {
-    const modelDir = await ensureVisionModel();
+const stageVisionWebAssets = async (distDir, options) => {
+    const modelDir = await ensureVisionModel(options);
     // dist/ is also the Android webDir. Remove CLI outputs from older builds.
     for (const name of ['vision-runtime.tar.gz', 'vision-runtime.sha256', 'sea-prep.blob', 'sea-config.json']) {
         fs.rmSync(path.join(distDir, name), { force: true });
@@ -70,10 +72,12 @@ const stageVisionWebAssets = async (distDir) => {
     }
 };
 
-if (require.main === module)
+const main = () =>
     ensureVisionModel().catch((error) => {
         console.error(error);
         process.exitCode = 1;
     });
 
-module.exports = { MODEL_DIR, ensureVisionModel, stageVisionWebAssets };
+runIfMain(require.main, module, main);
+
+module.exports = { FILES, MODEL_DIR, ensureVisionModel, stageVisionWebAssets, main };
