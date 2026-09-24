@@ -17,10 +17,10 @@ export default [
             // eslint-config-prettier (last in this array) turns them off anyway,
             // and Prettier (.prettierrc.json) owns those choices.
             // Project rule: route all logging through src/js/logger.js. console.warn /
-            // console.error remain allowed for genuinely-bootstrap callers (e.g.
-            // translations/index.js loads before the logger is available); the file
-            // overrides below disable the rule entirely for logger.js itself (it owns
-            // the console) and for scripts/ (build CLIs where console is the output).
+            // console.error remain allowed for genuinely-bootstrap callers that run
+            // before the logger is available; the file overrides below disable the
+            // rule entirely for logger.js itself (it owns the console) and for
+            // scripts/ (build CLIs where console is the output).
             'no-console': ['error', { allow: ['warn', 'error'] }],
         },
     },

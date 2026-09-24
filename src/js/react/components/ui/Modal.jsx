@@ -1,13 +1,15 @@
 import { useEffect, useCallback, useRef, useId } from 'react';
+import { rendererTranslator } from '../../../translations/renderer';
+import { StrokeIcon, ICON_PATHS } from './StrokeIcon';
 
 // The elements Tab can land on inside the dialog.
 const FOCUSABLE_SELECTOR =
     'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// Close-button label, read from the global translation singleton rather than
-// the useTranslation hook so this generic UI primitive stays usable outside a
-// TranslationProvider. Falls back to English if the manager isn't ready.
-const closeLabel = () => window.translationManager?.t?.('common.closeModal') || 'Close modal';
+// Close-button label, read from the page translator rather than the
+// useTranslation hook so this generic UI primitive stays usable outside a
+// TranslationProvider.
+const closeLabel = () => rendererTranslator.t('common.closeModal');
 
 /**
  * DaisyUI modal with accessibility features: role=dialog / aria-modal, Escape
@@ -121,14 +123,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md', className
                                 onClick={onClose}
                                 aria-label={closeLabel()}
                             >
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth="2"
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
+                                <StrokeIcon className="w-4 h-4" d={ICON_PATHS.close} />
                             </button>
                         )}
                     </div>

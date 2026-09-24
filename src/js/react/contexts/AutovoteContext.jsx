@@ -12,6 +12,7 @@ import {
 } from './autovoteScheduler';
 import { createDeadlineNotifier, resolveRendererDelivery } from '../notifications/deadlineNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
+import { rendererTranslator } from '../../translations/renderer';
 
 const AutovoteContext = createContext(null);
 
@@ -160,7 +161,7 @@ function createRendererDeadlineNotifier() {
         ? createDeadlineNotifier({
               getSettings: () => window.api.getSettings(),
               getDeadlineActions: (challenge) => window.api.getDeadlineActions(challenge),
-              translate: (key) => globalThis.translationManager?.t?.(key) ?? key,
+              translate: (key) => rendererTranslator.t(key),
               deliver,
               log: (msg) => window.api.logDebug?.(msg),
           })
@@ -411,13 +412,19 @@ export function AutovoteProvider({ children, onChallengesRefresh }) {
         }
     }, [start, stop]);
 
-    const value = {
-        ...state,
-        start,
-        stop,
-        toggle,
-        rearmSchedule,
-    };
+    // Memoized so consumers re-render only when the state or a control
+    // actually changes, not on every provider render (e.g. when the parent
+    // re-renders with the same onChallengesRefresh).
+    const value = useMemo(
+        () => ({
+            ...state,
+            start,
+            stop,
+            toggle,
+            rearmSchedule,
+        }),
+        [state, start, stop, toggle, rearmSchedule],
+    );
 
     return <AutovoteContext.Provider value={value}>{children}</AutovoteContext.Provider>;
 }

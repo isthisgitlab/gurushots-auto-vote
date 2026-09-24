@@ -4,6 +4,7 @@
 
 import { render, screen } from './helpers/test-utils';
 import { CurrencyConfirmModal, currencyOutcomeText } from '@/components/app/CurrencyConfirmModal';
+import { mockTranslator } from './helpers/setup';
 
 const STRINGS = {
     'app.currencyBalance': '{current} {currency} -> {resulting}',
@@ -12,11 +13,11 @@ const STRINGS = {
 };
 
 beforeEach(() => {
-    window.translationManager.t.mockImplementation((key) => STRINGS[key] ?? key);
+    mockTranslator.t.mockImplementation((key) => STRINGS[key] ?? key);
 });
 
 afterEach(() => {
-    window.translationManager.t.mockImplementation((key) => key);
+    mockTranslator.t.mockImplementation((key) => key);
 });
 
 const renderModal = (bankroll) =>

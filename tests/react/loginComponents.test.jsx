@@ -8,7 +8,6 @@ import { LoginForm } from '@/components/login/LoginForm';
 import { LanguageSwitcher } from '@/components/login/LanguageSwitcher';
 import { SettingsToggles } from '@/components/login/SettingsToggles';
 import { ModeInfoText } from '@/components/login/ModeInfoText';
-import { mockTranslationManager } from './helpers/setup';
 
 describe('LoginForm', () => {
     test('blocks submit and shows both required errors when empty', () => {
@@ -77,13 +76,13 @@ describe('LanguageSwitcher', () => {
 
         fireEvent.click(screen.getByText('common.languageLatvian'));
         await waitFor(() => expect(screen.getByText('Latviešu')).toBeTruthy());
-        expect(mockTranslationManager.setLanguage).toHaveBeenCalledWith('lv');
+        expect(window.api.setSetting).toHaveBeenCalledWith('language', 'lv');
         expect(window.api.refreshMenu).toHaveBeenCalledTimes(1);
         expect(screen.getByText('common.languageLatvian').className).toBe('active');
 
         fireEvent.click(screen.getByText('common.languageEnglish'));
         await waitFor(() => expect(screen.getByText('English')).toBeTruthy());
-        expect(mockTranslationManager.setLanguage).toHaveBeenLastCalledWith('en');
+        expect(window.api.setSetting).toHaveBeenLastCalledWith('language', 'en');
     });
 });
 

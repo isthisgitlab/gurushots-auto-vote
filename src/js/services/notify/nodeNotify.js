@@ -29,22 +29,21 @@ const {
     formatNotification,
     readNotificationConfig,
 } = require('../deadlineNotifications');
+const { createTranslator } = require('../../translations/translator');
+
+const notifyTranslator = createTranslator();
 
 /**
- * Resolve a raw i18n template for the user's language, Node-side (the renderer's
- * translationManager is a browser singleton). Returns the key itself when
- * unresolved, so the notification still shows something.
+ * Resolve a raw i18n template in the user's saved language through the shared
+ * translator core (same English fallback as the UI). Returns the key itself
+ * when it doesn't resolve to a string, so the notification still shows
+ * something.
  * @param {string} key - dotted key, e.g. 'app.notifyBody'
  * @returns {string}
  */
 const nodeTranslate = (key) => {
     try {
-        const lang = settings.getSetting('language') === 'lv' ? 'lv' : 'en';
-        // Required in Node these UMD modules return the translations object.
-        const table = lang === 'lv' ? require('../../translations/latvian') : require('../../translations/english');
-        const resolved = String(key)
-            .split('.')
-            .reduce((node, part) => (node && node[part] != null ? node[part] : null), table);
+        const resolved = notifyTranslator.t(String(key), settings.getSetting('language'));
         return typeof resolved === 'string' ? resolved : key;
     } catch {
         return key;

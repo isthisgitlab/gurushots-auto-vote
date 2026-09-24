@@ -1,7 +1,6 @@
 /**
  * Fallback / default paths of the shared UI primitives in components/ui that
  * the per-component suites don't reach: unknown size/variant props, the
- * English fallbacks when the translation singleton is missing or throws, the
  * focus-trap edges of Modal, and ErrorBoundary's odd-error handling.
  */
 import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
@@ -11,11 +10,10 @@ import { StatusBadge, ConnectionBadge } from '@/components/ui/StatusBadge';
 import { Modal, ModalActions } from '@/components/ui/Modal';
 import { AsyncActionButton } from '@/components/ui/AsyncActionButton';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { mockApi, mockTranslationManager } from './helpers/setup';
+import { mockApi } from './helpers/setup';
 
 beforeEach(() => {
     window.api = mockApi;
-    window.translationManager = mockTranslationManager;
     jest.clearAllMocks();
 });
 
@@ -105,12 +103,6 @@ describe('Modal edges', () => {
         render(<Modal isOpen onClose={onClose} title="T" />);
         expect(fireEvent.keyDown(document, { key: 'Enter' })).toBe(true);
         expect(onClose).not.toHaveBeenCalled();
-    });
-
-    test('falls back to the English close label without a translation manager', () => {
-        window.translationManager = undefined;
-        render(<Modal isOpen onClose={() => {}} />);
-        expect(screen.getByLabelText('Close modal')).toBeTruthy();
     });
 
     test('an unknown size uses the md width cap', () => {
@@ -228,32 +220,6 @@ describe('ErrorBoundary edges', () => {
             </ErrorBoundary>,
         );
         expect(mockApi.logError.mock.calls[0][0]).toContain('React error boundary caught: no stack here');
-    });
-
-    test('without a translation manager the English labels are used', () => {
-        window.translationManager = undefined;
-        render(
-            <ErrorBoundary>
-                <Thrower value={new Error('y')} />
-            </ErrorBoundary>,
-        );
-        expect(screen.getByText('Something went wrong')).toBeTruthy();
-    });
-
-    test('a translation manager that throws falls back to English labels', () => {
-        window.translationManager = {
-            t: () => {
-                throw new Error('not ready');
-            },
-        };
-        render(
-            <ErrorBoundary>
-                <Thrower value={new Error('x')} />
-            </ErrorBoundary>,
-        );
-        expect(screen.getByText('Something went wrong')).toBeTruthy();
-        expect(screen.getByText('Dismiss')).toBeTruthy();
-        expect(screen.getByText('Reload')).toBeTruthy();
     });
 
     test('without window.api.logError nothing is logged and the fallback still renders', () => {

@@ -6,7 +6,7 @@
  */
 import { act, fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { ChallengeSettingsModal } from '@/components/app/ChallengeSettingsModal';
-import { mockApi } from './helpers/setup';
+import { mockApi, mockTranslator } from './helpers/setup';
 
 const field = (group, type, dflt) => ({
     type,
@@ -78,7 +78,7 @@ const HHMM = /\d\d:\d\d/.source;
 beforeEach(() => {
     window.api = mockApi;
     resetSchema();
-    window.translationManager.t.mockImplementation((key) => TEMPLATES[key] ?? key);
+    mockTranslator.t.mockImplementation((key) => TEMPLATES[key] ?? key);
     mockApi.getTitleProfile.mockReset().mockResolvedValue(null);
     mockApi.getChallengeOverrides.mockReset().mockResolvedValue({});
     mockApi.getSettings.mockReset().mockResolvedValue({ timezone: 'UTC', checkFrequencyMax: 30 });
@@ -90,7 +90,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    window.translationManager.t.mockImplementation((key) => key);
+    mockTranslator.t.mockImplementation((key) => key);
 });
 
 const renderModal = (props = {}) => {

@@ -47,7 +47,7 @@ Domain terms used throughout, in reader's terms:
 - The per-challenge action **runners are strictly sequential, never parallelised**: auto-fill mutates the
   shared challenge object (`reflectNewEntry`) so a later turbo/boost in the same cycle sees the new entry
   and the consumed slot.
-- The decision engine is `_runVotingRules()` (`services/VotingLogic.js` — around L540). Its precedence
+- The decision engine is `_runVotingRules()` (`services/decisions/ruleEngine.js` — around L65). Its precedence
   order is load-bearing: onlyBoost → not-started / already-ended → flash (→100) → last-minute window
   (→100) → **pre-boost fill** (→100) → **voting pause** → scheduled-fill window → **pre-final-window top-up** →
   final-window rule → normal threshold. The **pre-boost fill** (`voteBeforeBoost`, default off) votes to
@@ -81,13 +81,13 @@ Domain terms used throughout, in reader's terms:
 - **Trigger ≠ target, and there are two _different_ sentinel families — do not merge them:**
     - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
       stays **active**, it simply votes up to the trigger value (legacy behavior).
-      `getEffectiveExposureTarget()` (`services/VotingLogic.js` — around L394); schema note in
+      `getEffectiveExposureTarget()` (`services/decisions/thresholds.js` — around L90); schema note in
       `settings/schema.js` (around L87).
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
-      See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/VotingLogic.js` — around
-      L973: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
-      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill.js` — around
-      L1494: `emergencySeconds <= 0` → `'disabled'`).
+      See the explicit comment in `getEffectiveKeyUnlockedBoostTime()` (`services/decisions/thresholds.js` — around
+      L129: _"An explicit 0 means 'never auto-apply', matching the 0-is-off convention boostTime and
+      emergencyFill already use"_), and `maybeEmergencyFillChallenge()` (`services/autoFill/emergencyFill.js` — around
+      L97: `emergencySeconds <= 0` → `'disabled'`).
 - Magic constants: final-window width defaults to 3600 s — the `finalWindowDuration` setting's default
   (configurable 60 s … 30 d); key-unlock boost default window = 900 s when the setting is
   unusable (explicit `0` still = never).
@@ -95,8 +95,8 @@ Domain terms used throughout, in reader's terms:
   older rejection-sampling could loop forever on duplicate ids) and never posts an empty ballot
   (`api/voting.js` — around L59, L155).
 - **≤1 boost and ≤1 turbo per challenge, on different entries** — enforced by `pickEntryAvoidingConflict()`
-  (`services/VotingLogic.js` — around L1104) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
-  `VotingLogic` (shared core) rather than in `api/boost.js` so mock mode honours the same rule.
+  (`services/decisions/entryPick.js` — around L33) plus a `reflectEntryFlag` marker. Entry-pick logic lives in
+  the shared decision core (behind the `VotingLogic` facade) rather than in `api/boost.js` so mock mode honours the same rule.
 
 ## 2. Scheduling
 
@@ -232,7 +232,7 @@ Domain terms used throughout, in reader's terms:
 ### 3a. Reading a challenge title
 
 A title rarely just names its subject, so three rules turn it into something searchable
-(`services/photoPicker.js`):
+(`services/photoPicker/title.js`):
 
 - **Series prefix.** `"Color Hunt: Green"` is about green, not colour or hunting. Everything before a
   `:` / en dash / em dash is the series name, so the subject is what follows. A plain hyphen is NOT a
@@ -271,7 +271,7 @@ repeated six times is one that gets forgotten at one of them.
 - `search_autocomplete` needs `member_id`, which is a member identity — the account's `user_name` or its
   opaque id hash. **An email is rejected** (`Couldn't find username`), and the app logs in with one, so the
   login field is not a usable source: identity comes from `get_current_member_profile` (token-only) and is
-  memoised per token in `autoFill.js`.
+  memoised per token in `services/autoFill/memberIdentity.js`.
 - Resolution is guarded twice because substring matching is blunt: **bounded backoff** (a missing term is
   retried at most `MAX_BACKOFF_STEPS` shorter, never below the server's own 3-char floor) and **mandatory
   validation** — a candidate is kept only if it is a lexical match for the term or the lexicon puts it on
@@ -299,7 +299,7 @@ repeated six times is one that gets forgotten at one of them.
 - It **never breaks a fill**: any failure (missing asset, no theme text, no in-vocab labels) resolves to
   `null` and the caller ranks lexically as before. `buildThemeKeywords()` returning `[]` — every title word
   was boilerplate or contest cadence, e.g. "Guru of The Week" — is that "no theme text" case, on purpose.
-- `SEMANTIC_MATCH_FLOOR = 46` (`services/photoPicker.js`) is **build-gated by
+- `SEMANTIC_MATCH_FLOOR = 46` (`services/photoPicker/tiers.js`) is **build-gated by
   `scripts/validate-lexicon.js`** (a statistical gate: `p99(unrelated) < FLOOR < p25(related)`), **not
   hand-tuned**. Scores below the floor are forced to 0 (sub-floor cosine is indistinguishable from vector
   noise), not merely ranked low. **The floor is calibrated per pooling shape** — the validator pools exactly
@@ -312,7 +312,7 @@ repeated six times is one that gets forgotten at one of them.
 - `rankVisually()` (`services/visionVerifier.js`) runs a bundled, 8-bit quantized **SigLIP** model
   (`zero-shot-image-classification`, `@huggingface/transformers`) over the **top 12 tag-ranked
   candidates** of every challenge. Like the lexicon it only orders photos — it is never part of the vote
-  decision. One call site feeds every submission path: `verifyFillPick()` in `autoFill.js` (auto, emergency,
+  decision. One call site feeds every submission path: `verifyFillPick()` in `services/autoFill/pipeline.js` (auto, emergency,
   manual, and fill-new fills via `runFillAttempt`, plus swaps via `rankCandidatesForChallenge`), and
   `pickJoinPhoto()` for auto-join.
 - **Prompts come from the challenge, never a theme list**: `a photo of <subject>` from
@@ -464,8 +464,10 @@ repeated six times is one that gets forgotten at one of them.
   `login` / `app` / `logs`). Languages: `en` and `lv` only.
 - **Internal / log / error-prefix strings stay English** (not translated) — e.g. the fallback strings
   inside `useAsyncIpcAction.js` and the action hooks are English literals by design.
-- Non-hook contexts (class components, primitives) route through the `window.translationManager` global
-  with an English fallback (`ui/Modal.jsx`, `ui/ErrorBoundary.jsx`), because they can't call the hook.
+- Non-hook contexts (class components, primitives, the deadline notifier) use the bundled
+  `translations/renderer.js` translator (`ui/Modal.jsx`, `ui/ErrorBoundary.jsx`), because they can't call
+  the hook. The dependency-free core is `translations/translator.js`; the renderer persists the language
+  through `window.api`, the Node side (`translations/index.js`) through the settings facade.
 
 ## 10. Security (renderer / main) — state the limits, don't over-promise
 

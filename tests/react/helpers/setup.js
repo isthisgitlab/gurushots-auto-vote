@@ -133,14 +133,15 @@ Object.assign(mockApi, {
     applyChallengeProfile: jest.fn().mockResolvedValue(true),
 });
 
-// Mock window.translationManager
-const mockTranslationManager = {
-    initialized: true,
-    t: jest.fn((key) => key), // Return key as translation for testing
+// Mock the page translator (translations/renderer.js) that TranslationProvider,
+// ErrorBoundary and Modal translate through. `t` returns the key so tests can
+// assert on keys ('app.save'); override it per test with mockImplementation.
+const mockTranslator = {
+    t: jest.fn((key) => key),
     getCurrentLanguage: jest.fn().mockReturnValue('en'),
-    setLanguage: jest.fn().mockResolvedValue(true),
-    getAvailableLanguages: jest.fn().mockReturnValue(['en', 'lv']),
+    setCurrentLanguage: jest.fn(),
 };
+jest.mock('../../../src/js/translations/renderer', () => ({ rendererTranslator: mockTranslator }));
 
 // Set up global mocks. Augment the test-env window in place rather than
 // replacing it with a plain object — spreading `{...window}` only copies
@@ -149,7 +150,6 @@ const mockTranslationManager = {
 // keeps the real DOM surface intact while attaching the IPC mocks.
 Object.assign(global.window, {
     api: mockApi,
-    translationManager: mockTranslationManager,
 });
 
 // Reset all mocks before each test
@@ -160,5 +160,5 @@ beforeEach(() => {
 // Export mocks for use in tests
 module.exports = {
     mockApi,
-    mockTranslationManager,
+    mockTranslator,
 };

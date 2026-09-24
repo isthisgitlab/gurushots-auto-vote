@@ -7,11 +7,12 @@
  * underneath) so the injected deps can be exercised directly and asserted on.
  */
 
+import { memo } from 'react';
 import { render, act } from '@testing-library/preact';
 import { AutovoteProvider, useAutovote } from '@/contexts/AutovoteContext';
 import * as foregroundService from '../../src/js/services/ForegroundServiceController';
 import * as nativeAutovote from '../../src/js/services/NativeAutovoteBridge';
-import { mockApi, mockTranslationManager } from './helpers/setup';
+import { mockApi, mockTranslator } from './helpers/setup';
 
 const captured = { chainDeps: null, notifierDeps: null };
 
@@ -468,23 +469,16 @@ describe('AutovoteContext', () => {
             deps.log('note');
             expect(window.api.logDebug).toHaveBeenCalledWith('note');
 
-            mockTranslationManager.t.mockImplementation((k) => `T:${k}`);
+            mockTranslator.t.mockImplementation((k) => `T:${k}`);
             expect(deps.translate('a.b')).toBe('T:a.b');
-            mockTranslationManager.t.mockImplementation(() => undefined);
-            expect(deps.translate('a.b')).toBe('a.b');
-            mockTranslationManager.t.mockImplementation((k) => k);
+            expect(mockTranslator.t).toHaveBeenCalledWith('a.b');
+            mockTranslator.t.mockImplementation((k) => k);
 
-            const savedTm = globalThis.translationManager;
             const savedLog = window.api.logDebug;
             try {
-                globalThis.translationManager = {};
-                expect(deps.translate('no.t')).toBe('no.t');
-                delete globalThis.translationManager;
-                expect(deps.translate('no.tm')).toBe('no.tm');
                 delete window.api.logDebug;
                 expect(() => deps.log('silent')).not.toThrow();
             } finally {
-                globalThis.translationManager = savedTm;
                 window.api.logDebug = savedLog;
             }
         });
@@ -500,6 +494,66 @@ describe('AutovoteContext', () => {
             globalThis.Capacitor = {};
             renderProvider();
             expect(captured.chainDeps.onCycleChallenges).toEqual(expect.any(Function));
+        });
+    });
+
+    describe('context value memoization', () => {
+        let renders;
+        const Consumer = memo(function Consumer() {
+            renders++;
+            ctx = useAutovote();
+            return null;
+        });
+        const Host = ({ onChallengesRefresh }) => (
+            <AutovoteProvider onChallengesRefresh={onChallengesRefresh}>
+                <Consumer />
+            </AutovoteProvider>
+        );
+
+        beforeEach(() => {
+            renders = 0;
+        });
+
+        it('keeps the value (and so its consumers) stable across an unrelated provider re-render', async () => {
+            const refresh = jest.fn();
+            const { rerender } = render(<Host onChallengesRefresh={refresh} />);
+            await flush();
+            const first = ctx;
+            const rendersBefore = renders;
+
+            rerender(<Host onChallengesRefresh={refresh} />);
+            await flush();
+
+            expect(renders).toBe(rendersBefore);
+            expect(ctx).toBe(first);
+        });
+
+        it('publishes a new value when the state changes', async () => {
+            render(<Host onChallengesRefresh={jest.fn()} />);
+            await flush();
+            const first = ctx;
+            const rendersBefore = renders;
+
+            await act(async () => {
+                await ctx.start();
+            });
+
+            expect(renders).toBeGreaterThan(rendersBefore);
+            expect(ctx).not.toBe(first);
+            expect(ctx.running).toBe(true);
+        });
+
+        it('publishes new controls when onChallengesRefresh changes', async () => {
+            const { rerender } = render(<Host onChallengesRefresh={jest.fn()} />);
+            await flush();
+            const first = ctx;
+
+            rerender(<Host onChallengesRefresh={jest.fn()} />);
+            await flush();
+
+            expect(ctx).not.toBe(first);
+            expect(ctx.stop).not.toBe(first.stop);
+            expect(ctx.running).toBe(first.running);
         });
     });
 });

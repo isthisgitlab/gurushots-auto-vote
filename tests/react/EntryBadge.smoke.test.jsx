@@ -36,7 +36,7 @@ describe('EntryBadge — smoke', () => {
             />,
         );
         // Translation keys come through as the keys themselves in tests
-        // (mockTranslationManager.t returns the key), so we assert on the
+        // (mockTranslator.t returns the key), so we assert on the
         // rank and vote numbers which are stable values.
         expect(screen.getByText(/app\.rank/)).toBeTruthy();
         expect(screen.getByText(/3.*42.*app\.votes/)).toBeTruthy();

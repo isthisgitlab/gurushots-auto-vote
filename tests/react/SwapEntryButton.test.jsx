@@ -6,6 +6,7 @@
 
 import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { SwapEntryButton, SwapBackButton } from '@/components/app/SwapEntryButton';
+import { mockTranslator } from './helpers/setup';
 
 const ENTRY = { id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', member_id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' };
 const CANDIDATE = { id: 'cccccccccccccccccccccccccccccccc', member_id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' };
@@ -151,14 +152,14 @@ describe('SwapBackButton', () => {
     });
 
     test('names the turbo kind in the body for a turbo swap back', () => {
-        window.translationManager.t.mockImplementation((key) => (key === 'app.turbo' ? 'TURBO' : key));
+        mockTranslator.t.mockImplementation((key) => (key === 'app.turbo' ? 'TURBO' : key));
         try {
             renderSwapBack({ ...SWAP_BACK, kind: 'turbo' });
             fireEvent.click(screen.getByText(/app\.currencySwapBack$/));
-            expect(window.translationManager.t).toHaveBeenCalledWith('app.turbo', expect.anything());
-            expect(window.translationManager.t).not.toHaveBeenCalledWith('app.boost', expect.anything());
+            expect(mockTranslator.t).toHaveBeenCalledWith('app.turbo', expect.anything());
+            expect(mockTranslator.t).not.toHaveBeenCalledWith('app.boost', expect.anything());
         } finally {
-            window.translationManager.t.mockImplementation((key) => key);
+            mockTranslator.t.mockImplementation((key) => key);
         }
     });
 

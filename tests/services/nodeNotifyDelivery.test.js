@@ -76,6 +76,11 @@ describe('nodeTranslate', () => {
         expect(lv).toContain('{minutes}');
     });
 
+    test('a key naming a section rather than a string falls back to the key itself', () => {
+        settings.getSetting.mockReturnValue('en');
+        expect(nodeTranslate('app')).toBe('app');
+    });
+
     test('an unresolvable key falls back to the key itself', () => {
         settings.getSetting.mockReturnValue('en');
         expect(nodeTranslate('app.nope.notAKey')).toBe('app.nope.notAKey');

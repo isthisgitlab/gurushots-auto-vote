@@ -7,6 +7,7 @@
 
 import { render, screen, fireEvent, waitFor } from './helpers/test-utils';
 import { DiscoverSection } from '@/components/app/DiscoverSection';
+import { mockTranslator } from './helpers/setup';
 
 const items = [
     { id: 900001, type: 'default', join_coins: 0, title: 'Free One' },
@@ -211,7 +212,7 @@ describe('edge paths', () => {
         window.api.getMemberChallenges = jest
             .fn()
             .mockResolvedValue({ success: true, items: [{ id: 5, url: 'paid-url', join_coins: 10 }] });
-        window.translationManager.t.mockImplementation((key) =>
+        mockTranslator.t.mockImplementation((key) =>
             key === 'app.discoverConfirmBody' ? 'join {title} for {coins}' : key,
         );
         try {
@@ -222,7 +223,7 @@ describe('edge paths', () => {
             expect(screen.getByText('join paid-url for 10')).toBeTruthy();
             expect(screen.getByText('app.discoverConfirmSpend').disabled).toBe(false);
         } finally {
-            window.translationManager.t.mockImplementation((key) => key);
+            mockTranslator.t.mockImplementation((key) => key);
         }
     });
 

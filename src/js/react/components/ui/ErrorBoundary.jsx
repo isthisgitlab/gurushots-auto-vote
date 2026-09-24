@@ -1,18 +1,12 @@
 import { Component } from 'react';
+import { rendererTranslator } from '../../../translations/renderer';
 
 /**
- * Translate from the global singleton rather than the useTranslation hook:
+ * Translate through the page translator rather than the useTranslation hook:
  * ErrorBoundary is a class (no hooks) and, more importantly, an error boundary
  * must not depend on React context that may itself be part of what broke.
- * Falls back to English if the manager isn't ready or the lookup throws.
  */
-function tr(key, fallback) {
-    try {
-        return window.translationManager?.t?.(key) || fallback;
-    } catch {
-        return fallback;
-    }
-}
+const tr = (key) => rendererTranslator.t(key);
 
 /**
  * Catches render/lifecycle errors from descendants and shows a recovery UI
@@ -79,15 +73,15 @@ export class ErrorBoundary extends Component {
         return (
             <div className="alert alert-error shadow-lg my-4">
                 <div className="flex-1">
-                    <h3 className="font-bold">{tr('errors.boundaryTitle', 'Something went wrong')}</h3>
+                    <h3 className="font-bold">{tr('errors.boundaryTitle')}</h3>
                     <p className="text-sm break-words">{message}</p>
                 </div>
                 <div className="flex gap-2 shrink-0">
                     <button type="button" className="btn btn-sm" onClick={this.handleDismiss}>
-                        {tr('errors.dismiss', 'Dismiss')}
+                        {tr('errors.dismiss')}
                     </button>
                     <button type="button" className="btn btn-sm btn-primary" onClick={this.handleReload}>
-                        {tr('errors.reload', 'Reload')}
+                        {tr('errors.reload')}
                     </button>
                 </div>
             </div>

@@ -5,15 +5,6 @@
  */
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { Modal } from '@/components/ui/Modal';
-import { mockTranslationManager } from './helpers/setup';
-
-// Modal reads the close-button label from window.translationManager (so the
-// primitive works outside a provider). Pin it so the label resolves through
-// the mock — which returns the key — rather than the English fallback, the
-// same convention ErrorBoundary.test.jsx uses.
-beforeEach(() => {
-    window.translationManager = mockTranslationManager;
-});
 
 describe('Modal', () => {
     test('renders nothing when closed', () => {

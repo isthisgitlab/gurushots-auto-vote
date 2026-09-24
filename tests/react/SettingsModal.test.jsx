@@ -727,7 +727,7 @@ describe('SettingsModal — save outcomes', () => {
         expect(screen.getByDisplayValue('Caps')).toBeTruthy();
     });
 
-    test('a changed language is applied through the translation manager on save', async () => {
+    test('a changed language is applied through the translation provider on save', async () => {
         mockFormState.commit = jest.fn().mockResolvedValue([]);
         mockFormState.uiValues.language = 'lv';
         const onClose = jest.fn();
@@ -735,7 +735,7 @@ describe('SettingsModal — save outcomes', () => {
         clickButtonByText('app.save');
 
         await waitFor(() => expect(onClose).toHaveBeenCalled());
-        expect(window.translationManager.setLanguage).toHaveBeenCalledWith('lv');
+        expect(window.api.setSetting).toHaveBeenCalledWith('language', 'lv');
     });
 
     test.each([

@@ -6,15 +6,12 @@
 import { fireEvent, render, screen } from './helpers/test-utils';
 import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
-import { mockApi, mockTranslationManager } from './helpers/setup';
+import { mockApi } from './helpers/setup';
 
-// Pin window.api + window.translationManager per-test — the global test setup
-// occasionally loses them across files. ErrorBoundary reads translationManager
-// directly (it's a class boundary, no hook), so restore it to exercise the
-// localized path. Keeps this suite hermetic.
+// Pin window.api per-test — the global test setup occasionally loses it
+// across files. Keeps this suite hermetic.
 beforeEach(() => {
     window.api = mockApi;
-    window.translationManager = mockTranslationManager;
 });
 
 function Boom({ shouldThrow }) {

@@ -133,7 +133,7 @@ describe('StatusHeader', () => {
 
     test('shows an explicit idle state when autovote is not running', () => {
         wrap(<StatusHeader challenges={oneChallenge} nextRunAt={null} running={false} />);
-        // statusHeaderNotRunning key (no translationManager in test → key text).
+        // statusHeaderNotRunning key (the test translator returns the key).
         expect(screen.getByTestId('status-header').textContent).toContain('statusHeaderNotRunning');
     });
 

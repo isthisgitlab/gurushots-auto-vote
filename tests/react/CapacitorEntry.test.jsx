@@ -1,9 +1,8 @@
 /**
  * Capacitor entry (pages/Capacitor.jsx) — runs its bootstrap at module load:
- * installs the translation globals, on a native platform installs the bridge
- * and hydrates every write-behind store, wires flush-on-background, loads the
- * language, then mounts Login or App by token and re-mounts on
- * login-success / logout. Each test loads the module in an isolated registry
+ * on a native platform installs the bridge and hydrates every write-behind
+ * store, wires flush-on-background, then mounts Login or App by token and
+ * re-mounts on login-success / logout. Each test loads the module in an isolated registry
  * with its collaborators doMock'ed, so the bootstrap can be driven per case.
  */
 
@@ -13,13 +12,7 @@ const flush = async () => {
     for (let i = 0; i < 20; i += 1) await Promise.resolve();
 };
 
-const GLOBALS = [
-    '__capacitorBootstrap',
-    'translationManager',
-    'translations',
-    'englishTranslations',
-    'latvianTranslations',
-];
+const GLOBALS = ['__capacitorBootstrap'];
 
 describe('Capacitor entry', () => {
     let savedGlobals;
@@ -56,18 +49,8 @@ describe('Capacitor entry', () => {
      * Load Capacitor.jsx with mocked collaborators.
      * @param {object} opts
      */
-    const load = ({
-        native = true,
-        token = 'tok',
-        getSettingThrows = false,
-        initSettingsRejects = null,
-        translationsModule = null,
-        englishModule = { hello: 'Hello' },
-        latvianModule = { hello: 'Sveiki' },
-    } = {}) => {
-        const tm = { loadLanguageFromSettings: jest.fn().mockResolvedValue(undefined) };
+    const load = ({ native = true, token = 'tok', getSettingThrows = false, initSettingsRejects = null } = {}) => {
         const m = {
-            tm,
             subscribers: {},
             installBridge: jest.fn(),
             subscribe: jest.fn((event, cb) => {
@@ -126,12 +109,6 @@ describe('Capacitor entry', () => {
             }));
             jest.doMock(`${SRC}/runtime`, () => ({ isCapacitor: m.isCapacitor }));
             jest.doMock(`${SRC}/logger`, () => ({ withCategory: m.withCategory }));
-            jest.doMock(
-                `${SRC}/translations`,
-                () => translationsModule ?? { translationManager: tm, translations: {} },
-            );
-            jest.doMock(`${SRC}/translations/english`, () => englishModule);
-            jest.doMock(`${SRC}/translations/latvian`, () => latvianModule);
             jest.doMock('@/pages/App', () => ({ mountApp: m.mountApp }));
             jest.doMock('@/pages/Login', () => ({ mountLogin: m.mountLogin }));
             require('@/pages/Capacitor');
@@ -151,16 +128,12 @@ describe('Capacitor entry', () => {
         return root;
     };
 
-    test('native bootstrap: globals, bridge, store hydration in order, language, then App mount', async () => {
+    test('native bootstrap: bridge, store hydration in order, then App mount', async () => {
         const root = addRoot('stale-a', 'stale-b');
         const m = load();
         await flush();
 
         expect(globalThis.__capacitorBootstrap).toBe(true);
-        expect(globalThis.translationManager).toBe(m.tm);
-        expect(globalThis.translations).toEqual({});
-        expect(globalThis.englishTranslations).toEqual({ hello: 'Hello' });
-        expect(globalThis.latvianTranslations).toEqual({ hello: 'Sveiki' });
 
         const order = [
             m.installBridge,
@@ -170,7 +143,6 @@ describe('Capacitor entry', () => {
             m.initializeSwapBackAsync,
             m.initializeAutoSpendAsync,
             m.initializeDiagnosticsAsync,
-            m.tm.loadLanguageFromSettings,
             m.mountApp,
         ].map((fn) => fn.mock.invocationCallOrder[0]);
         expect(order).toEqual([...order].sort((a, b) => a - b));
@@ -230,54 +202,12 @@ describe('Capacitor entry', () => {
         expect(m.mountApp).not.toHaveBeenCalled();
     });
 
-    test('off-native skips the bridge and stores but still loads the language', async () => {
+    test('off-native skips the bridge and stores but still mounts', async () => {
         const m = load({ native: false });
         await flush();
         expect(m.installBridge).not.toHaveBeenCalled();
         expect(m.initSettings).not.toHaveBeenCalled();
         expect(docListeners.visibilitychange).toBeUndefined();
-        expect(m.tm.loadLanguageFromSettings).toHaveBeenCalledTimes(1);
-        expect(m.mountApp).toHaveBeenCalledTimes(1);
-    });
-
-    test('a failed language load is logged and the app still mounts', async () => {
-        const tmOverride = { loadLanguageFromSettings: jest.fn().mockRejectedValue(new Error('no lang')) };
-        const m = load({ native: false, translationsModule: { translationManager: tmOverride, translations: {} } });
-        await flush();
-        expect(m.withCategory).toHaveBeenCalledWith('translation');
-        expect(m.categoryError).toHaveBeenCalledWith('Translation load failed', expect.any(Error));
-        expect(m.mountApp).toHaveBeenCalledTimes(1);
-    });
-
-    test('ES-module-shaped translations without a manager leave the globals alone and skip loading', async () => {
-        globalThis.translationManager = undefined;
-        const m = load({
-            native: false,
-            translationsModule: { __esModule: true },
-            englishModule: { __esModule: true, default: { en: 1 } },
-            latvianModule: { __esModule: true, default: { lv: 1 } },
-        });
-        await flush();
-        expect(globalThis.translationManager).toBeUndefined();
-        expect(globalThis.englishTranslations).toEqual({ en: 1 });
-        expect(globalThis.latvianTranslations).toEqual({ lv: 1 });
-        expect(m.mountApp).toHaveBeenCalledTimes(1);
-    });
-
-    test('a manager without loadLanguageFromSettings is not driven', async () => {
-        // Default-less ES-module language files fall back to the namespace.
-        const en = { __esModule: true, hi: 'Hi' };
-        const lv = { __esModule: true, hi: 'Sveiki' };
-        const m = load({
-            native: false,
-            translationsModule: { translationManager: {}, translations: {} },
-            englishModule: en,
-            latvianModule: lv,
-        });
-        await flush();
-        expect(globalThis.englishTranslations.hi).toBe('Hi');
-        expect(globalThis.latvianTranslations.hi).toBe('Sveiki');
-        expect(m.categoryError).not.toHaveBeenCalled();
         expect(m.mountApp).toHaveBeenCalledTimes(1);
     });
 
