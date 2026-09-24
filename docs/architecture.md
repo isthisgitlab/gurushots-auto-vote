@@ -80,7 +80,7 @@ Domain terms used throughout, in reader's terms:
   scheduled-fill and last-minute (those still force 100). Only active when `useFinalWindowExposure` is on.
 - **Trigger ≠ target, and there are two _different_ sentinel families — do not merge them:**
     - `exposureTarget` / `finalWindowExposureTarget`: `0` or null means **"target == trigger"** — the rule
-      stays **active**, it simply votes up to the trigger value (legacy behavior).
+      stays **active**, it simply votes up to the trigger value.
       `getEffectiveExposureTarget()` (`services/decisions/thresholds.js` — around L90); schema note in
       `settings/schema.js` (around L87).
     - `boostTime` / `emergencyFill` / `keyUnlockedBoostTime`: `0` means **feature off / never auto-apply**.
@@ -245,8 +245,8 @@ A title rarely just names its subject, so three rules turn it into something sea
   matched independently, so extra words are weak evidence rather than vector noise, and it is the safety
   net for a title whose subject sits before the separator.
 - **Head noun first, participles last.** Search terms are capped at `SEARCH_TERMS_CAP`, so ORDER decides
-  what survives: `"Color Hunt: Blue & Orange"` used to yield `[color, hunt, blue]` and drop "orange"
-  entirely. An English title puts its subject last (`"Epic Lighthouses"`), so nouns are read
+  what survives: `"Color Hunt: Blue & Orange"` read left-to-right would yield `[color, hunt, blue]` and
+  drop "orange" entirely. An English title puts its subject last (`"Epic Lighthouses"`), so nouns are read
   right-to-left — except participles (`-ing`, length-guarded so "king"/"ring" are not caught), which sink
   to the back because the subject LEADS in `"Cats and Dogs Running"`.
 

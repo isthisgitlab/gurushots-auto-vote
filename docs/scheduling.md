@@ -161,7 +161,7 @@ decayed below that target isn't stranded there by the lower
 `finalWindowExposure` trigger when the final window begins. The window is
 `[close − finalWindowDuration − lead, close − finalWindowDuration + lead]`,
 where `finalWindowDuration` is the configurable final-window width (default
-3600 s = the legacy fixed hour) and `lead` = `voteBeforeFinalWindowLeadMin`
+3600 s = one hour) and `lead` = `voteBeforeFinalWindowLeadMin`
 (1–59 min, default 15). Only active when `useFinalWindowExposure` is on.
 
 The decision side lives in `_runVotingRules`
