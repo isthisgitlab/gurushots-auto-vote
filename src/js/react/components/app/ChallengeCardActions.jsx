@@ -12,15 +12,14 @@ const FILL_ERROR_DISPLAY_MS = 5000;
 
 /**
  * "Earn turbo" mini-game button (detailed turbo cell, compact action row).
- * Locked while a play is in flight or the autovote loop (which plays turbo
- * itself) is running.
+ * Locked while a play is in flight.
  */
-function EarnTurboButton({ turboError, playingTurbo, disabled, onPlay, label }) {
+function EarnTurboButton({ turboError, playingTurbo, onPlay, label }) {
     return (
         <button
             className={`btn btn-xs mt-1 ${turboError ? 'btn-error' : 'btn-info'}`}
             onClick={onPlay}
-            disabled={disabled}
+            disabled={playingTurbo}
         >
             {playingTurbo ? <span className="loading loading-spinner loading-xs" /> : <>🎯 {label}</>}
         </button>
@@ -116,11 +115,11 @@ export function useChallengeCardActions({
         settingsButton: challenge.type !== 'flash' && (
             <SettingsButton onClick={() => onSettingsClick(challenge.id, challenge.title)} label={t('app.settings')} />
         ),
-        earnTurboButton: view.canPlayAutoTurbo && (
+        // Hidden while the autovote loop runs: it plays turbo itself.
+        earnTurboButton: view.canPlayAutoTurbo && !autovoteRunning && (
             <EarnTurboButton
                 turboError={turboError}
                 playingTurbo={playingTurbo}
-                disabled={playingTurbo || autovoteRunning}
                 onPlay={handlePlayAutoTurbo}
                 label={t('app.earnTurbo')}
             />

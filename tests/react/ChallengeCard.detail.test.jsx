@@ -257,9 +257,9 @@ describe('earn turbo', () => {
         expect(screen.queryByText(/app\.earnTurbo/)).toBeNull();
     });
 
-    test('while autovote runs the button is disabled with a hint', () => {
+    test('while autovote runs the button is hidden and a hint shows instead', () => {
         renderCard(turboChallenge({ state: 'FREE' }), { autovoteRunning: true });
-        expect(screen.getByText(/app\.earnTurbo/).closest('button').disabled).toBe(true);
+        expect(screen.queryByText(/app\.earnTurbo/)).toBeNull();
         expect(screen.getByText('app.autoTurboRunsWithAutovote')).toBeTruthy();
     });
 
