@@ -89,7 +89,7 @@ describe('hasScheme', () => {
 describe('srcDirOf', () => {
     it('returns "" for root files and the directory for nested files', () => {
         expect(srcDirOf('README.md')).toBe('');
-        expect(srcDirOf('docs/INSTALACIJA.md')).toBe('docs');
+        expect(srcDirOf('docs/scheduling.md')).toBe('docs');
     });
 });
 
@@ -104,7 +104,7 @@ describe('toRepoPath', () => {
 
 describe('rewriteLink', () => {
     it('maps in-set .md links to their generated .html page', () => {
-        expect(rewriteLink('docs/INSTALACIJA.md', '')).toBe('./installacija.html');
+        expect(rewriteLink('README.lv.md', '')).toBe('./lv.html');
         expect(rewriteLink('docs/scheduling.md', '')).toBe('./scheduling.html');
         // from a doc in docs/, ../README.md is the home page
         expect(rewriteLink('../README.md', 'docs')).toBe('./index.html');
@@ -149,7 +149,7 @@ describe('buildNav (language switch)', () => {
         expect(nav).toContain('href="./scheduling.html"');
         // the switch points to the Latvian guide, labelled in Latvian
         expect(nav).toContain('🇱🇻 Latviski');
-        expect(nav).toContain('href="./installacija.html"');
+        expect(nav).toContain('href="./lv.html"');
         // no "back to English" link while already in English
         expect(nav).not.toContain('🇬🇧 English');
         // current page is marked active
@@ -157,7 +157,7 @@ describe('buildNav (language switch)', () => {
     });
 
     it('shows an "English" switch back to the README on the Latvian page', () => {
-        const nav = buildNav(pageBySrc('docs/INSTALACIJA.md'));
+        const nav = buildNav(pageBySrc('README.lv.md'));
         expect(nav).toContain('🇬🇧 English');
         expect(nav).toContain('href="./index.html"');
         // the Latvian side has no separate scheduling page, and shouldn't offer "Latviski"
@@ -188,12 +188,12 @@ describe('main (full render into a temp tree)', () => {
         fs.writeFileSync(full, body);
     };
 
-    const seedRepo = ({ logo = true, instalacija = true } = {}) => {
+    const seedRepo = ({ logo = true, latvian = true } = {}) => {
         write('package.json', JSON.stringify({ version: '9.9.9' }));
         write('layout.html', '<title>{{title}}</title><nav>{{nav}}</nav><main>{{content}}</main>v{{version}}');
         write('README.md', '# Title\n[Scheduling](docs/scheduling.md)\n![Logo](src/assets/logo.png)\n[Lic](LICENSE)');
         write('docs/scheduling.md', '[Home](../README.md)');
-        if (instalacija) write('docs/INSTALACIJA.md', 'Sveiki');
+        if (latvian) write('README.lv.md', 'Sveiki');
         if (logo) write('src/assets/logo.png', 'PNG');
     };
 
@@ -222,7 +222,7 @@ describe('main (full render into a temp tree)', () => {
 
         await main(opts());
 
-        expect(fs.readdirSync(out).sort()).toEqual(['index.html', 'installacija.html', 'logo.png', 'scheduling.html']);
+        expect(fs.readdirSync(out).sort()).toEqual(['index.html', 'logo.png', 'lv.html', 'scheduling.html']);
         const index = fs.readFileSync(nodePath.join(out, 'index.html'), 'utf8');
         expect(index).toContain('<title>GuruShots Auto Vote</title>');
         expect(index).toContain('<a href="./scheduling.html">Scheduling</a>');
@@ -253,11 +253,11 @@ describe('main (full render into a temp tree)', () => {
     });
 
     it('exits 1 when a page source is missing', async () => {
-        seedRepo({ instalacija: false });
+        seedRepo({ latvian: false });
 
         await expect(main(opts())).rejects.toThrow('exit 1');
 
-        expect(errorSpy).toHaveBeenCalledWith('✗ source not found: docs/INSTALACIJA.md');
+        expect(errorSpy).toHaveBeenCalledWith('✗ source not found: README.lv.md');
     });
 
     it('runCli uses the real repo paths and turns a failure into exit 1', async () => {

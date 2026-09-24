@@ -6,7 +6,7 @@
 
 Automated voting for GuruShots challenges. The same voting engine ships three ways: a desktop **GUI** (Electron), a **CLI** (`gurucli`), and an **Android** app (sideloaded APK) that keeps voting in the background.
 
-**🇱🇻 [Instalācijas un lietošanas ceļvedis latviešu valodā →](docs/INSTALACIJA.md)**
+**🇱🇻 [Instalācijas un lietošanas ceļvedis latviešu valodā →](README.lv.md)**
 
 ## Table of Contents
 

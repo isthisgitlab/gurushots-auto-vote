@@ -6,7 +6,7 @@ This directory contains application documentation in different languages.
 
 ### **🇱🇻 Latvian**
 
-- **[Instalācijas un lietošanas ceļvedis](INSTALACIJA.md)** - Complete install & usage guide in Latvian (mirrors the English README)
+- **[Instalācijas un lietošanas ceļvedis](../README.lv.md)** - Complete install & usage guide in Latvian (mirrors the English README)
 
 ### **🇺🇸 English**
 
@@ -24,10 +24,10 @@ This directory contains application documentation in different languages.
 
 ## 🔗 Quick Links (Latvian guide)
 
-- **[Lejupielāde un instalācija](INSTALACIJA.md#-lejupielāde-un-instalācija)** - Download & install
-- **[Lietošana](INSTALACIJA.md#-lietošana)** - Usage (GUI + CLI)
-- **[Problēmu risināšana](INSTALACIJA.md#-problēmu-risināšana)** - Troubleshooting
+- **[Lejupielāde un instalācija](../README.lv.md#-lejupielāde-un-instalācija)** - Download & install
+- **[Lietošana](../README.lv.md#-lietošana)** - Usage (GUI + CLI)
+- **[Problēmu risināšana](../README.lv.md#-problēmu-risināšana)** - Troubleshooting
 
 ---
 
-**Note**: `README.md` and `INSTALACIJA.md` are version-synced by `pnpm update:readme`; this index is maintained manually.
+**Note**: `README.md` and `README.lv.md` are version-synced by `pnpm update:readme`; this index is maintained manually.

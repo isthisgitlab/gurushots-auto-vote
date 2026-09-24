@@ -2,7 +2,7 @@
  * Unit tests for scripts/readme-version.js (`pnpm update:readme` /
  * `pnpm verify:readme`).
  *
- * fs is an in-memory file map, so the real README.md / docs/INSTALACIJA.md
+ * fs is an in-memory file map, so the real README.md / README.lv.md
  * are never read or rewritten. The script does its work at require time, so
  * each case requires it in an isolated registry with argv set and
  * process.exit stubbed to throw (stopping control where the process would).
@@ -29,7 +29,7 @@ jest.mock('fs', () => mockFs);
 const ROOT = realPath.join(__dirname, '..', '..');
 const PKG = realPath.join(ROOT, 'package.json');
 const README = realPath.join(ROOT, 'README.md');
-const INSTALACIJA = realPath.join(ROOT, 'docs', 'INSTALACIJA.md');
+const README_LV = realPath.join(ROOT, 'README.lv.md');
 const DL = 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download';
 
 const guiSection = (v) =>
@@ -62,7 +62,7 @@ const cliSection = (v) =>
 
 const readme = (v) => `${guiSection(v)}\n${cliSection(v)}\n`;
 // The Latvian guide localizes the CLI placeholder as `[platforma]`.
-const instalacija = (v) => `${guiSection(v)}\n${cliSection(v).replace('[platform]', '[platforma]')}\n`;
+const readmeLv = (v) => `${guiSection(v)}\n${cliSection(v).replace('[platform]', '[platforma]')}\n`;
 
 class ExitCalled extends Error {
     constructor(code) {
@@ -122,16 +122,16 @@ describe('scripts/readme-version.js', () => {
     describe('update mode', () => {
         test('rewrites every stale occurrence in both docs', () => {
             mockFiles.set(README, readme('1.8.2'));
-            mockFiles.set(INSTALACIJA, instalacija('1.8.2-beta.1'));
+            mockFiles.set(README_LV, readmeLv('1.8.2-beta.1'));
 
             expect(run()).toBeNull();
 
             expect(mockFiles.get(README)).toBe(readme('2.0.0'));
-            expect(mockFiles.get(INSTALACIJA)).toBe(instalacija('2.0.0'));
+            expect(mockFiles.get(README_LV)).toBe(readmeLv('2.0.0'));
             // -linux-arm must not be clobbered by the bare -linux rule.
             expect(mockFiles.get(README)).toContain('gurucli-v2.0.0-linux-arm');
             expect(out()).toContain('✓ README.md: 20 occurrence(s) updated to v2.0.0');
-            expect(out()).toContain(`✓ ${realPath.join('docs', 'INSTALACIJA.md')}: 20 occurrence(s) updated`);
+            expect(out()).toContain('✓ README.lv.md: 20 occurrence(s) updated');
             expect(out()).toContain('40 total replacement(s) for v2.0.0.');
         });
 
@@ -165,12 +165,12 @@ describe('scripts/readme-version.js', () => {
     describe('--check mode', () => {
         test('passes when both docs match', () => {
             mockFiles.set(README, readme('2.0.0'));
-            mockFiles.set(INSTALACIJA, instalacija('2.0.0'));
+            mockFiles.set(README_LV, readmeLv('2.0.0'));
 
             expect(run(['--check'])).toBeNull();
 
             expect(out()).toContain('✓ README.md: matches v2.0.0');
-            expect(out()).toContain(`✓ ${realPath.join('docs', 'INSTALACIJA.md')}: matches v2.0.0`);
+            expect(out()).toContain('✓ README.lv.md: matches v2.0.0');
             expect(out()).not.toContain('total replacement');
             expect(err()).toBe('');
             expect(mockFs.writeFileSync).not.toHaveBeenCalled();
@@ -198,13 +198,13 @@ describe('scripts/readme-version.js', () => {
             // A "gurucli-v" reference alone marks the file as having a CLI section.
             mockFiles.set(README, `${guiSection('2.0.0')}\ngurucli-v2.0.0-mac\n`);
             // No CLI marker at all: the cli rules stay optional.
-            mockFiles.set(INSTALACIJA, `${guiSection('2.0.0')}\n`);
+            mockFiles.set(README_LV, `${guiSection('2.0.0')}\n`);
 
             expect(run(['--check'])).toBe(1);
             const errors = err();
             expect(errors).toContain('✗ README.md: required pattern /gurucli-v');
-            expect(errors).not.toContain('INSTALACIJA.md');
-            expect(out()).toContain('INSTALACIJA.md: matches v2.0.0');
+            expect(errors).not.toContain('README.lv.md');
+            expect(out()).toContain('README.lv.md: matches v2.0.0');
         });
     });
 });

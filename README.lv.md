@@ -2,7 +2,7 @@
 
 Automātiska balsošana GuruShots izaicinājumos. Viens un tas pats balsošanas dzinējs pieejams trīs veidos: darbvirsmas **grafiskā lietotne** (Electron), **komandrindas rīks** (`gurucli`) un **Android** lietotne (sānielādēts APK), kas turpina balsot fonā.
 
-**🇬🇧 [Documentation in English →](../README.md)**
+**🇬🇧 [Documentation in English →](README.md)**
 
 ## Saturs
 
@@ -245,7 +245,7 @@ Sliekšņiem ar atsevišķu mērķi lietotne balso tikai tad, kad esat zem sliek
 
 ### Plānošanas kadence
 
-Nepārtrauktajā režīmā starp cikliem tiek izvēlēta nejauša aizture diapazonā `[checkFrequencyMin, checkFrequencyMax]` minūtes. Tiklīdz kāds izaicinājums ienāk savā `lastMinuteThreshold` logā, plānotājs pārslēdzas uz fiksētu, ciešāku kadenci (`lastMinuteCheckFrequency`, noklusējums ik minūti), līdz neviens izaicinājums vairs nav šajā logā, tad atgriežas. (Skatiet [`scheduling.md`](scheduling.md) par platformu iekšējo darbību — CLI/Android izmanto vienu dzinēju; grafiskā lietotne izmanto to pašu matemātiku.)
+Nepārtrauktajā režīmā starp cikliem tiek izvēlēta nejauša aizture diapazonā `[checkFrequencyMin, checkFrequencyMax]` minūtes. Tiklīdz kāds izaicinājums ienāk savā `lastMinuteThreshold` logā, plānotājs pārslēdzas uz fiksētu, ciešāku kadenci (`lastMinuteCheckFrequency`, noklusējums ik minūti), līdz neviens izaicinājums vairs nav šajā logā, tad atgriežas. (Skatiet [`scheduling.md`](docs/scheduling.md) par platformu iekšējo darbību — CLI/Android izmanto vienu dzinēju; grafiskā lietotne izmanto to pašu matemātiku.)
 
 ### Boost
 

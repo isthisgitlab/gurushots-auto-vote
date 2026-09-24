@@ -26,8 +26,8 @@ const dl = `https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/
 // Requirement values:
 //   'always' — required in every file (GUI download artifacts; every install doc must list them)
 //   'cli'    — required only in files that already contain a CLI section (matches the old
-//              verify-readme-version.js `required: hasCLISection` logic; INSTALACIJA.md skips,
-//              README enforces because it has gurucli-* references)
+//              verify-readme-version.js `required: hasCLISection` logic; a doc with no
+//              gurucli-* references skips them)
 //   false    — optional everywhere
 //
 // Ordering note: `-linux-arm` rules MUST precede `-linux` because /-linux/ matches inside
@@ -55,12 +55,12 @@ const rules = [
     [`chmod \\+x GuruShotsAutoVote-v${v}-\\*\\.AppImage`, `chmod +x GuruShotsAutoVote-v${vRepl}-*.AppImage`, false],
     [`\\./GuruShotsAutoVote-v${v}-\\*\\.AppImage`, `./GuruShotsAutoVote-v${vRepl}-*.AppImage`, false],
     [`\\./gurucli-v${v}-\\[platform\\]`, `./gurucli-v${vRepl}-[platform]`, false],
-    // Latvian (INSTALACIJA.md) localizes the placeholder as `[platforma]`; without this
+    // Latvian (README.lv.md) localizes the placeholder as `[platforma]`; without this
     // rule those example lines are invisible to update/verify and silently drift on bumps.
     [`\\./gurucli-v${v}-\\[platforma\\]`, `./gurucli-v${vRepl}-[platforma]`, false],
 ];
 
-const files = [path.join(root, 'README.md'), path.join(root, 'docs', 'INSTALACIJA.md')];
+const files = [path.join(root, 'README.md'), path.join(root, 'README.lv.md')];
 
 let anyFailure = false;
 let totalChanges = 0;

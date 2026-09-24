@@ -581,7 +581,7 @@ jobs:
               run: |
                   git config --local user.email "action@github.com"
                   git config --local user.name "GitHub Action"
-                  git add package.json README.md docs/
+                  git add package.json README.md README.lv.md
                   git commit -m "Bump version to ${{ needs.version-bump.outputs.new-version }} (${{ needs.version-bump.outputs.bump-type }}) and update documentation [skip ci]"
                   git push origin ${{ github.ref_name }}
 

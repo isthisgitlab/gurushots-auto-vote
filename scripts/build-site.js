@@ -41,21 +41,21 @@ const PAGES = [
         lang: 'en',
     },
     {
-        src: 'docs/INSTALACIJA.md',
-        out: 'installacija.html',
-        title: 'Instalācija — GuruShots Auto Vote',
+        src: 'README.lv.md',
+        out: 'lv.html',
+        title: 'GuruShots Auto Vote',
         nav: 'Sākums',
         lang: 'lv',
     },
 ];
 
 // The site is bilingual: an English side (README + scheduling) and a Latvian
-// side (the standalone install guide). Every page carries a switch to the OTHER
+// side (README.lv.md, the translated README). Every page carries a switch to the OTHER
 // language's entry page, labelled in the target language — so the Latvian guide
 // shows "🇬🇧 English" (the way back) instead of a useless "Latviski".
 const LANGUAGES = {
     en: { entry: 'index.html', switchLabel: '🇬🇧 English' },
-    lv: { entry: 'installacija.html', switchLabel: '🇱🇻 Latviski' },
+    lv: { entry: 'lv.html', switchLabel: '🇱🇻 Latviski' },
 };
 
 const srcToOut = Object.fromEntries(PAGES.map((p) => [p.src, p.out]));

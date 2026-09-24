@@ -76,7 +76,7 @@ scripts/              # Development and build utilities
 ├── build-cli.js          # Bundle CLI and inject into Node SEA binary
 ├── build-react.js        # esbuild orchestration for the React renderer
 ├── cleanup-logs.js       # Delete legacy api-debug-* log files
-├── readme-version.js     # Sync (or verify with --check) README/INSTALACIJA version strings
+├── readme-version.js     # Sync (or verify with --check) README/README.lv version strings
 ├── settings-cli.js       # Settings facade CLI used by the settings:* pnpm scripts
 └── syntax-check.js       # Lightweight node-context syntax check (used by `pnpm lint`)
 ```
