@@ -1032,7 +1032,7 @@ const SETTINGS_SCHEMA = {
     // scheduling/wallClock.js, NOT device-local time) and one-shot
     // seconds-before-close offsets — every entry opens its own window sharing
     // scheduledFillWindowMinutes, all OR'd. The decision-side consumer is
-    // getScheduledFillState in services/VotingLogic.js; the cadence-side
+    // getScheduledFillState in services/decisions/triggerWindows.js; the cadence-side
     // consumer is scheduling/scheduledFill.js.
     useScheduledFill: {
         type: 'boolean',
@@ -1101,7 +1101,7 @@ const SETTINGS_SCHEMA = {
     // same entry cap as scheduled fill (see the validator block above), with
     // votingPauseDurationMinutes playing the scheduledFillWindowMinutes role.
     // The decision-side consumer is getVotingPauseState in
-    // services/VotingLogic.js.
+    // services/decisions/triggerWindows.js.
     //
     // Deliberately NOT a cadence input: the pass still runs on its normal
     // schedule during a pause and each paused challenge is skipped with a
@@ -1263,7 +1263,7 @@ const SETTINGS_SCHEMA = {
     },
     // Elapsed-fraction join anchor. 0 = off. When BOTH this and
     // autoJoinWithinHoursOfEnd are set on the same resolved source, the percent
-    // wins (see resolveJoinWindow in services/VotingLogic.js) — one candidate
+    // wins (see resolveJoinWindow in services/decisions/joinDecision.js) — one candidate
     // gets ONE window, never the intersection of two, so the effective timing is
     // always readable off a single number.
     //

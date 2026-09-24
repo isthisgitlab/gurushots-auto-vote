@@ -1,7 +1,7 @@
 /**
  * Cadence-side scheduled-fill math (issue #26).
  *
- * The decision side (services/VotingLogic.js getScheduledFillState) answers
+ * The decision side (services/decisions/triggerWindows.js getScheduledFillState) answers
  * "is this challenge in a fill window right now?"; this module answers the
  * scheduler's question "when does the next fill window OPEN?", so
  * computeNextCycleDelayMs can cap the sleep and land a cycle exactly at the

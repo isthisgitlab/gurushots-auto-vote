@@ -78,7 +78,7 @@ const sanitizeNotificationText = (value, maxLength = MAX_TEXT_LEN) =>
 
 /**
  * Fill `{placeholder}` tokens in a translated template. The app's translation
- * layer (translations/index.js `t()`) does no interpolation of its own, so the
+ * layer (translations/translator.js `t()`) does no interpolation of its own, so the
  * templates carry `{minutes}` / `{title}` / `{count}` and we substitute here.
  * Unknown tokens are left intact rather than blanked.
  *

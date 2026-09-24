@@ -68,7 +68,7 @@ migrates to an explicit `[]`, never deleted, so it keeps shadowing a
 configured global default.
 
 The decision side lives in `getScheduledFillState`
-(`src/js/services/VotingLogic.js`): during a window
+(`src/js/services/decisions/triggerWindows.js`): during a window
 `[start, start + scheduledFillWindowMinutes]` the challenge votes to
 100/100 like the last-minute rule; with `scheduledFillReplaces` on, the
 normal and final-window threshold rules are blocked outside the windows
@@ -165,7 +165,7 @@ where `finalWindowDuration` is the configurable final-window width (default
 (1–59 min, default 15). Only active when `useFinalWindowExposure` is on.
 
 The decision side lives in `_runVotingRules`
-(`src/js/services/VotingLogic.js`): its pre-final-window branch sits **above**
+(`src/js/services/decisions/ruleEngine.js`): its pre-final-window branch sits **above**
 the final-window rule and **below** scheduled-fill/last-minute in the
 load-bearing precedence, so during the lead minutes after the boundary —
 where the top-up and final-window windows overlap — the top-up wins and votes

@@ -272,7 +272,7 @@ const CHALLENGE_HINTS = new Map([
  * render from the effective (override-or-inherited) values. Both triggers are
  * LISTS; every entry opens its own window. The trigger-window derivation
  * lives in utils/windowHints.js, which mirrors _triggerWindowState in
- * services/VotingLogic.js so a hint can never claim a window the decision
+ * services/decisions/triggerWindows.js so a hint can never claim a window the decision
  * path won't open.
  */
 export function challengeSettingHints({ effectiveOf, appSettings, challenge, profileReplacesWarning, t }) {
