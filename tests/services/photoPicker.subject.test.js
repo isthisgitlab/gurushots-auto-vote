@@ -24,6 +24,7 @@ const {
     buildSearchTerms,
     buildThemeKeywords,
     buildChallengeKeywords,
+    visualSubjectWords,
 } = require('../../src/js/services/photoPicker');
 
 describe('abstractTitleWords', () => {
@@ -85,5 +86,25 @@ describe('title readers with the real lexicon', () => {
             expect(buildSearchTerms(title)).toEqual(['nature', 'among', 'built']);
             expect(buildThemeKeywords(title)).toEqual(['built', 'among', 'nature']);
         });
+    });
+});
+
+describe('visualSubjectWords', () => {
+    beforeEach(() => lexicon.init());
+    afterAll(() => lexicon.__resetForTests());
+
+    test('keeps every subject word readable — the lexicon reads "leaves" as abstract', () => {
+        expect(buildThemeKeywords({ title: 'Glorious Green Leaves' })).not.toContain('leav');
+        expect(visualSubjectWords({ title: 'Glorious Green Leaves' })).toEqual(['glorious', 'green', 'leaves']);
+        expect(visualSubjectWords({ title: 'Glorious Green Leaves' }, ['glorious'])).toEqual(['green', 'leaves']);
+    });
+
+    test('drops the series prefix and negated subjects, and is empty for meta titles', () => {
+        expect(visualSubjectWords({ title: 'Screen Stars - Tropic Paradise' })).toEqual(['tropic', 'paradise']);
+        expect(visualSubjectWords({ title: 'People-Free Streets' })).toEqual(['streets']);
+        expect(visualSubjectWords({ title: 'No Humans' })).toEqual([]);
+        expect(visualSubjectWords({ title: 'Photo of the Week!' })).toEqual([]);
+        expect(visualSubjectWords({ title: 'Street Street' })).toEqual(['street']);
+        expect(visualSubjectWords(undefined)).toEqual([]);
     });
 });

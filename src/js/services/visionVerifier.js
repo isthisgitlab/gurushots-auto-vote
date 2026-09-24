@@ -1,20 +1,36 @@
 /**
- * Local image/text check for the highest-ranked auto-fill candidates.
- * The model is downloaded and checksummed by the build, then shipped with the
- * application. A failed image fetch or inference leaves tag ranking intact.
+ * Local image/text check for the highest-ranked fill candidates of ANY
+ * challenge. The prompts come from the challenge itself — its title subject
+ * and the opening of its description — so no theme is hardcoded. The model is
+ * downloaded and checksummed by the build, then shipped with the application.
+ *
+ * The check only reorders: photos the model finds clearly off-theme move
+ * behind the ones it accepts, and the tag/popularity order is kept inside each
+ * group. It never empties a pick. A challenge with no visual subject ("Guru of
+ * The Week", "It's all About Balance"), a failed image fetch, or a failed
+ * inference leaves the tag order untouched.
  */
 const runtime = require('../runtime');
 const { entryPhotoUrl } = require('../format/photoUrl');
+const { visualSubjectWords } = require('./photoPicker');
 
 const MAX_IMAGES = 12;
-const MIN_STRONG_SCORE = 0.001;
-const VETO_RATIO = 0.1;
-// Only prompts checked against real GuruShots examples are enabled. SigLIP's
-// raw score for a bare challenge title was misleading ("Banisters" scored a
-// lakeside portrait above a real handrail), so other themes abstain.
-const VERIFIED_PROMPTS = Object.freeze({
-    banisters: 'a photo of a banister or handrail',
-});
+// Thresholds are on SigLIP's logit scale, measured on live GuruShots
+// challenges (2026-09-24). A prompt describes something visible when at least
+// one shortlisted photo reaches ABSTAIN_LOGIT for it: concrete themes peaked
+// between -5.7 (Metal & Wood) and -1.1 (Smoke-Filled Scenes), while
+// "Exclusively for GuruShots" (-7.7) and "It's all About Balance" (-7.8) never
+// did, so those keep the tag order instead of an arbitrary visual one.
+const ABSTAIN_LOGIT = -6.5;
+// A photo scoring 10x less likely than the best match is off-theme (the aerial
+// island under "Green Leaves" sat ~7 logits below the leaf photos).
+const OFF_THEME_MARGIN = Math.log(10);
+// SigLIP reads 64 text tokens; two sentences of a description fit well within.
+const MAX_DESCRIPTION_CHARS = 200;
+// GuruShots appends the same rewards/sign-off text to every description.
+const BOILERPLATE_RE = /join our challenge|participation reward|elite level reward|allstar level reward|good luck/i;
+const HTML_ENTITIES = Object.freeze({ '&amp;': '&', '&quot;': '"', '&#39;': "'", '&apos;': "'", '&nbsp;': ' ' });
+
 let classifierPromise;
 let cliAssetRoot;
 
@@ -57,65 +73,115 @@ const getClassifier = () => {
     return classifierPromise;
 };
 
-const themePrompt = (challenge) => {
-    const title = String(challenge?.title || '')
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, ' ');
-    return VERIFIED_PROMPTS[title] || null;
-};
-
-const selectVisualMatches = (scored, wantCount) => {
-    const strongest = Math.max(...scored.map((item) => item.score));
-    if (strongest < MIN_STRONG_SCORE) return [];
-    return scored
-        .filter((item) => item.score >= strongest * VETO_RATIO)
-        .slice(0, wantCount)
-        .map((item) => item.id);
+/**
+ * The description's own statement of the subject: "Share your best photos of
+ * balloons. Special occasion balloons, hot air balloons…". HTML and the shared
+ * rewards text are removed; '' when nothing descriptive is left.
+ *
+ * @param {unknown} message - challenge.welcome_message
+ * @returns {string}
+ */
+const descriptionLead = (message) => {
+    if (typeof message !== 'string') return '';
+    let text = message
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/&(?:amp|quot|#39|apos|nbsp);/g, (entity) => HTML_ENTITIES[entity])
+        .replace(/\s+/g, ' ')
+        .trim();
+    const boilerplate = text.search(BOILERPLATE_RE);
+    if (boilerplate >= 0) text = text.slice(0, boilerplate);
+    const sentences = text.match(/[^.!?]+[.!?]*/g) || [];
+    return sentences.slice(0, 2).join('').trim().slice(0, MAX_DESCRIPTION_CHARS).trim();
 };
 
 /**
- * Preserve the tag/popularity order, vetoing only visual outliers when the
- * model finds at least one strong match in the same shortlist. A successfully
- * scored but weak shortlist leaves the slot empty; unavailable inference
- * returns the original tag selection.
+ * Text prompts for a challenge: its title subject, plus the description lead
+ * when there is one. Empty when the title names nothing visual — the
+ * description of a meta challenge ("Photo of the Day") is about the contest,
+ * not the picture, so it is never used alone.
+ *
+ * @param {object} challenge
+ * @param {Iterable<string>|null} [ignoreWords]
+ * @returns {string[]}
  */
-const pickVisuallyVerified = async (challenge, rankedIds, eligible, wantCount, logger) => {
+const challengePrompts = (challenge, ignoreWords = null) => {
+    const subject = visualSubjectWords(challenge, ignoreWords);
+    if (subject.length === 0) return [];
+    const lead = descriptionLead(challenge?.welcome_message);
+    return [`a photo of ${subject.join(' ')}`, ...(lead ? [lead] : [])];
+};
+
+const toLogit = (score) => {
+    const p = Math.min(Math.max(score, 1e-12), 1 - 1e-12);
+    return Math.log(p / (1 - p));
+};
+
+/**
+ * Order shortlisted photos by visual fit. Each entry carries one logit per
+ * prompt and a photo's fit is their mean: taking the best prompt instead let
+ * fog, read by the title prompt as "smoke filled scenes", set a bar that
+ * rejected the real smoke photo the description prompt preferred.
+ *
+ * @param {Array<{id: *, logits: number[]}>} scored - in tag/popularity order
+ * @returns {Array<*>|null} ids, accepted photos first; null to abstain
+ */
+const orderByVisualFit = (scored) => {
+    if (scored.length === 0) return null;
+    const peak = Math.max(...scored.flatMap((item) => item.logits));
+    if (peak < ABSTAIN_LOGIT) return null;
+    const fits = scored.map((item) => ({
+        id: item.id,
+        fit: item.logits.reduce((sum, logit) => sum + logit, 0) / item.logits.length,
+    }));
+    const floor = Math.max(...fits.map((item) => item.fit)) - OFF_THEME_MARGIN;
+    const accepted = fits.filter((item) => item.fit >= floor);
+    const rejected = fits.filter((item) => item.fit < floor).sort((a, b) => b.fit - a.fit);
+    return [...accepted, ...rejected].map((item) => item.id);
+};
+
+/**
+ * Re-rank the head of a tag-ranked shortlist by what the photos show.
+ *
+ * @param {object} challenge
+ * @param {Array<*>} rankedIds - photo ids, best tag/popularity match first
+ * @param {Array<object>} eligible - photo records (id + member_id) for the ids
+ * @param {number} wantCount
+ * @param {{logger: object, ignoreWords?: Iterable<string>|null}} options
+ * @returns {Promise<Array<*>>} wantCount ids (fewer only if rankedIds is shorter)
+ */
+const rankVisually = async (challenge, rankedIds, eligible, wantCount, { logger, ignoreWords = null }) => {
     const original = rankedIds.slice(0, wantCount);
-    const prompt = themePrompt(challenge);
-    if (!prompt || rankedIds.length === 0) return original;
+    const prompts = challengePrompts(challenge, ignoreWords);
+    if (prompts.length === 0 || rankedIds.length === 0) return original;
     const byId = new Map(eligible.map((photo) => [String(photo.id), photo]));
-    const candidates = rankedIds.slice(0, Math.min(MAX_IMAGES, Math.max(4, wantCount * 3))).map((id) => ({
+    const shortlist = rankedIds.slice(0, Math.max(MAX_IMAGES, wantCount));
+    const candidates = shortlist.map((id) => ({
         id,
         url: entryPhotoUrl(byId.get(String(id)), { size: 256, fit: true }),
     }));
     if (candidates.some((item) => !item.url)) return original;
+    const log = logger.withCategory('autoFill');
     try {
         const classifier = await getClassifier();
         const scored = [];
         for (const { id, url } of candidates) {
-            const result = await classifier(url, [prompt]);
-            const score = result?.[0]?.score;
-            if (!Number.isFinite(score)) return original;
-            scored.push({ id, score });
+            const results = await classifier(url, prompts);
+            const logits = prompts.map((prompt) => toLogit(results?.find?.((r) => r.label === prompt)?.score));
+            if (!logits.every(Number.isFinite)) return original;
+            scored.push({ id, logits });
         }
-        const picked = selectVisualMatches(scored, wantCount);
-        if (picked.length === 0) {
-            logger
-                .withCategory('autoFill')
-                .info(`Visual check found no strong match for ${logger.challengeTag(challenge)}; standing down`, null);
-            return picked;
-        }
+        const order = orderByVisualFit(scored);
+        if (order === null) return original;
+        const picked = [...order, ...rankedIds.slice(shortlist.length)].slice(0, wantCount);
         if (picked.some((id, index) => id !== original[index])) {
-            logger
-                .withCategory('autoFill')
-                .info(`Visual check skipped weak matches for ${logger.challengeTag(challenge)}`, null);
+            log.info(
+                `Visual check reordered picks for ${logger.challengeTag(challenge)}: ${original.join(', ')} → ${picked.join(', ')}`,
+                null,
+            );
         }
         return picked;
     } catch (error) {
-        logger
-            .withCategory('autoFill')
-            .warning(`Visual check unavailable for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
+        log.warning(`Visual check unavailable for ${logger.challengeTag(challenge)}: ${error.message || error}`, null);
         return original;
     }
 };
@@ -125,4 +191,4 @@ const __resetForTests = () => {
     cliAssetRoot = undefined;
 };
 
-module.exports = { pickVisuallyVerified, selectVisualMatches, themePrompt, __resetForTests };
+module.exports = { rankVisually, orderByVisualFit, challengePrompts, descriptionLead, __resetForTests };

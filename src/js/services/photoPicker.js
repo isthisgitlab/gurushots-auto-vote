@@ -667,6 +667,31 @@ const buildThemeKeywords = (challenge, ignoreWords = null) => {
     return Array.from(new Set(fromUrl)).slice(0, MAX_CHALLENGE_KEYWORDS);
 };
 
+/**
+ * The challenge's subject as readable words, for the image model's prompt:
+ * the title subject buildThemeKeywords starts from (series prefix and negated
+ * words removed), but unstemmed — "leaves", not "leav". Empty for a title with
+ * no visual subject ("Guru of The Week").
+ *
+ * abstractTitleWords is deliberately NOT applied: the word vectors read some
+ * nouns as abstract ("leaves" as the verb), and dropping it turned "Glorious
+ * Green Leaves" into "a photo of green". The image model handles a qualifier
+ * like "fun" in "balloon fun" fine; it does not handle a missing subject.
+ *
+ * @param {object} challenge
+ * @param {Iterable<string>|null} [ignoreWords]
+ * @returns {string[]}
+ */
+const visualSubjectWords = (challenge, ignoreWords = null) => {
+    const negation = parseNegation(challenge?.title, ignoreWords);
+    const title = negation.active ? negation.positiveTitle : challenge?.title;
+    const negated = new Set(negation.stems);
+    const words = rawTokenise(titleSubject(title, ignoreWords), { ignoreWords }).filter(
+        (word) => !negated.has(stem(word)) && !NEGATION_MARKER_STEMS.has(stem(word)),
+    );
+    return Array.from(new Set(words));
+};
+
 // Minimum stem length for the fuzzy (prefix) branch of matches(). Below this a
 // stem may only match by exact equality.
 const MIN_FUZZY_STEM_LENGTH = 3;
@@ -1416,6 +1441,7 @@ module.exports = {
     matches,
     buildChallengeKeywords,
     buildThemeKeywords,
+    visualSubjectWords,
     abstractTitleWords,
     scorePhoto,
     tokeniseTagList,

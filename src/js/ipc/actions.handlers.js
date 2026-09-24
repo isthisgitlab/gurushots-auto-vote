@@ -228,7 +228,6 @@ const buildHandlers = () => ({
                 submitted: result.submitted,
                 skipped: result.skipped,
                 error: result.error,
-                ...(result.errorCode ? { errorCode: result.errorCode } : {}),
                 message: result.success
                     ? `Submitted ${result.submitted} entr${result.submitted === 1 ? 'y' : 'ies'}`
                     : undefined,

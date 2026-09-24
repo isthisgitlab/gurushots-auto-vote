@@ -37,6 +37,7 @@ const cancellation = require('../voting/cancellation');
 const { shouldJoinChallenge } = require('./VotingLogic');
 const { fetchCandidatesForChallenge, resolveSemanticScores } = require('./autoFill');
 const { pickPhotosForChallenge } = require('./photoPicker');
+const { rankVisually } = require('./visionVerifier');
 
 // Shared across the manual handler and the automatic pass IN THIS PROCESS so the
 // two cannot double-spend the same challenge. Module-level = one Set per process;
@@ -277,6 +278,9 @@ const clearUnlocked = (store, id) => {
 
 // ---- photo pick (reuses auto-fill's picker) ----
 
+// Same shortlist length the fill path hands the visual re-rank.
+const VISUAL_SHORTLIST = 12;
+
 /**
  * Pick a single eligible entry photo for a candidate, honoring the same
  * must/should tag rules and picker as auto-fill. Tags are resolved by the
@@ -318,14 +322,21 @@ const pickJoinPhoto = async (challenge, token, deps) => {
         return null;
     }
     const semanticScores = await resolveSemanticScores(challenge, eligible, { ignoreWords });
-    const picked = pickPhotosForChallenge(challenge, eligible, 1, {
+    // A shortlist, not one photo, so the visual re-rank a fill applies can
+    // promote an on-theme alternative here too.
+    const shortlist = pickPhotosForChallenge(challenge, eligible, VISUAL_SHORTLIST, {
         mustIncludeTags,
         shouldIncludeTags,
         fillWithoutTagMatch,
         semanticScores,
         ignoreWords,
     });
-    return picked && picked[0] ? picked[0] : null;
+    if (!shortlist || shortlist.length === 0) return null;
+    const [picked] = await (deps.rankVisually || rankVisually)(challenge, shortlist, eligible, 1, {
+        logger,
+        ignoreWords,
+    });
+    return picked;
 };
 
 // ---- the join itself (shared by pass + manual) ----

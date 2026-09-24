@@ -27,26 +27,36 @@ jest.mock('../../src/js/services/visionCliAssets', () => ({ extractVisionCliAsse
 
 const path = require('node:path');
 const {
-    pickVisuallyVerified,
-    selectVisualMatches,
-    themePrompt,
+    rankVisually,
+    orderByVisualFit,
+    challengePrompts,
+    descriptionLead,
     __resetForTests,
 } = require('../../src/js/services/visionVerifier');
 
 const hex = (seed) => seed.repeat(32).slice(0, 32);
 const photo = (id) => ({ id: hex(id), member_id: hex('f') });
-const BANISTERS = { id: 'c1', title: 'Banisters' };
+const LEAVES = {
+    id: 'c1',
+    title: 'Glorious Green Leaves',
+    welcome_message: 'show us some green leaves. Join our challenge and earn rewards! * Participation reward: 10 coins',
+};
+const PROMPTS = ['a photo of glorious green leaves', 'show us some green leaves.'];
+const sigmoid = (logit) => 1 / (1 + Math.exp(-logit));
 
 const makeLogger = () => {
     const scoped = { info: jest.fn(), warning: jest.fn() };
-    return { scoped, withCategory: jest.fn(() => scoped), challengeTag: jest.fn(() => '[Challenge c1: Banisters]') };
+    return { scoped, withCategory: jest.fn(() => scoped), challengeTag: jest.fn(() => '[Challenge c1: Leaves]') };
 };
 
-// Scores keyed by the photo id embedded in each CDN URL.
-const scoreBy = (scores) =>
-    mockClassifier.mockImplementation(async (url) => {
-        const id = Object.keys(scores).find((key) => url.includes(`3_${hex(key)}`));
-        return [{ score: scores[id] }];
+// Logits per photo seed, one per prompt, returned as the pipeline does:
+// [{label, score}] sorted by score.
+const logitsBy = (table) =>
+    mockClassifier.mockImplementation(async (url, prompts) => {
+        const seed = Object.keys(table).find((key) => url.includes(`3_${hex(key)}`));
+        return prompts
+            .map((label, index) => ({ label, score: sigmoid(table[seed][index]) }))
+            .sort((a, b) => b.score - a.score);
     });
 
 beforeEach(() => {
@@ -71,62 +81,90 @@ afterAll(() => {
     delete process.resourcesPath;
 });
 
-test('a validated Banisters prompt rejects the real motorcycle and beach outliers', () => {
-    // Measured on the user's live themed-search shortlist with bundled SigLIP.
-    const scored = [
-        { id: 'handrail', score: 0.0117948595 },
-        { id: 'motorcycle', score: 0.00000001668 },
-        { id: 'beach', score: 0.000004933 },
-    ];
-    expect(selectVisualMatches(scored, 3)).toEqual(['handrail']);
-});
-
-test('weak visual evidence stands down, and unvalidated themes keep tag ranking', () => {
-    expect(
-        selectVisualMatches(
-            [
-                { id: 'first', score: 0.0002 },
-                { id: 'second', score: 0.0001 },
-            ],
-            1,
-        ),
-    ).toEqual([]);
-    expect(themePrompt({ title: '  BANISTERS ' })).toBe('a photo of a banister or handrail');
-    expect(themePrompt({ title: 'Best Meals' })).toBeNull();
-    expect(themePrompt({ title: 'Smoke-Filled Scenes' })).toBeNull();
-    expect(themePrompt({})).toBeNull();
-    expect(themePrompt(undefined)).toBeNull();
-});
-
-describe('pickVisuallyVerified', () => {
-    test('unvalidated themes and empty shortlists keep the tag pick without loading the model', async () => {
-        const logger = makeLogger();
-        expect(await pickVisuallyVerified({ title: 'Best Meals' }, ['a', 'b'], [], 1, logger)).toEqual(['a']);
-        expect(await pickVisuallyVerified(BANISTERS, [], [], 1, logger)).toEqual([]);
-        expect(mockTransformers.pipeline).not.toHaveBeenCalled();
+describe('descriptionLead', () => {
+    test('keeps the opening sentences and drops markup, entities and the rewards text', () => {
+        expect(
+            descriptionLead(
+                '<p>Share your best photos of balloons.&nbsp;Hot air &amp; weather balloons!</p> Anything goes. Join our challenge and earn rewards!',
+            ),
+        ).toBe('Share your best photos of balloons. Hot air & weather balloons!');
     });
 
-    test('a candidate without a buildable photo URL keeps the tag pick', async () => {
-        const ids = [hex('a'), 'not-an-md5'];
-        const eligible = [photo('a'), { id: 'not-an-md5', member_id: hex('f') }];
-        expect(await pickVisuallyVerified(BANISTERS, ids, eligible, 1, makeLogger())).toEqual([hex('a')]);
-        expect(mockTransformers.pipeline).not.toHaveBeenCalled();
+    test('is empty for missing or boilerplate-only text, and capped for long prose', () => {
+        expect(descriptionLead(undefined)).toBe('');
+        expect(descriptionLead('Good luck & have fun!')).toBe('');
+        expect(descriptionLead(`${'word '.repeat(80)}.`).length).toBeLessThanOrEqual(200);
+    });
+});
+
+describe('challengePrompts', () => {
+    test('builds prompts from any challenge title and description', () => {
+        expect(challengePrompts(LEAVES)).toEqual(PROMPTS);
+        expect(challengePrompts({ title: 'Metal & Wood' })).toEqual(['a photo of metal wood']);
+        expect(challengePrompts({ title: 'Color Hunt: Green' })).toEqual(['a photo of green']);
+        expect(challengePrompts({ title: 'Glorious Green Leaves' }, ['glorious'])).toEqual(['a photo of green leaves']);
     });
 
-    test('packaged Electron vetoes a weak tag pick and loads the model from resources once', async () => {
-        scoreBy({ a: 0.00001, b: 0.02, c: 0.01, d: 0.0000001 });
-        const ids = ['a', 'b', 'c', 'd'].map(hex);
-        const eligible = ['a', 'b', 'c', 'd'].map(photo);
+    test('a title with no visual subject gets no prompt, even with a description', () => {
+        expect(challengePrompts({ title: 'Guru of The Week', welcome_message: 'Share your freshest shots.' })).toEqual(
+            [],
+        );
+        expect(challengePrompts({ title: 'No Humans' })).toEqual([]);
+        expect(challengePrompts(undefined)).toEqual([]);
+    });
+});
+
+describe('orderByVisualFit', () => {
+    test('moves clear off-theme photos behind the accepted ones, keeping tag order inside each group', () => {
+        // Live "Glorious Green Leaves" logits: aerial island, field walkers,
+        // leaf close-up, bridge, leaf canopy.
+        const scored = [
+            { id: 'island', logits: [-10.31, -8.39] },
+            { id: 'walkers', logits: [-10.47, -6.92] },
+            { id: 'leaf', logits: [-1.69, -2.84] },
+            { id: 'bridge', logits: [-12.45, -10.9] },
+            { id: 'canopy', logits: [-3.52, -2.91] },
+        ];
+        expect(orderByVisualFit(scored)).toEqual(['leaf', 'canopy', 'walkers', 'island', 'bridge']);
+    });
+
+    test('fit averages the prompts, so a title-only match cannot push out a photo that fits both', () => {
+        // Live "Smoke-Filled Scenes": the title prompt alone rated fog far
+        // above the real smoke photo, which the description prompt preferred.
+        const scored = [
+            { id: 'smoke', logits: [-4.53, -5.55] },
+            { id: 'fog', logits: [-1.05, -8.9] },
+            { id: 'portrait', logits: [-11.96, -12.44] },
+        ];
+        expect(orderByVisualFit(scored)).toEqual(['smoke', 'fog', 'portrait']);
+    });
+
+    test('abstains when no photo clearly matches any prompt, or nothing was scored', () => {
+        // Live "It's all About Balance": best photo peaked at -7.78.
+        expect(
+            orderByVisualFit([
+                { id: 'stairs', logits: [-7.97] },
+                { id: 'rose', logits: [-11.17] },
+            ]),
+        ).toBeNull();
+        expect(orderByVisualFit([])).toBeNull();
+    });
+});
+
+describe('rankVisually', () => {
+    const ids = ['a', 'b', 'c'].map(hex);
+    const eligible = ['a', 'b', 'c'].map(photo);
+
+    test('promotes the on-theme photo and loads the model from packaged resources once', async () => {
+        logitsBy({ a: [-10.3, -8.4], b: [-1.7, -2.8], c: [-3.5, -2.9] });
         const logger = makeLogger();
 
-        expect(await pickVisuallyVerified(BANISTERS, ids, eligible, 2, logger)).toEqual([hex('b'), hex('c')]);
+        expect(await rankVisually(LEAVES, ids, eligible, 2, { logger })).toEqual([hex('b'), hex('c')]);
+        expect(mockClassifier).toHaveBeenCalledWith(expect.stringContaining('/256x256/'), PROMPTS);
         expect(logger.scoped.info).toHaveBeenCalledWith(
-            'Visual check skipped weak matches for [Challenge c1: Banisters]',
+            `Visual check reordered picks for [Challenge c1: Leaves]: ${hex('a')}, ${hex('b')} → ${hex('b')}, ${hex('c')}`,
             null,
         );
-        expect(mockClassifier).toHaveBeenCalledWith(expect.stringContaining('/256x256/'), [
-            'a photo of a banister or handrail',
-        ]);
         expect(mockTransformers.env).toMatchObject({
             allowRemoteModels: false,
             allowLocalModels: true,
@@ -137,49 +175,70 @@ describe('pickVisuallyVerified', () => {
             device: 'cpu',
         });
 
-        await pickVisuallyVerified(BANISTERS, ids, eligible, 2, logger);
+        await rankVisually(LEAVES, ids, eligible, 1, { logger, ignoreWords: ['glorious'] });
         expect(mockTransformers.pipeline).toHaveBeenCalledTimes(1);
+        expect(mockClassifier).toHaveBeenLastCalledWith(expect.any(String), [
+            'a photo of green leaves',
+            'show us some green leaves.',
+        ]);
+    });
+
+    test('only the head of a long ranking is scored; the tail still backs a large pick', async () => {
+        const long = [...'0123456789abcd'].map(hex);
+        const photos = long.map((id) => ({ id, member_id: hex('f') }));
+        mockClassifier.mockImplementation(async (url, prompts) => prompts.map((label) => ({ label, score: 0.1 })));
+        const picked = await rankVisually(LEAVES, long, photos, 13, { logger: makeLogger() });
+        expect(mockClassifier).toHaveBeenCalledTimes(13);
+        expect(picked).toEqual(long.slice(0, 13));
     });
 
     test('an unchanged pick logs nothing', async () => {
-        scoreBy({ a: 0.02, b: 0.01 });
+        logitsBy({ a: [-2, -2], b: [-2.5, -2.5], c: [-9, -9] });
         const logger = makeLogger();
-        const result = await pickVisuallyVerified(BANISTERS, [hex('a'), hex('b')], [photo('a'), photo('b')], 1, logger);
-        expect(result).toEqual([hex('a')]);
+        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger })).toEqual([hex('a')]);
         expect(logger.scoped.info).not.toHaveBeenCalled();
     });
 
-    test('an all-weak shortlist stands down with an empty pick', async () => {
-        scoreBy({ a: 0.0001, b: 0.0002 });
-        const logger = makeLogger();
-        expect(
-            await pickVisuallyVerified(BANISTERS, [hex('a'), hex('b')], [photo('a'), photo('b')], 1, logger),
-        ).toEqual([]);
-        expect(logger.scoped.info).toHaveBeenCalledWith(
-            'Visual check found no strong match for [Challenge c1: Banisters]; standing down',
-            null,
+    test.each([
+        ['a title with no visual subject', { title: 'Photo of the Day' }, ids],
+        ['an empty ranking', LEAVES, []],
+    ])('%s keeps the tag order without loading the model', async (_name, challenge, ranked) => {
+        expect(await rankVisually(challenge, ranked, eligible, 1, { logger: makeLogger() })).toEqual(
+            ranked.slice(0, 1),
         );
+        expect(mockTransformers.pipeline).not.toHaveBeenCalled();
     });
 
-    test.each([[[]], [undefined], [[{ score: Number.NaN }]]])(
-        'an unusable classifier result %p keeps the tag pick',
+    test('a candidate without a buildable photo URL keeps the tag order', async () => {
+        const withBroken = [...eligible, { id: 'not-an-md5', member_id: hex('f') }];
+        expect(await rankVisually(LEAVES, [...ids, 'not-an-md5'], withBroken, 1, { logger: makeLogger() })).toEqual([
+            hex('a'),
+        ]);
+        expect(mockTransformers.pipeline).not.toHaveBeenCalled();
+    });
+
+    test('abstains to the tag order when nothing matches the prompts', async () => {
+        logitsBy({ a: [-9, -9], b: [-8, -8], c: [-12, -12] });
+        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger: makeLogger() })).toEqual([hex('a')]);
+    });
+
+    test.each([[undefined], [{}], [[]], [[{ label: 'something else', score: 0.5 }]]])(
+        'an unusable classifier result %p keeps the tag order',
         async (output) => {
             mockClassifier.mockResolvedValue(output);
-            expect(
-                await pickVisuallyVerified(BANISTERS, [hex('a'), hex('b')], [photo('a'), photo('b')], 1, makeLogger()),
-            ).toEqual([hex('a')]);
+            expect(await rankVisually(LEAVES, ids, eligible, 1, { logger: makeLogger() })).toEqual([hex('a')]);
         },
     );
 
     test.each([
         [new Error('onnx missing'), 'onnx missing'],
         ['bare failure', 'bare failure'],
-    ])('a model load failure (%p) keeps the tag pick and warns', async (failure, detail) => {
+    ])('a model load failure (%p) keeps the tag order and warns', async (failure, detail) => {
         mockTransformers.pipeline.mockRejectedValueOnce(failure);
         const logger = makeLogger();
-        expect(await pickVisuallyVerified(BANISTERS, [hex('a')], [photo('a')], 1, logger)).toEqual([hex('a')]);
+        expect(await rankVisually(LEAVES, ids, eligible, 1, { logger })).toEqual([hex('a')]);
         expect(logger.scoped.warning).toHaveBeenCalledWith(
-            `Visual check unavailable for [Challenge c1: Banisters]: ${detail}`,
+            `Visual check unavailable for [Challenge c1: Leaves]: ${detail}`,
             null,
         );
     });
@@ -189,8 +248,8 @@ describe('pickVisuallyVerified', () => {
         ['the headless service', () => mockRuntime.isHeadlessService.mockReturnValue(true)],
     ])('%s runs single-threaded WASM from the WebView origin', async (_name, arrange) => {
         arrange();
-        scoreBy({ a: 0.02 });
-        await pickVisuallyVerified(BANISTERS, [hex('a')], [photo('a')], 1, makeLogger());
+        logitsBy({ a: [-2, -2] });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
         expect(mockTransformers.env.localModelPath).toBe('./');
         expect(mockTransformers.env.backends.onnx.wasm).toEqual({ wasmPaths: './', numThreads: 1 });
         expect(mockTransformers.pipeline).toHaveBeenCalledWith('zero-shot-image-classification', 'vision-model', {
@@ -203,8 +262,8 @@ describe('pickVisuallyVerified', () => {
         mockRuntime.isCli.mockReturnValue(true);
         mockRuntime.isElectron.mockReturnValue(false);
         mockSea.isSea.mockReturnValue(true);
-        scoreBy({ a: 0.02 });
-        await pickVisuallyVerified(BANISTERS, [hex('a')], [photo('a')], 1, makeLogger());
+        logitsBy({ a: [-2, -2] });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
         expect(mockExtract).toHaveBeenCalled();
         expect(mockCreateRequire).toHaveBeenCalledWith('/vision/root/vision-entry.js');
         expect(mockSeaTransformers.env.localModelPath).toBe(`/vision/root${path.sep}`);
@@ -222,8 +281,8 @@ describe('pickVisuallyVerified', () => {
         ['unpackaged Electron', () => mockRuntime.isPackaged.mockReturnValue(false)],
     ])('%s reads the build cache under the repository root', async (_name, arrange) => {
         arrange();
-        scoreBy({ a: 0.02 });
-        await pickVisuallyVerified(BANISTERS, [hex('a')], [photo('a')], 1, makeLogger());
+        logitsBy({ a: [-2, -2] });
+        await rankVisually(LEAVES, [hex('a')], [photo('a')], 1, { logger: makeLogger() });
         expect(mockExtract).not.toHaveBeenCalled();
         expect(mockTransformers.env.localModelPath).toBe(path.join(__dirname, '..', '..', '.cache') + path.sep);
     });

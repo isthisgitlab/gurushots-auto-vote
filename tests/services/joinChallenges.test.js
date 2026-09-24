@@ -16,6 +16,9 @@ jest.mock('../../src/js/services/autoFill', () => ({
 jest.mock('../../src/js/services/photoPicker', () => ({
     pickPhotosForChallenge: jest.fn(() => ['imgA']),
 }));
+jest.mock('../../src/js/services/visionVerifier', () => ({
+    rankVisually: jest.fn(async (challenge, ids, eligible, wantCount) => ids.slice(0, wantCount)),
+}));
 jest.mock('../../src/js/settings', () => ({
     getEffectiveSetting: jest.fn((key) => {
         const map = {
@@ -96,6 +99,26 @@ describe('performJoin — ordering & idempotency', () => {
         expect(res.status).toBe('joined');
         expect(deps.coinsUnlock).not.toHaveBeenCalled();
         expect(deps.submitToChallenge).toHaveBeenCalledWith(1, ['imgA'], 'tok');
+    });
+
+    test('joins with the visually re-ranked photo from a 12-photo shortlist', async () => {
+        photoPicker.pickPhotosForChallenge.mockReturnValue(['imgA', 'imgB']);
+        const rankVisually = jest.fn(async () => ['imgB']);
+        const challenge = { id: 3, title: 'Glorious Green Leaves' };
+        const deps = makeDeps({ rankVisually });
+        const res = await performJoin(challenge, 'tok', deps, 0);
+        expect(res.status).toBe('joined');
+        expect(photoPicker.pickPhotosForChallenge).toHaveBeenCalledWith(
+            challenge,
+            expect.any(Array),
+            12,
+            expect.any(Object),
+        );
+        expect(rankVisually).toHaveBeenCalledWith(challenge, ['imgA', 'imgB'], expect.any(Array), 1, {
+            logger: expect.any(Object),
+            ignoreWords: null,
+        });
+        expect(deps.submitToChallenge).toHaveBeenCalledWith(3, ['imgB'], 'tok');
     });
 
     test('no eligible photo → skip, NO coins spent', async () => {

@@ -211,6 +211,30 @@ describe('rankCandidatesForChallenge', () => {
         expect(result.status).toBe('fetch-error');
         expect(result.error).toBe(error);
     });
+
+    test('a swap candidate goes through the same visual re-rank as a fill', async () => {
+        const { logger } = makeCapturingLogger();
+        const challenge = makeChallenge();
+        const rankVisually = jest.fn().mockResolvedValue(['leaves']);
+        const result = await rankCandidatesForChallenge(challenge, 'tok', {
+            settings: makeSettings(),
+            logger,
+            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('island'), allowedPhoto('leaves')]),
+            rankVisually,
+        });
+        expect(result.status).toBe('ranked');
+        expect(result.picked.map((photo) => photo.id)).toEqual(['leaves']);
+        expect(rankVisually).toHaveBeenCalledWith(
+            challenge,
+            expect.arrayContaining(['island', 'leaves']),
+            expect.any(Array),
+            1,
+            {
+                logger,
+                ignoreWords: null,
+            },
+        );
+    });
 });
 
 describe('maybeEmergencyFillChallenge', () => {

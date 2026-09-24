@@ -13,10 +13,7 @@ import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useMemberChallenges } from '@/api/useMemberChallenges';
 import { useSwapBacks } from '@/api/useSwapBacks';
 import { useActiveChallenges } from '@/api/useActiveChallenges';
-import { TranslationProvider } from '@/contexts/TranslationContext';
 import { mockApi } from './helpers/setup';
-
-const withTranslations = ({ children }) => <TranslationProvider>{children}</TranslationProvider>;
 
 const deferred = () => {
     let resolve;
@@ -152,7 +149,7 @@ describe('useBoost / useTurbo / useFillChallenge', () => {
 
     test('useFillChallenge forwards the mode and reports its error label', async () => {
         mockApi.fillChallengeNow.mockRejectedValueOnce({});
-        const { result } = renderHook(() => useFillChallenge(), { wrapper: withTranslations });
+        const { result } = renderHook(() => useFillChallenge());
         await act(async () => {
             await result.current.fillNow('c9', 'fill');
         });
@@ -160,25 +157,6 @@ describe('useBoost / useTurbo / useFillChallenge', () => {
         expect(result.current.error).toBe('Fill error');
         act(() => result.current.clearError());
         expect(result.current.error).toBeNull();
-    });
-
-    test('useFillChallenge shows the localized visual stand-down reason', async () => {
-        const previousManager = window.translationManager;
-        window.translationManager = { t: (key) => (key === 'app.visualNoMatch' ? 'Choose a photo manually.' : key) };
-        try {
-            mockApi.fillChallengeNow.mockResolvedValueOnce({
-                success: false,
-                errorCode: 'no-visual-match',
-                error: 'English backend message',
-            });
-            const { result } = renderHook(() => useFillChallenge(), { wrapper: withTranslations });
-            await act(async () => {
-                await result.current.fillNow('c9', 'one');
-            });
-            expect(result.current.error).toBe('Choose a photo manually.');
-        } finally {
-            window.translationManager = previousManager;
-        }
     });
 });
 

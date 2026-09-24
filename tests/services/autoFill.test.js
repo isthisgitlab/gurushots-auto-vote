@@ -273,24 +273,24 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
     });
 
-    test('visual verification can replace the ranked photo before submission', async () => {
+    test('the visual re-rank can replace the tag pick before submission', async () => {
         const challenge = makeChallenge({ entries: [{ id: 'e1' }], closeIn: 19 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
-        const pickVisuallyVerified = jest.fn().mockResolvedValue(['p2']);
+        const rankVisually = jest.fn().mockResolvedValue(['p2']);
         const result = await maybeAutoFillChallenge(challenge, 'tok', NOW, {
             settings: makeSettings({ autoFill: true }),
             logger: makeLogger(),
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge,
-            pickVisuallyVerified,
+            rankVisually,
         });
         expect(result).toBe('submitted');
-        expect(pickVisuallyVerified).toHaveBeenCalledWith(
+        expect(rankVisually).toHaveBeenCalledWith(
             challenge,
             expect.arrayContaining(['p1', 'p2']),
             expect.any(Array),
             1,
-            expect.any(Object),
+            { logger: expect.any(Object), ignoreWords: null },
         );
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p2'], 'tok');
     });
@@ -299,6 +299,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         ['rejects with an Error', () => Promise.reject(new Error('model crashed')), 'model crashed'],
         ['rejects with a bare value', () => Promise.reject('bare failure'), 'bare failure'],
         ['returns a non-array', () => Promise.resolve(null), null],
+        ['returns the wrong number of ids', () => Promise.resolve([]), null],
     ])('a verifier that %s keeps the tag pick', async (_name, verifier, warning) => {
         const challenge = makeChallenge({ entries: [{ id: 'e1' }], closeIn: 19 * 60 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
@@ -308,7 +309,7 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
             logger,
             getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('p1'), allowedPhoto('p2')]),
             submitToChallenge,
-            pickVisuallyVerified: jest.fn(verifier),
+            rankVisually: jest.fn(verifier),
         });
         expect(result).toBe('submitted');
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
@@ -317,25 +318,6 @@ describe('maybeAutoFillChallenge — staggered auto-fill', () => {
         );
         const failures = warned.filter((message) => message.startsWith('Visual check failed for'));
         expect(failures).toEqual(warning ? [expect.stringContaining(warning)] : []);
-    });
-
-    test('a later cycle leaves the slot empty when remaining photos are visually weak', async () => {
-        const challenge = makeChallenge({ title: 'Banisters', entries: [{ id: 'e1' }], closeIn: 19 * 60 });
-        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
-        const pickVisuallyVerified = jest.fn().mockResolvedValueOnce(['handrail']).mockResolvedValueOnce([]);
-        const deps = {
-            settings: makeSettings({ autoFill: true }),
-            logger: makeLogger(),
-            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('handrail'), allowedPhoto('motorcycle')]),
-            submitToChallenge,
-            pickVisuallyVerified,
-        };
-
-        expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('submitted');
-        expect(await maybeAutoFillChallenge(challenge, 'tok', NOW, deps)).toBe('skipped');
-        expect(pickVisuallyVerified).toHaveBeenCalledTimes(2);
-        expect(submitToChallenge).toHaveBeenCalledTimes(1);
-        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['handrail'], 'tok');
     });
 
     test('schedule: single {2 @ T-10m} row, T-11m → not yet due → skipped', async () => {
@@ -1286,25 +1268,6 @@ describe('maybeEmergencyFillChallenge — last-resort fill near deadline', () =>
 });
 
 describe('fillChallengeNow — manual fill', () => {
-    test('explains when visual verification finds no matching photo', async () => {
-        const challenge = makeChallenge({ title: 'Banisters', closeIn: 86400 });
-        const submitToChallenge = jest.fn();
-        const result = await fillChallengeNow(challenge, 'tok', 'one', {
-            logger: makeLogger(),
-            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('motorcycle')]),
-            submitToChallenge,
-            pickVisuallyVerified: jest.fn().mockResolvedValue([]),
-        });
-        expect(result).toEqual({
-            success: false,
-            submitted: 0,
-            skipped: 4,
-            errorCode: 'no-visual-match',
-            error: 'No photo matched the challenge in the image check. The slot is still empty. Choose a photo manually.',
-        });
-        expect(submitToChallenge).not.toHaveBeenCalled();
-    });
-
     test("mode='one' submits exactly 1 photo regardless of slots remaining", async () => {
         const challenge = makeChallenge({ maxSubmits: 4, entries: [], closeIn: 86400 });
         const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
@@ -1561,18 +1524,20 @@ describe('submitNewEntryForAction — fill-new for boost/turbo', () => {
         expect(submitToChallenge).toHaveBeenCalledWith('c1', ['p1'], 'tok');
     });
 
-    test('returns no-visual-match without submitting when the image check rejects every photo', async () => {
-        const challenge = makeChallenge({ title: 'Banisters', maxSubmits: 4, entries: [{ id: 'e1' }] });
-        const submitToChallenge = jest.fn();
+    test('submits the visually re-ranked photo', async () => {
+        const challenge = makeChallenge({ title: 'Glorious Green Leaves', maxSubmits: 4, entries: [{ id: 'e1' }] });
+        const submitToChallenge = jest.fn().mockResolvedValue({ ok: true, raw: { success: true } });
         const result = await submitNewEntryForAction(challenge, 'tok', {
             settings: makeSettings(),
             logger: makeLogger(),
-            getEligiblePhotos: jest.fn().mockResolvedValue([allowedPhoto('motorcycle', ['Pink'])]),
+            getEligiblePhotos: jest
+                .fn()
+                .mockResolvedValue([allowedPhoto('island', ['Pink']), allowedPhoto('leaves', ['Pink'])]),
             submitToChallenge,
-            pickVisuallyVerified: jest.fn().mockResolvedValue([]),
+            rankVisually: jest.fn().mockResolvedValue(['leaves']),
         });
-        expect(result).toEqual({ ok: false, imageId: null, reason: 'no-visual-match' });
-        expect(submitToChallenge).not.toHaveBeenCalled();
+        expect(result).toEqual({ ok: true, imageId: 'leaves', reason: 'submitted' });
+        expect(submitToChallenge).toHaveBeenCalledWith('c1', ['leaves'], 'tok');
     });
 
     test('resolves tag lists via getEffectiveTagSetting with the full challenge (enables title rules)', async () => {
