@@ -15,37 +15,90 @@ concurrency:
     group: codeql-${{ github.ref }}
     cancel-in-progress: false
 
-# NOTE: JS/TS only. A java-kotlin leg to scan the Android/Capacitor Kotlin was
-# attempted but reverted — CodeQL's Kotlin extractor rejects this repo's Kotlin
-# version ("Kotlin version 2.4.20 is too recent. CodeQL currently supports
-# versions below 2.4.20"), so the leg fails at compileDebugKotlin with no way to
-# configure around it. Re-add the java-kotlin matrix leg (manual build-mode,
-# `./gradlew assembleDebug` under android/, with setup-java 21 + setup-android +
-# `cap sync android`) once the CodeQL extractor supports Kotlin 2.4.20+, or if
-# the Android Kotlin is ever pinned back below that.
 jobs:
     analyze:
-        name: Analyze (javascript-typescript)
-        runs-on: ubuntu-slim
-        timeout-minutes: 20
+        name: Analyze (${{ matrix.language }})
+        runs-on: ${{ matrix.runner }}
+        timeout-minutes: ${{ matrix.language == 'java-kotlin' && 30 || 20 }}
         permissions:
             actions: read
             contents: read
             security-events: write
 
+        strategy:
+            # Independent legs — a build failure in the Android/Kotlin leg must
+            # not suppress the other SARIF uploads, and vice-versa.
+            fail-fast: false
+            matrix:
+                include:
+                    - language: javascript-typescript
+                      # No compilation needed for JS/TS sources.
+                      build-mode: none
+                      runner: ubuntu-slim
+                    - language: java-kotlin
+                      # The Capacitor app ships custom Kotlin/Java in every
+                      # signed release APK. Manual build-mode with an explicit
+                      # debug assemble (no signing secrets needed) is more
+                      # deterministic than autobuild hunting for gradlew under
+                      # android/. Needs a CodeQL bundle >= 2.27.1: older
+                      # extractors reject Kotlin 2.4.20 as "too recent".
+                      build-mode: manual
+                      runner: ubuntu-latest
+                    - language: actions
+                      # The workflows and the setup-build composite action.
+                      build-mode: none
+                      runner: ubuntu-slim
+
         steps:
             - name: Checkout code
               uses: actions/checkout@v7
 
+            - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
+              if: matrix.language == 'java-kotlin'
+              uses: actions/setup-java@v6
+              with:
+                  distribution: 'temurin'
+                  java-version: '21'
+                  cache: 'gradle'
+                  cache-dependency-path: |
+                      android/**/*.gradle*
+                      android/gradle/wrapper/gradle-wrapper.properties
+
+            - name: Setup Android SDK
+              if: matrix.language == 'java-kotlin'
+              uses: android-actions/setup-android@v4
+
+            - name: Setup build environment
+              if: matrix.language == 'java-kotlin'
+              uses: ./.github/actions/setup-build
+
+            # cap sync generates the Capacitor gradle subprojects and bridge
+            # config assets; it refuses to run without the web build. Runs
+            # before CodeQL init so none of it is traced.
+            - name: Build renderer
+              if: matrix.language == 'java-kotlin'
+              run: pnpm build:prep
+
+            - name: Sync Capacitor
+              if: matrix.language == 'java-kotlin'
+              run: pnpm exec cap sync android
+
             - name: Initialize CodeQL
               uses: github/codeql-action/init@v4
               with:
-                  languages: javascript-typescript
-                  # No compilation needed for JS/TS sources.
-                  build-mode: none
+                  languages: ${{ matrix.language }}
+                  build-mode: ${{ matrix.build-mode }}
                   queries: security-and-quality
+
+            # --no-build-cache keeps every compile task executing (a cached
+            # FROM-CACHE task is invisible to the extractor); --no-daemon keeps
+            # the Kotlin compile inside the traced process tree.
+            - name: Build Android (manual build-mode)
+              if: matrix.language == 'java-kotlin'
+              working-directory: android
+              run: ./gradlew --no-daemon --no-build-cache assembleDebug
 
             - name: Perform CodeQL analysis
               uses: github/codeql-action/analyze@v4
               with:
-                  category: '/language:javascript-typescript'
+                  category: '/language:${{ matrix.language }}'
