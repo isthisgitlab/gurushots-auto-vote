@@ -91,8 +91,8 @@ jobs:
                   queries: security-and-quality
 
             # --no-build-cache keeps every compile task executing (a cached
-            # FROM-CACHE task is invisible to the extractor); --no-daemon keeps
-            # the Kotlin compile inside the traced process tree.
+            # FROM-CACHE task is invisible to the extractor); --no-daemon stops
+            # Gradle from reusing a daemon started outside the traced build.
             - name: Build Android (manual build-mode)
               if: matrix.language == 'java-kotlin'
               working-directory: android
