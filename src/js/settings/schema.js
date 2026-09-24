@@ -177,7 +177,7 @@ const fillSchedule = z
 
 /**
  * Clamp a persisted autoFillSchedule array to the current bounds. Used by the
- * load-time `_autoFillScheduleBoundsV1` sanitizer in settings.js: the Settings
+ * load-time `_autoFillScheduleBoundsV1` sanitizer in settings/migrations.js: the Settings
  * modal resubmits EVERY persisted key on save, so a stored schedule that
  * violates the (tightened) validator would block saving unrelated settings
  * until repaired — this heals such data on load instead. Keeps only strict
@@ -239,7 +239,7 @@ const tagsList = z
 // Scheduled fill: LISTS of triggers (issue #26 follow-up — "fill twice in a
 // day, like 4 hours to the end and 10 hours to the end"). Each entry opens
 // its own fill window; the empty array is the off sentinel and the schema
-// default (the old scalar '' / 0 sentinels are migrated in settings.js —
+// default (the old scalar '' / 0 sentinels are migrated in settings/migrations.js —
 // _scheduledFillListsMigratedV1). Entries are deduped by the validators and
 // canonical-sorted by the sanitizers; order carries no meaning. The window
 // floor keeps a window from being shorter than one last-minute check cycle;
@@ -1328,7 +1328,7 @@ const SETTINGS_SCHEMA = {
         description: 'app.autoFillDesc',
     },
     // Replaces the old autoFillIntervalMinutes single-interval knob (migrated
-    // in settings.js `_autoFillScheduleMigratedV1`). Default mirrors the old
+    // in settings/migrations.js `_autoFillScheduleMigratedV1`). Default mirrors the old
     // 10-minute default: 2 @ 30m, 3 @ 20m, 4 @ 10m before close.
     autoFillSchedule: {
         type: 'schedule',

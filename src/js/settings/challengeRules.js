@@ -3,7 +3,7 @@
  *
  * Dependency-free on purpose (no zod, no logger) so the renderer can import it
  * for the editor's "sort by default order" action without pulling the settings
- * schema into the bundle. Persistence and value validation live in settings.js.
+ * schema into the bundle. Persistence and value validation live behind the settings.js facade.
  *
  * A rule carries any mix of conditions — a title (with a match mode), a
  * challenge tag, the challenge type, the photo count, and a runtime range in
