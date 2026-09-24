@@ -66,7 +66,7 @@ jobs:
 
             - name: Setup Android SDK
               if: matrix.language == 'java-kotlin'
-              uses: android-actions/setup-android@v4
+              uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
             - name: Setup build environment
               if: matrix.language == 'java-kotlin'
@@ -89,6 +89,23 @@ jobs:
                   languages: ${{ matrix.language }}
                   build-mode: ${{ matrix.build-mode }}
                   queries: security-and-quality
+                  # Rules that flag the Android app's design rather than a defect:
+                  # - javascript-enabled / addjavascriptinterface: the headless
+                  #   voting WebView (AutoVoteService) exists to run the bundled JS
+                  #   through its native bridges. It loads only the packaged
+                  #   WebViewAssetLoader origin with file and content access off,
+                  #   and the HTTP bridge is pinned to https *.gurushots.com.
+                  # - arbitrary-apk-installation: fires on any FileProvider URI
+                  #   handed to an APK install intent, i.e. on every in-app
+                  #   updater (ApkInstallerPlugin). The system installer still asks
+                  #   the user, and Android rejects an update signed with another key.
+                  config: |
+                      query-filters:
+                          - exclude:
+                                id:
+                                    - java/android/websettings-javascript-enabled
+                                    - java/android/webview-addjavascriptinterface
+                                    - java/android/arbitrary-apk-installation
 
             # --no-build-cache keeps every compile task executing (a cached
             # FROM-CACHE task is invisible to the extractor); --no-daemon stops

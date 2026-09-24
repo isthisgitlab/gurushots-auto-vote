@@ -52,6 +52,9 @@ updates:
                   - 'patch'
       # Major bumps land as individual PRs so they can be reviewed one at a time.
 
+    # Third-party (non actions/*, github/*) actions are pinned to a full commit
+    # SHA with a `# vX.Y.Z` comment (CodeQL actions/unpinned-tag); Dependabot
+    # bumps the SHA and the comment together.
     - package-ecosystem: 'github-actions'
       directory: '/'
       schedule:

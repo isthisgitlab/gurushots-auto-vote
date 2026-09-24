@@ -51,7 +51,7 @@ jobs:
             # One flag of a parallel build: test-android uploads the other and
             # coverage-finish closes it.
             - name: Upload coverage to Coveralls
-              uses: coverallsapp/github-action@v2
+              uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
               with:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
                   file: coverage/lcov.info
@@ -85,7 +85,7 @@ jobs:
                       android/gradle/wrapper/gradle-wrapper.properties
 
             - name: Setup Android SDK
-              uses: android-actions/setup-android@v4
+              uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
             # cap sync generates the Capacitor gradle subprojects and bridge
             # config assets the tests load; it refuses to run without the web build.
@@ -100,7 +100,7 @@ jobs:
               run: ./gradlew testDebugUnitTest jacocoTestReport
 
             - name: Upload Android coverage to Coveralls
-              uses: coverallsapp/github-action@v2
+              uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
               with:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
                   file: android/app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
@@ -127,7 +127,7 @@ jobs:
         if: always()
         steps:
             - name: Finish Coveralls parallel build
-              uses: coverallsapp/github-action@v2
+              uses: coverallsapp/github-action@8d6379e14d29928660c4ba802d8e85393440b329 # v2.3.8
               with:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
                   parallel-finished: true
@@ -435,7 +435,7 @@ jobs:
                   java-version: '21'
 
             - name: Setup Android SDK
-              uses: android-actions/setup-android@v4
+              uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
             - name: Decode keystore
               env:
@@ -560,7 +560,7 @@ jobs:
                   fi
 
             - name: Create Release
-              uses: softprops/action-gh-release@v3
+              uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
               with:
                   tag_name: ${{ steps.release_name.outputs.RELEASE_NAME }}
                   target_commitish: ${{ github.ref_name }}

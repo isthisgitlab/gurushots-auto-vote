@@ -49,7 +49,6 @@ import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowAlarmManager
 import org.robolectric.shadows.ShadowContextImpl
 import org.robolectric.shadows.ShadowPowerManager
-import java.io.IOException
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -143,6 +142,7 @@ class AutoVoteServiceTest {
         idle()
         val wv = svc.webView()!!
         assertFalse(wv.settings.allowFileAccess)
+        assertFalse(wv.settings.allowContentAccess)
         shadowOf(wv).webViewClient.onPageFinished(wv, HEADLESS_URL)
         clearAlarms()
         return svc
@@ -789,35 +789,30 @@ class AutoVoteServiceTest {
         startServer()
         val svc = startedAndReady()
         svc.HeadlessHttp().request(5, "POST", "https://api.gurushots.com/x", "not-json", "")
-        assertTrue(httpResolution(svc, 5).getString("error").isNotEmpty())
+        assertEquals("bad-request (JSONException)", httpResolution(svc, 5).getString("error"))
     }
 
     @Test
-    fun requestBuildFailureWithoutMessageUsesFallback() {
+    fun requestBuildFailureReportsTypeOnly() {
         startServer()
         val svc = startedAndReady()
         mockkObject(HttpUrl.Companion)
         try {
-            every { with(HttpUrl.Companion) { any<String>().toHttpUrlOrNull() } } throws RuntimeException()
+            every { with(HttpUrl.Companion) { any<String>().toHttpUrlOrNull() } } throws RuntimeException("internal detail")
             svc.HeadlessHttp().request(6, "POST", "https://api.gurushots.com/x", "{}", "")
         } finally {
             unmockkObject(HttpUrl.Companion)
         }
-        assertEquals("bad-request", httpResolution(svc, 6).getString("error"))
+        assertEquals("bad-request (RuntimeException)", httpResolution(svc, 6).getString("error"))
     }
 
     @Test
-    fun networkFailuresResolveWithError() {
-        var message: String? = "connection reset"
-        startServer(Interceptor { throw IOException(message) })
+    fun networkFailuresResolveWithErrorTypeOnly() {
+        startServer(Interceptor { throw java.net.SocketTimeoutException("timeout to 10.0.0.1") })
         val svc = startedAndReady()
 
         svc.HeadlessHttp().request(8, "POST", "https://api.gurushots.com/x", "{}", "")
-        assertEquals("connection reset", httpResolution(svc, 8).getString("error"))
-
-        message = null
-        svc.HeadlessHttp().request(9, "POST", "https://api.gurushots.com/x", "{}", "")
-        assertEquals("network-error", httpResolution(svc, 9).getString("error"))
+        assertEquals("network-error (SocketTimeoutException)", httpResolution(svc, 8).getString("error"))
     }
 
     @Test
@@ -828,7 +823,7 @@ class AutoVoteServiceTest {
         startServer(TestSupport.failingBodyInterceptor { closed.countDown() })
         val svc = startedAndReady()
         svc.HeadlessHttp().request(11, "POST", "https://api.gurushots.com/x", "{}", "")
-        assertEquals("unexpected end of stream", httpResolution(svc, 11).getString("error"))
+        assertEquals("network-error (IOException)", httpResolution(svc, 11).getString("error"))
         assertTrue(closed.await(10, TimeUnit.SECONDS))
     }
 

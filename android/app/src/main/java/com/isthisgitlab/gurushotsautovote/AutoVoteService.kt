@@ -145,7 +145,7 @@ class AutoVoteService : Service() {
         cycleCount = 0
         lastError = null
         startForegroundNotification("Auto-vote starting…")
-        mainHandler.post { createWebView() }
+        mainHandler.post { ensureWebView() }
         scheduleNextAlarm(INITIAL_DELAY_MS)
     }
 
@@ -159,7 +159,7 @@ class AutoVoteService : Service() {
             // don't start a cycle (or acquire a wakelock) against a service
             // that's shutting down.
             if (!isRunning) return@post
-            val wv = createWebView()
+            ensureWebView()
             if (!pageReady) {
                 Log.i(TAG, "Headless page not ready yet — retrying shortly")
                 scheduleNextAlarm(PAGE_RETRY_MS)
@@ -169,7 +169,9 @@ class AutoVoteService : Service() {
             cycleWakeLock = acquireWakelock()
             mainHandler.postDelayed(cycleWatchdog, CYCLE_TIMEOUT_MS)
             Log.i(TAG, "Cycle ${cycleCount + 1} starting (JS)")
-            wv.evaluateJavascript(
+            // ensureWebView() above set it on this (main) thread; only handleStop's
+            // main-thread block clears it, so it can't be null here.
+            webView!!.evaluateJavascript(
                 "(function(){try{" +
                     "if(window.GS&&window.GS.runOneCycle){window.GS.runOneCycle();}" +
                     "else{AndroidHeadlessBridge.onCycleComplete(JSON.stringify({ok:false,error:'not-loaded'}));}" +
@@ -228,14 +230,16 @@ class AutoVoteService : Service() {
 
     // ---------- Headless WebView ----------
 
-    /** Returns the service's headless WebView, creating (and loading) it on first use. */
-    private fun createWebView(): WebView {
-        webView?.let { return it }
+    /** Creates the service's headless WebView and starts loading it, unless it already exists. */
+    private fun ensureWebView() {
+        if (webView != null) return
         Log.i(TAG, "Creating headless WebView")
         val wv = WebView(this)
         wv.settings.javaScriptEnabled = true
         wv.settings.domStorageEnabled = true
         wv.settings.allowFileAccess = false
+        // The page is served from the asset-loader origin; it never reads content:// URIs.
+        wv.settings.allowContentAccess = false
         // Local HTTPS origin lets the headless JS fetch packaged model and
         // lexicon assets without granting file:// cross-origin access.
         val assetLoader = WebViewAssetLoader.Builder()
@@ -283,7 +287,6 @@ class AutoVoteService : Service() {
         pageReady = false
         wv.loadUrl(HEADLESS_URL)
         webView = wv
-        return wv
     }
 
     /** OkHttp-backed HTTP bridge. Async so the WebView's JS thread never blocks on network. */
@@ -292,8 +295,12 @@ class AutoVoteService : Service() {
         fun request(id: Int, method: String, url: String, headersJson: String, body: String) {
             val req = try {
                 buildRequest(method, url, headersJson, body)
+            } catch (e: RejectedRequest) {
+                resolveHttp(id, JSONObject().put("error", e.reason))
+                return
             } catch (t: Throwable) {
-                resolveHttp(id, JSONObject().put("error", t.message ?: "bad-request"))
+                // Only the exception type crosses into the WebView, never its message text.
+                resolveHttp(id, JSONObject().put("error", "bad-request (${t.javaClass.simpleName})"))
                 return
             }
             http.newCall(req).enqueue(object : Callback {
@@ -320,8 +327,11 @@ class AutoVoteService : Service() {
         }
     }
 
+    /** A request the bridge refuses by policy; [reason] is authored here and safe to hand back to JS. */
+    private class RejectedRequest(val reason: String) : IllegalArgumentException(reason)
+
     private fun buildRequest(method: String, url: String, headersJson: String, body: String): Request {
-        val parsed = url.toHttpUrlOrNull() ?: throw IllegalArgumentException("invalid url")
+        val parsed = url.toHttpUrlOrNull() ?: throw RejectedRequest("invalid url")
         // Defense in depth: the only caller is first-party JS targeting
         // api.gurushots.com over https. Reject anything else so a future bug
         // that fed an attacker-controlled URL here can't become an SSRF.
@@ -329,7 +339,7 @@ class AutoVoteService : Service() {
         val host = parsed.host
         val hostAllowed = host == "gurushots.com" || host.endsWith(".gurushots.com")
         if (parsed.scheme != "https" || !hostAllowed) {
-            throw IllegalArgumentException("blocked url host/scheme: $host")
+            throw RejectedRequest("blocked url host/scheme: $host")
         }
         val m = method.uppercase(Locale.US)
         // OkHttp rejects a body on GET/HEAD; the API is POST-only but the
@@ -349,8 +359,9 @@ class AutoVoteService : Service() {
         return builder.build()
     }
 
+    // Like request()'s build failures: the exception type only, never its message text.
     private fun resolveNetworkError(id: Int, e: IOException) =
-        resolveHttp(id, JSONObject().put("error", e.message ?: "network-error"))
+        resolveHttp(id, JSONObject().put("error", "network-error (${e.javaClass.simpleName})"))
 
     private fun resolveHttp(id: Int, payload: JSONObject) {
         val js = "window.__gsResolveHeadlessHttp && window.__gsResolveHeadlessHttp($id, ${JSONObject.quote(payload.toString())});"
@@ -406,13 +417,10 @@ class AutoVoteService : Service() {
             } catch (t: Throwable) {
                 Log.w(TAG, "Bad onCycleComplete payload", t)
             }
-            // lastError can carry API-derived content; keep the detail out of
-            // release logcat (the JS console path is gated the same way).
-            if (isDebuggable) {
-                Log.i(TAG, "Cycle reported complete: nextDelayMs=$delay error=$lastError")
-            } else {
-                Log.i(TAG, "Cycle reported complete: nextDelayMs=$delay${if (lastError != null) " (error)" else ""}")
-            }
+            // lastError is JS-supplied, possibly API-derived text: log only its
+            // presence. The headless JS already logs the detail through the
+            // debug-only console path.
+            Log.i(TAG, "Cycle reported complete: nextDelayMs=$delay${if (lastError != null) " (error)" else ""}")
             completeCycle(delay)
         }
     }
