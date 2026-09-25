@@ -12,8 +12,9 @@ re-introducing a separate boundary-switch timer per host.
 
 `computeNextCycleDelayMs(challenges, now, { resolveThreshold, normalDelayMs,
 lastMinuteCheckMinutes, minGapMs, resolveScheduledFill?, resolveFinalWindowTopUp?,
-resolveBoostPrefill?, timezone? })` returns `{ delayMs, mode, nextEntry, nextScheduled,
-nextFinalWindowTopUp, nextBoostPrefill }`:
+resolveBoostPrefill?, resolveCurrencyAuto?, resolveScenarioWake?, timezone? })` returns
+`{ delayMs, mode, nextEntry, nextScheduled, nextFinalWindowTopUp, nextBoostPrefill,
+nextCurrencyRule, nextScenarioWake }`:
 
 - **last-minute**: a challenge is already inside its `lastMinuteThreshold`
   window → fixed `lastMinuteCheckMinutes` cadence.
@@ -30,6 +31,19 @@ nextFinalWindowTopUp, nextBoostPrefill }`:
 - **pre-boost**: the soonest upcoming pre-boost fill window start (see below)
   is closer than the random delay and every other cap → wait is capped to that
   start so a cycle lands when the fill opens, while the Boost is still unspent.
+- **currency-rule**: the soonest opening of an enabled automatic key / swap /
+  fill rule (`voting/currencyAuto.js` `ruleOpensAt`) → wait is capped to it.
+  Unlike the modes above it considers every still-open challenge, flash
+  included.
+- **scenario**: the soonest instant a user-defined scenario's time condition
+  can flip — a daily window opening or closing, a before-end / after-start /
+  percent / in-phase bound, or local midnight for a once-per-day rule that
+  already fired (`scenarios/nextWake.js`, the same function the runner's
+  engine uses, so the scheduler and the runner cannot disagree). A plan that
+  has not started yet is judged from its start phase. Every still-open
+  challenge counts, flash included. Resolvers: `nodeResolvers.resolveScenarioWake`
+  (over `services/scenarioStatus.js`) and its IPC twin in
+  `react/contexts/autovoteScheduler.js` (`get-scenario-status`).
 - **normal**: otherwise the random delay in `[checkFrequencyMin,
 checkFrequencyMax]`.
 

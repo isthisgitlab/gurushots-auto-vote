@@ -19,6 +19,7 @@
 - **API transport**: everything POSTs through `makePostRequest` (`src/js/api/api-client.js`), which returns the body or **`null` — it never throws**. Branch on `null`; keep retry/backoff centralised; custom (Android) adapters must call `finalizeAdapterResponse`.
 - **Semantic lexicon** ranks auto-fill photos only — **never** the vote decision; `SEMANTIC_MATCH_FLOOR` is build-gated by `scripts/validate-lexicon.js`, not hand-tuned.
 - **Safety**: optional-chain every per-challenge API read (an unguarded throw aborts the whole pass); new-entry detection compares ids as **sets, not positions**; mock mode must pass `cleanupStaleMetadata: null` so it never touches the real `metadata.json`.
+- **Scenarios** (`docs/architecture.md` §11): a phase's settings overlay sits above every layer of `getEffectiveSetting`; unreadable scenario state halts the challenge (never a silent restart); the runner re-reads live state before each action and persists progress after each one, so a resumed rule never repeats a landed spend.
 - **Security invariants** (details/limits in `docs/architecture.md` §10): keep `contextIsolation` on, `nodeIntegration` off, and the sandboxed-preload / `window.api`-only exposure — regressing any is a severe-vuln class; keep the `isTrustedSender` frame check on every invoke; never log a raw headers/token object (redaction is key-allowlisted, not exhaustive — it only guards the key names it lists).
 
 ## File Management

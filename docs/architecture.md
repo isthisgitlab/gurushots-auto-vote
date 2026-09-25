@@ -495,3 +495,45 @@ repeated six times is one that gets forgotten at one of them.
   an **allowlist** — prefer never logging a raw headers object rather than
   relying on it — and neither layer is **PII-aware** (e.g. a username logged into a message is not
   redacted).
+
+## 11. User-defined scenarios
+
+A **scenario** is a user-written, multi-day playbook for a challenge: named **phases**, each with a
+**settings overlay** and ordered **rules** (`if` conditions → `do` actions, a `repeat` mode). The app
+hard-codes no tactic; `scenarios/vocabulary.js` is the one list of conditions, entry selectors, actions and
+caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editable examples.
+
+- **Documents** (`settings/scenarios.js`, `settings/scenarioSchema.js`, via the facade): stored name-keyed
+  in `challengeSettings.scenarios` (so the Android background service has them) and re-validated on read.
+  A shared file is untrusted input: size-capped before parsing, strict zod shapes (unknown keys rejected),
+  bounded non-reserved names, resolvable `start` / `goto` / memory slots, and phase settings limited to
+  per-challenge keys validated like profile values — with paired keys (`exposure`/`exposureTarget`,
+  final-window trigger/target) set together, because `getEffectiveSetting` does not re-validate combined
+  values. Rename and delete cascade to every assignment.
+- **Assignment** is the `challengeOnly` setting `scenario` (per challenge, challenge rule inline key, or
+  profile). An unknown name runs nothing and is logged.
+- **Overlay precedence**: while a challenge is in a phase, that phase's `settings` sit **above** every other
+  layer of `getEffectiveSetting` for that challenge, the manual override included
+  (`settings/scenarioOverlay.js`). Leaving the phase restores normal values; nothing is copied into stored
+  overrides; the `scenario` key itself is never overlaid. No overlay while the state is unreadable, belongs
+  to another scenario, or names a phase the scenario no longer has.
+- **Runtime state** (`scenarioStateStore.js`, per challenge: phase, memory, fired markers, in-flight action,
+  spends, last action/error). An unreadable file or malformed record reads as **corrupt, never as a fresh
+  start** — the challenge halts until `scenario-reset`, because replaying a plan could repeat spends. Mock
+  mode uses the in-memory ledger. Android persists it through the native keyed bridge
+  (`gs_scenario_state`); the app WebView `refreshAsync`es it before status reads, resets and each in-app
+  pass, and when the native service is available only the background service advances scenarios
+  (`backgroundServiceOwnsScenarios`).
+- **Engine** (`scenarios/conditions.js`, `selectors.js`, `evaluate.js`, `nextWake.js`, pure): unknown data
+  fails closed (never makes a condition true); entry ids are compared as strings, never by position (except
+  the explicit `slot` selector); an in-flight rule resumes first; a phase or in-flight rule the edited
+  scenario no longer has **halts** the challenge instead of guessing.
+- **Runner contract** (`services/scenarioRunner.js`, first step of `processChallenge`, never throws): the
+  challenge is re-read live and the action's entry re-resolved before every action; a gone target skips the
+  action. Once one action of a rule lands the rule is **committed** and its progress persisted after every
+  action, so a crash or failure resumes at the next action and never repeats a spend; a rule whose first
+  action fails simply did not fire. A `goto` takes effect when the rule finishes. No spend cap: each rule
+  fires at most once per pass and a `goto` chain stops on revisiting a phase in that pass; spends honour the
+  user's `currencyReserve*` (shared `reserveAllows`) and the scenario's optional `limits`.
+- **Surfaces**: IPC `ipc/scenarios.handlers.js` (the CLI reuses it), CLI `cli/commands/scenarios.js`,
+  GUI `ScenariosSection`, the `scenario` field in `SettingInput`, and the card `ScenarioStatusLine`.
