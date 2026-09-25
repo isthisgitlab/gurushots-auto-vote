@@ -124,17 +124,37 @@ describe('fillExposure', () => {
 
 describe('previewSwap', () => {
     test('picks the next-ranked alternative when the top-ranked photos are all excluded', async () => {
-        // The three most popular photos are the entered one, one swapped out
-        // before and the photo being replaced — ranking must reach past them.
-        const library = [photo('entered', 900), photo('swapped-before', 800), photo('old', 700), photo('fresh', 10)];
+        // The two most popular photos are another entered one and the photo
+        // being replaced — ranking must reach past them.
+        const library = [photo('entered', 900), photo('old', 700), photo('fresh', 10)];
         const strategy = stubStrategy({ library });
         const result = await previewSwap(555, 'old', 'tok', { strategy, logger, settings: null });
         expect(result).toEqual({ ok: true, outcome: 'ok', candidate: { id: 'fresh', member_id: 'mem1' } });
         expect(strategy.getEligiblePhotos).toHaveBeenCalledWith(555, 'tok', expect.objectContaining({ usage: 'swap' }));
     });
 
+    test('a photo swapped out earlier stays a candidate', async () => {
+        const library = [photo('entered', 900), photo('swapped-before', 800), photo('old', 700), photo('fresh', 10)];
+        const strategy = stubStrategy({ library });
+        const result = await previewSwap(555, 'old', 'tok', { strategy, logger, settings: null });
+        expect(result.candidate).toEqual({ id: 'swapped-before', member_id: 'mem1' });
+    });
+
+    test('excludeSwapped skips photos swapped out earlier (the automatic swap)', async () => {
+        const library = [photo('entered', 900), photo('swapped-before', 800), photo('old', 700), photo('fresh', 10)];
+        const strategy = stubStrategy({ library });
+        const result = await previewSwap(
+            555,
+            'old',
+            'tok',
+            { strategy, logger, settings: null },
+            { excludeSwapped: true },
+        );
+        expect(result.candidate).toEqual({ id: 'fresh', member_id: 'mem1' });
+    });
+
     test('no different photo → no-alternative', async () => {
-        const strategy = stubStrategy({ library: [photo('entered', 5), photo('old', 4), photo('swapped-before', 3)] });
+        const strategy = stubStrategy({ library: [photo('entered', 5), photo('old', 4)] });
         expect((await previewSwap(555, 'old', 'tok', { strategy, logger, settings: null })).outcome).toBe(
             'no-alternative',
         );
@@ -163,10 +183,19 @@ describe('swapEntry', () => {
         expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'fresh', 'tok');
     });
 
-    test.each(['old', 'entered', 'swapped-before'])('refuses %s as the replacement', async (newId) => {
+    test.each(['old', 'entered'])('refuses %s as the replacement', async (newId) => {
         const strategy = stubStrategy();
         expect((await swapEntry(555, 'old', newId, 'tok', { strategy, logger })).outcome).toBe('stale-candidate');
         expect(strategy.swapPhoto).not.toHaveBeenCalled();
+    });
+
+    test('a photo swapped out earlier can be swapped back in', async () => {
+        const strategy = stubStrategy();
+        expect(await swapEntry(555, 'old', 'swapped-before', 'tok', { strategy, logger })).toEqual({
+            ok: true,
+            outcome: 'ok',
+        });
+        expect(strategy.swapPhoto).toHaveBeenCalledWith(555, 'old', 'swapped-before', 'tok');
     });
 
     test('photo no longer entered → not-available', async () => {

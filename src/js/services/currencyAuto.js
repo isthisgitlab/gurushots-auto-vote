@@ -161,7 +161,9 @@ const runAutoSwap = guarded('swap', async (ctx) => {
     const deps = { strategy: currency.strategy, logger, settings };
     let candidate = null;
     const result = await lockedSpend('swap', challenge, async () => {
-        const preview = await currencyActions.previewSwap(challenge.id, target.id, token, deps);
+        const preview = await currencyActions.previewSwap(challenge.id, target.id, token, deps, {
+            excludeSwapped: true,
+        });
         if (!preview?.ok) return preview;
         candidate = preview.candidate;
         return currencyActions.swapEntry(challenge.id, target.id, candidate.id, token, {

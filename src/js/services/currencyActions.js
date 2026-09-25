@@ -75,6 +75,14 @@ const entryIds = (challenge) =>
             .map(String),
     );
 
+// Every photo swapped out of the challenge so far (the API's swap history).
+const swappedOutIds = (challenge) =>
+    new Set(
+        (Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps : []).map((s) =>
+            String(s?.id),
+        ),
+    );
+
 /**
  * Live re-check shared by every action. Returns the blocking outcome, or null
  * with the live challenge when the spend may go ahead.
@@ -112,16 +120,25 @@ const unlockBoostWithKey = async (challengeId, token, { strategy, logger }) => {
 /**
  * Picks the photo a swap would put in place of `imageId` — the best-ranked
  * candidate under the same pipeline a fill uses, excluding every photo already
- * entered, every photo previously swapped out, and `imageId` itself. Spends
- * nothing.
+ * entered and `imageId` itself. A photo swapped out earlier stays a candidate
+ * unless `excludeSwapped` is set — the automatic swap sets it, since it means
+ * "bring in a fresh photo" and would otherwise flip a slot between the photo it
+ * just swapped out and its replacement. Spends nothing.
  *
  * @param {string|number} challengeId
  * @param {string} imageId - the entered photo to replace
  * @param {string} token
  * @param {{strategy: object, logger: object, settings: object}} deps
+ * @param {{excludeSwapped?: boolean}} [options]
  * @returns {Promise<{ok: boolean, outcome: string, candidate?: {id: string, member_id: string}}>}
  */
-const previewSwap = async (challengeId, imageId, token, { strategy, logger, settings }) => {
+const previewSwap = async (
+    challengeId,
+    imageId,
+    token,
+    { strategy, logger, settings },
+    { excludeSwapped = false } = {},
+) => {
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
     if (!entryIds(challenge).has(String(imageId))) {
@@ -134,6 +151,9 @@ const previewSwap = async (challengeId, imageId, token, { strategy, logger, sett
     const id = String(challenge.id);
     const excludeIds = swapExcludedIds(challenge);
     excludeIds.add(String(imageId));
+    if (excludeSwapped) {
+        for (const swappedId of swappedOutIds(challenge)) excludeIds.add(swappedId);
+    }
     const ranked = await rankCandidatesForChallenge(
         challenge,
         token,
@@ -178,7 +198,7 @@ const previewSwap = async (challengeId, imageId, token, { strategy, logger, sett
 /**
  * Spends a SWAP to replace entered photo `imageId` with `newImageId`. Refuses
  * (spending nothing) when `imageId` is no longer entered, or when `newImageId`
- * is already entered / was swapped out before / equals `imageId`.
+ * is already entered / equals `imageId`.
  *
  * @param {string|number} challengeId
  * @param {string} imageId
@@ -226,11 +246,7 @@ const swapBack = async (challengeId, currentImageId, token, { strategy, logger, 
     if (!record) return { ok: false, outcome: CURRENCY_OUTCOME.notAvailable };
     const { blocked, challenge } = await checkLive('swap', challengeId, token, strategy);
     if (blocked) return { ok: false, outcome: blocked };
-    const history = new Set(
-        (Array.isArray(challenge?.member?.ranking?.swaps) ? challenge.member.ranking.swaps : []).map((s) =>
-            String(s?.id),
-        ),
-    );
+    const history = swappedOutIds(challenge);
     const entered = entryIds(challenge);
     if (!entered.has(record.currentId) || entered.has(record.previousId) || !history.has(record.previousId)) {
         // The slot moved on outside this app — the record no longer describes it.

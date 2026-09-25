@@ -200,7 +200,10 @@ describe('runAutoSwap', () => {
     test('replaces the last entry by default and records it in the pass', async () => {
         const ctx = makeCtx();
         expect(await runAutoSwap(ctx)).toBe(true);
-        expect(currencyActions.previewSwap).toHaveBeenCalledWith(555, 'e2', 'tok', expect.any(Object));
+        // Auto swap always brings in a fresh photo — never one swapped out before.
+        expect(currencyActions.previewSwap).toHaveBeenCalledWith(555, 'e2', 'tok', expect.any(Object), {
+            excludeSwapped: true,
+        });
         expect(currencyActions.swapEntry).toHaveBeenCalledWith(
             555,
             'e2',

@@ -113,10 +113,10 @@ describe('malformed payloads never throw', () => {
 });
 
 describe('swapExcludedIds', () => {
-    test('union of current entries and previously swapped-out photos, as strings', () => {
+    test('current entries only, as strings — previously swapped-out photos stay pickable', () => {
         const c = makeChallenge();
         c.member.ranking.entries.push({ id: 42 });
-        expect([...swapExcludedIds(c)].sort()).toEqual(['42', 'e1', 'e2', 's1']);
+        expect([...swapExcludedIds(c)].sort()).toEqual(['42', 'e1', 'e2']);
     });
 });
 
@@ -124,7 +124,7 @@ describe('swapExcludedIds — id hygiene', () => {
     test('skips entries with no usable id (missing, null, empty string, null item)', () => {
         const c = makeChallenge();
         c.member.ranking.entries = [{ id: 'e1' }, {}, { id: null }, { id: '' }, null, { id: 0 }];
-        expect([...swapExcludedIds(c)].sort()).toEqual(['0', 'e1', 's1']);
+        expect([...swapExcludedIds(c)].sort()).toEqual(['0', 'e1']);
     });
 });
 

@@ -96,21 +96,22 @@ const canFillExposure = (challenge, bankroll, nowSec) =>
     hasBalance(bankroll, 'fill') && challengeAllows('fill', challenge, nowSec);
 
 /**
- * Image ids a swap must never pick: every photo currently entered plus every
- * photo previously swapped out of this challenge. Compared as a set of strings,
- * never by position.
+ * Image ids a swap must never pick: every photo currently entered (the photo
+ * being replaced included), so a swap can't put a photo into the challenge
+ * twice or swap a photo for itself. A photo swapped out earlier is NOT
+ * excluded — it keeps its votes (and any boost/turbo) while out, and swapping
+ * it back in is a legitimate move. Compared as a set of strings, never by
+ * position.
  *
  * @param {any} challenge
  * @returns {Set<string>}
  */
 const swapExcludedIds = (challenge) => {
     const ids = new Set();
-    const ranking = challenge?.member?.ranking;
-    for (const list of [ranking?.entries, ranking?.swaps]) {
-        if (!Array.isArray(list)) continue;
-        for (const item of list) {
-            if (item?.id !== undefined && item?.id !== null && item.id !== '') ids.add(String(item.id));
-        }
+    const entries = challenge?.member?.ranking?.entries;
+    if (!Array.isArray(entries)) return ids;
+    for (const item of entries) {
+        if (item?.id !== undefined && item?.id !== null && item.id !== '') ids.add(String(item.id));
     }
     return ids;
 };
