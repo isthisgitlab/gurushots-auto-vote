@@ -101,6 +101,7 @@ const invokeChannels = [
     'fill-exposure',
     // User-defined scenarios
     'get-scenarios',
+    'check-scenario',
     'save-scenario',
     'rename-scenario',
     'delete-scenario',

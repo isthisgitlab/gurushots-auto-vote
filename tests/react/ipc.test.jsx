@@ -47,6 +47,7 @@ describe('pass-through wrappers', () => {
 describe('scenario wrappers', () => {
     test.each([
         ['getScenarios', []],
+        ['checkScenario', [{ name: 'Draft' }]],
         ['saveScenario', [{ name: 'Plan' }, { overwrite: false }]],
         ['renameScenario', ['Old', 'New']],
         ['deleteScenario', ['Plan']],

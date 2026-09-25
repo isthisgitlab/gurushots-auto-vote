@@ -27,7 +27,10 @@ const changeSelect = (sel, value) =>
         sel.dispatchEvent(new window.Event('change', { bubbles: true }));
     });
 
-beforeEach(() => withScenarios());
+beforeEach(() => {
+    withScenarios();
+    window.api.checkScenario = jest.fn(async () => ({ success: true }));
+});
 
 describe('listing', () => {
     test('shows each scenario with its phase count and description', async () => {

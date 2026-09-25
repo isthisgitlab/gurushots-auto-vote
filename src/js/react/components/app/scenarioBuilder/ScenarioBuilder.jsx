@@ -381,21 +381,31 @@ function SimulatePanel({ draft }) {
 export function ScenarioBuilder({ initial, originalName, onSaved, onCancel }) {
     const { t } = useTranslation();
     const [draft, setDraft] = useState(initial);
+    // The name the scenario is stored under right now: a rename that went
+    // through before a refused save must not be attempted again on retry.
+    const [storedName, setStoredName] = useState(originalName);
     const [tab, setTab] = useState('builder');
     const [error, setError] = useState(null);
     const phases = Object.keys(draft.phases);
 
     const save = async () => {
         setError(null);
-        const renamed = originalName !== null && originalName.toLowerCase() !== String(draft.name).toLowerCase();
+        // Validate before anything is renamed, so a draft with problems changes nothing.
+        const checked = await ipc.checkScenario(draft);
+        if (!checked?.success) {
+            setError({ what: 'app.sbSaveFailed', issues: checked?.issues });
+            return;
+        }
+        const renamed = storedName !== null && storedName.toLowerCase() !== String(draft.name).toLowerCase();
         if (renamed) {
-            const moved = await ipc.renameScenario(originalName, draft.name);
+            const moved = await ipc.renameScenario(storedName, draft.name);
             if (!moved?.success) {
                 setError({ what: 'app.sbSaveFailed', issues: moved?.issues });
                 return;
             }
+            setStoredName(moved.name);
         }
-        const result = await ipc.saveScenario(draft, { overwrite: originalName !== null });
+        const result = await ipc.saveScenario(draft, { overwrite: storedName !== null });
         if (result?.success) onSaved();
         else setError({ what: 'app.sbSaveFailed', issues: result?.issues });
     };

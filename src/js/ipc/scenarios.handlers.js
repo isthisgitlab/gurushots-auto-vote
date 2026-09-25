@@ -6,6 +6,7 @@
  * behave identically.
  *
  *   get-scenarios            stored scenarios + the example templates
+ *   check-scenario           validate a document without storing it
  *   save-scenario            validate and store a document
  *   rename-scenario          rename (assignments follow)
  *   delete-scenario          delete (assignments are cleared)
@@ -105,6 +106,12 @@ const buildHandlers = () => ({
             scenarios: settings.getScenarios(),
             templates: SCENARIO_TEMPLATES,
         })),
+
+    'check-scenario': async (event, doc) =>
+        safely('check-scenario', () => {
+            const result = settings.checkScenario(doc);
+            return result.ok ? { success: true } : fromResult(result);
+        }),
 
     'save-scenario': async (event, doc, options) =>
         safely('save-scenario', () =>

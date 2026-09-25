@@ -112,6 +112,18 @@ describe('save / rename / delete', () => {
     });
 });
 
+test('check-scenario validates without storing', async () => {
+    settings.checkScenario
+        .mockReturnValueOnce({ ok: true, scenario: {} })
+        .mockReturnValueOnce({ ok: false, issues: [issue] });
+    await expect(handlers['check-scenario'](null, {})).resolves.toEqual({ success: true });
+    await expect(handlers['check-scenario'](null, {})).resolves.toEqual({
+        success: false,
+        error: issue.message,
+        issues: [issue],
+    });
+});
+
 describe('import / export', () => {
     test('preview and import', async () => {
         settings.previewScenarioImport.mockReturnValue({

@@ -70,6 +70,7 @@ beforeEach(() => {
         return { success: true, name: draft.name };
     });
     window.api.renameScenario = jest.fn(async () => ({ success: true, name: 'New' }));
+    window.api.checkScenario = jest.fn(async () => ({ success: true }));
     window.api.simulateScenario = jest.fn();
 });
 
@@ -259,6 +260,36 @@ describe('save', () => {
         expect((await screen.findByRole('alert')).textContent).toContain('app.sbSaveFailed');
         expect(window.api.renameScenario).not.toHaveBeenCalled();
         expect(onSaved).not.toHaveBeenCalled();
+    });
+
+    test('a draft that does not validate changes nothing — no rename, no save', async () => {
+        window.api.checkScenario = jest.fn(async () => ({
+            success: false,
+            issues: [{ path: 'start', message: 'No phase' }],
+        }));
+        await renderBuilder();
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'New' } });
+        click('app.sbSave');
+        expect((await screen.findByRole('alert')).textContent).toContain('No phase');
+        expect(window.api.renameScenario).not.toHaveBeenCalled();
+        expect(window.api.saveScenario).not.toHaveBeenCalled();
+    });
+
+    test('after a rename went through but the save was refused, a retry saves without renaming again', async () => {
+        window.api.saveScenario = jest
+            .fn()
+            .mockResolvedValueOnce({ success: false, issues: [{ path: '', message: 'disk full' }] })
+            .mockResolvedValueOnce({ success: true, name: 'New' });
+        await renderBuilder();
+        fireEvent.change(screen.getByLabelText('app.sbName'), { target: { value: 'New' } });
+        click('app.sbSave');
+        expect((await screen.findByRole('alert')).textContent).toContain('disk full');
+        click('app.sbSave');
+        await waitFor(() => expect(onSaved).toHaveBeenCalled());
+        expect(window.api.renameScenario).toHaveBeenCalledTimes(1);
+        expect(window.api.saveScenario).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'New' }), {
+            overwrite: true,
+        });
     });
 
     test('a refused rename stops before saving', async () => {
