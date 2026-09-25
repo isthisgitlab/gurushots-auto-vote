@@ -2,6 +2,10 @@ name: Setup Build Environment
 description: Repeated setup shared by test, build matrix, build-android, and create-release. Activates pnpm via corepack (pinned by the packageManager field), sets up Node 26 with pnpm cache, optionally pulls the bumped package.json artifact, and installs dependencies.
 
 inputs:
+    cache-vision-model:
+        description: Restore the pinned vision model for jobs that build full assets.
+        required: false
+        default: 'false'
     download-bumped:
         description: When 'true', download the bumped-package artifact uploaded by the version-bump job before installing.
         required: false
@@ -30,3 +34,9 @@ runs:
         - if: inputs.install == 'true'
           shell: bash
           run: pnpm install --frozen-lockfile
+
+        - if: inputs.cache-vision-model == 'true'
+          uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.0.0
+          with:
+              path: .cache/vision-model
+              key: vision-model-${{ runner.os }}-${{ hashFiles('scripts/fetch-vision-model.js') }}

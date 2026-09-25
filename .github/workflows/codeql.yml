@@ -71,6 +71,8 @@ jobs:
             - name: Setup build environment
               if: matrix.language == 'java-kotlin'
               uses: ./.github/actions/setup-build
+              with:
+                  cache-vision-model: 'true'
 
             # cap sync generates the Capacitor gradle subprojects and bridge
             # config assets; it refuses to run without the web build. Runs

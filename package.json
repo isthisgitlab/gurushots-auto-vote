@@ -221,6 +221,7 @@
             "artifactName": "GuruShotsAutoVote-v${version}-${arch}.${ext}"
         },
         "win": {
+            "compression": "normal",
             "target": "portable",
             "icon": "src/assets/logo.png",
             "artifactName": "GuruShotsAutoVote-v${version}-${arch}.exe"

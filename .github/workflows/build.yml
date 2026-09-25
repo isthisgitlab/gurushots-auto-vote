@@ -73,6 +73,8 @@ jobs:
 
             - name: Setup build environment
               uses: ./.github/actions/setup-build
+              with:
+                  cache-vision-model: 'true'
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
               uses: actions/setup-java@v6
@@ -214,20 +216,26 @@ jobs:
                   retention-days: 1
 
     build:
+        name: build (${{ matrix.os }}, ${{ matrix.variant }})
         runs-on: ${{ matrix.os }}
         timeout-minutes: 45
         needs: [version-bump]
         if: github.event_name == 'push'
         strategy:
             matrix:
-                os: [ubuntu-latest, windows-latest, macos-26]
                 include:
                     - os: macos-26
                       platform: mac
+                      variant: full
                     - os: ubuntu-latest
                       platform: linux
+                      variant: full
                     - os: windows-latest
                       platform: win
+                      variant: full
+                    - os: windows-latest
+                      platform: win
+                      variant: lite
 
         steps:
             - name: Checkout code
@@ -237,14 +245,14 @@ jobs:
               uses: ./.github/actions/setup-build
               with:
                   download-bumped: 'true'
+                  cache-vision-model: ${{ matrix.variant != 'lite' }}
 
             - name: Run linter
+              if: matrix.variant != 'lite'
               run: pnpm lint
 
-            - name: Build CSS
-              run: pnpm build:css
-
             - name: Build Electron app
+              if: matrix.variant != 'lite'
               run: pnpm build:${{ matrix.platform }}
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -253,6 +261,7 @@ jobs:
             # Same app without the local vision model and its runtime, for users
             # who don't want it (scripts/electron-builder-lite.js → build/lite/).
             - name: Build lite Electron app
+              if: matrix.platform != 'win' || matrix.variant == 'lite'
               run: pnpm build:${{ matrix.platform }}:lite
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -343,7 +352,7 @@ jobs:
             - name: Upload build artifacts
               uses: actions/upload-artifact@v7
               with:
-                  name: ${{ needs.version-bump.outputs.is-beta == 'true' && format('develop-{0}-builds', matrix.platform) || format('{0}-builds', matrix.platform) }}
+                  name: ${{ needs.version-bump.outputs.is-beta == 'true' && 'develop-' || '' }}${{ matrix.platform }}${{ matrix.variant == 'lite' && '-lite' || '' }}-builds
                   path: |
                       build/*.dmg
                       build/GuruShotsAutoVote-v*.app.zip
@@ -372,6 +381,7 @@ jobs:
               uses: ./.github/actions/setup-build
               with:
                   download-bumped: 'true'
+                  cache-vision-model: 'true'
 
             # No `cache:` — the composite already restored the pnpm cache for this job.
             - name: Setup Node.js 26 for CLI build
@@ -427,6 +437,7 @@ jobs:
               uses: ./.github/actions/setup-build
               with:
                   download-bumped: 'true'
+                  cache-vision-model: 'true'
 
             - name: Setup Java (JDK 21 — required by Capacitor 8 plugins' kotlin jvmToolchain)
               uses: actions/setup-java@v6
@@ -606,8 +617,8 @@ jobs:
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/lite/lite-mac.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/lite/GuruShotsAutoVote-v*.AppImage
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/lite/lite-linux*.yml
-                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/lite/GuruShotsAutoVote-v*.exe
-                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-builds/lite/lite.yml
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-lite-builds/lite/GuruShotsAutoVote-v*.exe
+                      artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}win-lite-builds/lite/lite.yml
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}mac-builds/cli/gurucli-v*-mac-lite
                       artifacts/${{ steps.release_vars.outputs.ARTIFACT_PREFIX }}linux-builds/cli/gurucli-v*-linux
