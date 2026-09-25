@@ -37,6 +37,13 @@ describe('onSwapped', () => {
         expect(ledger.list(7)).toEqual([expect.objectContaining({ currentId: 'C', previousId: 'A' })]);
     });
 
+    test('a plain swap that puts the original back in drops its record', () => {
+        const ledger = createMemoryLedger();
+        ledger.onSwapped(7, boosted, 'B');
+        ledger.onSwapped(7, { id: 'B' }, 'A');
+        expect(ledger.list(7)).toEqual([]);
+    });
+
     test('challenges are kept apart; ids compare as strings', () => {
         const ledger = createMemoryLedger();
         ledger.onSwapped(7, boosted, 'B');

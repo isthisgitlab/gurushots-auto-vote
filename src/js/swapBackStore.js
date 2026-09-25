@@ -77,9 +77,10 @@ const createLedger = (store) => {
             const state = read();
             const key = String(challengeId);
             const oldId = String(oldEntry?.id);
-            const records = recordsOf(state, key).map((r) =>
-                r.currentId === oldId ? { ...r, currentId: String(newId), at: Date.now() } : r,
-            );
+            const records = recordsOf(state, key)
+                .map((r) => (r.currentId === oldId ? { ...r, currentId: String(newId), at: Date.now() } : r))
+                // A plain swap put the original back in its slot: nothing left to swap back.
+                .filter((r) => r.currentId !== r.previousId);
             const kind = oldEntry?.boosted === true ? 'boost' : oldEntry?.turbo ? 'turbo' : null;
             if (kind) {
                 records.push({
