@@ -16,6 +16,7 @@ const { loadSettings, saveSettings } = require('./persistence');
 const { ensureChallengeSettings, globalChallengeValues } = require('./defaults');
 const { normalizeProfileName, profileNameForLog, findProfileKey } = require('./profileStore');
 const { validateScenario, parseScenarioJson } = require('./scenarioSchema');
+const { sanitizeTitleRuleInline } = require('./titleRuleSanitize');
 
 const MAX_SCENARIOS = SCENARIO_CAPS.scenarios;
 
@@ -73,6 +74,48 @@ const getScenario = (name) => {
 
 const failure = (issues) => ({ ok: false, issues });
 
+const plainObject = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? value : {});
+
+// A rule keeps its row only while it still contributes something: a profile,
+// tags, or a valid inline value.
+const ruleHasBehaviour = (rule) => {
+    const hasTags = ['mustIncludeTags', 'shouldIncludeTags'].some(
+        (key) => Array.isArray(rule[key]) && rule[key].length > 0,
+    );
+    const inline = sanitizeTitleRuleInline(rule);
+    return Boolean(rule.profile) || hasTags || (inline !== null && Object.keys(inline).length > 0);
+};
+
+/**
+ * Point every assignment of scenario `fromName` — per-challenge overrides,
+ * profiles and challenge rules — at `toName`, or clear it when `toName` is
+ * ''. A deleted scenario must not linger as an assignment that silently runs
+ * nothing, and a rename must not orphan its challenges.
+ */
+const reassignScenario = (settings, fromName, toName) => {
+    const from = normalizeProfileName(fromName);
+    const assigned = (value) => typeof value === 'string' && normalizeProfileName(value) === from;
+    const challengeSettings = ensureChallengeSettings(settings);
+    const valueMaps = [
+        ...Object.values(plainObject(challengeSettings.perChallenge)),
+        ...Object.values(plainObject(challengeSettings.profiles)),
+    ];
+    for (const values of valueMaps) {
+        if (!values || !assigned(values.scenario)) continue;
+        if (toName) values.scenario = toName;
+        else delete values.scenario;
+    }
+    if (Array.isArray(challengeSettings.titleRules)) {
+        challengeSettings.titleRules = challengeSettings.titleRules.flatMap((rule) => {
+            if (!assigned(rule?.scenario)) return [rule];
+            if (toName) return [{ ...rule, scenario: toName }];
+            const kept = { ...rule };
+            delete kept.scenario;
+            return ruleHasBehaviour(kept) ? [kept] : [];
+        });
+    }
+};
+
 /**
  * Validate and store a scenario. `overwrite: false` refuses a name that
  * already exists; `replaces` names a stored scenario this document takes the
@@ -80,7 +123,7 @@ const failure = (issues) => ({ ok: false, issues });
  *
  * @returns {{ok: true, name: string} | {ok: false, issues: Array<{path: string, message: string}>}}
  */
-const storeScenario = (doc, { overwrite, replaces = null }) => {
+const storeScenario = (doc, { overwrite, replaces = null, beforeSave = null }) => {
     const settings = loadSettings();
     const result = validateScenario(doc, globalChallengeValues(settings));
     if (!result.ok) return failure(result.issues);
@@ -108,6 +151,7 @@ const storeScenario = (doc, { overwrite, replaces = null }) => {
     }
     scenarios[scenario.name] = scenario;
     ensureChallengeSettings(settings).scenarios = scenarios;
+    if (beforeSave) beforeSave(settings, scenario.name);
     if (!saveSettings(settings)) return failure([{ path: '', message: 'The settings file could not be saved' }]);
     log().info(`Scenario saved: "${profileNameForLog(scenario.name)}"`, null);
     return { ok: true, name: scenario.name };
@@ -115,15 +159,28 @@ const storeScenario = (doc, { overwrite, replaces = null }) => {
 
 const saveScenario = (doc, { overwrite = true } = {}) => storeScenario(doc, { overwrite });
 
-/** Rename a stored scenario. The new name must be free (a casing-only change is fine). */
+/**
+ * Rename a stored scenario and every assignment of it. The new name must be
+ * free (a casing-only change is fine).
+ */
 const renameScenario = (oldName, newName) => {
     const existing = getScenario(oldName);
     if (!existing) return failure([{ path: 'name', message: `No scenario named "${oldName}"` }]);
     const sameName = normalizeProfileName(oldName) === normalizeProfileName(newName);
-    return storeScenario({ ...existing, name: newName }, { overwrite: sameName, replaces: existing.name });
+    return storeScenario(
+        { ...existing, name: newName },
+        {
+            overwrite: sameName,
+            replaces: existing.name,
+            beforeSave: (settings, storedName) => reassignScenario(settings, existing.name, storedName),
+        },
+    );
 };
 
-/** Delete a stored scenario. False when there is none by that name. */
+/**
+ * Delete a stored scenario and clear every assignment of it. False when there
+ * is none by that name.
+ */
 const deleteScenario = (name) => {
     const settings = loadSettings();
     const stored = readScenariosMap(settings);
@@ -132,6 +189,7 @@ const deleteScenario = (name) => {
     const scenarios = { ...stored };
     delete scenarios[key];
     ensureChallengeSettings(settings).scenarios = scenarios;
+    reassignScenario(settings, key, '');
     if (!saveSettings(settings)) return false;
     log().info(`Scenario deleted: "${profileNameForLog(key)}"`, null);
     return true;

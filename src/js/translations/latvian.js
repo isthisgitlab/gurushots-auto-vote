@@ -277,6 +277,9 @@ module.exports = {
             'Ieteiktā bilde vairs nav aktuāla. Nospied Apmainīt vēlreiz, lai saņemtu jaunu ieteikumu.',
         currencyOutcomeBusy: 'Vēl notiek cita valūtas darbība — mēģini vēlreiz pēc brīža.',
         currencyOutcomeFailed: 'GuruShots noraidīja pieprasījumu. Mēģini vēlāk; ja atkārtojas, pārbaudi žurnālus.',
+        scenario: 'Scenārijs',
+        scenarioDesc:
+            'Scenārijs, ko šis izaicinājums izpilda — tavs paša vairāku dienu plāns ar fāzēm un noteikumiem (Iestatījumi → Scenāriji). Tukšs = nav. Piešķir to konkrētam izaicinājumam vai uzreiz daudziem ar izaicinājumu noteikumu (piemēram, tips = exhibition).',
         // Automātiskās pievienošanās iestatījumi
         groupAutoJoin: 'Automātiskā pievienošanās',
         autoJoin: 'Automātiski pievienoties izaicinājumiem',

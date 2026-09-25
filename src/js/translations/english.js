@@ -277,6 +277,9 @@ module.exports = {
         currencyOutcomeStaleCandidate: 'The suggested replacement expired. Press Swap again for a fresh pick.',
         currencyOutcomeBusy: 'Another currency action is still running — try again in a moment.',
         currencyOutcomeFailed: 'GuruShots rejected the request. Try again later; check the logs if it keeps happening.',
+        scenario: 'Scenario',
+        scenarioDesc:
+            'The scenario this challenge runs — your own multi-day plan of phases and rules (Settings → Scenarios). Empty = none. Assign it per challenge, or to many challenges at once with a challenge rule (for example type = exhibition).',
         // Auto-Join settings
         groupAutoJoin: 'Auto Join',
         autoJoin: 'Auto-Join Challenges',

@@ -221,6 +221,103 @@ describe('settings facade — scenarios', () => {
     });
 });
 
+describe('settings facade — scenario assignment', () => {
+    let store;
+    const blob = () => JSON.parse(store.value).challengeSettings;
+
+    beforeEach(() => {
+        globalThis.__GS_HEADLESS__ = true;
+        store = {
+            value: null,
+            read: jest.fn(() => store.value),
+            write: jest.fn((d) => {
+                store.value = d;
+            }),
+        };
+        globalThis.AndroidHeadlessStore = store;
+        settings.rememberChallengeTitles([
+            { id: 7, title: 'Big show', type: 'exhibition' },
+            { id: 8, title: 'Other' },
+        ]);
+        settings.saveScenario(simple('Plan'));
+    });
+
+    afterEach(() => {
+        delete globalThis.__GS_HEADLESS__;
+        delete globalThis.AndroidHeadlessStore;
+        settings.rememberChallengeTitles([]);
+    });
+
+    test('no scenario by default, and none as a global value', () => {
+        expect(settings.getEffectiveSetting('scenario', '7')).toBe('');
+        expect(settings.SETTINGS_SCHEMA.scenario.challengeOnly).toBe(true);
+    });
+
+    test('assigned per challenge, by a challenge rule, or through a profile', () => {
+        expect(settings.setChallengeOverride('scenario', '8', 'Plan')).toBe(true);
+        expect(settings.getEffectiveSetting('scenario', '8')).toBe('Plan');
+        expect(settings.setTitleRules([{ type: 'exhibition', scenario: 'Plan' }])).toBe(true);
+        expect(settings.getEffectiveSetting('scenario', '7')).toBe('Plan');
+        expect(settings.saveChallengeProfile('Show tactic', { scenario: 'Plan' })).toBe(true);
+    });
+
+    test('a rule may carry a scenario as its only behaviour', () => {
+        expect(settings.TITLE_RULE_INLINE_KEYS).toContain('scenario');
+        expect(settings.setTitleRules([{ type: 'exhibition', scenario: 'Plan' }])).toBe(true);
+        expect(settings.getTitleRules()).toEqual([expect.objectContaining({ scenario: 'Plan' })]);
+    });
+
+    const assignEverywhere = () => {
+        settings.setChallengeOverride('scenario', '8', 'plan');
+        settings.saveChallengeProfile('Show tactic', { scenario: 'Plan', autoFill: true });
+        settings.setTitleRules([
+            { type: 'exhibition', scenario: 'Plan' },
+            { title: 'Other', scenario: 'PLAN', autoFill: true },
+            { title: 'Unrelated', scenario: 'Something else' },
+        ]);
+    };
+
+    test('a rename moves every assignment to the new name', () => {
+        assignEverywhere();
+        expect(settings.renameScenario('Plan', 'Show plan').ok).toBe(true);
+        const stored = blob();
+        expect(stored.perChallenge['8'].scenario).toBe('Show plan');
+        expect(stored.profiles['Show tactic'].scenario).toBe('Show plan');
+        expect(stored.titleRules.map((r) => r.scenario)).toEqual(['Show plan', 'Show plan', 'Something else']);
+    });
+
+    test('a delete clears every assignment and drops rules left with nothing to do', () => {
+        assignEverywhere();
+        expect(settings.deleteScenario('Plan')).toBe(true);
+        const stored = blob();
+        expect(stored.perChallenge['8'].scenario).toBeUndefined();
+        expect(stored.profiles['Show tactic']).toEqual({ autoFill: true });
+        expect(stored.titleRules).toEqual([
+            expect.objectContaining({ title: 'Other', autoFill: true }),
+            expect.objectContaining({ title: 'Unrelated', scenario: 'Something else' }),
+        ]);
+        expect(stored.titleRules[0].scenario).toBeUndefined();
+    });
+
+    test('a delete keeps a rule that still has a profile or tags', () => {
+        settings.saveChallengeProfile('Show tactic', { autoFill: true });
+        settings.setTitleRules([
+            { type: 'exhibition', scenario: 'Plan', profile: 'Show tactic' },
+            { title: 'Other', scenario: 'Plan', mustIncludeTags: ['sea'] },
+        ]);
+        settings.deleteScenario('Plan');
+        expect(blob().titleRules).toHaveLength(2);
+    });
+
+    test('a delete copes with missing or corrupted assignment containers', () => {
+        const raw = JSON.parse(store.value);
+        raw.challengeSettings.profiles = { Broken: null };
+        raw.challengeSettings.titleRules = 'not a list';
+        store.value = JSON.stringify(raw);
+        expect(settings.deleteScenario('Plan')).toBe(true);
+    });
+});
+
 describe('settings facade — scenarios when the save fails', () => {
     let scenarios;
 
@@ -238,6 +335,20 @@ describe('settings facade — scenarios when the save fails', () => {
 
     test('save and delete report the failure', () => {
         expect(scenarios.saveScenario(simple()).issues[0].message).toContain('could not be saved');
+    });
+
+    test('delete tolerates a non-list rules container', () => {
+        jest.isolateModules(() => {
+            jest.doMock('../../src/js/settings/persistence', () => {
+                const actual = jest.requireActual('../../src/js/settings/persistence');
+                const blob = actual.loadSettings();
+                blob.challengeSettings.scenarios = { Plan: simple() };
+                blob.challengeSettings.titleRules = 'not a list';
+                return { ...actual, loadSettings: () => structuredClone(blob), saveSettings: () => true };
+            });
+            const isolated = require('../../src/js/settings/scenarios');
+            expect(isolated.deleteScenario('Plan')).toBe(true);
+        });
     });
 
     test('delete reports false when the save fails', () => {

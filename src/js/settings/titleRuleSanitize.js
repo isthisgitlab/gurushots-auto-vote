@@ -37,7 +37,13 @@ const MAX_TITLES_PER_RULE = 50;
  * key off — so a rule is the only place they can be expressed. Richer setups
  * belong in a named profile, which this composes with (inline wins).
  */
-const TITLE_RULE_INLINE_KEYS = ['autoJoin', 'autoFill', 'autoJoinWithinHoursOfEnd', 'autoJoinAfterPercentElapsed'];
+const TITLE_RULE_INLINE_KEYS = [
+    'autoJoin',
+    'autoFill',
+    'autoJoinWithinHoursOfEnd',
+    'autoJoinAfterPercentElapsed',
+    'scenario',
+];
 
 /**
  * Pull the inline overrides off one rule, validated against the schema. Returns
