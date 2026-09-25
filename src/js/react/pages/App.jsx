@@ -221,6 +221,7 @@ function AppContent() {
                         lastRun={autovote.lastRun}
                         cycles={autovote.cycles}
                         onToggle={handleAutovoteToggle}
+                        autoJoinActive={autoJoinActive}
                     />
 
                     {/* At-a-glance status summary — counts + next-action countdown + bankroll */}
@@ -229,7 +230,6 @@ function AppContent() {
                         nextRunAt={autovote.nextRunAt}
                         running={autovote.running}
                         bankroll={bankroll}
-                        autoJoinActive={autoJoinActive}
                         autoClaimStatus={autoClaimStatus}
                     />
 

@@ -4,7 +4,7 @@ import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 /**
  * Autovote controls - toggle button, status, last run, cycle count
  */
-export function AutoVoteControls({ running, status, statusClass, lastRun, cycles, onToggle }) {
+export function AutoVoteControls({ running, status, statusClass, lastRun, cycles, onToggle, autoJoinActive }) {
     const { t } = useTranslation();
 
     return (
@@ -32,6 +32,24 @@ export function AutoVoteControls({ running, status, statusClass, lastRun, cycles
                         <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{t('app.status')}</span>
                             <span className={`badge badge-sm ${statusClass}`}>{status}</span>
+                            {/* Auto-join is a property of the running autovote, so it
+                                sits next to the running status. Shown only while
+                                autovote runs — that is when the join pre-step
+                                actually executes, and showing it while autovote is
+                                off would wrongly imply background joining. Own
+                                polite live region so arming/disarming mid-session
+                                is announced. */}
+                            {autoJoinActive && running && (
+                                <span
+                                    className="badge badge-success badge-sm gap-1"
+                                    role="status"
+                                    aria-live="polite"
+                                    title={t('app.autoJoinBadgeTitle')}
+                                >
+                                    <span aria-hidden="true">🤝</span>
+                                    {t('app.autoJoinBadge')}
+                                </span>
+                            )}
                         </div>
 
                         {/* Last Run */}

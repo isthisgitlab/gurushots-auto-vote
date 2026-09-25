@@ -119,9 +119,9 @@ describe('App page', () => {
         });
         expect(mockProps.StatusHeader).toMatchObject({
             challenges: mockChallenges.challenges,
-            autoJoinActive: true,
             running: false,
         });
+        expect(mockProps.AutoVoteControls).toMatchObject({ autoJoinActive: true, running: false });
         expect(mockProps.DiscoverSection.isLoggedIn).toBe(true);
         expect(mockProps.WelcomeModal.isOpen).toBe(false);
         expect(mockProps.AutovoteProvider.onChallengesRefresh).toBe(mockChallenges.refetch);

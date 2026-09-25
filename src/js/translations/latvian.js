@@ -146,11 +146,11 @@ module.exports = {
         statusHeaderNextClaim: 'Nākamā balvu saņemšana',
         statusHeaderNextClaimHint: 'Balvas saņem pirmajā balsošanas ciklā pēc stundas gaidīšanas perioda beigām.',
         statusHeaderNotRunning: 'auto-balsošana izslēgta',
-        statusHeaderAutoJoin: 'auto-pievienošanās ieslēgta',
-        statusHeaderAutoJoinTitle:
-            'Auto-pievienošanās darbojas katrā balsošanas ciklā, kamēr auto-balsošana ir ieslēgta. Konfigurē to sadaļā Iestatījumi › Auto-pievienošanās.',
         statusHeaderNextApprox: 'aptuveni — pārrēķina katrā ciklā',
         settingHelpLabel: 'Ko tas nozīmē?',
+        autoJoinBadge: 'auto-pievienošanās ieslēgta',
+        autoJoinBadgeTitle:
+            'Auto-pievienošanās darbojas katrā balsošanas ciklā, kamēr auto-balsošana ir ieslēgta. Konfigurē to sadaļā Iestatījumi › Auto-pievienošanās.',
         boostTime: 'Boost laiks',
         boostTimeDesc:
             'Pielieto Boost, kad paša Boost taimerī ir atlicis šis laiks. Neattiecas uz Boost, kas atvērts ar atslēgu — tam nav taimera, un tas izmanto atsevišķu iestatījumu “Boost laiks (atvērts ar atslēgu)”.',

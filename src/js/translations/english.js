@@ -146,11 +146,11 @@ module.exports = {
         statusHeaderNextClaim: 'Next claim',
         statusHeaderNextClaimHint: 'Claims run on the first voting cycle after the hourly cooldown ends.',
         statusHeaderNotRunning: 'autovote off',
-        statusHeaderAutoJoin: 'auto-join on',
-        statusHeaderAutoJoinTitle:
-            'Auto-join runs each voting cycle while autovote is on. Configure it in Settings › Auto Join.',
         statusHeaderNextApprox: 'approximate — recomputed each cycle',
         settingHelpLabel: 'What does this mean?',
+        autoJoinBadge: 'auto-join on',
+        autoJoinBadgeTitle:
+            'Auto-join runs each voting cycle while autovote is on. Configure it in Settings › Auto Join.',
         boostTime: 'Boost Time',
         boostTimeDesc:
             'Apply Boost when this much time is left on the Boost’s own timer. Does not apply to a key-unlocked Boost, which has no timer — that one uses Key-Unlocked Boost Time.',

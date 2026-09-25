@@ -60,7 +60,6 @@ describe('StatusHeader', () => {
                 running={true}
                 nextRunAt={BASE_MS + 120_000}
                 autoClaimStatus={{ enabled: true, nextClaimAt: BASE_MS + 3_600_000 }}
-                autoJoinActive={true}
             />,
         );
         expect(screen.getByText('app.statusHeaderNextClaim:')).toBeTruthy();
@@ -76,7 +75,6 @@ describe('StatusHeader', () => {
         act(() => jest.advanceTimersByTime(1000));
         expect(claimCountdown.textContent).toBe('~59m 58s');
         expect(screen.getByTestId('status-header').textContent).toContain('~1m 58s');
-        expect(screen.getByTestId('status-header').textContent).toContain('app.statusHeaderAutoJoin');
         expect(openBoostWindows).toHaveBeenCalledTimes(baseline);
     });
 
@@ -148,35 +146,6 @@ describe('StatusHeader', () => {
     test('renders nothing when there are no challenges and autovote is idle', () => {
         const { container } = wrap(<StatusHeader challenges={[]} nextRunAt={null} running={false} />);
         expect(container.querySelector('[data-testid="status-header"]')).toBeNull();
-    });
-
-    test('shows the auto-join indicator when armed AND autovote is running', () => {
-        wrap(
-            <StatusHeader
-                challenges={oneChallenge}
-                nextRunAt={BASE_MS + 60_000}
-                running={true}
-                autoJoinActive={true}
-            />,
-        );
-        expect(screen.getByTestId('status-header').textContent).toContain('statusHeaderAutoJoin');
-    });
-
-    test('hides the auto-join indicator when armed but autovote is NOT running (avoids implying it runs)', () => {
-        wrap(<StatusHeader challenges={oneChallenge} nextRunAt={null} running={false} autoJoinActive={true} />);
-        expect(screen.getByTestId('status-header').textContent).not.toContain('statusHeaderAutoJoin');
-    });
-
-    test('no auto-join indicator when inactive even while running', () => {
-        wrap(
-            <StatusHeader
-                challenges={oneChallenge}
-                nextRunAt={BASE_MS + 60_000}
-                running={true}
-                autoJoinActive={false}
-            />,
-        );
-        expect(screen.getByTestId('status-header').textContent).not.toContain('statusHeaderAutoJoin');
     });
 
     test('bankroll renders as its own second row (separate block, not inline with the counts)', () => {

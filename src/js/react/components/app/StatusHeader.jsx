@@ -91,7 +91,7 @@ function HeaderCountdown({ icon, labelKey, ...countdown }) {
  * header body never re-renders on the countdown's clock. Responsive: the row
  * wraps on narrow viewports rather than using wide DaisyUI `stat` blocks.
  */
-export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoinActive, autoClaimStatus }) {
+export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoClaimStatus }) {
     const { t } = useTranslation();
     // ChallengesContext always hands down an array ([] while empty/loading).
     const list = challenges;
@@ -106,8 +106,7 @@ export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoi
     // and needs to see their coins before a paid join. Only fully idle + no
     // bankroll hides it.
     const hasBankroll = bankroll !== undefined && bankroll !== null;
-    // The auto-join badge only shows while autovote is running (see below), and
-    // when running the bar always renders — so no extra term is needed here.
+    // When running the bar always renders, so no extra term is needed here.
     if (activeCount === 0 && !running && !hasBankroll) return null;
 
     return (
@@ -119,7 +118,7 @@ export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoi
             className="text-sm rounded-lg border border-base-300 bg-base-100 px-3 py-2 mb-3"
             data-testid="status-header"
         >
-            {/* Row 1: counts + next-action countdown + auto-join badge. */}
+            {/* Row 1: counts + next-action countdowns. */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 <HeaderStat icon="🏆" value={activeCount} label={t('app.statusHeaderActive')} />
                 <HeaderStat icon="🚀" value={boostsAvailable} label={t('app.statusHeaderBoosts')} />
@@ -134,22 +133,6 @@ export function StatusHeader({ challenges, nextRunAt, running, bankroll, autoJoi
                         running={running}
                         titleKey="app.statusHeaderNextClaimHint"
                     />
-                )}
-                {/* Only shown while autovote is RUNNING — that's when the join
-                    pre-step actually executes. Showing it while autovote is off (a
-                    pure settings check) would wrongly imply challenges are being
-                    joined in the background. Own polite live region so arming/disarming
-                    it mid-session is announced without making the 1Hz countdown noisy. */}
-                {autoJoinActive && running && (
-                    <span
-                        className="badge badge-success badge-sm gap-1"
-                        role="status"
-                        aria-live="polite"
-                        title={t('app.statusHeaderAutoJoinTitle')}
-                    >
-                        <span aria-hidden="true">🤝</span>
-                        {t('app.statusHeaderAutoJoin')}
-                    </span>
                 )}
             </div>
             {/* Row 2: bankroll, always its own row so it doesn't shuffle up/down
