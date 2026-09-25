@@ -83,6 +83,14 @@ jobs:
               if: matrix.language == 'java-kotlin'
               run: pnpm exec cap sync android
 
+            # Capacitor includes plugin Java sources as Gradle subprojects under
+            # node_modules. Compile those dependencies before CodeQL starts so
+            # the traced build analyzes only the app's own Kotlin/Java sources.
+            - name: Prebuild Android dependencies
+              if: matrix.language == 'java-kotlin'
+              working-directory: android
+              run: ./gradlew --no-daemon --no-build-cache assembleDebug
+
             - name: Initialize CodeQL
               uses: github/codeql-action/init@v4
               with:
@@ -107,13 +115,15 @@ jobs:
                                     - java/android/webview-addjavascriptinterface
                                     - java/android/arbitrary-apk-installation
 
-            # --no-build-cache keeps every compile task executing (a cached
-            # FROM-CACHE task is invisible to the extractor); --no-daemon stops
-            # Gradle from reusing a daemon started outside the traced build.
+            # Clean only :app, leaving the prebuilt plugin subprojects up to
+            # date. --no-build-cache prevents restoring app classes from cache;
+            # --no-daemon keeps the compile inside CodeQL's traced process.
             - name: Build Android (manual build-mode)
               if: matrix.language == 'java-kotlin'
               working-directory: android
-              run: ./gradlew --no-daemon --no-build-cache assembleDebug
+              run: |
+                  ./gradlew --no-daemon --no-build-cache :app:clean
+                  ./gradlew --no-daemon --no-build-cache :app:assembleDebug
 
             - name: Perform CodeQL analysis
               uses: github/codeql-action/analyze@v4
