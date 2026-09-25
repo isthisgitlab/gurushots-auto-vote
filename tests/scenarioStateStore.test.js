@@ -43,6 +43,7 @@ describe('initialState', () => {
             inFlight: null,
             spent: { swaps: 0, keys: 0, fills: 0 },
             history: {},
+            outbox: [],
             lastAction: null,
             lastError: null,
         });
@@ -90,6 +91,7 @@ describe('createStateLedger', () => {
         ['bad inFlight', { ...initialState('Plan', 'a', 1), inFlight: { ruleId: 'r', actionIndex: 'x' } }],
         ['missing fired', { ...initialState('Plan', 'a', 1), fired: null }],
         ['bad history', { ...initialState('Plan', 'a', 1), history: [] }],
+        ['bad outbox', { ...initialState('Plan', 'a', 1), outbox: {} }],
     ])('a malformed record (%s) is corrupt without affecting others', (label, record) => {
         const store = rawStore(JSON.stringify({ 7: record, 8: { ...state(), updatedAt: Date.now() } }));
         const ledger = createStateLedger(store);

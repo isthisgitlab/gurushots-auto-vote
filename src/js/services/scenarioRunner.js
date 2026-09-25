@@ -272,10 +272,24 @@ const ACTIONS = {
     forget: async (action) => done({ forget: action.slot }),
 
     goto: async (action) => done({ goto: action.phase }),
+
+    notify: async (action) => done({ notice: action.message }),
+};
+
+/** Notices kept for the host notifiers: the newest, within a day. */
+const OUTBOX_LIMIT = 20;
+const OUTBOX_KEEP_SEC = 24 * 3600;
+
+/** State with a notice appended to its outbox (services/scenarioNotifications.js delivers it). */
+const withNotice = (state, message, at) => {
+    const kept = (state.outbox ?? []).filter((item) => at - item.at <= OUTBOX_KEEP_SEC);
+    const id = `${at}-${kept.length}-${Math.random().toString(36).slice(2, 8)}`;
+    return { ...state, outbox: [...kept, { id, at, message }].slice(-OUTBOX_LIMIT) };
 };
 
 /** State after one action's effects. */
-const applyEffects = (state, effects) => {
+const applyEffects = (before, effects, at) => {
+    const state = effects.notice ? withNotice(before, effects.notice, at) : before;
     const memory = { ...state.memory, ...effects.remember };
     if (effects.forget) delete memory[effects.forget];
     const spent = effects.spent
@@ -317,7 +331,7 @@ const runRule = async (fire, ctx, startState) => {
         committed = true;
         gotoPhase = result.goto ?? gotoPhase;
         state = {
-            ...applyEffects(state, result),
+            ...applyEffects(state, result, at),
             inFlight: { ruleId: rule.id, actionIndex: index + 1 },
             lastAction: { at, ruleId: rule.id, action: action.type, outcome: 'done' },
         };
@@ -413,7 +427,13 @@ const runScenarioStep = async (challenge, now, pass) => {
             });
             if (decision.halted) {
                 if (state.lastError?.message !== decision.halted) {
-                    state = { ...state, lastError: { at: nowSec(), message: decision.halted } };
+                    // A halt needs the user, so it is also a notice (once per distinct halt).
+                    const at = nowSec();
+                    state = withNotice(
+                        { ...state, lastError: { at, message: decision.halted } },
+                        `Halted: ${decision.halted}`,
+                        at,
+                    );
                     ctx.ledger.set(challengeId, state);
                 }
                 log().error(`${logger.challengeTag(challenge)} scenario halted: ${decision.halted}`, null);

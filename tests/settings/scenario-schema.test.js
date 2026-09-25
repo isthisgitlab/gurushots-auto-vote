@@ -96,6 +96,7 @@ describe('validateScenario — accepted documents', () => {
             { type: 'remember', slot: 'top', entry: { by: 'boosted' } },
             { type: 'forget', slot: 'top' },
             { type: 'goto', phase: 'main' },
+            { type: 'notify', message: 'Held photo is out' },
         ];
         const input = doc({
             phases: {
@@ -192,6 +193,19 @@ describe('validateScenario — shape errors carry readable paths', () => {
         ],
     ])('condition %p', (condition, path, message) => {
         expectIssue(withRule({ if: [condition] }), `phases.main.rules[0].${path}`, message);
+    });
+
+    test('a notify message is required and plain', () => {
+        expectIssue(
+            withRule({ do: [{ type: 'notify', message: '' }] }),
+            'phases.main.rules[0].do[0].message',
+            'Write the message',
+        );
+        expectIssue(
+            withRule({ do: [{ type: 'notify', message: 'a\u0007b' }] }),
+            'phases.main.rules[0].do[0].message',
+            'control',
+        );
     });
 
     test('labels and descriptions refuse control characters', () => {

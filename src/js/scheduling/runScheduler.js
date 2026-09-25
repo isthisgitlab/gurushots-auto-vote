@@ -28,7 +28,7 @@ const {
     resolveCurrencyAuto,
     resolveScenarioWake,
 } = require('./nodeResolvers');
-const { createNodeDeadlineNotifier } = require('../services/notify/nodeNotify');
+const { createNodeDeadlineNotifier, createNodeScenarioNotifier } = require('../services/notify/nodeNotify');
 
 /**
  * Create a continuous voting scheduler.
@@ -47,6 +47,7 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
     // guard across cycles). The chain fires it in its own isolated wrapper, so
     // it can never disturb the cadence.
     const notifyDeadlines = createNodeDeadlineNotifier();
+    const notifyScenarios = createNodeScenarioNotifier();
 
     const chain = createCadenceChain({
         isRunning: () => isRunning,
@@ -87,7 +88,9 @@ const createScheduler = ({ runVotingCycle, getActiveChallenges }) => {
         },
         // OS "action coming up" notifications (opt-in; no-op when all toggles
         // are off, which is the default).
-        onCycleChallenges: notifyDeadlines,
+        // Both notifiers are self-contained and never throw.
+        onCycleChallenges: (challenges, now) =>
+            Promise.all([notifyDeadlines(challenges, now), notifyScenarios(challenges)]),
     });
 
     const start = async () => {

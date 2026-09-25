@@ -200,6 +200,10 @@ const action = z.discriminatedUnion('type', [
     z.strictObject({ type: z.literal('remember'), slot: identifier, entry: selector }),
     z.strictObject({ type: z.literal('forget'), slot: identifier }),
     z.strictObject({ type: z.literal('goto'), phase: identifier }),
+    z.strictObject({
+        type: z.literal('notify'),
+        message: plainText(SCENARIO_CAPS.noticeLength).min(1, 'Write the message'),
+    }),
 ]);
 
 const rule = z.strictObject({

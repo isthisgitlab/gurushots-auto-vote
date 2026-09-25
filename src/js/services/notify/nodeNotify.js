@@ -30,6 +30,8 @@ const {
     readNotificationConfig,
 } = require('../deadlineNotifications');
 const { createTranslator } = require('../../translations/translator');
+const { createScenarioNotifier } = require('../scenarioNotifications');
+const { getScenarioStatus } = require('../scenarioStatus');
 
 const notifyTranslator = createTranslator();
 
@@ -138,8 +140,33 @@ const createNodeDeadlineNotifier = (deps = {}) => {
     };
 };
 
+/**
+ * The Node host's scenario notifier (services/scenarioNotifications.js): the
+ * notices scenarios left since this scheduler started, over the same OS
+ * delivery. Create ONE per scheduler.
+ *
+ * @param {Object} [deps] - injectable seams (defaults wire the real facade)
+ * @param {(key:string)=>*} [deps.getSetting]
+ * @param {(challengeId:string)=>{state: {outbox?: Array}|null}} [deps.getStatus]
+ * @param {(key:string)=>string} [deps.translate]
+ * @param {(n:{title:string, body:string})=>void} [deps.deliver]
+ * @returns {(challenges:Array)=>Promise<void>}
+ */
+const createNodeScenarioNotifier = (deps = {}) => {
+    const getSetting = deps.getSetting || ((key) => settings.getSetting(key));
+    const getStatus = deps.getStatus || getScenarioStatus;
+    return createScenarioNotifier({
+        isEnabled: () => getSetting('notifyOnScenario') !== false,
+        readOutbox: (challenge) => getStatus(String(challenge.id)).state?.outbox,
+        translate: deps.translate || nodeTranslate,
+        deliver: deps.deliver || deliverOsNotification,
+        log: (message) => logger.withCategory('scenario').debug(message, null),
+    });
+};
+
 module.exports = {
     createNodeDeadlineNotifier,
+    createNodeScenarioNotifier,
     deliverOsNotification,
     nodeTranslate,
     // exported for unit tests

@@ -12,6 +12,7 @@ import {
     resolveScenarioWake,
 } from './autovoteScheduler';
 import { createDeadlineNotifier, resolveRendererDelivery } from '../notifications/deadlineNotifier';
+import { createRendererScenarioNotifier } from '../notifications/scenarioNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
 import { rendererTranslator } from '../../translations/renderer';
 import * as ipc from '../api/ipc';
@@ -150,24 +151,32 @@ async function runRendererVotingCycle({ runningRef, dispatch, onChallengesRefres
 }
 
 /**
- * Build the per-cycle OS deadline-notifier for this platform: the notifier on
- * Electron, `null` on native Android, where the native foreground service is
- * authoritative — so the notifier is NOT wired there at all (that both avoids a
- * dual-loop double-fire and the per-cycle IPC that would only be discarded).
- * See deadlineNotifier.js header.
+ * Build the per-cycle OS notifier for this platform — deadline warnings plus
+ * scenario notices — on Electron; `null` on native Android, where the native
+ * foreground service is authoritative — so the notifier is NOT wired there at
+ * all (that both avoids a dual-loop double-fire and the per-cycle IPC that
+ * would only be discarded). See deadlineNotifier.js header.
  */
 function createRendererDeadlineNotifier() {
     const isNativePlatform = globalThis.Capacitor?.isNativePlatform?.() === true;
     const deliver = resolveRendererDelivery(isNativePlatform);
-    return deliver
-        ? createDeadlineNotifier({
-              getSettings: () => ipc.getSettings(),
-              getDeadlineActions: (challenge) => ipc.getDeadlineActions(challenge),
-              translate: (key) => rendererTranslator.t(key),
-              deliver,
-              log: (msg) => ipc.logRendererDebug(msg),
-          })
-        : null;
+    if (!deliver) return null;
+    const shared = {
+        getSettings: () => ipc.getSettings(),
+        translate: (key) => rendererTranslator.t(key),
+        deliver,
+        log: (msg) => ipc.logRendererDebug(msg),
+    };
+    const deadlines = createDeadlineNotifier({
+        ...shared,
+        getDeadlineActions: (challenge) => ipc.getDeadlineActions(challenge),
+    });
+    const scenarios = createRendererScenarioNotifier({
+        ...shared,
+        getScenarioStatus: (challengeId) => ipc.getScenarioStatus(challengeId),
+    });
+    // Both are self-contained and never throw.
+    return (challenges, now) => Promise.all([deadlines(challenges, now), scenarios(challenges)]);
 }
 
 /**

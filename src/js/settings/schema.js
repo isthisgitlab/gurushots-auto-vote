@@ -1479,6 +1479,18 @@ const SETTINGS_SCHEMA = {
     // decision + delivery live in services/deadlineNotifications.js + the
     // per-host notify adapters. Only the enabled types are ever evaluated, so
     // an all-off config (the default) costs nothing per cycle.
+    // Scenario notices (a scenario's `notify` action, and a halted scenario)
+    // are asked for explicitly by the user's own plan, so this is on by default.
+    notifyOnScenario: {
+        type: 'boolean',
+        default: true,
+        perChallenge: false,
+        validation: zBool,
+        validationOrder: 1,
+        group: 'notifications',
+        label: 'app.notifyOnScenario',
+        description: 'app.notifyOnScenarioDesc',
+    },
     notifyOnBoost: {
         type: 'boolean',
         default: false,

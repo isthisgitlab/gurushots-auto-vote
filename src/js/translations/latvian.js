@@ -325,6 +325,11 @@ module.exports = {
         scenarioStatusNotStarted: 'sāksies fāzē {phase} nākamajā palaišanā',
         scenarioStatusNext: 'nākamā pārbaude pēc {time}',
         scenarioStatusProblem: 'Pēdējais solis izlaists: {message}',
+        notifyOnScenario: 'Paziņojumi no scenārijiem',
+        notifyOnScenarioDesc:
+            'Rādīt ziņas, ko sūta tavu scenāriju paziņojuma soļi, un brīdinājumu, kad scenārijs apstājas, jo vajag tevi.',
+        scenarioNotifyTitle: 'Scenārijs — {title}',
+        scenarioNotifyGroupTitle: 'Scenāriji — {count} jaunumi',
         // Automātiskās pievienošanās iestatījumi
         groupAutoJoin: 'Automātiskā pievienošanās',
         autoJoin: 'Automātiski pievienoties izaicinājumiem',

@@ -14,7 +14,8 @@ jest.mock('../../src/js/settings', () => ({
 }));
 
 jest.mock('../../src/js/services/notify/nodeNotify', () => ({
-    createNodeDeadlineNotifier: jest.fn(() => jest.fn()),
+    createNodeDeadlineNotifier: jest.fn(() => jest.fn(async () => {})),
+    createNodeScenarioNotifier: jest.fn(() => jest.fn(async () => {})),
 }));
 
 let mockChainOpts;
@@ -135,5 +136,18 @@ describe('lifecycle', () => {
         expect(mockChainOpts.getTimer()).toBeNull();
         jest.advanceTimersByTime(2000);
         expect(fired).not.toHaveBeenCalled();
+    });
+});
+
+describe('notifications', () => {
+    test('each cycle feeds both the deadline and the scenario notifier', async () => {
+        const nodeNotify = require('../../src/js/services/notify/nodeNotify');
+        const { createScheduler } = require('../../src/js/scheduling/runScheduler');
+        createScheduler({ runVotingCycle: jest.fn(), getActiveChallenges: jest.fn() });
+        const deadlines = nodeNotify.createNodeDeadlineNotifier.mock.results.at(-1).value;
+        const scenarios = nodeNotify.createNodeScenarioNotifier.mock.results.at(-1).value;
+        await mockChainOpts.onCycleChallenges([{ id: 1 }], 1000);
+        expect(deadlines).toHaveBeenCalledWith([{ id: 1 }], 1000);
+        expect(scenarios).toHaveBeenCalledWith([{ id: 1 }]);
     });
 });

@@ -455,6 +455,31 @@ describe('actions', () => {
             expect(state().memory).toEqual({ top: 'a' });
         });
 
+        test('notify leaves a notice in the outbox, keeping the newest within a day', async () => {
+            setup(single([{ type: 'notify', message: 'Held photo is out' }]));
+            const old = Array.from({ length: 25 }, (_, i) => ({
+                id: `o${i}`,
+                at: NOW - (i < 5 ? 2 * 86400 : 60),
+                message: 'x',
+            }));
+            ledger.set(7, { ...initialState('Plan', 'main', NOW), outbox: old });
+            await run();
+            const { outbox } = state();
+            expect(outbox).toHaveLength(20);
+            expect(outbox.at(-1)).toEqual(
+                expect.objectContaining({ message: 'Held photo is out', at: expect.any(Number) }),
+            );
+        });
+
+        test('a state from before the outbox existed still takes a notice', async () => {
+            setup(single([{ type: 'notify', message: 'hi' }]));
+            const legacy = initialState('Plan', 'main', NOW);
+            delete legacy.outbox;
+            ledger.set(7, legacy);
+            await run();
+            expect(state().outbox).toHaveLength(1);
+        });
+
         test('remember with no matching entry is skipped', async () => {
             setup(single([{ type: 'remember', slot: 'top', entry: { by: 'boosted' } }]));
             await run();
@@ -585,6 +610,7 @@ describe('rule execution', () => {
         await run();
         const first = state().lastError;
         expect(first.message).toContain('no longer exists');
+        expect(state().outbox).toEqual([expect.objectContaining({ message: expect.stringContaining('Halted:') })]);
         await run();
         expect(state().lastError).toEqual(first);
     });

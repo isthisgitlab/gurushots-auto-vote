@@ -325,6 +325,11 @@ module.exports = {
         scenarioStatusNotStarted: 'starts in phase {phase} on the next run',
         scenarioStatusNext: 'next check in {time}',
         scenarioStatusProblem: 'Last step skipped: {message}',
+        notifyOnScenario: 'Notify from scenarios',
+        notifyOnScenarioDesc:
+            "Show the messages your scenarios' notify steps send, and a warning when a scenario stops because it needs you.",
+        scenarioNotifyTitle: 'Scenario — {title}',
+        scenarioNotifyGroupTitle: 'Scenarios — {count} updates',
         // Auto-Join settings
         groupAutoJoin: 'Auto Join',
         autoJoin: 'Auto-Join Challenges',

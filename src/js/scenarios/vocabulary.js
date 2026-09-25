@@ -47,6 +47,7 @@ const SCENARIO_CAPS = {
     actionsPerRule: 10,
     conditionDepth: 4,
     nameLength: 60,
+    noticeLength: 120,
     descriptionLength: 500,
     importBytes: 256 * 1024,
 };
@@ -91,6 +92,7 @@ const VOCABULARY_REFERENCE = [
     ['action', 'remember', 'slot: name, entry: selector'],
     ['action', 'forget', 'slot: name'],
     ['action', 'goto', 'phase: name'],
+    ['action', 'notify', 'message: text (max 120) — an OS notification on the desktop app and the CLI scheduler'],
     ['rule', 'repeat', `${REPEAT_MODES.join('|')} (default always = every pass the conditions hold)`],
     ['rule', 'op', COMPARISON_OPS.join(' ')],
     ['rule', 'duration', 'seconds or "5d", "90m", "1d 6h"'],
