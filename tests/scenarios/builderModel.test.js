@@ -85,6 +85,7 @@ describe('phases', () => {
         expect(model.newRule(withRule, 'main').id).toBe('main-3');
         expect(model.newRule(doc, 'later')).toEqual({
             id: 'later-2',
+            repeat: 'once',
             do: [{ type: 'notify', message: 'Check the challenge' }],
         });
     });

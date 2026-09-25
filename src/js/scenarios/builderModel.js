@@ -118,7 +118,9 @@ const removePhase = (doc, name) => {
 };
 
 /**
- * A new rule for `phase`, with an id unique across the scenario.
+ * A new rule for `phase`, with an id unique across the scenario. It starts as
+ * a once-only notification: a fresh rule has no conditions, so an `always`
+ * default would notify on every voting pass if saved unedited.
  *
  * @param {any} doc
  * @param {string} phase
@@ -127,7 +129,11 @@ const newRule = (doc, phase) => {
     const ids = Object.values(doc.phases).flatMap((/** @type {any} */ p) =>
         (p.rules ?? []).map((/** @type {any} */ r) => r.id),
     );
-    return { id: freeKey(`${phase}-`, ids), do: [{ type: 'notify', message: 'Check the challenge' }] };
+    return {
+        id: freeKey(`${phase}-`, ids),
+        repeat: 'once',
+        do: [{ type: 'notify', message: 'Check the challenge' }],
+    };
 };
 
 /** @param {unknown} value */
