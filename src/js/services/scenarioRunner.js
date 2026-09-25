@@ -7,12 +7,17 @@
  *
  * Contracts:
  *   - Before each action the challenge is re-read live and the action's entry
- *     re-resolved; an action whose target or precondition is gone is skipped
- *     (logged), never forced.
+ *     re-resolved; an action whose target or precondition is gone is SKIPPED
+ *     (logged, shown as the last problem), never forced.
  *   - Once an action of a rule has gone through, the rule is committed: its
- *     progress is persisted after every action, so a crash or a later failure
- *     resumes at the next action and never repeats a spend that landed.
- *     A rule whose FIRST action does not go through is simply not fired.
+ *     progress is persisted after every action, so a crash never repeats a
+ *     spend that landed. After that, a SKIPPED action is passed over and the
+ *     rule carries on (a permanent skip — the boost already used, the photo
+ *     already entered — must not freeze the plan before its `goto`), while a
+ *     FAILED or deferred action (the server refused, the spend lock was busy
+ *     — worth retrying) resumes at that action next pass.
+ *     A rule whose first action does not go through is simply not fired, so a
+ *     skip never uses up a `once` rule.
  *   - No spend cap: each rule fires at most once per pass (a condition the
  *     action cannot change in-pass would otherwise re-fire it), and a `goto`
  *     chain stops when it comes back to a phase already visited this pass.
@@ -29,6 +34,7 @@ const nativeAutovote = require('./NativeAutovoteBridge');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 const currencyActions = require('./currencyActions');
 const { reserveAllows, lockedSpend } = require('./currencyAuto');
+const { CURRENCY_OUTCOME } = require('../voting/currencyActions');
 const {
     submitNewEntryForAction,
     reflectNewEntry,
@@ -101,12 +107,21 @@ const spendAllowed = async (actionType, ctx, state) => {
         : `the ${spend.limit} reserve would be crossed`;
 };
 
+/** Spend outcomes worth retrying; every other refusal (no balance, no alternative photo, the entry moved on) is a skip. */
+const TRANSIENT_OUTCOMES = new Set([
+    CURRENCY_OUTCOME.apiFailed,
+    CURRENCY_OUTCOME.balanceUnknown,
+    CURRENCY_OUTCOME.busy,
+]);
+
 /** Runs a currency spend under the shared lock; `deferred` when another spend holds it. */
 const lockedCurrencySpend = async (actionType, ctx, spend) => {
     const result = await lockedSpend(SPEND[actionType].action, ctx.challenge, spend, LABEL);
     if (result === null) return { status: 'deferred', message: 'another spend is in progress' };
     // Every spend resolves {ok, outcome}; null is reserved for a busy lock.
-    return result.ok ? null : failed(`${actionType} was refused (${result.outcome ?? 'no response'})`);
+    if (result.ok) return null;
+    const message = `${actionType} was refused (${result.outcome ?? 'no response'})`;
+    return result.outcome === undefined || TRANSIENT_OUTCOMES.has(result.outcome) ? failed(message) : skipped(message);
 };
 
 const currencyDeps = (ctx) => ({ strategy: ctx.pass.currency.strategy, logger, settings });
@@ -118,13 +133,14 @@ const ACTIONS = {
     enterPhoto: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
         const photoId = rememberedPhoto(action.photo, state);
-        if (photoId === undefined) return failed(`memory slot "${action.photo.memory}" is empty`);
+        if (photoId === undefined) return skipped(`memory slot "${action.photo.memory}" is empty`);
         let enteredId = photoId;
         if (photoId === null) {
             // The fill path re-reads the challenge live and checks the free slots itself.
             const filled = await submitNewEntryForAction(challenge, pass.token, pass.fillDeps);
             if (filled.reason === 'no-slots') return skipped('no free entry slot');
             if (filled.reason === 'challenge-gone') return skipped('the challenge is no longer active');
+            if (filled.reason === 'no-eligible') return skipped('no eligible photo to enter');
             if (!filled.ok) return failed(`no photo was entered (${filled.reason})`);
             enteredId = String(filled.imageId);
         } else {
@@ -143,7 +159,7 @@ const ACTIONS = {
     swap: async (action, ctx, state) => {
         const { challenge, pass } = ctx;
         const newPhoto = rememberedPhoto(action.with, state);
-        if (newPhoto === undefined) return failed(`memory slot "${action.with.memory}" is empty`);
+        if (newPhoto === undefined) return skipped(`memory slot "${action.with.memory}" is empty`);
         if (!(await refreshLive(ctx))) return skipped('the challenge is no longer active');
         const target = selectEntry(action.entry, challenge, state.memory);
         if (!target) return skipped('no entry matches the swap target');
@@ -266,7 +282,7 @@ const applyEffects = (state, effects) => {
 
 /**
  * Execute one rule from `startIndex`. Returns the new state and whether the
- * rule finished (all actions went through).
+ * rule finished (its actions all went through or were passed over).
  */
 const runRule = async (fire, ctx, startState) => {
     const { rule, startIndex } = fire;
@@ -274,6 +290,7 @@ const runRule = async (fire, ctx, startState) => {
     let state = startState;
     let committed = startIndex > 0;
     let gotoPhase = null;
+    let skippedStep = null;
     for (let index = startIndex; index < rule.do.length; index++) {
         const action = rule.do[index];
         const result = await ACTIONS[action.type](action, ctx, state);
@@ -281,6 +298,13 @@ const runRule = async (fire, ctx, startState) => {
         if (result.status !== 'done') {
             const message = `${rule.label ?? rule.id} → ${action.type}: ${result.message}`;
             log().warning(`${tag} scenario "${ctx.scenario.name}": ${message}`, null);
+            if (result.status === 'skipped' && committed) {
+                // Committed rules pass over a skipped step and carry on.
+                skippedStep = { at, message };
+                state = { ...state, lastError: skippedStep, inFlight: { ruleId: rule.id, actionIndex: index + 1 } };
+                ctx.ledger.set(ctx.challengeId, state);
+                continue;
+            }
             state = { ...state, inFlight: committed ? { ruleId: rule.id, actionIndex: index } : null };
             if (result.status !== 'deferred') state.lastError = { at, message };
             ctx.ledger.set(ctx.challengeId, state);
@@ -300,7 +324,8 @@ const runRule = async (fire, ctx, startState) => {
     state = {
         ...state,
         inFlight: null,
-        lastError: null,
+        // A step passed over in this firing stays visible as the last problem.
+        lastError: skippedStep,
         fired: { ...state.fired, [rule.id]: firedRecord(startState, at, ctx.timezone) },
     };
     // A phase change takes effect when the rule finishes, so an interrupted

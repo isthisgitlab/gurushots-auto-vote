@@ -183,7 +183,8 @@ describe('actions', () => {
         test.each([
             ['no-slots', 'no free entry slot'],
             ['challenge-gone', 'no longer active'],
-            ['no-eligible', 'no photo was entered (no-eligible)'],
+            ['no-eligible', 'no eligible photo to enter'],
+            ['fetch-error', 'no photo was entered (fetch-error)'],
         ])('best: %s', async (reason, message) => {
             autoFill.submitNewEntryForAction.mockResolvedValue({ ok: false, imageId: null, reason });
             setup(single([{ type: 'enterPhoto', photo: 'best' }]));
@@ -491,6 +492,64 @@ describe('rule execution', () => {
         await run();
         expect(currencyActions.fillExposure).toHaveBeenCalledTimes(1);
         expect(state()).toEqual(expect.objectContaining({ inFlight: null, lastError: null }));
+    });
+
+    test('a committed rule passes over a permanently skipped step and still reaches its goto', async () => {
+        currencyActions.swapEntry.mockResolvedValue({ ok: true, outcome: 'ok' });
+        setup(
+            plan({
+                holding: {
+                    rules: [
+                        rule('comeback', [
+                            { type: 'swap', entry: { by: 'fewestVotes' }, with: { memory: 'held' } },
+                            { type: 'boost', entry: { by: 'memory', slot: 'held' } },
+                            { type: 'goto', phase: 'pulse' },
+                        ]),
+                    ],
+                },
+                pulse: {},
+            }),
+        );
+        ledger.set(7, { ...initialState('Plan', 'holding', NOW), memory: { held: 'orig' } });
+        const c = challenge();
+        c.member.boost.state = 'USED';
+        await run(c);
+        expect(state()).toEqual(
+            expect.objectContaining({
+                phase: 'pulse',
+                inFlight: null,
+                lastError: expect.objectContaining({
+                    message: expect.stringContaining('the boost is not available (USED)'),
+                }),
+            }),
+        );
+        expect(state().fired.comeback).toBeDefined();
+        expect(state().spent.swaps).toBe(1);
+    });
+
+    test('a permanent spend refusal is passed over; a transient one resumes at that step', async () => {
+        currencyActions.unlockBoostWithKey.mockResolvedValue({ ok: true });
+        currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'no-balance' });
+        setup(single([{ type: 'unlockBoost' }, { type: 'fillExposure' }, { type: 'goto', phase: 'main' }]));
+        await run();
+        expect(state()).toEqual(expect.objectContaining({ inFlight: null }));
+        expect(state().lastError.message).toContain('fillExposure was refused (no-balance)');
+
+        ledger.remove(7);
+        currencyActions.fillExposure.mockResolvedValueOnce({ ok: false, outcome: 'balance-unknown' });
+        await run();
+        expect(state().inFlight).toEqual({ ruleId: 'r1', actionIndex: 1 });
+    });
+
+    test('a skip before anything landed does not use up a once rule', async () => {
+        setup(single([{ type: 'boost', entry: { by: 'bestRank' } }], { repeat: 'once' }));
+        const c = challenge();
+        c.member.boost.state = 'LOCKED';
+        await run(c);
+        expect(state().fired).toEqual({});
+        await run();
+        expect(pass.api.applyBoostToEntry).toHaveBeenCalledTimes(1);
+        expect(state().fired.r1).toBeDefined();
     });
 
     test('an always rule fires once per pass even when its conditions still hold', async () => {

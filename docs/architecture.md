@@ -531,8 +531,11 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editab
 - **Runner contract** (`services/scenarioRunner.js`, first step of `processChallenge`, never throws): the
   challenge is re-read live and the action's entry re-resolved before every action; a gone target skips the
   action. Once one action of a rule lands the rule is **committed** and its progress persisted after every
-  action, so a crash or failure resumes at the next action and never repeats a spend; a rule whose first
-  action fails simply did not fire. A `goto` takes effect when the rule finishes. No spend cap: each rule
+  action, so a crash never repeats a spend that landed. A committed rule then passes over a **skipped** step
+  (target/precondition gone — a permanent state such as the boost already used) and carries on, keeping it as
+  the last problem, while a **failed** or deferred step (a transient refusal: API failure, unreadable balance,
+  busy lock) resumes at that step next pass. A rule whose first action does not go through simply did not
+  fire, so a skip never uses up a `once` rule. A `goto` takes effect when the rule finishes. No spend cap: each rule
   fires at most once per pass and a `goto` chain stops on revisiting a phase in that pass; spends honour the
   user's `currencyReserve*` (shared `reserveAllows`) and the scenario's optional `limits`.
 - **Surfaces**: IPC `ipc/scenarios.handlers.js` (the CLI reuses it), CLI `cli/commands/scenarios.js`,
