@@ -361,6 +361,24 @@ describe('createCadenceChain', () => {
         );
     });
 
+    test('scenario mode caps to the scenario wake and logs the scenario branch', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const scenario = {
+            name: 'Plan',
+            start: 'main',
+            phases: { main: { rules: [{ id: 'r', if: [{ type: 'inPhaseFor', min: '2m' }], do: [] }] } },
+        };
+        const deps = makeDeps({ resolveScenarioWake: jest.fn(() => ({ scenario, state: null, timezone: 'UTC' })) });
+        const chain = createCadenceChain(deps);
+        await chain.scheduleNext([
+            { id: 6, title: 'Plan Later', type: 'regular', start_time: now - 60, close_time: now + 7200 },
+        ]);
+        expect(deps.log.cadence).toHaveBeenCalledWith(
+            'scenario',
+            expect.stringContaining('scenario step for "Plan Later" (phase main)'),
+        );
+    });
+
     test('pre-boost mode caps to the fill boundary and logs the pre-boost branch', async () => {
         const deps = makeDeps({
             resolveBoostPrefill: jest.fn(() => ({

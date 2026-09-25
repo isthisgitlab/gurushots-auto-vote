@@ -25,6 +25,7 @@
 const { soonestScheduledStart, eligibleChallenges } = require('./scheduledFill');
 const { boostApplyThreshold } = require('../voting/boostWindow');
 const { ruleOpensAt } = require('../voting/currencyAuto');
+const { nextWakeAt } = require('../scenarios/nextWake');
 
 /**
  * Resolve each challenge's per-challenge config in parallel, fail-soft: a
@@ -253,6 +254,47 @@ async function soonestCurrencyRuleStart(challenges, now, resolveCurrencyAuto) {
 }
 
 /**
+ * @typedef {(challengeId: string) => ({scenario: any, state: any|null, timezone: string}|null|Promise<{scenario: any, state: any|null, timezone: string}|null>)} ResolveScenarioWake
+ *   The challenge's assigned scenario and its runtime state (null state = the
+ *   plan has not started yet), or null when no scenario can run for it.
+ */
+
+/**
+ * Soonest instant after `now` at which a user-defined scenario's time
+ * condition can flip (scenarios/nextWake.js), across every still-open
+ * challenge — flash included, a scenario may be assigned to any challenge.
+ * A challenge whose plan has not started yet is judged from its start phase.
+ * Fail-soft: a challenge whose resolver throws is skipped.
+ *
+ * @param {Array} challenges
+ * @param {number} now - Unix timestamp (seconds)
+ * @param {ResolveScenarioWake} resolveScenarioWake
+ * @returns {Promise<{challengeId, challengeTitle, startTime:number, phase:string}|null>}
+ */
+async function soonestScenarioWake(challenges, now, resolveScenarioWake) {
+    const open = (Array.isArray(challenges) ? challenges : []).filter((c) => Number(c?.close_time) > now);
+    const inputs = await resolveConfigsFailSoft(open, resolveScenarioWake);
+
+    let best = null;
+    for (let i = 0; i < open.length; i++) {
+        const input = inputs[i];
+        if (!input) continue;
+        const state = input.state ?? { phase: input.scenario.start, phaseEnteredAt: now, fired: {}, memory: {} };
+        const startTime = nextWakeAt({
+            scenario: input.scenario,
+            state,
+            challenge: open[i],
+            now,
+            timezone: input.timezone,
+        });
+        if (startTime !== null && isSoonerUpcomingStart(startTime, now, best)) {
+            best = { challengeId: open[i].id, challengeTitle: challengeLabel(open[i]), startTime, phase: state.phase };
+        }
+    }
+    return best;
+}
+
+/**
  * Resolve each eligible challenge's per-challenge threshold ONCE. Every
  * threshold question (in-window? next entry? next delay?) is then answered from
  * this single resolved snapshot — important because on the WebView each
@@ -385,7 +427,8 @@ const capCadenceToBoundary = (cadence, boundarySec, now, minGapMs, mode) => {
  * @param {ResolveFinalWindowTopUp|null} [opts.resolveFinalWindowTopUp] - per-challenge pre-final-window top-up config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming top-up window start
  * @param {ResolveBoostPrefill|null} [opts.resolveBoostPrefill] - per-challenge pre-boost fill config resolver (sync or async); when passed, the delay is also capped to the soonest upcoming pre-boost window start
  * @param {ResolveCurrencyAuto|null} [opts.resolveCurrencyAuto] - per-challenge currency-automation timing resolver (sync or async); when passed, the delay is also capped to the soonest upcoming key / swap / fill rule opening
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null), nextCurrencyRule:(object|null)}>}
+ * @param {ResolveScenarioWake|null} [opts.resolveScenarioWake] - per-challenge scenario resolver (sync or async); when passed, the delay is also capped to the soonest instant a scenario time condition can flip
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'scenario'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null), nextCurrencyRule:(object|null), nextScenarioWake:(object|null)}>}
  */
 async function computeNextCycleDelayMs(
     challenges,
@@ -400,6 +443,7 @@ async function computeNextCycleDelayMs(
         resolveFinalWindowTopUp = null,
         resolveBoostPrefill = null,
         resolveCurrencyAuto = null,
+        resolveScenarioWake = null,
     },
 ) {
     const { eligible, thresholds } = await resolveEligibleThresholds(challenges, now, resolveThreshold);
@@ -413,6 +457,7 @@ async function computeNextCycleDelayMs(
             nextFinalWindowTopUp: null,
             nextBoostPrefill: null,
             nextCurrencyRule: null,
+            nextScenarioWake: null,
         };
     }
 
@@ -448,6 +493,12 @@ async function computeNextCycleDelayMs(
         : null;
     if (nextCurrencyRule) capTo(nextCurrencyRule.startTime, 'currency-rule');
 
+    // Scenario boundaries likewise consider every still-open challenge.
+    const nextScenarioWake = resolveScenarioWake
+        ? await soonestScenarioWake(challenges, now, resolveScenarioWake)
+        : null;
+    if (nextScenarioWake) capTo(nextScenarioWake.startTime, 'scenario');
+
     return {
         delayMs: cadence.delayMs,
         mode: cadence.mode,
@@ -456,6 +507,7 @@ async function computeNextCycleDelayMs(
         nextFinalWindowTopUp,
         nextBoostPrefill,
         nextCurrencyRule,
+        nextScenarioWake,
     };
 }
 
@@ -466,4 +518,5 @@ module.exports = {
     soonestFinalWindowTopUpStart,
     soonestBoostPrefillStart,
     soonestCurrencyRuleStart,
+    soonestScenarioWake,
 };

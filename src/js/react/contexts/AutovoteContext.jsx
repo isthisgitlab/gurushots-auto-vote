@@ -9,6 +9,7 @@ import {
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
     resolveCurrencyAuto,
+    resolveScenarioWake,
 } from './autovoteScheduler';
 import { createDeadlineNotifier, resolveRendererDelivery } from '../notifications/deadlineNotifier';
 import { useLatestRef } from '../hooks/useLatestRef';
@@ -199,6 +200,7 @@ function createRendererCadenceChain({ runningRef, cycleTimerRef, runVotingCycle,
         resolveFinalWindowTopUp,
         resolveBoostPrefill,
         resolveCurrencyAuto,
+        resolveScenarioWake,
         runCycle: () => runVotingCycle(),
         log: {
             // Best-effort parity log (the logRenderer* helpers tolerate a

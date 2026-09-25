@@ -91,6 +91,16 @@ export const resolveCurrencyAuto = async (challengeId) => {
     return { key, swap, fill };
 };
 
+// WebView resolver for the scenario boundary — the async-IPC twin of
+// nodeResolvers.resolveScenarioWake: the challenge's scenario and runtime
+// state, or null when no scenario can run for it.
+export const resolveScenarioWake = async (challengeId) => {
+    const status = await ipc.getScenarioStatus(challengeId);
+    return status?.success && status.scenario && !status.corrupt
+        ? { scenario: status.scenario, state: status.state, timezone: status.timezone }
+        : null;
+};
+
 /**
  * Delay (ms) until the next voting cycle, using the shared decision: fast fixed
  * cadence while in-window, otherwise the rolled random delay capped to the
@@ -100,7 +110,7 @@ export const resolveCurrencyAuto = async (challengeId) => {
  * @param {Array} challenges
  * @param {number} now - Unix timestamp (seconds)
  * @param {{normalDelayMs:number, lastMinuteCheckMinutes:number, minGapMs:number, timezone?:(string|null)}} opts
- * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null), nextCurrencyRule:(object|null)}>}
+ * @returns {Promise<{delayMs:number, mode:'last-minute'|'approaching'|'scheduled'|'pre-final-window'|'pre-boost'|'currency-rule'|'scenario'|'normal', nextEntry:(object|null), nextScheduled:(object|null), nextFinalWindowTopUp:(object|null), nextBoostPrefill:(object|null), nextCurrencyRule:(object|null), nextScenarioWake:(object|null)}>}
  */
 export async function computeNextCycleDelayMs(
     challenges,
@@ -117,5 +127,6 @@ export async function computeNextCycleDelayMs(
         resolveFinalWindowTopUp,
         resolveBoostPrefill,
         resolveCurrencyAuto,
+        resolveScenarioWake,
     });
 }

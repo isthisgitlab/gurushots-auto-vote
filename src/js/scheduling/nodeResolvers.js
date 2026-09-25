@@ -8,6 +8,7 @@
  */
 
 const settings = require('../settings');
+const { getScenarioStatus, scenarioWakeInput } = require('../services/scenarioStatus');
 
 // Per-challenge lastMinuteThreshold for the shared threshold math.
 const resolveThreshold = (challengeId) => settings.getEffectiveSetting('lastMinuteThreshold', challengeId);
@@ -74,7 +75,12 @@ const resolveCurrencyAuto = (challengeId) => ({
     fill: currencyTimingOf('autoExposureFill', 'autoExposureFill', challengeId),
 });
 
+// Per-challenge scenario and runtime state for the scenario boundary
+// (./thresholdWindow.js computes the instant with the engine's own nextWakeAt).
+const resolveScenarioWake = (challengeId) => scenarioWakeInput(getScenarioStatus(challengeId));
+
 module.exports = {
+    resolveScenarioWake,
     resolveThreshold,
     resolveScheduledFill,
     resolveFinalWindowTopUp,

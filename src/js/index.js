@@ -13,6 +13,7 @@ const votingIpc = require('./ipc/voting.handlers');
 const actionsIpc = require('./ipc/actions.handlers');
 const computationsIpc = require('./ipc/computations.handlers');
 const currencyIpc = require('./ipc/currency.handlers');
+const scenariosIpc = require('./ipc/scenarios.handlers');
 const { isTrustedSender } = require('./ipc/registerHandlers');
 const { ensureExit, focusExistingWindow, clearTokenOnQuit } = require('./windows/lifecycle');
 const { watchSettingsFile } = require('./windows/settingsWatcher');
@@ -80,6 +81,7 @@ votingIpc.register(ipcMain);
 actionsIpc.register(ipcMain);
 computationsIpc.register(ipcMain);
 currencyIpc.register(ipcMain);
+scenariosIpc.register(ipcMain);
 
 // Hold a quit or main-window close that would forfeit an open boost window
 // and ask first; `proceed` re-issues it once confirmed. See windows/quitGuard.js.

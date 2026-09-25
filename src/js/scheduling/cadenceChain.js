@@ -138,6 +138,8 @@ const describeBoundaryCadence = (decision, waitMs) => {
             return `⏰ Approaching pre-boost fill for "${decision.nextBoostPrefill?.challengeTitle}" — ${inSeconds} (capped to the ${decision.nextBoostPrefill?.leadMin}m pre-boost boundary)`;
         case 'currency-rule':
             return `⏰ Approaching automatic ${decision.nextCurrencyRule?.action} rule for "${decision.nextCurrencyRule?.challengeTitle}" — ${inSeconds}`;
+        case 'scenario':
+            return `⏰ Approaching a scenario step for "${decision.nextScenarioWake?.challengeTitle}" (phase ${decision.nextScenarioWake?.phase}) — ${inSeconds}`;
         case 'pre-final-window':
             return `⏰ Approaching pre-final-window top-up for "${decision.nextFinalWindowTopUp?.challengeTitle}" — ${inSeconds} (capped to the ${decision.nextFinalWindowTopUp?.leadMin}m pre-final-window boundary)`;
         default:
@@ -189,6 +191,7 @@ const decideNextWait = async (deps, prefetched, previousCycleStartMs) => {
         resolveFinalWindowTopUp: deps.resolveFinalWindowTopUp,
         resolveBoostPrefill: deps.resolveBoostPrefill,
         resolveCurrencyAuto: deps.resolveCurrencyAuto,
+        resolveScenarioWake: deps.resolveScenarioWake,
     });
 
     if (decision.mode === 'normal') {
@@ -261,6 +264,8 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  *   per-challenge pre-boost fill resolver for the shared math
  * @param {import('./thresholdWindow').ResolveCurrencyAuto|null} [deps.resolveCurrencyAuto] -
  *   per-challenge currency-automation timing resolver for the shared math
+ * @param {import('./thresholdWindow').ResolveScenarioWake|null} [deps.resolveScenarioWake] -
+ *   per-challenge scenario resolver for the shared math
  * @param {()=>Promise<*>} deps.runCycle - run one voting cycle; the resolved
  *   value is handed to the next decision as the prefetched list candidate
  *   (any non-array means "fetch fresh"). A rejection is logged via
@@ -268,7 +273,8 @@ const decideNextWaitOrFallBack = async (deps, prefetched, previousCycleStartMs) 
  * @param {Object} deps.log - host log adapter
  * @param {(mode:string, message:string)=>(void|Promise<void>)} deps.log.cadence -
  *   receives every cadence decision line (modes: normal / last-minute /
- *   scheduled / pre-final-window / pre-boost / approaching); a host may drop
+ *   scheduled / pre-final-window / pre-boost / currency-rule / scenario /
+ *   approaching); a host may drop
  *   modes it never logged
  * @param {(error:*)=>(void|Promise<void>)} deps.log.decisionError - decision
  *   failure (chain falls back to the random cadence)
@@ -305,6 +311,7 @@ const createCadenceChain = ({
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
     resolveCurrencyAuto = null,
+    resolveScenarioWake = null,
     runCycle,
     log,
     onScheduled,
@@ -319,6 +326,7 @@ const createCadenceChain = ({
         resolveFinalWindowTopUp,
         resolveBoostPrefill,
         resolveCurrencyAuto,
+        resolveScenarioWake,
         log,
     };
 

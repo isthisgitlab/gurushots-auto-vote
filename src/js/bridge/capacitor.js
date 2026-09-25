@@ -30,6 +30,7 @@ const logHandlers = require('../ipc/log.handlers');
 const actionsHandlers = require('../ipc/actions.handlers');
 const computationsHandlers = require('../ipc/computations.handlers');
 const currencyHandlers = require('../ipc/currency.handlers');
+const scenariosHandlers = require('../ipc/scenarios.handlers');
 const { errorResult } = require('../ipc/errorResult');
 
 const settings = require('../settings');
@@ -187,6 +188,7 @@ const buildAllHandlers = () => {
         ...actionsHandlers.buildHandlers(),
         ...computationsHandlers.buildHandlers(),
         ...currencyHandlers.buildHandlers(),
+        ...scenariosHandlers.buildHandlers(),
         ...updateStubs,
     };
 };

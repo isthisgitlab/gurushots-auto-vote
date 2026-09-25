@@ -10,6 +10,7 @@ import {
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
     resolveCurrencyAuto,
+    resolveScenarioWake,
     computeNextCycleDelayMs,
 } from '@/contexts/autovoteScheduler';
 import { mockApi } from './helpers/setup';
@@ -83,6 +84,27 @@ describe('autovoteScheduler resolvers', () => {
             });
         },
     );
+
+    it('resolveScenarioWake: a known scenario with readable state, else null', async () => {
+        const scenario = { name: 'Plan', start: 'main', phases: { main: {} } };
+        mockApi.getScenarioStatus.mockResolvedValueOnce({
+            success: true,
+            scenario,
+            state: null,
+            corrupt: false,
+            timezone: 'UTC',
+        });
+        await expect(resolveScenarioWake('c1')).resolves.toEqual({ scenario, state: null, timezone: 'UTC' });
+        expect(mockApi.getScenarioStatus).toHaveBeenCalledWith('c1');
+        mockApi.getScenarioStatus.mockResolvedValueOnce({ success: true, scenario, state: null, corrupt: true });
+        await expect(resolveScenarioWake('c1')).resolves.toBeNull();
+        mockApi.getScenarioStatus.mockResolvedValueOnce({ success: true, scenario: null });
+        await expect(resolveScenarioWake('c1')).resolves.toBeNull();
+        mockApi.getScenarioStatus.mockResolvedValueOnce({ success: false });
+        await expect(resolveScenarioWake('c1')).resolves.toBeNull();
+        mockApi.getScenarioStatus.mockResolvedValueOnce(undefined);
+        await expect(resolveScenarioWake('c1')).resolves.toBeNull();
+    });
 
     it('resolveCurrencyAuto: an enabled rule passes its timing through; a disabled one is null', async () => {
         withSettings({

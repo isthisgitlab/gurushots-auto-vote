@@ -99,6 +99,8 @@ const invokeChannels = [
     'get-swap-backs',
     'swap-back-entry-photo',
     'fill-exposure',
+    // User-defined scenarios
+    'get-scenario-status',
     'reload-window',
     'refresh-menu',
     // AutoUpdater

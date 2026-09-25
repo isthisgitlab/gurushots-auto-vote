@@ -82,6 +82,9 @@ export const deleteChallengeProfile = forward('deleteChallengeProfile');
 export const getTitleRules = forward('getTitleRules');
 export const setTitleRules = forward('setTitleRules');
 
+// User-defined scenarios
+export const getScenarioStatus = forward('getScenarioStatus');
+
 // Challenges and voting
 export const getActiveChallenges = forward('getActiveChallenges');
 export const getDeadlineActions = forward('getDeadlineActions');

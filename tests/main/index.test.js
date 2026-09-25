@@ -99,7 +99,7 @@ jest.mock('../../src/js/services/AutoUpdater', () =>
     })),
 );
 jest.mock('../../src/js/services/auth', () => ({ clearAuthToken: jest.fn(() => Promise.resolve()) }));
-for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency']) {
+for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency', 'scenarios']) {
     jest.mock(`../../src/js/ipc/${mod}.handlers`, () => ({ register: jest.fn() }));
 }
 jest.mock('../../src/js/ipc/registerHandlers', () => ({ isTrustedSender: jest.fn(() => true) }));
@@ -191,7 +191,17 @@ describe('module bootstrap', () => {
         expect(global.translationManager).toBeUndefined();
         expect(m.app.commandLine.appendSwitch).toHaveBeenCalledWith('disable-features', 'ServiceWorker');
         expect(m.app.commandLine.appendSwitch).toHaveBeenCalledWith('use-mock-keychain');
-        for (const mod of ['log', 'update', 'misc', 'settings', 'voting', 'actions', 'computations', 'currency']) {
+        for (const mod of [
+            'log',
+            'update',
+            'misc',
+            'settings',
+            'voting',
+            'actions',
+            'computations',
+            'currency',
+            'scenarios',
+        ]) {
             expect(require(`../../src/js/ipc/${mod}.handlers`).register.mock.calls[0][0]).toBe(m.ipcMain);
         }
         expect(Object.keys(m.ipcMain.handlers)).toEqual(['login-success', 'logout']);

@@ -29,6 +29,7 @@ const {
     resolveFinalWindowTopUp,
     resolveBoostPrefill,
     resolveCurrencyAuto,
+    resolveScenarioWake,
 } = require('../scheduling/nodeResolvers');
 const { DEFAULT_TIMEZONE } = require('../settings/uiDefaults');
 
@@ -74,6 +75,7 @@ const computeNextDelayMs = async (token, prefetched = null) => {
             resolveFinalWindowTopUp,
             resolveBoostPrefill,
             resolveCurrencyAuto,
+            resolveScenarioWake,
         });
         // API still down (this tick's own fetch failed): cap the wait to a short
         // retry so recovery tracks reconnection, not the full normal cadence.
