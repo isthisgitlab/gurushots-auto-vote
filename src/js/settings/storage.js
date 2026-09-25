@@ -291,6 +291,23 @@ const createJsonStore = ({ fileName, prefKey }) => {
                 initialized = true;
             }
         },
+        /**
+         * Re-read the Capacitor preference into the cache — for a store the
+         * Android background service (a separate JS context) also writes.
+         * Waits for this context's own queued writes first, so none is lost.
+         * No-op off the Capacitor app WebView.
+         */
+        refreshAsync: async () => {
+            if (!runtime.isCapacitor() || runtime.isHeadlessService()) return;
+            await chain;
+            try {
+                const { value } = await getCapacitorPreferences().get({ key: prefKey });
+                cachedJson = value;
+                initialized = true;
+            } catch (err) {
+                logger.withCategory('settings').error(`Capacitor ${prefKey} refresh failed:`, err);
+            }
+        },
         /** Await to guarantee the write-behind queue has drained. */
         flushPendingWrites: () => chain,
         /** fs path (Electron/CLI) — for debug/info surfaces. */

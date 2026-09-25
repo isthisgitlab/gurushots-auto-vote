@@ -25,7 +25,9 @@
  * Same platform-aware transport as the other side stores; on Capacitor its
  * cache must be hydrated at boot (initializeScenarioStateAsync, Capacitor.jsx),
  * and the Android background service persists it through the native keyed
- * bridge (the `gs_scenario_state` key in AutoVoteService.kt).
+ * bridge (the `gs_scenario_state` key in AutoVoteService.kt). That service
+ * advances scenarios while the app is open too, so the app re-reads the store
+ * (refreshScenarioStateAsync) before it reads or resets scenario state.
  */
 
 const logger = require('./logger');
@@ -155,5 +157,6 @@ module.exports = {
     createMemoryStateLedger,
     initialState,
     initializeScenarioStateAsync: scenarioStateStore.initializeAsync,
+    refreshScenarioStateAsync: scenarioStateStore.refreshAsync,
     flushScenarioStateWrites: scenarioStateStore.flushPendingWrites,
 };

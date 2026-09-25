@@ -62,6 +62,22 @@ jest.mock('../../src/js/cli/commands/bankroll', () => ({ showBankroll: jest.fn()
 jest.mock('../../src/js/cli/commands/join', () => ({ showDiscover: jest.fn(), joinChallengeCmd: jest.fn() }));
 jest.mock('../../src/js/cli/commands/update', () => ({ checkUpdates: jest.fn() }));
 jest.mock('../../src/js/cli/commands/logs', () => ({ showLogs: jest.fn() }));
+jest.mock('../../src/js/cli/commands/scenarios', () =>
+    Object.fromEntries(
+        [
+            'listScenarios',
+            'scenarioTemplate',
+            'importScenarioCmd',
+            'exportScenarioCmd',
+            'renameScenarioCmd',
+            'deleteScenarioCmd',
+            'scenarioStatusCmd',
+            'scenarioResetCmd',
+            'scenarioDryRunCmd',
+            'scenarioVocabulary',
+        ].map((name) => [name, jest.fn(async () => 0)]),
+    ),
+);
 jest.mock('../../src/js/cli/commands/settings', () => ({
     getSetting: jest.fn(),
     setSetting: jest.fn(),
@@ -120,6 +136,7 @@ const run = async (argv, setup) => {
             update: require('../../src/js/cli/commands/update'),
             logs: require('../../src/js/cli/commands/logs'),
             cmd: require('../../src/js/cli/commands/settings'),
+            scenarios: require('../../src/js/cli/commands/scenarios'),
         };
         setup?.(m);
         require('../../src/js/cli/cli.js');
@@ -449,5 +466,52 @@ describe('logs', () => {
         const m = await run(['logs', ...tail]);
         expect(m.logs.showLogs).toHaveBeenCalledWith(opts);
         expect(m.exitCodes).toEqual([0]);
+    });
+});
+
+describe('scenario commands', () => {
+    test.each([
+        [['list-scenarios'], 'listScenarios', []],
+        [['scenario-template', 'eveningBoost'], 'scenarioTemplate', ['eveningBoost', undefined]],
+        [['scenario-template', 'eveningBoost', 'out.json'], 'scenarioTemplate', ['eveningBoost', 'out.json']],
+        [['import-scenario', 'plan.json'], 'importScenarioCmd', ['plan.json', { overwrite: false, yes: false }]],
+        [
+            ['import-scenario', 'plan.json', '--overwrite', '--yes'],
+            'importScenarioCmd',
+            ['plan.json', { overwrite: true, yes: true }],
+        ],
+        [['export-scenario', 'My plan'], 'exportScenarioCmd', ['My plan', undefined]],
+        [['export-scenario', 'My plan', 'out.json'], 'exportScenarioCmd', ['My plan', 'out.json']],
+        [['rename-scenario', 'Old', 'New'], 'renameScenarioCmd', ['Old', 'New']],
+        [['delete-scenario', 'My plan'], 'deleteScenarioCmd', ['My plan']],
+        [['scenario-status', '--challenge=7'], 'scenarioStatusCmd', ['7']],
+        [['scenario-dry-run', '--challenge=7'], 'scenarioDryRunCmd', ['7']],
+        [['scenario-reset', '--challenge=7'], 'scenarioResetCmd', ['7']],
+        [['scenario-vocabulary'], 'scenarioVocabulary', []],
+    ])('%p runs %s', async (argv, fn, args) => {
+        const m = await run(argv);
+        expect(m.scenarios[fn]).toHaveBeenCalledWith(...args);
+        expect(m.exitCodes).toEqual([0]);
+    });
+
+    test.each([
+        [['list-scenarios', 'extra']],
+        [['scenario-template']],
+        [['import-scenario']],
+        [['export-scenario', 'a', 'b', 'c']],
+        [['rename-scenario', 'only-one']],
+        [['delete-scenario']],
+        [['scenario-vocabulary', 'x']],
+    ])('%p is a usage error', async (argv) => {
+        const m = await run(argv);
+        expect(m.msgs('error')).toContain('Wrong arguments');
+        expect(m.exitCodes).toEqual([1]);
+    });
+
+    test('a failing command exits with its code', async () => {
+        const m = await run(['delete-scenario', 'Plan'], (mods) =>
+            mods.scenarios.deleteScenarioCmd.mockResolvedValue(1),
+        );
+        expect(m.exitCodes).toEqual([1]);
     });
 });

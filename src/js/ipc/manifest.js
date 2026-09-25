@@ -100,7 +100,16 @@ const invokeChannels = [
     'swap-back-entry-photo',
     'fill-exposure',
     // User-defined scenarios
+    'get-scenarios',
+    'save-scenario',
+    'rename-scenario',
+    'delete-scenario',
+    'preview-scenario-import',
+    'import-scenario',
+    'export-scenario',
     'get-scenario-status',
+    'reset-scenario-state',
+    'dry-run-scenario',
     'reload-window',
     'refresh-menu',
     // AutoUpdater

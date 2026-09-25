@@ -44,6 +44,25 @@ describe('pass-through wrappers', () => {
     });
 });
 
+describe('scenario wrappers', () => {
+    test.each([
+        ['getScenarios', []],
+        ['saveScenario', [{ name: 'Plan' }, { overwrite: false }]],
+        ['renameScenario', ['Old', 'New']],
+        ['deleteScenario', ['Plan']],
+        ['previewScenarioImport', ['{}']],
+        ['importScenario', ['{}', { overwrite: true }]],
+        ['exportScenario', ['Plan']],
+        ['getScenarioStatus', ['7']],
+        ['resetScenarioState', ['7']],
+        ['dryRunScenario', ['7']],
+    ])('%s forwards its arguments', async (method, args) => {
+        mockApi[method].mockResolvedValueOnce({ success: true });
+        await expect(ipc[method](...args)).resolves.toEqual({ success: true });
+        expect(mockApi[method]).toHaveBeenCalledWith(...args);
+    });
+});
+
 describe('onSettingsChanged', () => {
     test('subscribes and returns the unsubscribe handle', () => {
         const off = jest.fn();

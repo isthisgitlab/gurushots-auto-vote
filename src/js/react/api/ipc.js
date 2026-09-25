@@ -83,7 +83,16 @@ export const getTitleRules = forward('getTitleRules');
 export const setTitleRules = forward('setTitleRules');
 
 // User-defined scenarios
+export const getScenarios = forward('getScenarios');
+export const saveScenario = forward('saveScenario');
+export const renameScenario = forward('renameScenario');
+export const deleteScenario = forward('deleteScenario');
+export const previewScenarioImport = forward('previewScenarioImport');
+export const importScenario = forward('importScenario');
+export const exportScenario = forward('exportScenario');
 export const getScenarioStatus = forward('getScenarioStatus');
+export const resetScenarioState = forward('resetScenarioState');
+export const dryRunScenario = forward('dryRunScenario');
 
 // Challenges and voting
 export const getActiveChallenges = forward('getActiveChallenges');

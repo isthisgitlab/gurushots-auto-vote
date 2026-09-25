@@ -58,6 +58,7 @@ const {
     deleteProfile,
 } = require('./commands/settings');
 const { showLogs } = require('./commands/logs');
+const scenarioCommands = require('./commands/scenarios');
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -123,6 +124,17 @@ Commands:
   save-profile "<name>" --challenge=<id> - Save a challenge's overrides as a named profile
   apply-profile "<name>" --challenge=<id> - Replace a challenge's overrides with a profile
   delete-profile "<name>" - Delete a saved profile
+  list-scenarios - Show saved scenarios and the example templates
+  scenario-template <id> [file] - Print (or write) an example scenario to start from
+  import-scenario <file> [--overwrite] [--yes] - Check a scenario file and show what it does; --yes imports it
+  export-scenario "<name>" [file] - Print (or write) a scenario as JSON to share
+  rename-scenario "<old>" "<new>" - Rename a scenario; its assignments follow
+  delete-scenario "<name>" - Delete a scenario and clear its assignments
+  scenario-status --challenge=<id> - Where a challenge is in its scenario
+  scenario-dry-run --challenge=<id> - What the scenario would do right now (spends nothing)
+  scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts)
+  scenario-vocabulary - List every condition, selector and action a scenario can use
+             Assign one with: set-setting scenario "<name>" --challenge=<id> (or a challenge rule)
   help-settings - Show detailed settings help (includes profile details)
   logs [--error|--api|--settings|--lexicon] [--lines=<n>] - Show logs or the local lexicon report
   reset-windows  - Reset window positions to default
@@ -303,6 +315,20 @@ const runListProfiles = async (argv) => {
 };
 
 /**
+ * A scenario command taking positional arguments (quoted names, file paths)
+ * and flags: requires `count` positionals, then `run(positionals, flags)`.
+ */
+const scenarioCommand =
+    (usage, count, run, maxPositionals = count) =>
+    async (argv) => {
+        const positionals = argv.filter((arg) => !arg.startsWith('--'));
+        const flags = new Set(argv.filter((arg) => arg.startsWith('--')));
+        if (positionals.length < count || positionals.length > maxPositionals)
+            return usageError('Wrong arguments', usage);
+        return run(positionals, flags);
+    };
+
+/**
  * Command table: name → `(argv) => exitCode`, where argv is everything after
  * the command name. A handler resolving `undefined` leaves the process
  * running (continuous mode).
@@ -360,6 +386,40 @@ const COMMANDS = {
         challengeHint: 'Please specify --challenge=<id> to apply the profile to',
     }),
     'delete-profile': profileCommand('delete-profile', (name) => deleteProfile(name)),
+    'list-scenarios': scenarioCommand('Usage: list-scenarios', 0, () => scenarioCommands.listScenarios()),
+    'scenario-template': scenarioCommand(
+        'Usage: scenario-template <id> [file]',
+        1,
+        ([id, file]) => scenarioCommands.scenarioTemplate(id, file),
+        2,
+    ),
+    'import-scenario': scenarioCommand('Usage: import-scenario <file> [--overwrite] [--yes]', 1, ([file], flags) =>
+        scenarioCommands.importScenarioCmd(file, { overwrite: flags.has('--overwrite'), yes: flags.has('--yes') }),
+    ),
+    'export-scenario': scenarioCommand(
+        'Usage: export-scenario "<name>" [file]',
+        1,
+        ([name, file]) => scenarioCommands.exportScenarioCmd(name, file),
+        2,
+    ),
+    'rename-scenario': scenarioCommand('Usage: rename-scenario "<old>" "<new>"', 2, ([oldName, newName]) =>
+        scenarioCommands.renameScenarioCmd(oldName, newName),
+    ),
+    'delete-scenario': scenarioCommand('Usage: delete-scenario "<name>"', 1, ([name]) =>
+        scenarioCommands.deleteScenarioCmd(name),
+    ),
+    'scenario-status': challengeCommand('Usage: scenario-status --challenge=<id>', (id) =>
+        scenarioCommands.scenarioStatusCmd(id),
+    ),
+    'scenario-dry-run': challengeCommand('Usage: scenario-dry-run --challenge=<id>', (id) =>
+        scenarioCommands.scenarioDryRunCmd(id),
+    ),
+    'scenario-reset': challengeCommand('Usage: scenario-reset --challenge=<id>', (id) =>
+        scenarioCommands.scenarioResetCmd(id),
+    ),
+    'scenario-vocabulary': scenarioCommand('Usage: scenario-vocabulary', 0, () =>
+        scenarioCommands.scenarioVocabulary(),
+    ),
     logs: runLogs,
     'help-settings': exitsZero(helpSettings),
     'reset-windows': exitsZero(resetWindows),

@@ -26,7 +26,7 @@ const { keyUnlock, swapPhoto, exposureAutofill } = require('../../api/currency')
 const { cleanupStaleMetadata } = require('../../metadata');
 const { swapBackLedger } = require('../../swapBackStore');
 const { autoSpendLedger } = require('../../currencyAutoStore');
-const { scenarioStateLedger } = require('../../scenarioStateStore');
+const { scenarioStateLedger, refreshScenarioStateAsync } = require('../../scenarioStateStore');
 const { backgroundServiceOwnsScenarios } = require('../../services/scenarioRunner');
 const { sleep, getRandomDelay } = require('../../timing');
 const logger = require('../../logger');
@@ -196,6 +196,9 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
                 .warning(`claim pass errored (voting continues): ${error?.message || error}`, null);
         }
     }
+    // The Android background service advances scenarios in its own JS context;
+    // re-read its state so this pass's phase-settings overlay is current.
+    if (backgroundServiceOwnsScenarios()) await refreshScenarioStateAsync();
     return runVotingPass(token, challengeIdFilter, {
         api: {
             getActiveChallenges,

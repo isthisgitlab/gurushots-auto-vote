@@ -107,6 +107,32 @@ describe('createJsonStore', () => {
             expect(persisted).toEqual(['A', 'B']);
         });
 
+        test("refreshAsync re-reads Preferences after this context's queued writes drain", async () => {
+            let release;
+            mockPrefSet.mockImplementationOnce(
+                () =>
+                    new Promise((resolve) => {
+                        release = resolve;
+                    }),
+            );
+            store.writeRaw('{"mine":1}');
+            mockPrefGet.mockResolvedValue({ value: '{"background":2}' });
+            const refreshed = store.refreshAsync();
+            await Promise.resolve();
+            expect(mockPrefGet).not.toHaveBeenCalled();
+            release();
+            await refreshed;
+            expect(mockPrefGet).toHaveBeenCalledWith({ key: 'gurushots-metadata' });
+            expect(store.readRaw()).toBe('{"background":2}');
+        });
+
+        test('a failed refresh keeps the cache', async () => {
+            store.writeRaw('{"kept":1}');
+            mockPrefGet.mockRejectedValueOnce(new Error('bridge down'));
+            await expect(store.refreshAsync()).resolves.toBeUndefined();
+            expect(store.readRaw()).toBe('{"kept":1}');
+        });
+
         test('a failed Preferences write is absorbed and the cache keeps the latest value', async () => {
             mockPrefSet.mockRejectedValueOnce(new Error('quota'));
             store.writeRaw('{"y":2}');
@@ -129,6 +155,7 @@ describe('createJsonStore', () => {
             store.writeRaw('{"m":1}');
             expect(store.readRaw()).toBe('{"m":1}');
             await store.initializeAsync();
+            await store.refreshAsync();
             expect(mockPrefGet).not.toHaveBeenCalled();
             expect(mockPrefSet).not.toHaveBeenCalled();
             expect(fs.writeFileSync).not.toHaveBeenCalled();
