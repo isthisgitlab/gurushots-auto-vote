@@ -42,6 +42,8 @@ Ja saņemat rate-limit kļūdu: apturiet visas instances, pagaidiet 5–10 minū
 - **Konta atlikums** — parāda jūsu atslēgas / maiņas / uzpildes / monētas blakus taimerim grafiskajā lietotnē un ar `bankroll` (alias `coins`) CLI komandu.
 - **Iestatījumi katram izaicinājumam** — katram balsošanas iestatījumam ir globālais noklusējums, ko jebkurš izaicinājums var pārrakstīt.
 - **Izaicinājumu noteikumi** — noteikumi, kas atlasa izaicinājumus pēc nosaukuma, izaicinājuma taga, veida, bilžu skaita vai ilguma (tāpēc tie saglabājas, kad GuruShots katrā rotācijā maina izaicinājuma ID), jūsu izvēlētā secībā; katrs var piešķirt iestatījumu profilu, ieslēgt/izslēgt auto-pievienošanos / auto-iesniegšanu, iestatīt pievienošanās laiku un pievienot auto-iesniegšanas tagus.
+- **Scenāriji** — jūsu pašu vairāku dienu plāni izaicinājumam: fāzes ar saviem iestatījumiem un noteikumi, kas jūsu izvēlētos laikos un apstākļos iesniedz bildes, apmaina, pielieto Boost, spēlē Turbo, gaida vai paziņo jums. Veido vizuālā redaktorā (vai kā JSON), kopīgo kā failus un pirms jebkādiem tēriņiem pārbaudi ar "kas būtu, ja" simulāciju.
+- **Darbvirsmas paziņojumi** — pēc izvēles brīdinājumi dažas minūtes pirms Boost, Turbo vai auto-iesniegšanas, kā arī jūsu scenāriju sūtītie ziņojumi.
 - **Trīs platformas** — Electron grafiskā lietotne, `gurucli` komandrinda un Android lietotne, kas balso ar bloķētu telefonu.
 - **Noturīgs API slānis** — konfigurējama noildze plus automātiska atkārtošana/aizture pārejošu kļūmju gadījumā.
 - **Ērtības** — gaišā/tumšā tēma, angļu/latviešu saskarne, laika joslas attēlošana, mock režīms drošai testēšanai un iebūvēti atjauninājumu paziņojumi.
@@ -202,31 +204,42 @@ Android versija **nav pieejama Google Play** — instalācija notiek caur tiešu
 
 > **⚠️** Vienlaikus darbiniet tikai VIENU instanci (grafisko lietotni vai CLI).
 
-| Komanda                                           | Ko tā dara                                                                                                                                                     |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `login`                                           | Autentificējieties ar GuruShots un saglabājiet tokenu (interaktīvs; nepieciešams īsts terminālis).                                                             |
-| `logout`                                          | Notīra saglabāto autentifikācijas tokenu.                                                                                                                      |
-| `vote`                                            | Palaiž **vienu manuālu ciklu** — balso līdz **100%** visos aktīvajos izaicinājumos, ignorējot visus sliekšņus. Vienreizēja papildināšana.                      |
-| `run [--challenge=<id>]`                          | Palaiž **vienu pilnu auto-stratēģijas ciklu** (boost / turbo / auto-iesniegšana / slieksni ievērojoša balsošana). `--challenge` ierobežo uz vienu.             |
-| `boost --challenge=<id> [--image=<id>]`           | Pielieto boost vienam izaicinājumam. Bez `--image` izmanto `boostImageIndex` vietu.                                                                            |
-| `turbo --challenge=<id>`                          | Spēlē turbo mini-spēli, lai iegūtu turbo vienam izaicinājumam (tikai iegūšana; rokā esošu turbo pielieto `useTurbo` vai grafiskā lietotne).                    |
-| `submit --challenge=<id> [--all]`                 | Iesniedz labāk ranžēto fotogrāfiju vienā tukšā vietā, vai ar `--all` iesniedz foto visās tukšajās vietās uzreiz.                                               |
-| `bankroll` (alias `coins`)                        | Parāda jūsu valūtu atlikumus — atslēgas / maiņas / uzpildes / monētas.                                                                                         |
-| `discover`                                        | Uzskaita atvērtos (nepievienotos) izaicinājumus, kuriem varat pievienoties, ar katra tipu un monētu izmaksu.                                                   |
-| `join <id> [--yes]`                               | Pievienojas atvērtam izaicinājumam. Bezmaksas pievienojas uzreiz; **maksas** izaicinājums izdrukā monētu izmaksu un prasa `--yes`, pirms tiek tērētas monētas. |
-| `check-updates`                                   | Pārbauda GitHub, vai nav pieejams jaunāks izlaidums.                                                                                                           |
-| `start`                                           | Sāk **nepārtrauktu** balsošanu ar dinamisku plānošanu. Darbojas, līdz nospiežat **Ctrl+C**.                                                                    |
-| `status`                                          | Parāda režīmu (MOCK/REAL), autentifikācijas statusu un galvenos iestatījumus.                                                                                  |
-| `get-setting <key> [--challenge=<id>]`            | Izdrukā iestatījuma efektīvo vērtību (katram izaicinājumam ar `--challenge`).                                                                                  |
-| `set-setting <key> <value> [--challenge=<id>]`    | Uzstāda iestatījumu; ar `--challenge` ieraksta pārrakstījumu konkrētam izaicinājumam.                                                                          |
-| `set-global-default <key> <value>`                | Uzstāda globālo noklusējumu **ar shēmas validāciju**.                                                                                                          |
-| `list-settings [--challenge=<id>]`                | Parāda visus iestatījumus un modifikācijas statusu (skats katram izaicinājumam ar `--challenge`).                                                              |
-| `reset-setting <key> [--challenge=<id>]`          | Atiestata iestatījumu uz noklusējumu (vai notīra izaicinājuma pārrakstījumu ar `--challenge`).                                                                 |
-| `reset-all-settings`                              | Atiestata visu uz noklusējumiem (saglabā tokenu, mock karogu un API galvenes).                                                                                 |
-| `logs [--error\|--api\|--settings] [--lines=<n>]` | Izdrukā žurnālfaila beigas (noklusējums 100 rindas; noklusējuma kategorija ir lietotnes žurnāls).                                                              |
-| `reset-windows`                                   | Atiestata grafiskās lietotnes logu pozīcijas uz noklusējumiem.                                                                                                 |
-| `help-settings`                                   | Detalizēta palīdzība par iestatījumiem — atslēgu nosaukumi, vērtību formāti, diapazoni.                                                                        |
-| `help`                                            | Parāda komandu palīdzību.                                                                                                                                      |
+| Komanda                                           | Ko tā dara                                                                                                                                                      |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `login`                                           | Autentificējieties ar GuruShots un saglabājiet tokenu (interaktīvs; nepieciešams īsts terminālis).                                                              |
+| `logout`                                          | Notīra saglabāto autentifikācijas tokenu.                                                                                                                       |
+| `vote`                                            | Palaiž **vienu manuālu ciklu** — balso līdz **100%** visos aktīvajos izaicinājumos, ignorējot visus sliekšņus. Vienreizēja papildināšana.                       |
+| `run [--challenge=<id>]`                          | Palaiž **vienu pilnu auto-stratēģijas ciklu** (boost / turbo / auto-iesniegšana / slieksni ievērojoša balsošana). `--challenge` ierobežo uz vienu.              |
+| `boost --challenge=<id> [--image=<id>]`           | Pielieto boost vienam izaicinājumam. Bez `--image` izmanto `boostImageIndex` vietu.                                                                             |
+| `turbo --challenge=<id>`                          | Spēlē turbo mini-spēli, lai iegūtu turbo vienam izaicinājumam (tikai iegūšana; rokā esošu turbo pielieto `useTurbo` vai grafiskā lietotne).                     |
+| `submit --challenge=<id> [--all]`                 | Iesniedz labāk ranžēto fotogrāfiju vienā tukšā vietā, vai ar `--all` iesniedz foto visās tukšajās vietās uzreiz.                                                |
+| `bankroll` (alias `coins`)                        | Parāda jūsu valūtu atlikumus — atslēgas / maiņas / uzpildes / monētas.                                                                                          |
+| `discover`                                        | Uzskaita atvērtos (nepievienotos) izaicinājumus, kuriem varat pievienoties, ar katra tipu un monētu izmaksu.                                                    |
+| `join <id> [--yes]`                               | Pievienojas atvērtam izaicinājumam. Bezmaksas pievienojas uzreiz; **maksas** izaicinājums izdrukā monētu izmaksu un prasa `--yes`, pirms tiek tērētas monētas.  |
+| `list-scenarios`                                  | Parāda jūsu saglabātos scenārijus un piemēru šablonus.                                                                                                          |
+| `scenario-template <id> [file]`                   | Izdrukā (vai ieraksta failā) piemēra scenāriju, no kura sākt.                                                                                                   |
+| `import-scenario <file> [--overwrite] [--yes]`    | Pārbauda scenārija failu un parāda, ko tas dara, ieskaitot katru darbību, kas tērē; `--yes` to importē, `--overwrite` aizstāj scenāriju ar tādu pašu nosaukumu. |
+| `export-scenario "<name>" [file]`                 | Izdrukā (vai ieraksta) scenāriju kā JSON kopīgošanai.                                                                                                           |
+| `rename-scenario "<old>" "<new>"`                 | Pārdēvē scenāriju; izaicinājumi, kas to izmanto, seko jaunajam nosaukumam.                                                                                      |
+| `delete-scenario "<name>"`                        | Dzēš scenāriju un notīra tā piešķīrumus.                                                                                                                        |
+| `scenario-status --challenge=<id>`                | Kur izaicinājums ir savā scenārijā: fāze, pēdējā darbība, pēdējā problēma.                                                                                      |
+| `scenario-dry-run --challenge=<id>`               | Ko scenārijs darītu tieši tagad (neko netērē).                                                                                                                  |
+| `scenario-simulate --challenge=<id>`              | "Kas būtu, ja" laika līnija līdz izaicinājuma beigām (neko netērē).                                                                                             |
+| `scenario-reset --challenge=<id>`                 | Aizmirst izaicinājuma scenārija progresu, lai plāns sāktos no jauna.                                                                                            |
+| `scenario-vocabulary`                             | Uzskaita katru nosacījumu, ieraksta izvēli un darbību, ko scenārijs var izmantot.                                                                               |
+| `check-updates`                                   | Pārbauda GitHub, vai nav pieejams jaunāks izlaidums.                                                                                                            |
+| `start`                                           | Sāk **nepārtrauktu** balsošanu ar dinamisku plānošanu. Darbojas, līdz nospiežat **Ctrl+C**.                                                                     |
+| `status`                                          | Parāda režīmu (MOCK/REAL), autentifikācijas statusu un galvenos iestatījumus.                                                                                   |
+| `get-setting <key> [--challenge=<id>]`            | Izdrukā iestatījuma efektīvo vērtību (katram izaicinājumam ar `--challenge`).                                                                                   |
+| `set-setting <key> <value> [--challenge=<id>]`    | Uzstāda iestatījumu; ar `--challenge` ieraksta pārrakstījumu konkrētam izaicinājumam.                                                                           |
+| `set-global-default <key> <value>`                | Uzstāda globālo noklusējumu **ar shēmas validāciju**.                                                                                                           |
+| `list-settings [--challenge=<id>]`                | Parāda visus iestatījumus un modifikācijas statusu (skats katram izaicinājumam ar `--challenge`).                                                               |
+| `reset-setting <key> [--challenge=<id>]`          | Atiestata iestatījumu uz noklusējumu (vai notīra izaicinājuma pārrakstījumu ar `--challenge`).                                                                  |
+| `reset-all-settings`                              | Atiestata visu uz noklusējumiem (saglabā tokenu, mock karogu un API galvenes).                                                                                  |
+| `logs [--error\|--api\|--settings] [--lines=<n>]` | Izdrukā žurnālfaila beigas (noklusējums 100 rindas; noklusējuma kategorija ir lietotnes žurnāls).                                                               |
+| `reset-windows`                                   | Atiestata grafiskās lietotnes logu pozīcijas uz noklusējumiem.                                                                                                  |
+| `help-settings`                                   | Detalizēta palīdzība par iestatījumiem — atslēgu nosaukumi, vērtību formāti, diapazoni.                                                                         |
+| `help`                                            | Parāda komandu palīdzību.                                                                                                                                       |
 
 Iestatījumi ir kopīgi ar grafisko lietotni: CLI veikts `set-setting` tiek pamanīts grafiskajā lietotnē un otrādi.
 
@@ -324,6 +337,67 @@ GuruShots katrā rotācijā atkārto izaicinājumu ar jaunu ID, tāpēc izaicin�
 - **Plaši noteikumi.** Noteikums bez nosaukuma var ieslēgt auto-pievienošanos vai auto-iesniegšanu katram atbilstošajam izaicinājumam; redaktors tad rāda brīdinājumu, jo viens noteikums var tērēt monētas vai foto veselai izaicinājumu grupai.
 - **Atjaunināšana.** Ielādējot iestatījumus no vecākas versijas, saglabātie noteikumi vienreiz tiek sakārtoti noklusējuma secībā, un "pievienošanās laiks pēc kategorijas" noteikumi tiek pārvietoti šajā sarakstā zem tiem. Tā kā zemāks noteikums aizpilda to, ko augstāks atstāj tukšu, iestatījumu žurnālā parādās brīdinājums par katru noteikumu pāri, kur tas varētu ieslēgt auto-pievienošanos vai auto-iesniegšanu — ja tāds redzams, pārskatiet secību.
 
+### Scenāriji
+
+**Scenārijs** ir jūsu rakstīts plāns izaicinājumam, kas ilgst vairākas dienas — piemēram, "katru rītu iesniegt vienu bildi, un, ja kāda no tām strauji kāpj, noturēt to malā un pēdējā dienā pielietot tai Boost". Lietotnē nav iebūvētas taktikas: scenārijs sastāv no dažiem būvblokiem, un to kombināciju izvēlaties jūs.
+
+**Kur tos atrast.** Grafiskajā un Android lietotnē: **Iestatījumi → Scenāriji**. Sāciet ar **Jauns scenārijs**, izvēlieties piemēru sadaļā **Sākt no šablona…** un spiediet **Pievienot kopiju**, vai **Importēt…** kāda kopīgotu scenāriju. Katram saglabātajam scenārijam ir **Rediģēt**, **Eksportēt**, **Pārdēvēt** un **Dzēst**; izmaiņas šeit tiek saglabātas uzreiz. Redaktoram ir divas cilnes — vizuālais **Veidotājs** un neapstrādāts **JSON** —, un saglabāšana pārbauda visu, norādot, kurš lauks ir nepareizs. CLI redaktora nav, bet tā var importēt, eksportēt, apskatīt un simulēt (skatiet [CLI komandas](#cli-komandas)).
+
+**Piešķiršana.** Scenārijs neko nedara, kamēr to neizpilda kāds izaicinājums. Izvēlieties to izaicinājuma ⚙️ iestatījumos laukā **Scenārijs** vai piešķiriet to uzreiz daudziem izaicinājumiem ar [izaicinājumu noteikumu](#izaicinājumu-noteikumi) vai profilu (piemēram, katram `exhibition` izaicinājumam). No CLI: `set-setting scenario "<nosaukums>" --challenge=<id>`. Izaicinājuma kartītē tad parādās 🧭 rinda ar scenāriju, pašreizējo fāzi, nākamās pārbaudes laiku un pēdējo problēmu, ja tāda ir.
+
+**Kā scenārijs ir veidots.**
+
+- **Fāzes.** Scenārijam ir viena vai vairākas nosauktas fāzes, un tas sākas jūsu izvēlētajā. Kamēr izaicinājums ir fāzē, tam tiek piemēroti šīs fāzes **iestatījumi** (jebkurš izaicinājuma iestatījums — ekspozīcija, auto-Boost, auto-iesniegšana, …). Tiem ir priekšroka pār visu citu, ieskaitot jūsu manuālo ⚙️ pārrakstījumu, un parastie iestatījumi atgriežas, tiklīdz fāze tiek pamesta. Nekas netiek kopēts jūsu saglabātajos pārrakstījumos.
+- **Noteikumi.** Katrai fāzei ir sakārtots noteikumu saraksts. Katrā balsošanas ciklā **pirmais noteikums, kura visi nosacījumi izpildās**, pēc kārtas izpilda savas darbības. Noteikuma iestatījums **Izpilda** nosaka, cik bieži: _katrā palaišanā, kamēr izpildās_, _tikai vienreiz_, _vienreiz katrā fāzes sākumā_ vai _vienreiz dienā_.
+- **Nosacījumi** — diennakts laiks (lietotnes laika joslā), atlikušais laiks līdz beigām, laiks kopš sākuma, izaicinājuma pagājusī daļa, laiks šajā fāzē, ierakstu skaits, brīvās vietas, ekspozīcija, izaicinājuma vieta un balsis, Boost / Turbo stāvoklis, jūsu atslēgu / apmaiņu / uzpilžu / monētu atlikums, vai atcerētā bilde ir iestatīta, un pārbaude vienam ierakstam (tā balsis, vieta, **balsis stundā**, **ātruma attiecība** pret jūsu pārējiem ierakstiem, Boost / Turbo). Kombinējiet tos ar _visi no_, _jebkurš no_ un _ne_.
+- **Kurš ieraksts.** Darbības un ierakstu pārbaudes izvēlas ierakstu pēc vietas, visvairāk / vismazāk balsu, labākās / sliktākās vietas, ātrākā (balsis stundā), ieraksta ar Boost vai Turbo, vai iepriekš atcerētas bildes — pēc izvēles izlaižot ierakstus ar Boost / Turbo.
+- **Darbības** — iesniegt bildi (jūsu labāko piemēroto vai atcerētu), apmainīt ierakstu pret citu bildi (balsis, Boost un Turbo paliek pie bildes), pielietot Boost, pielietot Turbo, atbloķēt Boost ar atslēgu, uzpildīt ekspozīciju, balsot līdz noteiktam procentam, atcerēties / aizmirst bildi, pāriet uz citu fāzi un **paziņot** jums ar ziņojumu.
+- **Atmiņa.** Noteikums var atcerēties bildi ar nosaukumu (piemēram, `held`), un vēlāks noteikums — pat pēc dienām, citā fāzē — var to apmainīt atpakaļ vai pielietot tai Boost.
+
+Pilnu sarakstu ar visiem laukiem parāda CLI komanda `scenario-vocabulary`.
+
+**Droši atstāt darbībā.**
+
+- Pirms katras darbības izaicinājums tiek nolasīts no jauna, tāpēc darbība, kuras mērķis vairs nav, tiek izlaista, nevis minēta.
+- Progress tiek saglabāts pēc katras darbības. Pēc avārijas vai restarta daļēji izpildīts noteikums turpina tur, kur apstājās, un nekad neatkārto tēriņu, kas jau notika.
+- Tēriņi ievēro jūsu valūtas rezerves un paša scenārija neobligātos **tēriņu limitus** (apmaiņas / atslēgas / uzpildes).
+- Ja scenārija saglabāto progresu nevar nolasīt vai jūs izdzēšat fāzi vai noteikumu, kura vidū tas bija, šis izaicinājums **apstājas** un jums par to paziņo (brīdinājums kartītē un paziņojums). Pats no sevis tas nekad nesākas no jauna. Izlabojiet scenāriju vai sāciet to no jauna ar `scenario-reset --challenge=<id>` CLI.
+- Balsošanas ātruma nosacījumiem vajag vismaz 10 minūšu balsu vēsturi. Līdz tam tie ir nepatiesi.
+
+**Izmēģiniet pirms tēriņiem.** Veidotājā izvēlieties izaicinājumu un spiediet **Simulēt**, lai redzētu "kas būtu, ja" laika līniju līdz izaicinājuma beigām: kas izpildītos, kad, un kāpēc tas apstājas. Tas darbojas arī ar nesaglabātām izmaiņām. Simulācija pieņem, ka katrs solis izdodas un balsis un vieta paliek tādas kā tagad. No CLI `scenario-dry-run` parāda, kas notiktu tieši tagad, un `scenario-simulate` — visu laika līniju; neviena no tām neko netērē.
+
+**Šabloni**, no kuriem sākt: _Exhibition double-dip_, _Evening boost before the last day_, _Morning swap of the weakest entry_ un _Turbo in the top 10_. Pievienojiet kopiju un tad to rediģējiet.
+
+Minimāls scenārijs JSON formātā — pielietot Boost labākajai vietai ierakstam no 20:00 līdz 21:00, kad līdz izaicinājuma beigām ir 1–2 dienas:
+
+```json
+{
+    "name": "Evening boost",
+    "version": 1,
+    "start": "main",
+    "phases": {
+        "main": {
+            "rules": [
+                {
+                    "id": "evening-boost",
+                    "repeat": "once",
+                    "if": [
+                        { "type": "dailyWindow", "from": "20:00", "to": "21:00" },
+                        { "type": "beforeEnd", "min": "1d", "max": "2d" },
+                        { "type": "boostState", "in": ["AVAILABLE", "AVAILABLE_KEY"] }
+                    ],
+                    "do": [{ "type": "boost", "entry": { "by": "bestRank" } }]
+                }
+            ]
+        }
+    }
+}
+```
+
+Ilgumus raksta kā `"90m"`, `"6h"`, `"1d 6h"` vai sekundēs. Importējiet scenāriju failus tikai no cilvēkiem, kam uzticaties — scenārijs var tērēt jūsu apmaiņas, atslēgas, uzpildes un Boost. Importa priekšskatījums pirms saglabāšanas uzskaita katru darbību, kas tērē.
+
+**Paziņojumi.** Darbība `notify` un scenārijs, kas apstājas, jo tam vajag jūs, parāda paziņojumu darbvirsmas lietotnē un no `gurucli start` (izslēdz ar **Paziņojumi no scenārijiem**). Android lietotne scenāriju paziņojumus nerāda. Scenāriji tur tomēr darbojas, arī fona servisā.
+
 ### Konta atlikums
 
 Jūsu valūtu atlikumi — **atslēgas / maiņas / uzpildes / monētas** — parādās blakus taimerim grafiskās lietotnes galvenē (tie rāda `—`, nevis `0`, ja atlikumu nevar nolasīt, tāpēc neizdevusies nolasīšana netiek sajaukta ar "tukšu"). No CLI `bankroll` (alias `coins`) tos izdrukā.
@@ -346,19 +420,31 @@ Iestatījumi ir divos slāņos. **Lietotnes preferences** ir globālas visai lie
 | `apiRetryBaseDelayMs`                     | `1000`        | 100–10000 ms         | Bāzes aizture eksponenciālajai atkāpei starp atkārtojumiem.                                |
 | `windowBounds`                            | —             | —                    | Grafiskās lietotnes loga pozīcija/izmērs (Electron); saglabājas automātiski.               |
 
+**Paziņojumi** (darbvirsmas lietotne un `gurucli start`; tikai globāli — uzstāda ar `set-global-default`)
+
+| Iestatījums             | Noklusējums | Diapazons / vērtības | Apraksts                                                                                      |
+| ----------------------- | ----------- | -------------------- | --------------------------------------------------------------------------------------------- |
+| `notifyOnScenario`      | `true`      | bool                 | Rāda ziņojumus, ko sūta jūsu scenāriju `notify` soļi, un brīdinājumu, kad scenārijs apstājas. |
+| `notifyOnBoost`         | `false`     | bool                 | Brīdina pirms Boost pielietošanas, lai jūs varētu atstāt lietotni darbībā.                    |
+| `notifyOnTurbo`         | `false`     | bool                 | Brīdina pirms Turbo spēlēšanas.                                                               |
+| `notifyOnAutoFill`      | `false`     | bool                 | Brīdina pirms bildes auto-iesniegšanas tuvu termiņam.                                         |
+| `notifyOnEmergencyFill` | `false`     | bool                 | Brīdina pirms pēdējā brīža ārkārtas iesniegšanas.                                             |
+| `notifyLeadTime`        | `5`         | 1–60 min             | Cik minūtes pirms darbības parāda brīdinājumu.                                                |
+
 ### Izaicinājumu iestatījumi
 
 Visi atbalsta pārrakstīšanu katram izaicinājumam, izņemot kur norādīts.
 
 **Vispārīgi**
 
-| Iestatījums          | Noklusējums | Diapazons / vērtības                         | Apraksts                                                                                                                                                      |
-| -------------------- | ----------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `exposure`           | `100`       | 1–100 %                                      | Normālā sliekšņa vērtība: balsot, kamēr ekspozīcija ir zem tā.                                                                                                |
-| `exposureTarget`     | `0`         | `0` vai 1–100 % (ja iestatīts, ≥ `exposure`) | Balsot līdz šim %, kad iedarbojas normālais noteikums. `0` = apstāties pie sliekšņa.                                                                          |
-| `onlyBoost`          | `false`     | bool                                         | Izlaist normālo balsošanu; pielietot tikai boost/turbo.                                                                                                       |
-| `compactCards`       | `false`     | bool                                         | Kompakts izaicinājumu kartīšu izkārtojums (tikai grafiskās lietotnes attēlojums).                                                                             |
-| `compactCardActions` | `false`     | bool                                         | Izaicinājuma darbību pogas (balsošana, palaišana, Turbo, iesniegšana, valūtas tēriņi, iestatījumi) kompaktajās kartītēs (tikai grafiskajā lietotnē, globāls). |
+| Iestatījums          | Noklusējums | Diapazons / vērtības                         | Apraksts                                                                                                                                                               |
+| -------------------- | ----------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exposure`           | `100`       | 1–100 %                                      | Normālā sliekšņa vērtība: balsot, kamēr ekspozīcija ir zem tā.                                                                                                         |
+| `exposureTarget`     | `0`         | `0` vai 1–100 % (ja iestatīts, ≥ `exposure`) | Balsot līdz šim %, kad iedarbojas normālais noteikums. `0` = apstāties pie sliekšņa.                                                                                   |
+| `scenario`           | `''`        | saglabāta scenārija nosaukums vai tukšs      | [Scenārijs](#scenāriji), ko šis izaicinājums izpilda. Tukšs = nav. Katram izaicinājumam atsevišķi vai ar izaicinājumu noteikumu vai profilu (globālā noklusējuma nav). |
+| `onlyBoost`          | `false`     | bool                                         | Izlaist normālo balsošanu; pielietot tikai boost/turbo.                                                                                                                |
+| `compactCards`       | `false`     | bool                                         | Kompakts izaicinājumu kartīšu izkārtojums (tikai grafiskās lietotnes attēlojums).                                                                                      |
+| `compactCardActions` | `false`     | bool                                         | Izaicinājuma darbību pogas (balsošana, palaišana, Turbo, iesniegšana, valūtas tēriņi, iestatījumi) kompaktajās kartītēs (tikai grafiskajā lietotnē, globāls).          |
 
 **Boost**
 

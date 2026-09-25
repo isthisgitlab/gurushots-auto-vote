@@ -48,6 +48,8 @@ The desktop app now enforces this for GUI instances: launching it a second time 
 - **Bankroll display** — shows your keys / swaps / fills / coins next to the timer in the GUI and via the `bankroll` (alias `coins`) CLI command.
 - **Per-challenge overrides** — every voting setting has a global default that any individual challenge can override.
 - **Challenge rules** — rules that match challenges by title, challenge tag, type, photo count or length (so they survive GuruShots' per-rotation challenge-ID changes), in an order you choose; each can assign a settings profile, switch auto-join / auto-submit, set join timing, and add auto-submit tags.
+- **Scenarios** — your own multi-day plans for a challenge: phases with their own settings, and rules that enter photos, swap, boost, play turbo, wait or notify you at the times and conditions you choose. Built in a visual editor (or as JSON), shared as files, and previewed with a what-if simulation before they spend anything.
+- **Desktop notifications** — optional warnings a few minutes before a boost, turbo or auto-submit, plus the messages your scenarios send.
 - **Three platforms** — Electron GUI, `gurucli` command line, and an Android app that votes with the phone locked.
 - **Resilient API layer** — configurable timeout plus automatic retry/backoff on transient failures.
 - **Quality-of-life** — light/dark themes, English/Latvian UI, timezone display, mock mode for safe testing, and built-in update notifications.
@@ -221,6 +223,17 @@ The Android build is **not on Google Play** — install via direct APK download.
 | `bankroll` (alias `coins`)                        | Show your currency balances — keys / swaps / fills / coins.                                                                                          |
 | `discover`                                        | List open (un-joined) challenges you can join, with each one's type and coin cost.                                                                   |
 | `join <id> [--yes]`                               | Join an open challenge. Free challenges join immediately; a **paid** challenge prints its coin cost and requires `--yes` before any coins are spent. |
+| `list-scenarios`                                  | Show your saved scenarios and the example templates.                                                                                                 |
+| `scenario-template <id> [file]`                   | Print (or write to a file) an example scenario to start from.                                                                                        |
+| `import-scenario <file> [--overwrite] [--yes]`    | Check a scenario file and show what it does, including every spending action; `--yes` imports it, `--overwrite` replaces one with the same name.     |
+| `export-scenario "<name>" [file]`                 | Print (or write) a scenario as JSON to share.                                                                                                        |
+| `rename-scenario "<old>" "<new>"`                 | Rename a scenario; challenges using it follow the new name.                                                                                          |
+| `delete-scenario "<name>"`                        | Delete a scenario and clear its assignments.                                                                                                         |
+| `scenario-status --challenge=<id>`                | Where a challenge is in its scenario: phase, last action, last problem.                                                                              |
+| `scenario-dry-run --challenge=<id>`               | What the scenario would do right now (spends nothing).                                                                                               |
+| `scenario-simulate --challenge=<id>`              | A what-if timeline until the challenge closes (spends nothing).                                                                                      |
+| `scenario-reset --challenge=<id>`                 | Forget a challenge's scenario progress, so the plan starts over.                                                                                     |
+| `scenario-vocabulary`                             | List every condition, entry choice and action a scenario can use.                                                                                    |
 | `check-updates`                                   | Check GitHub for a newer release.                                                                                                                    |
 | `start`                                           | Start **continuous** voting with dynamic scheduling. Runs until you press **Ctrl+C**.                                                                |
 | `status`                                          | Show mode (MOCK/REAL), auth status, and key settings.                                                                                                |
@@ -335,6 +348,67 @@ GuruShots recycles each challenge under a fresh ID every rotation, so a per-chal
 - **Broad rules.** A rule without a title can switch auto-join or auto-submit on for every challenge it matches; the editor shows a warning when one does, since a single rule can then spend coins or photos across a whole group of challenges.
 - **Upgrading.** When settings from an older version load, saved rules are put into the default order once and any "join timing by category" rules are moved into this list below them. Because a lower rule fills in what a higher one leaves empty, the settings log gets a warning for each pair of rules where that could switch auto-join or auto-submit on — review the order if you see one.
 
+### Scenarios
+
+A **scenario** is a plan you write for a challenge that runs over several days — for example "enter one photo each morning, and if one of them takes off, hold it back and boost it on the last day". The app has no built-in tactic: a scenario is made of a few building blocks, and you decide how they combine.
+
+**Where to find them.** GUI and Android app: **Settings → Scenarios**. Start from **New scenario**, pick an example under **Start from a template…** and click **Add copy**, or **Import…** one someone shared. Each saved scenario has **Edit**, **Export**, **Rename** and **Delete**; changes here are saved immediately. The editor has two tabs — a visual **Builder** and the raw **JSON** — and saving checks everything, telling you which field is wrong. The CLI has no editor, but can import, export, inspect and simulate (see [CLI commands](#cli-commands)).
+
+**Assigning one.** A scenario does nothing until a challenge runs it. Pick it in the challenge's ⚙️ settings under **Scenario**, or give it to many challenges at once through a [challenge rule](#challenge-rules) or a profile (e.g. every `exhibition` challenge). From the CLI: `set-setting scenario "<name>" --challenge=<id>`. The challenge card then shows a 🧭 line with the scenario, its current phase, when it next looks, and the last problem, if any.
+
+**How a scenario is built.**
+
+- **Phases.** A scenario has one or more named phases and starts in the one you choose. While a challenge is in a phase, that phase's **settings** (any per-challenge setting — exposure, auto-boost, auto-submit, …) apply to it. They take precedence over everything else, your manual ⚙️ override included, and normal settings return as soon as the phase is left. Nothing is copied into your stored overrides.
+- **Rules.** Each phase has an ordered list of rules. On every voting pass the **first rule whose conditions all hold** runs its actions in order. A rule's **Runs** setting decides how often: _every run while it holds_, _only once_, _once each time the phase starts_, or _once a day_.
+- **Conditions** — time of day (in the app timezone), time left until the end, time since the start, share of the challenge elapsed, time in this phase, number of entries, free slots, exposure, the challenge's rank and votes, boost / turbo state, your balance of keys / swaps / fills / coins, whether a remembered photo is set, and a test on one entry (its votes, rank, **votes per hour**, **speed ratio** against your other entries, boosted / turbo). Combine them with _all of_, _any of_ and _not_.
+- **Which entry.** Actions and entry tests pick an entry by slot, most / fewest votes, best / worst rank, fastest (votes per hour), the boosted or turbo entry, or a photo you remembered earlier — optionally skipping boosted / turbo entries.
+- **Actions** — enter a photo (your best eligible one, or a remembered one), swap an entry for another photo (votes, boost and turbo stay with the photo), boost, apply turbo, unlock the boost with a key, fill exposure, vote up to a percentage, remember / forget a photo, go to another phase, and **notify** you with a message.
+- **Memory.** A rule can remember a photo under a name (e.g. `held`) and a later rule — even days later, in another phase — can swap it back in or boost it.
+
+Run `scenario-vocabulary` in the CLI for the complete list with every field.
+
+**Safe to leave running.**
+
+- Before each action the challenge is read again, so an action whose target has gone is skipped instead of guessed.
+- Progress is saved after every action. After a crash or restart a half-done rule carries on where it stopped and never repeats a spend that already went through.
+- Spending respects your currency reserves and the scenario's own optional **spending limits** (swaps / keys / fills).
+- If a scenario's saved progress can't be read, or you edit away the phase or rule it was in the middle of, that challenge **stops** and tells you (a warning on the card, and a notification). It never restarts on its own. Fix the scenario, or start it over with `scenario-reset --challenge=<id>` in the CLI.
+- Vote-speed conditions need at least 10 minutes of vote history. Until then they are false.
+
+**Try before it spends.** In the builder, pick a challenge and click **Simulate** for a what-if timeline up to the challenge's end: what would run, when, and why it stops. It works on unsaved edits too. The simulation assumes every step succeeds and that votes and rank stay as they are now. From the CLI, `scenario-dry-run` shows what would happen right now and `scenario-simulate` shows the whole timeline; neither spends anything.
+
+**Templates** to start from: _Exhibition double-dip_, _Evening boost before the last day_, _Morning swap of the weakest entry_ and _Turbo in the top 10_. Add a copy, then edit it.
+
+A minimal scenario in JSON — boost the best-ranked entry between 20:00 and 21:00 once the challenge is 1–2 days from its end:
+
+```json
+{
+    "name": "Evening boost",
+    "version": 1,
+    "start": "main",
+    "phases": {
+        "main": {
+            "rules": [
+                {
+                    "id": "evening-boost",
+                    "repeat": "once",
+                    "if": [
+                        { "type": "dailyWindow", "from": "20:00", "to": "21:00" },
+                        { "type": "beforeEnd", "min": "1d", "max": "2d" },
+                        { "type": "boostState", "in": ["AVAILABLE", "AVAILABLE_KEY"] }
+                    ],
+                    "do": [{ "type": "boost", "entry": { "by": "bestRank" } }]
+                }
+            ]
+        }
+    }
+}
+```
+
+Durations are written as `"90m"`, `"6h"`, `"1d 6h"` or seconds. Only import scenario files from people you trust — a scenario can spend your swaps, keys, fills and boosts. The import preview lists every spending action before anything is saved.
+
+**Notifications.** A `notify` action, and a scenario that stops because it needs you, show a notification on the desktop app and from `gurucli start` (turn off with **Notify from scenarios**). The Android app does not show scenario notifications. Scenarios still run there, including in the background service.
+
 ### Bankroll
 
 Your currency balances — **keys / swaps / fills / coins** — show next to the timer in the GUI header (they read `—`, not `0`, if the balance can't be fetched, so a failed read is never mistaken for "empty"). From the CLI, `bankroll` (alias `coins`) prints them.
@@ -357,6 +431,17 @@ Settings come in two layers. **App preferences** are global to the app. **Challe
 | `apiRetryBaseDelayMs`                     | `1000`        | 100–10000 ms    | Base delay for exponential backoff between retries.                                                                                                                                                                                                                                                                                                                                       |
 | `windowBounds`                            | —             | —               | GUI window position/size (Electron); persisted automatically.                                                                                                                                                                                                                                                                                                                             |
 
+**Notifications** (desktop app and `gurucli start`; global only — set with `set-global-default`)
+
+| Setting                 | Default | Range / values | Description                                                                                 |
+| ----------------------- | ------- | -------------- | ------------------------------------------------------------------------------------------- |
+| `notifyOnScenario`      | `true`  | bool           | Show the messages your scenarios' `notify` steps send, and a warning when a scenario stops. |
+| `notifyOnBoost`         | `false` | bool           | Warn before a boost is applied, so you can keep the app running.                            |
+| `notifyOnTurbo`         | `false` | bool           | Warn before a turbo is played.                                                              |
+| `notifyOnAutoFill`      | `false` | bool           | Warn before a photo is auto-submitted near the deadline.                                    |
+| `notifyOnEmergencyFill` | `false` | bool           | Warn before a last-second emergency submit.                                                 |
+| `notifyLeadTime`        | `5`     | 1–60 min       | How many minutes before the action the warning is shown.                                    |
+
 ### Challenge settings
 
 All of these support per-challenge overrides except where noted.
@@ -368,6 +453,7 @@ All of these support per-challenge overrides except where noted.
 | `exposure`       | `100`   | 1–100 %                                | Normal-rule trigger: vote while your exposure is below this.                                                                                                                                                                   |
 | `exposureTarget` | `0`     | `0`, or 1–100 % (if set, ≥ `exposure`) | Vote up to this % when the normal rule fires. `0` = stop at the trigger.                                                                                                                                                       |
 | `onlyBoost`      | `false` | bool                                   | Skip normal voting; only apply boost/turbo.                                                                                                                                                                                    |
+| `scenario`       | `''`    | a saved scenario's name, or empty      | The [scenario](#scenarios) this challenge runs. Empty = none. Per challenge, or through a challenge rule or profile (it has no global default).                                                                                |
 | `voteOnNewEntry` | `false` | bool                                   | When a new photo appears, vote once even if exposure is already at/above the trigger, up to whichever target the winning rule resolves. Does not override Only Boost Mode, Vote Only in Last Minute, or Scheduled Voting Only. |
 
 **Boost**
