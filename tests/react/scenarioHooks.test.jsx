@@ -16,8 +16,8 @@ function ScenariosProbe({ enabled }) {
     );
 }
 
-function StatusProbe({ challenge, version = 0 }) {
-    const summary = useScenarioStatus(challenge, version);
+function StatusProbe({ challenge, version = 0, pass = 0 }) {
+    const summary = useScenarioStatus(challenge, version, pass);
     return <div data-testid="out">{summary === null ? 'none' : JSON.stringify(summary)}</div>;
 }
 
@@ -121,6 +121,9 @@ describe('useScenarioStatus', () => {
         rerender(<StatusProbe challenge={challenge([{ id: 'a', votes: 9, rank: 2 }])} />);
         rerender(<StatusProbe challenge={challenge([{ id: 'a', votes: 9, rank: 2 }])} version={1} />);
         await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(3));
+        // A finished pass refetches even when the challenge payload is unchanged.
+        rerender(<StatusProbe challenge={challenge([{ id: 'a', votes: 9, rank: 2 }])} version={1} pass={1} />);
+        await waitFor(() => expect(window.api.getScenarioStatus).toHaveBeenCalledTimes(4));
     });
 
     test('a challenge without entries, and a result that lands after unmount, are handled', async () => {

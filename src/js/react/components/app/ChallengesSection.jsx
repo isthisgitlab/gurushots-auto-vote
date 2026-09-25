@@ -69,11 +69,16 @@ function useGlobalCardDensity() {
 }
 
 /**
- * Challenges section with Vote All, Refresh buttons, and challenge cards
+ * Challenges section with Vote All, Refresh buttons, and challenge cards.
+ * `autovoteCycles` plus the count of manual passes started here make each
+ * card's `passVersion`: a finished pass can move a scenario on without
+ * changing the challenge payload, so the card re-reads its scenario status
+ * on this signal rather than waiting for the data to differ.
  */
 export function ChallengesSection({
     timezone,
     autovoteRunning,
+    autovoteCycles = 0,
     isLoggedIn,
     onChallengeSettingsClick,
     bankroll = null,
@@ -86,10 +91,15 @@ export function ChallengesSection({
 
     // Shared success path for the Vote All / Run buttons below (awaited, so
     // their spinner holds until the refreshed list lands).
-    const refetchAfterAction = useCallback(() => refetch(true), [refetch]);
+    const [manualPasses, setManualPasses] = useState(0);
+    const refetchAfterAction = useCallback(() => {
+        setManualPasses((n) => n + 1);
+        return refetch(true);
+    }, [refetch]);
 
     // Per-card success path: refresh without holding the card's spinner.
     const handleVoteComplete = useCallback(() => {
+        setManualPasses((n) => n + 1);
         refetch(true);
     }, [refetch]);
 
@@ -211,6 +221,7 @@ export function ChallengesSection({
                     <ChallengeCard
                         key={challenge.id}
                         settingsVersion={refreshKey}
+                        passVersion={autovoteCycles + manualPasses}
                         challenge={challenge}
                         defaultCompact={globalCompact}
                         compactActions={compactActions}

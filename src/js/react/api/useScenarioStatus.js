@@ -9,14 +9,17 @@ import * as ipc from './ipc';
  * math, so the card shows the same moment the scheduler wakes for.
  *
  * Keyed on a fingerprint of the challenge fields a scenario step changes
- * (entries, boost/turbo state) plus `settingsVersion`, so it refetches after
- * a pass that did something, not on every render.
+ * (entries, boost/turbo state), `settingsVersion`, and `passVersion` — bumped
+ * when a voting pass finishes, since a pass can start a scenario, change its
+ * phase or send a notice without touching the challenge payload. So it
+ * refetches after a pass or an edit, not on every render.
  *
  * @param {any} challenge - the card's challenge (always present)
  * @param {number} [settingsVersion]
+ * @param {number} [passVersion]
  * @returns {null | {name: string, missing?: true, corrupt?: true, phase?: string, started?: boolean, lastError?: string|null, nextWakeAt?: number|null}}
  */
-export function useScenarioStatus(challenge, settingsVersion) {
+export function useScenarioStatus(challenge, settingsVersion, passVersion) {
     const [summary, setSummary] = useState(null);
     const entries = challenge.member?.ranking?.entries;
     const fingerprint = [
@@ -44,7 +47,7 @@ export function useScenarioStatus(challenge, settingsVersion) {
         return () => {
             cancelled = true;
         };
-    }, [fingerprint, settingsVersion, challengeRef]);
+    }, [fingerprint, settingsVersion, passVersion, challengeRef]);
 
     return summary;
 }

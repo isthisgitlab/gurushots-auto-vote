@@ -21,6 +21,7 @@ import { useChallengeCardActions, buildCompactActionRow } from './ChallengeCardA
 export function ChallengeCard({
     challenge,
     settingsVersion = 0,
+    passVersion = 0,
     defaultCompact = false,
     compactActions = false,
     timeRemaining,
@@ -42,7 +43,7 @@ export function ChallengeCard({
     // renders without them, never an error surface.
     const { actions: deadlineActions, boostBlocked } = useDeadlineActions(challenge, settingsVersion);
     const swapBacks = useSwapBacks(challenge);
-    const scenarioStatus = useScenarioStatus(challenge, settingsVersion);
+    const scenarioStatus = useScenarioStatus(challenge, settingsVersion, passVersion);
 
     // Tick once a second — only meaningful when this challenge is in TIMER
     // state and we want canPlayAutoTurbo to flip to true the moment the

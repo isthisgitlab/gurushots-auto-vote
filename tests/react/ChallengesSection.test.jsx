@@ -18,6 +18,7 @@ jest.mock('@/components/app/ChallengeCard', () => ({
     ChallengeCard: ({
         challenge,
         settingsVersion,
+        passVersion,
         defaultCompact,
         compactActions,
         bankroll,
@@ -29,6 +30,7 @@ jest.mock('@/components/app/ChallengeCard', () => ({
             data-testid="card"
             data-id={challenge.id}
             data-settings-version={String(settingsVersion)}
+            data-pass-version={String(passVersion)}
             data-compact={String(defaultCompact)}
             data-compact-actions={String(compactActions)}
             data-bankroll={String(bankroll)}
@@ -240,6 +242,19 @@ describe('ChallengesProvider + ChallengesSection', () => {
             await settle();
             expect(mockApi.runVotingCycle).toHaveBeenCalled();
             expect(refetch).toHaveBeenCalledWith(true);
+        });
+
+        it('passVersion counts autovote cycles plus manual passes', async () => {
+            renderSection({ autovoteCycles: 3 });
+            const pass = () => screen.getAllByTestId('card')[0].dataset.passVersion;
+            expect(pass()).toBe('3');
+            fireEvent.click(screen.getByText('vote-1'));
+            expect(pass()).toBe('4');
+            await act(async () => {
+                fireEvent.click(screen.getByText('app.run'));
+            });
+            await settle();
+            expect(pass()).toBe('5');
         });
 
         it('card callbacks refetch, refresh the bankroll and open settings', () => {

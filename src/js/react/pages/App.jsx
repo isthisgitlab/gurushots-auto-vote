@@ -237,6 +237,7 @@ function AppContent() {
                     <ChallengesSection
                         timezone={timezone}
                         autovoteRunning={autovote.running}
+                        autovoteCycles={autovote.cycles}
                         isLoggedIn={isLoggedIn}
                         onChallengeSettingsClick={challengeSettings.open}
                         bankroll={bankroll}
