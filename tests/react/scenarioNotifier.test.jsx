@@ -13,7 +13,7 @@ test('reads each challenge status and delivers new notices', async () => {
         id === 1 ? { success: true, state: { outbox: outbox() } } : { success: false },
     );
     const notify = createRendererScenarioNotifier({
-        getSettings: async () => ({}),
+        getSetting: async () => undefined,
         getScenarioStatus,
         translate: (key) => key,
         deliver,
@@ -23,17 +23,17 @@ test('reads each challenge status and delivers new notices', async () => {
     expect(deliver).toHaveBeenCalledWith({ title: 'app.scenarioNotifyTitle', body: 'Boost now' });
 });
 
-test('notifyOnScenario false turns it off; a missing settings object does not', async () => {
+test('notifyOnScenario false turns it off; an unset value does not', async () => {
     const getScenarioStatus = jest.fn(async () => ({ success: true, state: null }));
     await createRendererScenarioNotifier({
-        getSettings: async () => ({ notifyOnScenario: false }),
+        getSetting: async (key) => (key === 'notifyOnScenario' ? false : undefined),
         getScenarioStatus,
         translate: (key) => key,
         deliver: jest.fn(),
     })([{ id: 1 }]);
     expect(getScenarioStatus).not.toHaveBeenCalled();
     await createRendererScenarioNotifier({
-        getSettings: async () => null,
+        getSetting: async () => null,
         getScenarioStatus,
         translate: (key) => key,
         deliver: jest.fn(),

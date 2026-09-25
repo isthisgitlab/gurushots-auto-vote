@@ -462,8 +462,8 @@ describe('AutovoteContext', () => {
             expect(captured.chainDeps.onCycleChallenges).toEqual(expect.any(Function));
             const deps = captured.notifierDeps;
 
-            await deps.getSettings();
-            expect(window.api.getSettings).toHaveBeenCalled();
+            await deps.getSetting('notifyOnBoost');
+            expect(window.api.getGlobalDefault).toHaveBeenCalledWith('notifyOnBoost');
             await deps.getDeadlineActions({ id: 7 });
             expect(window.api.getDeadlineActions).toHaveBeenCalledWith({ id: 7 });
             deps.log('note');

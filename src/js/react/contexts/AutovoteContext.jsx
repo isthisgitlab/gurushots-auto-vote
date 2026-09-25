@@ -162,7 +162,7 @@ function createRendererDeadlineNotifier() {
     const deliver = resolveRendererDelivery(isNativePlatform);
     if (!deliver) return null;
     const shared = {
-        getSettings: () => ipc.getSettings(),
+        getSetting: (key) => ipc.getGlobalDefault(key),
         translate: (key) => rendererTranslator.t(key),
         deliver,
         log: (msg) => ipc.logRendererDebug(msg),

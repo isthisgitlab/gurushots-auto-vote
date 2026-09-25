@@ -33,7 +33,7 @@ describe('createDeadlineNotifier failure logging', () => {
     test('a non-Error rejection is logged verbatim', async () => {
         const log = jest.fn();
         const notify = createDeadlineNotifier({
-            getSettings: jest.fn().mockRejectedValue('settings offline'),
+            getSetting: jest.fn().mockRejectedValue('settings offline'),
             getDeadlineActions: jest.fn(),
             translate: (k) => k,
             deliver: jest.fn(),

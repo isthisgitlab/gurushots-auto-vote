@@ -11,16 +11,16 @@ import { createScenarioNotifier } from '../../services/scenarioNotifications';
 
 /**
  * @param {Object} deps
- * @param {()=>Promise<Object>} deps.getSettings - the getSettings IPC
+ * @param {(key:string)=>Promise<any>} deps.getSetting - the getGlobalDefault IPC
  * @param {(challengeId:unknown)=>Promise<any>} deps.getScenarioStatus - the getScenarioStatus IPC
  * @param {(key:string)=>string} deps.translate
  * @param {(n:{title:string, body:string})=>void} deps.deliver
  * @param {(message:string)=>void} [deps.log]
  * @returns {(challenges:Array)=>Promise<void>}
  */
-export function createRendererScenarioNotifier({ getSettings, getScenarioStatus, translate, deliver, log }) {
+export function createRendererScenarioNotifier({ getSetting, getScenarioStatus, translate, deliver, log }) {
     return createScenarioNotifier({
-        isEnabled: async () => (await getSettings())?.notifyOnScenario !== false,
+        isEnabled: async () => (await getSetting('notifyOnScenario')) !== false,
         readOutbox: async (challenge) => {
             const status = await getScenarioStatus(challenge.id);
             return status?.success ? status.state?.outbox : null;

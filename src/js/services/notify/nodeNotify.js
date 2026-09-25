@@ -98,7 +98,7 @@ const deliverOsNotification = ({ title, body }) => {
  */
 const createNodeDeadlineNotifier = (deps = {}) => {
     const describeDeadlineActions = deps.describeDeadlineActions || votingLogic.describeDeadlineActions;
-    const getSetting = deps.getSetting || ((key) => settings.getSetting(key));
+    const getSetting = deps.getSetting || ((key) => settings.getGlobalDefault(key));
     const translate = deps.translate || nodeTranslate;
     const deliver = deps.deliver || deliverOsNotification;
 
@@ -153,7 +153,7 @@ const createNodeDeadlineNotifier = (deps = {}) => {
  * @returns {(challenges:Array)=>Promise<void>}
  */
 const createNodeScenarioNotifier = (deps = {}) => {
-    const getSetting = deps.getSetting || ((key) => settings.getSetting(key));
+    const getSetting = deps.getSetting || ((key) => settings.getGlobalDefault(key));
     const getStatus = deps.getStatus || getScenarioStatus;
     return createScenarioNotifier({
         isEnabled: () => getSetting('notifyOnScenario') !== false,

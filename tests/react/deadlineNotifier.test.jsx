@@ -18,10 +18,12 @@ const act = (action, secondsUntil) => ({ action, dueAt: NOW + secondsUntil });
 
 const settingsAllOff = { notifyLeadTime: 5 };
 const settingsBoostOn = { notifyOnBoost: true, notifyLeadTime: 5 };
+// The getGlobalDefault IPC: one key per call.
+const readerFor = (store) => jest.fn(async (key) => store[key]);
 
 const makeNotifier = (over = {}) =>
     createDeadlineNotifier({
-        getSettings: jest.fn(async () => settingsBoostOn),
+        getSetting: readerFor(settingsBoostOn),
         getDeadlineActions: jest.fn(async () => okActions(act('boost', 120))),
         translate: (key) => key,
         deliver: jest.fn(),
@@ -33,7 +35,7 @@ describe('createDeadlineNotifier', () => {
         const getDeadlineActions = jest.fn();
         const deliver = jest.fn();
         const notify = makeNotifier({
-            getSettings: jest.fn(async () => settingsAllOff),
+            getSetting: readerFor(settingsAllOff),
             getDeadlineActions,
             deliver,
         });
@@ -90,7 +92,7 @@ describe('createDeadlineNotifier', () => {
             c.id === '1' ? okActions(act('boost', 60)) : okActions(act('boost', 90)),
         );
         const notify = makeNotifier({
-            getSettings: jest.fn(async () => settingsBoostOn),
+            getSetting: readerFor(settingsBoostOn),
             getDeadlineActions,
             deliver,
         });
@@ -112,15 +114,15 @@ describe('createDeadlineNotifier', () => {
         const gate = new Promise((resolve) => {
             releaseSettings = resolve;
         });
-        // First call blocks inside getSettings; the second call arrives while it
-        // is still in flight and must no-op.
+        // The first cycle blocks inside its first setting read; the second call
+        // arrives while it is still in flight and must no-op.
         let calls = 0;
-        const getSettings = jest.fn(async () => {
+        const getSetting = jest.fn(async (key) => {
             calls += 1;
             if (calls === 1) await gate;
-            return settingsBoostOn;
+            return settingsBoostOn[key];
         });
-        const notify = makeNotifier({ getSettings, deliver });
+        const notify = makeNotifier({ getSetting, deliver });
 
         const first = notify([{ id: '1', title: 'A' }], NOW);
         const second = notify([{ id: '1', title: 'A' }], NOW); // overlaps first
@@ -139,17 +141,17 @@ describe('createDeadlineNotifier', () => {
         expect(deliver).not.toHaveBeenCalled();
     });
 
-    test('a rejecting getSettings is caught, logged, and releases the guard (self-contained)', async () => {
+    test('a rejecting setting read is caught, logged, and releases the guard (self-contained)', async () => {
         const deliver = jest.fn();
         const log = jest.fn();
         let fail = true;
-        const getSettings = jest.fn(async () => {
+        const getSetting = jest.fn(async (key) => {
             if (fail) throw new Error('settings down');
-            return settingsBoostOn;
+            return settingsBoostOn[key];
         });
-        const notify = makeNotifier({ getSettings, deliver, log });
+        const notify = makeNotifier({ getSetting, deliver, log });
 
-        // First cycle: getSettings throws → must resolve (not reject), log, deliver nothing.
+        // First cycle: the setting read throws → must resolve (not reject), log, deliver nothing.
         await expect(notify([{ id: '1', title: 'A' }], NOW)).resolves.toBeUndefined();
         expect(log).toHaveBeenCalledTimes(1);
         expect(deliver).not.toHaveBeenCalled();

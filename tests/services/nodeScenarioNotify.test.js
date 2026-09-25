@@ -4,7 +4,7 @@
  */
 
 jest.mock('../../src/js/services/scenarioStatus', () => ({ getScenarioStatus: jest.fn() }));
-jest.mock('../../src/js/settings', () => ({ getSetting: jest.fn() }));
+jest.mock('../../src/js/settings', () => ({ getGlobalDefault: jest.fn() }));
 
 const settings = require('../../src/js/settings');
 const { getScenarioStatus } = require('../../src/js/services/scenarioStatus');
@@ -25,13 +25,13 @@ test('delivers outbox notices through the injected seams', async () => {
 });
 
 test('the default seams read the facade; notifyOnScenario false turns it off', async () => {
-    settings.getSetting.mockReturnValue(false);
+    settings.getGlobalDefault.mockReturnValue(false);
     const deliver = jest.fn();
     await createNodeScenarioNotifier({ deliver })([{ id: 7 }]);
-    expect(settings.getSetting).toHaveBeenCalledWith('notifyOnScenario');
+    expect(settings.getGlobalDefault).toHaveBeenCalledWith('notifyOnScenario');
     expect(getScenarioStatus).not.toHaveBeenCalled();
 
-    settings.getSetting.mockReturnValue(true);
+    settings.getGlobalDefault.mockReturnValue(true);
     getScenarioStatus.mockReturnValue({ state: null });
     await createNodeScenarioNotifier({ deliver })([{ id: 7 }]);
     expect(getScenarioStatus).toHaveBeenCalledWith('7');

@@ -26,6 +26,7 @@
  */
 
 import {
+    NOTIFY_CONFIG_KEYS,
     computeDueNotifications,
     createDedupe,
     formatNotification,
@@ -75,7 +76,7 @@ function logCycleFailure(log, error) {
  * would never dedupe).
  *
  * @param {Object} deps
- * @param {()=>Promise<Object>} deps.getSettings - the getSettings IPC
+ * @param {(key:string)=>Promise<any>} deps.getSetting - the getGlobalDefault IPC
  * @param {(challenge:Object)=>Promise<{success:boolean, actions?:Array}>} deps.getDeadlineActions -
  *   the getDeadlineActions IPC (returns the {success, actions} wrapper — never throws)
  * @param {(key:string)=>string} deps.translate - returns a raw i18n template
@@ -84,7 +85,7 @@ function logCycleFailure(log, error) {
  *   (e.g. ipc.logRendererDebug); a failure is logged here rather than vanishing.
  * @returns {(challenges:Array, now:number)=>Promise<void>}
  */
-export function createDeadlineNotifier({ getSettings, getDeadlineActions, translate, deliver, log }) {
+export function createDeadlineNotifier({ getSetting, getDeadlineActions, translate, deliver, log }) {
     const dedupe = createDedupe();
     // Re-entrancy guard: per-challenge IPC round trips make a cycle's run
     // outlast a fast (last-minute) cadence tick; without this, two overlapping
@@ -95,8 +96,9 @@ export function createDeadlineNotifier({ getSettings, getDeadlineActions, transl
         if (running) return;
         running = true;
         try {
-            const settings = await getSettings();
-            const config = readNotificationConfig((key) => settings?.[key]);
+            const values = await Promise.all(NOTIFY_CONFIG_KEYS.map((key) => getSetting(key)));
+            const byKey = Object.fromEntries(NOTIFY_CONFIG_KEYS.map((key, i) => [key, values[i]]));
+            const config = readNotificationConfig((key) => byKey[key]);
             // Feature off (the default) → zero per-challenge work.
             if (!config.anyEnabled) return;
 

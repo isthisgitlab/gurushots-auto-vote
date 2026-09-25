@@ -7,6 +7,7 @@
 jest.mock('node:child_process', () => ({ execFile: jest.fn() }));
 jest.mock('../../src/js/settings', () => ({
     getSetting: jest.fn(() => 'en'),
+    getGlobalDefault: jest.fn(),
     loadSettings: jest.fn(() => ({})),
     getEffectiveSetting: jest.fn(),
 }));
@@ -102,6 +103,8 @@ describe('createNodeDeadlineNotifier (default wiring)', () => {
 
     beforeEach(() => {
         settings.getSetting.mockImplementation((key) => store[key]);
+        // The toggles live in the global defaults (where the settings modal saves them).
+        settings.getGlobalDefault.mockImplementation((key) => store[key]);
         setPlatform('linux');
     });
 

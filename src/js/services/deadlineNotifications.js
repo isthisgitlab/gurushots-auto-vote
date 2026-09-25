@@ -47,6 +47,14 @@ const NOTIFY_SETTING_KEYS = {
     emergencyFill: 'notifyOnEmergencyFill',
 };
 
+/**
+ * Every settings key readNotificationConfig reads, for a host that has to
+ * fetch them up front (the renderer, over IPC). They are global-only keys held
+ * in the challenge-settings global defaults, so read them with getGlobalDefault
+ * — not the top-level getSetting, which never sees them.
+ */
+const NOTIFY_CONFIG_KEYS = [...Object.values(NOTIFY_SETTING_KEYS), 'notifyLeadTime'];
+
 const MAX_TEXT_LEN = 120;
 
 /**
@@ -244,6 +252,7 @@ const readNotificationConfig = (getSetting) => {
 module.exports = {
     ACTION_LABEL_KEY,
     NOTIFY_SETTING_KEYS,
+    NOTIFY_CONFIG_KEYS,
     sanitizeNotificationText,
     interpolate,
     computeDueNotifications,
