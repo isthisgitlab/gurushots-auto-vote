@@ -2,6 +2,8 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { useListDraft, LIST_FINGERPRINT_SEP } from '@/hooks/useListDraft';
 import { SettingResetButton } from './SettingResetButton';
 import { TimeField, ScheduleField, TimeOfDayListField, TimeListField } from './TimeSettingFields';
+import { useScenarios } from '@/api/useScenarios';
+import { interp } from '@/utils/interp';
 
 export { SCHEDULED_FILL_MAX_ENTRIES } from './TimeSettingFields';
 
@@ -190,6 +192,41 @@ function TextField({ id, settingKey, value, onChange, onReset, disabled }) {
 }
 
 /**
+ * The `scenario` assignment: a pick of the stored scenarios ('' = none). A
+ * name that no longer exists stays visible — marked as missing — so the user
+ * sees the stale assignment instead of it silently reading as "none".
+ */
+function ScenarioField({ id, settingKey, value, onChange, onReset, disabled }) {
+    const { t } = useTranslation();
+    const { scenarios } = useScenarios();
+    const names = Object.keys(scenarios);
+    const current = String(value);
+    const selected = names.find((name) => name.toLowerCase() === current.toLowerCase()) ?? current;
+    const missing = current !== '' && !names.includes(selected);
+    return (
+        <ControlRow settingKey={settingKey} onReset={onReset}>
+            <select
+                id={id}
+                className="select select-sm"
+                value={selected}
+                onChange={(e) => onChange(settingKey, e.target.value)}
+                disabled={disabled}
+            >
+                <option value="">{t('app.scenarioNone')}</option>
+                {names.map((name) => (
+                    <option key={name} value={name}>
+                        {name}
+                    </option>
+                ))}
+                {missing && (
+                    <option value={current}>{interp(t('app.scenarioMissingOption'), { name: current })}</option>
+                )}
+            </select>
+        </ControlRow>
+    );
+}
+
+/**
  * Get default value for a config type to prevent uncontrolled inputs
  */
 function getDefaultForType(type) {
@@ -222,6 +259,7 @@ const FIELD_BY_TYPE = new Map([
     ['time', TimeField],
     ['boolean', BooleanField],
     ['number', NumberField],
+    ['scenario', ScenarioField],
 ]);
 
 // Row-list fields render inside a role="group" wrapper named by the

@@ -133,6 +133,10 @@ Object.assign(mockApi, {
     saveChallengeProfile: jest.fn().mockResolvedValue(true),
     deleteChallengeProfile: jest.fn().mockResolvedValue(true),
     applyChallengeProfile: jest.fn().mockResolvedValue(true),
+
+    // User-defined scenarios — none stored, and no challenge has one.
+    getScenarios: jest.fn().mockResolvedValue({ success: true, scenarios: {}, templates: [] }),
+    getScenarioStatus: jest.fn().mockResolvedValue({ success: true, assigned: '' }),
 });
 
 // Every live settings-changed listener. Each registration gets its own

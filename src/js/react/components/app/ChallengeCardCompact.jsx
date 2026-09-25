@@ -3,6 +3,7 @@ import { getEntryStatus } from '@/utils/formatters';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
 import { DeadlineTimeline } from './DeadlineTimeline';
+import { ScenarioStatusLine } from './ScenarioStatusLine';
 
 /**
  * One labelled stat in the compact tile's grid. The emoji is the visual label;
@@ -45,6 +46,7 @@ export function ChallengeCardCompact({
     onToggleCompact,
     boostBlocked,
     deadlineActions,
+    scenarioStatus,
     actions,
 }) {
     const { t } = useTranslation();
@@ -116,6 +118,7 @@ export function ChallengeCardCompact({
             )}
 
             <DeadlineTimeline actions={deadlineActions} compact />
+            <ScenarioStatusLine status={scenarioStatus} compact />
 
             {actions}
         </div>

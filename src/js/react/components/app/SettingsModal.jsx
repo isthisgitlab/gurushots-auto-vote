@@ -16,6 +16,7 @@ import { SettingInput, SettingLabel } from './SettingInput';
 import { SettingHintList, globalSettingHints } from './SettingHints';
 import { ApplicationSettingsSection } from './ApplicationSettingsSection';
 import { TitleTagRulesEditor } from './TitleTagRulesEditor';
+import { ScenariosSection } from './ScenariosSection';
 import * as ipc from '@/api/ipc';
 
 // Challenge types seen on the live API (verified 2026-09-19). Suggestions for
@@ -232,6 +233,7 @@ export function SettingsModal({ isOpen, onClose }) {
                         hintsFor={hintsFor}
                     />
                     <TitleRulesSection titleRules={titleRules} />
+                    <ScenariosSection isOpen={isOpen} />
                     <ModalActionRow bordered {...actionRowProps} />
                 </div>
             )}

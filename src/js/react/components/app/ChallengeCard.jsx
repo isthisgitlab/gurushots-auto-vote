@@ -2,6 +2,7 @@ import { useTranslation } from '@/contexts/TranslationContext';
 import { deriveChallengeCardView } from '@/utils/challengeCardView';
 import { useDeadlineActions } from '@/api/useDeadlineActions';
 import { useSwapBacks } from '@/api/useSwapBacks';
+import { useScenarioStatus } from '@/api/useScenarioStatus';
 import { useChallengeSettings } from '@/hooks/useChallengeSettings';
 import { useTick } from '@/hooks/useTick';
 import { ChallengeCardCompact } from './ChallengeCardCompact';
@@ -41,6 +42,7 @@ export function ChallengeCard({
     // renders without them, never an error surface.
     const { actions: deadlineActions, boostBlocked } = useDeadlineActions(challenge, settingsVersion);
     const swapBacks = useSwapBacks(challenge);
+    const scenarioStatus = useScenarioStatus(challenge, settingsVersion);
 
     // Tick once a second — only meaningful when this challenge is in TIMER
     // state and we want canPlayAutoTurbo to flip to true the moment the
@@ -98,6 +100,7 @@ export function ChallengeCard({
                     onToggleCompact={toggleCompact}
                     boostBlocked={boostBlocked}
                     deadlineActions={deadlineActions}
+                    scenarioStatus={scenarioStatus}
                     actions={buildCompactActionRow({ actions, canFill: view.canFill, enabled: compactActions })}
                 />
             </div>
@@ -119,6 +122,7 @@ export function ChallengeCard({
                 onToggleCompact={toggleCompact}
                 boostBlocked={boostBlocked}
                 deadlineActions={deadlineActions}
+                scenarioStatus={scenarioStatus}
                 swapBacks={swapBacks}
                 bankroll={bankroll}
                 onVoteComplete={onVoteComplete}

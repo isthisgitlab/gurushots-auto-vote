@@ -4,6 +4,7 @@ import { formatEndTime, getLevelStatus } from '@/utils/formatters';
 import { getNextLevelInfo } from '@/utils/challengeCardView';
 import { sanitizeWelcomeMessage } from '@/utils/sanitizeWelcomeMessage';
 import { DeadlineTimeline } from './DeadlineTimeline';
+import { ScenarioStatusLine } from './ScenarioStatusLine';
 import { EntryBadge } from './EntryBadge';
 import { ChallengeBadgeRow } from './ChallengeBadgeRow';
 import { CardDensityToggle } from './CardDensityToggle';
@@ -206,6 +207,7 @@ export function ChallengeCardDetail({
     onToggleCompact,
     boostBlocked,
     deadlineActions,
+    scenarioStatus,
     swapBacks,
     bankroll,
     onVoteComplete,
@@ -287,6 +289,7 @@ export function ChallengeCardDetail({
             {/* Advisory timeline of the automation's upcoming deadline
                 actions (the compact tile shows only the next one). */}
             <DeadlineTimeline actions={deadlineActions} />
+            <ScenarioStatusLine status={scenarioStatus} />
         </div>
     );
 }

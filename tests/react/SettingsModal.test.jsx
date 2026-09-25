@@ -675,7 +675,7 @@ describe('SettingsModal — rule loading', () => {
         window.api.getTitleRules.mockRejectedValueOnce(failure);
         render(<SettingsModal isOpen={true} onClose={jest.fn()} />);
         await waitFor(() => expect(window.api.logError).toHaveBeenCalledWith(message));
-        expect(screen.getByText('app.titleTagRulesLoadError')).toBeTruthy();
+        expect(await screen.findByText('app.titleTagRulesLoadError')).toBeTruthy();
         // The editor is gone, so no edit can be made that the skipped save would drop.
         expect(screen.queryByText('app.noTitleTagRules')).toBeNull();
     });
