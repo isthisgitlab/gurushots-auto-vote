@@ -45,6 +45,17 @@ const isReserved = (/** @type {string} */ value) => RESERVED_PROFILE_NAMES.has(v
 /** z.enum over one of the vocabulary's plain string lists. */
 const oneOf = (/** @type {string[]} */ values) => z.enum(/** @type {[string, ...string[]]} */ (values));
 
+/**
+ * Free text shown in logs, the CLI and the GUI (rule labels, descriptions).
+ * Control characters are refused: a shared file must not be able to forge log
+ * lines (CR/LF) or drive the terminal (ANSI escapes).
+ */
+const plainText = (/** @type {number} */ max) =>
+    z
+        .string()
+        .max(max)
+        .regex(/^\P{Cc}*$/u, 'Remove line breaks and other control characters');
+
 const identifier = z
     .string()
     .regex(/^[A-Za-z][\w-]{0,31}$/, 'Use letters, digits, "-" or "_", starting with a letter (max 32)')
@@ -187,7 +198,7 @@ const rule = z.strictObject({
         .string()
         .regex(/^[\w-]{1,40}$/, 'Use letters, digits, "-" or "_" (max 40)')
         .optional(),
-    label: z.string().max(SCENARIO_CAPS.nameLength).optional(),
+    label: plainText(SCENARIO_CAPS.nameLength).optional(),
     repeat: oneOf(vocabulary.REPEAT_MODES).optional(),
     if: z.array(condition).max(SCENARIO_CAPS.conditionsPerList).optional(),
     do: z.array(action).min(1, 'A rule needs at least one action').max(SCENARIO_CAPS.actionsPerRule),
@@ -203,7 +214,7 @@ const limitCount = z.number().int().min(0).max(100000);
 const scenarioDocument = z.strictObject({
     name: scenarioName,
     version: z.literal(1),
-    description: z.string().max(SCENARIO_CAPS.descriptionLength).optional(),
+    description: plainText(SCENARIO_CAPS.descriptionLength).optional(),
     start: identifier,
     limits: z
         .strictObject({ swaps: limitCount.optional(), keys: limitCount.optional(), fills: limitCount.optional() })

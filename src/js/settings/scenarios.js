@@ -81,11 +81,11 @@ const getScenarios = () => {
 
 /** One valid scenario by name (case-insensitive), or null. */
 const getScenario = (name) => {
-    const normalized = normalizeProfileName(name);
-    if (!normalized) return null;
-    const scenarios = getScenarios();
-    const key = findProfileKey(scenarios, normalized);
-    return key === null ? null : scenarios[key];
+    if (!normalizeProfileName(name)) return null;
+    // Looks up and copies just this one — the engine and the scheduler call it
+    // per challenge per pass.
+    const scenario = findStoredScenario(loadSettings(), name);
+    return scenario ? structuredClone(scenario) : null;
 };
 
 const failure = (issues) => ({ ok: false, issues });
@@ -181,7 +181,7 @@ const saveScenario = (doc, { overwrite = true } = {}) => storeScenario(doc, { ov
  */
 const renameScenario = (oldName, newName) => {
     const existing = getScenario(oldName);
-    if (!existing) return failure([{ path: 'name', message: `No scenario named "${oldName}"` }]);
+    if (!existing) return failure([{ path: 'name', message: `No scenario named "${profileNameForLog(oldName)}"` }]);
     const sameName = normalizeProfileName(oldName) === normalizeProfileName(newName);
     return storeScenario(
         { ...existing, name: newName },

@@ -176,6 +176,12 @@ describe('validateScenario — shape errors carry readable paths', () => {
         expectIssue(withRule({ if: [condition] }), `phases.main.rules[0].${path}`, message);
     });
 
+    test('labels and descriptions refuse control characters', () => {
+        expectIssue(withRule({ label: 'two\nlines' }), 'phases.main.rules[0].label', 'control characters');
+        expectIssue(doc({ description: 'colour \u001b[31mred' }), 'description', 'control characters');
+        expect(validate(doc({ description: 'Ieliec pa vienai bildei — Izstāde' })).ok).toBe(true);
+    });
+
     test('names must be bounded, well-formed and not reserved', () => {
         expectIssue(doc({ name: '' }), 'name', 'required');
         expectIssue(doc({ name: 'x'.repeat(61) }), 'name', 'longer than');

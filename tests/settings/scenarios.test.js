@@ -134,6 +134,7 @@ describe('settings facade — scenarios', () => {
             expect(settings.renameScenario('A', 'b').issues[0].message).toContain('already exists');
             expect(settings.renameScenario('A', '').issues[0].path).toBe('name');
             expect(settings.renameScenario('Nope', 'C').issues[0].message).toContain('No scenario named');
+            expect(settings.renameScenario('a\nforged', 'C').issues[0].message).toBe('No scenario named "a forged"');
             expect(Object.keys(storedMap()).sort()).toEqual(['A', 'B']);
         });
     });
