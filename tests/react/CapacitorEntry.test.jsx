@@ -72,6 +72,8 @@ describe('Capacitor entry', () => {
             flushSwapBackWrites: jest.fn(),
             initializeAutoSpendAsync: jest.fn().mockResolvedValue(undefined),
             flushAutoSpendWrites: jest.fn(),
+            initializeScenarioStateAsync: jest.fn().mockResolvedValue(undefined),
+            flushScenarioStateWrites: jest.fn(),
             initializeDiagnosticsAsync: jest.fn().mockResolvedValue(undefined),
             flushDiagnosticsWrites: jest.fn(),
             isCapacitor: jest.fn(() => native),
@@ -102,6 +104,10 @@ describe('Capacitor entry', () => {
             jest.doMock(`${SRC}/currencyAutoStore`, () => ({
                 initializeAutoSpendAsync: m.initializeAutoSpendAsync,
                 flushAutoSpendWrites: m.flushAutoSpendWrites,
+            }));
+            jest.doMock(`${SRC}/scenarioStateStore`, () => ({
+                initializeScenarioStateAsync: m.initializeScenarioStateAsync,
+                flushScenarioStateWrites: m.flushScenarioStateWrites,
             }));
             jest.doMock(`${SRC}/services/semantic/diagnostics`, () => ({
                 initializeDiagnosticsAsync: m.initializeDiagnosticsAsync,
@@ -142,6 +148,7 @@ describe('Capacitor entry', () => {
             m.initializeJoinStateAsync,
             m.initializeSwapBackAsync,
             m.initializeAutoSpendAsync,
+            m.initializeScenarioStateAsync,
             m.initializeDiagnosticsAsync,
             m.mountApp,
         ].map((fn) => fn.mock.invocationCallOrder[0]);
@@ -160,6 +167,7 @@ describe('Capacitor entry', () => {
             m.flushJoinStateWrites,
             m.flushSwapBackWrites,
             m.flushAutoSpendWrites,
+            m.flushScenarioStateWrites,
             m.flushDiagnosticsWrites,
         ];
 

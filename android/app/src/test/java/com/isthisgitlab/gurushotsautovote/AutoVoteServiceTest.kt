@@ -274,7 +274,7 @@ class AutoVoteServiceTest {
     }
 
     @Test
-    fun headlessDiagnosticsUseOnlyTheAllowedPreferenceKey() {
+    fun headlessSideStoresUseOnlyTheAllowedPreferenceKeys() {
         val store = newService().HeadlessStore()
         store.writeKey("gs_lexicon_diagnostics", "{\"challenges\":1}")
         assertEquals("{\"challenges\":1}", store.readKey("gs_lexicon_diagnostics"))
@@ -282,6 +282,10 @@ class AutoVoteServiceTest {
         assertNull(store.readKey("unrelated-key"))
         store.writeKey("gs_lexicon_diagnostics", "invalid JSON")
         assertEquals("{\"challenges\":1}", store.readKey("gs_lexicon_diagnostics"))
+        store.writeKey("gs_scenario_state", "{\"7\":{\"phase\":\"buildup\"}}")
+        assertEquals("{\"7\":{\"phase\":\"buildup\"}}", store.readKey("gs_scenario_state"))
+        store.writeKey("gs_scenario_state", "invalid JSON")
+        assertEquals("{\"7\":{\"phase\":\"buildup\"}}", store.readKey("gs_scenario_state"))
     }
 
     @Test

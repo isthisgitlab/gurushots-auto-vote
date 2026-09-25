@@ -19,6 +19,7 @@ import { initializeMetadataAsync, flushMetadataWrites } from '../../metadata';
 import { initializeJoinStateAsync, flushJoinStateWrites } from '../../joinStateStore';
 import { initializeSwapBackAsync, flushSwapBackWrites } from '../../swapBackStore';
 import { initializeAutoSpendAsync, flushAutoSpendWrites } from '../../currencyAutoStore';
+import { initializeScenarioStateAsync, flushScenarioStateWrites } from '../../scenarioStateStore';
 import { initializeDiagnosticsAsync, flushDiagnosticsWrites } from '../../services/semantic/diagnostics';
 import { isCapacitor } from '../../runtime';
 import { withCategory } from '../../logger';
@@ -64,6 +65,8 @@ const bootstrap = async () => {
         await initializeSwapBackAsync();
         // Automatic exposure-fill counts (the per-challenge fill cap).
         await initializeAutoSpendAsync();
+        // Where each challenge is in its user-defined scenario (phase, memory).
+        await initializeScenarioStateAsync();
         await initializeDiagnosticsAsync();
 
         // Settings writes are write-behind (cache now, persist async). When
@@ -77,6 +80,7 @@ const bootstrap = async () => {
                 flushJoinStateWrites();
                 flushSwapBackWrites();
                 flushAutoSpendWrites();
+                flushScenarioStateWrites();
                 flushDiagnosticsWrites();
             } catch {
                 // never let a teardown handler throw

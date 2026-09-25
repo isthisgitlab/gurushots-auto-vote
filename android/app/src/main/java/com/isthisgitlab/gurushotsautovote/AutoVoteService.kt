@@ -371,22 +371,26 @@ class AutoVoteService : Service() {
 
     /** Settings bridge — same store @capacitor/preferences uses, so token/settings stay in sync. */
     inner class HeadlessStore {
-        private val diagnosticKey = "gs_lexicon_diagnostics"
+        // The only side stores the background service persists besides the
+        // settings blob: lexicon diagnostics, and scenario runtime state (the
+        // phase and memory a user-defined scenario is at — losing it on a
+        // service restart would restart the plan).
+        private val allowedKeys = setOf("gs_lexicon_diagnostics", "gs_scenario_state")
 
         @android.webkit.JavascriptInterface
         fun read(): String? = getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null)
 
         @android.webkit.JavascriptInterface
         fun readKey(key: String): String? =
-            if (key == diagnosticKey) getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(key, null) else null
+            if (key in allowedKeys) getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(key, null) else null
 
         @android.webkit.JavascriptInterface
         fun writeKey(key: String, data: String) {
-            if (key != diagnosticKey) return
+            if (key !in allowedKeys) return
             try {
                 JSONObject(data)
             } catch (t: Throwable) {
-                Log.w(TAG, "Refusing to persist non-JSON diagnostics blob")
+                Log.w(TAG, "Refusing to persist non-JSON blob for $key")
                 return
             }
             getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(key, data).apply()
