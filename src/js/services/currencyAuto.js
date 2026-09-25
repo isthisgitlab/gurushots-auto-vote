@@ -56,21 +56,23 @@ const baseGate = (action, prefix, ctx) => {
 
 /**
  * True when the balance stays at or above the global reserve after spending
- * one. An unreadable bankroll refuses — never spend blind.
+ * one. An unreadable bankroll refuses — never spend blind. Shared with the
+ * scenario runner (services/scenarioRunner.js), which passes its own log
+ * label, so both automations honour the same user-set reserves.
  */
-const reserveAllows = async (action, ctx) => {
+const reserveAllows = async (action, ctx, label = `auto ${action}`) => {
     const { challenge, token, currency } = ctx;
     const bankroll = await currency.strategy.getBankroll(token);
     const balance = Number(bankroll?.[CURRENCY_FIELD[action]]);
     if (!Number.isFinite(balance)) {
-        log().warning(`auto ${action}: balance unreadable for ${logger.challengeTag(challenge)} — not spending`, null);
+        log().warning(`${label}: balance unreadable for ${logger.challengeTag(challenge)} — not spending`, null);
         return false;
     }
     const reserve = Number(settings.getEffectiveSetting(RESERVE_KEY[action]));
     const keep = Number.isFinite(reserve) && reserve > 0 ? reserve : 0;
     if (balance > keep) return true;
     log().info(
-        `auto ${action}: ${logger.challengeTag(challenge)} skipped — balance ${balance} would go below the reserve of ${keep}`,
+        `${label}: ${logger.challengeTag(challenge)} skipped — balance ${balance} would go below the reserve of ${keep}`,
         null,
     );
     return false;
@@ -80,10 +82,10 @@ const reserveAllows = async (action, ctx) => {
  * Runs a spend under the shared lock. Null when another spend holds it (the
  * rule simply re-evaluates next cycle).
  */
-const lockedSpend = async (action, challenge, spend) => {
+const lockedSpend = async (action, challenge, spend, label = `auto ${action}`) => {
     const locked = await currencyActions.withSpendLock(spend);
     if (locked.busy) {
-        log().info(`auto ${action}: ${logger.challengeTag(challenge)} deferred — another spend is in progress`, null);
+        log().info(`${label}: ${logger.challengeTag(challenge)} deferred — another spend is in progress`, null);
         return null;
     }
     return locked.value;
@@ -229,4 +231,4 @@ const runAutoExposureFill = guarded('fill', async (ctx, votePool) => {
     return true;
 });
 
-module.exports = { runAutoKey, runAutoSwap, runAutoExposureFill };
+module.exports = { runAutoKey, runAutoSwap, runAutoExposureFill, reserveAllows, lockedSpend };

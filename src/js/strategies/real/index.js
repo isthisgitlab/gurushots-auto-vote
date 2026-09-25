@@ -26,6 +26,8 @@ const { keyUnlock, swapPhoto, exposureAutofill } = require('../../api/currency')
 const { cleanupStaleMetadata } = require('../../metadata');
 const { swapBackLedger } = require('../../swapBackStore');
 const { autoSpendLedger } = require('../../currencyAutoStore');
+const { scenarioStateLedger } = require('../../scenarioStateStore');
+const { backgroundServiceOwnsScenarios } = require('../../services/scenarioRunner');
 const { sleep, getRandomDelay } = require('../../timing');
 const logger = require('../../logger');
 const { runVotingPass } = require('../../services/votingOrchestrator');
@@ -224,6 +226,11 @@ const fetchChallengesAndVote = async (token, _getExposureThreshold = null, chall
             swapLedger: swapBackLedger,
             spendLedger: autoSpendLedger,
         },
+        // User-defined scenarios over the persisted state ledger. In the Android
+        // app WebView the native background service owns them (it runs a pass
+        // alongside the in-app loop, with its own copy of the state), so only
+        // one loop ever advances a challenge's plan.
+        scenarios: { ledger: scenarioStateLedger, enabled: () => !backgroundServiceOwnsScenarios() },
     });
 };
 

@@ -61,6 +61,7 @@ const autoFill = require('./autoFill');
 const photoStats = require('./photoStats');
 const newEntryTracker = require('./newEntryTracker');
 const currencyAuto = require('./currencyAuto');
+const { runScenarioStep } = require('./scenarioRunner');
 const cancellation = require('../voting/cancellation');
 const { formatDuration } = require('../format/duration');
 const { failureText } = require('../format/logSafe');
@@ -443,6 +444,7 @@ const buildFillDeps = (api) => ({
  *   interChallengeDelay: () => number,
  *   entryTracker: ({get: Function, set: Function}|null),
  *   currency: (Object|null),
+ *   scenarios: ({ledger: Object, enabled?: () => boolean}|null),
  *   allChallenges: Array,
  * }} PassContext
  */
@@ -736,8 +738,9 @@ const voteOnChallenge = async (challenge, decision, pass, onVoteLanded) => {
 };
 
 /**
- * One challenge's full pass: turbo-earn, currency automation, deadline actions,
- * new-entry detection, the vote, and the post-vote exposure fill — in that order.
+ * One challenge's full pass: its user-defined scenario, turbo-earn, currency
+ * automation, deadline actions, new-entry detection, the vote, and the
+ * post-vote exposure fill — in that order.
  *
  * @param {Object} challenge
  * @param {number} now
@@ -755,6 +758,11 @@ const processChallenge = async (challenge, now, position, total, pass) => {
     logger
         .withCategory('voting')
         .progress(`Processing challenge ${position}/${total}: ${challenge.title}`, position, total);
+
+    // The challenge's scenario runs first: its actions (and a phase change)
+    // land before the built-in steps, which then read the new phase's
+    // settings overlay through getEffectiveSetting.
+    await runScenarioStep(challenge, now, pass);
 
     await playAutoTurbo(challenge, now, pass);
 
@@ -800,7 +808,14 @@ const processChallenge = async (challenge, now, position, total, pass) => {
 };
 
 const runVotingPass = async (token, challengeIdFilter, deps) => {
-    const { api, cleanupStaleMetadata, interChallengeDelay, entryTracker = null, currency = null } = deps;
+    const {
+        api,
+        cleanupStaleMetadata,
+        interChallengeDelay,
+        entryTracker = null,
+        currency = null,
+        scenarios = null,
+    } = deps;
     const fillDeps = buildFillDeps(api);
     // Clear the photo-stats failure breaker so a pass that hit a rate limit does
     // not disable stat enrichment for every later pass in the session.
@@ -835,7 +850,7 @@ const runVotingPass = async (token, challengeIdFilter, deps) => {
         const { challenges } = scope;
 
         /** @type {PassContext} */
-        const pass = { token, api, fillDeps, interChallengeDelay, entryTracker, currency, allChallenges };
+        const pass = { token, api, fillDeps, interChallengeDelay, entryTracker, currency, scenarios, allChallenges };
 
         // Process each challenge
         let processedCount = 0;

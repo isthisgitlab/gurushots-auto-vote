@@ -2,7 +2,8 @@
  * votingOrchestrator — where the automatic key / swap / fill spends sit in the
  * pass: key then swap BEFORE the deadline actions (so an unlocked boost and a
  * swapped-in photo are visible to them), fill AFTER the vote with the pool the
- * vote used (so it only spends when voting fell short).
+ * vote used (so it only spends when voting fell short). The user-defined
+ * scenario step runs before all of them.
  */
 
 jest.mock('../../src/js/settings', () => ({
@@ -26,7 +27,10 @@ jest.mock('../../src/js/services/currencyAuto', () => ({
     runAutoExposureFill: jest.fn(async () => false),
 }));
 
+jest.mock('../../src/js/services/scenarioRunner', () => ({ runScenarioStep: jest.fn(async () => {}) }));
+
 const votingLogic = require('../../src/js/services/VotingLogic');
+const { runScenarioStep } = require('../../src/js/services/scenarioRunner');
 const autoFill = require('../../src/js/services/autoFill');
 const currencyAuto = require('../../src/js/services/currencyAuto');
 const { runVotingPass } = require('../../src/js/services/votingOrchestrator');
@@ -69,6 +73,34 @@ test('key, then swap, then the deadline actions — all with the pass currency d
     expect(swap).toBeLessThan(deadline);
     expect(currencyAuto.runAutoKey).toHaveBeenCalledWith(
         expect.objectContaining({ token: 'tok', currency, challenge: expect.objectContaining({ id: 101 }) }),
+    );
+});
+
+test('the scenario step runs first, with the pass scenario deps', async () => {
+    const scenarios = { ledger: {} };
+    await runVotingPass('tok', null, {
+        api: makeApi(),
+        cleanupStaleMetadata: null,
+        interChallengeDelay: () => 0,
+        currency,
+        scenarios,
+    });
+    expect(runScenarioStep).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 101 }),
+        expect.any(Number),
+        expect.objectContaining({ scenarios, currency, token: 'tok' }),
+    );
+    expect(runScenarioStep.mock.invocationCallOrder[0]).toBeLessThan(
+        currencyAuto.runAutoKey.mock.invocationCallOrder[0],
+    );
+});
+
+test('without scenario deps the pass still runs the step, which no-ops', async () => {
+    await run(makeApi());
+    expect(runScenarioStep).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Number),
+        expect.objectContaining({ scenarios: null }),
     );
 });
 

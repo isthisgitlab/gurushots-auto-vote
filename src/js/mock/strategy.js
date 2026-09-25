@@ -17,6 +17,7 @@ const { runJoinPass, joinChallengeSingle } = require('../services/joinChallenges
 const { runClaimPass } = require('../services/autoClaim');
 const { mockSwapBackLedger } = require('../swapBackStore');
 const { createMemoryAutoSpendLedger } = require('../currencyAutoStore');
+const { mockScenarioStateLedger } = require('../scenarioStateStore');
 const { mockMethod } = require('./simulate');
 
 // Module-level so snapshots survive across mock cycles within a run — a per-call
@@ -164,6 +165,10 @@ const createMockStrategy = (client) => {
                 swapLedger: mockSwapBackLedger,
                 spendLedger: mockAutoSpendLedger,
             },
+            // In-memory scenario state — mock mode never touches scenarioState.json.
+            // The Android background service does nothing in mock mode, so the
+            // in-app loop always runs mock scenarios.
+            scenarios: { ledger: mockScenarioStateLedger },
         });
     };
 

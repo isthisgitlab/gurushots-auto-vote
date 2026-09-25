@@ -81,3 +81,38 @@ describe('runVotingPass api surface wiring', () => {
         }
     });
 });
+
+// Every API method a scenario action calls on pass.api (services/scenarioRunner.js).
+const SCENARIO_ACTION_METHODS = [
+    'getActiveChallenges',
+    'submitToChallenge',
+    'applyBoostToEntry',
+    'applyTurbo',
+    'getVoteImages',
+    'submitVotes',
+];
+
+describe('runVotingPass scenario wiring', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('real strategy runs scenarios over the persisted state ledger, off-Android', async () => {
+        const { scenarioStateLedger } = require('../../src/js/scenarioStateStore');
+        const { fetchChallengesAndVote } = require('../../src/js/strategies/real');
+        await fetchChallengesAndVote('tok');
+        const { api, scenarios } = runVotingPass.mock.calls[0][2];
+        expect(scenarios.ledger).toBe(scenarioStateLedger);
+        expect(scenarios.enabled()).toBe(true);
+        for (const method of SCENARIO_ACTION_METHODS) expect(typeof api[method]).toBe('function');
+    });
+
+    test('mock strategy runs scenarios over the in-memory ledger', async () => {
+        const { mockScenarioStateLedger } = require('../../src/js/scenarioStateStore');
+        const { mockApiClient } = require('../../src/js/mock');
+        await mockApiClient.fetchChallengesAndVote('tok');
+        const { api, scenarios } = runVotingPass.mock.calls[0][2];
+        expect(scenarios).toEqual({ ledger: mockScenarioStateLedger });
+        for (const method of SCENARIO_ACTION_METHODS) expect(typeof api[method]).toBe('function');
+    });
+});
