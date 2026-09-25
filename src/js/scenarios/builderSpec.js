@@ -18,7 +18,7 @@
 
 const vocabulary = require('./vocabulary');
 
-/** @typedef {{key: string, kind: string, optional?: boolean, options?: string[]}} FieldSpec */
+/** @typedef {{key: string, kind: string, optional?: boolean, options?: string[], labels?: string}} FieldSpec */
 
 const BOOST_STATES = ['LOCKED', 'AVAILABLE', 'AVAILABLE_KEY', 'USED', 'UNAVAILABLE'];
 const TURBO_STATES = ['FREE', 'IN_PROGRESS', 'TIMER', 'WON', 'LOCKED', 'USED'];
@@ -43,8 +43,8 @@ const CONDITION_FIELDS = {
     inPhaseFor: range('duration'),
     elapsedPercent: range('percent'),
     ...Object.fromEntries(vocabulary.NUMERIC_CONDITIONS.map((type) => [type, compared])),
-    boostState: [{ key: 'in', kind: 'states', options: BOOST_STATES }],
-    turboState: [{ key: 'in', kind: 'states', options: TURBO_STATES }],
+    boostState: [{ key: 'in', kind: 'states', options: BOOST_STATES, labels: 'boost' }],
+    turboState: [{ key: 'in', kind: 'states', options: TURBO_STATES, labels: 'turbo' }],
     balance: [{ key: 'currency', kind: 'currency' }, ...compared],
     memorySet: [{ key: 'slot', kind: 'slot' }],
     entry: [

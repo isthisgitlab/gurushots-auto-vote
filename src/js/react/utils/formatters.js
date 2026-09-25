@@ -59,6 +59,8 @@ export const formatSettingDefault = (value, config, t) => {
     if (Array.isArray(value)) {
         return value.join(', ') || t('app.none');
     }
+    // An empty text default (e.g. no scenario) reads as "none", not a blank.
+    if (value === '') return t('app.none');
     if (config?.type === 'time') {
         return formatSecondsAsHoursMinutes(value, t('app.hours'), t('app.minutes'));
     }

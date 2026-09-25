@@ -92,7 +92,7 @@ function RuleEditor({ rule, onChange, phases, controls }) {
     return (
         <div className="rounded border border-base-300 p-2 space-y-2 bg-base-100">
             <div className="flex flex-wrap gap-2 items-end">
-                <label className="form-control text-xs gap-1 flex-1 min-w-40">
+                <label className="flex flex-col text-xs gap-1 flex-1 min-w-40">
                     <span className="opacity-70">{t('app.sbRuleLabel')}</span>
                     <input
                         type="text"
@@ -102,7 +102,7 @@ function RuleEditor({ rule, onChange, phases, controls }) {
                         onChange={(e) => onChange(setIn(rule, ['label'], e.target.value || undefined))}
                     />
                 </label>
-                <label className="form-control text-xs gap-1">
+                <label className="flex flex-col text-xs gap-1">
                     <span className="opacity-70">{t('app.sbRepeat')}</span>
                     <select
                         className="select select-sm select-bordered"
@@ -138,7 +138,7 @@ function PhaseEditor({ name, phase, draft, onDraft, phases }) {
     return (
         <section className="rounded-lg border border-base-300 p-3 space-y-3">
             <div className="flex gap-2 items-end">
-                <label className="form-control text-xs gap-1 flex-1">
+                <label className="flex flex-col text-xs gap-1 flex-1">
                     <span className="opacity-70">{t('app.sbPhaseName')}</span>
                     <input
                         type="text"
@@ -213,7 +213,7 @@ function ScenarioHeader({ draft, onDraft, phases }) {
     const { t } = useTranslation();
     return (
         <div className="grid gap-2 sm:grid-cols-2">
-            <label className="form-control text-xs gap-1">
+            <label className="flex flex-col text-xs gap-1">
                 <span className="opacity-70">{t('app.sbName')}</span>
                 <input
                     type="text"
@@ -222,7 +222,7 @@ function ScenarioHeader({ draft, onDraft, phases }) {
                     onChange={(e) => onDraft({ ...draft, name: e.target.value })}
                 />
             </label>
-            <label className="form-control text-xs gap-1">
+            <label className="flex flex-col text-xs gap-1">
                 <span className="opacity-70">{t('app.sbStart')}</span>
                 <select
                     className="select select-sm select-bordered"
@@ -236,7 +236,7 @@ function ScenarioHeader({ draft, onDraft, phases }) {
                     ))}
                 </select>
             </label>
-            <label className="form-control text-xs gap-1 sm:col-span-2">
+            <label className="flex flex-col text-xs gap-1 sm:col-span-2">
                 <span className="opacity-70">{t('app.sbDescription')}</span>
                 <input
                     type="text"
@@ -249,7 +249,7 @@ function ScenarioHeader({ draft, onDraft, phases }) {
                 <legend className="opacity-70 mb-1">{t('app.sbLimits')}</legend>
                 <div className="flex gap-2">
                     {LIMIT_KEYS.map((key) => (
-                        <label key={key} className="form-control gap-1">
+                        <label key={key} className="flex flex-col gap-1">
                             <span>{t(`app.sbCurrency_${key}`)}</span>
                             <input
                                 type="number"

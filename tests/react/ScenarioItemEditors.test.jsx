@@ -102,9 +102,9 @@ describe('field kinds', () => {
         const { unmount } = render(
             <Probe Editor={ItemEditor} kind="condition" initial={{ type: 'boostState', in: 'AVAILABLE' }} />,
         );
-        fireEvent.click(control('AVAILABLE_KEY'));
-        fireEvent.click(control('LOCKED'));
-        fireEvent.click(control('LOCKED'));
+        fireEvent.click(control('app.sbState_boost_AVAILABLE_KEY'));
+        fireEvent.click(control('app.sbState_boost_LOCKED'));
+        fireEvent.click(control('app.sbState_boost_LOCKED'));
         expect(value()).toEqual({ type: 'boostState', in: ['AVAILABLE_KEY'] });
         unmount();
         const second = render(

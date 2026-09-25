@@ -81,10 +81,10 @@ describe('phases', () => {
     });
 
     test('newRule ids are unique across the scenario', () => {
-        const withRule = model.setIn(doc, ['phases', 'later', 'rules'], [{ id: 'main-2', do: [] }]);
-        expect(model.newRule(withRule, 'main').id).toBe('main-3');
+        const withRule = model.setIn(doc, ['phases', 'later', 'rules'], [{ id: 'main-1', do: [] }]);
+        expect(model.newRule(withRule, 'main').id).toBe('main-2');
         expect(model.newRule(doc, 'later')).toEqual({
-            id: 'later-2',
+            id: 'later-1',
             repeat: 'once',
             do: [{ type: 'notify', message: 'Check the challenge' }],
         });

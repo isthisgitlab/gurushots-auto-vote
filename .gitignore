@@ -151,3 +151,5 @@ dist-site/
 .claude/scheduled_tasks.lock
 
 .claude/worktrees/
+
+.claude/memory/

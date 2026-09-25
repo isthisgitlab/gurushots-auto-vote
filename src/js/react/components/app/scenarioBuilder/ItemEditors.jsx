@@ -31,7 +31,7 @@ const SELECT = 'select select-sm select-bordered w-full';
  */
 function Field({ label, children }) {
     return (
-        <div role="group" aria-label={label} className="form-control text-xs gap-1">
+        <div role="group" aria-label={label} className="flex flex-col text-xs gap-1">
             <span className="opacity-70" aria-hidden="true">
                 {label}
             </span>
@@ -85,13 +85,14 @@ function PhotoSourceInput({ value, onChange, label }) {
     );
 }
 
-/** Boost / turbo states: any of the listed ones. */
-function StatesInput({ value, options, onChange }) {
+/** Boost / turbo states: any of the listed ones, labelled in words (the raw state is the tooltip). */
+function StatesInput({ value, options, labels, onChange }) {
+    const { t } = useTranslation();
     const selected = new Set(Array.isArray(value) ? value : []);
     return (
         <div className="flex flex-wrap gap-2">
             {options.map((state) => (
-                <label key={state} className="label cursor-pointer gap-1 p-0">
+                <label key={state} className="label cursor-pointer gap-1 p-0" title={state}>
                     <input
                         type="checkbox"
                         className="checkbox checkbox-xs"
@@ -103,7 +104,7 @@ function StatesInput({ value, options, onChange }) {
                             onChange(options.filter((option) => next.has(option)));
                         }}
                     />
-                    <span className="font-mono">{state}</span>
+                    <span>{t(`app.sbState_${labels}_${state}`)}</span>
                 </label>
             ))}
         </div>
@@ -171,7 +172,7 @@ function FieldInput({ field, value, onChange, item, phases, label }) {
                 />
             );
         case 'states':
-            return <StatesInput value={value} options={field.options} onChange={onChange} />;
+            return <StatesInput value={value} options={field.options} labels={field.labels} onChange={onChange} />;
         case 'currency':
             return (
                 <select aria-label={label} className={SELECT} value={value} onChange={(e) => onChange(e.target.value)}>

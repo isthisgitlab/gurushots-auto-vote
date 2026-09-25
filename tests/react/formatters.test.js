@@ -30,6 +30,10 @@ describe('formatSettingDefault edge shapes', () => {
         expect(out).toBe('undefined ≤ 0 h, 0 m, undefined ≤ 0 h, 1 m, 5 ≤ 1 h, 0 m');
     });
 
+    test('an empty text default renders the none label', () => {
+        expect(formatSettingDefault('', { type: 'scenario' }, t)).toBe('(none)');
+    });
+
     test('schedule with a non-array value renders the none label', () => {
         expect(formatSettingDefault('bogus', { type: 'schedule' }, t)).toBe('(none)');
     });

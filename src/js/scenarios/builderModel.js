@@ -62,14 +62,16 @@ const moveItem = (list, index, delta) => {
 const newScenario = (name) => ({ name, version: 1, start: 'main', phases: { main: { rules: [] } } });
 
 /**
- * The first `${base}${n}` not already taken.
+ * The first `${base}${n}` not already taken, counting from `first` — 2 for a
+ * phase (it follows `main`), 1 for a rule (the phase's first rule is `-1`).
  *
  * @param {string} base
  * @param {Iterable<string>} taken
+ * @param {number} [first]
  */
-const freeKey = (base, taken) => {
+const freeKey = (base, taken, first = 2) => {
     const used = new Set(taken);
-    let n = 2;
+    let n = first;
     while (used.has(`${base}${n}`)) n++;
     return `${base}${n}`;
 };
@@ -130,7 +132,7 @@ const newRule = (doc, phase) => {
         (p.rules ?? []).map((/** @type {any} */ r) => r.id),
     );
     return {
-        id: freeKey(`${phase}-`, ids),
+        id: freeKey(`${phase}-`, ids, 1),
         repeat: 'once',
         do: [{ type: 'notify', message: 'Check the challenge' }],
     };
