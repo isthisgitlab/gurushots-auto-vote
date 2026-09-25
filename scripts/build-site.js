@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // Renders the project's Markdown docs into a small, self-contained static site
-// for GitHub Pages. The README stays the single source of truth — this script
-// only transforms it (and the two docs it links to) into branded HTML that
+// for GitHub Pages. The READMEs and linked guides stay the source of truth — this script
+// only transforms them into branded HTML that
 // reuses the app's Tailwind + DaisyUI styling. Run `pnpm build:site` to also
 // build the CSS; this file just emits the HTML and copies assets.
 //
@@ -34,6 +34,13 @@ const SITE_DESCRIPTION =
 const PAGES = [
     { src: 'README.md', out: 'index.html', title: 'GuruShots Auto Vote', nav: 'Home', lang: 'en' },
     {
+        src: 'docs/usage.md',
+        out: 'usage.html',
+        title: 'Usage — GuruShots Auto Vote',
+        nav: 'Usage',
+        lang: 'en',
+    },
+    {
         src: 'docs/scheduling.md',
         out: 'scheduling.html',
         title: 'Scheduling — GuruShots Auto Vote',
@@ -47,10 +54,17 @@ const PAGES = [
         nav: 'Sākums',
         lang: 'lv',
     },
+    {
+        src: 'docs/usage.lv.md',
+        out: 'usage.lv.html',
+        title: 'Lietošana — GuruShots Auto Vote',
+        nav: 'Lietošana',
+        lang: 'lv',
+    },
 ];
 
-// The site is bilingual: an English side (README + scheduling) and a Latvian
-// side (README.lv.md, the translated README). Every page carries a switch to the OTHER
+// The site is bilingual: an English side (README, usage, scheduling) and a Latvian
+// side (README.lv.md and usage.lv.md). Every page carries a switch to the OTHER
 // language's entry page, labelled in the target language — so the Latvian guide
 // shows "🇬🇧 English" (the way back) instead of a useless "Latviski".
 const LANGUAGES = {

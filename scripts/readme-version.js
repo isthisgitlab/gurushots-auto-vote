@@ -67,13 +67,19 @@ const rules = [
     [`\\./gurucli-v${v}-\\[platforma\\]`, `./gurucli-v${vRepl}-[platforma]`, false],
 ];
 
-const files = [path.join(root, 'README.md'), path.join(root, 'README.lv.md')];
+const files = [
+    path.join(root, 'README.md'),
+    path.join(root, 'README.lv.md'),
+    path.join(root, 'docs/usage.md'),
+    path.join(root, 'docs/usage.lv.md'),
+];
 
 let anyFailure = false;
 let totalChanges = 0;
 
 for (const file of files) {
     const name = path.relative(root, file);
+    const isReadme = path.dirname(file) === root;
     // Read without a prior existsSync so the later write can't act on a file
     // that changed between check and use; a missing README is simply skipped.
     let original;
@@ -91,7 +97,7 @@ for (const file of files) {
     const hasCLI = original.includes('gurucli-v') || original.includes('CLI Applications');
 
     for (const [pattern, replacement, required] of rules) {
-        const isRequired = required === 'always' || (required === 'cli' && hasCLI);
+        const isRequired = isReadme && (required === 'always' || (required === 'cli' && hasCLI));
         const re = new RegExp(pattern, 'g');
         const matched = content.match(re);
         if (!matched || matched.length === 0) {

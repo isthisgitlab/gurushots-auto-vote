@@ -1,5 +1,5 @@
 // Unit tests for the GitHub Pages renderer. The pure helpers guard the
-// "README is the single source of truth" invariant: as the README/docs evolve,
+// source Markdown invariant: as the README/docs evolve,
 // their cross-links must keep resolving on the static site. Importing the module
 // is side-effect-free — main() runs only when the file is the entry point.
 // main() itself is exercised against a temp repo tree under os.tmpdir(); the
@@ -106,9 +106,16 @@ describe('rewriteLink', () => {
     it('maps in-set .md links to their generated .html page', () => {
         expect(rewriteLink('README.lv.md', '')).toBe('./lv.html');
         expect(rewriteLink('docs/scheduling.md', '')).toBe('./scheduling.html');
+        expect(rewriteLink('docs/usage.md#auto-submit-missing-entries', '')).toBe(
+            './usage.html#auto-submit-missing-entries',
+        );
+        expect(rewriteLink('docs/usage.lv.md#-problēmu-risināšana', '')).toBe('./usage.lv.html#-problēmu-risināšana');
         // from a doc in docs/, ../README.md is the home page
         expect(rewriteLink('../README.md', 'docs')).toBe('./index.html');
         expect(rewriteLink('scheduling.md', 'docs')).toBe('./scheduling.html');
+        expect(rewriteLink('../README.lv.md#instalācija-katrai-platformai', 'docs')).toBe(
+            './lv.html#instalācija-katrai-platformai',
+        );
     });
 
     it('sends other repo-relative targets to the GitHub blob URL', () => {
@@ -147,6 +154,7 @@ describe('buildNav (language switch)', () => {
         const nav = buildNav(pageBySrc('README.md'));
         expect(nav).toContain('href="./index.html"');
         expect(nav).toContain('href="./scheduling.html"');
+        expect(nav).toContain('href="./usage.html"');
         // the switch points to the Latvian guide, labelled in Latvian
         expect(nav).toContain('🇱🇻 Latviski');
         expect(nav).toContain('href="./lv.html"');
@@ -160,6 +168,7 @@ describe('buildNav (language switch)', () => {
         const nav = buildNav(pageBySrc('README.lv.md'));
         expect(nav).toContain('🇬🇧 English');
         expect(nav).toContain('href="./index.html"');
+        expect(nav).toContain('href="./usage.lv.html"');
         // the Latvian side has no separate scheduling page, and shouldn't offer "Latviski"
         expect(nav).not.toContain('href="./scheduling.html"');
         expect(nav).not.toContain('🇱🇻 Latviski');
@@ -218,14 +227,28 @@ describe('main (full render into a temp tree)', () => {
 
     it('renders every page with rewritten links, clears stale output, and copies the logo', async () => {
         seedRepo();
+        write(
+            'README.md',
+            '# Title\n[Usage](docs/usage.md#-usage)\n[Scheduling](docs/scheduling.md)\n![Logo](src/assets/logo.png)\n[Lic](LICENSE)',
+        );
+        write('docs/usage.md', '[Home](../README.md)\n[Latviski](usage.lv.md)');
+        write('docs/usage.lv.md', '[Sākums](../README.lv.md)\n[English](usage.md)');
         write('dist-site/stale.html', 'old');
 
         await main(opts());
 
-        expect(fs.readdirSync(out).sort()).toEqual(['index.html', 'logo.png', 'lv.html', 'scheduling.html']);
+        expect(fs.readdirSync(out).sort()).toEqual([
+            'index.html',
+            'logo.png',
+            'lv.html',
+            'scheduling.html',
+            'usage.html',
+            'usage.lv.html',
+        ]);
         const index = fs.readFileSync(nodePath.join(out, 'index.html'), 'utf8');
         expect(index).toContain('<title>GuruShots Auto Vote</title>');
         expect(index).toContain('<a href="./scheduling.html">Scheduling</a>');
+        expect(index).toContain('<a href="./usage.html#-usage">Usage</a>');
         expect(index).toContain(`<img src="${RAW}/src/assets/logo.png" alt="Logo">`);
         expect(index).toContain(`<a href="${BLOB}/LICENSE">Lic</a>`);
         expect(index).toContain('<p># Title</p>');
@@ -234,6 +257,12 @@ describe('main (full render into a temp tree)', () => {
         // links in docs/ resolve relative to docs/
         expect(fs.readFileSync(nodePath.join(out, 'scheduling.html'), 'utf8')).toContain(
             '<a href="./index.html">Home</a>',
+        );
+        expect(fs.readFileSync(nodePath.join(out, 'usage.html'), 'utf8')).toContain(
+            '<a href="./usage.lv.html">Latviski</a>',
+        );
+        expect(fs.readFileSync(nodePath.join(out, 'usage.lv.html'), 'utf8')).toContain(
+            '<a href="./lv.html">Sākums</a>',
         );
         expect(fs.readFileSync(nodePath.join(out, 'logo.png'), 'utf8')).toBe('PNG');
         expect(resetHeadings).toHaveBeenCalledTimes(PAGES.length);
@@ -253,11 +282,11 @@ describe('main (full render into a temp tree)', () => {
     });
 
     it('exits 1 when a page source is missing', async () => {
-        seedRepo({ latvian: false });
+        seedRepo();
 
         await expect(main(opts())).rejects.toThrow('exit 1');
 
-        expect(errorSpy).toHaveBeenCalledWith('✗ source not found: README.lv.md');
+        expect(errorSpy).toHaveBeenCalledWith('✗ source not found: docs/usage.md');
     });
 
     it('runCli uses the real repo paths and turns a failure into exit 1', async () => {

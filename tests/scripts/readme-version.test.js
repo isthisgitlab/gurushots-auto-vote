@@ -2,7 +2,7 @@
  * Unit tests for scripts/readme-version.js (`pnpm update:readme` /
  * `pnpm verify:readme`).
  *
- * fs is an in-memory file map, so the real README.md / README.lv.md
+ * fs is an in-memory file map, so the real READMEs and usage guides
  * are never read or rewritten. The script does its work at require time, so
  * each case requires it in an isolated registry with argv set and
  * process.exit stubbed to throw (stopping control where the process would).
@@ -29,6 +29,8 @@ const ROOT = realPath.join(__dirname, '..', '..');
 const PKG = realPath.join(ROOT, 'package.json');
 const README = realPath.join(ROOT, 'README.md');
 const README_LV = realPath.join(ROOT, 'README.lv.md');
+const USAGE = realPath.join(ROOT, 'docs/usage.md');
+const USAGE_LV = realPath.join(ROOT, 'docs/usage.lv.md');
 const DL = 'https://github.com/isthisgitlab/gurushots-auto-vote/releases/latest/download';
 
 const guiSection = (v) =>
@@ -136,21 +138,25 @@ describe('scripts/readme-version.js', () => {
     });
 
     describe('update mode', () => {
-        test('rewrites every stale occurrence in both docs', () => {
+        test('rewrites every stale occurrence in the READMEs and usage guides', () => {
             mockFiles.set(README, readme('1.8.2'));
             mockFiles.set(README_LV, readmeLv('1.8.2-beta.1'));
+            mockFiles.set(USAGE, './gurucli-v1.8.2-[platform] run\n');
+            mockFiles.set(USAGE_LV, './gurucli-v1.8.2-[platforma] run\n');
 
             expect(run()).toBeNull();
 
             expect(mockFiles.get(README)).toBe(readme('2.0.0'));
             expect(mockFiles.get(README_LV)).toBe(readmeLv('2.0.0'));
+            expect(mockFiles.get(USAGE)).toBe('./gurucli-v2.0.0-[platform] run\n');
+            expect(mockFiles.get(USAGE_LV)).toBe('./gurucli-v2.0.0-[platforma] run\n');
             // -linux-arm must not be clobbered by the bare -linux rule, nor the
             // lite APK by the full one (its `-lite` reads like a prerelease tag).
             expect(mockFiles.get(README)).toContain('gurucli-v2.0.0-linux-arm');
             expect(mockFiles.get(README)).toContain('GuruShotsAutoVote-v2.0.0-lite.apk');
             expect(out()).toContain('✓ README.md: 28 occurrence(s) updated to v2.0.0');
             expect(out()).toContain('✓ README.lv.md: 28 occurrence(s) updated');
-            expect(out()).toContain('56 total replacement(s) for v2.0.0.');
+            expect(out()).toContain('58 total replacement(s) for v2.0.0.');
         });
 
         test('reports files already at the current version without writing', () => {
@@ -181,14 +187,18 @@ describe('scripts/readme-version.js', () => {
     });
 
     describe('--check mode', () => {
-        test('passes when both docs match', () => {
+        test('passes when READMEs and usage guides match', () => {
             mockFiles.set(README, readme('2.0.0'));
             mockFiles.set(README_LV, readmeLv('2.0.0'));
+            mockFiles.set(USAGE, './gurucli-v2.0.0-[platform] run\n');
+            mockFiles.set(USAGE_LV, './gurucli-v2.0.0-[platforma] run\n');
 
             expect(run(['--check'])).toBeNull();
 
             expect(out()).toContain('✓ README.md: matches v2.0.0');
             expect(out()).toContain('✓ README.lv.md: matches v2.0.0');
+            expect(out()).toContain('✓ docs/usage.md: matches v2.0.0');
+            expect(out()).toContain('✓ docs/usage.lv.md: matches v2.0.0');
             expect(out()).not.toContain('total replacement');
             expect(err()).toBe('');
             expect(mockFs.writeFileSync).not.toHaveBeenCalled();
@@ -201,6 +211,15 @@ describe('scripts/readme-version.js', () => {
 
             expect(err()).toMatch(/✗ README\.md: 1 occurrence\(s\) of .* do not match v2\.0\.0/);
             expect(err()).toContain('Run `pnpm run update:readme` to fix.');
+            expect(mockFs.writeFileSync).not.toHaveBeenCalled();
+        });
+
+        test('fails when a usage guide has a stale CLI example', () => {
+            mockFiles.set(USAGE, './gurucli-v1.8.2-[platform] run\n');
+
+            expect(run(['--check'])).toBe(1);
+
+            expect(err()).toContain('✗ docs/usage.md: 1 occurrence(s)');
             expect(mockFs.writeFileSync).not.toHaveBeenCalled();
         });
 
