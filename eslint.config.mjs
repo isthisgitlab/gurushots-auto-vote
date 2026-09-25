@@ -163,7 +163,7 @@ export default [
                     "CallExpression[callee.name='require'] > Literal.arguments",
                     'ImportDeclaration > Literal.source',
                 ].map((selector) => ({
-                    selector: `${selector}[value=/settings\\/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|titlePins|titleRuleSanitize|titleRules)(\\.js)?$/]`,
+                    selector: `${selector}[value=/settings\\/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$/]`,
                     message: 'Settings internals are private to the facade — require settings.js instead.',
                 })),
             ],

@@ -16,6 +16,8 @@
  *   profileStore.js       profile names and value sanitization
  *   profiles.js           named challenge-settings profiles
  *   titlePins.js          persisted first-seen challenge-title pins
+ *   scenarioSchema.js     validation of user-defined scenario documents
+ *   scenarios.js          stored scenarios, JSON import/export
  *   reset.js              reset helpers and "modified" checks
  */
 
@@ -42,6 +44,7 @@ const { TITLE_RULE_INLINE_KEYS, MAX_TITLE_LENGTH } = require('./settings/titleRu
 const titleRules = require('./settings/titleRules');
 const profiles = require('./settings/profiles');
 const titlePins = require('./settings/titlePins');
+const scenarios = require('./settings/scenarios');
 const reset = require('./settings/reset');
 
 module.exports = {
@@ -95,6 +98,19 @@ module.exports = {
     seedIntentProfiles: profiles.seedIntentProfiles,
     MAX_CHALLENGE_PROFILES: profiles.MAX_CHALLENGE_PROFILES,
     MAX_PROFILE_NAME_LENGTH: profiles.MAX_PROFILE_NAME_LENGTH,
+
+    // User-defined scenarios (survive challenge rotation) and their JSON
+    // import/export. Results are {ok, name} / {ok: false, issues}.
+    getScenarios: scenarios.getScenarios,
+    getScenario: scenarios.getScenario,
+    saveScenario: scenarios.saveScenario,
+    renameScenario: scenarios.renameScenario,
+    deleteScenario: scenarios.deleteScenario,
+    describeScenario: scenarios.describeScenario,
+    previewScenarioImport: scenarios.previewScenarioImport,
+    importScenario: scenarios.importScenario,
+    exportScenario: scenarios.exportScenario,
+    MAX_SCENARIOS: scenarios.MAX_SCENARIOS,
 
     // First-seen challenge-title pins (internal cache — no IPC wiring).
     // MAX_TITLE_LENGTH is exported so challengeTitlePin.js bounds incoming
