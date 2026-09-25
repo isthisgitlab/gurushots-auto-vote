@@ -237,3 +237,28 @@ describe('import', () => {
         expect(screen.queryByLabelText('app.scenarioImportLabel')).toBeNull();
     });
 });
+
+describe('builder', () => {
+    test('New opens the builder on an empty scenario under a free name; cancel returns', async () => {
+        withScenarios({ 'app.sbNew': plan });
+        await renderSection();
+        click('app.sbNew');
+        expect(screen.getByText('app.sbTitleNew')).toBeTruthy();
+        expect(screen.getByLabelText('app.sbName').value).toBe('app.sbNew 2');
+        click('app.cancel');
+        // Back on the list: the stored scenario's row is there again.
+        expect(screen.getByTitle('app.sbNew')).toBeTruthy();
+    });
+
+    test('Edit opens the scenario; saving returns to the refreshed list', async () => {
+        window.api.saveScenario.mockResolvedValue({ success: true, name: 'Plan' });
+        await renderSection();
+        click('app.sbEdit');
+        expect(screen.getByText('app.sbTitleEdit')).toBeTruthy();
+        expect(screen.getByLabelText('app.sbName').value).toBe('Plan');
+        const loads = window.api.getScenarios.mock.calls.length;
+        click('app.sbSave');
+        await waitFor(() => expect(window.api.getScenarios.mock.calls.length).toBeGreaterThan(loads));
+        expect(screen.queryByText('app.sbTitleEdit')).toBeNull();
+    });
+});

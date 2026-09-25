@@ -4,34 +4,12 @@ import { useScenarios } from '@/api/useScenarios';
 import { InlineLoader } from '@/components/ui/LoadingSpinner';
 import { interp } from '@/utils/interp';
 import * as ipc from '@/api/ipc';
+import { ScenarioError } from './ScenarioError';
+import { ScenarioBuilder } from './scenarioBuilder/ScenarioBuilder';
+import { newScenario } from '../../../scenarios/builderModel';
 
 // How long an armed delete stays armed before it disarms itself.
 const CONFIRM_TIMEOUT_MS = 4000;
-
-/**
- * A failed scenario request as the user sees it: what happened, why (the
- * first validation issues, with the place in the file), and what to do next.
- */
-function ScenarioError({ error }) {
-    const { t } = useTranslation();
-    if (!error) return null;
-    return (
-        <div className="alert alert-error py-2 text-sm flex-col items-start" role="alert">
-            <span>
-                {t(error.what)} {t('app.scenarioErrorNext')}
-            </span>
-            {error.issues?.length > 0 && (
-                <ul className="text-xs list-disc ml-4">
-                    {error.issues.slice(0, 5).map((issue) => (
-                        <li key={`${issue.path}:${issue.message}`}>
-                            {issue.path ? <code>{issue.path}</code> : null} {issue.message}
-                        </li>
-                    ))}
-                </ul>
-            )}
-        </div>
-    );
-}
 
 /** What a scenario does before it is imported: its phases, spends and limits. */
 function ImportPreview({ preview }) {
@@ -141,7 +119,7 @@ function ImportPanel({ onDone, onCancel }) {
 }
 
 /** One stored scenario: export, rename and a two-step delete. */
-function ScenarioRow({ name, scenario, onChanged, onError }) {
+function ScenarioRow({ name, scenario, onChanged, onError, onEdit }) {
     const { t } = useTranslation();
     const [exported, setExported] = useState(null);
     const [renaming, setRenaming] = useState(null);
@@ -189,6 +167,9 @@ function ScenarioRow({ name, scenario, onChanged, onError }) {
                 <span className="text-xs text-base-content/60">
                     {interp(t('app.scenarioPhaseCount'), { count: Object.keys(scenario.phases).length })}
                 </span>
+                <button type="button" className="btn btn-xs" onClick={onEdit}>
+                    {t('app.sbEdit')}
+                </button>
                 <button type="button" className="btn btn-xs" onClick={runExport}>
                     {t('app.scenarioExport')}
                 </button>
@@ -257,6 +238,8 @@ export function ScenariosSection({ isOpen }) {
     const [importing, setImporting] = useState(false);
     const [templateId, setTemplateId] = useState('');
     const [error, setError] = useState(null);
+    // The scenario open in the builder: {initial, originalName} (null name = new).
+    const [editing, setEditing] = useState(null);
 
     const changed = useCallback(() => {
         setError(null);
@@ -282,6 +265,16 @@ export function ScenariosSection({ isOpen }) {
                 <div className="alert alert-error py-2 text-sm" role="alert">
                     <span>{t('app.scenariosLoadError')}</span>
                 </div>
+            ) : editing ? (
+                <ScenarioBuilder
+                    initial={editing.initial}
+                    originalName={editing.originalName}
+                    onSaved={() => {
+                        setEditing(null);
+                        changed();
+                    }}
+                    onCancel={() => setEditing(null)}
+                />
             ) : (
                 <div className="space-y-3">
                     <ScenarioError error={error} />
@@ -296,11 +289,24 @@ export function ScenariosSection({ isOpen }) {
                                     scenario={scenarios[name]}
                                     onChanged={changed}
                                     onError={setError}
+                                    onEdit={() => setEditing({ initial: scenarios[name], originalName: name })}
                                 />
                             ))}
                         </ul>
                     )}
                     <div className="flex flex-wrap gap-2 items-center">
+                        <button
+                            type="button"
+                            className="btn btn-sm btn-primary"
+                            onClick={() =>
+                                setEditing({
+                                    initial: newScenario(freeName(t('app.sbNew'), names)),
+                                    originalName: null,
+                                })
+                            }
+                        >
+                            {t('app.sbNew')}
+                        </button>
                         <select
                             className="select select-sm"
                             aria-label={t('app.scenarioTemplatePick')}
