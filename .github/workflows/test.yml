@@ -189,7 +189,7 @@ jobs:
             # ttsc keys plugins by its own content hash, so a toolchain bump
             # just misses, rebuilds once, and saves under the new lockfile key.
             - name: Cache compiled ttsc plugins
-              uses: actions/cache@v6
+              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
               with:
                   path: node_modules/.cache/ttsc/plugins
                   key: ttsc-plugins-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
