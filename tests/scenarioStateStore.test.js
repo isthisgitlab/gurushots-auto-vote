@@ -42,6 +42,7 @@ describe('initialState', () => {
             fired: {},
             inFlight: null,
             spent: { swaps: 0, keys: 0, fills: 0 },
+            history: {},
             lastAction: null,
             lastError: null,
         });
@@ -52,6 +53,12 @@ describe('createStateLedger', () => {
     test('no record yet reads as no state', () => {
         const ledger = createStateLedger(rawStore());
         expect(ledger.get(7)).toEqual({ corrupt: false, state: null });
+    });
+
+    test('a record from before vote history existed is still readable', () => {
+        const legacy = { ...state(), updatedAt: Date.now() };
+        delete legacy.history;
+        expect(createStateLedger(rawStore(JSON.stringify({ 7: legacy }))).get(7).corrupt).toBe(false);
     });
 
     test('round-trips a record per challenge, ids as strings, copies returned', () => {
@@ -82,6 +89,7 @@ describe('createStateLedger', () => {
         ['bad memory', { ...initialState('Plan', 'a', 1), memory: { held: 5 } }],
         ['bad inFlight', { ...initialState('Plan', 'a', 1), inFlight: { ruleId: 'r', actionIndex: 'x' } }],
         ['missing fired', { ...initialState('Plan', 'a', 1), fired: null }],
+        ['bad history', { ...initialState('Plan', 'a', 1), history: [] }],
     ])('a malformed record (%s) is corrupt without affecting others', (label, record) => {
         const store = rawStore(JSON.stringify({ 7: record, 8: { ...state(), updatedAt: Date.now() } }));
         const ledger = createStateLedger(store);

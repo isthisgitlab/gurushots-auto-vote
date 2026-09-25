@@ -11,6 +11,8 @@
 
 const { resolveEntryIndex } = require('../voting/entrySlot');
 const { isProtectedEntry } = require('../voting/currencyAuto');
+const { parseDuration } = require('./duration');
+const { votesPerHour, DEFAULT_WINDOW_SEC } = require('./speed');
 
 /**
  * @param {any} challenge
@@ -60,17 +62,31 @@ const RANKING = {
 };
 
 /**
+ * @typedef {object} SelectContext
+ * @property {Record<string, string>} [memory] - the scenario's remembered photo ids
+ * @property {import('./speed').VoteHistory} [history] - sampled vote counts, for `fastest`
+ * @property {number} [now] - unix seconds, for `fastest`
+ */
+
+/**
+ * A duration field's seconds, or the default window. Validated upstream.
+ *
+ * @param {unknown} value
+ */
+const windowOf = (value) => (value === undefined ? DEFAULT_WINDOW_SEC : /** @type {number} */ (parseDuration(value)));
+
+/**
  * The entry a selector picks, or null when none qualifies.
  *
  * @param {any} selector - a validated selector ({by, …})
  * @param {any} challenge
- * @param {Record<string, string>} memory - the scenario's remembered photo ids
+ * @param {SelectContext} [context]
  * @returns {any|null}
  */
-const selectEntry = (selector, challenge, memory) => {
+const selectEntry = (selector, challenge, context = {}) => {
     const entries = entriesOf(challenge);
     if (selector.by === 'memory') {
-        const id = memory?.[selector.slot];
+        const id = context.memory?.[selector.slot];
         return typeof id === 'string' ? (entries.find((entry) => String(entry.id) === id) ?? null) : null;
     }
     if (selector.by === 'slot') {
@@ -78,7 +94,13 @@ const selectEntry = (selector, challenge, memory) => {
         return index === null ? null : entries[index];
     }
     const candidates = selector.skipProtected ? entries.filter((entry) => !isProtectedEntry(entry)) : entries;
+    if (selector.by === 'fastest') {
+        const window = windowOf(selector.window);
+        return bestBy(candidates, (entry) =>
+            votesPerHour(context.history, entry, /** @type {number} */ (context.now), window),
+        );
+    }
     return RANKING[selector.by](candidates);
 };
 
-module.exports = { selectEntry, entriesOf, rankOf, votesOf };
+module.exports = { selectEntry, entriesOf, rankOf, votesOf, windowOf };

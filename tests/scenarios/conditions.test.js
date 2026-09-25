@@ -195,7 +195,7 @@ describe('logical conditions', () => {
 
 describe('selectEntry', () => {
     const c = challenge();
-    const select = (selector, memory = {}) => selectEntry(selector, c, memory)?.id ?? null;
+    const select = (selector, memory = {}) => selectEntry(selector, c, { memory })?.id ?? null;
 
     test.each([
         [{ by: 'mostVotes' }, 'b'],
@@ -214,7 +214,7 @@ describe('selectEntry', () => {
     test('memory matches ids as strings', () => {
         const numeric = challenge();
         numeric.member.ranking.entries[0].id = 42;
-        expect(selectEntry({ by: 'memory', slot: 'x' }, numeric, { x: '42' }).votes).toBe(10);
+        expect(selectEntry({ by: 'memory', slot: 'x' }, numeric, { memory: { x: '42' } }).votes).toBe(10);
         expect(select({ by: 'memory', slot: 'x' }, {})).toBeNull();
         expect(select({ by: 'memory', slot: 'x' }, { x: 'not-entered' })).toBeNull();
     });
@@ -229,7 +229,7 @@ describe('selectEntry', () => {
     test('no boosted entry, or no memory at all → null', () => {
         const plain = { member: { ranking: { entries: [{ id: 'p' }] } } };
         expect(selectEntry({ by: 'boosted' }, plain, {})).toBeNull();
-        expect(selectEntry({ by: 'memory', slot: 'x' }, plain, undefined)).toBeNull();
+        expect(selectEntry({ by: 'memory', slot: 'x' }, plain)).toBeNull();
     });
 
     test('no entries → nothing selected', () => {

@@ -157,6 +157,12 @@ describe('starting a plan', () => {
         expect(state()).toEqual(expect.objectContaining({ scenario: 'Plan', phase: 'main', phaseEnteredAt: NOW }));
     });
 
+    test("every pass samples the entries' votes for the speed conditions", async () => {
+        setup(plan({ main: {} }));
+        await run();
+        expect(state().history).toEqual({ a: [[NOW, 10]], b: [[NOW, 3]] });
+    });
+
     test('state from another scenario is replaced; the same scenario (any casing) is kept', async () => {
         setup(plan({ main: {} }));
         ledger.set(7, initialState('Other', 'x', 1));

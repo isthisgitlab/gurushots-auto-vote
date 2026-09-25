@@ -11,6 +11,7 @@
  *       fired: { ruleId: { at, day?, phase? } },
  *       inFlight: { ruleId, actionIndex } | null,
  *       spent: { swaps, keys, fills },
+ *       history: { photoId: [[unixSec, votes], …] },   // vote samples (scenarios/speed.js)
  *       lastAction: { at, ruleId, action, outcome } | null,
  *       lastError: { at, message } | null,
  *       updatedAt                               // ms, for pruning
@@ -50,6 +51,7 @@ const isRecord = (r) =>
     isStringMap(r.memory) &&
     isPlainObject(r.fired) &&
     isPlainObject(r.spent) &&
+    (r.history === undefined || isPlainObject(r.history)) &&
     (r.inFlight === null ||
         (isPlainObject(r.inFlight) &&
             typeof r.inFlight.ruleId === 'string' &&
@@ -64,6 +66,7 @@ const initialState = (scenario, phase, nowSec) => ({
     fired: {},
     inFlight: null,
     spent: { swaps: 0, keys: 0, fills: 0 },
+    history: {},
     lastAction: null,
     lastError: null,
 });

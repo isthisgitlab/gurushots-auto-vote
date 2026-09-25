@@ -44,6 +44,7 @@ const {
 } = require('./autoFill');
 const { evaluateScenario, firedRecord } = require('../scenarios/evaluate');
 const { selectEntry, entriesOf } = require('../scenarios/selectors');
+const { recordVoteSample } = require('../scenarios/speed');
 const { initialState } = require('../scenarioStateStore');
 
 const log = () => logger.withCategory('scenario');
@@ -126,6 +127,9 @@ const lockedCurrencySpend = async (actionType, ctx, spend) => {
 
 const currencyDeps = (ctx) => ({ strategy: ctx.pass.currency.strategy, logger, settings });
 
+/** What entry selectors read: remembered photos, and vote history for `fastest`. */
+const selectContext = (state) => ({ memory: state.memory, history: state.history, now: nowSec() });
+
 /** The photo a `with` / `photo` source names: a remembered id, or null for "best". */
 const rememberedPhoto = (source, state) => (source === 'best' ? null : (state.memory[source.memory] ?? undefined));
 
@@ -161,7 +165,7 @@ const ACTIONS = {
         const newPhoto = rememberedPhoto(action.with, state);
         if (newPhoto === undefined) return skipped(`memory slot "${action.with.memory}" is empty`);
         if (!(await refreshLive(ctx))) return skipped('the challenge is no longer active');
-        const target = selectEntry(action.entry, challenge, state.memory);
+        const target = selectEntry(action.entry, challenge, selectContext(state));
         if (!target) return skipped('no entry matches the swap target');
         if (newPhoto !== null && entriesOf(challenge).some((entry) => String(entry.id) === newPhoto)) {
             return skipped(`photo ${newPhoto} is already entered`);
@@ -204,7 +208,7 @@ const ACTIONS = {
         if (!BOOST_APPLICABLE.has(challenge.member?.boost?.state)) {
             return skipped(`the boost is not available (${challenge.member?.boost?.state ?? 'unknown'})`);
         }
-        const target = selectEntry(action.entry, challenge, state.memory);
+        const target = selectEntry(action.entry, challenge, selectContext(state));
         if (!target) return skipped('no entry matches the boost target');
         const response = await pass.api.applyBoostToEntry(challenge.id, String(target.id), pass.token);
         if (!response) return failed(`the boost on entry ${target.id} was refused`);
@@ -219,7 +223,7 @@ const ACTIONS = {
         if (challenge.member?.turbo?.state !== 'WON') {
             return skipped(`no won turbo to apply (${challenge.member?.turbo?.state ?? 'unknown'})`);
         }
-        const target = selectEntry(action.entry, challenge, state.memory);
+        const target = selectEntry(action.entry, challenge, selectContext(state));
         if (!target) return skipped('no entry matches the turbo target');
         const result = await pass.api.applyTurbo(challenge.id, String(target.id), pass.token);
         if (!result?.ok) return failed(`the turbo on entry ${target.id} was refused`);
@@ -260,7 +264,7 @@ const ACTIONS = {
     },
 
     remember: async (action, ctx, state) => {
-        const target = selectEntry(action.entry, ctx.challenge, state.memory);
+        const target = selectEntry(action.entry, ctx.challenge, selectContext(state));
         if (!target) return skipped('no entry matches');
         return done({ remember: { [action.slot]: String(target.id) } });
     },
@@ -389,6 +393,9 @@ const runScenarioStep = async (challenge, now, pass) => {
         const ctx = { challenge, challengeId, scenario, timezone, pass, ledger: deps.ledger };
         let state = loadState(ctx, now);
         if (!state) return;
+        // One vote sample per pass feeds the speed conditions (scenarios/speed.js).
+        state = { ...state, history: recordVoteSample(state.history, entriesOf(challenge), now) };
+        ctx.ledger.set(challengeId, state);
 
         const firedThisPass = new Set();
         const visited = new Set([state.phase]);

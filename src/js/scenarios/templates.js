@@ -15,7 +15,7 @@ const SCENARIO_TEMPLATES = [
             name: 'Exhibition double-dip',
             version: 1,
             description:
-                'From 5 days before the end, enter one photo each morning and keep exposure topped up. If a photo breaks out, hold it out of the challenge and swap it back in on the last morning, boost it, then swap it out and back once it reaches #1. With no breakout, just boost the best entry on the last morning.',
+                'From 5 days before the end, enter one photo each morning and keep exposure topped up. If a photo breaks out (twice the votes per hour of the others over 6 h, and 30+ votes), hold it out of the challenge and swap it back in on the last morning, boost it, then swap it out and back once it reaches #1. With no breakout, just boost the best entry on the last morning.',
             start: 'buildup',
             phases: {
                 buildup: {
@@ -38,12 +38,26 @@ const SCENARIO_TEMPLATES = [
                             label: 'A photo broke out: hold it back',
                             if: [
                                 { type: 'beforeEnd', min: '1d' },
-                                { type: 'entry', select: { by: 'bestRank' }, field: 'rank', op: '<=', value: 50 },
+                                {
+                                    type: 'entry',
+                                    select: { by: 'fastest', window: '6h' },
+                                    field: 'speedRatio',
+                                    window: '6h',
+                                    op: '>=',
+                                    value: 2,
+                                },
+                                {
+                                    type: 'entry',
+                                    select: { by: 'fastest', window: '6h' },
+                                    field: 'votes',
+                                    op: '>=',
+                                    value: 30,
+                                },
                             ],
                             do: [
                                 {
                                     type: 'swap',
-                                    entry: { by: 'bestRank' },
+                                    entry: { by: 'fastest', window: '6h' },
                                     with: 'best',
                                     rememberRemoved: 'held',
                                     rememberAdded: 'filler',

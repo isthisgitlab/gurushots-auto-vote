@@ -24,10 +24,13 @@ const STATE_CONDITIONS = ['boostState', 'turboState'];
 
 const CURRENCIES = ['keys', 'swaps', 'fills', 'coins'];
 
-const NUMERIC_ENTRY_FIELDS = ['votes', 'rank'];
+const NUMERIC_ENTRY_FIELDS = ['votes', 'rank', 'votesPerHour', 'speedRatio'];
+
+/** Entry fields measured over a time window (the optional `window` duration). */
+const SPEED_ENTRY_FIELDS = ['votesPerHour', 'speedRatio'];
 const BOOLEAN_ENTRY_FIELDS = ['boosted', 'turbo', 'boosting'];
 
-/** Selectors that pick an entry by comparing entries; `slot` and `memory` take an argument. */
+/** Selectors that pick an entry by comparing entries; `slot`, `memory` and `fastest` take an argument. */
 const RANKING_SELECTORS = ['mostVotes', 'fewestVotes', 'bestRank', 'worstRank', 'boosted', 'turbo'];
 
 /** Actions that spend currency or a one-per-challenge power — listed in the import preview. */
@@ -65,7 +68,7 @@ const VOCABULARY_REFERENCE = [
     [
         'condition',
         'entry',
-        `select: selector, field: ${[...NUMERIC_ENTRY_FIELDS, ...BOOLEAN_ENTRY_FIELDS].join('|')}, op, value`,
+        `select: selector, field: ${[...NUMERIC_ENTRY_FIELDS, ...BOOLEAN_ENTRY_FIELDS].join('|')}, op, value, window?: duration (speed fields, default 1h)`,
     ],
     ['condition', 'all', 'of: [condition, …] — every one holds'],
     ['condition', 'any', 'of: [condition, …] — at least one holds'],
@@ -73,6 +76,7 @@ const VOCABULARY_REFERENCE = [
     ['selector', 'slot', 'index: 1-4 (0 = last entry)'],
     ...RANKING_SELECTORS.map((by) => ['selector', by, 'skipProtected?: true — ignore boosted/turbo entries']),
     ['selector', 'memory', 'slot: name — the entry holding the remembered photo'],
+    ['selector', 'fastest', 'window?: duration (default 1h), skipProtected? — most votes per hour'],
     ['action', 'enterPhoto', 'photo: "best" | {memory: name}, remember?: name — submits as a NEW entry'],
     [
         'action',
@@ -100,6 +104,7 @@ module.exports = {
     STATE_CONDITIONS,
     CURRENCIES,
     NUMERIC_ENTRY_FIELDS,
+    SPEED_ENTRY_FIELDS,
     BOOLEAN_ENTRY_FIELDS,
     RANKING_SELECTORS,
     SPENDING_ACTIONS,

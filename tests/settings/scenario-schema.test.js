@@ -63,6 +63,14 @@ describe('validateScenario — accepted documents', () => {
             { type: 'entry', select: { by: 'slot', index: 0 }, field: 'votes', op: '>', value: 10 },
             {
                 type: 'entry',
+                select: { by: 'fastest', window: '6h' },
+                field: 'speedRatio',
+                op: '>=',
+                value: 2,
+                window: '6h',
+            },
+            {
+                type: 'entry',
                 select: { by: 'fewestVotes', skipProtected: true },
                 field: 'boosted',
                 op: '=',
@@ -171,6 +179,16 @@ describe('validateScenario — shape errors carry readable paths', () => {
             { type: 'entry', select: { by: 'mostVotes' }, field: 'rank', op: '<', value: false },
             'if[0].value',
             'a number',
+        ],
+        [
+            { type: 'entry', select: { by: 'fastest' }, field: 'votes', op: '>', value: 1, window: '1h' },
+            'if[0].window',
+            'only applies',
+        ],
+        [
+            { type: 'entry', select: { by: 'fastest', window: 'soon' }, field: 'votesPerHour', op: '>', value: 1 },
+            'if[0].select.window',
+            'Not a duration',
         ],
     ])('condition %p', (condition, path, message) => {
         expectIssue(withRule({ if: [condition] }), `phases.main.rules[0].${path}`, message);

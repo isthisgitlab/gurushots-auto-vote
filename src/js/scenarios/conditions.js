@@ -10,12 +10,13 @@
 
 const { occurrencesOf } = require('../scheduling/wallClock');
 const { parseDuration } = require('./duration');
-const { selectEntry, entriesOf, rankOf, votesOf } = require('./selectors');
+const { selectEntry, entriesOf, rankOf, votesOf, windowOf } = require('./selectors');
+const { votesPerHour, speedRatio } = require('./speed');
 
 /**
  * @typedef {object} ConditionContext
  * @property {any} challenge
- * @property {{phaseEnteredAt: number, memory: Record<string, string>}} state
+ * @property {{phaseEnteredAt: number, memory: Record<string, string>, history?: import('./speed').VoteHistory}} state
  * @property {number} now - unix seconds
  * @property {string} timezone - IANA zone for dailyWindow
  * @property {Record<string, number>|null} [bankroll] - {keys, swaps, fills, coins}
@@ -178,9 +179,18 @@ const evaluateCondition = (condition, ctx) => {
  * @param {ConditionContext} ctx
  */
 const evaluateEntryCondition = (condition, ctx) => {
-    const entry = selectEntry(condition.select, ctx.challenge, ctx.state.memory);
+    const { history, memory } = ctx.state;
+    const entry = selectEntry(condition.select, ctx.challenge, { memory, history, now: ctx.now });
     if (!entry) return false;
     if (condition.field === 'votes') return compare(votesOf(entry), condition.op, condition.value);
+    if (condition.field === 'votesPerHour' || condition.field === 'speedRatio') {
+        const window = windowOf(condition.window);
+        const speed =
+            condition.field === 'votesPerHour'
+                ? votesPerHour(history, entry, ctx.now, window)
+                : speedRatio(history, entriesOf(ctx.challenge), entry, ctx.now, window);
+        return speed !== null && compare(speed, condition.op, condition.value);
+    }
     if (condition.field === 'rank') {
         const rank = rankOf(entry);
         return rank !== null && compare(rank, condition.op, condition.value);

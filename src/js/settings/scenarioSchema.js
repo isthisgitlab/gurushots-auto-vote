@@ -109,6 +109,7 @@ const percent = z.number().min(0).max(100);
 const selector = z.discriminatedUnion('by', [
     z.strictObject({ by: z.literal('slot'), index: z.number().int().min(0).max(4) }),
     z.strictObject({ by: z.literal('memory'), slot: identifier }),
+    z.strictObject({ by: z.literal('fastest'), window: duration.optional(), skipProtected: z.boolean().optional() }),
     ...vocabulary.RANKING_SELECTORS.map((by) =>
         z.strictObject({ by: z.literal(by), skipProtected: z.boolean().optional() }),
     ),
@@ -121,8 +122,16 @@ const entryCondition = z
         field: oneOf([...vocabulary.NUMERIC_ENTRY_FIELDS, ...vocabulary.BOOLEAN_ENTRY_FIELDS]),
         op,
         value: z.union([finiteNumber, z.boolean()]),
+        window: duration.optional(),
     })
     .superRefine((value, ctx) => {
+        if (value.window !== undefined && !vocabulary.SPEED_ENTRY_FIELDS.includes(value.field)) {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['window'],
+                message: `window only applies to ${vocabulary.SPEED_ENTRY_FIELDS.join(' and ')}`,
+            });
+        }
         if (vocabulary.BOOLEAN_ENTRY_FIELDS.includes(value.field)) {
             if (typeof value.value !== 'boolean') {
                 ctx.addIssue({
