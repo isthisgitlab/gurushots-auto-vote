@@ -74,7 +74,9 @@ function HeaderCountdown({ icon, labelKey, ...countdown }) {
     return (
         <HeaderStat icon={icon}>
             <span className="text-base-content/60">{t(labelKey)}:</span>
-            <NextActionCountdown {...countdown} />
+            <span className="inline-block min-w-[11ch] tabular-nums">
+                <NextActionCountdown {...countdown} />
+            </span>
         </HeaderStat>
     );
 }

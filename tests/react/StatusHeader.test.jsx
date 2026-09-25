@@ -60,15 +60,23 @@ describe('StatusHeader', () => {
                 running={true}
                 nextRunAt={BASE_MS + 120_000}
                 autoClaimStatus={{ enabled: true, nextClaimAt: BASE_MS + 3_600_000 }}
+                autoJoinActive={true}
             />,
         );
         expect(screen.getByText('app.statusHeaderNextClaim:')).toBeTruthy();
-        expect(screen.getByTitle('app.statusHeaderNextClaimHint').textContent).toBe('~1h 0m');
+        const claimCountdown = screen.getByTitle('app.statusHeaderNextClaimHint');
+        const nextCountdown = screen.getByTitle('app.statusHeaderNextApprox');
+        for (const countdown of [claimCountdown, nextCountdown]) {
+            expect(countdown.parentElement.classList.contains('min-w-[11ch]')).toBe(true);
+            expect(countdown.parentElement.classList.contains('tabular-nums')).toBe(true);
+        }
+        expect(claimCountdown.textContent).toBe('~1h 0m');
         act(() => jest.advanceTimersByTime(1000));
         const baseline = openBoostWindows.mock.calls.length;
         act(() => jest.advanceTimersByTime(1000));
-        expect(screen.getByTitle('app.statusHeaderNextClaimHint').textContent).toBe('~59m 58s');
+        expect(claimCountdown.textContent).toBe('~59m 58s');
         expect(screen.getByTestId('status-header').textContent).toContain('~1m 58s');
+        expect(screen.getByTestId('status-header').textContent).toContain('app.statusHeaderAutoJoin');
         expect(openBoostWindows).toHaveBeenCalledTimes(baseline);
     });
 
