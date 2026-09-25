@@ -54,7 +54,7 @@
         "lint": "pnpm run syntax:check && eslint src/ scripts/ tests/ eslint.config.mjs",
         "lint:fix": "eslint src/ scripts/ tests/ eslint.config.mjs --fix",
         "syntax:check": "node scripts/syntax-check.js",
-        "preinstall": "node -e \"if(!/^pnpm\\//.test(process.env.npm_config_user_agent||'')){console.error('This repository requires pnpm (see packageManager in package.json); npm and yarn are not supported.');process.exit(1)}\"",
+        "preinstall": "node -e \"if(!/^pnpm\\//.test(process.env.npm_config_user_agent||'')){console.error('This repository requires pnpm (see packageManager in package.json); npm and yarn are not supported.');process.exit(1)}if(Number(process.versions.node.split('.')[0])<26){console.error('This repository requires Node.js 26 or newer.');process.exit(1)}\"",
         "prebuild": "pnpm run build:prep",
         "prepare": "cross-env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_COUNT=0 lefthook install",
         "settings:get": "node scripts/settings-cli.js get",

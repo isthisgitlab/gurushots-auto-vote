@@ -34,6 +34,10 @@ strictPeerDependencies: true
 peerDependencyRules:
     allowedVersions:
         'eslint-plugin-jsx-a11y>eslint': '10'
+# Check dependency engines against the minimum supported Node version, including
+# when Dependabot regenerates the lockfile under an older host Node. The
+# preinstall script checks the actual Node version for normal installs.
+nodeVersion: 26.0.0
 # Honor the `engines` field in package.json (Node 26+ — that's its only key;
 # the pnpm version is pinned via `packageManager` + corepack, and pnpm 12's
 # managePackageManagerVersions default additionally records that resolved binary
