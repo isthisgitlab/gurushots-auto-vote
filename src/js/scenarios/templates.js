@@ -19,7 +19,15 @@ const SCENARIO_TEMPLATES = [
             start: 'buildup',
             phases: {
                 buildup: {
-                    settings: { exposure: 10, exposureTarget: 12, autoFill: false, autoBoost: false },
+                    settings: {
+                        exposure: 10,
+                        exposureTarget: 12,
+                        // Off here, so a final-window trigger above 10% in the
+                        // global defaults cannot conflict with the lowered exposure.
+                        useFinalWindowExposure: false,
+                        autoFill: false,
+                        autoBoost: false,
+                    },
                     rules: [
                         {
                             id: 'daily-entry',
@@ -82,7 +90,15 @@ const SCENARIO_TEMPLATES = [
                     ],
                 },
                 holding: {
-                    settings: { exposure: 10, exposureTarget: 12, autoFill: false, autoBoost: false },
+                    settings: {
+                        exposure: 10,
+                        exposureTarget: 12,
+                        // Off here, so a final-window trigger above 10% in the
+                        // global defaults cannot conflict with the lowered exposure.
+                        useFinalWindowExposure: false,
+                        autoFill: false,
+                        autoBoost: false,
+                    },
                     rules: [
                         {
                             id: 'comeback',

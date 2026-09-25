@@ -168,7 +168,7 @@ describe('settings facade — scenarios', () => {
             ]);
             expect(result.preview.phases[0]).toEqual({
                 name: 'buildup',
-                settings: ['exposure', 'exposureTarget', 'autoFill', 'autoBoost'],
+                settings: ['exposure', 'exposureTarget', 'useFinalWindowExposure', 'autoFill', 'autoBoost'],
                 rules: 3,
             });
             expect(result.preview.spending).toEqual(

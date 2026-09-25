@@ -23,6 +23,25 @@ describe('scenario templates', () => {
         const result = validateScenario(structuredClone(scenario), globalDefaults);
         expect(result).toEqual(expect.objectContaining({ ok: true }));
     });
+
+    // A template is added on top of whatever the user's global defaults are, so
+    // its phase overlays must not lean on the schema defaults — e.g. a final
+    // window that is on with a trigger above a phase's lowered exposure.
+    const customGlobals = {
+        ...globalDefaults,
+        exposure: 70,
+        exposureTarget: 100,
+        useFinalWindowExposure: true,
+        finalWindowExposure: 51,
+        finalWindowExposureTarget: 80,
+    };
+    test.each(SCENARIO_TEMPLATES.map((t) => [t.id, t.scenario]))(
+        '%s validates against customised global defaults',
+        (id, scenario) => {
+            const result = validateScenario(structuredClone(scenario), customGlobals);
+            expect(result).toEqual(expect.objectContaining({ ok: true }));
+        },
+    );
 });
 
 describe('vocabulary reference', () => {
