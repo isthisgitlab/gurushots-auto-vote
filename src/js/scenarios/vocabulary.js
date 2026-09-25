@@ -63,7 +63,8 @@ const VOCABULARY_REFERENCE = [
     ['condition', 'elapsedPercent', 'min?, max?: 0-100 — share of the challenge that has run'],
     ['condition', 'inPhaseFor', 'min?, max?: duration — time since this phase was entered'],
     ...NUMERIC_CONDITIONS.map((type) => ['condition', type, 'op, value: number']),
-    ...STATE_CONDITIONS.map((type) => ['condition', type, 'in: ["STATE", …] e.g. AVAILABLE, AVAILABLE_KEY, WON']),
+    ['condition', 'boostState', 'in: ["STATE", …] — LOCKED, AVAILABLE, AVAILABLE_KEY, USED, UNAVAILABLE'],
+    ['condition', 'turboState', 'in: ["STATE", …] — FREE, IN_PROGRESS, TIMER, WON, LOCKED, USED'],
     ['condition', 'balance', `currency: ${CURRENCIES.join('|')}, op, value: number`],
     ['condition', 'memorySet', 'slot: name — true while the memory slot holds a photo'],
     [
