@@ -108,6 +108,7 @@ module.exports = {
     renameScenario: scenarios.renameScenario,
     deleteScenario: scenarios.deleteScenario,
     describeScenario: scenarios.describeScenario,
+    checkScenario: scenarios.checkScenario,
     previewScenarioImport: scenarios.previewScenarioImport,
     importScenario: scenarios.importScenario,
     exportScenario: scenarios.exportScenario,

@@ -56,6 +56,7 @@ describe('scenario wrappers', () => {
         ['getScenarioStatus', ['7']],
         ['resetScenarioState', ['7']],
         ['dryRunScenario', ['7']],
+        ['simulateScenario', ['7', { name: 'Draft' }]],
     ])('%s forwards its arguments', async (method, args) => {
         mockApi[method].mockResolvedValueOnce({ success: true });
         await expect(ipc[method](...args)).resolves.toEqual({ success: true });

@@ -132,6 +132,7 @@ Commands:
   delete-scenario "<name>" - Delete a scenario and clear its assignments
   scenario-status --challenge=<id> - Where a challenge is in its scenario
   scenario-dry-run --challenge=<id> - What the scenario would do right now (spends nothing)
+  scenario-simulate --challenge=<id> - A what-if timeline until the challenge closes (spends nothing)
   scenario-reset --challenge=<id> - Forget a challenge's scenario progress (the plan restarts)
   scenario-vocabulary - List every condition, selector and action a scenario can use
              Assign one with: set-setting scenario "<name>" --challenge=<id> (or a challenge rule)
@@ -413,6 +414,9 @@ const COMMANDS = {
     ),
     'scenario-dry-run': challengeCommand('Usage: scenario-dry-run --challenge=<id>', (id) =>
         scenarioCommands.scenarioDryRunCmd(id),
+    ),
+    'scenario-simulate': challengeCommand('Usage: scenario-simulate --challenge=<id>', (id) =>
+        scenarioCommands.scenarioSimulateCmd(id),
     ),
     'scenario-reset': challengeCommand('Usage: scenario-reset --challenge=<id>', (id) =>
         scenarioCommands.scenarioResetCmd(id),

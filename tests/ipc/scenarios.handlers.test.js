@@ -4,6 +4,7 @@
  */
 
 jest.mock('../../src/js/settings', () => ({
+    checkScenario: jest.fn(),
     getScenarios: jest.fn(() => ({})),
     saveScenario: jest.fn(),
     renameScenario: jest.fn(),
@@ -241,6 +242,85 @@ describe('dry-run-scenario', () => {
             success: false,
             error: 'challenge-not-found',
         });
+    });
+});
+
+describe('simulate-scenario', () => {
+    const strategy = {
+        getActiveChallenges: jest.fn(async () => ({
+            challenges: [{ id: 7, close_time: NOW + 3600, member: { ranking: { entries: [] } } }],
+        })),
+        getBankroll: jest.fn(async () => ({})),
+    };
+    const timed = {
+        name: 'Draft',
+        version: 1,
+        start: 'main',
+        phases: {
+            main: {
+                rules: [{ id: 't', if: [{ type: 'inPhaseFor', min: '4m' }], do: [{ type: 'notify', message: 'x' }] }],
+            },
+        },
+    };
+
+    beforeEach(() => {
+        apiFactory.getApiStrategy.mockReturnValue(strategy);
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: 'Plan',
+            scenario,
+            state: null,
+            corrupt: false,
+            timezone: 'UTC',
+        });
+    });
+
+    test('simulates the assigned scenario from its current state', async () => {
+        const result = await handlers['simulate-scenario'](null, 7);
+        expect(result).toEqual(
+            expect.objectContaining({
+                success: true,
+                scenario: 'Plan',
+                startPhase: 'main',
+                stoppedBecause: expect.any(String),
+            }),
+        );
+        expect(result.events[0]).toEqual(expect.objectContaining({ ruleId: 'r2' }));
+    });
+
+    test('simulates an unsaved draft from its start phase, even without an assignment', async () => {
+        scenarioStatus.getScenarioStatus.mockReturnValue({
+            assigned: '',
+            scenario: null,
+            state: null,
+            corrupt: true,
+            timezone: 'UTC',
+        });
+        settings.checkScenario.mockReturnValue({ ok: true, scenario: timed });
+        const result = await handlers['simulate-scenario'](null, 7, timed);
+        expect(settings.checkScenario).toHaveBeenCalledWith(timed);
+        expect(result.events).toEqual([expect.objectContaining({ ruleId: 't', at: expect.any(Number) })]);
+    });
+
+    test('an invalid draft reports its issues; a bad id is refused', async () => {
+        settings.checkScenario.mockReturnValueOnce({ ok: false, issues: [{ path: 'start', message: 'No phase' }] });
+        await expect(handlers['simulate-scenario'](null, 7, {})).resolves.toEqual({
+            success: false,
+            error: 'No phase',
+            issues: [{ path: 'start', message: 'No phase' }],
+        });
+        settings.checkScenario.mockReturnValueOnce({ ok: false, issues: [] });
+        await expect(handlers['simulate-scenario'](null, 7, {})).resolves.toEqual(
+            expect.objectContaining({ error: 'Invalid scenario' }),
+        );
+        await expect(handlers['simulate-scenario'](null, '')).resolves.toEqual({
+            success: false,
+            error: 'invalid-args',
+        });
+    });
+
+    test('refuses what the dry run refuses', async () => {
+        scenarioStatus.getScenarioStatus.mockReturnValue({ assigned: '', scenario: null });
+        await expect(handlers['simulate-scenario'](null, 7)).resolves.toEqual({ success: false, error: 'no-scenario' });
     });
 });
 

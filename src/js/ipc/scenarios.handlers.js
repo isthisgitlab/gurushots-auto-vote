@@ -16,6 +16,8 @@
  *                            scheduler's boundary and the card status read it)
  *   reset-scenario-state     forget a challenge's progress — its plan restarts
  *   dry-run-scenario         what would fire right now and why; spends nothing
+ *   simulate-scenario        a what-if timeline until the challenge closes, of
+ *                            the assigned scenario or an unsaved draft
  */
 
 const logger = require('../logger');
@@ -27,6 +29,7 @@ const { errorResult } = require('./errorResult');
 const { getScenarioStatus, ledgerForMode } = require('../services/scenarioStatus');
 const { findActiveChallenge } = require('../services/findActiveChallenge');
 const { evaluateScenario } = require('../scenarios/evaluate');
+const { simulateScenario } = require('../scenarios/simulate');
 const { SCENARIO_TEMPLATES } = require('../scenarios/templates');
 const { refreshScenarioStateAsync } = require('../scenarioStateStore');
 
@@ -51,6 +54,48 @@ const safely = async (label, body) => {
         log().error(`Error handling ${label} request:`, error);
         return errorResult(error, `The ${label} request failed`);
     }
+};
+
+const startState = (scenario, now) => ({
+    phase: scenario.start,
+    phaseEnteredAt: now,
+    memory: {},
+    fired: {},
+    inFlight: null,
+});
+
+/**
+ * What the dry run and the simulation both need: the challenge's scenario
+ * status, the live challenge, its state (or a start state) and the bankroll.
+ * `draft` replaces the assigned scenario with an unsaved document, which then
+ * starts from its start phase.
+ */
+const loadLiveScenario = async (label, challengeId, draft = null) => {
+    const refuse = (error, extra = {}) => ({ ok: false, response: { success: false, error, ...extra } });
+    const guard = auth.requireAuthToken(label);
+    if (!guard.ok) return { ok: false, response: guard.response };
+    await refreshScenarioStateAsync();
+    let status = getScenarioStatus(challengeId);
+    if (draft !== null) {
+        const checked = settings.checkScenario(draft);
+        if (!checked.ok) return refuse(checked.issues[0]?.message ?? 'Invalid scenario', { issues: checked.issues });
+        status = { ...status, scenario: checked.scenario, state: null, corrupt: false };
+    }
+    if (!status.scenario) return refuse(status.assigned ? 'unknown-scenario' : 'no-scenario');
+    if (status.corrupt) return refuse('state-unreadable');
+    const strategy = apiFactory.getApiStrategy();
+    const response = await strategy.getActiveChallenges(guard.token);
+    const challenge = findActiveChallenge(response?.challenges, challengeId);
+    if (!challenge) return refuse('challenge-not-found');
+    const now = Math.floor(Date.now() / 1000);
+    return {
+        ok: true,
+        status,
+        challenge,
+        now,
+        state: status.state ?? startState(status.scenario, now),
+        bankroll: await strategy.getBankroll(guard.token),
+    };
 };
 
 const buildHandlers = () => ({
@@ -115,32 +160,16 @@ const buildHandlers = () => ({
     'dry-run-scenario': async (event, challengeId) => {
         if (!isIdArg(challengeId)) return invalidArgs;
         return safely('dry-run-scenario', async () => {
-            const guard = auth.requireAuthToken('scenario dry run');
-            if (!guard.ok) return guard.response;
-            await refreshScenarioStateAsync();
-            const status = getScenarioStatus(challengeId);
-            if (!status.scenario)
-                return { success: false, error: status.assigned ? 'unknown-scenario' : 'no-scenario' };
-            if (status.corrupt) return { success: false, error: 'state-unreadable' };
-            const strategy = apiFactory.getApiStrategy();
-            const response = await strategy.getActiveChallenges(guard.token);
-            const challenge = findActiveChallenge(response?.challenges, challengeId);
-            if (!challenge) return { success: false, error: 'challenge-not-found' };
-            const now = Math.floor(Date.now() / 1000);
-            const state = status.state ?? {
-                phase: status.scenario.start,
-                phaseEnteredAt: now,
-                memory: {},
-                fired: {},
-                inFlight: null,
-            };
+            const loaded = await loadLiveScenario('scenario dry run', challengeId);
+            if (!loaded.ok) return loaded.response;
+            const { status, challenge, state, now, bankroll } = loaded;
             const decision = evaluateScenario({
                 scenario: status.scenario,
                 state,
                 challenge,
                 now,
                 timezone: status.timezone,
-                bankroll: await strategy.getBankroll(guard.token),
+                bankroll,
             });
             return {
                 success: true,
@@ -158,6 +187,24 @@ const buildHandlers = () => ({
                 explain: decision.explain,
                 nextWakeAt: decision.nextWakeAt,
             };
+        });
+    },
+
+    'simulate-scenario': async (event, challengeId, draft) => {
+        if (!isIdArg(challengeId)) return invalidArgs;
+        return safely('simulate-scenario', async () => {
+            const loaded = await loadLiveScenario('scenario simulation', challengeId, draft ?? null);
+            if (!loaded.ok) return loaded.response;
+            const { status, challenge, state, now, bankroll } = loaded;
+            const timeline = simulateScenario({
+                scenario: status.scenario,
+                state,
+                challenge,
+                now,
+                timezone: status.timezone,
+                bankroll,
+            });
+            return { success: true, scenario: status.scenario.name, startPhase: state.phase, now, ...timeline };
         });
     },
 });

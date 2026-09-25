@@ -192,6 +192,27 @@ const scenarioDryRunCmd = async (challengeId) => {
     return 0;
 };
 
+const STOP_REASONS = {
+    closed: 'the challenge closes',
+    idle: 'nothing more is time-based — the plan now waits on live data (votes, rank, boost) the simulation holds still',
+    halted: 'the scenario halts',
+    limit: 'the timeline is long — only the first steps are shown',
+};
+
+const scenarioSimulateCmd = async (challengeId) => {
+    const result = await handlers()['simulate-scenario'](null, challengeId);
+    if (!result.success) return reportFailure(result, 'Simulation failed');
+    ui().info(`Scenario "${result.scenario}" from phase ${result.startPhase}, assuming every step succeeds:`);
+    if (result.events.length === 0) ui().info('  Nothing would run.');
+    for (const event of result.events) {
+        const move = event.toPhase ? ` → phase ${event.toPhase}` : '';
+        ui().info(`  ${at(event.at)}  [${event.phase}] ${event.label}: ${event.actions.join(', ')}${move}`);
+    }
+    ui().info(`  Stops at ${at(result.stoppedAt)}: ${STOP_REASONS[result.stoppedBecause]}.`);
+    if (result.halted) ui().warning(`  ${result.halted}`);
+    return 0;
+};
+
 const scenarioVocabulary = async () => {
     for (const [kind, type, fields] of VOCABULARY_REFERENCE)
         ui().info(`  ${kind.padEnd(9)} ${type.padEnd(16)} ${fields}`);
@@ -208,5 +229,6 @@ module.exports = {
     scenarioStatusCmd,
     scenarioResetCmd,
     scenarioDryRunCmd,
+    scenarioSimulateCmd,
     scenarioVocabulary,
 };

@@ -21,6 +21,7 @@ jest.mock('../../src/js/ipc/scenarios.handlers', () => {
             'get-scenario-status',
             'reset-scenario-state',
             'dry-run-scenario',
+            'simulate-scenario',
         ].map((channel) => [channel, jest.fn()]),
     );
     return { __handlers: handlers, buildHandlers: () => handlers };
@@ -297,6 +298,42 @@ describe('scenario-reset / dry-run / vocabulary', () => {
         await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(1);
         h['dry-run-scenario'].mockResolvedValueOnce({ success: false, error: 'no-scenario' });
         await expect(cmd.scenarioDryRunCmd('7')).resolves.toBe(1);
+    });
+
+    test('simulate prints the timeline and why it stops', async () => {
+        h['simulate-scenario'].mockResolvedValueOnce({
+            success: true,
+            scenario: 'Plan',
+            startPhase: 'main',
+            events: [
+                { at: 1_800_000_000, phase: 'main', label: 'Morning entry', actions: ['enterPhoto'], toPhase: null },
+                { at: 1_800_000_600, phase: 'main', label: 'Hold it', actions: ['swap', 'goto'], toPhase: 'holding' },
+            ],
+            stoppedBecause: 'idle',
+            stoppedAt: 1_800_000_600,
+            halted: null,
+        });
+        await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(0);
+        expect(text()).toContain('[main] Morning entry: enterPhoto');
+        expect(text()).toContain('Hold it: swap, goto → phase holding');
+        expect(text()).toContain('waits on live data');
+    });
+
+    test('simulate: an empty or halted timeline, and a failure', async () => {
+        h['simulate-scenario'].mockResolvedValueOnce({
+            success: true,
+            scenario: 'Plan',
+            startPhase: 'x',
+            events: [],
+            stoppedBecause: 'halted',
+            stoppedAt: 1,
+            halted: 'Phase gone',
+        });
+        await cmd.scenarioSimulateCmd('7');
+        expect(text()).toContain('Nothing would run.');
+        expect(text('warning')).toContain('Phase gone');
+        h['simulate-scenario'].mockResolvedValueOnce({ success: false, error: 'no-scenario' });
+        await expect(cmd.scenarioSimulateCmd('7')).resolves.toBe(1);
     });
 
     test('vocabulary lists every piece', async () => {

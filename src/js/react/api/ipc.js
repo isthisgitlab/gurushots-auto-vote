@@ -93,6 +93,7 @@ export const exportScenario = forward('exportScenario');
 export const getScenarioStatus = forward('getScenarioStatus');
 export const resetScenarioState = forward('resetScenarioState');
 export const dryRunScenario = forward('dryRunScenario');
+export const simulateScenario = forward('simulateScenario');
 
 // Challenges and voting
 export const getActiveChallenges = forward('getActiveChallenges');

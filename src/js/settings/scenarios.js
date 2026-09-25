@@ -240,6 +240,12 @@ const describeScenario = (scenario) => {
 };
 
 /**
+ * Validate a scenario document without storing it (the builder's draft, the
+ * simulation of an unsaved edit).
+ */
+const checkScenario = (doc) => validateScenario(doc, globalChallengeValues(loadSettings()));
+
+/**
  * Parse and validate shared scenario JSON without storing it — the preview
  * step. `exists` tells the caller a save would replace a scenario.
  */
@@ -279,6 +285,7 @@ module.exports = {
     renameScenario,
     deleteScenario,
     describeScenario,
+    checkScenario,
     previewScenarioImport,
     importScenario,
     exportScenario,

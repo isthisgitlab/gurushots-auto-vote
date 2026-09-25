@@ -68,6 +68,12 @@ describe('settings facade — scenarios', () => {
         expect(settings.getScenario('EVENING boost before the last day').start).toBe('main');
     });
 
+    test('checkScenario validates without storing', () => {
+        expect(settings.checkScenario(simple())).toEqual(expect.objectContaining({ ok: true }));
+        expect(settings.checkScenario({ ...simple(), start: 'x' }).ok).toBe(false);
+        expect(settings.getScenarios()).toEqual({});
+    });
+
     test('an invalid document is refused with its issues', () => {
         const result = settings.saveScenario({ ...simple(), start: 'missing' });
         expect(result).toEqual({ ok: false, issues: [expect.objectContaining({ path: 'start' })] });

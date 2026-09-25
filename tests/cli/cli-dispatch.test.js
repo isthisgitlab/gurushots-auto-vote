@@ -74,6 +74,7 @@ jest.mock('../../src/js/cli/commands/scenarios', () =>
             'scenarioStatusCmd',
             'scenarioResetCmd',
             'scenarioDryRunCmd',
+            'scenarioSimulateCmd',
             'scenarioVocabulary',
         ].map((name) => [name, jest.fn(async () => 0)]),
     ),
@@ -486,6 +487,7 @@ describe('scenario commands', () => {
         [['delete-scenario', 'My plan'], 'deleteScenarioCmd', ['My plan']],
         [['scenario-status', '--challenge=7'], 'scenarioStatusCmd', ['7']],
         [['scenario-dry-run', '--challenge=7'], 'scenarioDryRunCmd', ['7']],
+        [['scenario-simulate', '--challenge=7'], 'scenarioSimulateCmd', ['7']],
         [['scenario-reset', '--challenge=7'], 'scenarioResetCmd', ['7']],
         [['scenario-vocabulary'], 'scenarioVocabulary', []],
     ])('%p runs %s', async (argv, fn, args) => {

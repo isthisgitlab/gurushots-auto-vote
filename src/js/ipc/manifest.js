@@ -110,6 +110,7 @@ const invokeChannels = [
     'get-scenario-status',
     'reset-scenario-state',
     'dry-run-scenario',
+    'simulate-scenario',
     'reload-window',
     'refresh-menu',
     // AutoUpdater
