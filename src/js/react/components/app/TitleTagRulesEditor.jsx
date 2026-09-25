@@ -1,6 +1,8 @@
 import { useTranslation } from '@/contexts/TranslationContext';
 import { StrokeIcon, ICON_PATHS } from '@/components/ui/StrokeIcon';
 import { TagsField } from './SettingInput';
+import { useScenarios } from '@/api/useScenarios';
+import { interp } from '@/utils/interp';
 import { hasRuleCondition, rulePatterns, sortRulesByDefaultOrder } from '../../../settings/challengeRules';
 
 // Tri-state boolean override. '' = inherit (the key is omitted from the saved
@@ -140,6 +142,36 @@ function RuleProfileSelect({ rule, profiles, onPatch }) {
                         {name}
                     </option>
                 ))}
+            </select>
+        </div>
+    );
+}
+
+// The scenario the rule assigns inline ('' = inherit). A name that no longer
+// exists stays listed, marked missing, like the per-challenge picker.
+function RuleScenarioSelect({ rule, onPatch }) {
+    const { t } = useTranslation();
+    const { scenarios } = useScenarios();
+    const names = Object.keys(scenarios);
+    const current = rule.scenario ?? '';
+    return (
+        <div className="flex flex-col gap-1">
+            <span className="text-sm">{t('app.scenario')}</span>
+            <select
+                aria-label={t('app.scenario')}
+                className="select select-sm w-full"
+                value={current}
+                onChange={(event) => onPatch({ scenario: event.target.value })}
+            >
+                <option value="">{t('app.titleRuleInherit')}</option>
+                {names.map((name) => (
+                    <option key={name} value={name}>
+                        {name}
+                    </option>
+                ))}
+                {current !== '' && !names.includes(current) && (
+                    <option value={current}>{interp(t('app.scenarioMissingOption'), { name: current })}</option>
+                )}
             </select>
         </div>
     );
@@ -360,6 +392,7 @@ function RuleCard({ index, count, rule, profiles, onPatch, onMove, onRemove }) {
             <RuleClassConditions rule={rule} onPatch={onPatch} />
             <p className="text-xs opacity-60">{t('app.titleRuleConditionsHint')}</p>
             <RuleProfileSelect rule={rule} profiles={profiles} onPatch={onPatch} />
+            <RuleScenarioSelect rule={rule} onPatch={onPatch} />
             <RuleBehaviour rule={rule} onPatch={onPatch} />
             {isBroadSpendingRule(rule) && (
                 <div role="alert" className="alert alert-warning py-2 text-sm">

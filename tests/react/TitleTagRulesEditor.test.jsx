@@ -4,7 +4,7 @@
  * mock returns each key verbatim, so labels/placeholders are the i18n keys.
  */
 
-import { fireEvent, render, screen } from './helpers/test-utils';
+import { fireEvent, render, screen, waitFor } from './helpers/test-utils';
 import { TitleTagRulesEditor } from '@/components/app/TitleTagRulesEditor';
 
 describe('TitleTagRulesEditor', () => {
@@ -28,6 +28,29 @@ describe('TitleTagRulesEditor', () => {
         expect(onChange).toHaveBeenCalledWith([
             { title: "Let's See Hats", titles: ["Let's See Hats"], mustIncludeTags: [], shouldIncludeTags: [] },
         ]);
+    });
+
+    test('a rule can assign a scenario inline, and a missing one stays visible', async () => {
+        window.api.getScenarios.mockResolvedValue({ success: true, scenarios: { Plan: {} }, templates: [] });
+        const onChange = jest.fn();
+        const value = [{ title: 'A', mustIncludeTags: [], shouldIncludeTags: [] }];
+        const { rerender } = render(<TitleTagRulesEditor value={value} onChange={onChange} />);
+        await waitFor(() => expect(screen.getByRole('option', { name: 'Plan' })).toBeTruthy());
+        const pick = (name) => {
+            const select = screen.getByLabelText('app.scenario');
+            select.value = name;
+            select.dispatchEvent(new window.Event('change', { bubbles: true }));
+        };
+        pick('Plan');
+        expect(onChange).toHaveBeenLastCalledWith([{ ...value[0], scenario: 'Plan' }]);
+
+        rerender(<TitleTagRulesEditor value={[{ ...value[0], scenario: 'Plan' }]} onChange={onChange} />);
+        pick('');
+        expect(onChange).toHaveBeenLastCalledWith([{ ...value[0], scenario: '' }]);
+
+        rerender(<TitleTagRulesEditor value={[{ ...value[0], scenario: 'Gone' }]} onChange={onChange} />);
+        expect(screen.getByLabelText('app.scenario').value).toBe('Gone');
+        expect(screen.getByRole('option', { name: 'app.scenarioMissingOption' })).toBeTruthy();
     });
 
     test('a rule can list several titles', () => {
