@@ -82,6 +82,9 @@ class AutoVoteService : Service() {
         // @capacitor/preferences store the JS settings module reads/writes.
         private const val PREFS_FILE = "CapacitorStorage"
         private const val SETTINGS_KEY = "gurushots-settings"
+        // Side stores the headless JS persists outside that blob (see HeadlessStore).
+        private const val KEY_LEXICON_DIAGNOSTICS = "gs_lexicon_diagnostics"
+        private const val KEY_SCENARIO_STATE = "gs_scenario_state"
         private const val HEADLESS_URL = "https://appassets.androidplatform.net/assets/public/headless.html"
 
         // Test seam: JVM unit tests swap in a client whose interceptor reroutes
@@ -375,7 +378,7 @@ class AutoVoteService : Service() {
         // settings blob: lexicon diagnostics, and scenario runtime state (the
         // phase and memory a user-defined scenario is at — losing it on a
         // service restart would restart the plan).
-        private val allowedKeys = setOf("gs_lexicon_diagnostics", "gs_scenario_state")
+        private val allowedKeys = setOf(KEY_LEXICON_DIAGNOSTICS, KEY_SCENARIO_STATE)
 
         @android.webkit.JavascriptInterface
         fun read(): String? = getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).getString(SETTINGS_KEY, null)
@@ -390,7 +393,14 @@ class AutoVoteService : Service() {
             try {
                 JSONObject(data)
             } catch (t: Throwable) {
-                Log.w(TAG, "Refusing to persist non-JSON blob for $key")
+                // Name the store from a literal instead of logging the JS-supplied
+                // key: a newline in it renders as a forged second log line (CodeQL
+                // java/log-injection). Add an arm when you allow a new key.
+                if (key == KEY_SCENARIO_STATE) {
+                    Log.w(TAG, "Refusing to persist non-JSON scenario state blob")
+                } else {
+                    Log.w(TAG, "Refusing to persist non-JSON lexicon diagnostics blob")
+                }
                 return
             }
             getSharedPreferences(PREFS_FILE, Context.MODE_PRIVATE).edit().putString(key, data).apply()

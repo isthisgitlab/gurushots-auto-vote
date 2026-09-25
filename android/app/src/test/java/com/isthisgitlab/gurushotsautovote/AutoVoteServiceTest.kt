@@ -48,6 +48,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.ShadowAlarmManager
 import org.robolectric.shadows.ShadowContextImpl
+import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowPowerManager
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
@@ -276,6 +277,7 @@ class AutoVoteServiceTest {
     @Test
     fun headlessSideStoresUseOnlyTheAllowedPreferenceKeys() {
         val store = newService().HeadlessStore()
+        ShadowLog.clear()
         store.writeKey("gs_lexicon_diagnostics", "{\"challenges\":1}")
         assertEquals("{\"challenges\":1}", store.readKey("gs_lexicon_diagnostics"))
         store.writeKey("unrelated-key", "{\"challenges\":2}")
@@ -286,6 +288,16 @@ class AutoVoteServiceTest {
         assertEquals("{\"7\":{\"phase\":\"buildup\"}}", store.readKey("gs_scenario_state"))
         store.writeKey("gs_scenario_state", "invalid JSON")
         assertEquals("{\"7\":{\"phase\":\"buildup\"}}", store.readKey("gs_scenario_state"))
+        // A refusal names the store from a literal — the JS-supplied key never
+        // reaches the log line (CodeQL java/log-injection), and the rejected
+        // key is silent.
+        assertEquals(
+            listOf(
+                "Refusing to persist non-JSON lexicon diagnostics blob",
+                "Refusing to persist non-JSON scenario state blob"
+            ),
+            ShadowLog.getLogsForTag(AutoVoteService.TAG).map { it.msg }
+        )
     }
 
     @Test
