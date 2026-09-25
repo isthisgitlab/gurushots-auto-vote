@@ -18,6 +18,7 @@
  *   titlePins.js          persisted first-seen challenge-title pins
  *   scenarioSchema.js     validation of user-defined scenario documents
  *   scenarios.js          stored scenarios, JSON import/export
+ *   scenarioOverlay.js    the active scenario phase's settings layer
  *   reset.js              reset helpers and "modified" checks
  */
 

@@ -1,7 +1,8 @@
 /**
  * Schema-based challenge settings: global defaults, id-keyed per-challenge
  * overrides (single-key and batch writes, profile-mode suppression), effective
- * value resolution (override -> matching rules -> global default), and pruning
+ * value resolution (scenario phase -> override -> matching rules -> global
+ * default), and pruning
  * of overrides for challenges that no longer exist.
  */
 
@@ -16,6 +17,7 @@ const {
     challengeValueSetIsValid,
 } = require('./defaults');
 const { ruleValuesForChallengeId, isTitleProfileSuppressed } = require('./ruleResolution');
+const { scenarioPhaseSettings } = require('./scenarioOverlay');
 
 // Trimmed string form of a caller-supplied challenge id ('' when absent).
 const trimmedChallengeId = (challengeId) =>
@@ -294,7 +296,8 @@ const replaceChallengeOverrides = (challengeId, overrides, suppressTitleProfile 
 };
 
 /**
- * Get the effective value for a setting (per-challenge override or global default)
+ * Get the effective value for a setting: the active scenario phase's value,
+ * then the per-challenge override, matching rules, and the global default.
  */
 const getEffectiveSetting = (settingKey, challengeId = null) => {
     if (!SETTINGS_SCHEMA[settingKey]) {
@@ -303,6 +306,26 @@ const getEffectiveSetting = (settingKey, challengeId = null) => {
     }
 
     const settings = loadSettings();
+
+    // A scenario phase's settings sit above every other layer while the
+    // challenge is in that phase (settings/scenarioOverlay.js). The
+    // assignment itself is never overlaid.
+    if (challengeId && settingKey !== 'scenario' && SETTINGS_SCHEMA[settingKey].perChallenge) {
+        const phaseSettings = scenarioPhaseSettings(settings, String(challengeId), () =>
+            _resolveEffectiveSetting(settings, 'scenario', challengeId),
+        );
+        if (phaseSettings && Object.prototype.hasOwnProperty.call(phaseSettings, settingKey)) {
+            return phaseSettings[settingKey];
+        }
+    }
+    return _resolveEffectiveSetting(settings, settingKey, challengeId);
+};
+
+/**
+ * The stored layers of getEffectiveSetting, over an already loaded settings
+ * blob: per-challenge override -> matching rules -> global default.
+ */
+const _resolveEffectiveSetting = (settings, settingKey, challengeId) => {
     const challengeSettings = settings.challengeSettings || getDefaultSettings().challengeSettings;
 
     // Explicit id-keyed settings remain the highest-precedence layer.

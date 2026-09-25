@@ -44,6 +44,22 @@ const validateStored = (raw, globalDefaults) => {
 };
 
 /**
+ * The valid stored scenario named `name` (case-insensitive) in an already
+ * loaded settings object, or null. Not a copy — callers only read it. Used by
+ * the phase-settings overlay, which must not load settings a second time.
+ */
+const findStoredScenario = (settings, name) => {
+    const stored = readScenariosMap(settings);
+    const key = findProfileKey(stored, normalizeProfileName(name));
+    if (key === null) return null;
+    const result = validateStored(stored[key], globalChallengeValues(settings));
+    return result.ok ? result.scenario : null;
+};
+
+/** True when any scenario is stored at all — lets hot paths skip the overlay cheaply. */
+const hasStoredScenarios = (settings) => Object.keys(readScenariosMap(settings)).length > 0;
+
+/**
  * Valid stored scenarios as `{ [name]: document }` (defensive copies). A
  * stored document that no longer validates is left out — and logged — rather
  * than run.
@@ -255,6 +271,8 @@ const exportScenario = (name) => {
 
 module.exports = {
     MAX_SCENARIOS,
+    findStoredScenario,
+    hasStoredScenarios,
     getScenarios,
     getScenario,
     saveScenario,
