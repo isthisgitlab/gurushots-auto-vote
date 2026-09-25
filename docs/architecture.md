@@ -538,5 +538,21 @@ caps (dependency-free, renderer-safe), and `scenarios/templates.js` holds editab
   fire, so a skip never uses up a `once` rule. A `goto` takes effect when the rule finishes. No spend cap: each rule
   fires at most once per pass and a `goto` chain stops on revisiting a phase in that pass; spends honour the
   user's `currencyReserve*` (shared `reserveAllows`) and the scenario's optional `limits`.
+- **Vote speed** (`scenarios/speed.js`): the runner samples every entry's votes once per pass into the state's
+  `history`, keyed by photo id (a swapped-out photo keeps its history). `votesPerHour` / `speedRatio` and the
+  `fastest` selector read it; a speed with under 10 minutes of history, or nothing to compare with, is null and
+  fails closed.
+- **Notices** (`services/scenarioNotifications.js`, pure): a `notify` action — and a halt — appends to the state's
+  bounded `outbox`; each host's per-cycle notifier (CLI `nodeNotify.createNodeScenarioNotifier`, desktop
+  `react/notifications/scenarioNotifier.js`, composed with the deadline notifier) shows only notices created
+  after it started, each once, gated by `notifyOnScenario`. Native Android delivers none, as for deadlines.
+- **Simulation** (`scenarios/simulate.js`, pure): a what-if timeline jumping between the engine's own wake-ups,
+  chaining rules like the runner; assumes every step succeeds and live data holds still, and says why it stopped.
+  IPC `simulate-scenario` (stored scenario, or an unsaved draft via `settings.checkScenario`), CLI
+  `scenario-simulate`, and the builder.
+- **Builder** (`react/components/app/scenarioBuilder/`): forms generated from `scenarios/builderSpec.js` (every
+  condition / action / selector's fields and kinds — a test checks every default against the validator) over
+  pure draft edits in `scenarios/builderModel.js`; it never validates itself — save and simulate do.
 - **Surfaces**: IPC `ipc/scenarios.handlers.js` (the CLI reuses it), CLI `cli/commands/scenarios.js`,
-  GUI `ScenariosSection`, the `scenario` field in `SettingInput`, and the card `ScenarioStatusLine`.
+  GUI `ScenariosSection` (+ the builder), the `scenario` field in `SettingInput`, and the card
+  `ScenarioStatusLine`.
