@@ -43,7 +43,7 @@ jobs:
 
             # Informational only (continue-on-error) — pnpm audit --prod above
             # is the blocking gate for shipped deps; this surfaces CVEs in the
-            # devDependency tree (ttsc toolchain, build tooling) that the
+            # devDependency tree (lint, type-check and build tooling) that the
             # --prod gate deliberately excludes, without letting an unfixable
             # dev-only advisory block PRs.
             - name: Audit dev dependencies (informational)
@@ -161,10 +161,8 @@ jobs:
                   fail-on-error: false
 
     typecheck:
-        # Separate standard runner: on a cold cache ttsc compiles the
-        # @ttsc/lint Go plugin from source (~6 CPU-minutes, ~25 min wall on a
-        # single core, 1.6 GiB of GOCACHE), which blows the ubuntu-slim job
-        # cap and surfaces as "The operation was canceled".
+        # Its own job so a type error reads as its own red check, separate from
+        # lint and tests.
         runs-on: ubuntu-latest
         timeout-minutes: 30
 
@@ -184,23 +182,9 @@ jobs:
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
-            # Only the built plugin binary (~35 MB) is needed for a warm start;
-            # the multi-GiB go-build cache next to it is deliberately not saved.
-            # ttsc keys plugins by its own content hash, so a toolchain bump
-            # just misses, rebuilds once, and saves under the new lockfile key.
-            - name: Cache compiled ttsc plugins
-              uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-              with:
-                  path: node_modules/.cache/ttsc/plugins
-                  key: ttsc-plugins-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
-                  restore-keys: ttsc-plugins-${{ runner.os }}-${{ runner.arch }}-
-
-            # ttsc runs the strict type-check (JSDoc, checkJs) AND the
-            # @ttsc/lint pass (lint.config.ts) in one compile — a red run here
-            # can be either a type error or an error-severity lint rule. The
-            # band hint lives in the step name because Actions never shows
-            # YAML comments in the log.
-            - name: Type-check + lint via ttsc (TS9000-TS17999 = lint rule, see lint.config.ts)
+            # Strict JSDoc type-check (tsconfig checkJs) with the native tsc.
+            # Lint, including the type-aware promise rules, runs in `pnpm lint`.
+            - name: Type-check
               run: pnpm typecheck
 
     knip:

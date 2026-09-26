@@ -94,7 +94,7 @@ The same core business logic in `src/js/` runs under three shells: **Electron (G
 
 ### Code Style
 
-- We use ESLint for code linting
+- We use Oxlint for code linting and Prettier for formatting
 - 4-space indentation
 - Single quotes for strings
 - Semicolons are required

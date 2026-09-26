@@ -28,7 +28,7 @@ const cliAssetSuffix = async () => {
 // Pattern built via RegExp so no literal control bytes live in the source.
 // no-control-regex is disabled deliberately: matching control chars is the
 // whole point — we strip them so they can't reach the terminal.
-// eslint-disable-next-line no-control-regex
+// oxlint-disable-next-line no-control-regex
 const CONTROL_CHARS = new RegExp('[\\u0000-\\u001f\\u007f-\\u009f]', 'g');
 /** @param {unknown} s */
 const plain = (s) => String(s ?? '').replace(CONTROL_CHARS, '');

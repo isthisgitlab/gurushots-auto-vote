@@ -32,6 +32,6 @@
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true
     },
-    "include": ["src/js/**/*.js", "src/js/**/*.jsx", "src/js/**/*.ts", "src/js/**/*.tsx", "lint.config.ts"],
+    "include": ["src/js/**/*.js", "src/js/**/*.jsx", "src/js/**/*.ts", "src/js/**/*.tsx"],
     "exclude": ["node_modules", "dist", "build", "coverage", "android", "**/*.test.js"]
 }

@@ -1,0 +1,345 @@
+{
+    "$schema": "./node_modules/oxlint/configuration_schema.json",
+    "plugins": ["eslint", "typescript", "react", "jsx-a11y"],
+    "jsPlugins": ["./scripts/lint/a11y-local.js"],
+    // Every category off: the rules below are listed explicitly, mirroring
+    // eslint:recommended plus this project's rules, so an Oxlint upgrade never
+    // enables new rules on its own.
+    "categories": {
+        "correctness": "off",
+        "suspicious": "off",
+        "pedantic": "off",
+        "perf": "off",
+        "style": "off",
+        "restriction": "off",
+        "nursery": "off"
+    },
+    "options": {
+        "typeAware": true
+    },
+    "env": {
+        "node": true,
+        "es2024": true
+    },
+    // Type-only declaration files carry no code to lint; tsc checks them.
+    "ignorePatterns": ["src/js/types/**"],
+    // eslint:recommended (Oxlint lacks only no-dupe-args and no-octal, both
+    // syntax errors in the strict src/js modules), plus: logging goes through
+    // src/js/logger.js (console.warn/error stay for bootstrap code that runs before
+    // the logger exists), and _-prefixed args / catch bindings are deliberately
+    // unused. No formatting rules anywhere: Prettier owns formatting.
+    "rules": {
+        "constructor-super": "error",
+        "for-direction": "error",
+        "getter-return": "error",
+        "no-async-promise-executor": "error",
+        "no-case-declarations": "error",
+        "no-class-assign": "error",
+        "no-compare-neg-zero": "error",
+        "no-cond-assign": "error",
+        "no-const-assign": "error",
+        "no-constant-binary-expression": "error",
+        "no-constant-condition": "error",
+        "no-control-regex": "error",
+        "no-debugger": "error",
+        "no-delete-var": "error",
+        "no-dupe-class-members": "error",
+        "no-dupe-else-if": "error",
+        "no-dupe-keys": "error",
+        "no-duplicate-case": "error",
+        "no-empty": "error",
+        "no-empty-character-class": "error",
+        "no-empty-pattern": "error",
+        "no-empty-static-block": "error",
+        "no-ex-assign": "error",
+        "no-extra-boolean-cast": "error",
+        "no-fallthrough": "error",
+        "no-func-assign": "error",
+        "no-global-assign": "error",
+        "no-import-assign": "error",
+        "no-invalid-regexp": "error",
+        "no-irregular-whitespace": "error",
+        "no-loss-of-precision": "error",
+        "no-misleading-character-class": "error",
+        "no-new-native-nonconstructor": "error",
+        "no-nonoctal-decimal-escape": "error",
+        "no-obj-calls": "error",
+        "no-prototype-builtins": "error",
+        "no-redeclare": "error",
+        "no-regex-spaces": "error",
+        "no-self-assign": "error",
+        "no-setter-return": "error",
+        "no-shadow-restricted-names": "error",
+        "no-sparse-arrays": "error",
+        "no-this-before-super": "error",
+        "no-unassigned-vars": "error",
+        "no-undef": "error",
+        "no-unexpected-multiline": "error",
+        "no-unreachable": "error",
+        "no-unsafe-finally": "error",
+        "no-unsafe-negation": "error",
+        "no-unsafe-optional-chaining": "error",
+        "no-unused-labels": "error",
+        "no-unused-private-class-members": "error",
+        "no-unused-vars": [
+            "error",
+            {
+                "argsIgnorePattern": "^_",
+                "caughtErrorsIgnorePattern": "^_"
+            }
+        ],
+        "no-useless-assignment": "error",
+        "no-useless-backreference": "error",
+        "no-useless-catch": "error",
+        "no-useless-escape": "error",
+        "no-with": "error",
+        "preserve-caught-error": "error",
+        "require-yield": "error",
+        "use-isnan": "error",
+        "valid-typeof": "error",
+        "no-console": [
+            "error",
+            {
+                "allow": ["warn", "error"]
+            }
+        ]
+    },
+    "overrides": [
+        // logger.js owns the console, and build/dev scripts print to it.
+        {
+            "files": ["src/js/logger.js", "scripts/**"],
+            "rules": {
+                "no-console": "off"
+            }
+        },
+        // src/js/ui (the application menu) is linted with browser and Node globals.
+        {
+            "files": ["src/js/ui/**/*.js"],
+            "env": {
+                "browser": true,
+                "node": true
+            },
+            "rules": {
+                "no-undef": "off"
+            }
+        },
+        // Settings facade boundary. settings.js is the only public entry point; the
+        // modules behind it under settings/ share mutable state (load-once guards,
+        // active-challenge caches) that a direct import would bypass. settings/schema,
+        // storage, limits, uiDefaults and challengeRules stay importable.
+        {
+            "files": ["src/js/**/*.js", "src/js/**/*.jsx", "scripts/**/*.js"],
+            "excludeFiles": ["src/js/settings.js", "src/js/settings/**"],
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            {
+                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$",
+                                "message": "Settings internals are private to the facade — import settings.js instead."
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        // The type-aware promise rules (via oxlint-tsgolint, over the tsconfig
+        // program) and the core rules that went with them.
+        {
+            "files": ["src/js/**/*.js", "src/js/**/*.jsx"],
+            "rules": {
+                "no-var": "error",
+                "prefer-const": "error",
+                "no-throw-literal": "error",
+                "no-promise-executor-return": "error",
+                "typescript/await-thenable": "error",
+                "typescript/no-floating-promises": "error",
+                "typescript/no-misused-promises": "error"
+            }
+        },
+        // Renderer (Preact via preact/compat).
+        // - no-restricted-imports: the React tree must never import Node-only,
+        //   process-spawning code — services/notify/nodeNotify.js requires
+        //   node:child_process, and bundling it would ship a shell-spawning path into
+        //   the WebView/Electron renderer. Renderer notifications go through
+        //   react/notifications/deadlineNotifier.js. It repeats the settings-facade
+        //   patterns because a file's last matching override sets the rule's options.
+        // - rules-of-hooks is a real bug class (error); exhaustive-deps is advisory.
+        // - jsx-a11y's recommended set (control-has-associated-label turned on with
+        //   its recommended options, minus includeRoles, which Oxlint doesn't take),
+        //   plus a11y-local/label-has-control: jsx-a11y's label rule skips a label
+        //   whose text is {t('…')} — every label in this translated UI — so an orphan
+        //   <label> would otherwise pass.
+        {
+            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx"],
+            "env": {
+                "browser": true
+            },
+            "rules": {
+                "no-undef": "off",
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "paths": [
+                            {
+                                "name": "child_process",
+                                "message": "The renderer must not spawn processes; use the renderer notifier instead."
+                            },
+                            {
+                                "name": "node:child_process",
+                                "message": "The renderer must not spawn processes; use the renderer notifier instead."
+                            }
+                        ],
+                        "patterns": [
+                            {
+                                "group": ["**/services/notify/nodeNotify", "**/services/notify/nodeNotify.js"],
+                                "message": "nodeNotify is a Node-only (child_process) delivery module — never import it into the renderer bundle."
+                            },
+                            {
+                                "regex": "settings/(challengeFacts|challengeOverrides|defaults|migrations|persistence|profileStore|profiles|reset|ruleResolution|scenarioOverlay|scenarioSchema|scenarios|titlePins|titleRuleSanitize|titleRules)(\\.js)?$",
+                                "message": "Settings internals are private to the facade — import settings.js instead."
+                            }
+                        ]
+                    }
+                ],
+                "react/rules-of-hooks": "error",
+                "react/exhaustive-deps": "warn",
+                "jsx-a11y/alt-text": "error",
+                "jsx-a11y/anchor-has-content": "error",
+                "jsx-a11y/anchor-is-valid": "error",
+                "jsx-a11y/aria-activedescendant-has-tabindex": "error",
+                "jsx-a11y/aria-props": "error",
+                "jsx-a11y/aria-proptypes": "error",
+                "jsx-a11y/aria-role": "error",
+                "jsx-a11y/aria-unsupported-elements": "error",
+                "jsx-a11y/autocomplete-valid": "error",
+                "jsx-a11y/click-events-have-key-events": "error",
+                "jsx-a11y/control-has-associated-label": [
+                    "error",
+                    {
+                        "ignoreElements": ["audio", "canvas", "embed", "input", "textarea", "tr", "video"],
+                        "ignoreRoles": [
+                            "grid",
+                            "listbox",
+                            "menu",
+                            "menubar",
+                            "radiogroup",
+                            "row",
+                            "tablist",
+                            "toolbar",
+                            "tree",
+                            "treegrid"
+                        ]
+                    }
+                ],
+                "jsx-a11y/heading-has-content": "error",
+                "jsx-a11y/html-has-lang": "error",
+                "jsx-a11y/iframe-has-title": "error",
+                "jsx-a11y/img-redundant-alt": "error",
+                "jsx-a11y/interactive-supports-focus": [
+                    "error",
+                    {
+                        "tabbable": ["button", "checkbox", "link", "searchbox", "spinbutton", "switch", "textbox"]
+                    }
+                ],
+                "jsx-a11y/label-has-associated-control": "error",
+                "jsx-a11y/media-has-caption": "error",
+                "jsx-a11y/mouse-events-have-key-events": "error",
+                "jsx-a11y/no-access-key": "error",
+                "jsx-a11y/no-autofocus": "error",
+                "jsx-a11y/no-distracting-elements": "error",
+                "jsx-a11y/no-interactive-element-to-noninteractive-role": [
+                    "error",
+                    {
+                        "tr": ["none", "presentation"],
+                        "canvas": ["img"]
+                    }
+                ],
+                "jsx-a11y/no-noninteractive-element-interactions": [
+                    "error",
+                    {
+                        "handlers": [
+                            "onClick",
+                            "onError",
+                            "onLoad",
+                            "onMouseDown",
+                            "onMouseUp",
+                            "onKeyPress",
+                            "onKeyDown",
+                            "onKeyUp"
+                        ],
+                        "alert": ["onKeyUp", "onKeyDown", "onKeyPress"],
+                        "body": ["onError", "onLoad"],
+                        "dialog": ["onKeyUp", "onKeyDown", "onKeyPress"],
+                        "iframe": ["onError", "onLoad"],
+                        "img": ["onError", "onLoad"]
+                    }
+                ],
+                "jsx-a11y/no-noninteractive-element-to-interactive-role": [
+                    "error",
+                    {
+                        "ul": ["listbox", "menu", "menubar", "radiogroup", "tablist", "tree", "treegrid"],
+                        "ol": ["listbox", "menu", "menubar", "radiogroup", "tablist", "tree", "treegrid"],
+                        "li": ["menuitem", "menuitemradio", "menuitemcheckbox", "option", "row", "tab", "treeitem"],
+                        "table": ["grid"],
+                        "td": ["gridcell"],
+                        "fieldset": ["radiogroup", "presentation"]
+                    }
+                ],
+                "jsx-a11y/no-noninteractive-tabindex": [
+                    "error",
+                    {
+                        "tags": [],
+                        "roles": ["tabpanel"],
+                        "allowExpressionValues": true
+                    }
+                ],
+                "jsx-a11y/no-redundant-roles": "error",
+                "jsx-a11y/no-static-element-interactions": [
+                    "error",
+                    {
+                        "allowExpressionValues": true,
+                        "handlers": ["onClick", "onMouseDown", "onMouseUp", "onKeyPress", "onKeyDown", "onKeyUp"]
+                    }
+                ],
+                "jsx-a11y/role-has-required-aria-props": "error",
+                "jsx-a11y/role-supports-aria-props": "error",
+                "jsx-a11y/scope": "error",
+                "jsx-a11y/tabindex-no-positive": "error",
+                "a11y-local/label-has-control": "error"
+            }
+        },
+        // Renderer IPC boundary: components, hooks and contexts reach the shell
+        // bridge only through src/js/react/api/, so the bridge surface stays in one
+        // place and no component grows per-platform branching.
+        {
+            "files": ["src/js/react/**/*.js", "src/js/react/**/*.jsx"],
+            "excludeFiles": ["src/js/react/api/**"],
+            "rules": {
+                "no-restricted-properties": [
+                    "error",
+                    {
+                        "object": "window",
+                        "property": "api",
+                        "message": "Call the shell bridge through src/js/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
+                    },
+                    {
+                        "object": "globalThis",
+                        "property": "api",
+                        "message": "Call the shell bridge through src/js/react/api/ (e.g. `import * as ipc from \"@/api/ipc\"`)."
+                    }
+                ]
+            }
+        },
+        // Jest and happy-dom globals for the test suite.
+        {
+            "files": ["tests/**"],
+            "env": {
+                "node": true,
+                "browser": true,
+                "jest": true
+            }
+        }
+    ]
+}

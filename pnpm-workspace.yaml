@@ -13,7 +13,7 @@ allowBuilds:
     '@parcel/watcher': true
     # electron-builder dependency — install script picks the right 7-Zip binary per arch.
     electron-winstaller: true
-    # Native resolver pulled in transitively by ESLint v10 — napi-postinstall verifies prebuilds.
+    # Native resolver pulled in transitively by Jest — napi-postinstall verifies prebuilds.
     unrs-resolver: true
     # lefthook's only build script is a convenience that auto-runs `lefthook install`;
     # our `prepare` script does that explicitly, so no lifecycle script is needed here.
@@ -28,12 +28,6 @@ allowBuilds:
 autoInstallPeers: true
 # Fail fast on conflicting peer ranges rather than silently picking a winner.
 strictPeerDependencies: true
-# Scoped exception to strictPeerDependencies: eslint-plugin-jsx-a11y (latest
-# 6.10.2) still declares eslint ^3–^9 but works under the repo's ESLint 10.
-# Drop this once the plugin's peer range includes eslint 10.
-peerDependencyRules:
-    allowedVersions:
-        'eslint-plugin-jsx-a11y>eslint': '10'
 # Check dependency engines against the minimum supported Node version, including
 # when Dependabot regenerates the lockfile under an older host Node. The
 # preinstall script checks the actual Node version for normal installs.

@@ -444,7 +444,7 @@ repeated six times is one that gets forgotten at one of them.
   `refetch`, optional subscribe) and `react/api/useAsyncIpcAction.js` (loading + `{success,error}`
   handling). `useSettings`, `useActiveChallenges`, `useAuth`, `useBoost`, etc. all build on these. One-shot
   calls, event subscriptions and best-effort logging go through `react/api/ipc.js` (`logRendererError` never
-  throws). Nothing else under `src/js/react/` touches `window.api`; ESLint enforces it.
+  throws). Nothing else under `src/js/react/` touches `window.api`; Oxlint enforces it.
 - **Settings changes reach every window.** A successful `set-setting` / `save-settings` broadcasts
   `settings-changed` to every open window (Electron) or the in-process bus (Capacitor); `useIpcQuery`
   subscribers refetch in the background without toggling `loading`, and the translation provider reads

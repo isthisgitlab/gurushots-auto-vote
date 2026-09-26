@@ -1,13 +1,13 @@
 # Pre-commit hooks. Runs on STAGED files only and keeps fast — the full test
-# suite stays in CI. Sequential (parallel: false) so eslint --fix and
-# prettier --write never race to write the same file; eslint-config-prettier
-# keeps the two from fighting over formatting regardless of order.
+# suite stays in CI. Sequential (parallel: false) so oxlint --fix and
+# prettier --write never race to write the same file; .oxlintrc.json enables no
+# formatting rules, so the two never fight over formatting.
 pre-commit:
     parallel: false
     commands:
-        eslint:
-            glob: '*.{js,jsx,mjs}'
-            run: pnpm exec eslint --fix {staged_files}
+        oxlint:
+            glob: '*.{js,jsx,mjs,cjs,ts,tsx}'
+            run: pnpm exec oxlint --fix {staged_files}
             stage_fixed: true
         prettier:
             glob: '*.{js,jsx,mjs,ts,tsx,json,jsonc,css,md,yml,yaml,html}'

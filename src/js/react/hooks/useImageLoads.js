@@ -6,8 +6,8 @@ import { useEffect, useState } from 'react';
  *
  * Probes with a detached `Image` rather than an `onError` prop on the rendered
  * `<img>`: jsx-a11y counts `onError` among "interactions" on a non-interactive
- * element, and this repo runs that rule set as a shrinking backlog (see the
- * jsx-a11y block in eslint.config.mjs), so the handler would add a warning. The
+ * element, and the renderer is linted with jsx-a11y's rules (.oxlintrc.json),
+ * so the handler would be flagged. The
  * probe shares the browser HTTP cache with the `<img>` that renders the same
  * URL, so it costs no extra network round trip.
  *

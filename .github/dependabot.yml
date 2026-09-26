@@ -2,9 +2,9 @@ version: 2
 
 # Automates dependency currency; `pnpm bump` stays available for ad-hoc bumps.
 # Dependabot is pnpm-aware (updates pnpm-lock.yaml). The intentional version pins
-# survive its PRs two ways: prettier (4.0.0-alpha) and typescript (7.1.0-dev
-# nightly, lockstep with ttsc) are pre-releases, and Dependabot only offers
-# pre-release bumps for deps already on one; electron-builder follows the `v26`
+# survive its PRs two ways: prettier (4.0.0-alpha) is a pre-release, and
+# Dependabot only offers pre-release bumps for deps already on one;
+# electron-builder follows the `v26`
 # dist-tag (AHEAD of the stale `latest`), and Dependabot never downgrades — it
 # proposes equal-or-higher versions only, so it won't pull it back to `latest`.
 # CAVEAT: Dependabot compares against `latest` only, so new v26-tag patches are
@@ -28,16 +28,13 @@ updates:
       labels:
           - 'dependencies'
       groups:
-          # ttsc + @ttsc/lint release together and must bump together —
-          # @ttsc/lint has no peer pin, so a partial bump would install cleanly
-          # and only fail later inside the typecheck gate. One PR for both;
-          # listed before the catch-all groups so this match wins. Review the
-          # release diff before merging (devDeps are outside the --prod audit
-          # gate — see CLAUDE.md "Dependencies & Type Checking").
-          ttsc-toolchain:
+          # oxlint drives oxlint-tsgolint (its type-aware engine), so the two
+          # bump together in one PR; listed before the catch-all groups so this
+          # match wins.
+          oxlint-toolchain:
               patterns:
-                  - 'ttsc'
-                  - '@ttsc/lint'
+                  - 'oxlint'
+                  - 'oxlint-tsgolint'
           # Batch low-risk dev-dependency minor/patch bumps into one PR.
           dev-minor-patch:
               dependency-type: 'development'
