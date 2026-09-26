@@ -176,14 +176,36 @@ const hasVector = (token) => Boolean(table && vectorFor(table, token));
 
 const MAX_RELATED_SEARCH_TERMS = 6;
 const GENERIC_SEARCH_FLOOR = 0.76;
+// Distributional vectors put contrasting labels in similar contexts. Those
+// labels must not become tag-search substitutes for one another.
+const CONTRASTING_SEARCH_TERMS = new Map([
+    ['indoor', ['outdoor']],
+    ['outdoor', ['indoor']],
+    ['dry', ['wet']],
+    ['wet', ['dry']],
+    ['small', ['large', 'larger']],
+    ['large', ['small']],
+    ['larger', ['small']],
+    ['up', ['down']],
+    ['down', ['up']],
+    ['north', ['south', 'east', 'west']],
+    ['south', ['north', 'east', 'west']],
+    ['east', ['north', 'south', 'west']],
+    ['west', ['north', 'south', 'east']],
+    ['horizontal', ['vertical']],
+    ['vertical', ['horizontal']],
+    ['above', ['below']],
+    ['below', ['above']],
+]);
 
 const nearestSearchTerms = (term) => {
     const query = embed([term]);
     if (!query) return [];
     const termStem = stemToken(term);
+    const contrasting = CONTRASTING_SEARCH_TERMS.get(termStem) || [];
     const matches = [];
     for (const [key, vec] of table.words) {
-        if (key === termStem) continue;
+        if (key === termStem || contrasting.includes(key)) continue;
         let dot = 0;
         let norm = 0;
         for (let i = 0; i < vec.length; i++) {

@@ -156,6 +156,23 @@ describe('semantic lexicon backend', () => {
         }
     });
 
+    test('generic expansion does not turn a contrast into a matching tag', async () => {
+        await lexicon.init();
+        for (const [theme, opposite] of [
+            ['indoor', 'outdoor'],
+            ['outdoor', 'indoor'],
+            ['dry', 'wet'],
+            ['small', 'large'],
+            ['large', 'small'],
+            ['north', 'south'],
+            ['east', 'west'],
+            ['horizontal', 'vertical'],
+            ['above', 'below'],
+        ]) {
+            expect(lexicon.relatedSearchTerms([theme])).not.toContain(opposite);
+        }
+    });
+
     test('embed is deterministic', async () => {
         await lexicon.init();
         expect(Array.from(lexicon.embed(['cat', 'kitten']))).toEqual(Array.from(lexicon.embed(['cat', 'kitten'])));
