@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../../types/gurushots' */
 /**
  * Boost and turbo apply decisions, including the Emergency Fill override.
  * Part of the services/VotingLogic facade.
@@ -31,7 +32,7 @@ const { pickEntryAvoidingConflict } = require('./entryPick');
  * boost/turbo on a closing challenge is simply wasted. Returns false (no
  * override) when Emergency Fill is disabled, so a user can opt out by setting it
  * to 0.
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} now - Unix timestamp in seconds
  * @returns {boolean}
  */
@@ -52,7 +53,7 @@ const isWithinEmergencyWindow = (challenge, now) => {
  *   apply when timeUntilBoostExpires <= effectiveBoostTime
  * - Key-unlocked available (state === 'AVAILABLE_KEY' or available with no timeout):
  *   ignore boost timer completely and apply only if challenge ends in next 15 minutes
- * @param {any} challenge - Challenge object
+ * @param {Challenge} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
  * @param {{emergency?: boolean}} [options] - When `emergency` is true and the
  *   challenge is inside the Emergency Fill window, apply any available boost
@@ -81,7 +82,8 @@ const shouldApplyBoost = (challenge, now, options = {}) => {
 
     const boost = challenge.member?.boost || {};
     const boostState = boost.state;
-    const hasTimeout = typeof boost.timeout === 'number' && boost.timeout > 0;
+    const timeout = typeof boost.timeout === 'number' ? boost.timeout : 0;
+    const hasTimeout = timeout > 0;
 
     // Determine if this is a key-unlocked availability
     // Treat AVAILABLE without timeout as key-unlocked as well
@@ -97,7 +99,7 @@ const shouldApplyBoost = (challenge, now, options = {}) => {
 
     // Timer-based AVAILABLE with a timeout: use existing effectiveBoostTime window
     if (boostState === 'AVAILABLE' && hasTimeout) {
-        const timeUntilBoostExpires = boost.timeout - now;
+        const timeUntilBoostExpires = timeout - now;
         return timeUntilBoostExpires > 0 && timeUntilBoostExpires <= effectiveBoostTime;
     }
 
@@ -111,7 +113,7 @@ const shouldApplyBoost = (challenge, now, options = {}) => {
  * Used by shouldApplyBoost (its emergency path) and describeDeadlineActions
  * (the boost/turbo entry-conflict flag).
  * Predicate itself is shared with the renderer (voting/boostWindow.js).
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} now - Unix timestamp in seconds
  * @returns {boolean}
  */
@@ -119,7 +121,7 @@ const isBoostWindowOpen = (challenge, now) => boostWindowOpen(challenge?.member?
 
 /**
  * Decides whether to play the Turbo mini-game on a challenge.
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} now - Unix timestamp in seconds
  * @returns {boolean}
  */
@@ -147,7 +149,7 @@ const shouldPlayAutoTurbo = (challenge, now) => {
  * (fill-new can create the first entry) and `imageId` is returned only as a
  * fallback target for when the fresh submit can't happen.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} now - Unix timestamp in seconds
  * @param {{emergency?: boolean}} [options] - When `emergency` is true and the
  *   challenge is inside the Emergency Fill window, apply a won turbo regardless

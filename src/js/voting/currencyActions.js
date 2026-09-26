@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../types/gurushots' */
 /**
  * Availability predicates for the three bankroll-currency actions a member can
  * spend on a challenge — KEYS (unlock a locked boost), SWAPS (replace an entered
@@ -32,7 +33,7 @@ const CURRENCY_OUTCOME = Object.freeze({
 const CURRENCY_FIELD = Object.freeze({ key: 'keys', swap: 'swaps', fill: 'fills' });
 
 /**
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} nowSec - Unix seconds
  * @returns {boolean}
  */
@@ -55,7 +56,7 @@ const hasBalance = (bankroll, action) => Number(bankroll?.[CURRENCY_FIELD[action
  * to tell "state already changed" apart from "out of currency".
  *
  * @param {'key'|'swap'|'fill'} action
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} nowSec
  * @returns {boolean}
  */
@@ -72,7 +73,7 @@ const challengeAllows = (action, challenge, nowSec) => {
 };
 
 /**
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {any} bankroll
  * @param {number} nowSec
  */
@@ -80,7 +81,7 @@ const canKeyUnlock = (challenge, bankroll, nowSec) =>
     hasBalance(bankroll, 'key') && challengeAllows('key', challenge, nowSec);
 
 /**
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {any} bankroll
  * @param {number} nowSec
  */
@@ -88,7 +89,7 @@ const canSwapEntry = (challenge, bankroll, nowSec) =>
     hasBalance(bankroll, 'swap') && challengeAllows('swap', challenge, nowSec);
 
 /**
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {any} bankroll
  * @param {number} nowSec
  */
@@ -103,7 +104,7 @@ const canFillExposure = (challenge, bankroll, nowSec) =>
  * it back in is a legitimate move. Compared as a set of strings, never by
  * position.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @returns {Set<string>}
  */
 const swapExcludedIds = (challenge) => {
@@ -123,7 +124,7 @@ const swapExcludedIds = (challenge) => {
  * when the action is allowed.
  *
  * @param {'key'|'swap'|'fill'} action
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {any} bankroll
  * @param {number} nowSec
  * @returns {string|null}

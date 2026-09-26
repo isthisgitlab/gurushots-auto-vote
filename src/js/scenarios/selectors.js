@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge, RankingEntry } from '../types/gurushots' */
 /**
  * Entry selectors: which of the member's entries a scenario condition or
  * action means. Entries are matched by id (as strings), never by where they
@@ -15,16 +16,16 @@ const { parseDuration } = require('./duration');
 const { votesPerHour, DEFAULT_WINDOW_SEC } = require('./speed');
 
 /**
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @returns {any[]}
  */
 const entriesOf = (challenge) =>
     Array.isArray(challenge?.member?.ranking?.entries) ? challenge.member.ranking.entries.filter(Boolean) : [];
 
-/** @param {any} entry */
+/** @param {RankingEntry} entry */
 const votesOf = (entry) => (Number.isFinite(Number(entry?.votes)) ? Number(entry.votes) : 0);
 
-/** Positive rank, or null when unranked. @param {any} entry */
+/** Positive rank, or null when unranked. @param {RankingEntry} entry */
 const rankOf = (entry) => {
     const rank = Number(entry?.rank);
     return Number.isFinite(rank) && rank > 0 ? rank : null;
@@ -79,7 +80,7 @@ const windowOf = (value) => (value === undefined ? DEFAULT_WINDOW_SEC : /** @typ
  * The entry a selector picks, or null when none qualifies.
  *
  * @param {any} selector - a validated selector ({by, …})
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {SelectContext} [context]
  * @returns {any|null}
  */

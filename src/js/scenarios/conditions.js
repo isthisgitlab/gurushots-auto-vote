@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../types/gurushots' */
 /**
  * Evaluates a scenario rule's conditions against the live challenge. Pure:
  * everything comes in through `ctx`.
@@ -90,7 +91,7 @@ const CHALLENGE_NUMBERS = {
  * Seconds left until close, or null when the challenge has no readable
  * close_time or has already closed.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} now
  */
 const secondsLeft = (challenge, now) => {
@@ -98,13 +99,13 @@ const secondsLeft = (challenge, now) => {
     return close === null || now >= close ? null : close - now;
 };
 
-/** @param {any} challenge @param {number} now */
+/** @param {Challenge} challenge @param {number} now */
 const secondsSinceStart = (challenge, now) => {
     const start = finite(challenge?.start_time);
     return start === null || now < start ? null : now - start;
 };
 
-/** @param {any} challenge @param {number} now */
+/** @param {Challenge} challenge @param {number} now */
 const percentElapsed = (challenge, now) => {
     const start = finite(challenge?.start_time);
     const close = finite(challenge?.close_time);

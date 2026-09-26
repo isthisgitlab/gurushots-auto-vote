@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../../types/gurushots' */
 /**
  * Trigger-window state for the two features built on the same pair of trigger
  * lists: scheduled fill (vote inside the window) and the voting pause (refuse
@@ -58,7 +59,7 @@ const { oneLine: oneLineId } = require('../../format/logSafe');
  * challenge can't occur there. A future caller feeding a broader list should
  * pre-filter on `close_time > now` (as soonestScheduledStart does).
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {string} challengeId
  * @param {number} now - Current time (Unix timestamp, seconds)
  * @param {{enabledKey: string, timesKey: string, beforeEndKey: string,
@@ -170,7 +171,7 @@ const _triggerWindowState = (challenge, challengeId, now, keys) => {
  * per-challenge catch reports the errors it sees, so swallowing one silently
  * here would make this the least visible failure in the pass.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {string} challengeId
  * @param {number} now - Current time (Unix timestamp, seconds)
  * @returns {{active: boolean, inWindow: boolean, replaces: boolean}}
@@ -225,7 +226,7 @@ const getScheduledFillState = (challenge, challengeId, now) => {
  *     last-minute rule that would otherwise rescue it also needs that value.
  * Every one of those paths logs; a silent pause is indistinguishable from a bug.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {string} challengeId
  * @param {number} now - Current time (Unix timestamp, seconds)
  * @returns {{active: boolean, inWindow: boolean}}

@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../../types/gurushots' */
 /**
  * The shared voting-rule engine behind the auto- and manual-vote evaluators.
  * Rule precedence in `_runVotingRules` is load-bearing. Part of the
@@ -53,7 +54,7 @@ const { getBoostPrefillState } = require('./boostPrefill');
  *     ruleLabel:     string,          // 'flash', 'lastminute', 'scheduled', 'pre-final-window', 'final-window', 'normal'
  *     thresholdInfo: object }         // small bundle of settings the wrapper formats
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} now
  * @param {'auto'|'manual'} mode
  * @param {{hasNewEntry?: boolean}} [options] - `hasNewEntry` is supplied

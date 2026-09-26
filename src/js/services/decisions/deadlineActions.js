@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../../types/gurushots' */
 /**
  * Per-challenge deadline actions (auto-fill, emergency fill, boost, turbo):
  * their seconds-before-close thresholds, the order they run in, and the
@@ -33,7 +34,7 @@ const { pickBoostEntry, resolveBoostFillNewMode } = require('./entryPick');
  * Note: the entry count is read live, so this is a snapshot at call time
  * (orderDeadlineActions is called once per challenge before the runners
  * execute).
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {string} challengeId
  * @returns {number}
  */
@@ -67,7 +68,7 @@ const getEmergencyFillThresholdSec = (challengeId) => {
  * which only sorts boost later — its handler (shouldApplyBoost) is still the
  * source of truth for whether to actually apply. Returns -Infinity when no boost
  * is available, so the boost action sorts last.
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {string} challengeId
  * @returns {number}
  */
@@ -97,7 +98,7 @@ const getBoostThresholdSec = (challenge, challengeId) =>
  * boost precede turbo and a freshly filled (and locally reflected) entry is
  * available when turbo runs on a tie.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @returns {Array<{action: 'autoFill'|'turbo'|'emergencyFill'|'boost', thresholdSec: number}>}
  */
 const orderDeadlineActions = (challenge) => {
@@ -144,7 +145,7 @@ const orderDeadlineActions = (challenge) => {
  * what the runner later sees after a mid-cycle fill — callers must present it
  * as advisory.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} now - Unix timestamp in seconds
  * @returns {{actions: Array<{action: string, thresholdSec: number, dueAt: number|null}>, boostBlocked: boolean}}
  */

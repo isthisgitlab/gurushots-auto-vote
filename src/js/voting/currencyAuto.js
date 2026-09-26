@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge, RankingEntry, VoteImagesResponse } from '../types/gurushots' */
 /**
  * Rule math for the currency automation (automatic KEY unlock, photo SWAP and
  * exposure FILL). Pure and dependency-free — no settings, no services — so the
@@ -33,7 +34,7 @@ const positive = (value) => {
  * closed: spending currency on a challenge whose clock can't be read would be
  * exactly the blanket spend the timing conditions exist to prevent.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {RuleTiming} timing
  * @returns {number|null}
  */
@@ -66,7 +67,7 @@ const ruleOpensAt = (challenge, timing) => {
  * True while the rule is open: on or after its opening instant and before the
  * challenge closes.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {RuleTiming} timing
  * @param {number} nowSec
  * @returns {boolean}
@@ -83,7 +84,7 @@ const isRuleOpen = (challenge, timing, nowSec) => {
  * off the challenge's scoreboard photo, so the automation avoids it unless the
  * user allows it.
  *
- * @param {any} entry
+ * @param {RankingEntry} entry
  * @returns {boolean}
  */
 const isProtectedEntry = (entry) => entry?.boosted === true || entry?.boosting === true || entry?.turbo === true;
@@ -103,9 +104,9 @@ const isProtectedEntry = (entry) => entry?.boosted === true || entry?.boosting =
  */
 const pickSwapTarget = (entries, { imageIndex = 0, lowestVotes = false, allowProtected = false, maxVotes = 0 }) => {
     if (!Array.isArray(entries) || entries.length === 0) return null;
-    /** @param {any} entry */
+    /** @param {RankingEntry} entry */
     const eligible = (entry) => entry && (allowProtected || !isProtectedEntry(entry));
-    /** @param {any} entry */
+    /** @param {RankingEntry} entry */
     const votesOf = (entry) => {
         const votes = Number(entry?.votes);
         return Number.isFinite(votes) ? votes : 0;
@@ -136,7 +137,7 @@ const pickSwapTarget = (entries, { imageIndex = 0, lowestVotes = false, allowPro
  * the ratio of every distinct image in it — the same walk submitVotes does.
  * Null when there is no readable pool (no images, or no exposure figure).
  *
- * @param {any} voteImages - the getVoteImages response
+ * @param {VoteImagesResponse} voteImages - the getVoteImages response
  * @returns {number|null}
  */
 const votePoolReach = (voteImages) => {

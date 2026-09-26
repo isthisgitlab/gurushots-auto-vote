@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../types/gurushots' */
 /**
  * New-entry detection for the `voteOnNewEntry` setting.
  *
@@ -56,7 +57,7 @@ const { oneLine: oneLineId } = require('../format/logSafe');
  * literal string "undefined" and pollute the diff set (it would also trip the
  * metadata validator later and cost the whole snapshot).
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @returns {string[]|null} - null when the challenge carries no usable entries
  *   array at all, which means "don't track this one" rather than "no entries".
  */

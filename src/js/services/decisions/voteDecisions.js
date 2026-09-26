@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../../types/gurushots' */
 /**
  * Caller-facing vote decisions: the auto-vote and manual-vote evaluators that
  * map the rule engine's result onto their shapes and messages, plus the
@@ -36,7 +37,7 @@ const { _runVotingRules } = require('./ruleEngine');
 
 /**
  * Auto-vote evaluator. Returns { shouldVote, voteReason, targetExposure, forcedByNewEntry }.
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} now
  * @param {{hasNewEntry?: boolean}} [options] - `hasNewEntry` must already be gated
  *   on the voteOnNewEntry setting by the caller; see `_runVotingRules`.
@@ -128,7 +129,7 @@ const evaluateVotingDecision = (challenge, now, options = {}) => {
 
 /**
  * Manual-vote evaluator. Returns { shouldAllowVoting, errorMessage, targetExposure }.
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {number} now
  * @param {string} challengeTitle
  * @returns {ManualVoteDecision}
@@ -170,7 +171,7 @@ const evaluateManualVotingDecision = (challenge, now, challengeTitle) => {
 /**
  * Evaluate whether manual voting to 100% should be allowed on a challenge
  * (Used for manual vote buttons - bypasses all threshold configurations)
- * @param {any} challenge - Challenge object
+ * @param {Challenge} challenge - Challenge object
  * @param {number} now - Current time (Unix timestamp)
  * @param {string} challengeTitle - Challenge title for error messages
  * @returns {Object} - Decision with shouldAllowVoting boolean, errorMessage string, and targetExposure number

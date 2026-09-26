@@ -18,7 +18,7 @@
 const { z } = require('zod');
 const { parseDuration } = require('../scenarios/duration');
 const vocabulary = require('../scenarios/vocabulary');
-const { SETTINGS_SCHEMA, validateSetting, getValidationError } = require('./schema');
+const { schemaEntry, validateSetting, getValidationError } = require('./schema');
 const { challengeValueSetIsValid } = require('./defaults');
 const { RESERVED_PROFILE_NAMES } = require('./profileStore');
 
@@ -322,7 +322,7 @@ const phaseSettingsIssues = (values, basePath, globalDefaults) => {
         const path = `${basePath}.${key}`;
         if (PHASE_FORBIDDEN_KEYS.has(key)) {
             issues.push({ path, message: 'A phase cannot change the scenario assignment itself' });
-        } else if (!Object.prototype.hasOwnProperty.call(SETTINGS_SCHEMA, key) || !SETTINGS_SCHEMA[key].perChallenge) {
+        } else if (!schemaEntry(key)?.perChallenge) {
             issues.push({ path, message: 'Not a per-challenge setting' });
         } else if (!validateSetting(key, value, context)) {
             issues.push({ path, message: String(getValidationError(key, value, context)) });

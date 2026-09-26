@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../../types/gurushots' */
 /**
  * Pre-boost fill window: the vote-to-100% stretch ahead of an auto-applied
  * boost. Part of the services/VotingLogic facade.
@@ -76,7 +77,7 @@ const getBoostPrefillLeadSec = (challengeId) => {
  * boost windows), and the cost is a fill that arrives too late rather than a
  * wrong action.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {string} challengeId
  * @param {number} now - Current time (Unix timestamp, seconds)
  * @returns {{active: boolean, inWindow: boolean}}

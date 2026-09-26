@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { Challenge } from '../../types/gurushots' */
 /**
  * Boost/turbo entry selection: which entry a boost or turbo lands on, never
  * sharing one, and how a boost sources its entry when every candidate is
@@ -51,7 +52,7 @@ const pickEntryAvoidingConflict = (entries, requestedIndex, conflictField) => {
  * runs the identical shared voting pass, so a rule that only held on the real surface would
  * make mock runs quietly diverge.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {string} challengeId
  * @returns {any|null} the entry to boost, or null when every candidate is turboed
  */
@@ -75,7 +76,7 @@ const pickBoostEntry = (challenge, challengeId) => {
  * `!picked` branch in {@link shouldApplyTurbo}, where picker-null with at least
  * one entry means the single entry carries the other feature's flag.
  *
- * @param {any} challenge
+ * @param {Challenge} challenge
  * @param {string} challengeId
  * @returns {'always'|'conflict'|'no'}
  */

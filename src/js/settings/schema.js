@@ -58,7 +58,7 @@ const { MAX_SCHEDULED_FILL_ENTRIES, MAX_VOTING_PAUSE_MINUTES } = require('./limi
  * @param {string} key
  * @returns {*}
  */
-const getSchemaDefault = (key) => SETTINGS_SCHEMA[key]?.default;
+const getSchemaDefault = (key) => schemaEntry(key)?.default;
 
 /**
  * The exposure value the exposure-dependent validators compare against:
@@ -328,7 +328,7 @@ const sanitizeBeforeEndList = (value) => {
 // settings modals render. Object key order has no runtime effect —
 // getSchemaDefault resolves at call time and validationOrder/dependsOn drive
 // dependency ordering — so the order here is purely for readability.
-/** @type {Record<string, SettingsSchemaEntry>} */
+/** @satisfies {Record<string, SettingsSchemaEntry>} */
 const SETTINGS_SCHEMA = {
     // --- General ---
     // NOTE on min/max/unit: the IPC schema projection and SettingInput forward these three
@@ -1580,6 +1580,23 @@ const SETTINGS_SCHEMA = {
     },
 };
 
+/** @typedef {keyof typeof SETTINGS_SCHEMA} SettingKey */
+
+/**
+ * The value type of each setting, read off its zod validator.
+ *
+ * @typedef {{ [K in SettingKey]: import('zod').infer<(typeof SETTINGS_SCHEMA)[K]['validation']> }} SettingValues
+ */
+
+/**
+ * The schema entry for a key that is only known at runtime, or undefined for
+ * an unknown key.
+ *
+ * @param {string} key
+ * @returns {SettingsSchemaEntry | undefined}
+ */
+const schemaEntry = (key) => /** @type {Record<string, SettingsSchemaEntry | undefined>} */ (SETTINGS_SCHEMA)[key];
+
 /**
  * Ordered tiers the groups below are rendered under. A tier is presentation
  * only — nothing branches on it — but the order encodes the rule the section
@@ -1645,7 +1662,7 @@ const SETTINGS_GROUPS = [
  * @returns {boolean}
  */
 const validateSetting = (key, value, allSettings = null, challengeId = null) => {
-    const schemaConfig = SETTINGS_SCHEMA[key];
+    const schemaConfig = schemaEntry(key);
     if (!schemaConfig) return true;
     if (schemaConfig.validation && !schemaConfig.validation.safeParse(value).success) return false;
     if (schemaConfig.contextValidation && allSettings) {
@@ -1668,7 +1685,7 @@ const validateSetting = (key, value, allSettings = null, challengeId = null) => 
  * @returns {string|null}
  */
 const getValidationError = (settingKey, value, allSettings = null, challengeId = null) => {
-    const schemaConfig = SETTINGS_SCHEMA[settingKey];
+    const schemaConfig = schemaEntry(settingKey);
     if (!schemaConfig) {
         return null; // No schema config, assume valid
     }
@@ -1705,6 +1722,7 @@ const getSettingsSchema = async () => SETTINGS_SCHEMA;
 
 module.exports = {
     SETTINGS_SCHEMA,
+    schemaEntry,
     SETTINGS_GROUPS,
     SETTINGS_TIERS,
     getSchemaDefault,
