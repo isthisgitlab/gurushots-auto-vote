@@ -7,6 +7,7 @@
 
 import { MAX_TOKENISE_CHARS, stem, rawTokenise, tokenise, matches } from './stemming';
 import * as lexicon from '../semantic/lexicon';
+import { finiteOr } from '../../numbers';
 
 /** @import { ChallengeText, ExcludedSubject, IgnoreWords, Negation } from '../../types/photoPicker' */
 
@@ -46,11 +47,12 @@ const abstractTitleWords = (words, concretenessOf = lexiconConcreteness) => {
     /** @type {Set<string>} */
     const abstract = new Set();
     if (!Array.isArray(words) || words.length < 2) return abstract;
-    const scores = words.map((word) => concretenessOf(word));
-    const known = /** @type {number[]} */ (scores.filter((score) => Number.isFinite(score)));
+    const scores = words.map((word) => finiteOr(concretenessOf(word), null));
+    const known = scores.filter((score) => score !== null);
     if (!(Math.max(...known) >= CONCRETE_SUBJECT_MIN)) return abstract;
     words.forEach((word, i) => {
-        if (Number.isFinite(scores[i]) && /** @type {number} */ (scores[i]) <= ABSTRACT_WORD_MAX) abstract.add(word);
+        const score = scores[i];
+        if (score !== null && score <= ABSTRACT_WORD_MAX) abstract.add(word);
     });
     return abstract;
 };

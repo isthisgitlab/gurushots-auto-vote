@@ -58,7 +58,7 @@
 
 import { finiteOr } from '../../numbers';
 
-/** @import { PickerPhoto, ScoredCandidate, SemanticScore, SemanticScoreMap, ThemeTiers } from '../../types/photoPicker' */
+/** @import { PickerPhoto, ScoredCandidate, SemanticScoreMap, ThemeTiers } from '../../types/photoPicker' */
 
 /**
  * Below this the semantic tier is treated as "no match at all" (see
@@ -140,19 +140,17 @@ const NO_SEMANTIC = Object.freeze({ semantic: 0, semanticSupport: 0 });
 const semanticTiersOf = (semanticScores, id) => {
     if (!semanticScores) return NO_SEMANTIC;
     const entry = semanticScores.get(String(id));
-    const raw = typeof entry === 'number' ? entry : entry && entry.score;
-    if (!Number.isFinite(raw)) return NO_SEMANTIC;
-    const bucket = Math.round(Math.max(0, Math.min(1, /** @type {number} */ (raw))) * 100);
+    const raw = finiteOr(typeof entry === 'number' ? entry : entry?.score, null);
+    if (raw === null) return NO_SEMANTIC;
+    const bucket = Math.round(Math.max(0, Math.min(1, raw)) * 100);
     // Sub-floor: no label cleared the floor, so there is nothing to support
     // either. Returning zero for BOTH keeps a hand-built map that pairs a
     // sub-floor score with a support count from smuggling that count past the
     // floor and pre-empting a genuine lexical hit on the tier below.
     if (bucket < SEMANTIC_MATCH_FLOOR) return NO_SEMANTIC;
     // A bare-number entry has no `support` (reads undefined → no support).
-    const rawSupport = entry && /** @type {SemanticScore} */ (entry).support;
-    const semanticSupport = Number.isFinite(rawSupport)
-        ? Math.max(0, Math.min(SEMANTIC_SUPPORT_CAP, Math.floor(/** @type {number} */ (rawSupport))))
-        : 0;
+    const rawSupport = typeof entry === 'number' ? undefined : entry?.support;
+    const semanticSupport = Math.max(0, Math.min(SEMANTIC_SUPPORT_CAP, Math.floor(finiteOr(rawSupport, 0))));
     return { semantic: bucket, semanticSupport };
 };
 
@@ -166,8 +164,8 @@ const semanticTiersOf = (semanticScores, id) => {
  * @returns {number}
  */
 const achievementCountOf = (photo) => {
-    const count = /** @type {number} */ (photo.achievementCount);
-    if (Number.isFinite(count) && count >= 0) {
+    const count = finiteOr(photo.achievementCount, null);
+    if (count !== null && count >= 0) {
         return Math.floor(count);
     }
     return Array.isArray(photo.achievements) ? photo.achievements.length : 0;
