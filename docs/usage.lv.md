@@ -70,10 +70,10 @@ Iestatījumi ir kopīgi ar grafisko lietotni: CLI veikts `set-setting` tiek pama
 > Aizstājiet `[platforma]` zemāk ar `mac`, `linux` vai `linux-arm`.
 
 ```bash
-./gurucli-v1.11.1-[platforma] set-global-default exposure 80
-./gurucli-v1.11.1-[platforma] set-setting onlyBoost true --challenge=12345
-./gurucli-v1.11.1-[platforma] list-settings --challenge=12345
-./gurucli-v1.11.1-[platforma] logs --error --lines=50
+./gurucli-v1.11.2-[platforma] set-global-default exposure 80
+./gurucli-v1.11.2-[platforma] set-setting onlyBoost true --challenge=12345
+./gurucli-v1.11.2-[platforma] list-settings --challenge=12345
+./gurucli-v1.11.2-[platforma] logs --error --lines=50
 ```
 
 ## ⚙️ Kā darbojas balsošana
