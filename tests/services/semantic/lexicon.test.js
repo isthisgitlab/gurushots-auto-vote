@@ -124,9 +124,11 @@ describe('semantic lexicon backend', () => {
         const terms = lexicon.relatedSearchTerms(['religion', 'history']);
         expect(terms).toContain('church');
         expect(terms).toContain('altar');
+        expect(terms).toContain('candle');
         expect(terms).toContain('historical');
         expect(terms).toContain('artifact');
         expect(terms).toHaveLength(6);
+        expect(lexicon.relatedSearchTerms(['candle'])).not.toContain('church');
     });
 
     test('embed is deterministic', async () => {

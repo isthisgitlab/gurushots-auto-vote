@@ -173,14 +173,14 @@ const MAX_RELATED_SEARCH_TERMS = 6;
 const relatedSearchTerms = (terms) => {
     if (!table || !Array.isArray(terms)) return [];
     const groups = terms.flatMap((term) =>
-        table.searchGroups.filter((group) => group.some((word) => stemToken(word) === stemToken(term))),
+        table.searchGroups.filter((group) => group.triggers.some((word) => stemToken(word) === stemToken(term))),
     );
     const seen = new Set(terms.map(stemToken));
     const related = [];
-    const width = Math.max(0, ...groups.map((group) => group.length));
+    const width = Math.max(0, ...groups.map((group) => group.words.length));
     for (let i = 0; i < width && related.length < MAX_RELATED_SEARCH_TERMS; i++) {
         for (const group of groups) {
-            const word = group[i];
+            const word = group.words[i];
             if (!word || seen.has(stemToken(word))) continue;
             seen.add(stemToken(word));
             related.push(word);

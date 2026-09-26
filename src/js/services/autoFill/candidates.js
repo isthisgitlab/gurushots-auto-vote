@@ -339,9 +339,9 @@ const fetchCandidatesForChallenge = async (
         logger
             .withCategory(logLabel)
             .warning(
-                `${logLabel}: nothing found by tag search for ${logger.challengeTag(challenge)} — no photo is tagged ` +
-                    `${terms.map((t) => `"${t}"`).join(' or ')} (matched as word stems) and no related library tag ` +
-                    `was found, so the whole library will be ranked semantically; popularity breaks ties when nothing matches. ${next}`,
+                `${logLabel}: nothing found by tag search for ${logger.challengeTag(challenge)} — searches for ` +
+                    `${terms.map((t) => `"${t}"`).join(' or ')} (matched as word stems) and related tags ` +
+                    `returned no eligible photo, so the whole library will be ranked semantically; popularity breaks ties when nothing matches. ${next}`,
                 null,
             );
     }
