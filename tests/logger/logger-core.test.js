@@ -252,7 +252,7 @@ describe('writeLog routing and fan-out', () => {
             logger.getSettingsLogFile(),
             logger.getLogFile(),
         ]);
-        expect(fs.appendFileSync.mock.calls[3][1]).toMatch(/\[INFO\] \[CLI\] \[general\] plain\n={80}\n$/);
+        expect(fs.appendFileSync.mock.calls[3][1]).toMatch(/\[INFO\] \[CLI\] \[general\] ℹ️ plain\n={80}\n$/);
     });
 
     test('serialises sanitized object data and bare-string data into the file line', () => {
@@ -261,7 +261,7 @@ describe('writeLog routing and fan-out', () => {
         logger.info('str', 'detail');
 
         expect(fs.appendFileSync.mock.calls[0][1]).toContain(JSON.stringify({ token: '[REDACTED]', n: 1 }, null, 2));
-        expect(fs.appendFileSync.mock.calls[1][1]).toContain('] str\ndetail\n');
+        expect(fs.appendFileSync.mock.calls[1][1]).toContain('] ℹ️ str\ndetail\n');
     });
 
     test('a failing disk write never throws out of the logger', () => {
@@ -273,7 +273,7 @@ describe('writeLog routing and fan-out', () => {
         const { logger } = loadLogger({ fs });
 
         expect(() => logger.info('still fine')).not.toThrow();
-        expect(lastEntry(logger).message).toBe('still fine');
+        expect(lastEntry(logger).message).toBe('ℹ️ still fine');
     });
 
     test('colors the console line per level (unknown levels render white)', () => {
@@ -297,9 +297,32 @@ describe('writeLog routing and fan-out', () => {
                 level: 'INFO',
                 context: 'CLI',
                 category: 'voting',
-                message: 'to gui',
+                message: 'ℹ️ to gui',
             }),
         );
+    });
+
+    test('leads every message with one icon: its own, else the level default', () => {
+        const { logger } = loadLogger();
+        const messageOf = (log) => {
+            log();
+            return lastEntry(logger).message;
+        };
+
+        expect(messageOf(() => logger.error('boom'))).toBe('❌ boom');
+        expect(messageOf(() => logger.info('🔄 Starting'))).toBe('🔄 Starting');
+        expect(messageOf(() => logger.info('⚠ bare pictograph'))).toBe('⚠ bare pictograph');
+        expect(messageOf(() => logger.success('🎁 Claimed'))).toBe('🎁 Claimed');
+        expect(messageOf(() => logger.warning('🔒 locked'))).toBe('🔒 locked');
+        expect(messageOf(() => logger.info('[Challenge 1: x] voted'))).toBe('ℹ️ [Challenge 1: x] voted');
+    });
+
+    test('leaves blank, indented and banner lines without an icon', () => {
+        const { logger } = loadLogger();
+        for (const message of ['', '  Status:  Default', '\nSettings:', '=== Login ===', '--- Cycle 1 ---']) {
+            logger.info(message);
+            expect(lastEntry(logger).message).toBe(message.replace('\n', ' '));
+        }
     });
 
     test('keeps non-string messages untouched', () => {
@@ -313,8 +336,8 @@ describe('writeLog routing and fan-out', () => {
         for (let i = 0; i < 1001; i++) logger.info(`m${i}`);
         const logs = logger.getRecentLogs();
         expect(logs).toHaveLength(1000);
-        expect(logs[0].message).toBe('m1');
-        expect(logs.at(-1).message).toBe('m1000');
+        expect(logs[0].message).toBe('ℹ️ m1');
+        expect(logs.at(-1).message).toBe('ℹ️ m1000');
     });
 
     test('an unexpected failure while writing is reported, not thrown', () => {
@@ -339,17 +362,17 @@ describe('top-level sugar methods', () => {
         logger.warning('hmm');
         expect(lastEntry(logger)).toMatchObject({ level: 'WARN', message: '⚠️ hmm' });
         logger.progress('just text');
-        expect(lastEntry(logger).message).toBe('just text');
+        expect(lastEntry(logger).message).toBe('ℹ️ just text');
         logger.progress('half', 5);
-        expect(lastEntry(logger).message).toBe('half');
+        expect(lastEntry(logger).message).toBe('ℹ️ half');
         logger.progress('half', 5, 10);
-        expect(lastEntry(logger).message).toBe(`half [${'█'.repeat(10)}${'░'.repeat(10)}] 50% (5/10)`);
+        expect(lastEntry(logger).message).toBe(`ℹ️ half [${'█'.repeat(10)}${'░'.repeat(10)}] 50% (5/10)`);
     });
 
     test('debug/api/apiRequest/apiResponse emit in source builds', () => {
         const { logger } = loadLogger();
         logger.debug('dbg');
-        expect(lastEntry(logger)).toMatchObject({ level: 'DEBUG', message: 'dbg' });
+        expect(lastEntry(logger)).toMatchObject({ level: 'DEBUG', message: '🔍 dbg' });
         logger.api('api msg');
         expect(lastEntry(logger)).toMatchObject({ level: 'INFO', category: 'api' });
         logger.api('api custom', null, 'boost');
@@ -403,13 +426,13 @@ describe('withCategory', () => {
         const expectLast = (fields) => expect(lastEntry(logger)).toMatchObject({ category: 'voting', ...fields });
 
         log.info('i', { a: 1 });
-        expectLast({ level: 'INFO', message: 'i', data: { a: 1 } });
+        expectLast({ level: 'INFO', message: 'ℹ️ i', data: { a: 1 } });
         log.error('e');
-        expectLast({ level: 'ERROR', message: 'e' });
+        expectLast({ level: 'ERROR', message: '❌ e' });
         log.debug('d');
-        expectLast({ level: 'DEBUG', message: 'd' });
+        expectLast({ level: 'DEBUG', message: '🔍 d' });
         log.api('a');
-        expectLast({ level: 'INFO', message: 'a' });
+        expectLast({ level: 'INFO', message: 'ℹ️ a' });
         log.apiRequest('GET', '/u');
         expectLast({ message: '🌐 REQUEST: GET /u' });
         log.apiRequest('GET', '/u', 3);
@@ -427,7 +450,7 @@ describe('withCategory', () => {
         log.warning('w');
         expectLast({ level: 'WARN', message: '⚠️ w' });
         log.progress('p');
-        expectLast({ message: 'p' });
+        expectLast({ message: 'ℹ️ p' });
         log.progress('p', 1, 4);
         expectLast({ message: expect.stringContaining('25% (1/4)') });
     });

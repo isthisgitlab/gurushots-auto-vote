@@ -237,6 +237,27 @@ const LEVEL_COLORS = {
     ERROR: 'red',
 };
 
+// Leading icon for a message that doesn't bring its own, so every log line
+// starts with one. `success` overrides INFO's with ✅.
+/** @type {Record<LogLevel, string>} */
+const LEVEL_ICONS = {
+    DEBUG: '🔍',
+    INFO: 'ℹ️',
+    WARN: '⚠️',
+    ERROR: '❌',
+};
+
+// Messages left as-is: already icon-led, blank, or CLI layout lines — indented
+// detail rows and `===` / `---` banners, where an icon would break alignment.
+const NO_ICON_RE = /^(?:$|\s|[=-]|\p{Extended_Pictographic})/u;
+
+/**
+ * @param {string} message
+ * @param {string} icon
+ * @returns {string}
+ */
+const withIcon = (message, icon) => (NO_ICON_RE.test(message) ? message : `${icon} ${message}`);
+
 // Resolve the GUI fan-out sink. Electron main sets global.sendLogToGUI and
 // the Capacitor bridge sets globalThis.sendLogToGUI; in Node `global` IS
 // `globalThis`, so one lookup covers both surfaces.
@@ -404,8 +425,9 @@ const routeLogFile = (level, category) => {
  * @param {string} message
  * @param {unknown} [data]
  * @param {string | null} [category]
+ * @param {string} [icon] - prefixed unless the message already leads with one
  */
-const writeLog = (level, message, data = null, category = null) => {
+const writeLog = (level, message, data = null, category = null, icon = LEVEL_ICONS[level]) => {
     try {
         const context = getContext();
         const timestamp = new Date().toISOString();
@@ -420,7 +442,7 @@ const writeLog = (level, message, data = null, category = null) => {
         // message) must not be able to forge a fake log line in the plain-text
         // log file. Messages are single-line by convention; structured detail
         // goes in `data`, which is serialised separately below.
-        if (typeof message === 'string') message = oneLine(message);
+        if (typeof message === 'string') message = withIcon(oneLine(message), icon);
         let sanitized = data ? sanitizeForLog(data) : null;
         // A bare-string (or number) `data` value is written to the log file
         // verbatim (the non-object branch below), and rendered in the GUI, so it
@@ -597,11 +619,11 @@ export const api = (message, data, category = 'api') => {
 /** @type {(message: string, data?: unknown, duration?: number | null, category?: string | null) => void} */
 export const success = (message, data = null, duration = null, category = null) => {
     const suffix = duration !== null ? ` (${duration}ms)` : '';
-    writeLog('INFO', `✅ ${message}${suffix}`, data, category);
+    writeLog('INFO', `${message}${suffix}`, data, category, '✅');
 };
 /** @type {(message: string, data?: unknown, category?: string | null) => void} */
 export const warning = (message, data = null, category = null) => {
-    writeLog('WARN', `⚠️ ${message}`, data, category);
+    writeLog('WARN', message, data, category);
 };
 /** @type {(message: string, current?: number | null, total?: number | null) => void} */
 export const progress = (message, current = null, total = null) => {
@@ -652,9 +674,9 @@ export const withCategory = (category) => ({
     },
     success: (message, data, duration) => {
         const suffix = duration !== null && duration !== undefined ? ` (${duration}ms)` : '';
-        writeLog('INFO', `✅ ${message}${suffix}`, data, category);
+        writeLog('INFO', `${message}${suffix}`, data, category, '✅');
     },
-    warning: (message, data) => writeLog('WARN', `⚠️ ${message}`, data, category),
+    warning: (message, data) => writeLog('WARN', message, data, category),
     progress: (message, current = null, total = null) => {
         writeLog('INFO', buildProgressMessage(message, current, total), null, category);
     },
