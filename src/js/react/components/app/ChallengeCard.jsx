@@ -98,7 +98,7 @@ export function ChallengeCard({
     // edge after scrollIntoView. Keep `challenge-${id}` in sync with
     // scrollToChallenge. Shared by both layouts.
     const cardId = `challenge-${challenge.id}`;
-    const cardClass = `${view.cardAlertClass} rounded-lg p-3 bg-base-100 scroll-mt-4`;
+    const cardClass = `${view.cardAlertClass} rounded-lg p-3 bg-base-100 scroll-mt-4 focus:outline focus:outline-4 focus:outline-info focus:outline-offset-4`;
     const badgeRowProps = {
         challenge,
         boostOpen: view.boostOpen,
@@ -111,7 +111,7 @@ export function ChallengeCard({
 
     if (isCompact) {
         return (
-            <div id={cardId} className={cardClass}>
+            <div id={cardId} className={cardClass} tabIndex={-1}>
                 <ChallengeCardCompact
                     challenge={challenge}
                     badgeRowProps={badgeRowProps}
@@ -134,7 +134,7 @@ export function ChallengeCard({
 
     return (
         // col-span-full: a detailed card takes a whole row of the grid.
-        <div id={cardId} className={`${cardClass} col-span-full`}>
+        <div id={cardId} className={`${cardClass} col-span-full`} tabIndex={-1}>
             <ChallengeCardDetail
                 challenge={challenge}
                 view={view}

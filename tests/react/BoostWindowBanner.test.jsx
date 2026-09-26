@@ -105,12 +105,13 @@ describe('BoostWindowBanner', () => {
     test('clicking a chip scrolls the matching card into view', () => {
         render(<BoostWindowBanner challenges={[challenge(42, 'JumpTo', { state: 'AVAILABLE_KEY' })]} />);
 
-        const fakeCard = { scrollIntoView: jest.fn() };
+        const fakeCard = { scrollIntoView: jest.fn(), focus: jest.fn() };
         const getById = jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
 
         fireEvent.click(screen.getByRole('button', { name: /JumpTo/ }));
 
         expect(getById).toHaveBeenCalledWith('challenge-42');
         expect(fakeCard.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+        expect(fakeCard.focus).toHaveBeenCalledWith({ preventScroll: true });
     });
 });

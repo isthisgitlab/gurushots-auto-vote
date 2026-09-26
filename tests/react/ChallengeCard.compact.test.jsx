@@ -94,6 +94,15 @@ beforeEach(() => {
 });
 
 describe('compact ChallengeCard tile', () => {
+    test('the compact jump target accepts focus and shows a blue outline', () => {
+        const { container } = renderCard(makeChallenge());
+        const card = container.querySelector('#challenge-202');
+        expect(card.getAttribute('tabindex')).toBe('-1');
+        expect(card.className).toContain('focus:outline-info');
+        expect(card.className).toContain('focus:outline-4');
+        expect(card.className).toContain('focus:outline-offset-4');
+    });
+
     test('offers no actions — the density toggle is the only button', () => {
         renderCard();
         const buttons = screen.getAllByRole('button');

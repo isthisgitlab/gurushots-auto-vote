@@ -33,7 +33,7 @@ describe('ChallengeChip', () => {
         expect(chip.className).toBe('btn btn-sm max-w-full whitespace-nowrap');
         expect(chip.getAttribute('type')).toBe('button');
 
-        const fakeCard = { scrollIntoView: jest.fn() };
+        const fakeCard = { scrollIntoView: jest.fn(), focus: jest.fn() };
         const getById = jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
         fireEvent.click(chip);
 

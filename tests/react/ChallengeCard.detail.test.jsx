@@ -9,6 +9,7 @@
 import { signal } from '@preact/signals';
 import { render, screen, fireEvent, waitFor, act } from './helpers/test-utils';
 import { ChallengeCard } from '@/components/app/ChallengeCard';
+import { scrollToChallenge } from '@/utils/scrollToChallenge';
 import { buildChallenge } from '../helpers/challengeFixtures';
 
 jest.mock('@/components/app/EntryBadge', () => ({
@@ -83,6 +84,15 @@ beforeEach(() => {
 });
 
 describe('header', () => {
+    test('the jump target accepts focus and shows a blue outline', () => {
+        const { container } = renderCard(makeChallenge());
+        const card = container.querySelector('#challenge-101');
+        expect(card.getAttribute('tabindex')).toBe('-1');
+        expect(card.className).toContain('focus:outline-info');
+        expect(card.className).toContain('focus:outline-4');
+        expect(card.className).toContain('focus:outline-offset-4');
+    });
+
     test('opens the challenge URL and the settings modal', async () => {
         const { onSettingsClick } = renderCard(makeChallenge());
         fireEvent.click(screen.getByText('gurushots.com/challenge/sunset'));
@@ -406,7 +416,11 @@ describe('entries, tags and alerts', () => {
         );
         const card = container.querySelector('#challenge-101');
         expect(card.className).toContain('border-2 border-error');
-        expect(card.className).toContain('ring-2 ring-info');
+        expect(card.className).toContain('ring-2 ring-info ring-offset-2');
+        expect(card.className).toContain('focus:outline-4 focus:outline-info focus:outline-offset-4');
+        card.scrollIntoView = jest.fn();
+        scrollToChallenge(101);
+        expect(document.activeElement).toBe(card);
         expect(screen.getByText('5%').className).toBe('text-error font-bold');
     });
 

@@ -48,13 +48,14 @@ describe('ChallengeNav', () => {
     test('clicking an entry scrolls the matching card into view', () => {
         render(<ChallengeNav challenges={[challenge(42, 'JumpTo')]} />);
 
-        const fakeCard = { scrollIntoView: jest.fn() };
+        const fakeCard = { scrollIntoView: jest.fn(), focus: jest.fn() };
         const getById = jest.spyOn(document, 'getElementById').mockReturnValue(fakeCard);
 
         fireEvent.click(screen.getByRole('button', { name: /JumpTo/ }));
 
         expect(getById).toHaveBeenCalledWith('challenge-42');
         expect(fakeCard.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+        expect(fakeCard.focus).toHaveBeenCalledWith({ preventScroll: true });
     });
 
     test('marks only the challenges that carry a per-challenge override', async () => {
